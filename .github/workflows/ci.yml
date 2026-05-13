@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, staging, prod]
+  push:
+    branches: [main, staging, prod]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      composer-cache-hit: ${{ steps.composer-cache.outputs.cache-hit }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, xml, ctype, json, bcmath, pdo_mysql, tokenizer, fileinfo, openssl, curl, redis, xdebug, gd
+          coverage: xdebug
+      - name: Cache Composer
+        id: composer-cache
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+      - if: steps.composer-cache.outputs.cache-hit != 'true'
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+  build:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '8.4' }
+      - run: composer install --no-interaction --prefer-dist
+      - name: Generate OpenAPI spec
+        run: php artisan l5-swagger:generate
+
+  test:
+    needs: setup
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ''
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: lesily_test
+        ports: ['3306:3306']
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: xdebug
+      - run: cp .env.github .env
+      - run: composer install --no-interaction --prefer-dist
+      - run: php artisan key:generate
+      - run: php artisan migrate --force
+      - name: Run tests with coverage
+        run: php artisan test --coverage --coverage-clover=coverage.xml --log-junit=junit.xml
+      - uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+
+  quality:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '8.4' }
+      - run: composer install --no-interaction --prefer-dist
+      - name: Pint (lint)
+        run: vendor/bin/pint --test
+      - name: Larastan (static analysis)
+        run: vendor/bin/phpstan analyse --memory-limit=512M
+      - name: Semgrep SAST
+        uses: returntocorp/semgrep-action@v1
+        with: { config: 'p/security-audit p/php' }
+
+  mutation-test:
+    needs: test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: xdebug
+      - run: composer install --no-interaction --prefer-dist
+      - run: cp .env.github .env
+      - run: php artisan key:generate
+      - run: php artisan migrate --force
+      - name: Infection (changed files only)
+        run: |
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'app/*.php' | tr '\n' ',')
+          vendor/bin/infection --filter="$CHANGED" --threads=4 --min-msi=80 --min-covered-msi=85
+
+  sonarcloud:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '8.4', coverage: xdebug }
+      - run: composer install --no-interaction --prefer-dist
+      - run: cp .env.github .env
+      - run: php artisan key:generate
+      - run: php artisan migrate --force
+      - run: php artisan test --coverage-clover=coverage.xml
+      - uses: SonarSource/sonarcloud-github-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  openapi-diff:
+    needs: build
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '8.4' }
+      - run: composer install --no-interaction --prefer-dist
+      - name: Generate base spec
+        run: |
+          git checkout origin/${{ github.base_ref }}
+          php artisan l5-swagger:generate
+          cp storage/api-docs/api-docs.json /tmp/base-spec.json
+      - name: Generate PR spec
+        run: |
+          git checkout ${{ github.sha }}
+          php artisan l5-swagger:generate
+          cp storage/api-docs/api-docs.json /tmp/pr-spec.json
+      - name: Diff specs
+        uses: oasdiff/oasdiff-action@main
+        with:
+          base: /tmp/base-spec.json
+          revision: /tmp/pr-spec.json
+          fail-on: ERR
