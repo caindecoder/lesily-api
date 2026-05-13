@@ -1,0 +1,21 @@
+{
+    $schema: "vendor/infection/infection/resources/schema.json",
+    source: {
+        directories: ["app"],
+        excludes: ["Console", "Exceptions", "Providers"]
+    },
+    timeout: 30,
+    logs: {
+        text: "infection.log",
+        html: "infection.html",
+        json: "infection.json",
+        summary: "infection-summary.log"
+    },
+    mutators: {
+        "@default": true
+    },
+    minMsi: 80,
+    minCoveredMsi: 85,
+    testFramework: "phpunit",
+    testFrameworkOptions: "--testsuite=Unit"
+}
