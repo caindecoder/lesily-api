@@ -1,0 +1,30 @@
+# Coverage gate policy per coding-conventions-plan.md Decision 4 + Section 4.4
+# Phase 1 (chunk-1 ramp-up): project gate disabled (target: auto); patch gate active (target: 100%)
+# Phase 2 (baseline reached): MANUALLY flip project.target from `auto` to `80%`
+#   Activation criterion: >=80% project coverage reported in 3 consecutive main merges.
+#   When flipped, update this comment with activation date.
+
+coverage:
+    status:
+        project:
+            default:
+                target: auto  # FLIP TO 80% AFTER BASELINE REACHED
+                threshold: 1%
+                informational: false
+        patch:
+            default:
+                target: 100%
+                threshold: 0%
+
+comment:
+    layout: "header, diff, flags, files, footer"
+    behavior: default
+    require_changes: false
+
+ignore:
+    - "tests/**"
+    - "database/migrations/**"
+    - "config/**"
+    - "bootstrap/**"
+    - "public/**"
+    - "resources/views/**"
