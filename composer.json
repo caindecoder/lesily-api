@@ -59,6 +59,16 @@
             "@php artisan config:clear --ansi @no_additional_args",
             "@php artisan test"
         ],
+        "test:coverage": "@php artisan test --coverage",
+        "lint": "vendor/bin/pint --test",
+        "format": "vendor/bin/pint",
+        "analyze": "vendor/bin/phpstan analyse",
+        "mutate": "vendor/bin/infection",
+        "quality": [
+            "@lint",
+            "@analyze",
+            "@test"
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"
