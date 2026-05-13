@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+        "laravel-boost": {
+            "command": "C:\\Users\\chami\\.config\\herd\\bin\\php84\\php.exe",
+            "args": [
+                "D:\\OneSyntax\\Laravel Projects\\Human Resource Management System\\lesily-api\\artisan",
+                "boost:mcp"
+            ]
+        }
+    }
+}
