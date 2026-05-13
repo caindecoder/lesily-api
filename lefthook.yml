@@ -3,5 +3,9 @@ pre-commit:
   commands:
     pint:
       glob: "*.php"
-      run: ./vendor/bin/pint --dirty {staged_files}
+      # Use vendor/bin/pint.bat directly (Composer's Windows wrapper) for Herd/git-bash compatibility.
+      # Bare `php` or `./vendor/bin/pint` shell script doesn't work because Herd ships `php.bat`
+      # (not `php.exe`) and git-bash's sh doesn't auto-resolve .bat extensions.
+      # The .bat wrapper internally calls Herd's PHP via Windows PATH.
+      run: vendor/bin/pint.bat --dirty {staged_files}
       stage_fixed: true
