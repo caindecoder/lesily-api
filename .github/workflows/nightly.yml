@@ -1,0 +1,49 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '30 20 * * *'  # 02:00 SLT (UTC+5:30)
+  workflow_dispatch:
+
+jobs:
+  smoke-tests:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env: { MYSQL_ROOT_PASSWORD: '', MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: lesily_test }
+        ports: ['3306:3306']
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '8.4' }
+      - run: composer install --no-interaction --prefer-dist
+      - run: cp .env.github .env
+      - run: php artisan key:generate
+      - run: php artisan migrate --force
+      - name: Run smoke test suite
+        run: php artisan test --testsuite=Smoke --compact
+
+  mutation-full:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env: { MYSQL_ROOT_PASSWORD: '', MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: lesily_test }
+        ports: ['3306:3306']
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '8.4', coverage: xdebug }
+      - run: composer install --no-interaction --prefer-dist
+      - run: cp .env.github .env
+      - run: php artisan key:generate
+      - run: php artisan migrate --force
+      - name: Full mutation report (report-only, no gate)
+        run: vendor/bin/infection --threads=4 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: infection-report
+          path: infection.html
