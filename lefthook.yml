@@ -1,0 +1,7 @@
+pre-commit:
+  parallel: true
+  commands:
+    pint:
+      glob: "*.php"
+      run: ./vendor/bin/pint --dirty {staged_files}
+      stage_fixed: true
