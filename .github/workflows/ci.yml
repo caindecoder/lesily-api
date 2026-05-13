@@ -90,6 +90,12 @@ jobs:
     needs: test
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env: { MYSQL_ROOT_PASSWORD: '', MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: lesily_test }
+        ports: ['3306:3306']
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -109,6 +115,12 @@ jobs:
   sonarcloud:
     needs: test
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env: { MYSQL_ROOT_PASSWORD: '', MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: lesily_test }
+        ports: ['3306:3306']
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
