@@ -131,7 +131,7 @@ jobs:
       - run: php artisan key:generate
       - run: php artisan migrate --force
       - run: php artisan test --coverage-clover=coverage.xml
-      - uses: SonarSource/sonarcloud-github-action@master
+      - uses: SonarSource/sonarqube-scan-action@v5.0.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
