@@ -114,8 +114,14 @@ jobs:
       - run: php artisan key:generate
       - run: php artisan migrate --force
       - name: Infection (changed files only)
+        # Short-circuit when no app/ PHP files changed (e.g., yml-only PR): empty
+        # --filter causes Infection to exit 1 even with passing tests. Master-action #99.
         run: |
           CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'app/*.php' | tr '\n' ',')
+          if [ -z "$CHANGED" ]; then
+            echo "No PHP files changed under app/ — skipping Infection."
+            exit 0
+          fi
           vendor/bin/infection --filter="$CHANGED" --threads=4 --min-msi=80 --min-covered-msi=85
 
   sonarcloud:
@@ -164,10 +170,13 @@ jobs:
           if [ -f storage/api-docs/api-docs.json ]; then cp storage/api-docs/api-docs.json /tmp/pr-spec.json; else echo "{}" > /tmp/pr-spec.json; fi
       - name: Diff specs
         # Skip diff if both specs are empty stubs (pre-chunk-1). Re-enabled implicitly when real specs land.
+        # Tufin/oasdiff-action is the canonical single-action variant; oasdiff/oasdiff-action@main
+        # fails because the root has no action.yml (only sub-actions). Master-action #98.
         if: hashFiles('/tmp/base-spec.json') != '' && hashFiles('/tmp/pr-spec.json') != ''
-        uses: oasdiff/oasdiff-action@main
+        uses: Tufin/oasdiff-action@v2.1.3
         continue-on-error: true
         with:
           base: /tmp/base-spec.json
           revision: /tmp/pr-spec.json
-          fail-on: ERR
+          check-breaking: true
+          fail-on-diff: true
