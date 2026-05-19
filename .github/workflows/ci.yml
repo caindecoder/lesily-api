@@ -126,6 +126,10 @@ jobs:
 
   sonarcloud:
     needs: test
+    # Skip on Dependabot PRs: SONAR_TOKEN is not exposed to Dependabot PR runs by default
+    # (GitHub policy since Sept 2021 — must be added to "Dependabot secrets" separately).
+    # Without the token, scan fails with "Project not found". Master-action #101 (lesily-api side).
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     services:
       mysql:
