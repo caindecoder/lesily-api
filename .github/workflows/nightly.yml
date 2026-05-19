@@ -20,7 +20,7 @@ jobs:
         ports: ['3306:3306']
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: shivammathur/setup-php@v2
         with: { php-version: '8.4' }
       - run: composer install --no-interaction --prefer-dist
@@ -41,7 +41,7 @@ jobs:
         ports: ['3306:3306']
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: shivammathur/setup-php@v2
         with: { php-version: '8.4', coverage: xdebug }
       - run: composer install --no-interaction --prefer-dist
