@@ -6,6 +6,12 @@ on:
   push:
     branches: [main, staging, prod]
 
+# Force Node-20-runtime JS actions to run on Node 24 ahead of the 2026-06-02
+# forced cutover. Remove when all actions have Node-24-compat majors pinned
+# (master-action #95).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   setup:
     runs-on: ubuntu-latest
