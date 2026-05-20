@@ -135,7 +135,9 @@ final class HealthCheckTest extends TestCase
 
     protected function sendHealthCheckUnauthenticated(): TestResponse
     {
-        throw new \RuntimeException('Not implemented (RED phase): sendHealthCheckUnauthenticated');
+        // No acting-as / no auth header / no HealthChecker binding.
+        // Endpoint is public — must return 200 or 503, never 401.
+        return $this->getJson('/api/health');
     }
 
     protected function sendHealthCheckWithAllSubsystemsHealthy(): TestResponse
