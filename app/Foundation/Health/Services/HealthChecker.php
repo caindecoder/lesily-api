@@ -14,4 +14,9 @@ final class HealthChecker
     {
         return $this->subsystems;
     }
+
+    public function isHealthy(): bool
+    {
+        return ! in_array('down', $this->subsystems, strict: true);
+    }
 }

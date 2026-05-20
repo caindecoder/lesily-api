@@ -142,7 +142,14 @@ final class HealthCheckTest extends TestCase
 
     protected function sendHealthCheckWithAllSubsystemsHealthy(): TestResponse
     {
-        throw new \RuntimeException('Not implemented (RED phase): sendHealthCheckWithAllSubsystemsHealthy');
+        $this->app->instance(HealthChecker::class, new HealthChecker([
+            'app' => 'up',
+            'database' => 'up',
+            'redis' => 'up',
+            'queue' => 'up',
+        ]));
+
+        return $this->getJson('/api/health');
     }
 
     // -------------------------------------------------------------

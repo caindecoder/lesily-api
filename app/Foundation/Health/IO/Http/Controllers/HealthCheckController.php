@@ -11,9 +11,12 @@ final class HealthCheckController
 {
     public function __invoke(HealthChecker $checker): JsonResponse
     {
+        $isHealthy = $checker->isHealthy();
+
         return response()->json([
-            'status' => 'unhealthy',
+            'status' => $isHealthy ? 'healthy' : 'unhealthy',
+            'checked_at' => now()->toIso8601String(),
             'subsystems' => $checker->subsystems(),
-        ], 503);
+        ], $isHealthy ? 200 : 503);
     }
 }
