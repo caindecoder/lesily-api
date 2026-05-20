@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Foundation;
 
+use App\Foundation\Health\Services\HealthChecker;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -119,8 +120,8 @@ final class HealthCheckTest extends TestCase
 
     protected function sendHealthCheckWithSubsystemDown(string $subsystem): TestResponse
     {
-        // Test #1 (database) green via "Fake It" — controller hardcodes 503 + database:down.
-        // Test #2 (redis) + #3 (queue) will force Triangulation: parameterize the fake checker.
+        $this->app->instance(HealthChecker::class, new HealthChecker([$subsystem => 'down']));
+
         return $this->getJson('/api/health');
     }
 
