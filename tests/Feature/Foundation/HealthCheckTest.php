@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Foundation;
 
 use App\Foundation\Health\Services\HealthChecker;
+use Illuminate\Http\Response;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -118,6 +119,7 @@ final class HealthCheckTest extends TestCase
     // ACTION HELPERS (per coding-conventions-plan §2.2 — no raw HTTP calls in tests)
     // -------------------------------------------------------------
 
+    /** @return TestResponse<Response> */
     protected function sendHealthCheckWithSubsystemDown(string $subsystem): TestResponse
     {
         $this->app->instance(HealthChecker::class, new HealthChecker([$subsystem => 'down']));
@@ -125,7 +127,10 @@ final class HealthCheckTest extends TestCase
         return $this->getJson('/api/health');
     }
 
-    /** @param  list<string>  $subsystems */
+    /**
+     * @param  list<string>  $subsystems
+     * @return TestResponse<Response>
+     */
     protected function sendHealthCheckWithMultipleSubsystemsDown(array $subsystems): TestResponse
     {
         $this->app->instance(HealthChecker::class, new HealthChecker(array_fill_keys($subsystems, 'down')));
@@ -133,6 +138,7 @@ final class HealthCheckTest extends TestCase
         return $this->getJson('/api/health');
     }
 
+    /** @return TestResponse<Response> */
     protected function sendHealthCheckUnauthenticated(): TestResponse
     {
         // No acting-as / no auth header / no HealthChecker binding.
@@ -140,6 +146,7 @@ final class HealthCheckTest extends TestCase
         return $this->getJson('/api/health');
     }
 
+    /** @return TestResponse<Response> */
     protected function sendHealthCheckWithAllSubsystemsHealthy(): TestResponse
     {
         $this->app->instance(HealthChecker::class, new HealthChecker([
@@ -156,7 +163,11 @@ final class HealthCheckTest extends TestCase
     // ASSERTION HELPERS (per coding-conventions-plan §2.2 — grouped multi-aspect, max 3 params, 2-5 aspects)
     // -------------------------------------------------------------
 
-    /** Verifies status 503 + JSON status "unhealthy" + subsystems.{name}=down (3 aspects). */
+    /**
+     * Verifies status 503 + JSON status "unhealthy" + subsystems.{name}=down (3 aspects).
+     *
+     * @param  TestResponse<Response>  $response
+     */
     protected function assertSubsystemMarkedDown(TestResponse $response, string $subsystem): void
     {
         $response->assertStatus(503);
@@ -167,6 +178,7 @@ final class HealthCheckTest extends TestCase
     /**
      * Verifies status 503 + JSON status "unhealthy" + each failed subsystem marked down (3 aspects).
      *
+     * @param  TestResponse<Response>  $response
      * @param  list<string>  $subsystems
      */
     protected function assertMultipleSubsystemsMarkedDown(TestResponse $response, array $subsystems): void
@@ -178,14 +190,22 @@ final class HealthCheckTest extends TestCase
         }
     }
 
-    /** Verifies response is NOT 401 (endpoint is public; 200 healthy or 503 unhealthy is acceptable). */
+    /**
+     * Verifies response is NOT 401 (endpoint is public; 200 healthy or 503 unhealthy is acceptable).
+     *
+     * @param  TestResponse<Response>  $response
+     */
     protected function assertNotUnauthorized(TestResponse $response): void
     {
         $this->assertNotSame(401, $response->status(), 'Health check is public — must not return 401');
         $this->assertContains($response->status(), [200, 503], 'Response should be 200 (healthy) or 503 (unhealthy), not auth-blocked');
     }
 
-    /** Verifies status 200 + status "healthy" + ISO8601 checked_at + all 4 subsystems "up" (4 aspects). */
+    /**
+     * Verifies status 200 + status "healthy" + ISO8601 checked_at + all 4 subsystems "up" (4 aspects).
+     *
+     * @param  TestResponse<Response>  $response
+     */
     protected function assertAllSubsystemsHealthy(TestResponse $response): void
     {
         $response->assertOk();
