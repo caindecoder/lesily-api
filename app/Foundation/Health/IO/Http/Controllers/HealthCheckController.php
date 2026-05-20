@@ -15,7 +15,7 @@ final class HealthCheckController
 
         return response()->json([
             'status' => $isHealthy ? 'healthy' : 'unhealthy',
-            'checked_at' => now()->toIso8601String(),
+            'checked_at' => now()->utc()->format('Y-m-d\TH:i:s\Z'),
             'subsystems' => $checker->subsystems(),
         ], $isHealthy ? 200 : 503);
     }

@@ -197,8 +197,11 @@ final class HealthCheckTest extends TestCase
      */
     protected function assertNotUnauthorized(TestResponse $response): void
     {
-        $this->assertNotSame(401, $response->status(), 'Health check is public — must not return 401');
-        $this->assertContains($response->status(), [200, 503], 'Response should be 200 (healthy) or 503 (unhealthy), not auth-blocked');
+        $this->assertContains(
+            $response->status(),
+            [200, 503],
+            'Health check is public — must respond 200 (healthy) or 503 (unhealthy), never 401/auth-blocked',
+        );
     }
 
     /**
