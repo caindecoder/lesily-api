@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Tests\Feature\Foundation;
 
 use Tests\TestCase;
@@ -17,15 +15,9 @@ use App\Foundation\Health\Services\HealthChecker;
  * - UC body: Documentation/06-design/chunk-1/use-cases/uc-infrastructure-security.md:31
  * - CD: Documentation/06-design/chunk-1/class-diagram/shared/cd-foundation-http.md (HealthCheckController, HealthChecker, HealthCheckResource, SubsystemStatus)
  * - API: Documentation/06-design/chunk-1/api-design/shared/api-1-infrastructure.md (GET /api/health)
- *
- * RED-phase: all tests fail because route + controller + service don't exist yet.
  */
-final class HealthCheckTest extends TestCase
+class HealthCheckTest extends TestCase
 {
-    // -------------------------------------------------------------
-    // SAD PATH (per coding-conventions-plan §2.2: Sad → Edge → Happy)
-    // -------------------------------------------------------------
-
     #[Test]
     public function when_database_unreachable_then_503_with_database_marked_down(): void
     {
@@ -66,10 +58,6 @@ final class HealthCheckTest extends TestCase
         $this->assertSubsystemMarkedDown($response, 'queue');
     }
 
-    // -------------------------------------------------------------
-    // EDGE CASES
-    // -------------------------------------------------------------
-
     #[Test]
     public function when_multiple_subsystems_down_then_503_lists_every_failure(): void
     {
@@ -94,10 +82,6 @@ final class HealthCheckTest extends TestCase
         $this->assertNotUnauthorized($response);
     }
 
-    // -------------------------------------------------------------
-    // HAPPY PATH
-    // -------------------------------------------------------------
-
     #[Test]
     public function when_all_subsystems_healthy_then_200_with_all_up_and_checked_at(): void
     {
@@ -114,10 +98,6 @@ final class HealthCheckTest extends TestCase
         // And the subsystems object shows app, database, redis, and queue all as "up"
         $this->assertAllSubsystemsHealthy($response);
     }
-
-    // -------------------------------------------------------------
-    // ACTION HELPERS (per coding-conventions-plan §2.2 — no raw HTTP calls in tests)
-    // -------------------------------------------------------------
 
     /** @return TestResponse<Response> */
     protected function sendHealthCheckWithSubsystemDown(string $subsystem): TestResponse
@@ -141,8 +121,6 @@ final class HealthCheckTest extends TestCase
     /** @return TestResponse<Response> */
     protected function sendHealthCheckUnauthenticated(): TestResponse
     {
-        // No acting-as / no auth header / no HealthChecker binding.
-        // Endpoint is public — must return 200 or 503, never 401.
         return $this->getJson('/api/health');
     }
 
@@ -159,15 +137,7 @@ final class HealthCheckTest extends TestCase
         return $this->getJson('/api/health');
     }
 
-    // -------------------------------------------------------------
-    // ASSERTION HELPERS (per coding-conventions-plan §2.2 — grouped multi-aspect, max 3 params, 2-5 aspects)
-    // -------------------------------------------------------------
-
-    /**
-     * Verifies status 503 + JSON status "unhealthy" + subsystems.{name}=down (3 aspects).
-     *
-     * @param  TestResponse<Response>  $response
-     */
+    /** @param  TestResponse<Response>  $response */
     protected function assertSubsystemMarkedDown(TestResponse $response, string $subsystem): void
     {
         $response->assertStatus(503);
@@ -176,8 +146,6 @@ final class HealthCheckTest extends TestCase
     }
 
     /**
-     * Verifies status 503 + JSON status "unhealthy" + each failed subsystem marked down (3 aspects).
-     *
      * @param  TestResponse<Response>  $response
      * @param  list<string>  $subsystems
      */
@@ -190,11 +158,7 @@ final class HealthCheckTest extends TestCase
         }
     }
 
-    /**
-     * Verifies response is NOT 401 (endpoint is public; 200 healthy or 503 unhealthy is acceptable).
-     *
-     * @param  TestResponse<Response>  $response
-     */
+    /** @param  TestResponse<Response>  $response */
     protected function assertNotUnauthorized(TestResponse $response): void
     {
         $this->assertContains(
@@ -204,11 +168,7 @@ final class HealthCheckTest extends TestCase
         );
     }
 
-    /**
-     * Verifies status 200 + status "healthy" + ISO8601 checked_at + all 4 subsystems "up" (4 aspects).
-     *
-     * @param  TestResponse<Response>  $response
-     */
+    /** @param  TestResponse<Response>  $response */
     protected function assertAllSubsystemsHealthy(TestResponse $response): void
     {
         $response->assertOk();

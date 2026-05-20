@@ -1,10 +1,8 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Foundation\Health\Services;
 
-final class HealthChecker
+class HealthChecker
 {
     private const DEFAULT_SUBSYSTEMS = [
         'app' => 'up',

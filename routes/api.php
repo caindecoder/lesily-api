@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 use Illuminate\Support\Facades\Route;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 

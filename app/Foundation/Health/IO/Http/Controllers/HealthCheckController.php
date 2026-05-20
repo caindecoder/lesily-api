@@ -1,13 +1,11 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Foundation\Health\IO\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use App\Foundation\Health\Services\HealthChecker;
 
-final class HealthCheckController
+class HealthCheckController
 {
     public function __invoke(HealthChecker $checker): JsonResponse
     {
