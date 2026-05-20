@@ -125,10 +125,12 @@ final class HealthCheckTest extends TestCase
         return $this->getJson('/api/health');
     }
 
-    /** @param list<string> $subsystems */
+    /** @param  list<string>  $subsystems */
     protected function sendHealthCheckWithMultipleSubsystemsDown(array $subsystems): TestResponse
     {
-        throw new \RuntimeException('Not implemented (RED phase): sendHealthCheckWithMultipleSubsystemsDown');
+        $this->app->instance(HealthChecker::class, new HealthChecker(array_fill_keys($subsystems, 'down')));
+
+        return $this->getJson('/api/health');
     }
 
     protected function sendHealthCheckUnauthenticated(): TestResponse
