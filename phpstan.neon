@@ -10,3 +10,18 @@ parameters:
         - tests
     excludePaths:
         - tests/TestCase.php  # framework boilerplate
+    ignoreErrors:
+        # Suppress two Level 8 "missing type" rules on tests/* so test helpers do not
+        # require PHPDoc annotations purely for static-analysis compliance:
+        # - missingType.generics: TestResponse<TResponse> + similar Laravel generics
+        # - missingType.iterableValue: list<T> / array<K,V> on `array` params/returns
+        # Other Level 8 rules (return type missing, property type missing, void mismatch,
+        # dead code, etc.) remain active on tests/. Production (app/, database/) stays
+        # under full Level 8 enforcement. See coding-conventions-plan.md §2.3 + §2.8
+        # (LeaveDates audit, session 044).
+        -
+            identifier: missingType.generics
+            path: tests/*
+        -
+            identifier: missingType.iterableValue
+            path: tests/*

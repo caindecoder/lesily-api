@@ -3,7 +3,6 @@
 namespace Tests\Feature\Foundation;
 
 use Tests\TestCase;
-use Illuminate\Http\Response;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Health\Services\HealthChecker;
@@ -99,7 +98,6 @@ class HealthCheckTest extends TestCase
         $this->assertAllSubsystemsHealthy($response);
     }
 
-    /** @return TestResponse<Response> */
     protected function sendHealthCheckWithSubsystemDown(string $subsystem): TestResponse
     {
         $this->app->instance(HealthChecker::class, new HealthChecker([$subsystem => 'down']));
@@ -107,10 +105,6 @@ class HealthCheckTest extends TestCase
         return $this->getJson('/api/health');
     }
 
-    /**
-     * @param  list<string>  $subsystems
-     * @return TestResponse<Response>
-     */
     protected function sendHealthCheckWithMultipleSubsystemsDown(array $subsystems): TestResponse
     {
         $this->app->instance(HealthChecker::class, new HealthChecker(array_fill_keys($subsystems, 'down')));
@@ -118,13 +112,11 @@ class HealthCheckTest extends TestCase
         return $this->getJson('/api/health');
     }
 
-    /** @return TestResponse<Response> */
     protected function sendHealthCheckUnauthenticated(): TestResponse
     {
         return $this->getJson('/api/health');
     }
 
-    /** @return TestResponse<Response> */
     protected function sendHealthCheckWithAllSubsystemsHealthy(): TestResponse
     {
         $this->app->instance(HealthChecker::class, new HealthChecker([
@@ -137,7 +129,6 @@ class HealthCheckTest extends TestCase
         return $this->getJson('/api/health');
     }
 
-    /** @param  TestResponse<Response>  $response */
     protected function assertSubsystemMarkedDown(TestResponse $response, string $subsystem): void
     {
         $response->assertStatus(503);
@@ -145,10 +136,6 @@ class HealthCheckTest extends TestCase
         $response->assertJsonPath("subsystems.{$subsystem}", 'down');
     }
 
-    /**
-     * @param  TestResponse<Response>  $response
-     * @param  list<string>  $subsystems
-     */
     protected function assertMultipleSubsystemsMarkedDown(TestResponse $response, array $subsystems): void
     {
         $response->assertStatus(503);
@@ -158,7 +145,6 @@ class HealthCheckTest extends TestCase
         }
     }
 
-    /** @param  TestResponse<Response>  $response */
     protected function assertNotUnauthorized(TestResponse $response): void
     {
         $this->assertContains(
@@ -168,7 +154,6 @@ class HealthCheckTest extends TestCase
         );
     }
 
-    /** @param  TestResponse<Response>  $response */
     protected function assertAllSubsystemsHealthy(TestResponse $response): void
     {
         $response->assertOk();
