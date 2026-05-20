@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Foundation\Health\IO\Http\Controllers;
 
-use App\Foundation\Health\Services\HealthChecker;
 use Illuminate\Http\JsonResponse;
+use App\Foundation\Health\Services\HealthChecker;
 
 final class HealthCheckController
 {

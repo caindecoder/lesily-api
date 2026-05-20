@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Foundation;
 
-use App\Foundation\Health\Services\HealthChecker;
+use Tests\TestCase;
 use Illuminate\Http\Response;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
-use Tests\TestCase;
+use App\Foundation\Health\Services\HealthChecker;
 
 /**
  * UC-1-097 — Health Check Endpoint (chunk-1 Tier-1 #1).

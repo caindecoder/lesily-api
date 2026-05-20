@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 use Illuminate\Support\Facades\Route;
+use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 
 // UC-1-097 — Health Check Endpoint. Registered OUTSIDE the auth/correlation/rate-limit
 // middleware stack per api-1-infrastructure.md §3.1.2 (operational endpoint, must remain
