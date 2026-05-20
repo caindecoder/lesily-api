@@ -26,3 +26,8 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Infection mutation testing reports (config file `infection.json5` IS tracked)
+/infection.html
+/infection.json
+/infection-summary.log
