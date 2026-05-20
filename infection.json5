@@ -16,6 +16,5 @@
     },
     minMsi: 80,
     minCoveredMsi: 85,
-    testFramework: "phpunit",
-    testFrameworkOptions: "--testsuite=Unit"
+    testFramework: "phpunit"
 }
