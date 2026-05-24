@@ -18,54 +18,54 @@ use App\Foundation\Health\Services\HealthChecker;
 class HealthCheckTest extends TestCase
 {
     #[Test]
-    public function when_database_unreachable_then_503_with_database_marked_down(): void
+    public function when_database_unreachable_then_database_marked_down_and_service_unavailable(): void
     {
         // Given the API is running
         // And the database is unreachable
         $response = $this->sendHealthCheckWithSubsystemDown('database');
 
         // When external service sends GET /api/health (in helper)
-        // Then the response is 503
+        // Then the response is service-unavailable
         // And the response body has status "unhealthy"
         // And the subsystems object shows database as "down"
         $this->assertSubsystemMarkedDown($response, 'database');
     }
 
     #[Test]
-    public function when_redis_unreachable_then_503_with_redis_marked_down(): void
+    public function when_redis_unreachable_then_redis_marked_down_and_service_unavailable(): void
     {
         // Given the API is running
         // And Redis is unreachable
         $response = $this->sendHealthCheckWithSubsystemDown('redis');
 
         // When external service sends GET /api/health
-        // Then the response is 503
+        // Then the response is service-unavailable
         // And the subsystems object shows redis as "down"
         $this->assertSubsystemMarkedDown($response, 'redis');
     }
 
     #[Test]
-    public function when_queue_not_processing_then_503_with_queue_marked_down(): void
+    public function when_queue_not_processing_then_queue_marked_down_and_service_unavailable(): void
     {
         // Given the API is running
         // And the queue worker is not processing
         $response = $this->sendHealthCheckWithSubsystemDown('queue');
 
         // When external service sends GET /api/health
-        // Then the response is 503
+        // Then the response is service-unavailable
         // And the subsystems object shows queue as "down"
         $this->assertSubsystemMarkedDown($response, 'queue');
     }
 
     #[Test]
-    public function when_multiple_subsystems_down_then_503_lists_every_failure(): void
+    public function when_multiple_subsystems_down_then_every_failure_listed_in_response(): void
     {
         // Given the API is running
         // And both the database and Redis are unreachable
         $response = $this->sendHealthCheckWithMultipleSubsystemsDown(['database', 'redis']);
 
         // When external service sends GET /api/health
-        // Then the response is 503
+        // Then the response is service-unavailable
         // And the subsystems object marks every failed subsystem as "down"
         $this->assertMultipleSubsystemsMarkedDown($response, ['database', 'redis']);
     }
@@ -82,7 +82,7 @@ class HealthCheckTest extends TestCase
     }
 
     #[Test]
-    public function when_all_subsystems_healthy_then_200_with_all_up_and_checked_at(): void
+    public function when_all_subsystems_healthy_then_all_marked_up_with_checked_at(): void
     {
         // Given the API is running
         // And the database is reachable
@@ -91,7 +91,7 @@ class HealthCheckTest extends TestCase
         $response = $this->sendHealthCheckWithAllSubsystemsHealthy();
 
         // When external service sends GET /api/health
-        // Then the response is 200
+        // Then the response is successful
         // And the response body has status "healthy"
         // And the response body has a checked_at ISO8601 timestamp
         // And the subsystems object shows app, database, redis, and queue all as "up"
