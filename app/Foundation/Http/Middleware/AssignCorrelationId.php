@@ -11,7 +11,7 @@ class AssignCorrelationId
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $correlationId = $request->header('Correlation-Id') ?: (string) Str::uuid7();
+        $correlationId = $request->header('Correlation-Id') ?: Str::uuid7()->toString();
         $request->attributes->set('correlation_id', $correlationId);
 
         $response = $next($request);
