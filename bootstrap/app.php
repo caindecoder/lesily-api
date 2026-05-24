@@ -5,6 +5,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -16,7 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->append(AssignCorrelationId::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (ValidationException $e, Request $request) {
@@ -26,7 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     'message' => $e->getMessage(),
                     'error_code' => 'VALIDATION_FAILED',
                     'errors' => $e->errors(),
-                    'correlation_id' => '00000000-0000-0000-0000-000000000000',
+                    'correlation_id' => $request->attributes->get('correlation_id', '00000000-0000-0000-0000-000000000000'),
                 ], 422);
             }
         });
@@ -37,7 +38,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     'status' => 'error',
                     'message' => 'Resource not found.',
                     'error_code' => 'RESOURCE_NOT_FOUND',
-                    'correlation_id' => '00000000-0000-0000-0000-000000000000',
+                    'correlation_id' => $request->attributes->get('correlation_id', '00000000-0000-0000-0000-000000000000'),
                 ], 404);
             }
         });
@@ -50,7 +51,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     'error_code' => 'FEATURE_NOT_AVAILABLE',
                     'upgrade_to' => $e->upgradeTo,
                     'upgrade_url' => $e->upgradeUrl,
-                    'correlation_id' => '00000000-0000-0000-0000-000000000000',
+                    'correlation_id' => $request->attributes->get('correlation_id', '00000000-0000-0000-0000-000000000000'),
                 ], 403);
             }
         });
@@ -67,7 +68,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     'status' => 'error',
                     'message' => 'An unexpected error occurred.',
                     'error_code' => 'INTERNAL_ERROR',
-                    'correlation_id' => '00000000-0000-0000-0000-000000000000',
+                    'correlation_id' => $request->attributes->get('correlation_id', '00000000-0000-0000-0000-000000000000'),
                 ], 500);
             }
 

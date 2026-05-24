@@ -3,6 +3,7 @@
 namespace Tests\Feature\Foundation;
 
 use Tests\TestCase;
+use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Route;
@@ -91,6 +92,19 @@ class ApiErrorResponseTest extends TestCase
         $this->assertGenericInternalErrorEnvelope($response);
     }
 
+    #[Test]
+    public function when_any_error_occurs_then_correlation_id_included_in_response(): void
+    {
+        // Given a request carries an explicit X-Correlation-Id header
+        $correlationId = (string) Str::uuid();
+
+        // When the request triggers any error (validation here as the simplest sad path)
+        $response = $this->sendInvalidPayloadWithCorrelationHeader($correlationId);
+
+        // Then the error response echoes the same correlation_id in body AND header
+        $this->assertCorrelationIdPropagated($response, $correlationId);
+    }
+
     protected function sendInvalidPayloadToValidatedEndpoint(): TestResponse
     {
         return $this->postJson('/_test/validation-probe', []);
@@ -147,9 +161,21 @@ class ApiErrorResponseTest extends TestCase
         $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
         $response->assertJsonPath('message', 'An unexpected error occurred.');
         $response->assertJsonStructure(['correlation_id']);
-        $body = $response->getContent();
+        $body = (string) $response->getContent();
         $this->assertStringNotContainsString('Internal stuff', $body);
         $this->assertStringNotContainsString('RuntimeException', $body);
         $this->assertStringNotContainsString('/_test/internal-explosion', $body);
+    }
+
+    protected function sendInvalidPayloadWithCorrelationHeader(string $correlationId): TestResponse
+    {
+        return $this->withHeader('X-Correlation-Id', $correlationId)
+            ->postJson('/_test/validation-probe', []);
+    }
+
+    protected function assertCorrelationIdPropagated(TestResponse $response, string $expectedCorrelationId): void
+    {
+        $response->assertJsonPath('correlation_id', $expectedCorrelationId);
+        $this->assertSame($expectedCorrelationId, $response->headers->get('X-Correlation-Id'));
     }
 }
