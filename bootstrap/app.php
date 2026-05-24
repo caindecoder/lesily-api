@@ -38,6 +38,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     'status' => 'error',
                     'message' => 'Resource not found.',
                     'error_code' => 'RESOURCE_NOT_FOUND',
+                    'errors' => (object) [],
                     'correlation_id' => $request->attributes->get('correlation_id', '00000000-0000-0000-0000-000000000000'),
                 ], 404);
             }
@@ -49,6 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     'status' => 'error',
                     'message' => $e->getMessage(),
                     'error_code' => 'FEATURE_NOT_AVAILABLE',
+                    'errors' => (object) [],
                     'upgrade_to' => $e->upgradeTo,
                     'upgrade_url' => $e->upgradeUrl,
                     'correlation_id' => $request->attributes->get('correlation_id', '00000000-0000-0000-0000-000000000000'),
@@ -68,6 +70,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     'status' => 'error',
                     'message' => 'An unexpected error occurred.',
                     'error_code' => 'INTERNAL_ERROR',
+                    'errors' => (object) [],
                     'correlation_id' => $request->attributes->get('correlation_id', '00000000-0000-0000-0000-000000000000'),
                 ], 500);
             }

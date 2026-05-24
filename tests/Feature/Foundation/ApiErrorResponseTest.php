@@ -131,6 +131,7 @@ class ApiErrorResponseTest extends TestCase
         $response->assertStatus(404);
         $response->assertJsonPath('status', 'error');
         $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
+        $response->assertJsonPath('errors', []);
         $response->assertJsonStructure(['correlation_id']);
     }
 
@@ -146,6 +147,7 @@ class ApiErrorResponseTest extends TestCase
         $response->assertJsonPath('error_code', 'FEATURE_NOT_AVAILABLE');
         $response->assertJsonPath('upgrade_to', 'Pro');
         $response->assertJsonPath('upgrade_url', '/settings/billing/upgrade');
+        $response->assertJsonPath('errors', []);
         $response->assertJsonStructure(['correlation_id']);
     }
 
@@ -160,6 +162,7 @@ class ApiErrorResponseTest extends TestCase
         $response->assertJsonPath('status', 'error');
         $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
         $response->assertJsonPath('message', 'An unexpected error occurred.');
+        $response->assertJsonPath('errors', []);
         $response->assertJsonStructure(['correlation_id']);
         $body = (string) $response->getContent();
         $this->assertStringNotContainsString('Internal stuff', $body);
@@ -169,13 +172,13 @@ class ApiErrorResponseTest extends TestCase
 
     protected function sendInvalidPayloadWithCorrelationHeader(string $correlationId): TestResponse
     {
-        return $this->withHeader('X-Correlation-Id', $correlationId)
+        return $this->withHeader('Correlation-Id', $correlationId)
             ->postJson('/_test/validation-probe', []);
     }
 
     protected function assertCorrelationIdPropagated(TestResponse $response, string $expectedCorrelationId): void
     {
         $response->assertJsonPath('correlation_id', $expectedCorrelationId);
-        $this->assertSame($expectedCorrelationId, $response->headers->get('X-Correlation-Id'));
+        $this->assertSame($expectedCorrelationId, $response->headers->get('Correlation-Id'));
     }
 }
