@@ -39,6 +39,10 @@ class ApiErrorResponseTest extends TestCase
                 upgradeUrl: '/settings/billing/upgrade',
             );
         });
+
+        Route::get('/_test/internal-explosion', function () {
+            throw new \RuntimeException('Internal stuff that should not leak to clients.');
+        });
     }
 
     #[Test]
@@ -72,6 +76,19 @@ class ApiErrorResponseTest extends TestCase
 
         // Then the envelope is FEATURE_NOT_AVAILABLE with upgrade_to + upgrade_url
         $this->assertFeatureGateDenialEnvelope($response);
+    }
+
+    #[Test]
+    public function when_internal_exception_thrown_then_generic_error_without_trace_exposure(): void
+    {
+        // Given APP_DEBUG is false (production posture)
+        config()->set('app.debug', false);
+
+        // When a controller throws an unhandled internal exception
+        $response = $this->sendRequestThatTriggersUnhandledException();
+
+        // Then the envelope is INTERNAL_ERROR with no stack-trace / file / class leak
+        $this->assertGenericInternalErrorEnvelope($response);
     }
 
     protected function sendInvalidPayloadToValidatedEndpoint(): TestResponse
@@ -116,5 +133,23 @@ class ApiErrorResponseTest extends TestCase
         $response->assertJsonPath('upgrade_to', 'Pro');
         $response->assertJsonPath('upgrade_url', '/settings/billing/upgrade');
         $response->assertJsonStructure(['correlation_id']);
+    }
+
+    protected function sendRequestThatTriggersUnhandledException(): TestResponse
+    {
+        return $this->getJson('/_test/internal-explosion');
+    }
+
+    protected function assertGenericInternalErrorEnvelope(TestResponse $response): void
+    {
+        $response->assertStatus(500);
+        $response->assertJsonPath('status', 'error');
+        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
+        $response->assertJsonPath('message', 'An unexpected error occurred.');
+        $response->assertJsonStructure(['correlation_id']);
+        $body = $response->getContent();
+        $this->assertStringNotContainsString('Internal stuff', $body);
+        $this->assertStringNotContainsString('RuntimeException', $body);
+        $this->assertStringNotContainsString('/_test/internal-explosion', $body);
     }
 }

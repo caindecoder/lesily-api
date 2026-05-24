@@ -54,4 +54,23 @@ return Application::configure(basePath: dirname(__DIR__))
                 ], 403);
             }
         });
+
+        $exceptions->render(function (Throwable $e, Request $request) {
+            if ($e instanceof ValidationException
+                || $e instanceof NotFoundHttpException
+                || $e instanceof FeatureUnavailableException) {
+                return null;
+            }
+
+            if ($request->expectsJson() && ! config('app.debug')) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'An unexpected error occurred.',
+                    'error_code' => 'INTERNAL_ERROR',
+                    'correlation_id' => '00000000-0000-0000-0000-000000000000',
+                ], 500);
+            }
+
+            return null;
+        });
     })->create();
