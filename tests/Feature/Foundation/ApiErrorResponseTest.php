@@ -27,6 +27,10 @@ class ApiErrorResponseTest extends TestCase
 
             return response()->json(['ok' => true]);
         });
+
+        Route::get('/_test/inaccessible-resource', function () {
+            abort(404);
+        });
     }
 
     #[Test]
@@ -38,6 +42,17 @@ class ApiErrorResponseTest extends TestCase
 
         // Then the response shape is the global error envelope with validation details
         $this->assertValidationErrorEnvelope($response);
+    }
+
+    #[Test]
+    public function when_resource_inaccessible_then_not_found_hides_existence(): void
+    {
+        // Given a request targets a resource that does not exist OR is cross-tenant
+        // When the endpoint returns 404 instead of 403 (tenant-isolation hides existence)
+        $response = $this->sendRequestToInaccessibleResource();
+
+        // Then the response envelope is RESOURCE_NOT_FOUND with no existence-leaking detail
+        $this->assertResourceNotFoundEnvelope($response);
     }
 
     protected function sendInvalidPayloadToValidatedEndpoint(): TestResponse
@@ -54,5 +69,18 @@ class ApiErrorResponseTest extends TestCase
             'errors' => ['name'],
             'correlation_id',
         ]);
+    }
+
+    protected function sendRequestToInaccessibleResource(): TestResponse
+    {
+        return $this->getJson('/_test/inaccessible-resource');
+    }
+
+    protected function assertResourceNotFoundEnvelope(TestResponse $response): void
+    {
+        $response->assertStatus(404);
+        $response->assertJsonPath('status', 'error');
+        $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
+        $response->assertJsonStructure(['correlation_id']);
     }
 }
