@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 
 /**
  * UC-1-099 — Receive API Error Response (Global Format) (chunk-1 Tier-1 #2).
@@ -31,6 +32,13 @@ class ApiErrorResponseTest extends TestCase
         Route::get('/_test/inaccessible-resource', function () {
             abort(404);
         });
+
+        Route::get('/_test/gated-feature', function () {
+            throw new FeatureUnavailableException(
+                upgradeTo: 'Pro',
+                upgradeUrl: '/settings/billing/upgrade',
+            );
+        });
     }
 
     #[Test]
@@ -53,6 +61,17 @@ class ApiErrorResponseTest extends TestCase
 
         // Then the response envelope is RESOURCE_NOT_FOUND with no existence-leaking detail
         $this->assertResourceNotFoundEnvelope($response);
+    }
+
+    #[Test]
+    public function when_feature_unavailable_then_feature_gate_denial_includes_upgrade_prompt(): void
+    {
+        // Given a Free-tier user attempts a Pro+ feature
+        // When the request hits a feature-gated endpoint
+        $response = $this->sendRequestToGatedFeature();
+
+        // Then the envelope is FEATURE_NOT_AVAILABLE with upgrade_to + upgrade_url
+        $this->assertFeatureGateDenialEnvelope($response);
     }
 
     protected function sendInvalidPayloadToValidatedEndpoint(): TestResponse
@@ -81,6 +100,21 @@ class ApiErrorResponseTest extends TestCase
         $response->assertStatus(404);
         $response->assertJsonPath('status', 'error');
         $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
+        $response->assertJsonStructure(['correlation_id']);
+    }
+
+    protected function sendRequestToGatedFeature(): TestResponse
+    {
+        return $this->getJson('/_test/gated-feature');
+    }
+
+    protected function assertFeatureGateDenialEnvelope(TestResponse $response): void
+    {
+        $response->assertStatus(403);
+        $response->assertJsonPath('status', 'error');
+        $response->assertJsonPath('error_code', 'FEATURE_NOT_AVAILABLE');
+        $response->assertJsonPath('upgrade_to', 'Pro');
+        $response->assertJsonPath('upgrade_url', '/settings/billing/upgrade');
         $response->assertJsonStructure(['correlation_id']);
     }
 }

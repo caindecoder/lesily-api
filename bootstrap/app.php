@@ -5,6 +5,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -38,6 +39,19 @@ return Application::configure(basePath: dirname(__DIR__))
                     'error_code' => 'RESOURCE_NOT_FOUND',
                     'correlation_id' => '00000000-0000-0000-0000-000000000000',
                 ], 404);
+            }
+        });
+
+        $exceptions->render(function (FeatureUnavailableException $e, Request $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $e->getMessage(),
+                    'error_code' => 'FEATURE_NOT_AVAILABLE',
+                    'upgrade_to' => $e->upgradeTo,
+                    'upgrade_url' => $e->upgradeUrl,
+                    'correlation_id' => '00000000-0000-0000-0000-000000000000',
+                ], 403);
             }
         });
     })->create();
