@@ -30,6 +30,14 @@ class RateLimitExceededTest extends TestCase
                 ['Retry-After' => 32],
             );
         });
+
+        Route::post('/_test/throttled-auth-probe', function (Request $request) {
+            throw new ThrottleRequestsException(
+                'Too many requests.',
+                null,
+                ['Retry-After' => 6],
+            );
+        });
     }
 
     #[Test]
@@ -43,9 +51,25 @@ class RateLimitExceededTest extends TestCase
         $this->assertThrottledEnvelope($response);
     }
 
+    #[Test]
+    public function when_unauth_ip_exceeds_auth_endpoint_limit_then_responds_with_throttled_envelope(): void
+    {
+        // Given an unauthenticated client has exhausted the per-IP auth quota for the minute
+        // When the client posts another login attempt
+        $response = $this->sendRequestExceedingAuthEndpointLimit();
+
+        // Then the same RATE_LIMIT_EXCEEDED envelope is returned (shorter Retry-After per tighter window)
+        $this->assertThrottledEnvelope($response);
+    }
+
     protected function sendRequestExceedingFreeTierGeneralApiLimit(): TestResponse
     {
         return $this->getJson('/_test/throttled-probe');
+    }
+
+    protected function sendRequestExceedingAuthEndpointLimit(): TestResponse
+    {
+        return $this->postJson('/_test/throttled-auth-probe');
     }
 
     protected function assertThrottledEnvelope(TestResponse $response): void
