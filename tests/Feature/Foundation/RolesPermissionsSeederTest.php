@@ -3,6 +3,7 @@
 namespace Tests\Feature\Foundation;
 
 use Tests\TestCase;
+use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
 use Database\Seeders\RolesPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -67,11 +68,51 @@ class RolesPermissionsSeederTest extends TestCase
         }
     }
 
+    #[Test]
+    public function when_seeder_runs_twice_then_idempotent_with_no_duplicates(): void
+    {
+        // Given a valid minimal YAML catalog (one role, no permissions, no grants)
+        $tmpDir = $this->givenTempYamlDirectory();
+        file_put_contents("{$tmpDir}/roles.yaml",
+            "- code: owner\n".
+            "  id: 0193abcd-1111-7000-8000-000000000001\n".
+            "  name: Owner\n".
+            "  description: Tenant Owner\n".
+            "  scope: tenant\n".
+            "  is_assignable: true\n".
+            "  is_system: true\n".
+            "  sort_order: 1\n"
+        );
+        file_put_contents("{$tmpDir}/permissions.yaml", '[]');
+        file_put_contents("{$tmpDir}/role-permissions.yaml", 'owner: []');
+
+        $seeder = $this->newSeeder($tmpDir);
+
+        // When the seeder runs twice
+        $seeder->run();
+        $rolesAfterFirst = DB::table('roles')->count();
+        $seeder->run();
+        $rolesAfterSecond = DB::table('roles')->count();
+
+        // Then row counts are identical and equal to the YAML row count
+        $this->assertSame(1, $rolesAfterFirst);
+        $this->assertSame($rolesAfterFirst, $rolesAfterSecond);
+    }
+
     protected function givenTempYamlDirectory(): string
     {
         $dir = sys_get_temp_dir().'/rbac-seeder-test-'.uniqid();
         mkdir($dir);
 
         return $dir;
+    }
+
+    protected function newSeeder(string $dir): RolesPermissionsSeeder
+    {
+        return new RolesPermissionsSeeder(
+            rolesYamlPath: "{$dir}/roles.yaml",
+            permissionsYamlPath: "{$dir}/permissions.yaml",
+            rolePermissionsYamlPath: "{$dir}/role-permissions.yaml",
+        );
     }
 }
