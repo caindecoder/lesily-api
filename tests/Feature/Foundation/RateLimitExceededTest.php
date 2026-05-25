@@ -183,11 +183,20 @@ class RateLimitExceededTest extends TestCase
         return $this->getJson('/_test/free-tier-probe');
     }
 
+    /**
+     * Laravel's framework throttle middleware emits X-RateLimit-Limit + X-RateLimit-Remaining on
+     * EVERY response but X-RateLimit-Reset ONLY on 429s. The full UC contract per CD-1-13 L189 +
+     * UC-1-098 L167 demands Reset on every response — that requires the custom EmitRateLimitHeaders
+     * middleware which arrives in a later UC. For now happy-path tests lock the framework-supplied
+     * Limit/Remaining; Reset is asserted only on the 429 envelope (where we emit it ourselves in
+     * bootstrap/app.php).
+     */
     protected function assertProTierLimitHeaders(TestResponse $response): void
     {
         $response->assertStatus(200);
         $this->assertSame('300', $response->headers->get('X-RateLimit-Limit'));
-        $this->assertNotNull($response->headers->get('X-RateLimit-Remaining'));
+        $this->assertSame('299', $response->headers->get('X-RateLimit-Remaining'));
+        $this->assertNotNull($response->headers->get('Correlation-Id'));
     }
 
     protected function assertFreeTierLimitHeaders(TestResponse $response): void
@@ -195,6 +204,7 @@ class RateLimitExceededTest extends TestCase
         $response->assertStatus(200);
         $this->assertSame('60', $response->headers->get('X-RateLimit-Limit'));
         $this->assertSame('59', $response->headers->get('X-RateLimit-Remaining'));
+        $this->assertNotNull($response->headers->get('Correlation-Id'));
     }
 
     protected function assertThrottledEnvelope(TestResponse $response): void
@@ -219,6 +229,14 @@ class RateLimitExceededTest extends TestCase
             '00000000-0000-0000-0000-000000000000',
             $response->json('correlation_id'),
             'correlation_id must be a real UUIDv7 minted by AssignCorrelationId middleware, not the zero-UUID fallback.',
+        );
+        $this->assertNotNull(
+            $response->headers->get('Correlation-Id'),
+            'Correlation-Id response header must be echoed by AssignCorrelationId middleware on throttled responses too.',
+        );
+        $this->assertNotNull(
+            $response->headers->get('X-RateLimit-Reset'),
+            'X-RateLimit-Reset must be emitted on 429 envelopes so clients know when the window resets.',
         );
     }
 }

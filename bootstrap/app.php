@@ -64,6 +64,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 // Laravel's ThrottleRequests middleware always sets Retry-After when it constructs
                 // ThrottleRequestsException; the 60s fallback is defense-in-depth for direct constructions.
                 $retryAfter = (int) ($e->getHeaders()['Retry-After'] ?? 60);
+                $resetAt = (string) (time() + $retryAfter);
 
                 return response()->json([
                     'status' => 'error',
@@ -72,7 +73,10 @@ return Application::configure(basePath: dirname(__DIR__))
                     'errors' => (object) [],
                     'retry_after' => $retryAfter,
                     'correlation_id' => $request->attributes->get('correlation_id', '00000000-0000-0000-0000-000000000000'),
-                ], 429, ['Retry-After' => $retryAfter]);
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Reset' => $resetAt,
+                ]);
             }
         });
 
