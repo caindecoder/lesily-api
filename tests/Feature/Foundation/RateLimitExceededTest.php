@@ -118,14 +118,13 @@ class RateLimitExceededTest extends TestCase
     public function when_redis_unavailable_then_request_processed_with_warning_logged(): void
     {
         // Given the rate-limit infrastructure (Redis) is unreachable
-        Log::spy();
+        Log::shouldReceive('warning')->once();
 
         // When a request reaches an endpoint that would normally consult the limiter
         $response = $this->sendRequestUnderSimulatedRedisOutage();
 
-        // Then fail-open: the request is processed normally and the outage is logged
+        // Then fail-open: the request is processed normally (Mockery verifies the warning at teardown)
         $response->assertStatus(200);
-        Log::shouldHaveReceived('warning')->once();
     }
 
     #[Test]
