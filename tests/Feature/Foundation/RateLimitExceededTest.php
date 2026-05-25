@@ -47,6 +47,11 @@ class RateLimitExceededTest extends TestCase
 
         Route::get('/_test/tenant-scoped-probe', fn () => response()->json(['ok' => true]))
             ->middleware('throttle:test-tenant-scope');
+
+        RateLimiter::for('test-pro-tier', fn () => Limit::perMinute(300));
+
+        Route::get('/_test/pro-tier-probe', fn () => response()->json(['ok' => true]))
+            ->middleware('throttle:test-pro-tier');
     }
 
     #[Test]
@@ -84,6 +89,17 @@ class RateLimitExceededTest extends TestCase
         $response->assertStatus(200);
     }
 
+    #[Test]
+    public function when_pro_tier_user_sends_request_then_higher_limit_header_advertised(): void
+    {
+        // Given a Pro-tier route resolves to the 300/min Pro bucket
+        // When the user sends a request well within the bucket
+        $response = $this->sendProTierRequest();
+
+        // Then the response surfaces X-RateLimit-Limit reflecting the Pro tier ceiling
+        $this->assertProTierLimitHeaders($response);
+    }
+
     protected function sendRequestExceedingFreeTierGeneralApiLimit(): TestResponse
     {
         return $this->getJson('/_test/throttled-probe');
@@ -105,6 +121,18 @@ class RateLimitExceededTest extends TestCase
     {
         return $this->withHeader('X-Tenant-Id', $tenantId)
             ->getJson('/_test/tenant-scoped-probe');
+    }
+
+    protected function sendProTierRequest(): TestResponse
+    {
+        return $this->getJson('/_test/pro-tier-probe');
+    }
+
+    protected function assertProTierLimitHeaders(TestResponse $response): void
+    {
+        $response->assertStatus(200);
+        $this->assertSame('300', $response->headers->get('X-RateLimit-Limit'));
+        $this->assertNotNull($response->headers->get('X-RateLimit-Remaining'));
     }
 
     protected function assertThrottledEnvelope(TestResponse $response): void
