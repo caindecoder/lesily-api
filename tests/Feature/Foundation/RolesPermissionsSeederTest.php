@@ -6,6 +6,7 @@ use Tests\TestCase;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
 use Database\Seeders\RolesPermissionsSeeder;
+use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\RolesPermissions\Exceptions\SeederSourceException;
 
@@ -107,6 +108,34 @@ class RolesPermissionsSeederTest extends TestCase
         return $dir;
     }
 
+    #[Test]
+    public function when_seeder_runs_then_eight_roles_persisted_with_canonical_codes_and_stable_uuids(): void
+    {
+        // Given the real catalog YAML in database/seeders/data
+        $seeder = $this->newSeeder($this->givenRealCatalogPath());
+
+        // When the seeder runs
+        $seeder->run();
+
+        // Then the 8 canonical role codes exist in sort_order
+        $codes = Role::query()->orderBy('sort_order')->pluck('code')->all();
+        $this->assertSame([
+            'platform_super_admin',
+            'owner',
+            'admin',
+            'hr_officer',
+            'payroll_officer',
+            'auditor',
+            'employee',
+            'manager',
+        ], $codes);
+
+        // And the owner role has the stable UUID committed to the seeder source
+        $owner = Role::query()->where('code', 'owner')->first();
+        $this->assertNotNull($owner);
+        $this->assertSame(36, strlen($owner->id));
+    }
+
     protected function newSeeder(string $dir): RolesPermissionsSeeder
     {
         return new RolesPermissionsSeeder(
@@ -114,5 +143,10 @@ class RolesPermissionsSeederTest extends TestCase
             permissionsYamlPath: "{$dir}/permissions.yaml",
             rolePermissionsYamlPath: "{$dir}/role-permissions.yaml",
         );
+    }
+
+    protected function givenRealCatalogPath(): string
+    {
+        return database_path('seeders/data');
     }
 }
