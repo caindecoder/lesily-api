@@ -41,4 +41,37 @@ class RolesPermissionsSeederTest extends TestCase
             $this->assertStringContainsString('/nonexistent/roles.yaml', $e->getMessage());
         }
     }
+
+    #[Test]
+    public function when_yaml_file_malformed_then_seeder_throws_with_descriptive_error(): void
+    {
+        // Given a valid roles.yaml and an unparseable permissions.yaml
+        $tmpDir = $this->givenTempYamlDirectory();
+        file_put_contents("{$tmpDir}/roles.yaml", "- code: owner\n  name: Owner\n");
+        file_put_contents("{$tmpDir}/permissions.yaml", 'invalid: yaml: : : malformed: bad: :');
+        file_put_contents("{$tmpDir}/role-permissions.yaml", "owner: []\n");
+
+        $seeder = new RolesPermissionsSeeder(
+            rolesYamlPath: "{$tmpDir}/roles.yaml",
+            permissionsYamlPath: "{$tmpDir}/permissions.yaml",
+            rolePermissionsYamlPath: "{$tmpDir}/role-permissions.yaml",
+        );
+
+        // When the seeder runs
+        try {
+            $seeder->run();
+            $this->fail('SeederSourceException was not thrown.');
+        } catch (SeederSourceException $e) {
+            // Then the exception message references the failing file
+            $this->assertStringContainsString('permissions.yaml', $e->getMessage());
+        }
+    }
+
+    protected function givenTempYamlDirectory(): string
+    {
+        $dir = sys_get_temp_dir().'/rbac-seeder-test-'.uniqid();
+        mkdir($dir);
+
+        return $dir;
+    }
 }

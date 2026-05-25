@@ -3,6 +3,8 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
+use Symfony\Component\Yaml\Yaml;
+use Symfony\Component\Yaml\Exception\ParseException;
 use App\Foundation\RolesPermissions\Exceptions\SeederSourceException;
 
 class RolesPermissionsSeeder extends Seeder
@@ -15,9 +17,21 @@ class RolesPermissionsSeeder extends Seeder
 
     public function run(): void
     {
-        if (! is_file($this->rolesYamlPath)) {
-            throw SeederSourceException::missingFile($this->rolesYamlPath);
+        $this->loadYaml($this->rolesYamlPath);
+        $this->loadYaml($this->permissionsYamlPath);
+        $this->loadYaml($this->rolePermissionsYamlPath);
+        // Writes land in Test #3's GREEN phase via DB::transaction wrapper.
+    }
+
+    private function loadYaml(string $path): array
+    {
+        if (! is_file($path)) {
+            throw SeederSourceException::missingFile($path);
         }
-        // Permissions + role-permissions checks land in Test #2's GREEN phase.
+        try {
+            return Yaml::parseFile($path) ?? [];
+        } catch (ParseException $e) {
+            throw SeederSourceException::parseFailure($path, $e);
+        }
     }
 }
