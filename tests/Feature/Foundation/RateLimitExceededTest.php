@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 
 /**
@@ -38,6 +40,13 @@ class RateLimitExceededTest extends TestCase
                 ['Retry-After' => 6],
             );
         });
+
+        RateLimiter::for('test-tenant-scope', function (Request $request) {
+            return Limit::perMinute(2)->by('tenant:'.$request->header('X-Tenant-Id', 'anonymous'));
+        });
+
+        Route::get('/_test/tenant-scoped-probe', fn () => response()->json(['ok' => true]))
+            ->middleware('throttle:test-tenant-scope');
     }
 
     #[Test]
@@ -62,6 +71,19 @@ class RateLimitExceededTest extends TestCase
         $this->assertThrottledEnvelope($response);
     }
 
+    #[Test]
+    public function when_separate_tenant_sends_request_then_unaffected_by_other_tenant_quota(): void
+    {
+        // Given tenant Contoso has consumed its general-API quota for the minute
+        $this->exhaustGeneralApiQuotaFor(tenantId: 'contoso');
+
+        // When tenant ACME (separate tenant, same tier) sends a request
+        $response = $this->sendTenantScopedRequestFor(tenantId: 'acme');
+
+        // Then ACME is unaffected — its own counter, not Contoso's, gates the request
+        $response->assertStatus(200);
+    }
+
     protected function sendRequestExceedingFreeTierGeneralApiLimit(): TestResponse
     {
         return $this->getJson('/_test/throttled-probe');
@@ -70,6 +92,19 @@ class RateLimitExceededTest extends TestCase
     protected function sendRequestExceedingAuthEndpointLimit(): TestResponse
     {
         return $this->postJson('/_test/throttled-auth-probe');
+    }
+
+    protected function exhaustGeneralApiQuotaFor(string $tenantId): void
+    {
+        $this->sendTenantScopedRequestFor($tenantId)->assertStatus(200);
+        $this->sendTenantScopedRequestFor($tenantId)->assertStatus(200);
+        $this->sendTenantScopedRequestFor($tenantId)->assertStatus(429);
+    }
+
+    protected function sendTenantScopedRequestFor(string $tenantId): TestResponse
+    {
+        return $this->withHeader('X-Tenant-Id', $tenantId)
+            ->getJson('/_test/tenant-scoped-probe');
     }
 
     protected function assertThrottledEnvelope(TestResponse $response): void
