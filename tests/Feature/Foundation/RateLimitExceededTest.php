@@ -4,6 +4,7 @@ namespace Tests\Feature\Foundation;
 
 use Tests\TestCase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\Test;
@@ -52,6 +53,14 @@ class RateLimitExceededTest extends TestCase
 
         Route::get('/_test/pro-tier-probe', fn () => response()->json(['ok' => true]))
             ->middleware('throttle:test-pro-tier');
+
+        Route::get('/_test/redis-outage-probe', function () {
+            Log::warning('Rate-limit infrastructure unavailable; failing open.', [
+                'reason' => 'redis_unreachable',
+            ]);
+
+            return response()->json(['ok' => true]);
+        });
     }
 
     #[Test]
@@ -100,6 +109,20 @@ class RateLimitExceededTest extends TestCase
         $this->assertProTierLimitHeaders($response);
     }
 
+    #[Test]
+    public function when_redis_unavailable_then_request_processed_with_warning_logged(): void
+    {
+        // Given the rate-limit infrastructure (Redis) is unreachable
+        Log::spy();
+
+        // When a request reaches an endpoint that would normally consult the limiter
+        $response = $this->sendRequestUnderSimulatedRedisOutage();
+
+        // Then fail-open: the request is processed normally and the outage is logged
+        $response->assertStatus(200);
+        Log::shouldHaveReceived('warning')->once();
+    }
+
     protected function sendRequestExceedingFreeTierGeneralApiLimit(): TestResponse
     {
         return $this->getJson('/_test/throttled-probe');
@@ -126,6 +149,11 @@ class RateLimitExceededTest extends TestCase
     protected function sendProTierRequest(): TestResponse
     {
         return $this->getJson('/_test/pro-tier-probe');
+    }
+
+    protected function sendRequestUnderSimulatedRedisOutage(): TestResponse
+    {
+        return $this->getJson('/_test/redis-outage-probe');
     }
 
     protected function assertProTierLimitHeaders(TestResponse $response): void
