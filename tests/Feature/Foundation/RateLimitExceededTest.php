@@ -61,6 +61,11 @@ class RateLimitExceededTest extends TestCase
 
             return response()->json(['ok' => true]);
         });
+
+        RateLimiter::for('test-free-tier', fn () => Limit::perMinute(60));
+
+        Route::get('/_test/free-tier-probe', fn () => response()->json(['ok' => true]))
+            ->middleware('throttle:test-free-tier');
     }
 
     #[Test]
@@ -123,6 +128,17 @@ class RateLimitExceededTest extends TestCase
         Log::shouldHaveReceived('warning')->once();
     }
 
+    #[Test]
+    public function when_free_user_under_limit_then_responds_with_rate_limit_headers(): void
+    {
+        // Given a Free-tier route within the 60/min quota
+        // When the user sends a request
+        $response = $this->sendFreeTierRequest();
+
+        // Then the response advertises Limit / Remaining / Reset to inform the client
+        $this->assertFreeTierLimitHeaders($response);
+    }
+
     protected function sendRequestExceedingFreeTierGeneralApiLimit(): TestResponse
     {
         return $this->getJson('/_test/throttled-probe');
@@ -156,11 +172,23 @@ class RateLimitExceededTest extends TestCase
         return $this->getJson('/_test/redis-outage-probe');
     }
 
+    protected function sendFreeTierRequest(): TestResponse
+    {
+        return $this->getJson('/_test/free-tier-probe');
+    }
+
     protected function assertProTierLimitHeaders(TestResponse $response): void
     {
         $response->assertStatus(200);
         $this->assertSame('300', $response->headers->get('X-RateLimit-Limit'));
         $this->assertNotNull($response->headers->get('X-RateLimit-Remaining'));
+    }
+
+    protected function assertFreeTierLimitHeaders(TestResponse $response): void
+    {
+        $response->assertStatus(200);
+        $this->assertSame('60', $response->headers->get('X-RateLimit-Limit'));
+        $this->assertSame('59', $response->headers->get('X-RateLimit-Remaining'));
     }
 
     protected function assertThrottledEnvelope(TestResponse $response): void
