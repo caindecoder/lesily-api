@@ -5,6 +5,7 @@ namespace App\Foundation\RolesPermissions\Entities;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Role extends Model
 {
@@ -29,4 +30,19 @@ class Role extends Model
         'is_system' => 'bool',
         'sort_order' => 'int',
     ];
+
+    public function permissions(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Permission::class,
+            'role_permission',
+            'role_id',
+            'permission_id'
+        );
+    }
+
+    public static function findByCode(string $code): ?self
+    {
+        return static::query()->where('code', $code)->first();
+    }
 }

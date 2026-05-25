@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Database\Seeders\RolesPermissionsSeeder;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\RolesPermissions\Entities\Permission;
 use App\Foundation\RolesPermissions\Exceptions\SeederSourceException;
 
 /**
@@ -145,8 +146,91 @@ class RolesPermissionsSeederTest extends TestCase
         );
     }
 
+    #[Test]
+    public function when_seeder_runs_then_seeded_permissions_match_module_action_dot_notation(): void
+    {
+        // Given the real catalog
+        $seeder = $this->newSeeder($this->givenRealCatalogPath());
+
+        // When the seeder runs
+        $seeder->run();
+
+        // Then every seeded permission code matches the {module}.{action} dot-notation
+        $codes = Permission::query()->pluck('code')->all();
+        $this->assertNotEmpty($codes, 'No permissions were seeded.');
+        foreach ($codes as $code) {
+            $this->assertMatchesRegularExpression(
+                '/^[a-z_]+\.[a-z_]+$/',
+                $code,
+                "Permission code '{$code}' does not match {module}.{action} dot-notation."
+            );
+        }
+    }
+
+    #[Test]
+    public function when_seeder_runs_then_role_permission_grants_match_locked_matrix_with_manager_empty(): void
+    {
+        // Given the real catalog
+        $seeder = $this->newSeeder($this->givenRealCatalogPath());
+
+        // When the seeder runs
+        $seeder->run();
+
+        // Then role-permission row counts match the authored role-permissions.yaml
+        $expected = [
+            'platform_super_admin' => 0,
+            'owner' => 8,
+            'admin' => 7,
+            'hr_officer' => 3,
+            'payroll_officer' => 3,
+            'auditor' => 4,
+            'employee' => 1,
+            'manager' => 0,
+        ];
+
+        $actual = Role::query()
+            ->withCount('permissions')
+            ->get()
+            ->mapWithKeys(fn ($role) => [$role->code => $role->permissions_count])
+            ->all();
+
+        $this->assertRoleGrantCountsMatchMatrix($expected, $actual);
+        $this->assertSame(0, $actual['manager'], 'Manager must have zero grants in chunk-1 (placeholder).');
+    }
+
+    #[Test]
+    public function when_owner_role_is_loaded_by_code_with_permissions_then_eager_loaded_in_two_queries(): void
+    {
+        // Given the seeded catalog
+        $this->newSeeder($this->givenRealCatalogPath())->run();
+
+        // When Role::findByCode is called with eager-loaded permissions
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $owner = Role::findByCode('owner')->load('permissions');
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        // Then owner exists, has its full permission set, and query count is exactly 2 (no N+1)
+        $this->assertNotNull($owner);
+        $this->assertGreaterThan(0, $owner->permissions->count(), 'Owner should have permission grants.');
+        $this->assertSame(2, $queryCount, "Expected 2 queries (roles + permissions), got {$queryCount}.");
+    }
+
     protected function givenRealCatalogPath(): string
     {
         return database_path('seeders/data');
+    }
+
+    protected function assertRoleGrantCountsMatchMatrix(array $expected, array $actual): void
+    {
+        foreach ($expected as $code => $expectedCount) {
+            $this->assertArrayHasKey($code, $actual, "Role '{$code}' not seeded.");
+            $this->assertSame(
+                $expectedCount,
+                $actual[$code],
+                "Role '{$code}' grant count drift: expected {$expectedCount}, got {$actual[$code]}."
+            );
+        }
     }
 }
