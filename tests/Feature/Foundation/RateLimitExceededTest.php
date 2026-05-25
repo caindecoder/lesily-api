@@ -94,7 +94,7 @@ class RateLimitExceededTest extends TestCase
     public function when_separate_tenant_sends_request_then_unaffected_by_other_tenant_quota(): void
     {
         // Given tenant Contoso has consumed its general-API quota for the minute
-        $this->exhaustGeneralApiQuotaFor(tenantId: 'contoso');
+        $this->exhaustAndConfirmLimitReachedFor(tenantId: 'contoso');
 
         // When tenant ACME (separate tenant, same tier) sends a request
         $response = $this->sendTenantScopedRequestFor(tenantId: 'acme');
@@ -114,6 +114,13 @@ class RateLimitExceededTest extends TestCase
         $this->assertProTierLimitHeaders($response);
     }
 
+    /**
+     * Envelope-shape-locking test for UC-1-098 L173-174 contractual promise:
+     * "infrastructure outages must never block legitimate traffic; warning logged."
+     * The real RateLimiter-throws fail-open path will be exercised when the
+     * EmitRateLimitHeaders middleware (CD-1-13 L182-190) lands in a later UC —
+     * this test locks only the response shape + warning emission.
+     */
     #[Test]
     public function when_redis_unavailable_then_request_processed_with_warning_logged(): void
     {
@@ -148,7 +155,7 @@ class RateLimitExceededTest extends TestCase
         return $this->postJson('/_test/throttled-auth-probe');
     }
 
-    protected function exhaustGeneralApiQuotaFor(string $tenantId): void
+    protected function exhaustAndConfirmLimitReachedFor(string $tenantId): void
     {
         $this->sendTenantScopedRequestFor($tenantId)->assertStatus(200);
         $this->sendTenantScopedRequestFor($tenantId)->assertStatus(200);
@@ -195,10 +202,23 @@ class RateLimitExceededTest extends TestCase
         $response->assertStatus(429);
         $response->assertJsonPath('status', 'error');
         $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
-        $response->assertJsonStructure(['retry_after', 'correlation_id']);
+        $response->assertJsonStructure([
+            'status',
+            'message',
+            'error_code',
+            'errors',
+            'retry_after',
+            'correlation_id',
+        ]);
+        $response->assertJsonPath('errors', []);
         $this->assertSame(
             (int) $response->json('retry_after'),
             (int) $response->headers->get('Retry-After'),
+        );
+        $this->assertNotSame(
+            '00000000-0000-0000-0000-000000000000',
+            $response->json('correlation_id'),
+            'correlation_id must be a real UUIDv7 minted by AssignCorrelationId middleware, not the zero-UUID fallback.',
         );
     }
 }

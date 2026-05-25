@@ -61,6 +61,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(function (ThrottleRequestsException $e, Request $request) {
             if ($request->expectsJson()) {
+                // Laravel's ThrottleRequests middleware always sets Retry-After when it constructs
+                // ThrottleRequestsException; the 60s fallback is defense-in-depth for direct constructions.
                 $retryAfter = (int) ($e->getHeaders()['Retry-After'] ?? 60);
 
                 return response()->json([
