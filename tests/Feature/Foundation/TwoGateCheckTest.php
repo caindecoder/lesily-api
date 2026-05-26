@@ -11,10 +11,14 @@ use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\Addon;
 use App\Foundation\Billing\Enums\Feature;
+use App\Foundation\Http\Responses\EnvelopeBuilder;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\RolesPermissions\Entities\Permission;
+use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
 use App\Foundation\RolesPermissions\Entities\RolePermission;
+use App\Foundation\Http\Middleware\CheckPermissionMiddleware;
+use App\Foundation\RolesPermissions\Services\PermissionEvaluator;
 
 /**
  * UC-1-055 — Access Gated Feature (Two-Gate Check) (chunk-1 Tier-1 #5).
@@ -177,6 +181,34 @@ class TwoGateCheckTest extends TestCase
         // Then the action proceeds (no 403, normal pass-through to the route handler)
         $response->assertStatus(200);
         $response->assertJsonPath('ok', true);
+    }
+
+    #[Test]
+    public function uc_1_055_public_apis_preserve_their_visibility_contracts(): void
+    {
+        // Preempts PublicVisibility / ProtectedVisibility mutants per UC-1-136 CI lessons.
+        // External callers (middleware, evaluator, controllers, render handlers) depend on these
+        // visibility levels being exactly as declared.
+        $publicContract = [
+            [Company::class, 'canUseFeature', 'isPublic'],
+            [Company::class, 'users', 'isPublic'],
+            [Company::class, 'activeAddons', 'isPublic'],
+            [EnsureFeatureAvailable::class, 'handle', 'isPublic'],
+            [CheckPermissionMiddleware::class, 'handle', 'isPublic'],
+            [PermissionEvaluator::class, 'canUserDo', 'isPublic'],
+            [PermissionEvaluator::class, 'canRoleDo', 'isPublic'],
+            [PermissionEvaluator::class, 'resolveRoleId', 'isPublic'],
+            [EnvelopeBuilder::class, 'build', 'isPublic'],
+            [Company::class, 'newFactory', 'isProtected'],
+        ];
+
+        foreach ($publicContract as [$class, $method, $expectedVisibilityMethod]) {
+            $reflection = new \ReflectionMethod($class, $method);
+            $this->assertTrue(
+                $reflection->{$expectedVisibilityMethod}(),
+                "{$class}::{$method}() visibility contract violated."
+            );
+        }
     }
 
     protected function assertGateBlockedAsFeatureUnavailable(
