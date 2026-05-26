@@ -8,6 +8,8 @@ use Illuminate\Foundation\Configuration\Middleware;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
+use App\Foundation\Http\Exceptions\RoleInsufficientException;
+use App\Foundation\Http\Middleware\CheckPermissionMiddleware;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -22,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(AssignCorrelationId::class);
         $middleware->alias([
             'feature' => EnsureFeatureAvailable::class,
+            'permission' => CheckPermissionMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -63,6 +66,19 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
+        $exceptions->render(function (RoleInsufficientException $e, Request $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $e->getMessage(),
+                    'error_code' => 'ROLE_INSUFFICIENT',
+                    'errors' => (object) [],
+                    'user_role' => $e->userRoleCode,
+                    'correlation_id' => $request->attributes->get('correlation_id', '00000000-0000-0000-0000-000000000000'),
+                ], 403);
+            }
+        });
+
         $exceptions->render(function (ThrottleRequestsException $e, Request $request) {
             if ($request->expectsJson()) {
                 // Laravel's ThrottleRequests middleware always sets Retry-After when it constructs
@@ -88,6 +104,7 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($e instanceof ValidationException
                 || $e instanceof NotFoundHttpException
                 || $e instanceof FeatureUnavailableException
+                || $e instanceof RoleInsufficientException
                 || $e instanceof ThrottleRequestsException) {
                 return null;
             }

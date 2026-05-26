@@ -9,6 +9,7 @@ use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\Feature;
+use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
@@ -60,6 +61,30 @@ class TwoGateCheckTest extends TestCase
         $this->assertGateBlockedAsFeatureUnavailable($response, expectedUpgradeTo: 'pro');
     }
 
+    #[Test]
+    public function when_role_gate_fails_then_403_with_role_insufficient(): void
+    {
+        // Given a Pro-tier company (billing gate passes for 2FA)
+        $company = Company::factory()->create(['current_billing_plan' => 'pro']);
+        // And a user whose role does NOT have the required permission
+        $user = User::factory()->create();
+        $employeeRole = Role::factory()
+            ->create(['code' => 'employee']);
+        $company->users()->attach($user, ['role_id' => $employeeRole->id]);
+        $this->actingAs($user);
+
+        // And a test route gated by feature:two_factor_auth + permission:manage_security
+        Route::middleware(['auth', 'feature:two_factor_auth', 'permission:manage_security'])
+            ->post('/_test/two-fa-policy', fn () => response()->json(['ok' => true]));
+
+        // When the user attempts the action
+        $response = $this->withHeaders(['X-Company-Id' => $company->id])
+            ->postJson('/_test/two-fa-policy');
+
+        // Then the response is 403 with ROLE_INSUFFICIENT envelope
+        $this->assertGateBlockedAsRoleInsufficient($response, expectedUserRole: 'employee');
+    }
+
     protected function assertGateBlockedAsFeatureUnavailable(
         TestResponse $response,
         string $expectedUpgradeTo
@@ -68,5 +93,17 @@ class TwoGateCheckTest extends TestCase
         $response->assertJsonPath('status', 'error');
         $response->assertJsonPath('error_code', 'FEATURE_NOT_AVAILABLE');
         $response->assertJsonPath('upgrade_to', $expectedUpgradeTo);
+    }
+
+    protected function assertGateBlockedAsRoleInsufficient(
+        TestResponse $response,
+        ?string $expectedUserRole
+    ): void {
+        $response->assertStatus(403);
+        $response->assertJsonPath('status', 'error');
+        $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
+        if ($expectedUserRole !== null) {
+            $response->assertJsonPath('user_role', $expectedUserRole);
+        }
     }
 }
