@@ -9,6 +9,7 @@ use Database\Seeders\RolesPermissionsSeeder;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\RolesPermissions\Entities\Permission;
+use App\Foundation\RolesPermissions\Entities\RolePermission;
 use App\Foundation\RolesPermissions\Exceptions\SeederSourceException;
 
 /**
@@ -216,6 +217,32 @@ class RolesPermissionsSeederTest extends TestCase
         // Then owner has its full permission set, and query count is exactly 2 (no N+1)
         $this->assertGreaterThan(0, $owner->permissions->count(), 'Owner should have permission grants.');
         $this->assertSame(2, $queryCount, "Expected 2 queries (roles + permissions), got {$queryCount}.");
+    }
+
+    #[Test]
+    public function role_find_by_code_is_publicly_accessible_static_method(): void
+    {
+        // Public visibility is a contract — external callers (PermissionEvaluator, seeders,
+        // ad-hoc lookups) rely on Role::findByCode being reachable from any namespace.
+        // This guard kills the PublicVisibility mutant on Role::findByCode.
+        $reflection = new \ReflectionMethod(Role::class, 'findByCode');
+        $this->assertTrue($reflection->isPublic(), 'Role::findByCode must be public.');
+        $this->assertTrue($reflection->isStatic(), 'Role::findByCode must be static.');
+    }
+
+    #[Test]
+    public function rbac_model_factories_produce_persistable_rows_via_new_factory_resolution(): void
+    {
+        // Exercises Role/Permission/RolePermission newFactory() overrides (nested factory paths
+        // don't match Laravel's default `Database\Factories\{Model}` discovery; the overrides
+        // resolve to the Foundation\RolesPermissions\* namespace).
+        $role = Role::factory()->create();
+        $permission = Permission::factory()->create();
+        $rolePermission = RolePermission::factory()->create();
+
+        $this->assertSame(36, strlen($role->id));
+        $this->assertSame(36, strlen($permission->id));
+        $this->assertSame(36, strlen($rolePermission->id));
     }
 
     protected function givenRealCatalogPath(): string
