@@ -231,6 +231,21 @@ class RolesPermissionsSeederTest extends TestCase
     }
 
     #[Test]
+    public function rbac_model_new_factory_overrides_are_protected_per_laravel_contract(): void
+    {
+        // Laravel's Model::factory() resolves via static::newFactory() (late-static-binding).
+        // Protected visibility is the contract — private would break parent-class invocation;
+        // public would expose internals. This guard kills the ProtectedVisibility mutant.
+        foreach ([Role::class, Permission::class, RolePermission::class] as $model) {
+            $reflection = new \ReflectionMethod($model, 'newFactory');
+            $this->assertTrue(
+                $reflection->isProtected(),
+                "{$model}::newFactory() must be protected (Laravel factory-resolution contract)."
+            );
+        }
+    }
+
+    #[Test]
     public function rbac_model_factories_produce_persistable_rows_via_new_factory_resolution(): void
     {
         // Exercises Role/Permission/RolePermission newFactory() overrides (nested factory paths
