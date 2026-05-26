@@ -15,6 +15,9 @@ class CompanyUser extends Pivot
 
     protected $keyType = 'string';
 
+    /**
+     * @return list<string>
+     */
     public function uniqueIds(): array
     {
         return ['id'];

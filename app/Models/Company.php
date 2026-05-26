@@ -51,7 +51,7 @@ class Company extends Model
     }
 
     /**
-     * @return BelongsToMany<User, $this>
+     * @return BelongsToMany<User, $this, CompanyUser, 'pivot'>
      */
     public function users(): BelongsToMany
     {
