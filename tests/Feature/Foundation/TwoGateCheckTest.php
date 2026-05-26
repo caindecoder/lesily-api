@@ -6,11 +6,13 @@ use Tests\TestCase;
 use App\Models\User;
 use App\Models\Company;
 use App\Models\CompanyAddon;
+use Illuminate\Http\Request;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\Addon;
 use App\Foundation\Billing\Enums\Feature;
+use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Http\Responses\EnvelopeBuilder;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -181,6 +183,63 @@ class TwoGateCheckTest extends TestCase
         // Then the action proceeds (no 403, normal pass-through to the route handler)
         $response->assertStatus(200);
         $response->assertJsonPath('ok', true);
+    }
+
+    #[Test]
+    public function billing_plan_and_addon_feature_maps_match_locked_design(): void
+    {
+        // Pin every enum-arm explicitly so MatchArmRemoval + ArrayItemRemoval mutants get killed.
+        $this->assertSame([], BillingPlan::Free->features(), 'Free plan must have no features.');
+        $this->assertSame([], BillingPlan::Starter->features(), 'Starter plan must have no features.');
+        $this->assertSame([Feature::TwoFactorAuth], BillingPlan::Pro->features(), 'Pro plan must include 2FA.');
+        $this->assertSame([Feature::TwoFactorAuth], BillingPlan::Enterprise->features(), 'Enterprise plan must include 2FA.');
+
+        $this->assertSame([Feature::TemplateEngine], Addon::TemplateEngine->features(), 'TemplateEngine add-on must include Template Engine feature.');
+        $this->assertSame([], Addon::ReportEngine->features(), 'ReportEngine add-on (no feature mapping yet) must return empty list.');
+        $this->assertSame([Feature::TemplateEngine], Addon::Bundle->features(), 'Bundle add-on must include Template Engine feature.');
+    }
+
+    #[Test]
+    public function check_permission_middleware_throws_when_either_user_or_company_is_missing(): void
+    {
+        // Pins the LogicalOr branch in CheckPermissionMiddleware: both null-cases (user-null, company-null)
+        // must trigger 403 ROLE_INSUFFICIENT. Without this guard, mutation-test escapes `||` → `&&`.
+        // Route uses ONLY permission middleware (no feature gate) so the company-null branch routes
+        // through CheckPermissionMiddleware (not EnsureFeatureAvailable).
+        Route::middleware(['permission:manage_security'])
+            ->post('/_test/permission-only-no-auth', fn () => response()->json(['ok' => true]));
+        Route::middleware(['auth', 'permission:manage_security'])
+            ->post('/_test/permission-only-no-company', fn () => response()->json(['ok' => true]));
+
+        // No auth → user=null branch triggers (no X-Company-Id provided → company=null too)
+        $noAuthResponse = $this->postJson('/_test/permission-only-no-auth');
+        $noAuthResponse->assertStatus(403);
+        $noAuthResponse->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
+
+        // Auth but no X-Company-Id → user!=null, company=null branch triggers (the OR's second disjunct)
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $authNoCompanyResponse = $this->postJson('/_test/permission-only-no-company');
+        $authNoCompanyResponse->assertStatus(403);
+        $authNoCompanyResponse->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
+    }
+
+    #[Test]
+    public function envelope_builder_emits_errors_field_as_json_object_not_array(): void
+    {
+        // Pins the (object) cast on `errors` field — mutation-test escapes a CastObject removal otherwise.
+        // Per api-conventions §8.4, empty `errors` must serialize as `{}` not `[]` so client-side
+        // type checks (e.g., TypeScript) infer Object<string, ...> not Array<...>.
+        $request = Request::create('/test', 'GET');
+        $response = EnvelopeBuilder::build(
+            $request,
+            status: 400,
+            errorCode: 'SOME_ERROR',
+            message: 'something',
+        );
+
+        $body = json_decode((string) $response->getContent(), associative: false);
+        $this->assertIsObject($body->errors, 'envelope.errors must serialize as JSON object, not array.');
     }
 
     #[Test]
