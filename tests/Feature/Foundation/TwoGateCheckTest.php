@@ -3,7 +3,10 @@
 namespace Tests\Feature\Foundation;
 
 use Tests\TestCase;
+use App\Models\User;
 use App\Models\Company;
+use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\Feature;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -35,5 +38,35 @@ class TwoGateCheckTest extends TestCase
 
         // Then the gate fails closed (deny by default for any feature not explicitly granted)
         $this->assertFalse($canUse, 'Feature not in plan must fail closed via canUseFeature.');
+    }
+
+    #[Test]
+    public function when_billing_gate_fails_then_403_with_feature_unavailable(): void
+    {
+        // Given a Free-tier company attempting a Pro+ feature (2FA)
+        $company = Company::factory()->create(['current_billing_plan' => 'free']);
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        // And a test route gated by feature:two_factor_auth (Pro+ per BillingPlan::Pro->features())
+        Route::middleware(['auth', 'feature:two_factor_auth'])
+            ->post('/_test/two-fa-setup', fn () => response()->json(['ok' => true]));
+
+        // When the user attempts the gated action with the company context
+        $response = $this->withHeaders(['X-Company-Id' => $company->id])
+            ->postJson('/_test/two-fa-setup');
+
+        // Then the response is 403 with FEATURE_NOT_AVAILABLE envelope + upgrade_to hint
+        $this->assertGateBlockedAsFeatureUnavailable($response, expectedUpgradeTo: 'pro');
+    }
+
+    protected function assertGateBlockedAsFeatureUnavailable(
+        TestResponse $response,
+        string $expectedUpgradeTo
+    ): void {
+        $response->assertStatus(403);
+        $response->assertJsonPath('status', 'error');
+        $response->assertJsonPath('error_code', 'FEATURE_NOT_AVAILABLE');
+        $response->assertJsonPath('upgrade_to', $expectedUpgradeTo);
     }
 }

@@ -17,8 +17,8 @@ enum BillingPlan: string
         return match ($this) {
             self::Free => [],
             self::Starter => [],
-            self::Pro => [],
-            self::Enterprise => [],
+            self::Pro => [Feature::TwoFactorAuth],
+            self::Enterprise => [Feature::TwoFactorAuth],
         };
     }
 }

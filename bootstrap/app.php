@@ -7,6 +7,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
+use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -19,6 +20,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(AssignCorrelationId::class);
+        $middleware->alias([
+            'feature' => EnsureFeatureAvailable::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (ValidationException $e, Request $request) {
