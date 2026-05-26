@@ -293,6 +293,26 @@ class TwoGateCheckTest extends TestCase
     }
 
     #[Test]
+    public function feature_with_no_plan_mapping_falls_back_to_enterprise_upgrade_hint(): void
+    {
+        // Pins EnsureFeatureAvailable::minPlanFor's Enterprise fallback for features that
+        // exist only as add-on coverage (no plan has them in features()).
+        $company = Company::factory()->create(['current_billing_plan' => 'free']);
+        $this->actingAs(User::factory()->create());
+        // Feature::TemplateEngine is add-on-only; no BillingPlan::*->features() lists it.
+
+        Route::middleware(['auth', 'feature:template_engine'])
+            ->post('/_test/addon-only-feature', fn () => response()->json(['ok' => true]));
+
+        $response = $this->withHeaders(['X-Company-Id' => $company->id])
+            ->postJson('/_test/addon-only-feature');
+
+        $response->assertStatus(403);
+        $response->assertJsonPath('error_code', 'FEATURE_NOT_AVAILABLE');
+        $response->assertJsonPath('upgrade_to', 'enterprise');
+    }
+
+    #[Test]
     public function uc_1_055_public_apis_preserve_their_visibility_contracts(): void
     {
         // Preempts PublicVisibility / ProtectedVisibility mutants per UC-1-136 CI lessons.
