@@ -58,6 +58,9 @@ class RolesPermissionsSeeder extends Seeder
         });
     }
 
+    /**
+     * @return array<mixed>
+     */
     private function loadYaml(string $path): array
     {
         if (! is_file($path)) {

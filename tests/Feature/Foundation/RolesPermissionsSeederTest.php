@@ -207,12 +207,13 @@ class RolesPermissionsSeederTest extends TestCase
         // When Role::findByCode is called with eager-loaded permissions
         DB::flushQueryLog();
         DB::enableQueryLog();
-        $owner = Role::findByCode('owner')->load('permissions');
+        $owner = Role::findByCode('owner');
+        $this->assertNotNull($owner, 'Owner role must be seeded.');
+        $owner->load('permissions');
         $queryCount = count(DB::getQueryLog());
         DB::disableQueryLog();
 
-        // Then owner exists, has its full permission set, and query count is exactly 2 (no N+1)
-        $this->assertNotNull($owner);
+        // Then owner has its full permission set, and query count is exactly 2 (no N+1)
         $this->assertGreaterThan(0, $owner->permissions->count(), 'Owner should have permission grants.');
         $this->assertSame(2, $queryCount, "Expected 2 queries (roles + permissions), got {$queryCount}.");
     }

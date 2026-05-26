@@ -4,12 +4,16 @@ namespace App\Foundation\RolesPermissions\Entities;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Database\Factories\Foundation\RolesPermissions\RoleFactory;
 
 class Role extends Model
 {
+    /** @use HasFactory<RoleFactory> */
     use HasFactory;
+
     use HasUuids;
 
     protected $table = 'roles';
@@ -31,6 +35,9 @@ class Role extends Model
         'sort_order' => 'int',
     ];
 
+    /**
+     * @return BelongsToMany<Permission, $this>
+     */
     public function permissions(): BelongsToMany
     {
         return $this->belongsToMany(
@@ -44,5 +51,13 @@ class Role extends Model
     public static function findByCode(string $code): ?self
     {
         return static::query()->where('code', $code)->first();
+    }
+
+    /**
+     * @return Factory<self>
+     */
+    protected static function newFactory(): Factory
+    {
+        return RoleFactory::new();
     }
 }
