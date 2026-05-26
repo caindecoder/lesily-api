@@ -5,12 +5,16 @@ namespace Tests\Feature\Foundation;
 use Tests\TestCase;
 use App\Models\User;
 use App\Models\Company;
+use App\Models\CompanyAddon;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\Addon;
 use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\RolesPermissions\Entities\Permission;
+use App\Foundation\RolesPermissions\Entities\RolePermission;
 
 /**
  * UC-1-055 — Access Gated Feature (Two-Gate Check) (chunk-1 Tier-1 #5).
@@ -83,6 +87,96 @@ class TwoGateCheckTest extends TestCase
 
         // Then the response is 403 with ROLE_INSUFFICIENT envelope
         $this->assertGateBlockedAsRoleInsufficient($response, expectedUserRole: 'employee');
+    }
+
+    #[Test]
+    public function when_same_user_in_two_tier_companies_then_feature_access_per_company_context(): void
+    {
+        // Given a user with a role in both Free-tier Contoso and Pro-tier ACME
+        $contoso = Company::factory()->create(['current_billing_plan' => 'free']);
+        $acme = Company::factory()->create(['current_billing_plan' => 'pro']);
+        $user = User::factory()->create();
+        $adminRole = Role::factory()->create(['code' => 'admin']);
+        // Attach manage_security permission to admin (so role gate passes in both contexts)
+        $managePermission = Permission::factory()
+            ->create(['code' => 'manage_security']);
+        RolePermission::factory()
+            ->create(['role_id' => $adminRole->id, 'permission_id' => $managePermission->id]);
+        $contoso->users()->attach($user, ['role_id' => $adminRole->id]);
+        $acme->users()->attach($user, ['role_id' => $adminRole->id]);
+        $this->actingAs($user);
+
+        Route::middleware(['auth', 'feature:two_factor_auth', 'permission:manage_security'])
+            ->post('/_test/tenant-iso', fn () => response()->json(['ok' => true]));
+
+        // When the user attempts the action in Contoso (Free) — billing gate fails
+        $contosoResponse = $this->withHeaders(['X-Company-Id' => $contoso->id])
+            ->postJson('/_test/tenant-iso');
+        $this->assertGateBlockedAsFeatureUnavailable($contosoResponse, expectedUpgradeTo: 'pro');
+
+        // When the user attempts the action in ACME (Pro) — both gates pass
+        $acmeResponse = $this->withHeaders(['X-Company-Id' => $acme->id])
+            ->postJson('/_test/tenant-iso');
+        $acmeResponse->assertStatus(200);
+        $acmeResponse->assertJsonPath('ok', true);
+    }
+
+    #[Test]
+    public function when_addon_covers_feature_on_lower_plan_then_action_proceeds(): void
+    {
+        // Given a Free-tier company with the Template Engine add-on active
+        $company = Company::factory()->create(['current_billing_plan' => 'free']);
+        CompanyAddon::create([
+            'company_id' => $company->id,
+            'addon' => Addon::TemplateEngine,
+        ]);
+        $company->refresh();
+
+        $user = User::factory()->create();
+        $adminRole = Role::factory()->create(['code' => 'admin']);
+        $usePermission = Permission::factory()
+            ->create(['code' => 'use_templates']);
+        RolePermission::factory()
+            ->create(['role_id' => $adminRole->id, 'permission_id' => $usePermission->id]);
+        $company->users()->attach($user, ['role_id' => $adminRole->id]);
+        $this->actingAs($user);
+
+        Route::middleware(['auth', 'feature:template_engine', 'permission:use_templates'])
+            ->post('/_test/template-render', fn () => response()->json(['ok' => true]));
+
+        // When the user attempts the feature gated by an add-on (TemplateEngine)
+        $response = $this->withHeaders(['X-Company-Id' => $company->id])
+            ->postJson('/_test/template-render');
+
+        // Then the action proceeds (add-on covers the feature even though plan doesn't)
+        $response->assertStatus(200);
+        $response->assertJsonPath('ok', true);
+    }
+
+    #[Test]
+    public function when_both_gates_pass_then_action_proceeds(): void
+    {
+        // Given a Pro-tier company "Contoso" with admin "Alice" who has the required permission
+        $contoso = Company::factory()->create(['current_billing_plan' => 'pro']);
+        $alice = User::factory()->create();
+        $adminRole = Role::factory()->create(['code' => 'admin']);
+        $managePermission = Permission::factory()
+            ->create(['code' => 'manage_security']);
+        RolePermission::factory()
+            ->create(['role_id' => $adminRole->id, 'permission_id' => $managePermission->id]);
+        $contoso->users()->attach($alice, ['role_id' => $adminRole->id]);
+        $this->actingAs($alice);
+
+        Route::middleware(['auth', 'feature:two_factor_auth', 'permission:manage_security'])
+            ->post('/_test/two-fa-happy', fn () => response()->json(['ok' => true]));
+
+        // When Alice attempts to set up 2FA
+        $response = $this->withHeaders(['X-Company-Id' => $contoso->id])
+            ->postJson('/_test/two-fa-happy');
+
+        // Then the action proceeds (no 403, normal pass-through to the route handler)
+        $response->assertStatus(200);
+        $response->assertJsonPath('ok', true);
     }
 
     protected function assertGateBlockedAsFeatureUnavailable(
