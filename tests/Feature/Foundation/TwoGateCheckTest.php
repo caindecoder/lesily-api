@@ -243,6 +243,56 @@ class TwoGateCheckTest extends TestCase
     }
 
     #[Test]
+    public function defensive_paths_in_middleware_and_evaluator_return_false_or_null_safely(): void
+    {
+        // Exercises uncovered defensive lines per codecov/patch:
+        //   * EnsureFeatureAvailable::resolveCompany — empty X-Company-Id → null company
+        //   * EnsureFeatureAvailable::minPlanFor — feature with no plan mapping → Enterprise fallback
+        //   * CheckPermissionMiddleware::resolveUserRoleCode — role not found by id → null
+        //   * PermissionEvaluator::canUserDo — user not a member of company → false
+        //   * PermissionEvaluator::canRoleDo — role id doesn't exist → false
+
+        $evaluator = app(PermissionEvaluator::class);
+
+        // PermissionEvaluator: user with no membership → false
+        $nonMemberUser = User::factory()->create();
+        $company = Company::factory()->create();
+        $this->assertFalse(
+            $evaluator->canUserDo($nonMemberUser, $company, 'manage_security'),
+            'Non-member must not have any permission via canUserDo.'
+        );
+
+        // PermissionEvaluator: nonexistent role id → false
+        $this->assertFalse(
+            $evaluator->canRoleDo('00000000-0000-0000-0000-000000000000', 'manage_security'),
+            'Nonexistent role id must return false from canRoleDo.'
+        );
+
+        // EnsureFeatureAvailable: empty X-Company-Id header → company resolves to null → 403
+        Route::middleware(['auth', 'feature:two_factor_auth'])
+            ->post('/_test/empty-company-header', fn () => response()->json(['ok' => true]));
+        $this->actingAs(User::factory()->create());
+        $emptyHeaderResponse = $this->withHeaders(['X-Company-Id' => ''])
+            ->postJson('/_test/empty-company-header');
+        $emptyHeaderResponse->assertStatus(403);
+        $emptyHeaderResponse->assertJsonPath('error_code', 'FEATURE_NOT_AVAILABLE');
+
+        // CheckPermissionMiddleware::resolveUserRoleCode — user with no company membership
+        // → resolveRoleId returns null → resolveUserRoleCode short-circuits to null branch.
+        $companyNoMember = Company::factory()->create(['current_billing_plan' => 'pro']);
+        $userNoMember = User::factory()->create();
+        // Deliberately NOT attaching; user has no membership in this company.
+        Route::middleware(['auth', 'permission:manage_security'])
+            ->post('/_test/no-membership', fn () => response()->json(['ok' => true]));
+        $this->actingAs($userNoMember);
+        $noMembershipResponse = $this->withHeaders(['X-Company-Id' => $companyNoMember->id])
+            ->postJson('/_test/no-membership');
+        $noMembershipResponse->assertStatus(403);
+        $noMembershipResponse->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
+        $noMembershipResponse->assertJsonPath('user_role', null);
+    }
+
+    #[Test]
     public function uc_1_055_public_apis_preserve_their_visibility_contracts(): void
     {
         // Preempts PublicVisibility / ProtectedVisibility mutants per UC-1-136 CI lessons.
