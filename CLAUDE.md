@@ -171,3 +171,29 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - To filter on a particular test name: `php artisan test --compact --filter=testName` (recommended after making a change to a related file).
 
 </laravel-boost-guidelines>
+
+---
+
+## HRMS Project Conventions (authoritative)
+
+The Laravel Boost block above is auto-generated and covers Laravel/PHPUnit framework defaults. The **authoritative HRMS-specific conventions** live at:
+
+`Documentation/05-operations/coding-conventions-plan.md` (in the HRMS workspace, parent of this `lesily-api/` directory)
+
+**Key rules (locked session 054 — 2026-05-28):**
+
+- **§2.2 Rules 1-8** — Test conventions: Sad → Edge → Happy ordering; grouped assertion helpers (2-5 aspects, max 3 params); shared test data via `setUp()`; no HTTP status codes in test names (Rule 6 + grep enforcement); one scenario per test method (Rule 7); no transport identifiers in test names (Rule 8).
+- **§2.8** — Style baselines: LeaveDates primary, subscription-platform parity.
+- **§2.9** — `php artisan make:*` mandatory for ALL framework class scaffolding (pass `--no-interaction`).
+- **§2.10** — Abstract base TestCase per chunk module (`FoundationTestCase`, `EmployeeTestCase`, etc.) at `tests/Feature/{Module}/{Module}TestCase.php`.
+- **§2.11** — Test routes centralized in `routes/testing.php` (env-gated); NO inline `Route::middleware(...)->post(...)` inside test method bodies.
+- **§2.12** — DataProviders mandatory for ≥3-variation parametric scenarios.
+- **§2.13** — Factory state methods mandatory (`Role::factory()->admin()`, `Company::factory()->onPlan(Pro)`); no inline `factory()->create(['field' => 'value'])`.
+- **§8 Rule #13** — Fix root cause, not CI symptom. Forbidden: reflection mutation-killer tests, path-driven mega-tests, hard-coded enum-arm pinning, unjustified suppressions, retry/skip to silence flakiness.
+- **§8 Rule #14** — Laravel-docs-first: cite `laravel.com/docs/13.x/<topic>` URL in PR description when introducing any new Laravel concern.
+- **§8 Rule #15** — Reference-codebase consultation mandatory: every UC's TDD-RED MUST cite at least one LeaveDates (primary) or subscription-platform (secondary) analog file:line in PR description, OR explicitly document greenfield-UC designation.
+
+**Reference-codebase precedence:** LeaveDates primary, subscription-platform secondary. When they conflict, LeaveDates wins by default. Use `/reference-scan {uc-id} {concern-keywords}` skill to scope-grep both for analog patterns before TDD-RED. See parent's `.claude/memory/feedback_leavedates-primary.md` for the precedence rule + 3 locked divergences from LeaveDates.
+
+**Playbook:** `Documentation/06-design/chunk-1/_process/tdd-red-playbook.md` (parent directory). §3 procedure with PAUSE 1 + PAUSE 2; §4 Explore prompt template; §10 amendment triggers (now 12 — added Trigger #12 for CI-symptom suppression).
+
