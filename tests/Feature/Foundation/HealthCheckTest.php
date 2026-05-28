@@ -36,6 +36,7 @@ class HealthCheckTest extends FoundationTestCase
         return [
             'database down' => ['database'],
             'redis down' => ['redis'],
+            'queue down' => ['queue'],
         ];
     }
 
@@ -44,6 +45,7 @@ class HealthCheckTest extends FoundationTestCase
         match ($name) {
             'database' => $this->mockDatabaseDown(),
             'redis' => $this->mockRedisDown(),
+            'queue' => $this->mockQueueDown(),
         };
     }
 
@@ -84,6 +86,11 @@ class HealthCheckTest extends FoundationTestCase
         $connection = Mockery::mock();
         $connection->shouldReceive('ping')->andReturn(true);
         Redis::shouldReceive('connection')->andReturn($connection);
+    }
+
+    protected function mockQueueDown(): void
+    {
+        Queue::shouldReceive('size')->andThrow(new \Exception('queue unreachable'));
     }
 
     protected function mockQueueUp(): void
