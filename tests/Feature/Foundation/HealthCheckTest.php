@@ -5,8 +5,6 @@ namespace Tests\Feature\Foundation;
 use PDO;
 use Mockery;
 use Exception;
-use PDOException;
-use RedisException;
 use InvalidArgumentException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
@@ -118,7 +116,7 @@ class HealthCheckTest extends FoundationTestCase
     protected function mockDatabaseDown(): void
     {
         DB::shouldReceive('connection->getPdo')
-            ->andThrow(new PDOException('connection refused'));
+            ->andThrow(new Exception('database connection refused'));
     }
 
     protected function mockDatabaseUp(): void
@@ -130,7 +128,7 @@ class HealthCheckTest extends FoundationTestCase
     protected function mockRedisDown(): void
     {
         Redis::shouldReceive('connection->ping')
-            ->andThrow(new RedisException('connection refused'));
+            ->andThrow(new Exception('redis connection refused'));
     }
 
     protected function mockRedisUp(): void
@@ -141,7 +139,8 @@ class HealthCheckTest extends FoundationTestCase
 
     protected function mockQueueDown(): void
     {
-        Queue::shouldReceive('size')->andThrow(new Exception('queue unreachable'));
+        Queue::shouldReceive('size')
+            ->andThrow(new Exception('queue unreachable'));
     }
 
     protected function mockQueueUp(): void
