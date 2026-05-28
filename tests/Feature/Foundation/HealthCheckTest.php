@@ -46,6 +46,7 @@ class HealthCheckTest extends FoundationTestCase
             'database' => $this->mockDatabaseDown(),
             'redis' => $this->mockRedisDown(),
             'queue' => $this->mockQueueDown(),
+            default => throw new \InvalidArgumentException("Unknown subsystem: {$name}"),
         };
     }
 
@@ -56,36 +57,33 @@ class HealthCheckTest extends FoundationTestCase
                 'database' => $this->mockDatabaseUp(),
                 'redis' => $this->mockRedisUp(),
                 'queue' => $this->mockQueueUp(),
+                default => throw new \InvalidArgumentException("Unknown subsystem: {$name}"),
             };
         }
     }
 
     protected function mockDatabaseDown(): void
     {
-        $connection = Mockery::mock();
-        $connection->shouldReceive('getPdo')->andThrow(new PDOException('connection refused'));
-        DB::shouldReceive('connection')->andReturn($connection);
+        DB::shouldReceive('connection->getPdo')
+            ->andThrow(new PDOException('connection refused'));
     }
 
     protected function mockDatabaseUp(): void
     {
-        $connection = Mockery::mock();
-        $connection->shouldReceive('getPdo')->andReturn(Mockery::mock(\PDO::class));
-        DB::shouldReceive('connection')->andReturn($connection);
+        DB::shouldReceive('connection->getPdo')
+            ->andReturn(Mockery::mock(\PDO::class));
     }
 
     protected function mockRedisDown(): void
     {
-        $connection = Mockery::mock();
-        $connection->shouldReceive('ping')->andThrow(new RedisException('connection refused'));
-        Redis::shouldReceive('connection')->andReturn($connection);
+        Redis::shouldReceive('connection->ping')
+            ->andThrow(new RedisException('connection refused'));
     }
 
     protected function mockRedisUp(): void
     {
-        $connection = Mockery::mock();
-        $connection->shouldReceive('ping')->andReturn(true);
-        Redis::shouldReceive('connection')->andReturn($connection);
+        Redis::shouldReceive('connection->ping')
+            ->andReturn(true);
     }
 
     protected function mockQueueDown(): void

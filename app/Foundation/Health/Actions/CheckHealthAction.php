@@ -11,6 +11,9 @@ use App\Foundation\Health\Enums\HealthStatus;
 
 class CheckHealthAction
 {
+    /**
+     * @return array{status: HealthStatus, checked_at: string, subsystems: array<string, string>}
+     */
     public function execute(): array
     {
         $subsystems = [
