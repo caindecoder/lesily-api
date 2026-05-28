@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Foundation;
 
-use PDO;
 use Mockery;
 use Exception;
 use InvalidArgumentException;
@@ -122,7 +121,7 @@ class HealthCheckTest extends FoundationTestCase
     protected function mockDatabaseUp(): void
     {
         DB::shouldReceive('connection->getPdo')
-            ->andReturn(Mockery::mock(PDO::class));
+            ->andReturn(Mockery::mock());
     }
 
     protected function mockRedisDown(): void
