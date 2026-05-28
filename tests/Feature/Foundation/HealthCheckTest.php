@@ -116,4 +116,35 @@ class HealthCheckTest extends FoundationTestCase
             $response->assertJsonPath("subsystems.{$name}", 'up');
         }
     }
+
+    #[Test]
+    public function when_multiple_subsystems_are_unavailable_then_response_marks_each_failed_subsystem_down(): void
+    {
+        // Given
+        $this->mockSubsystemDown('database');
+        $this->mockSubsystemDown('redis');
+        $this->mockSubsystemsHealthy(['queue']);
+
+        // When
+        $response = $this->getJson('/api/health');
+
+        // Then
+        $this->assertResponseIsUnhealthy($response);
+        $this->assertSubsystemsDown($response, ['database', 'redis']);
+        $this->assertSubsystemsUp($response, ['app', 'queue']);
+    }
+
+    protected function assertSubsystemsDown(TestResponse $response, array $names): void
+    {
+        foreach ($names as $name) {
+            $response->assertJsonPath("subsystems.{$name}", 'down');
+        }
+    }
+
+    protected function assertSubsystemsUp(TestResponse $response, array $names): void
+    {
+        foreach ($names as $name) {
+            $response->assertJsonPath("subsystems.{$name}", 'up');
+        }
+    }
 }
