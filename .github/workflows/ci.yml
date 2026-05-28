@@ -110,10 +110,21 @@ jobs:
       - name: Infection (changed files only)
         # Short-circuit when no app/ PHP files changed (e.g., yml-only PR): empty
         # --filter causes Infection to exit 1 even with passing tests. Master-action #99.
+        # Also short-circuit when the test suite is empty: Infection's initial PHPUnit
+        # run exits 1 with "No tests executed!" on an empty suite, which Infection treats
+        # as failure. Edge case hit during chunk-1 Phase 1 redo (session 055): all
+        # 5 Tier-1 UC tests reverted simultaneously, leaving tests/Feature/ empty
+        # before redo TDD-RED restarts. Excludes abstract *TestCase.php bases per
+        # coding-conventions-plan.md §2.10 (FoundationTestCase, etc.) from the test count.
         run: |
           CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'app/*.php' | tr '\n' ',')
           if [ -z "$CHANGED" ]; then
             echo "No PHP files changed under app/ — skipping Infection."
+            exit 0
+          fi
+          TEST_COUNT=$(find tests -name '*Test.php' ! -name '*TestCase.php' 2>/dev/null | wc -l)
+          if [ "$TEST_COUNT" -eq 0 ]; then
+            echo "No *Test.php files (excluding abstract *TestCase.php bases) found in tests/ — skipping Infection."
             exit 0
           fi
           vendor/bin/infection --filter="$CHANGED" --threads=4 --min-msi=80 --min-covered-msi=85
