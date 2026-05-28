@@ -2,9 +2,12 @@
 
 namespace Tests\Feature\Foundation;
 
+use PDO;
 use Mockery;
+use Exception;
 use PDOException;
 use RedisException;
+use InvalidArgumentException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
@@ -31,6 +34,51 @@ class HealthCheckTest extends FoundationTestCase
         $this->assertOtherSubsystemsUp($response, $subsystem);
     }
 
+    #[Test]
+    public function when_multiple_subsystems_are_unavailable_then_response_marks_each_failed_subsystem_down(): void
+    {
+        // Given
+        $this->mockSubsystemDown('database');
+        $this->mockSubsystemDown('redis');
+        $this->mockSubsystemsHealthy(['queue']);
+
+        // When
+        $response = $this->getJson('/api/health');
+
+        // Then
+        $this->assertResponseIsUnhealthy($response);
+        $this->assertSubsystemsDown($response, ['database', 'redis']);
+        $this->assertSubsystemsUp($response, ['app', 'queue']);
+    }
+
+    #[Test]
+    public function when_request_is_unauthenticated_then_response_is_processed_normally(): void
+    {
+        // Given
+        $this->mockAllSubsystemsHealthy();
+
+        // When (no authentication setup — public endpoint)
+        $response = $this->getJson('/api/health');
+
+        // Then
+        $this->assertResponseIsHealthy($response);
+    }
+
+    #[Test]
+    public function when_all_subsystems_are_healthy_then_response_marks_everything_up(): void
+    {
+        // Given
+        $this->mockAllSubsystemsHealthy();
+
+        // When
+        $response = $this->getJson('/api/health');
+
+        // Then
+        $this->assertResponseIsHealthy($response);
+        $this->assertAllSubsystemsUp($response);
+        $this->assertCheckedAtIsIso8601WithZ($response);
+    }
+
     public static function provideSingleSubsystemDown(): array
     {
         return [
@@ -46,7 +94,7 @@ class HealthCheckTest extends FoundationTestCase
             'database' => $this->mockDatabaseDown(),
             'redis' => $this->mockRedisDown(),
             'queue' => $this->mockQueueDown(),
-            default => throw new \InvalidArgumentException("Unknown subsystem: {$name}"),
+            default => throw new InvalidArgumentException("Unknown subsystem: {$name}"),
         };
     }
 
@@ -57,9 +105,14 @@ class HealthCheckTest extends FoundationTestCase
                 'database' => $this->mockDatabaseUp(),
                 'redis' => $this->mockRedisUp(),
                 'queue' => $this->mockQueueUp(),
-                default => throw new \InvalidArgumentException("Unknown subsystem: {$name}"),
+                default => throw new InvalidArgumentException("Unknown subsystem: {$name}"),
             };
         }
+    }
+
+    protected function mockAllSubsystemsHealthy(): void
+    {
+        $this->mockSubsystemsHealthy(['database', 'redis', 'queue']);
     }
 
     protected function mockDatabaseDown(): void
@@ -71,7 +124,7 @@ class HealthCheckTest extends FoundationTestCase
     protected function mockDatabaseUp(): void
     {
         DB::shouldReceive('connection->getPdo')
-            ->andReturn(Mockery::mock(\PDO::class));
+            ->andReturn(Mockery::mock(PDO::class));
     }
 
     protected function mockRedisDown(): void
@@ -88,12 +141,18 @@ class HealthCheckTest extends FoundationTestCase
 
     protected function mockQueueDown(): void
     {
-        Queue::shouldReceive('size')->andThrow(new \Exception('queue unreachable'));
+        Queue::shouldReceive('size')->andThrow(new Exception('queue unreachable'));
     }
 
     protected function mockQueueUp(): void
     {
         Queue::shouldReceive('size')->andReturn(0);
+    }
+
+    protected function assertResponseIsHealthy(TestResponse $response): void
+    {
+        $response->assertStatus(200);
+        $response->assertJsonPath('status', 'healthy');
     }
 
     protected function assertResponseIsUnhealthy(TestResponse $response): void
@@ -115,23 +174,6 @@ class HealthCheckTest extends FoundationTestCase
         }
     }
 
-    #[Test]
-    public function when_multiple_subsystems_are_unavailable_then_response_marks_each_failed_subsystem_down(): void
-    {
-        // Given
-        $this->mockSubsystemDown('database');
-        $this->mockSubsystemDown('redis');
-        $this->mockSubsystemsHealthy(['queue']);
-
-        // When
-        $response = $this->getJson('/api/health');
-
-        // Then
-        $this->assertResponseIsUnhealthy($response);
-        $this->assertSubsystemsDown($response, ['database', 'redis']);
-        $this->assertSubsystemsUp($response, ['app', 'queue']);
-    }
-
     protected function assertSubsystemsDown(TestResponse $response, array $names): void
     {
         foreach ($names as $name) {
@@ -144,45 +186,6 @@ class HealthCheckTest extends FoundationTestCase
         foreach ($names as $name) {
             $response->assertJsonPath("subsystems.{$name}", 'up');
         }
-    }
-
-    #[Test]
-    public function when_request_is_unauthenticated_then_response_is_processed_normally(): void
-    {
-        // Given
-        $this->mockAllSubsystemsHealthy();
-
-        // When (no authentication setup — public endpoint)
-        $response = $this->getJson('/api/health');
-
-        // Then
-        $this->assertResponseIsHealthy($response);
-    }
-
-    protected function mockAllSubsystemsHealthy(): void
-    {
-        $this->mockSubsystemsHealthy(['database', 'redis', 'queue']);
-    }
-
-    protected function assertResponseIsHealthy(TestResponse $response): void
-    {
-        $response->assertStatus(200);
-        $response->assertJsonPath('status', 'healthy');
-    }
-
-    #[Test]
-    public function when_all_subsystems_are_healthy_then_response_marks_everything_up(): void
-    {
-        // Given
-        $this->mockAllSubsystemsHealthy();
-
-        // When
-        $response = $this->getJson('/api/health');
-
-        // Then
-        $this->assertResponseIsHealthy($response);
-        $this->assertAllSubsystemsUp($response);
-        $this->assertCheckedAtIsIso8601WithZ($response);
     }
 
     protected function assertAllSubsystemsUp(TestResponse $response): void
