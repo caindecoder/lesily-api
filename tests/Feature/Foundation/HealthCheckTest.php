@@ -171,4 +171,34 @@ class HealthCheckTest extends FoundationTestCase
         $response->assertStatus(200);
         $response->assertJsonPath('status', 'healthy');
     }
+
+    #[Test]
+    public function when_all_subsystems_are_healthy_then_response_marks_everything_up(): void
+    {
+        // Given
+        $this->mockAllSubsystemsHealthy();
+
+        // When
+        $response = $this->getJson('/api/health');
+
+        // Then
+        $this->assertResponseIsHealthy($response);
+        $this->assertAllSubsystemsUp($response);
+        $this->assertCheckedAtIsIso8601WithZ($response);
+    }
+
+    protected function assertAllSubsystemsUp(TestResponse $response): void
+    {
+        foreach (['app', 'database', 'redis', 'queue'] as $name) {
+            $response->assertJsonPath("subsystems.{$name}", 'up');
+        }
+    }
+
+    protected function assertCheckedAtIsIso8601WithZ(TestResponse $response): void
+    {
+        $this->assertMatchesRegularExpression(
+            '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/',
+            $response->json('checked_at')
+        );
+    }
 }
