@@ -1,0 +1,94 @@
+<?php
+
+namespace Tests\Feature\Foundation;
+
+use Mockery;
+use PDOException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Redis;
+use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
+
+class HealthCheckTest extends FoundationTestCase
+{
+    #[Test]
+    #[DataProvider('provideSingleSubsystemDown')]
+    public function when_one_subsystem_is_unavailable_then_response_marks_only_that_subsystem_down(string $subsystem): void
+    {
+        // Given
+        $this->mockSubsystemDown($subsystem);
+        $this->mockSubsystemsHealthy(array_diff(['database', 'redis', 'queue'], [$subsystem]));
+
+        // When
+        $response = $this->getJson('/api/health');
+
+        // Then
+        $this->assertResponseIsUnhealthy($response);
+        $this->assertSubsystemDown($response, $subsystem);
+        $this->assertOtherSubsystemsUp($response, $subsystem);
+    }
+
+    public static function provideSingleSubsystemDown(): array
+    {
+        return [
+            'database down' => ['database'],
+        ];
+    }
+
+    protected function mockSubsystemDown(string $name): void
+    {
+        match ($name) {
+            'database' => $this->mockDatabaseDown(),
+        };
+    }
+
+    protected function mockSubsystemsHealthy(array $names): void
+    {
+        foreach ($names as $name) {
+            match ($name) {
+                'redis' => $this->mockRedisUp(),
+                'queue' => $this->mockQueueUp(),
+            };
+        }
+    }
+
+    protected function mockDatabaseDown(): void
+    {
+        $connection = Mockery::mock();
+        $connection->shouldReceive('getPdo')->andThrow(new PDOException('connection refused'));
+        DB::shouldReceive('connection')->andReturn($connection);
+    }
+
+    protected function mockRedisUp(): void
+    {
+        $connection = Mockery::mock();
+        $connection->shouldReceive('ping')->andReturn(true);
+        Redis::shouldReceive('connection')->andReturn($connection);
+    }
+
+    protected function mockQueueUp(): void
+    {
+        Queue::shouldReceive('size')->andReturn(0);
+    }
+
+    protected function assertResponseIsUnhealthy(TestResponse $response): void
+    {
+        $response->assertStatus(503);
+        $response->assertJsonPath('status', 'unhealthy');
+    }
+
+    protected function assertSubsystemDown(TestResponse $response, string $name): void
+    {
+        $response->assertJsonPath("subsystems.{$name}", 'down');
+    }
+
+    protected function assertOtherSubsystemsUp(TestResponse $response, string $downName): void
+    {
+        $others = array_diff(['app', 'database', 'redis', 'queue'], [$downName]);
+        foreach ($others as $name) {
+            $response->assertJsonPath("subsystems.{$name}", 'up');
+        }
+    }
+}
