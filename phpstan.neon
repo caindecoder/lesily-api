@@ -10,18 +10,12 @@ parameters:
         - tests
     excludePaths:
         - tests/TestCase.php  # framework boilerplate
-    ignoreErrors:
-        # Suppress two Level 8 "missing type" rules on tests/* so test helpers do not
-        # require PHPDoc annotations purely for static-analysis compliance:
-        # - missingType.generics: TestResponse<TResponse> + similar Laravel generics
-        # - missingType.iterableValue: list<T> / array<K,V> on `array` params/returns
-        # Other Level 8 rules (return type missing, property type missing, void mismatch,
-        # dead code, etc.) remain active on tests/. Production (app/, database/) stays
-        # under full Level 8 enforcement. See coding-conventions-plan.md §2.3 + §2.8
-        # (LeaveDates audit, session 044).
-        -
-            identifier: missingType.generics
-            path: tests/*
-        -
-            identifier: missingType.iterableValue
-            path: tests/*
+    # ignoreErrors intentionally absent during Phase 1 redo window (session 055) —
+    # tests/ is empty after reverting UC-1-097 + UC-1-099 + UC-1-098 + UC-1-136 + UC-1-055.
+    # The prior `missingType.generics` + `missingType.iterableValue` ignores on
+    # `tests/*` (locked session 044 per coding-conventions-plan.md §2.3 + §2.8) became
+    # stale when tests disappeared; PHPStan's default `reportUnmatchedIgnoredErrors: true`
+    # then fails CI on those unused patterns. Removing keeps the safety net intact.
+    # **Re-add during Phase 5a UC-1-097 TDD-RED redo** if the rewritten tests trigger
+    # those rules (likely will — TestResponse<...> generics and array/list shapes are
+    # common in feature tests). Production (app/, database/) stays under full Level 8.
