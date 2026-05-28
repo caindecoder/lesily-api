@@ -147,4 +147,28 @@ class HealthCheckTest extends FoundationTestCase
             $response->assertJsonPath("subsystems.{$name}", 'up');
         }
     }
+
+    #[Test]
+    public function when_request_is_unauthenticated_then_response_is_processed_normally(): void
+    {
+        // Given
+        $this->mockAllSubsystemsHealthy();
+
+        // When (no authentication setup — public endpoint)
+        $response = $this->getJson('/api/health');
+
+        // Then
+        $this->assertResponseIsHealthy($response);
+    }
+
+    protected function mockAllSubsystemsHealthy(): void
+    {
+        $this->mockSubsystemsHealthy(['database', 'redis', 'queue']);
+    }
+
+    protected function assertResponseIsHealthy(TestResponse $response): void
+    {
+        $response->assertStatus(200);
+        $response->assertJsonPath('status', 'healthy');
+    }
 }
