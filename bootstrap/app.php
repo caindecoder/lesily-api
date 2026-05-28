@@ -3,14 +3,10 @@
 use Illuminate\Http\Request;
 use Illuminate\Foundation\Application;
 use Illuminate\Validation\ValidationException;
-use App\Foundation\Http\Responses\EnvelopeBuilder;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
-use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
-use App\Foundation\Http\Exceptions\RoleInsufficientException;
-use App\Foundation\Http\Middleware\CheckPermissionMiddleware;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -23,59 +19,43 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(AssignCorrelationId::class);
-        $middleware->alias([
-            'feature' => EnsureFeatureAvailable::class,
-            'permission' => CheckPermissionMiddleware::class,
-        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (ValidationException $e, Request $request) {
             if ($request->expectsJson()) {
-                return EnvelopeBuilder::build(
-                    $request,
-                    status: 422,
-                    errorCode: 'VALIDATION_FAILED',
-                    message: $e->getMessage(),
-                    extras: ['errors' => $e->errors()],
-                );
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $e->getMessage(),
+                    'error_code' => 'VALIDATION_FAILED',
+                    'errors' => $e->errors(),
+                    'correlation_id' => $request->attributes->get('correlation_id', '00000000-0000-0000-0000-000000000000'),
+                ], 422);
             }
         });
 
         $exceptions->render(function (NotFoundHttpException $e, Request $request) {
             if ($request->expectsJson()) {
-                return EnvelopeBuilder::build(
-                    $request,
-                    status: 404,
-                    errorCode: 'RESOURCE_NOT_FOUND',
-                    message: 'Resource not found.',
-                );
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Resource not found.',
+                    'error_code' => 'RESOURCE_NOT_FOUND',
+                    'errors' => (object) [],
+                    'correlation_id' => $request->attributes->get('correlation_id', '00000000-0000-0000-0000-000000000000'),
+                ], 404);
             }
         });
 
         $exceptions->render(function (FeatureUnavailableException $e, Request $request) {
             if ($request->expectsJson()) {
-                return EnvelopeBuilder::build(
-                    $request,
-                    status: 403,
-                    errorCode: 'FEATURE_NOT_AVAILABLE',
-                    message: $e->getMessage(),
-                    extras: [
-                        'upgrade_to' => $e->upgradeTo,
-                        'upgrade_url' => $e->upgradeUrl,
-                    ],
-                );
-            }
-        });
-
-        $exceptions->render(function (RoleInsufficientException $e, Request $request) {
-            if ($request->expectsJson()) {
-                return EnvelopeBuilder::build(
-                    $request,
-                    status: 403,
-                    errorCode: 'ROLE_INSUFFICIENT',
-                    message: $e->getMessage(),
-                    extras: ['user_role' => $e->userRoleCode],
-                );
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $e->getMessage(),
+                    'error_code' => 'FEATURE_NOT_AVAILABLE',
+                    'errors' => (object) [],
+                    'upgrade_to' => $e->upgradeTo,
+                    'upgrade_url' => $e->upgradeUrl,
+                    'correlation_id' => $request->attributes->get('correlation_id', '00000000-0000-0000-0000-000000000000'),
+                ], 403);
             }
         });
 
@@ -86,17 +66,17 @@ return Application::configure(basePath: dirname(__DIR__))
                 $retryAfter = (int) ($e->getHeaders()['Retry-After'] ?? 60);
                 $resetAt = (string) (time() + $retryAfter);
 
-                $response = EnvelopeBuilder::build(
-                    $request,
-                    status: 429,
-                    errorCode: 'RATE_LIMIT_EXCEEDED',
-                    message: 'Too many requests. Please try again later.',
-                    extras: ['retry_after' => $retryAfter],
-                );
-                $response->headers->set('Retry-After', (string) $retryAfter);
-                $response->headers->set('X-RateLimit-Reset', $resetAt);
-
-                return $response;
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Too many requests. Please try again later.',
+                    'error_code' => 'RATE_LIMIT_EXCEEDED',
+                    'errors' => (object) [],
+                    'retry_after' => $retryAfter,
+                    'correlation_id' => $request->attributes->get('correlation_id', '00000000-0000-0000-0000-000000000000'),
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Reset' => $resetAt,
+                ]);
             }
         });
 
@@ -104,18 +84,18 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($e instanceof ValidationException
                 || $e instanceof NotFoundHttpException
                 || $e instanceof FeatureUnavailableException
-                || $e instanceof RoleInsufficientException
                 || $e instanceof ThrottleRequestsException) {
                 return null;
             }
 
             if ($request->expectsJson() && ! config('app.debug')) {
-                return EnvelopeBuilder::build(
-                    $request,
-                    status: 500,
-                    errorCode: 'INTERNAL_ERROR',
-                    message: 'An unexpected error occurred.',
-                );
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'An unexpected error occurred.',
+                    'error_code' => 'INTERNAL_ERROR',
+                    'errors' => (object) [],
+                    'correlation_id' => $request->attributes->get('correlation_id', '00000000-0000-0000-0000-000000000000'),
+                ], 500);
             }
 
             return null;
