@@ -4,6 +4,7 @@ namespace Tests\Feature\Foundation;
 
 use Mockery;
 use PDOException;
+use RedisException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
@@ -34,6 +35,7 @@ class HealthCheckTest extends FoundationTestCase
     {
         return [
             'database down' => ['database'],
+            'redis down' => ['redis'],
         ];
     }
 
@@ -41,6 +43,7 @@ class HealthCheckTest extends FoundationTestCase
     {
         match ($name) {
             'database' => $this->mockDatabaseDown(),
+            'redis' => $this->mockRedisDown(),
         };
     }
 
@@ -48,6 +51,7 @@ class HealthCheckTest extends FoundationTestCase
     {
         foreach ($names as $name) {
             match ($name) {
+                'database' => $this->mockDatabaseUp(),
                 'redis' => $this->mockRedisUp(),
                 'queue' => $this->mockQueueUp(),
             };
@@ -59,6 +63,20 @@ class HealthCheckTest extends FoundationTestCase
         $connection = Mockery::mock();
         $connection->shouldReceive('getPdo')->andThrow(new PDOException('connection refused'));
         DB::shouldReceive('connection')->andReturn($connection);
+    }
+
+    protected function mockDatabaseUp(): void
+    {
+        $connection = Mockery::mock();
+        $connection->shouldReceive('getPdo')->andReturn(Mockery::mock(\PDO::class));
+        DB::shouldReceive('connection')->andReturn($connection);
+    }
+
+    protected function mockRedisDown(): void
+    {
+        $connection = Mockery::mock();
+        $connection->shouldReceive('ping')->andThrow(new RedisException('connection refused'));
+        Redis::shouldReceive('connection')->andReturn($connection);
     }
 
     protected function mockRedisUp(): void
