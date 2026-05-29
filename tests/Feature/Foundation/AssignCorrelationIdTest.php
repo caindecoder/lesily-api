@@ -45,6 +45,18 @@ class AssignCorrelationIdTest extends FoundationTestCase
         $this->assertErrorResponseCarriesCorrelationId($response);
     }
 
+    #[Test]
+    public function when_health_endpoint_polled_then_correlation_id_is_not_assigned(): void
+    {
+        // Given (Betterstack polling the health endpoint, which opts out)
+
+        // When
+        $response = $this->getHealth();
+
+        // Then
+        $this->assertNoCorrelationIdAssigned($response);
+    }
+
     protected function getCorrelationProbe(array $headers = []): TestResponse
     {
         return $this->getJson('/api/_test/correlation-probe', $headers);
@@ -53,6 +65,11 @@ class AssignCorrelationIdTest extends FoundationTestCase
     protected function getCorrelationErrorProbe(): TestResponse
     {
         return $this->getJson('/api/_test/correlation-error-probe');
+    }
+
+    protected function getHealth(): TestResponse
+    {
+        return $this->getJson('/api/health');
     }
 
     protected function assertCorrelationPropagated(TestResponse $response, string $expectedId): void
@@ -76,5 +93,10 @@ class AssignCorrelationIdTest extends FoundationTestCase
     {
         $response->assertStatus(404);
         $this->assertNotEmpty($response->headers->get('Correlation-Id'));
+    }
+
+    protected function assertNoCorrelationIdAssigned(TestResponse $response): void
+    {
+        $this->assertFalse($response->headers->has('Correlation-Id'));
     }
 }
