@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Foundation;
 
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -20,6 +21,18 @@ class AssignCorrelationIdTest extends FoundationTestCase
         $this->assertCorrelationPropagated($response, $suppliedId);
     }
 
+    #[Test]
+    public function when_no_correlation_id_supplied_then_a_uuid7_is_minted(): void
+    {
+        // Given (no Correlation-Id header is sent)
+
+        // When
+        $response = $this->getCorrelationProbe();
+
+        // Then
+        $this->assertCorrelationMinted($response);
+    }
+
     protected function getCorrelationProbe(array $headers = []): TestResponse
     {
         return $this->getJson('/api/_test/correlation-probe', $headers);
@@ -30,5 +43,15 @@ class AssignCorrelationIdTest extends FoundationTestCase
         $response->assertStatus(200);
         $response->assertHeader('Correlation-Id', $expectedId);
         $response->assertJsonPath('downstream_correlation_id', $expectedId);
+    }
+
+    protected function assertCorrelationMinted(TestResponse $response): void
+    {
+        $response->assertStatus(200);
+
+        $mintedId = $response->headers->get('Correlation-Id');
+        $this->assertTrue(Str::isUuid($mintedId), 'Correlation-Id is not a valid UUID.');
+        $this->assertSame('7', $mintedId[14], 'Correlation-Id is not a UUIDv7.');
+        $response->assertJsonPath('downstream_correlation_id', $mintedId);
     }
 }
