@@ -7,6 +7,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Database\Seeders\RolesPermissionsSeeder;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\RolesPermissions\Entities\Permission;
 use App\Foundation\RolesPermissions\Exceptions\SeederSourceException;
 
 class RolesPermissionsSeederTest extends FoundationTestCase
@@ -103,6 +104,24 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $owner = Role::query()->where('code', 'owner')->firstOrFail();
         $this->assertSame('0193abcd-1111-7000-8000-000000000002', $owner->id);
         $this->assertOwnerRolePersistedFaithfully($owner);
+    }
+
+    #[Test]
+    public function when_seeder_runs_then_permission_codes_use_module_action_dot_notation(): void
+    {
+        // Given the real RBAC catalog
+        $this->newSeeder($this->givenRealCatalogPath())->run();
+
+        // Then every seeded permission code matches {module}.{action} dot-notation
+        $codes = Permission::query()->pluck('code')->all();
+        $this->assertNotEmpty($codes, 'No permissions were seeded.');
+        foreach ($codes as $code) {
+            $this->assertMatchesRegularExpression(
+                '/^[a-z_]+\.[a-z_]+$/',
+                $code,
+                "Permission code '{$code}' is not {module}.{action} dot-notation."
+            );
+        }
     }
 
     protected function givenRealCatalogPath(): string

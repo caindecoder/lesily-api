@@ -8,6 +8,7 @@ use Symfony\Component\Yaml\Yaml;
 use Illuminate\Support\Facades\DB;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Symfony\Component\Yaml\Exception\ParseException;
+use App\Foundation\RolesPermissions\Entities\Permission;
 use App\Foundation\RolesPermissions\Exceptions\SeederSourceException;
 
 class RolesPermissionsSeeder extends Seeder
@@ -21,13 +22,19 @@ class RolesPermissionsSeeder extends Seeder
     public function run(): void
     {
         $rolesData = $this->loadYaml($this->rolesYamlPath);
-        $this->loadYaml($this->permissionsYamlPath);
+        $permissionsData = $this->loadYaml($this->permissionsYamlPath);
 
-        DB::transaction(function () use ($rolesData) {
+        DB::transaction(function () use ($rolesData, $permissionsData) {
             foreach ($rolesData as $row) {
                 Role::firstOrCreate(
                     ['code' => $row['code']],
                     Arr::only($row, ['id', 'name', 'description', 'scope', 'is_assignable', 'is_system', 'sort_order'])
+                );
+            }
+            foreach ($permissionsData as $row) {
+                Permission::firstOrCreate(
+                    ['code' => $row['code']],
+                    Arr::only($row, ['id', 'name', 'description', 'module'])
                 );
             }
         });
