@@ -1,0 +1,52 @@
+# Lesily chunk-1 RBAC permission catalog (initial subset — module.action dot-notation)
+# Source: Documentation/06-design/chunk-1/_process/2026-05-24-rbac-permissions-matrix.md
+# Chunk-1 scope: minimal core permissions sufficient for Tier-1 + Tier-2 UCs.
+# Full ~110-permission catalog backfilled incrementally as RBAC-touching UCs land.
+
+- code: users.invite
+  id: 0193abcd-2222-7000-8000-000000000001
+  name: Invite Users
+  description: Send invitations to new users to join the company.
+  module: users
+
+- code: users.view
+  id: 0193abcd-2222-7000-8000-000000000002
+  name: View Users
+  description: View the list of users in the company.
+  module: users
+
+- code: users.assign_role
+  id: 0193abcd-2222-7000-8000-000000000003
+  name: Assign User Role
+  description: Change a user's role within the company.
+  module: users
+
+- code: companies.view
+  id: 0193abcd-2222-7000-8000-000000000004
+  name: View Company
+  description: View company details and settings.
+  module: companies
+
+- code: companies.update
+  id: 0193abcd-2222-7000-8000-000000000005
+  name: Update Company
+  description: Edit company details.
+  module: companies
+
+- code: billing.view
+  id: 0193abcd-2222-7000-8000-000000000006
+  name: View Billing
+  description: View current plan, invoices, and payment history.
+  module: billing
+
+- code: billing.manage
+  id: 0193abcd-2222-7000-8000-000000000007
+  name: Manage Billing
+  description: Change plan, update payment method, purchase add-ons.
+  module: billing
+
+- code: audit.view
+  id: 0193abcd-2222-7000-8000-000000000008
+  name: View Audit Trail
+  description: Read the immutable audit log of data changes.
+  module: audit
