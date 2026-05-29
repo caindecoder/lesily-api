@@ -47,6 +47,35 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         }
     }
 
+    #[Test]
+    public function when_seeder_runs_twice_then_row_counts_are_unchanged(): void
+    {
+        // Given a valid single-role catalog
+        $dir = $this->givenTempCatalog([
+            'roles.yaml' => "- code: owner\n".
+                "  id: 0193abcd-1111-7000-8000-000000000002\n".
+                "  name: Owner\n".
+                "  description: Tenant Owner\n".
+                "  scope: tenant\n".
+                "  is_assignable: true\n".
+                "  is_system: true\n".
+                "  sort_order: 2\n",
+            'permissions.yaml' => '[]',
+            'role-permissions.yaml' => 'owner: []',
+        ]);
+        $seeder = $this->newSeeder($dir);
+
+        // When the seeder runs twice
+        $seeder->run();
+        $countAfterFirst = DB::table('roles')->count();
+        $seeder->run();
+        $countAfterSecond = DB::table('roles')->count();
+
+        // Then the row count is unchanged and equals the catalog size (idempotent)
+        $this->assertSame(1, $countAfterFirst);
+        $this->assertSame($countAfterFirst, $countAfterSecond);
+    }
+
     /**
      * @param  array<string, string>  $files
      */
