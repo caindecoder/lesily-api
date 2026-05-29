@@ -79,17 +79,6 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         }
     }
 
-    /**
-     * @return array<string, array{string, string}>
-     */
-    public static function unknownGrantCodeProvider(): array
-    {
-        return [
-            'unknown role code' => ["nonexistent_role:\n  - users.view\n", 'nonexistent_role'],
-            'unknown permission code' => ["owner:\n  - users.nonexistent\n", 'users.nonexistent'],
-        ];
-    }
-
     #[Test]
     public function when_seeder_runs_twice_then_all_table_counts_are_unchanged(): void
     {
@@ -105,18 +94,6 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         // Then every table's row count is stable across runs (idempotent — no duplicates)
         $this->assertSame(['roles' => 8, 'permissions' => 8, 'role_permission' => 26], $afterFirst);
         $this->assertSame($afterFirst, $afterSecond);
-    }
-
-    /**
-     * @return array{roles: int, permissions: int, role_permission: int}
-     */
-    protected function tableCounts(): array
-    {
-        return [
-            'roles' => DB::table('roles')->count(),
-            'permissions' => DB::table('permissions')->count(),
-            'role_permission' => DB::table('role_permission')->count(),
-        ];
     }
 
     #[Test]
@@ -168,11 +145,6 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $this->assertInviteUsersPermissionPersistedFaithfully();
     }
 
-    protected function givenRealCatalogPath(): string
-    {
-        return database_path('seeders/data');
-    }
-
     #[Test]
     public function when_seeder_runs_then_role_permission_grants_match_locked_matrix_with_manager_empty(): void
     {
@@ -221,19 +193,54 @@ class RolesPermissionsSeederTest extends FoundationTestCase
     }
 
     /**
-     * @param  array<string, int>  $expected
-     * @param  array<string, int>  $actual
+     * @return array<string, array{string, string}>
      */
-    protected function assertRoleGrantCountsMatchMatrix(array $expected, array $actual): void
+    public static function unknownGrantCodeProvider(): array
     {
-        foreach ($expected as $code => $expectedCount) {
-            $this->assertArrayHasKey($code, $actual, "Role '{$code}' was not seeded.");
-            $this->assertSame(
-                $expectedCount,
-                $actual[$code],
-                "Role '{$code}' grant count drift: expected {$expectedCount}, got {$actual[$code]}."
-            );
+        return [
+            'unknown role code' => ["nonexistent_role:\n  - users.view\n", 'nonexistent_role'],
+            'unknown permission code' => ["owner:\n  - users.nonexistent\n", 'users.nonexistent'],
+        ];
+    }
+
+    protected function newSeeder(string $catalogDir): RolesPermissionsSeeder
+    {
+        return new RolesPermissionsSeeder(
+            rolesYamlPath: "{$catalogDir}/roles.yaml",
+            permissionsYamlPath: "{$catalogDir}/permissions.yaml",
+            rolePermissionsYamlPath: "{$catalogDir}/role-permissions.yaml",
+        );
+    }
+
+    /**
+     * @param  array<string, string>  $files
+     */
+    protected function givenTempCatalog(array $files): string
+    {
+        $dir = sys_get_temp_dir().'/rbac-seeder-'.uniqid();
+        mkdir($dir);
+        foreach ($files as $name => $contents) {
+            file_put_contents("{$dir}/{$name}", $contents);
         }
+
+        return $dir;
+    }
+
+    protected function givenRealCatalogPath(): string
+    {
+        return database_path('seeders/data');
+    }
+
+    /**
+     * @return array{roles: int, permissions: int, role_permission: int}
+     */
+    protected function tableCounts(): array
+    {
+        return [
+            'roles' => DB::table('roles')->count(),
+            'permissions' => DB::table('permissions')->count(),
+            'role_permission' => DB::table('role_permission')->count(),
+        ];
     }
 
     protected function assertOwnerRolePersistedFaithfully(Role $owner): void
@@ -259,25 +266,18 @@ class RolesPermissionsSeederTest extends FoundationTestCase
     }
 
     /**
-     * @param  array<string, string>  $files
+     * @param  array<string, int>  $expected
+     * @param  array<string, int>  $actual
      */
-    protected function givenTempCatalog(array $files): string
+    protected function assertRoleGrantCountsMatchMatrix(array $expected, array $actual): void
     {
-        $dir = sys_get_temp_dir().'/rbac-seeder-'.uniqid();
-        mkdir($dir);
-        foreach ($files as $name => $contents) {
-            file_put_contents("{$dir}/{$name}", $contents);
+        foreach ($expected as $code => $expectedCount) {
+            $this->assertArrayHasKey($code, $actual, "Role '{$code}' was not seeded.");
+            $this->assertSame(
+                $expectedCount,
+                $actual[$code],
+                "Role '{$code}' grant count drift: expected {$expectedCount}, got {$actual[$code]}."
+            );
         }
-
-        return $dir;
-    }
-
-    protected function newSeeder(string $catalogDir): RolesPermissionsSeeder
-    {
-        return new RolesPermissionsSeeder(
-            rolesYamlPath: "{$catalogDir}/roles.yaml",
-            permissionsYamlPath: "{$catalogDir}/permissions.yaml",
-            rolePermissionsYamlPath: "{$catalogDir}/role-permissions.yaml",
-        );
     }
 }

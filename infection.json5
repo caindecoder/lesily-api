@@ -17,7 +17,21 @@
         // behaviorally identical on leaf-class internal helpers with no override).
         // Disabled project-wide as a principled equivalent-mutant exclusion, keeping
         // LeaveDates' protected-helper convention. See OQ-1-095 (UC-1-097 redo, 2026-05-29).
-        "ProtectedVisibility": false
+        "ProtectedVisibility": false,
+        // PublicVisibility on Eloquent static finders is an equivalent mutant: calling
+        // Role::findByCode() works identically whether the method is public OR protected,
+        // because Model::__callStatic forwards Role::findByCode() to (new static)->findByCode()
+        // from Model scope (a parent class), which CAN reach Role's protected method. No
+        // behavioral test can distinguish the two; only a forbidden reflection visibility test
+        // (Rule #13) could. Scoped to this ONE method — NOT global: public->protected stays a
+        // real, killable regression on controllers/services/value-objects, and even on the
+        // sibling Role::permissions() relation (resolved from Builder scope, no protected access).
+        // See OQ-1-099 (UC-1-136 redo, 2026-05-30).
+        "PublicVisibility": {
+            ignore: [
+                "App\\Foundation\\RolesPermissions\\Entities\\Role::findByCode",
+            ],
+        },
     },
     minMsi: 80,
     minCoveredMsi: 85,
