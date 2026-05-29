@@ -62,12 +62,51 @@ class ApiErrorResponseTest extends FoundationTestCase
         $this->assertInternalErrorIsOpaque($response);
     }
 
+    #[Test]
+    public function when_a_client_supplies_a_correlation_id_then_the_error_carries_the_same_id(): void
+    {
+        // Given
+        $suppliedId = '01HZ9P0R7Y4WJT2NS5G8A1KCED';
+
+        // When
+        $response = $this->getJson('/api/_test/error-not-found', ['Correlation-Id' => $suppliedId]);
+
+        // Then
+        $this->assertErrorCarriesCorrelationId($response, $suppliedId);
+    }
+
+    #[Test]
+    public function when_a_non_validation_error_occurs_then_the_errors_field_is_an_empty_object(): void
+    {
+        // When
+        $response = $this->getErrorProbe('error-feature-gate');
+
+        // Then
+        $response->assertStatus(403);
+        $response->assertSee('"errors":{}', false);
+    }
+
+    #[Test]
+    public function when_debug_is_enabled_then_an_internal_error_is_not_masked(): void
+    {
+        // Given
+        config(['app.debug' => true]);
+
+        // When
+        $response = $this->getErrorProbe('error-internal');
+
+        // Then
+        $response->assertStatus(500);
+        $response->assertSee('boom', false);
+    }
+
     public static function provideApiErrors(): array
     {
         return [
             'validation error' => ['error-validation', 422, 'VALIDATION_FAILED'],
             'feature gate' => ['error-feature-gate', 403, 'FEATURE_NOT_AVAILABLE'],
             'resource not found' => ['error-not-found', 404, 'RESOURCE_NOT_FOUND'],
+            'http not found' => ['error-http-not-found', 404, 'RESOURCE_NOT_FOUND'],
             'internal error' => ['error-internal', 500, 'INTERNAL_ERROR'],
         ];
     }
@@ -92,6 +131,12 @@ class ApiErrorResponseTest extends FoundationTestCase
         $correlationId = $response->json('correlation_id');
         $this->assertNotEmpty($correlationId);
         $this->assertSame($correlationId, $response->headers->get('Correlation-Id'));
+    }
+
+    protected function assertErrorCarriesCorrelationId(TestResponse $response, string $expectedId): void
+    {
+        $response->assertJsonPath('correlation_id', $expectedId);
+        $this->assertSame($expectedId, $response->headers->get('Correlation-Id'));
     }
 
     protected function assertFieldValidationErrors(TestResponse $response, string $field, string $message): void

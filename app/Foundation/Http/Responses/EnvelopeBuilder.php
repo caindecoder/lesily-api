@@ -18,6 +18,9 @@ class EnvelopeBuilder
             'status' => 'error',
             'message' => $message,
             'error_code' => $code->value,
+            // Cast forces an empty map to serialize as JSON {} (not []), so the
+            // errors field is always an object for strict client schemas. A
+            // validation error overrides this via $additional['errors'].
             'errors' => (object) [],
             'correlation_id' => $correlationId,
             ...$additional,
