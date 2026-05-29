@@ -33,9 +33,26 @@ class AssignCorrelationIdTest extends FoundationTestCase
         $this->assertCorrelationMinted($response);
     }
 
+    #[Test]
+    public function when_response_is_an_error_then_correlation_id_is_still_present(): void
+    {
+        // Given (a route that returns a non-2xx response)
+
+        // When
+        $response = $this->getCorrelationErrorProbe();
+
+        // Then
+        $this->assertErrorResponseCarriesCorrelationId($response);
+    }
+
     protected function getCorrelationProbe(array $headers = []): TestResponse
     {
         return $this->getJson('/api/_test/correlation-probe', $headers);
+    }
+
+    protected function getCorrelationErrorProbe(): TestResponse
+    {
+        return $this->getJson('/api/_test/correlation-error-probe');
     }
 
     protected function assertCorrelationPropagated(TestResponse $response, string $expectedId): void
@@ -53,5 +70,11 @@ class AssignCorrelationIdTest extends FoundationTestCase
         $this->assertTrue(Str::isUuid($mintedId), 'Correlation-Id is not a valid UUID.');
         $this->assertSame('7', $mintedId[14], 'Correlation-Id is not a UUIDv7.');
         $response->assertJsonPath('downstream_correlation_id', $mintedId);
+    }
+
+    protected function assertErrorResponseCarriesCorrelationId(TestResponse $response): void
+    {
+        $response->assertStatus(404);
+        $this->assertNotEmpty($response->headers->get('Correlation-Id'));
     }
 }
