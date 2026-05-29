@@ -26,31 +26,55 @@ class RolesPermissionsSeeder extends Seeder
         $permissionsData = $this->loadYaml($this->permissionsYamlPath);
         $rolePermissionsData = $this->loadYaml($this->rolePermissionsYamlPath);
 
-        DB::transaction(function () use ($rolesData, $permissionsData, $rolePermissionsData) {
-            foreach ($rolesData as $row) {
-                Role::firstOrCreate(
-                    ['code' => $row['code']],
-                    Arr::only($row, ['id', 'name', 'description', 'scope', 'is_assignable', 'is_system', 'sort_order'])
-                );
-            }
-            foreach ($permissionsData as $row) {
-                Permission::firstOrCreate(
-                    ['code' => $row['code']],
-                    Arr::only($row, ['id', 'name', 'description', 'module'])
-                );
-            }
-
-            $roleIdByCode = Role::query()->pluck('id', 'code')->all();
-            $permissionIdByCode = Permission::query()->pluck('id', 'code')->all();
-            foreach ($rolePermissionsData as $roleCode => $permissionCodes) {
-                foreach ($permissionCodes as $permissionCode) {
-                    RolePermission::firstOrCreate([
-                        'role_id' => $roleIdByCode[$roleCode],
-                        'permission_id' => $permissionIdByCode[$permissionCode],
-                    ]);
-                }
-            }
+        DB::transaction(function () use ($rolesData, $permissionsData, $rolePermissionsData): void {
+            $this->seedRoles($rolesData);
+            $this->seedPermissions($permissionsData);
+            $this->seedRolePermissions($rolePermissionsData);
         });
+    }
+
+    /**
+     * @param  array<mixed>  $rows
+     */
+    private function seedRoles(array $rows): void
+    {
+        foreach ($rows as $row) {
+            Role::firstOrCreate(
+                ['code' => $row['code']],
+                Arr::only($row, ['id', 'name', 'description', 'scope', 'is_assignable', 'is_system', 'sort_order'])
+            );
+        }
+    }
+
+    /**
+     * @param  array<mixed>  $rows
+     */
+    private function seedPermissions(array $rows): void
+    {
+        foreach ($rows as $row) {
+            Permission::firstOrCreate(
+                ['code' => $row['code']],
+                Arr::only($row, ['id', 'name', 'description', 'module'])
+            );
+        }
+    }
+
+    /**
+     * @param  array<mixed>  $grants
+     */
+    private function seedRolePermissions(array $grants): void
+    {
+        $roleIdByCode = Role::query()->pluck('id', 'code')->all();
+        $permissionIdByCode = Permission::query()->pluck('id', 'code')->all();
+
+        foreach ($grants as $roleCode => $permissionCodes) {
+            foreach ($permissionCodes as $permissionCode) {
+                RolePermission::firstOrCreate([
+                    'role_id' => $roleIdByCode[$roleCode],
+                    'permission_id' => $permissionIdByCode[$permissionCode],
+                ]);
+            }
+        }
     }
 
     /**
