@@ -12,7 +12,12 @@
         summary: "infection-summary.log"
     },
     mutators: {
-        "@default": true
+        "@default": true,
+        // ProtectedVisibility produces equivalent mutants (protected -> private is
+        // behaviorally identical on leaf-class internal helpers with no override).
+        // Disabled project-wide as a principled equivalent-mutant exclusion, keeping
+        // LeaveDates' protected-helper convention. See OQ-1-095 (UC-1-097 redo, 2026-05-29).
+        "ProtectedVisibility": false
     },
     minMsi: 80,
     minCoveredMsi: 85,

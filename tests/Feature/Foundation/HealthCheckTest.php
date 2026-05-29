@@ -10,6 +10,7 @@ use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Redis;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 class HealthCheckTest extends FoundationTestCase
@@ -19,6 +20,7 @@ class HealthCheckTest extends FoundationTestCase
     public function when_one_subsystem_is_unavailable_then_response_marks_only_that_subsystem_down(string $subsystem): void
     {
         // Given
+        Exceptions::fake();
         $this->mockSubsystemDown($subsystem);
         $this->mockSubsystemsHealthy(array_diff(['database', 'redis', 'queue'], [$subsystem]));
 
@@ -29,6 +31,7 @@ class HealthCheckTest extends FoundationTestCase
         $this->assertResponseIsUnhealthy($response);
         $this->assertSubsystemDown($response, $subsystem);
         $this->assertOtherSubsystemsUp($response, $subsystem);
+        Exceptions::assertReported(Exception::class);
     }
 
     #[Test]
