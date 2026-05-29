@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Symfony\Component\Yaml\Exception\ParseException;
 use App\Foundation\RolesPermissions\Entities\Permission;
+use App\Foundation\RolesPermissions\Entities\RolePermission;
 use App\Foundation\RolesPermissions\Exceptions\SeederSourceException;
 
 class RolesPermissionsSeeder extends Seeder
@@ -23,8 +24,9 @@ class RolesPermissionsSeeder extends Seeder
     {
         $rolesData = $this->loadYaml($this->rolesYamlPath);
         $permissionsData = $this->loadYaml($this->permissionsYamlPath);
+        $rolePermissionsData = $this->loadYaml($this->rolePermissionsYamlPath);
 
-        DB::transaction(function () use ($rolesData, $permissionsData) {
+        DB::transaction(function () use ($rolesData, $permissionsData, $rolePermissionsData) {
             foreach ($rolesData as $row) {
                 Role::firstOrCreate(
                     ['code' => $row['code']],
@@ -36,6 +38,17 @@ class RolesPermissionsSeeder extends Seeder
                     ['code' => $row['code']],
                     Arr::only($row, ['id', 'name', 'description', 'module'])
                 );
+            }
+
+            $roleIdByCode = Role::query()->pluck('id', 'code')->all();
+            $permissionIdByCode = Permission::query()->pluck('id', 'code')->all();
+            foreach ($rolePermissionsData as $roleCode => $permissionCodes) {
+                foreach ($permissionCodes as $permissionCode) {
+                    RolePermission::firstOrCreate([
+                        'role_id' => $roleIdByCode[$roleCode],
+                        'permission_id' => $permissionIdByCode[$permissionCode],
+                    ]);
+                }
             }
         });
     }

@@ -129,6 +129,49 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         return database_path('seeders/data');
     }
 
+    #[Test]
+    public function when_seeder_runs_then_role_permission_grants_match_locked_matrix_with_manager_empty(): void
+    {
+        // Given the real RBAC catalog
+        $this->newSeeder($this->givenRealCatalogPath())->run();
+
+        // Then per-role grant counts match the locked matrix, and manager has none
+        $expected = [
+            'platform_super_admin' => 0,
+            'owner' => 8,
+            'admin' => 7,
+            'hr_officer' => 3,
+            'payroll_officer' => 3,
+            'auditor' => 4,
+            'employee' => 1,
+            'manager' => 0,
+        ];
+        $actual = Role::query()
+            ->withCount('permissions')
+            ->get()
+            ->mapWithKeys(fn (Role $role) => [$role->code => $role->permissions_count])
+            ->all();
+
+        $this->assertRoleGrantCountsMatchMatrix($expected, $actual);
+        $this->assertSame(0, $actual['manager'], 'Manager must have zero grants (chunk-1 placeholder).');
+    }
+
+    /**
+     * @param  array<string, int>  $expected
+     * @param  array<string, int>  $actual
+     */
+    protected function assertRoleGrantCountsMatchMatrix(array $expected, array $actual): void
+    {
+        foreach ($expected as $code => $expectedCount) {
+            $this->assertArrayHasKey($code, $actual, "Role '{$code}' was not seeded.");
+            $this->assertSame(
+                $expectedCount,
+                $actual[$code],
+                "Role '{$code}' grant count drift: expected {$expectedCount}, got {$actual[$code]}."
+            );
+        }
+    }
+
     protected function assertOwnerRolePersistedFaithfully(Role $owner): void
     {
         $this->assertSame('Owner', $owner->name);
