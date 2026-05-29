@@ -36,3 +36,8 @@ RateLimiter::for('rate-limit-general', fn (Request $request) => Limit::perMinute
 
 Route::get('rate-limit-general-probe', fn () => response()->json(['ok' => true]))
     ->middleware('throttle:rate-limit-general');
+
+RateLimiter::for('rate-limit-auth', fn (Request $request) => Limit::perMinute(1)->by((string) $request->ip()));
+
+Route::post('rate-limit-auth-probe', fn () => response()->json(['ok' => true]))
+    ->middleware('throttle:rate-limit-auth');

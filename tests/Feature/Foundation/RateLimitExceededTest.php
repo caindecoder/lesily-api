@@ -20,10 +20,24 @@ class RateLimitExceededTest extends FoundationTestCase
         $this->assertRejectedWithRetryGuidance($response);
     }
 
-    protected function exhaustLimit(string $uri, int $allowed): void
+    #[Test]
+    public function when_unauthenticated_ip_exceeds_auth_endpoint_limit_then_request_is_rejected_with_retry_guidance(): void
+    {
+        // Given an unauthenticated client has exhausted the per-IP auth quota for the minute
+        $this->exhaustLimit('/api/_test/rate-limit-auth-probe', 1, 'post');
+
+        // When the client posts another login attempt
+        $response = $this->postJson('/api/_test/rate-limit-auth-probe');
+
+        // Then the same structured rate-limit error is returned for the auth endpoint
+        $this->assertRejectedWithRetryGuidance($response);
+    }
+
+    protected function exhaustLimit(string $uri, int $allowed, string $method = 'get'): void
     {
         for ($i = 0; $i < $allowed; $i++) {
-            $this->getJson($uri)->assertOk();
+            $response = $method === 'post' ? $this->postJson($uri) : $this->getJson($uri);
+            $response->assertOk();
         }
     }
 
