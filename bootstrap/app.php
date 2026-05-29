@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Foundation\Application;
 use Illuminate\Validation\ValidationException;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Http\Responses\EnvelopeBuilder;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -30,29 +31,25 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(fn (ValidationException $e) => EnvelopeBuilder::build(
-            'VALIDATION_FAILED',
+            ApiErrorCode::ValidationFailed,
             $e->getMessage(),
-            422,
-            $e->errors(),
+            ['errors' => $e->errors()],
         ));
 
         $exceptions->render(fn (FeatureUnavailableException $e) => EnvelopeBuilder::build(
-            'FEATURE_NOT_AVAILABLE',
+            ApiErrorCode::FeatureNotAvailable,
             $e->getMessage(),
-            403,
-            extra: ['upgrade_to' => $e->upgradeTo, 'upgrade_url' => $e->upgradeUrl],
+            ['upgrade_to' => $e->upgradeTo, 'upgrade_url' => $e->upgradeUrl],
         ));
 
         $exceptions->render(fn (ModelNotFoundException $e) => EnvelopeBuilder::build(
-            'RESOURCE_NOT_FOUND',
+            ApiErrorCode::ResourceNotFound,
             'The requested resource was not found.',
-            404,
         ));
 
         $exceptions->render(fn (NotFoundHttpException $e) => EnvelopeBuilder::build(
-            'RESOURCE_NOT_FOUND',
+            ApiErrorCode::ResourceNotFound,
             'The requested resource was not found.',
-            404,
         ));
 
         $exceptions->render(function (Throwable $e) {
@@ -60,6 +57,6 @@ return Application::configure(basePath: dirname(__DIR__))
                 return null;
             }
 
-            return EnvelopeBuilder::build('INTERNAL_ERROR', 'An unexpected error occurred.', 500);
+            return EnvelopeBuilder::build(ApiErrorCode::InternalError, 'An unexpected error occurred.');
         });
     })->create();

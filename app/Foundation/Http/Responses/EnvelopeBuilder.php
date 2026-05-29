@@ -7,17 +7,20 @@ use Illuminate\Support\Facades\Context;
 
 class EnvelopeBuilder
 {
-    public static function build(string $errorCode, string $message, int $status, array $errors = [], array $extra = []): JsonResponse
+    /**
+     * @param  array<string, mixed>  $additional
+     */
+    public static function build(ApiErrorCode $code, string $message, array $additional = []): JsonResponse
     {
         $correlationId = Context::get('correlation_id');
 
         return response()->json([
             'status' => 'error',
             'message' => $message,
-            'error_code' => $errorCode,
-            'errors' => (object) $errors,
+            'error_code' => $code->value,
+            'errors' => (object) [],
             'correlation_id' => $correlationId,
-            ...$extra,
-        ], $status)->header('Correlation-Id', $correlationId);
+            ...$additional,
+        ], $code->status())->header('Correlation-Id', $correlationId);
     }
 }
