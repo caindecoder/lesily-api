@@ -7,6 +7,7 @@ use App\Foundation\Http\Responses\EnvelopeBuilder;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
+use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -31,5 +32,12 @@ return Application::configure(basePath: dirname(__DIR__))
             $e->getMessage(),
             422,
             $e->errors(),
+        ));
+
+        $exceptions->render(fn (FeatureUnavailableException $e) => EnvelopeBuilder::build(
+            'FEATURE_NOT_AVAILABLE',
+            $e->getMessage(),
+            403,
+            extra: ['upgrade_to' => $e->upgradeTo, 'upgrade_url' => $e->upgradeUrl],
         ));
     })->create();

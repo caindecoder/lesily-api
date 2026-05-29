@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Context;
 
 class EnvelopeBuilder
 {
-    public static function build(string $errorCode, string $message, int $status, array $errors = []): JsonResponse
+    public static function build(string $errorCode, string $message, int $status, array $errors = [], array $extra = []): JsonResponse
     {
         $correlationId = Context::get('correlation_id');
 
@@ -17,6 +17,7 @@ class EnvelopeBuilder
             'error_code' => $errorCode,
             'errors' => (object) $errors,
             'correlation_id' => $correlationId,
+            ...$extra,
         ], $status)->header('Correlation-Id', $correlationId);
     }
 }
