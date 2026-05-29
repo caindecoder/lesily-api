@@ -1,0 +1,47 @@
+# Lesily chunk-1 role → permission grant matrix
+# Source: Documentation/06-design/chunk-1/_process/2026-05-24-rbac-permissions-matrix.md
+# Chunk-1 scope: minimal grants sufficient for Tier-1 + Tier-2 UCs.
+# Manager: empty grants (chunk-1 placeholder per cd-roles-permissions §3 Notes).
+# Platform Super Admin: bypasses RBAC at the evaluator level (no row grants needed).
+
+platform_super_admin: []
+
+owner:
+  - users.invite
+  - users.view
+  - users.assign_role
+  - companies.view
+  - companies.update
+  - billing.view
+  - billing.manage
+  - audit.view
+
+admin:
+  - users.invite
+  - users.view
+  - users.assign_role
+  - companies.view
+  - companies.update
+  - billing.view
+  - audit.view
+
+hr_officer:
+  - users.invite
+  - users.view
+  - companies.view
+
+payroll_officer:
+  - users.view
+  - companies.view
+  - billing.view
+
+auditor:
+  - users.view
+  - companies.view
+  - billing.view
+  - audit.view
+
+employee:
+  - companies.view
+
+manager: []

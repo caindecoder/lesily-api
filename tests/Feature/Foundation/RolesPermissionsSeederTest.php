@@ -5,6 +5,7 @@ namespace Tests\Feature\Foundation;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
 use Database\Seeders\RolesPermissionsSeeder;
+use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\RolesPermissions\Exceptions\SeederSourceException;
 
@@ -74,6 +75,48 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         // Then the row count is unchanged and equals the catalog size (idempotent)
         $this->assertSame(1, $countAfterFirst);
         $this->assertSame($countAfterFirst, $countAfterSecond);
+    }
+
+    #[Test]
+    public function when_seeder_runs_then_eight_roles_persisted_with_canonical_codes_and_stable_uuids(): void
+    {
+        // Given the real RBAC catalog shipped in database/seeders/data
+        $seeder = $this->newSeeder($this->givenRealCatalogPath());
+
+        // When the seeder runs
+        $seeder->run();
+
+        // Then the 8 canonical role codes are persisted in sort order
+        $codes = Role::query()->orderBy('sort_order')->pluck('code')->all();
+        $this->assertSame([
+            'platform_super_admin',
+            'owner',
+            'admin',
+            'hr_officer',
+            'payroll_officer',
+            'auditor',
+            'employee',
+            'manager',
+        ], $codes);
+
+        // And the owner role is persisted faithfully with its committed stable UUID
+        $owner = Role::query()->where('code', 'owner')->firstOrFail();
+        $this->assertSame('0193abcd-1111-7000-8000-000000000002', $owner->id);
+        $this->assertOwnerRolePersistedFaithfully($owner);
+    }
+
+    protected function givenRealCatalogPath(): string
+    {
+        return database_path('seeders/data');
+    }
+
+    protected function assertOwnerRolePersistedFaithfully(Role $owner): void
+    {
+        $this->assertSame('Owner', $owner->name);
+        $this->assertSame('tenant', $owner->scope);
+        $this->assertTrue($owner->is_assignable);
+        $this->assertTrue($owner->is_system);
+        $this->assertSame(2, $owner->sort_order);
     }
 
     /**
