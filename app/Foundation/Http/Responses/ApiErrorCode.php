@@ -7,6 +7,7 @@ enum ApiErrorCode: string
     case ValidationFailed = 'VALIDATION_FAILED';
     case FeatureNotAvailable = 'FEATURE_NOT_AVAILABLE';
     case ResourceNotFound = 'RESOURCE_NOT_FOUND';
+    case RateLimitExceeded = 'RATE_LIMIT_EXCEEDED';
     case InternalError = 'INTERNAL_ERROR';
 
     public function status(): int
@@ -15,6 +16,7 @@ enum ApiErrorCode: string
             self::ValidationFailed => 422,
             self::FeatureNotAvailable => 403,
             self::ResourceNotFound => 404,
+            self::RateLimitExceeded => 429,
             self::InternalError => 500,
         };
     }

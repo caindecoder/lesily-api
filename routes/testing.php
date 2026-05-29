@@ -1,7 +1,10 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Context;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
@@ -26,3 +29,20 @@ Route::get('error-not-found', fn () => throw new ModelNotFoundException);
 Route::get('error-http-not-found', fn () => throw new NotFoundHttpException);
 
 Route::get('error-internal', fn () => throw new RuntimeException('boom'));
+
+// Rate-limit probes (UC-1-098). Real Laravel throttle middleware drives the
+// 429 so the ThrottleRequestsException render handler is exercised end-to-end.
+RateLimiter::for('rate-limit-general', fn (Request $request) => Limit::perMinute(1)->by((string) $request->ip()));
+
+Route::get('rate-limit-general-probe', fn () => response()->json(['ok' => true]))
+    ->middleware('throttle:rate-limit-general');
+
+RateLimiter::for('rate-limit-auth', fn (Request $request) => Limit::perMinute(1)->by((string) $request->ip()));
+
+Route::post('rate-limit-auth-probe', fn () => response()->json(['ok' => true]))
+    ->middleware('throttle:rate-limit-auth');
+
+RateLimiter::for('rate-limit-tenant', fn (Request $request) => Limit::perMinute(2)->by('tenant:'.$request->header('X-Tenant-Id', 'anonymous')));
+
+Route::get('rate-limit-tenant-probe', fn () => response()->json(['ok' => true]))
+    ->middleware('throttle:rate-limit-tenant');

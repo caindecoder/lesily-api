@@ -9,6 +9,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -51,6 +52,22 @@ return Application::configure(basePath: dirname(__DIR__))
             ApiErrorCode::ResourceNotFound,
             'The requested resource was not found.',
         ));
+
+        $exceptions->render(function (ThrottleRequestsException $e) {
+            // Laravel's ThrottleRequests middleware is the only source of this exception and
+            // always sets Retry-After + X-RateLimit-Reset via buildException(), so the bare
+            // header access is safe and deliberately has no fallback.
+            $retryAfter = (int) $e->getHeaders()['Retry-After'];
+
+            return EnvelopeBuilder::build(
+                ApiErrorCode::RateLimitExceeded,
+                'Too many requests. Please try again later.',
+                ['retry_after' => $retryAfter],
+            )->withHeaders([
+                'Retry-After' => (string) $retryAfter,
+                'X-RateLimit-Reset' => (string) $e->getHeaders()['X-RateLimit-Reset'],
+            ]);
+        });
 
         $exceptions->render(function (Throwable $e) {
             if (config('app.debug')) {
