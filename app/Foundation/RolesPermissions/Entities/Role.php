@@ -36,4 +36,9 @@ class Role extends Model
     {
         return $this->belongsToMany(Permission::class, 'role_permission', 'role_id', 'permission_id');
     }
+
+    public static function findByCode(string $code): ?self
+    {
+        return static::query()->where('code', $code)->first();
+    }
 }

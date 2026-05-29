@@ -156,6 +156,26 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $this->assertSame(0, $actual['manager'], 'Manager must have zero grants (chunk-1 placeholder).');
     }
 
+    #[Test]
+    public function when_owner_role_loaded_by_code_then_permissions_eager_loaded_without_n_plus_one(): void
+    {
+        // Given the seeded catalog
+        $this->newSeeder($this->givenRealCatalogPath())->run();
+
+        // When owner is looked up by code and its permissions eager-loaded
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $owner = Role::findByCode('owner');
+        $this->assertNotNull($owner, 'Owner role must be seeded.');
+        $owner->load('permissions');
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        // Then owner has its full permission set in exactly 2 queries (no N+1)
+        $this->assertGreaterThan(0, $owner->permissions->count(), 'Owner should have permission grants.');
+        $this->assertSame(2, $queryCount, "Expected 2 queries (role + permissions), got {$queryCount}.");
+    }
+
     /**
      * @param  array<string, int>  $expected
      * @param  array<string, int>  $actual
