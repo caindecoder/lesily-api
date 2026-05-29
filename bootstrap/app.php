@@ -2,9 +2,15 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Foundation\Application;
+use Illuminate\Validation\ValidationException;
+use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\Http\Responses\EnvelopeBuilder;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Foundation\Http\Exceptions\FeatureUnavailableException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -24,5 +30,33 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->appendToGroup('api', AssignCorrelationId::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(fn (ValidationException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::ValidationFailed,
+            $e->getMessage(),
+            ['errors' => $e->errors()],
+        ));
+
+        $exceptions->render(fn (FeatureUnavailableException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::FeatureNotAvailable,
+            $e->getMessage(),
+            ['upgrade_to' => $e->upgradeTo, 'upgrade_url' => $e->upgradeUrl],
+        ));
+
+        $exceptions->render(fn (ModelNotFoundException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::ResourceNotFound,
+            'The requested resource was not found.',
+        ));
+
+        $exceptions->render(fn (NotFoundHttpException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::ResourceNotFound,
+            'The requested resource was not found.',
+        ));
+
+        $exceptions->render(function (Throwable $e) {
+            if (config('app.debug')) {
+                return null;
+            }
+
+            return EnvelopeBuilder::build(ApiErrorCode::InternalError, 'An unexpected error occurred.');
+        });
     })->create();
