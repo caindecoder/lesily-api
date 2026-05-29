@@ -41,3 +41,8 @@ RateLimiter::for('rate-limit-auth', fn (Request $request) => Limit::perMinute(1)
 
 Route::post('rate-limit-auth-probe', fn () => response()->json(['ok' => true]))
     ->middleware('throttle:rate-limit-auth');
+
+RateLimiter::for('rate-limit-tenant', fn (Request $request) => Limit::perMinute(2)->by('tenant:'.$request->header('X-Tenant-Id', 'anonymous')));
+
+Route::get('rate-limit-tenant-probe', fn () => response()->json(['ok' => true]))
+    ->middleware('throttle:rate-limit-tenant');

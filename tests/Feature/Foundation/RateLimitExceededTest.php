@@ -33,12 +33,38 @@ class RateLimitExceededTest extends FoundationTestCase
         $this->assertRejectedWithRetryGuidance($response);
     }
 
+    #[Test]
+    public function when_separate_tenant_sends_request_then_unaffected_by_other_tenants_quota(): void
+    {
+        // Given one tenant has consumed its rate-limit quota for the minute
+        $this->exhaustAndConfirmTenantThrottled('contoso');
+
+        // When a separate tenant on the same limit sends its first request
+        $response = $this->sendTenantRequest('acme');
+
+        // Then the separate tenant is unaffected by the first tenant's exhausted quota
+        $response->assertOk();
+    }
+
     protected function exhaustLimit(string $uri, int $allowed, string $method = 'get'): void
     {
         for ($i = 0; $i < $allowed; $i++) {
             $response = $method === 'post' ? $this->postJson($uri) : $this->getJson($uri);
             $response->assertOk();
         }
+    }
+
+    protected function exhaustAndConfirmTenantThrottled(string $tenant): void
+    {
+        $this->sendTenantRequest($tenant)->assertOk();
+        $this->sendTenantRequest($tenant)->assertOk();
+        $this->sendTenantRequest($tenant)->assertTooManyRequests();
+    }
+
+    protected function sendTenantRequest(string $tenant): TestResponse
+    {
+        return $this->withHeader('X-Tenant-Id', $tenant)
+            ->getJson('/api/_test/rate-limit-tenant-probe');
     }
 
     protected function assertRejectedWithRetryGuidance(TestResponse $response): void
