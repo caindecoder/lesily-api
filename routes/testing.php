@@ -18,3 +18,5 @@ Route::get('error-validation', fn () => throw ValidationException::withMessages(
 ]));
 
 Route::get('error-feature-gate', fn () => throw new FeatureUnavailableException('Pro', '/settings/billing/upgrade'));
+
+Route::get('error-internal', fn () => throw new RuntimeException('boom'));

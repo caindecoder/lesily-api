@@ -40,4 +40,12 @@ return Application::configure(basePath: dirname(__DIR__))
             403,
             extra: ['upgrade_to' => $e->upgradeTo, 'upgrade_url' => $e->upgradeUrl],
         ));
+
+        $exceptions->render(function (Throwable $e) {
+            if (config('app.debug')) {
+                return null;
+            }
+
+            return EnvelopeBuilder::build('INTERNAL_ERROR', 'An unexpected error occurred.', 500);
+        });
     })->create();

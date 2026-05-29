@@ -31,6 +31,19 @@ class ApiErrorResponseTest extends FoundationTestCase
         $this->assertUpgradePromptIncluded($response, 'Pro', '/settings/billing/upgrade');
     }
 
+    #[Test]
+    public function when_an_internal_error_occurs_in_production_then_no_internal_details_are_exposed(): void
+    {
+        // Given
+        config(['app.debug' => false]);
+
+        // When
+        $response = $this->getErrorProbe('error-internal');
+
+        // Then
+        $this->assertInternalErrorIsOpaque($response);
+    }
+
     protected function getErrorProbe(string $name): TestResponse
     {
         return $this->getJson("/api/_test/{$name}");
@@ -49,5 +62,14 @@ class ApiErrorResponseTest extends FoundationTestCase
         $response->assertJsonPath('error_code', 'FEATURE_NOT_AVAILABLE');
         $response->assertJsonPath('upgrade_to', $upgradeTo);
         $response->assertJsonPath('upgrade_url', $upgradeUrl);
+    }
+
+    protected function assertInternalErrorIsOpaque(TestResponse $response): void
+    {
+        $response->assertStatus(500);
+        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
+        $response->assertJsonPath('message', 'An unexpected error occurred.');
+        $response->assertDontSee('boom', false);
+        $response->assertDontSee('.php', false);
     }
 }
