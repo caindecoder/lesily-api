@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Foundation\Application;
+use Illuminate\Validation\ValidationException;
+use App\Foundation\Http\Responses\EnvelopeBuilder;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
@@ -24,5 +26,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->appendToGroup('api', AssignCorrelationId::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(fn (ValidationException $e) => EnvelopeBuilder::build(
+            'VALIDATION_FAILED',
+            $e->getMessage(),
+            422,
+            $e->errors(),
+        ));
     })->create();
