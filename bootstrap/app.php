@@ -54,6 +54,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ));
 
         $exceptions->render(function (ThrottleRequestsException $e) {
+            // Laravel's ThrottleRequests middleware is the only source of this exception and
+            // always sets Retry-After + X-RateLimit-Reset via buildException(), so the bare
+            // header access is safe and deliberately has no fallback.
             $retryAfter = (int) $e->getHeaders()['Retry-After'];
 
             return EnvelopeBuilder::build(

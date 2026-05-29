@@ -73,9 +73,17 @@ class RateLimitExceededTest extends FoundationTestCase
         $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
 
         $retryAfter = (int) $response->json('retry_after');
-        $this->assertGreaterThan(0, $retryAfter, 'retry_after must tell the client how long to wait.');
+        $this->assertGreaterThan(
+            0,
+            $retryAfter,
+            'retry_after must tell the client how long to wait.'
+        );
         $this->assertSame((string) $retryAfter, $response->headers->get('Retry-After'));
-        $this->assertNotNull($response->headers->get('X-RateLimit-Reset'));
+        $this->assertEqualsWithDelta(
+            time() + $retryAfter, (int) $response->headers->get('X-RateLimit-Reset'),
+            5,
+            'X-RateLimit-Reset must be the epoch when the window resets.'
+        );
         $this->assertNotEmpty($response->json('correlation_id'));
     }
 }
