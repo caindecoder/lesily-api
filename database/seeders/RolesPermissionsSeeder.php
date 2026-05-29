@@ -68,10 +68,12 @@ class RolesPermissionsSeeder extends Seeder
         $permissionIdByCode = Permission::query()->pluck('id', 'code')->all();
 
         foreach ($grants as $roleCode => $permissionCodes) {
+            $roleId = $roleIdByCode[$roleCode] ?? throw SeederSourceException::unknownCode($roleCode);
             foreach ($permissionCodes as $permissionCode) {
+                $permissionId = $permissionIdByCode[$permissionCode] ?? throw SeederSourceException::unknownCode($permissionCode);
                 RolePermission::firstOrCreate([
-                    'role_id' => $roleIdByCode[$roleCode],
-                    'permission_id' => $permissionIdByCode[$permissionCode],
+                    'role_id' => $roleId,
+                    'permission_id' => $permissionId,
                 ]);
             }
         }

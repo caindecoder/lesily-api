@@ -16,4 +16,9 @@ class SeederSourceException extends RuntimeException
     {
         return new self("RBAC seeder source file unparseable: {$path}", previous: $cause);
     }
+
+    public static function unknownCode(string $code): self
+    {
+        return new self("RBAC seeder grant references an unknown code absent from the catalog: {$code}");
+    }
 }

@@ -5,6 +5,7 @@ namespace Tests\Feature\Foundation;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
 use Database\Seeders\RolesPermissionsSeeder;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\RolesPermissions\Entities\Permission;
@@ -50,32 +51,72 @@ class RolesPermissionsSeederTest extends FoundationTestCase
     }
 
     #[Test]
-    public function when_seeder_runs_twice_then_row_counts_are_unchanged(): void
+    #[DataProvider('unknownGrantCodeProvider')]
+    public function when_grant_references_unknown_code_then_seeder_throws_and_rolls_back(string $grantsYaml, string $badCode): void
     {
-        // Given a valid single-role catalog
+        // Given valid roles + permissions but a grant referencing a code absent from the catalog
         $dir = $this->givenTempCatalog([
             'roles.yaml' => "- code: owner\n".
                 "  id: 0193abcd-1111-7000-8000-000000000002\n".
-                "  name: Owner\n".
-                "  description: Tenant Owner\n".
-                "  scope: tenant\n".
-                "  is_assignable: true\n".
-                "  is_system: true\n".
-                "  sort_order: 2\n",
-            'permissions.yaml' => '[]',
-            'role-permissions.yaml' => 'owner: []',
+                "  name: Owner\n  description: Owner\n  scope: tenant\n".
+                "  is_assignable: true\n  is_system: true\n  sort_order: 2\n",
+            'permissions.yaml' => "- code: users.view\n".
+                "  id: 0193abcd-2222-7000-8000-000000000002\n".
+                "  name: View Users\n  description: View\n  module: users\n",
+            'role-permissions.yaml' => $grantsYaml,
         ]);
-        $seeder = $this->newSeeder($dir);
+
+        // When the seeder runs
+        // Then it throws naming the bad code and rolls back every table (no partial state)
+        try {
+            $this->newSeeder($dir)->run();
+            $this->fail('SeederSourceException was not thrown.');
+        } catch (SeederSourceException $e) {
+            $this->assertStringContainsString($badCode, $e->getMessage());
+            $this->assertSame(0, DB::table('roles')->count());
+            $this->assertSame(0, DB::table('permissions')->count());
+            $this->assertSame(0, DB::table('role_permission')->count());
+        }
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function unknownGrantCodeProvider(): array
+    {
+        return [
+            'unknown role code' => ["nonexistent_role:\n  - users.view\n", 'nonexistent_role'],
+            'unknown permission code' => ["owner:\n  - users.nonexistent\n", 'users.nonexistent'],
+        ];
+    }
+
+    #[Test]
+    public function when_seeder_runs_twice_then_all_table_counts_are_unchanged(): void
+    {
+        // Given the real RBAC catalog
+        $seeder = $this->newSeeder($this->givenRealCatalogPath());
 
         // When the seeder runs twice
         $seeder->run();
-        $countAfterFirst = DB::table('roles')->count();
+        $afterFirst = $this->tableCounts();
         $seeder->run();
-        $countAfterSecond = DB::table('roles')->count();
+        $afterSecond = $this->tableCounts();
 
-        // Then the row count is unchanged and equals the catalog size (idempotent)
-        $this->assertSame(1, $countAfterFirst);
-        $this->assertSame($countAfterFirst, $countAfterSecond);
+        // Then every table's row count is stable across runs (idempotent — no duplicates)
+        $this->assertSame(['roles' => 8, 'permissions' => 8, 'role_permission' => 26], $afterFirst);
+        $this->assertSame($afterFirst, $afterSecond);
+    }
+
+    /**
+     * @return array{roles: int, permissions: int, role_permission: int}
+     */
+    protected function tableCounts(): array
+    {
+        return [
+            'roles' => DB::table('roles')->count(),
+            'permissions' => DB::table('permissions')->count(),
+            'role_permission' => DB::table('role_permission')->count(),
+        ];
     }
 
     #[Test]
@@ -122,6 +163,9 @@ class RolesPermissionsSeederTest extends FoundationTestCase
                 "Permission code '{$code}' is not {module}.{action} dot-notation."
             );
         }
+
+        // And a representative permission is persisted faithfully (name/description/module mapping)
+        $this->assertInviteUsersPermissionPersistedFaithfully();
     }
 
     protected function givenRealCatalogPath(): string
@@ -194,11 +238,24 @@ class RolesPermissionsSeederTest extends FoundationTestCase
 
     protected function assertOwnerRolePersistedFaithfully(Role $owner): void
     {
-        $this->assertSame('Owner', $owner->name);
-        $this->assertSame('tenant', $owner->scope);
-        $this->assertTrue($owner->is_assignable);
-        $this->assertTrue($owner->is_system);
-        $this->assertSame(2, $owner->sort_order);
+        $this->assertSame([
+            'name' => 'Owner',
+            'description' => 'Tenant Owner — billing, ownership, and final authority. Exactly one per company.',
+            'scope' => 'tenant',
+            'is_assignable' => true,
+            'is_system' => true,
+            'sort_order' => 2,
+        ], $owner->only(['name', 'description', 'scope', 'is_assignable', 'is_system', 'sort_order']));
+    }
+
+    protected function assertInviteUsersPermissionPersistedFaithfully(): void
+    {
+        $permission = Permission::query()->where('code', 'users.invite')->firstOrFail();
+        $this->assertSame([
+            'name' => 'Invite Users',
+            'description' => 'Send invitations to new users to join the company.',
+            'module' => 'users',
+        ], $permission->only(['name', 'description', 'module']));
     }
 
     /**
