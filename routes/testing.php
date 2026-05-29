@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 
 Route::get('correlation-probe', fn () => response()->json([
@@ -18,5 +19,7 @@ Route::get('error-validation', fn () => throw ValidationException::withMessages(
 ]));
 
 Route::get('error-feature-gate', fn () => throw new FeatureUnavailableException('Pro', '/settings/billing/upgrade'));
+
+Route::get('error-not-found', fn () => throw new ModelNotFoundException);
 
 Route::get('error-internal', fn () => throw new RuntimeException('boom'));

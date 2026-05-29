@@ -4,9 +4,27 @@ namespace Tests\Feature\Foundation;
 
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class ApiErrorResponseTest extends FoundationTestCase
 {
+    #[Test]
+    #[DataProvider('provideApiErrors')]
+    public function when_an_api_error_occurs_then_the_error_is_machine_readable_and_traceable(
+        string $probe,
+        int $expectedStatus,
+        string $expectedErrorCode,
+    ): void {
+        // Given
+        config(['app.debug' => false]);
+
+        // When
+        $response = $this->getErrorProbe($probe);
+
+        // Then
+        $this->assertGlobalErrorContract($response, $expectedStatus, $expectedErrorCode);
+    }
+
     #[Test]
     public function when_validation_fails_then_field_level_errors_are_returned(): void
     {
@@ -44,9 +62,36 @@ class ApiErrorResponseTest extends FoundationTestCase
         $this->assertInternalErrorIsOpaque($response);
     }
 
+    public static function provideApiErrors(): array
+    {
+        return [
+            'validation error' => ['error-validation', 422, 'VALIDATION_FAILED'],
+            'feature gate' => ['error-feature-gate', 403, 'FEATURE_NOT_AVAILABLE'],
+            'resource not found' => ['error-not-found', 404, 'RESOURCE_NOT_FOUND'],
+            'internal error' => ['error-internal', 500, 'INTERNAL_ERROR'],
+        ];
+    }
+
     protected function getErrorProbe(string $name): TestResponse
     {
         return $this->getJson("/api/_test/{$name}");
+    }
+
+    protected function assertGlobalErrorContract(TestResponse $response, int $status, string $errorCode): void
+    {
+        $response->assertStatus($status);
+        $response->assertJsonPath('status', 'error');
+        $response->assertJsonPath('error_code', $errorCode);
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+        $this->assertCorrelationIdMatchesHeader($response);
+        $response->assertJsonMissingPath('trace');
+    }
+
+    protected function assertCorrelationIdMatchesHeader(TestResponse $response): void
+    {
+        $correlationId = $response->json('correlation_id');
+        $this->assertNotEmpty($correlationId);
+        $this->assertSame($correlationId, $response->headers->get('Correlation-Id'));
     }
 
     protected function assertFieldValidationErrors(TestResponse $response, string $field, string $message): void

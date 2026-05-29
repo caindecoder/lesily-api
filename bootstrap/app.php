@@ -7,7 +7,9 @@ use App\Foundation\Http\Responses\EnvelopeBuilder;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -39,6 +41,18 @@ return Application::configure(basePath: dirname(__DIR__))
             $e->getMessage(),
             403,
             extra: ['upgrade_to' => $e->upgradeTo, 'upgrade_url' => $e->upgradeUrl],
+        ));
+
+        $exceptions->render(fn (ModelNotFoundException $e) => EnvelopeBuilder::build(
+            'RESOURCE_NOT_FOUND',
+            'The requested resource was not found.',
+            404,
+        ));
+
+        $exceptions->render(fn (NotFoundHttpException $e) => EnvelopeBuilder::build(
+            'RESOURCE_NOT_FOUND',
+            'The requested resource was not found.',
+            404,
         ));
 
         $exceptions->render(function (Throwable $e) {
