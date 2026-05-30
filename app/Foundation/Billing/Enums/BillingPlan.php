@@ -30,6 +30,9 @@ enum BillingPlan: string
     /**
      * The lowest tier whose plan grants the feature, or null when no plan does
      * (e.g. an add-on-only or deprecated feature) — drives the upgrade prompt.
+     *
+     * Relies on the cases being declared in ascending tier order
+     * (Free < Starter < Pro < Enterprise); self::cases() preserves that order.
      */
     public static function lowestPlanWith(Feature $feature): ?self
     {

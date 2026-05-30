@@ -163,6 +163,7 @@ class TwoGateCheckTest extends FoundationTestCase
         $response->assertForbidden();
         $response->assertJsonPath('error_code', 'FEATURE_NOT_AVAILABLE');
         $response->assertJsonPath('upgrade_to', $tier);
+        $response->assertJsonPath('upgrade_url', '/settings/billing/upgrade');
     }
 
     protected function assertPermissionDenied(TestResponse $response, string $permission): void
