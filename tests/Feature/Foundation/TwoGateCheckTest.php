@@ -110,6 +110,26 @@ class TwoGateCheckTest extends FoundationTestCase
         $this->assertGatedActionProceeded($response);
     }
 
+    #[Test]
+    public function when_the_same_member_acts_in_companies_on_different_tiers_then_feature_access_follows_each_company(): void
+    {
+        // Given (one member, one role, in a Free company and a Pro company)
+        $user = User::factory()->create();
+        $role = Role::factory()->code('member')->withPermissions(['manage_security'])->create();
+        $freeCompany = Company::factory()->onPlan(BillingPlan::Free)->create();
+        $proCompany = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $this->attachMember($freeCompany, $user, $role);
+        $this->attachMember($proCompany, $user, $role);
+
+        // When the member attempts a Pro+ feature in each company context
+        $inFreeContext = $this->attemptGatedAction('two-gate/secured', $user, $freeCompany);
+        $inProContext = $this->attemptGatedAction('two-gate/secured', $user, $proCompany);
+
+        // Then access follows each company's plan, not the user
+        $this->assertFeatureUpgradePromptReturned($inFreeContext, 'Pro');
+        $this->assertGatedActionProceeded($inProContext);
+    }
+
     /**
      * @return array<string, array{string, BillingPlan, string}>
      */
