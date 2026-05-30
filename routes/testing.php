@@ -61,3 +61,6 @@ Route::get('two-gate/secured', fn () => response()->json(['ok' => true]))
 
 Route::get('two-gate/deprecated', fn () => response()->json(['ok' => true]))
     ->middleware('feature:legacy_import');
+
+Route::get('two-gate/templates', fn () => response()->json(['ok' => true]))
+    ->middleware('feature:template_engine');

@@ -7,6 +7,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\Addon;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\RolesPermissions\Entities\Role;
@@ -90,6 +91,20 @@ class TwoGateCheckTest extends FoundationTestCase
 
         // When
         $response = $this->attemptGatedAction('two-gate/starter-feature', $user, $company);
+
+        // Then
+        $this->assertGatedActionProceeded($response);
+    }
+
+    #[Test]
+    public function when_an_addon_grants_a_feature_the_plan_excludes_then_access_is_allowed(): void
+    {
+        // Given (Free plan lacks TemplateEngine, but the Template Engine add-on grants it)
+        $company = Company::factory()->onPlan(BillingPlan::Free)->withAddon(Addon::TemplateEngine)->create();
+        $user = User::factory()->create();
+
+        // When
+        $response = $this->attemptGatedAction('two-gate/templates', $user, $company);
 
         // Then
         $this->assertGatedActionProceeded($response);

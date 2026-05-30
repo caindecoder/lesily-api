@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
@@ -38,12 +39,30 @@ class Company extends Model
     ];
 
     /**
-     * The billing gate: a feature is available when the plan grants it.
-     * (Add-on coverage is layered in by UC-1-055 test #6.)
+     * The billing gate: a feature is available when the plan grants it, or when an
+     * active add-on does (plan checked first, then add-ons).
      */
     public function canUseFeature(Feature $feature): bool
     {
-        return in_array($feature, $this->current_billing_plan->features(), strict: true);
+        if (in_array($feature, $this->current_billing_plan->features(), strict: true)) {
+            return true;
+        }
+
+        foreach ($this->addons as $companyAddon) {
+            if (in_array($feature, $companyAddon->addon->features(), strict: true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return HasMany<CompanyAddon, $this>
+     */
+    public function addons(): HasMany
+    {
+        return $this->hasMany(CompanyAddon::class, 'company_id');
     }
 
     /**
