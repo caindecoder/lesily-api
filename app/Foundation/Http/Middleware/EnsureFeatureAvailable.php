@@ -1,0 +1,34 @@
+<?php
+
+namespace App\Foundation\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use App\Companies\Entities\Company;
+use App\Foundation\Billing\Enums\Feature;
+use App\Foundation\Billing\Enums\BillingPlan;
+use Symfony\Component\HttpFoundation\Response;
+use App\Foundation\Http\Exceptions\FeatureUnavailableException;
+
+/**
+ * The billing gate (first of the two gates per api-conventions §11). Resolves the
+ * current company and denies the request when the company's plan + active add-ons
+ * do not grant the route's feature, pointing at the lowest tier that would.
+ */
+class EnsureFeatureAvailable
+{
+    public function handle(Request $request, Closure $next, string $feature): Response
+    {
+        $required = Feature::from($feature);
+        $company = Company::findOrFail($request->header('X-Company-Context'));
+
+        if (! $company->canUseFeature($required)) {
+            throw new FeatureUnavailableException(
+                BillingPlan::lowestPlanWith($required)?->label() ?? '',
+                '/settings/billing/upgrade',
+            );
+        }
+
+        return $next($request);
+    }
+}

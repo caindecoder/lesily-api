@@ -46,3 +46,12 @@ RateLimiter::for('rate-limit-tenant', fn (Request $request) => Limit::perMinute(
 
 Route::get('rate-limit-tenant-probe', fn () => response()->json(['ok' => true]))
     ->middleware('throttle:rate-limit-tenant');
+
+// Two-gate probes (UC-1-055). Real feature:/permission: middleware drive the
+// billing + role gates end-to-end; the acting user + X-Company-Context header are
+// supplied by tests via WithRolePermissionFixtures.
+Route::get('two-gate/starter-feature', fn () => response()->json(['ok' => true]))
+    ->middleware('feature:employee_directory');
+
+Route::get('two-gate/pro-feature', fn () => response()->json(['ok' => true]))
+    ->middleware('feature:two_factor_auth');
