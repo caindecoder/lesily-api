@@ -130,6 +130,22 @@ class TwoGateCheckTest extends FoundationTestCase
         $this->assertGatedActionProceeded($inProContext);
     }
 
+    #[Test]
+    public function when_both_gates_pass_then_the_gated_action_proceeds(): void
+    {
+        // Given (Pro company + member whose role grants manage_security)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = User::factory()->create();
+        $role = Role::factory()->code('admin')->withPermissions(['manage_security'])->create();
+        $this->attachMember($company, $user, $role);
+
+        // When
+        $response = $this->attemptGatedAction('two-gate/secured', $user, $company);
+
+        // Then
+        $this->assertGatedActionProceeded($response);
+    }
+
     /**
      * @return array<string, array{string, BillingPlan, string}>
      */
