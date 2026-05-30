@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\Addon;
+use Illuminate\Log\Events\MessageLogged;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\RolesPermissions\Entities\Role;
@@ -70,30 +71,50 @@ class TwoGateCheckTest extends FoundationTestCase
     public function when_a_feature_is_offered_by_no_plan_or_addon_then_the_gate_fails_closed(): void
     {
         // Given (a deprecated feature granted by no plan or add-on, even on the top tier)
-        $logSpy = Log::spy();
         $company = Company::factory()->onPlan(BillingPlan::Enterprise)->create();
         $user = User::factory()->create();
+        $loggedContext = null;
+        Log::listen(function (MessageLogged $log) use (&$loggedContext): void {
+            if ($log->level === 'warning') {
+                $loggedContext = $log->context;
+            }
+        });
 
         // When
         $response = $this->attemptGatedAction('two-gate/deprecated', $user, $company);
 
         // Then
         $this->assertFailsClosed($response);
-        $logSpy->shouldHaveReceived('warning');
+        $this->assertSame(['feature' => 'legacy_import', 'company_id' => $company->getKey()], $loggedContext);
     }
 
     #[Test]
-    public function when_a_higher_tier_company_uses_a_lower_tier_feature_then_access_is_inherited(): void
+    #[DataProvider('provideGrantedFeatures')]
+    public function when_a_companys_plan_grants_a_feature_then_access_proceeds(string $route, BillingPlan $plan): void
     {
-        // Given (Pro inherits Starter's EmployeeDirectory via the features() spread)
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        // Given (each tier grants its own features and inherits every lower tier's)
+        $company = Company::factory()->onPlan($plan)->create();
         $user = User::factory()->create();
 
         // When
-        $response = $this->attemptGatedAction('two-gate/starter-feature', $user, $company);
+        $response = $this->attemptGatedAction($route, $user, $company);
 
         // Then
         $this->assertGatedActionProceeded($response);
+    }
+
+    /**
+     * @return array<string, array{string, BillingPlan}>
+     */
+    public static function provideGrantedFeatures(): array
+    {
+        return [
+            'starter grants its own feature' => ['two-gate/starter-feature', BillingPlan::Starter],
+            'pro inherits the starter feature' => ['two-gate/starter-feature', BillingPlan::Pro],
+            'pro grants its own feature' => ['two-gate/pro-feature', BillingPlan::Pro],
+            'enterprise inherits the starter feature' => ['two-gate/starter-feature', BillingPlan::Enterprise],
+            'enterprise inherits the pro feature' => ['two-gate/pro-feature', BillingPlan::Enterprise],
+        ];
     }
 
     #[Test]
