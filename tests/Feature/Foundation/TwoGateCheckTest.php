@@ -4,6 +4,7 @@ namespace Tests\Feature\Foundation;
 
 use App\Models\User;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
@@ -64,6 +65,22 @@ class TwoGateCheckTest extends FoundationTestCase
         $this->assertPermissionDenied($response, 'manage_security');
     }
 
+    #[Test]
+    public function when_a_feature_is_offered_by_no_plan_or_addon_then_the_gate_fails_closed(): void
+    {
+        // Given (a deprecated feature granted by no plan or add-on, even on the top tier)
+        $logSpy = Log::spy();
+        $company = Company::factory()->onPlan(BillingPlan::Enterprise)->create();
+        $user = User::factory()->create();
+
+        // When
+        $response = $this->attemptGatedAction('two-gate/deprecated', $user, $company);
+
+        // Then
+        $this->assertFailsClosed($response);
+        $logSpy->shouldHaveReceived('warning');
+    }
+
     /**
      * @return array<string, array{string, BillingPlan, string}>
      */
@@ -89,5 +106,12 @@ class TwoGateCheckTest extends FoundationTestCase
         $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
         $response->assertJsonPath('required_permission', $permission);
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    protected function assertFailsClosed(TestResponse $response): void
+    {
+        $response->assertForbidden();
+        $response->assertJsonPath('error_code', 'FEATURE_NOT_AVAILABLE');
+        $response->assertJsonMissingPath('upgrade_to');
     }
 }

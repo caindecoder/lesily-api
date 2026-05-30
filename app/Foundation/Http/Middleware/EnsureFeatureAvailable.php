@@ -4,6 +4,7 @@ namespace App\Foundation\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Symfony\Component\HttpFoundation\Response;
@@ -24,13 +25,19 @@ class EnsureFeatureAvailable
         $required = Feature::from($feature);
         $company = $this->resolveCompany($request);
 
-        if (! $company->canUseFeature($required)) {
-            throw new FeatureUnavailableException(
-                BillingPlan::lowestPlanWith($required)?->label() ?? '',
-                '/settings/billing/upgrade',
-            );
+        if ($company->canUseFeature($required)) {
+            return $next($request);
         }
 
-        return $next($request);
+        $upgradePlan = BillingPlan::lowestPlanWith($required);
+
+        if ($upgradePlan === null) {
+            Log::warning('Feature gate failed closed: feature offered by no plan or add-on.', [
+                'feature' => $required->value,
+                'company_id' => $company->getKey(),
+            ]);
+        }
+
+        throw new FeatureUnavailableException($upgradePlan?->label(), '/settings/billing/upgrade');
     }
 }

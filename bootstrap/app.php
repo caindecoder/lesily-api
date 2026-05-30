@@ -47,7 +47,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (FeatureUnavailableException $e) => EnvelopeBuilder::build(
             ApiErrorCode::FeatureNotAvailable,
             $e->getMessage(),
-            ['upgrade_to' => $e->upgradeTo, 'upgrade_url' => $e->upgradeUrl],
+            $e->responseExtras(),
         ));
 
         $exceptions->render(fn (RoleInsufficientException $e) => EnvelopeBuilder::build(
