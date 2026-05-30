@@ -7,9 +7,12 @@ use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Http\Responses\EnvelopeBuilder;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use App\Foundation\Http\Middleware\EnsurePermission;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
+use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
+use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -29,6 +32,10 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->appendToGroup('api', AssignCorrelationId::class);
+        $middleware->alias([
+            'feature' => EnsureFeatureAvailable::class,
+            'permission' => EnsurePermission::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(fn (ValidationException $e) => EnvelopeBuilder::build(
@@ -40,7 +47,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (FeatureUnavailableException $e) => EnvelopeBuilder::build(
             ApiErrorCode::FeatureNotAvailable,
             $e->getMessage(),
-            ['upgrade_to' => $e->upgradeTo, 'upgrade_url' => $e->upgradeUrl],
+            $e->responseExtras(),
+        ));
+
+        $exceptions->render(fn (RoleInsufficientException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::RoleInsufficient,
+            $e->getMessage(),
+            ['required_permission' => $e->permission],
         ));
 
         $exceptions->render(fn (ModelNotFoundException $e) => EnvelopeBuilder::build(

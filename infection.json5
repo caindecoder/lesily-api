@@ -32,6 +32,18 @@
                 "App\\Foundation\\RolesPermissions\\Entities\\Role::findByCode",
             ],
         },
+        // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only
+        // spread there is Pro's `[...self::Starter->features(), TwoFactorAuth]`, and
+        // Starter grants exactly ONE feature in chunk-1 — so "spread only the first
+        // item" yields an identical array. Becomes killable (and this exclusion should
+        // be removed) once Starter grants 2+ features. Sibling mutators (SpreadRemoval,
+        // ArrayItemRemoval) stay active and ARE killed by the allow-matrix tests.
+        // See OQ-1-100 (UC-1-055 redo, 2026-05-30).
+        "SpreadOneItem": {
+            ignore: [
+                "App\\Foundation\\Billing\\Enums\\BillingPlan::features",
+            ],
+        },
     },
     minMsi: 80,
     minCoveredMsi: 85,

@@ -2,12 +2,17 @@
 
 namespace App\Foundation\RolesPermissions\Entities;
 
+use Database\Factories\RoleFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Role extends Model
 {
+    /** @use HasFactory<RoleFactory> */
+    use HasFactory;
+
     use HasUuids;
 
     protected $table = 'roles';
@@ -40,5 +45,10 @@ class Role extends Model
     public static function findByCode(string $code): ?self
     {
         return static::query()->where('code', $code)->first();
+    }
+
+    protected static function newFactory(): RoleFactory
+    {
+        return RoleFactory::new();
     }
 }
