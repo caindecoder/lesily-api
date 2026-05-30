@@ -55,3 +55,6 @@ Route::get('two-gate/starter-feature', fn () => response()->json(['ok' => true])
 
 Route::get('two-gate/pro-feature', fn () => response()->json(['ok' => true]))
     ->middleware('feature:two_factor_auth');
+
+Route::get('two-gate/secured', fn () => response()->json(['ok' => true]))
+    ->middleware(['feature:two_factor_auth', 'permission:manage_security']);

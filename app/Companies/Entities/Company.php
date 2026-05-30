@@ -2,12 +2,14 @@
 
 namespace App\Companies\Entities;
 
+use App\Models\User;
 use Database\Factories\CompanyFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
  * Chunk-1 read-model stub for the company.
@@ -42,6 +44,18 @@ class Company extends Model
     public function canUseFeature(Feature $feature): bool
     {
         return in_array($feature, $this->current_billing_plan->features(), strict: true);
+    }
+
+    /**
+     * Members of this company; the pivot carries the member's role_id, which the
+     * PermissionEvaluator resolves to evaluate the role gate.
+     *
+     * @return BelongsToMany<User, $this>
+     */
+    public function users(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'company_user', 'company_id', 'user_id')
+            ->withPivot('role_id');
     }
 
     protected static function newFactory(): CompanyFactory

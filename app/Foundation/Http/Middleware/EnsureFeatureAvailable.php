@@ -4,11 +4,11 @@ namespace App\Foundation\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use App\Companies\Entities\Company;
 use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Symfony\Component\HttpFoundation\Response;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
+use App\Foundation\Http\Middleware\Concerns\ResolvesCompanyContext;
 
 /**
  * The billing gate (first of the two gates per api-conventions §11). Resolves the
@@ -17,10 +17,12 @@ use App\Foundation\Http\Exceptions\FeatureUnavailableException;
  */
 class EnsureFeatureAvailable
 {
+    use ResolvesCompanyContext;
+
     public function handle(Request $request, Closure $next, string $feature): Response
     {
         $required = Feature::from($feature);
-        $company = Company::findOrFail($request->header('X-Company-Context'));
+        $company = $this->resolveCompany($request);
 
         if (! $company->canUseFeature($required)) {
             throw new FeatureUnavailableException(
