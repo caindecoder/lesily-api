@@ -81,6 +81,20 @@ class TwoGateCheckTest extends FoundationTestCase
         $logSpy->shouldHaveReceived('warning');
     }
 
+    #[Test]
+    public function when_a_higher_tier_company_uses_a_lower_tier_feature_then_access_is_inherited(): void
+    {
+        // Given (Pro inherits Starter's EmployeeDirectory via the features() spread)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = User::factory()->create();
+
+        // When
+        $response = $this->attemptGatedAction('two-gate/starter-feature', $user, $company);
+
+        // Then
+        $this->assertGatedActionProceeded($response);
+    }
+
     /**
      * @return array<string, array{string, BillingPlan, string}>
      */
@@ -113,5 +127,11 @@ class TwoGateCheckTest extends FoundationTestCase
         $response->assertForbidden();
         $response->assertJsonPath('error_code', 'FEATURE_NOT_AVAILABLE');
         $response->assertJsonMissingPath('upgrade_to');
+    }
+
+    protected function assertGatedActionProceeded(TestResponse $response): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('ok', true);
     }
 }
