@@ -23,17 +23,18 @@ class PermissionEvaluator
             ->where('user_id', $user->getKey())
             ->value('role_id');
 
-        if ($roleId === null) {
+        if (! is_string($roleId)) {
             return false;
         }
 
-        return $this->canRoleDo((string) $roleId, $permissionCode);
+        return $this->canRoleDo($roleId, $permissionCode);
     }
 
     public function canRoleDo(string $roleId, string $permissionCode): bool
     {
-        $role = Role::find($roleId);
-
-        return $role !== null && $role->permissions()->where('code', $permissionCode)->exists();
+        return Role::query()
+            ->whereKey($roleId)
+            ->whereHas('permissions', fn ($query) => $query->where('code', $permissionCode))
+            ->exists();
     }
 }

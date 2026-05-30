@@ -50,6 +50,20 @@ class TwoGateCheckTest extends FoundationTestCase
         $this->assertPermissionDenied($response, 'manage_security');
     }
 
+    #[Test]
+    public function when_a_member_has_no_role_in_the_company_then_the_permission_gate_denies(): void
+    {
+        // Given
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = User::factory()->create();
+
+        // When (the user is authenticated but never joined the company)
+        $response = $this->attemptGatedAction('two-gate/secured', $user, $company);
+
+        // Then
+        $this->assertPermissionDenied($response, 'manage_security');
+    }
+
     /**
      * @return array<string, array{string, BillingPlan, string}>
      */
