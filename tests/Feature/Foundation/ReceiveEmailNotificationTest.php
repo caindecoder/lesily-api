@@ -3,8 +3,10 @@
 namespace Tests\Feature\Foundation;
 
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Support\Facades\Mail;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
@@ -25,6 +27,17 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         $this->assertInAppCreatedAndEmailQueuedIndependently($recipient);
     }
 
+    #[Test]
+    public function when_email_delivery_fails_then_the_failure_is_logged_without_alerting_the_user(): void
+    {
+        Exceptions::fake();
+        $mail = new SystemNotificationMail(NotificationType::AccountSecurityAlert, 'Contoso');
+
+        $mail->failed(new RuntimeException('Mail server unavailable'));
+
+        $this->assertFailureLoggedWithRetryConfig($mail);
+    }
+
     protected function assertInAppCreatedAndEmailQueuedIndependently(User $recipient): void
     {
         $this->assertDatabaseHas('notifications', [
@@ -32,5 +45,12 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
             'type' => SystemNotification::class,
         ]);
         Mail::assertQueued(SystemNotificationMail::class);
+    }
+
+    protected function assertFailureLoggedWithRetryConfig(SystemNotificationMail $mail): void
+    {
+        Exceptions::assertReported(RuntimeException::class);
+        $this->assertSame(3, $mail->tries);
+        $this->assertSame([1, 5, 15], $mail->backoff);
     }
 }
