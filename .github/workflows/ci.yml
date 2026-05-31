@@ -64,7 +64,7 @@ jobs:
       - run: php artisan key:generate
       - run: php artisan migrate --force
       - name: Run tests with coverage
-        run: php artisan test --coverage --coverage-clover=coverage.xml --log-junit=junit.xml
+        run: php artisan test -p --coverage --coverage-clover=coverage.xml --log-junit=junit.xml
       - uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -151,7 +151,7 @@ jobs:
       - run: cp .env.github .env
       - run: php artisan key:generate
       - run: php artisan migrate --force
-      - run: php artisan test --coverage-clover=coverage.xml
+      - run: php artisan test -p --coverage-clover=coverage.xml
       - uses: SonarSource/sonarqube-scan-action@v5.0.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
