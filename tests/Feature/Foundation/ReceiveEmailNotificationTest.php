@@ -7,6 +7,7 @@ use RuntimeException;
 use Illuminate\Support\Facades\Mail;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
@@ -67,6 +68,38 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
     {
         Mail::assertQueued(SystemNotificationMail::class);
         $this->assertDatabaseHas('notifications', ['notifiable_id' => $recipient->getKey()]);
+    }
+
+    #[Test]
+    #[DataProvider('preferredLocaleProvider')]
+    public function when_recipient_has_a_preferred_locale_then_the_email_is_rendered_in_that_locale(string $locale): void
+    {
+        Mail::fake();
+        $recipient = User::factory()->locale($locale)->create();
+
+        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso'));
+
+        $this->assertEmailRenderedInLocale($locale);
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public static function preferredLocaleProvider(): array
+    {
+        return [
+            'Sinhala' => ['si'],
+            'Tamil' => ['ta'],
+            'English' => ['en'],
+        ];
+    }
+
+    protected function assertEmailRenderedInLocale(string $expected): void
+    {
+        Mail::assertQueued(
+            SystemNotificationMail::class,
+            fn (SystemNotificationMail $mail): bool => $mail->locale === $expected,
+        );
     }
 
     protected function optOutOfMail(User $recipient, NotificationType $type): void

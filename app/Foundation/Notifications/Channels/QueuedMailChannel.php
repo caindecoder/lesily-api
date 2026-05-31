@@ -4,6 +4,7 @@ namespace App\Foundation\Notifications\Channels;
 
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Notifications\Notification;
+use Illuminate\Contracts\Translation\HasLocalePreference;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 
 /**
@@ -18,6 +19,12 @@ class QueuedMailChannel
     public function send(object $notifiable, Notification $notification): void
     {
         /** @var SystemNotification $notification */
-        Mail::to($notifiable)->queue($notification->toMail($notifiable));
+        $mailable = $notification->toMail($notifiable);
+
+        if ($notifiable instanceof HasLocalePreference && ($locale = $notifiable->preferredLocale()) !== null) {
+            $mailable->locale($locale);
+        }
+
+        Mail::to($notifiable)->queue($mailable);
     }
 }
