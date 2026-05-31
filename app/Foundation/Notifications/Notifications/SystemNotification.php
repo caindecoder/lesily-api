@@ -2,6 +2,7 @@
 
 namespace App\Foundation\Notifications\Notifications;
 
+use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 use App\Foundation\Notifications\Enums\NotificationType;
@@ -27,6 +28,7 @@ class SystemNotification extends Notification
     ) {}
 
     /**
+     * @param  User  $notifiable
      * @return array<int, string>
      */
     public function via(object $notifiable): array
@@ -56,6 +58,9 @@ class SystemNotification extends Notification
         ];
     }
 
+    /**
+     * @param  User  $notifiable
+     */
     private function mailOptedOut(object $notifiable): bool
     {
         return NotificationPreference::query()
