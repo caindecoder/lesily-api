@@ -20,17 +20,6 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
     use RefreshDatabase;
 
     #[Test]
-    public function when_a_notification_is_dispatched_then_the_in_app_record_is_created_and_email_is_queued_independently(): void
-    {
-        Mail::fake();
-        $recipient = User::factory()->create();
-
-        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso'));
-
-        $this->assertInAppCreatedAndEmailQueuedIndependently($recipient);
-    }
-
-    #[Test]
     public function when_email_delivery_fails_then_the_failure_is_logged_without_alerting_the_user(): void
     {
         Exceptions::fake();
@@ -65,12 +54,6 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         $this->assertEmailQueuedAndInAppCreated($recipient);
     }
 
-    protected function assertEmailQueuedAndInAppCreated(User $recipient): void
-    {
-        Mail::assertQueued(SystemNotificationMail::class);
-        $this->assertDatabaseHas('notifications', ['notifiable_id' => $recipient->getKey()]);
-    }
-
     #[Test]
     #[DataProvider('preferredLocaleProvider')]
     public function when_recipient_has_a_preferred_locale_then_the_email_is_rendered_in_that_locale(string $locale): void
@@ -81,26 +64,6 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso'));
 
         $this->assertEmailRenderedInLocale($locale);
-    }
-
-    /**
-     * @return array<string, array<int, string>>
-     */
-    public static function preferredLocaleProvider(): array
-    {
-        return [
-            'Sinhala' => ['si'],
-            'Tamil' => ['ta'],
-            'English' => ['en'],
-        ];
-    }
-
-    protected function assertEmailRenderedInLocale(string $expected): void
-    {
-        Mail::assertQueued(
-            SystemNotificationMail::class,
-            fn (SystemNotificationMail $mail): bool => $mail->locale === $expected,
-        );
     }
 
     #[Test]
@@ -116,22 +79,15 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         $this->assertContentScopedToCompany($recipient, $recipientCompany, $otherCompany);
     }
 
-    protected function assertContentScopedToCompany(User $recipient, Company $recipientCompany, Company $otherCompany): void
+    #[Test]
+    public function when_a_notification_is_dispatched_then_the_in_app_record_is_created_and_email_is_queued_independently(): void
     {
-        $data = $recipient->notifications()->sole()->data;
-        $this->assertSame($recipientCompany->name, $data['company_name']);
-        $this->assertNotSame($otherCompany->name, $data['company_name']);
-    }
+        Mail::fake();
+        $recipient = User::factory()->create();
 
-    protected function optOutOfMail(User $recipient, NotificationType $type): void
-    {
-        NotificationPreference::factory()->mailDisabled($recipient, $type)->create();
-    }
+        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso'));
 
-    protected function assertOnlyInAppDelivered(User $recipient): void
-    {
-        Mail::assertNotQueued(SystemNotificationMail::class);
-        $this->assertDatabaseHas('notifications', ['notifiable_id' => $recipient->getKey()]);
+        $this->assertInAppCreatedAndEmailQueuedIndependently($recipient);
     }
 
     #[Test]
@@ -145,14 +101,56 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         $this->assertDeliveredAcrossBothChannels($recipient);
     }
 
-    protected function assertDeliveredAcrossBothChannels(User $recipient): void
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public static function preferredLocaleProvider(): array
+    {
+        return [
+            'Sinhala' => ['si'],
+            'Tamil' => ['ta'],
+            'English' => ['en'],
+        ];
+    }
+
+    protected function optOutOfMail(User $recipient, NotificationType $type): void
+    {
+        NotificationPreference::factory()->mailDisabled($recipient, $type)->create();
+    }
+
+    protected function assertFailureLoggedWithRetryConfig(SystemNotificationMail $mail): void
+    {
+        Exceptions::assertReported(RuntimeException::class);
+        $this->assertSame(3, $mail->tries);
+        $this->assertSame([1, 5, 15], $mail->backoff);
+    }
+
+    protected function assertOnlyInAppDelivered(User $recipient): void
+    {
+        Mail::assertNotQueued(SystemNotificationMail::class);
+        $this->assertDatabaseHas('notifications', ['notifiable_id' => $recipient->getKey()]);
+    }
+
+    protected function assertEmailQueuedAndInAppCreated(User $recipient): void
+    {
+        Mail::assertQueued(SystemNotificationMail::class);
+        $this->assertDatabaseHas('notifications', ['notifiable_id' => $recipient->getKey()]);
+    }
+
+    protected function assertEmailRenderedInLocale(string $expected): void
     {
         Mail::assertQueued(
             SystemNotificationMail::class,
-            fn (SystemNotificationMail $mail): bool => $mail->hasTo($recipient->email)
-                && $mail->envelope()->replyTo !== [],
+            fn (SystemNotificationMail $mail): bool => $mail->locale === $expected,
         );
-        $this->assertDatabaseHas('notifications', ['notifiable_id' => $recipient->getKey()]);
+    }
+
+    protected function assertContentScopedToCompany(User $recipient, Company $recipientCompany, Company $otherCompany): void
+    {
+        $data = $recipient->notifications()->sole()->data;
+        $this->assertSame($recipientCompany->name, $data['company_name']);
+        $this->assertNotSame($otherCompany->name, $data['company_name']);
+        $this->assertSame(NotificationType::AccountSecurityAlert->value, $data['notification_type']);
     }
 
     protected function assertInAppCreatedAndEmailQueuedIndependently(User $recipient): void
@@ -164,10 +162,13 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         Mail::assertQueued(SystemNotificationMail::class);
     }
 
-    protected function assertFailureLoggedWithRetryConfig(SystemNotificationMail $mail): void
+    protected function assertDeliveredAcrossBothChannels(User $recipient): void
     {
-        Exceptions::assertReported(RuntimeException::class);
-        $this->assertSame(3, $mail->tries);
-        $this->assertSame([1, 5, 15], $mail->backoff);
+        Mail::assertQueued(
+            SystemNotificationMail::class,
+            fn (SystemNotificationMail $mail): bool => $mail->hasTo($recipient->email)
+                && $mail->envelope()->replyTo !== [],
+        );
+        $this->assertDatabaseHas('notifications', ['notifiable_id' => $recipient->getKey()]);
     }
 }

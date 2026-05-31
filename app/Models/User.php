@@ -11,6 +11,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Contracts\Translation\HasLocalePreference;
 
+/**
+ * @property string $locale
+ */
 #[Fillable(['name', 'email', 'password', 'locale'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements HasLocalePreference
@@ -22,7 +25,7 @@ class User extends Authenticatable implements HasLocalePreference
      * The locale notifications and emails to this user are rendered in
      * (Sinhala / Tamil / English) — trilingual on all plans per S16.
      */
-    public function preferredLocale(): ?string
+    public function preferredLocale(): string
     {
         return $this->locale;
     }

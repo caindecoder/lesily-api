@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Entities\NotificationPreference;
+use App\Foundation\Notifications\Notifications\SystemNotification;
 
 /**
  * @extends Factory<NotificationPreference>
@@ -22,7 +23,7 @@ class NotificationPreferenceFactory extends Factory
         return [
             'user_id' => User::factory(),
             'notification_type' => NotificationType::GeneralAccountNotice->value,
-            'channel' => 'mail',
+            'channel' => SystemNotification::MAIL_CHANNEL,
             'enabled' => true,
         ];
     }
@@ -32,7 +33,7 @@ class NotificationPreferenceFactory extends Factory
         return $this->state(fn (array $attributes): array => [
             'user_id' => $recipient->getKey(),
             'notification_type' => $type->value,
-            'channel' => 'mail',
+            'channel' => SystemNotification::MAIL_CHANNEL,
             'enabled' => false,
         ]);
     }

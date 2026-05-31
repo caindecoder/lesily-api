@@ -22,6 +22,9 @@ class SystemNotification extends Notification
 {
     use Queueable;
 
+    /** The notification_preferences.channel value for the email leg. */
+    public const MAIL_CHANNEL = 'mail';
+
     public function __construct(
         public NotificationType $type,
         public string $companyName,
@@ -42,9 +45,13 @@ class SystemNotification extends Notification
         return $channels;
     }
 
+    /**
+     * @param  User  $notifiable
+     */
     public function toMail(object $notifiable): SystemNotificationMail
     {
-        return new SystemNotificationMail($this->type, $this->companyName);
+        return (new SystemNotificationMail($this->type, $this->companyName))
+            ->locale($notifiable->preferredLocale());
     }
 
     /**
@@ -66,7 +73,7 @@ class SystemNotification extends Notification
         return NotificationPreference::query()
             ->where('user_id', $notifiable->getKey())
             ->where('notification_type', $this->type->value)
-            ->where('channel', 'mail')
+            ->where('channel', self::MAIL_CHANNEL)
             ->where('enabled', false)
             ->exists();
     }
