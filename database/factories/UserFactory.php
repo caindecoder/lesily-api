@@ -50,4 +50,11 @@ class UserFactory extends Factory
             'locale' => $locale,
         ]);
     }
+
+    public function withPassword(string $password): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'password' => $password,
+        ]);
+    }
 }

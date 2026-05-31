@@ -67,6 +67,14 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_the_email_is_built_then_its_subject_is_the_localised_template_with_the_company_name(): void
+    {
+        $mail = new SystemNotificationMail(NotificationType::AccountSecurityAlert, 'Contoso');
+
+        $this->assertSame('Security alert for Contoso', $mail->envelope()->subject);
+    }
+
+    #[Test]
     public function when_notification_is_dispatched_then_its_content_is_scoped_to_the_recipient_company(): void
     {
         Mail::fake();
