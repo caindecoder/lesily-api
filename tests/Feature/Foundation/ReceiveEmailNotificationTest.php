@@ -4,6 +4,7 @@ namespace Tests\Feature\Foundation;
 
 use App\Models\User;
 use RuntimeException;
+use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Mail;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
@@ -100,6 +101,26 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
             SystemNotificationMail::class,
             fn (SystemNotificationMail $mail): bool => $mail->locale === $expected,
         );
+    }
+
+    #[Test]
+    public function when_notification_is_dispatched_then_its_content_is_scoped_to_the_recipient_company(): void
+    {
+        Mail::fake();
+        $recipientCompany = Company::factory()->create();
+        $otherCompany = Company::factory()->create();
+        $recipient = User::factory()->create();
+
+        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, $recipientCompany->name));
+
+        $this->assertContentScopedToCompany($recipient, $recipientCompany, $otherCompany);
+    }
+
+    protected function assertContentScopedToCompany(User $recipient, Company $recipientCompany, Company $otherCompany): void
+    {
+        $data = $recipient->notifications()->sole()->data;
+        $this->assertSame($recipientCompany->name, $data['company_name']);
+        $this->assertNotSame($otherCompany->name, $data['company_name']);
     }
 
     protected function optOutOfMail(User $recipient, NotificationType $type): void
