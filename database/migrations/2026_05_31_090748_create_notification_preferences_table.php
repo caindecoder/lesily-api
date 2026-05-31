@@ -19,7 +19,8 @@ return new class extends Migration
             $table->boolean('enabled')->default(true);
             $table->timestamps();
 
-            $table->unique(['user_id', 'notification_type', 'channel']);
+            // Explicit short name: the auto-generated name exceeds MySQL's 64-char limit.
+            $table->unique(['user_id', 'notification_type', 'channel'], 'notification_preferences_unique');
         });
     }
 
