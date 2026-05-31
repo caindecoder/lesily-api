@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
+use App\Foundation\Notifications\Entities\NotificationPreference;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 
 class ReceiveEmailNotificationTest extends FoundationTestCase
@@ -36,6 +37,29 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         $mail->failed(new RuntimeException('Mail server unavailable'));
 
         $this->assertFailureLoggedWithRetryConfig($mail);
+    }
+
+    #[Test]
+    public function when_user_opted_out_of_a_non_critical_notification_then_email_is_skipped_but_in_app_is_created(): void
+    {
+        Mail::fake();
+        $recipient = User::factory()->create();
+        $this->optOutOfMail($recipient, NotificationType::GeneralAccountNotice);
+
+        $recipient->notify(new SystemNotification(NotificationType::GeneralAccountNotice, 'Contoso'));
+
+        $this->assertOnlyInAppDelivered($recipient);
+    }
+
+    protected function optOutOfMail(User $recipient, NotificationType $type): void
+    {
+        NotificationPreference::factory()->mailDisabled($recipient, $type)->create();
+    }
+
+    protected function assertOnlyInAppDelivered(User $recipient): void
+    {
+        Mail::assertNotQueued(SystemNotificationMail::class);
+        $this->assertDatabaseHas('notifications', ['notifiable_id' => $recipient->getKey()]);
     }
 
     protected function assertInAppCreatedAndEmailQueuedIndependently(User $recipient): void
