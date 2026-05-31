@@ -51,6 +51,24 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         $this->assertOnlyInAppDelivered($recipient);
     }
 
+    #[Test]
+    public function when_notification_is_critical_then_user_opt_out_is_ignored_and_email_is_sent(): void
+    {
+        Mail::fake();
+        $recipient = User::factory()->create();
+        $this->optOutOfMail($recipient, NotificationType::AccountSecurityAlert);
+
+        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso'));
+
+        $this->assertEmailQueuedAndInAppCreated($recipient);
+    }
+
+    protected function assertEmailQueuedAndInAppCreated(User $recipient): void
+    {
+        Mail::assertQueued(SystemNotificationMail::class);
+        $this->assertDatabaseHas('notifications', ['notifiable_id' => $recipient->getKey()]);
+    }
+
     protected function optOutOfMail(User $recipient, NotificationType $type): void
     {
         NotificationPreference::factory()->mailDisabled($recipient, $type)->create();
