@@ -43,6 +43,7 @@ class SystemNotificationMail extends Mailable implements ShouldQueue
     {
         return new Envelope(
             subject: __('notifications.'.$this->type->value.'.subject', ['company' => $this->companyName]),
+            replyTo: [config('mail.from.address')],
         );
     }
 

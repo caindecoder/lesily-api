@@ -134,6 +134,27 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         $this->assertDatabaseHas('notifications', ['notifiable_id' => $recipient->getKey()]);
     }
 
+    #[Test]
+    public function when_a_notification_is_raised_for_a_user_then_an_email_and_an_in_app_notification_are_delivered(): void
+    {
+        Mail::fake();
+        $recipient = User::factory()->create();
+
+        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso'));
+
+        $this->assertDeliveredAcrossBothChannels($recipient);
+    }
+
+    protected function assertDeliveredAcrossBothChannels(User $recipient): void
+    {
+        Mail::assertQueued(
+            SystemNotificationMail::class,
+            fn (SystemNotificationMail $mail): bool => $mail->hasTo($recipient->email)
+                && $mail->envelope()->replyTo !== [],
+        );
+        $this->assertDatabaseHas('notifications', ['notifiable_id' => $recipient->getKey()]);
+    }
+
     protected function assertInAppCreatedAndEmailQueuedIndependently(User $recipient): void
     {
         $this->assertDatabaseHas('notifications', [
