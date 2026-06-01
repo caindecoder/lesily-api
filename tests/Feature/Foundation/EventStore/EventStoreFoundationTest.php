@@ -80,6 +80,24 @@ class EventStoreFoundationTest extends FoundationTestCase
         $this->assertSame(1, $rebuilt->thingCount());
     }
 
+    // Happy — tenant identity survives reconstitution: a reconstituted aggregate keeps scoping new events.
+    #[Test]
+    public function when_a_reconstituted_aggregate_records_a_further_event_then_it_stays_in_the_original_company_scope(): void
+    {
+        // Given an aggregate that recorded a company-scoped event and was persisted
+        $companyId = '11111111-1111-4111-8111-111111111111';
+        $aggregateUuid = (string) Str::uuid();
+        FixtureAggregate::retrieve($aggregateUuid)->recordThingFor($companyId)->persist();
+
+        // When it is reconstituted and records a further event WITHOUT restating the company
+        FixtureAggregate::retrieve($aggregateUuid)->recordThing()->persist();
+
+        // Then both events are stored in the original company's scope
+        $stored = LesilyStoredEvent::query()->whereForCompany($companyId)->get();
+
+        $this->assertCount(2, $stored);
+    }
+
     protected function assertEventStoredForCompany(EloquentStoredEventCollection $stored, string $expectedEventClass, ?string $expectedCompanyId): void
     {
         $this->assertCount(1, $stored);
