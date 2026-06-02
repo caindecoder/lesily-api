@@ -32,6 +32,17 @@ class CompanyFactory extends Factory
         ]);
     }
 
+    /**
+     * A company that has not chosen a plan yet (e.g. on trial) — the billing gate
+     * must treat the absent plan as granting no plan-tier features.
+     */
+    public function withoutPlan(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'current_billing_plan' => null,
+        ]);
+    }
+
     public function withAddon(Addon $addon): static
     {
         return $this->afterCreating(function (Company $company) use ($addon): void {
