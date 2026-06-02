@@ -68,6 +68,20 @@ class TwoGateCheckTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_a_company_has_no_billing_plan_then_a_plan_gated_feature_is_denied(): void
+    {
+        // Given (a company that has not chosen a plan — e.g. still on trial)
+        $company = Company::factory()->withoutPlan()->create();
+        $user = User::factory()->create();
+
+        // When it attempts a plan-gated feature
+        $response = $this->attemptGatedAction('two-gate/starter-feature', $user, $company);
+
+        // Then the billing gate denies it, pointing at the lowest plan that grants it
+        $this->assertFeatureUpgradePromptReturned($response, 'Starter');
+    }
+
+    #[Test]
     public function when_a_feature_is_offered_by_no_plan_or_addon_then_the_gate_fails_closed(): void
     {
         // Given (a deprecated feature granted by no plan or add-on, even on the top tier)

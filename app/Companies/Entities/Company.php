@@ -45,7 +45,9 @@ class Company extends Model
      */
     public function canUseFeature(Feature $feature): bool
     {
-        if (in_array($feature, $this->current_billing_plan->features(), strict: true)) {
+        $planFeatures = $this->current_billing_plan?->features() ?? [];
+
+        if (in_array($feature, $planFeatures, strict: true)) {
             return true;
         }
 
