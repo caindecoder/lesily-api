@@ -26,6 +26,10 @@ class Subscription extends AggregateRoot
 
     public function endTrial(string $source): static
     {
+        if ($this->status !== SubscriptionStatus::Trial) {
+            return $this;
+        }
+
         return $this->recordThat(new SubscriptionTrialEnded(source: $source, endedAt: CarbonImmutable::now()));
     }
 

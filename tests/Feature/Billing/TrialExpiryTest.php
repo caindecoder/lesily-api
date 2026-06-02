@@ -22,6 +22,28 @@ class TrialExpiryTest extends BillingTestCase
 {
     use RefreshDatabase;
 
+    // Sad/guard (UC-1-049 Sc5 guard) — once a trial has ended, expiring it again is a no-op.
+    // This is the status guard that also skips a company that already subscribed.
+    #[Test]
+    public function when_an_already_expired_trial_is_expired_again_then_nothing_changes(): void
+    {
+        // Given a company and subscription whose trial has already been expired once
+        $companyId = (string) Str::uuid();
+        $subscriptionId = (string) Str::uuid();
+        $this->givenCompanyAndSubscriptionOnTrial($companyId, $subscriptionId);
+        app(ApplyTrialExpirationInteractor::class)->execute(
+            new ApplyTrialExpirationCommand($companyId, $subscriptionId),
+        );
+
+        // When the trial-expiry interactor runs again for them
+        app(ApplyTrialExpirationInteractor::class)->execute(
+            new ApplyTrialExpirationCommand($companyId, $subscriptionId),
+        );
+
+        // Then nothing changes — each expiry event was recorded exactly once
+        $this->assertExpiredExactlyOnce($companyId);
+    }
+
     // Happy (UC-1-049 Sc1) — an elapsed trial flips the company to read-only and ends its subscription.
     #[Test]
     public function when_a_trial_has_elapsed_then_the_company_is_read_only_and_the_subscription_is_cancelled(): void
@@ -68,5 +90,16 @@ class TrialExpiryTest extends BillingTestCase
 
         $this->assertContains(CompanyTrialExpired::class, $scopedEventClasses);
         $this->assertContains(SubscriptionTrialEnded::class, $scopedEventClasses);
+    }
+
+    protected function assertExpiredExactlyOnce(string $companyId): void
+    {
+        $companyExpiries = LesilyStoredEvent::query()->whereForCompany($companyId)
+            ->where('event_class', CompanyTrialExpired::class)->count();
+        $subscriptionEndings = LesilyStoredEvent::query()->whereForCompany($companyId)
+            ->where('event_class', SubscriptionTrialEnded::class)->count();
+
+        $this->assertSame(1, $companyExpiries);
+        $this->assertSame(1, $subscriptionEndings);
     }
 }

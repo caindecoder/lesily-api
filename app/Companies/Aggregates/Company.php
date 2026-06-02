@@ -30,6 +30,10 @@ class Company extends AggregateRoot
 
     public function trialExpire(): static
     {
+        if ($this->status !== CompanyStatus::Trial) {
+            return $this;
+        }
+
         return $this->recordThat(new CompanyTrialExpired);
     }
 
