@@ -1,10 +1,11 @@
 <?php
 
-namespace App\Billing\Subscriptions\UseCases;
+namespace App\Billing\Subscriptions\UseCases\Interactors;
 
 use Illuminate\Support\Facades\DB;
 use App\Companies\Aggregates\Company;
 use App\Billing\Subscriptions\Aggregates\Subscription;
+use App\Billing\Subscriptions\UseCases\Commands\ApplyTrialExpirationCommand;
 
 /**
  * Pattern A (coordination-patterns.md §3) — moves a company and its subscription out of

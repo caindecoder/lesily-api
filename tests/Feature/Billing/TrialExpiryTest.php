@@ -13,10 +13,10 @@ use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
 use App\Companies\Entities\Company as CompanyReadModel;
 use App\Billing\Subscriptions\Events\SubscriptionTrialEnded;
-use App\Billing\Subscriptions\UseCases\ApplyTrialExpirationCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
-use App\Billing\Subscriptions\UseCases\ApplyTrialExpirationInteractor;
+use App\Billing\Subscriptions\UseCases\Commands\ApplyTrialExpirationCommand;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
+use App\Billing\Subscriptions\UseCases\Interactors\ApplyTrialExpirationInteractor;
 
 class TrialExpiryTest extends BillingTestCase
 {
@@ -32,12 +32,12 @@ class TrialExpiryTest extends BillingTestCase
         $subscriptionId = (string) Str::uuid();
         $this->givenCompanyAndSubscriptionOnTrial($companyId, $subscriptionId);
         app(ApplyTrialExpirationInteractor::class)->execute(
-            new ApplyTrialExpirationCommand($companyId, $subscriptionId),
+            ApplyTrialExpirationCommand::validateAndCreate(['companyId' => $companyId, 'subscriptionId' => $subscriptionId]),
         );
 
         // When the trial-expiry interactor runs again for them
         app(ApplyTrialExpirationInteractor::class)->execute(
-            new ApplyTrialExpirationCommand($companyId, $subscriptionId),
+            ApplyTrialExpirationCommand::validateAndCreate(['companyId' => $companyId, 'subscriptionId' => $subscriptionId]),
         );
 
         // Then nothing changes — each expiry event was recorded exactly once
@@ -55,7 +55,7 @@ class TrialExpiryTest extends BillingTestCase
 
         // When the trial-expiry interactor runs for them
         app(ApplyTrialExpirationInteractor::class)->execute(
-            new ApplyTrialExpirationCommand($companyId, $subscriptionId),
+            ApplyTrialExpirationCommand::validateAndCreate(['companyId' => $companyId, 'subscriptionId' => $subscriptionId]),
         );
 
         // Then the company is read-only, the subscription ended as trial-expired, and both events stay company-scoped
