@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Billing;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -22,35 +23,37 @@ class SubscriptionAggregateTest extends BillingTestCase
         // Given a subscription that already started a trial
         $companyId = (string) Str::uuid();
         $subscriptionId = (string) Str::uuid();
-        Subscription::retrieve($subscriptionId)->startTrial($companyId, 30)->persist();
+        $trialEndsAt = CarbonImmutable::now()->addDays(30);
+        Subscription::retrieve($subscriptionId)->startTrial($companyId, $trialEndsAt)->persist();
 
         // When the same subscription starts a trial again, Then it is rejected
         $this->expectException(SubscriptionAlreadyStartedException::class);
 
-        Subscription::retrieve($subscriptionId)->startTrial($companyId, 30);
+        Subscription::retrieve($subscriptionId)->startTrial($companyId, $trialEndsAt);
     }
 
-    // Happy — genesis: starting a trial opens a 30-day trial scoped to the owning company.
+    // Happy — genesis: starting a trial opens a trial scoped to the owning company.
     #[Test]
     public function when_a_trial_is_started_then_a_subscription_trial_started_event_is_stored_in_the_owning_company_scope(): void
     {
-        // Given a new subscription for a company
+        // Given a fixed point in time and a new subscription for a company
+        $this->travelTo('2026-06-01 00:00:00');
         $companyId = (string) Str::uuid();
         $subscriptionId = (string) Str::uuid();
 
         // When the trial is started and persisted
-        Subscription::retrieve($subscriptionId)->startTrial($companyId, 30)->persist();
+        Subscription::retrieve($subscriptionId)->startTrial($companyId, CarbonImmutable::now()->addDays(30))->persist();
 
-        // Then a SubscriptionTrialStarted event is stored, scoped to the owning company, for 30 days
+        // Then a SubscriptionTrialStarted event is stored, scoped to the owning company, ending in 30 days
         $event = LesilyStoredEvent::query()->whereForCompany($companyId)->sole();
 
-        $this->assertSubscriptionTrialStarted($event, $companyId, 30);
+        $this->assertSubscriptionTrialStarted($event, $companyId, '2026-07-01T00:00:00+00:00');
     }
 
-    protected function assertSubscriptionTrialStarted(EloquentStoredEvent $event, string $expectedCompanyId, int $expectedTrialDays): void
+    protected function assertSubscriptionTrialStarted(EloquentStoredEvent $event, string $expectedCompanyId, string $expectedTrialEndsAt): void
     {
         $this->assertSame(SubscriptionTrialStarted::class, $event->event_class);
         $this->assertSame($expectedCompanyId, $event->event_properties['companyId']);
-        $this->assertSame($expectedTrialDays, $event->event_properties['trialDays']);
+        $this->assertSame($expectedTrialEndsAt, $event->event_properties['trialEndsAt']);
     }
 }
