@@ -33,22 +33,23 @@ class CompanyAggregateTest extends CompaniesTestCase
     #[Test]
     public function when_a_company_is_created_then_a_company_created_event_is_stored_in_its_own_company_scope_opening_a_30_day_trial(): void
     {
-        // Given a new company id
+        // Given a fixed point in time and a new company id
+        $this->travelTo('2026-06-01 00:00:00');
         $companyId = (string) Str::uuid();
 
         // When the company is created and persisted
         Company::retrieve($companyId)->create('Contoso')->persist();
 
-        // Then a CompanyCreated event is stored, scoped to the company, opening a 30-day trial
+        // Then a CompanyCreated event is stored, scoped to the company, opening a trial that ends in 30 days
         $event = LesilyStoredEvent::query()->whereForCompany($companyId)->sole();
 
-        $this->assertCompanyCreated($event, 'Contoso', 30);
+        $this->assertCompanyCreated($event, 'Contoso', '2026-07-01T00:00:00+00:00');
     }
 
-    protected function assertCompanyCreated(EloquentStoredEvent $event, string $expectedName, int $expectedTrialDays): void
+    protected function assertCompanyCreated(EloquentStoredEvent $event, string $expectedName, string $expectedTrialEndsAt): void
     {
         $this->assertSame(CompanyCreated::class, $event->event_class);
         $this->assertSame($expectedName, $event->event_properties['name']);
-        $this->assertSame($expectedTrialDays, $event->event_properties['trialDays']);
+        $this->assertSame($expectedTrialEndsAt, $event->event_properties['trialEndsAt']);
     }
 }

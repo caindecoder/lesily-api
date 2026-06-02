@@ -2,6 +2,7 @@
 
 namespace App\Companies\Aggregates;
 
+use Carbon\CarbonImmutable;
 use App\Companies\Events\CompanyCreated;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\Exceptions\CompanyAlreadyExistsException;
@@ -19,7 +20,10 @@ class Company extends AggregateRoot
         }
 
         return $this->forCompany($this->uuid())
-            ->recordThat(new CompanyCreated(name: $name, trialDays: self::TRIAL_DAYS));
+            ->recordThat(new CompanyCreated(
+                name: $name,
+                trialEndsAt: CarbonImmutable::now()->addDays(self::TRIAL_DAYS),
+            ));
     }
 
     protected function applyCompanyCreated(CompanyCreated $event): void
