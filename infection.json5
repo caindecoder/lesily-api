@@ -41,7 +41,9 @@
             ignore: [
                 "App\\Foundation\\RolesPermissions\\Entities\\Role::findByCode",
                 "App\\Companies\\Projectors\\CompanyProjector::onCompanyCreated",
+                "App\\Companies\\Projectors\\CompanyProjector::onCompanyTrialExpired",
                 "App\\Billing\\Subscriptions\\Projectors\\SubscriptionProjector::onSubscriptionTrialStarted",
+                "App\\Billing\\Subscriptions\\Projectors\\SubscriptionProjector::onSubscriptionTrialEnded",
             ],
         },
         // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only
