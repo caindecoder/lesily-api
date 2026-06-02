@@ -146,6 +146,20 @@ class TwoGateCheckTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_a_plan_less_company_has_an_addon_granting_a_feature_then_access_is_allowed(): void
+    {
+        // Given (a plan-less trial company that holds the Template Engine add-on)
+        $company = Company::factory()->withoutPlan()->withAddon(Addon::TemplateEngine)->create();
+        $user = User::factory()->create();
+
+        // When it attempts the add-on-granted feature
+        $response = $this->attemptGatedAction('two-gate/templates', $user, $company);
+
+        // Then access is allowed — the absent plan must not short-circuit the add-on path
+        $this->assertGatedActionProceeded($response);
+    }
+
+    #[Test]
     public function when_the_same_member_acts_in_companies_on_different_tiers_then_feature_access_follows_each_company(): void
     {
         // Given (one member, one role, in a Free company and a Pro company)
