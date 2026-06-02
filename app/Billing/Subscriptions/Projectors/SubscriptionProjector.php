@@ -3,6 +3,7 @@
 namespace App\Billing\Subscriptions\Projectors;
 
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
+use App\Billing\Subscriptions\Events\SubscriptionTrialEnded;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Billing\Subscriptions\Events\SubscriptionTrialStarted;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
@@ -22,5 +23,15 @@ class SubscriptionProjector extends Projector
             'status' => SubscriptionStatus::Trial,
             'trial_ends_at' => $event->trialEndsAt,
         ]);
+    }
+
+    public function onSubscriptionTrialEnded(SubscriptionTrialEnded $event): void
+    {
+        SubscriptionReadModel::query()->findOrFail($event->aggregateRootUuid())
+            ->update([
+                'status' => SubscriptionStatus::Cancelled,
+                'ended_source' => $event->source,
+                'cancelled_at' => $event->endedAt,
+            ]);
     }
 }

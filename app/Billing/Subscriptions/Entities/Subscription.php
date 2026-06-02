@@ -23,10 +23,13 @@ class Subscription extends Model
         'company_id',
         'status',
         'trial_ends_at',
+        'ended_source',
+        'cancelled_at',
     ];
 
     protected $casts = [
         'status' => SubscriptionStatus::class,
         'trial_ends_at' => 'immutable_datetime',
+        'cancelled_at' => 'immutable_datetime',
     ];
 }
