@@ -27,9 +27,21 @@
         // real, killable regression on controllers/services/value-objects, and even on the
         // sibling Role::permissions() relation (resolved from Builder scope, no protected access).
         // See OQ-1-099 (UC-1-136 redo, 2026-05-30).
+        //
+        // PublicVisibility on a spatie projector/reactor handler (onX methods) is an
+        // equivalent mutant: Spatie\EventSourcing HandlesEvents discovers handlers via
+        // Handlers::new($this)->public()->protected(), so it invokes the handler whether
+        // it is public OR protected — public->protected changes nothing observable. The
+        // only way to "kill" it is to call the handler directly (needs public), i.e. a
+        // forbidden reflection/visibility test (Rule #13) that also spies ES internals
+        // (slice §6). Scoped to projector handlers ONLY — public->protected stays a real,
+        // killable regression elsewhere. Add new projector handlers here as they land
+        // (or switch to a wildcard if they proliferate). See increment #05, PR #39 (2026-06-02).
         "PublicVisibility": {
             ignore: [
                 "App\\Foundation\\RolesPermissions\\Entities\\Role::findByCode",
+                "App\\Companies\\Projectors\\CompanyProjector::onCompanyCreated",
+                "App\\Billing\\Subscriptions\\Projectors\\SubscriptionProjector::onSubscriptionTrialStarted",
             ],
         },
         // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only
