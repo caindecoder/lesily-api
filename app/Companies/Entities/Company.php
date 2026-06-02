@@ -3,6 +3,7 @@
 namespace App\Companies\Entities;
 
 use App\Models\User;
+use App\Companies\Enums\CompanyStatus;
 use Database\Factories\CompanyFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Foundation\Billing\Enums\Feature;
@@ -33,10 +34,14 @@ class Company extends Model
         'id',
         'name',
         'current_billing_plan',
+        'status',
+        'trial_ends_at',
     ];
 
     protected $casts = [
         'current_billing_plan' => BillingPlan::class,
+        'status' => CompanyStatus::class,
+        'trial_ends_at' => 'immutable_datetime',
     ];
 
     /**
