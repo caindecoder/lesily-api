@@ -23,9 +23,11 @@ class ApplyTrialExpirationCommand extends Data
      */
     public static function rules(ValidationContext $context): array
     {
+        // `required` is inferred from the non-nullable string properties; only the
+        // uuid format needs an explicit rule.
         return [
-            'companyId' => ['required', 'uuid'],
-            'subscriptionId' => ['required', 'uuid'],
+            'companyId' => ['uuid'],
+            'subscriptionId' => ['uuid'],
         ];
     }
 }
