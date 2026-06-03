@@ -30,6 +30,22 @@ class ExpireTrialsCommandTest extends BillingTestCase
         $this->travelTo(CarbonImmutable::parse('2026-07-02 09:00:00'));
     }
 
+    // Sad (default clock) — with no --date the scan uses "now"; a trial still inside its window
+    // is excluded, so a genuinely empty first scan reports zero and changes nothing.
+    #[Test]
+    public function when_no_trial_has_elapsed_then_the_default_scan_expires_nothing(): void
+    {
+        // Given a company still within its trial
+        $companyId = (string) Str::uuid();
+        $this->givenTrialEndingAt($companyId, (string) Str::uuid(), CarbonImmutable::now()->addDay());
+
+        // When the daily scan runs with no --date (defaults to now)
+        $this->runExpireTrials()->expectsOutputToContain('0 trial(s) expired.')->assertSuccessful();
+
+        // Then the company is untouched
+        $this->assertSame(CompanyStatus::Trial, CompanyReadModel::findOrFail($companyId)->status);
+    }
+
     // Sad (UC-1-049 Sc5 guard / idempotency) — once a trial has been expired, a later daily
     // scan must not re-process it: the cancelled subscription is filtered out of the scan, so
     // the second run reports zero and records no further events.
@@ -46,22 +62,6 @@ class ExpireTrialsCommandTest extends BillingTestCase
         // Then nothing is re-expired — zero reported and each expiry event recorded exactly once
         $this->runExpireTrials()->expectsOutputToContain('0 trial(s) expired.')->assertSuccessful();
         $this->assertExpiredExactlyOnce($companyId);
-    }
-
-    // Sad (default clock) — with no --date the scan uses "now"; a trial still inside its window
-    // is excluded, so a genuinely empty first scan reports zero and changes nothing.
-    #[Test]
-    public function when_no_trial_has_elapsed_then_the_default_scan_expires_nothing(): void
-    {
-        // Given a company still within its trial
-        $companyId = (string) Str::uuid();
-        $this->givenTrialEndingAt($companyId, (string) Str::uuid(), CarbonImmutable::now()->addDay());
-
-        // When the daily scan runs with no --date (defaults to now)
-        $this->runExpireTrials()->expectsOutputToContain('0 trial(s) expired.')->assertSuccessful();
-
-        // Then the company is untouched
-        $this->assertSame(CompanyStatus::Trial, CompanyReadModel::findOrFail($companyId)->status);
     }
 
     // Edge/selection (UC-1-049 Sc1 selection) — a company is expired only when its trial
