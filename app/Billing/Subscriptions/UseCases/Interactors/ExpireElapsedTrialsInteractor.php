@@ -18,10 +18,14 @@ class ExpireElapsedTrialsInteractor
         private ApplyTrialExpirationInteractor $applyExpiry,
     ) {}
 
-    public function execute(CarbonInterface $asOf): void
+    public function execute(CarbonInterface $asOf): int
     {
-        foreach ($this->subscriptions->listExpiringTrials($asOf) as $expiringTrial) {
+        $expiringTrials = $this->subscriptions->listExpiringTrials($asOf);
+
+        foreach ($expiringTrials as $expiringTrial) {
             $this->applyExpiry->execute(ApplyTrialExpirationCommand::validateAndCreate($expiringTrial));
         }
+
+        return count($expiringTrials);
     }
 }

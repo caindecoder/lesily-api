@@ -12,11 +12,20 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Subscriptions\Aggregates\Subscription;
+use App\Billing\Subscriptions\Enums\SubscriptionStatus;
 use App\Companies\Entities\Company as CompanyReadModel;
+use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 class ExpireTrialsCommandTest extends BillingTestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->travelTo(CarbonImmutable::parse('2026-07-02 09:00:00'));
+    }
 
     // Edge/selection (UC-1-049 Sc1 selection) — a company is expired only when its trial
     // elapsed strictly before the run cutoff; the within-trial and exactly-at-cutoff rows are
@@ -49,6 +58,23 @@ class ExpireTrialsCommandTest extends BillingTestCase
         ];
     }
 
+    // Happy (UC-1-049 Sc1) — an elapsed trial ends its subscription as trial-expired; the
+    // command reports how many it expired and runs off the default clock (no --date).
+    #[Test]
+    public function when_a_trial_has_elapsed_then_its_subscription_is_cancelled_as_trial_expired(): void
+    {
+        // Given a company whose trial elapsed yesterday
+        $companyId = (string) Str::uuid();
+        $subscriptionId = (string) Str::uuid();
+        $this->givenTrialEndingAt($companyId, $subscriptionId, CarbonImmutable::now()->subDay());
+
+        // When the daily scan runs for today (no --date — defaults to now)
+        $this->runExpireTrials()->expectsOutputToContain('1 trial(s) expired.')->assertSuccessful();
+
+        // Then the subscription ended as trial-expired
+        $this->assertSubscriptionCancelledAsTrialExpired($subscriptionId);
+    }
+
     protected function givenTrialEndingAt(string $companyId, string $subscriptionId, CarbonInterface $trialEndsAt): void
     {
         Company::retrieve($companyId)->create('Contoso')->persist();
@@ -61,5 +87,14 @@ class ExpireTrialsCommandTest extends BillingTestCase
         assert($command instanceof PendingCommand);
 
         return $command;
+    }
+
+    protected function assertSubscriptionCancelledAsTrialExpired(string $subscriptionId): void
+    {
+        $subscription = SubscriptionReadModel::findOrFail($subscriptionId);
+
+        $this->assertSame(SubscriptionStatus::Cancelled, $subscription->status);
+        $this->assertSame('trial-expired', $subscription->ended_source);
+        $this->assertNotNull($subscription->cancelled_at);
     }
 }

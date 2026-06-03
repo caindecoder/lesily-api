@@ -14,7 +14,9 @@ class ExpireTrials extends Command
 {
     public function handle(ExpireElapsedTrialsInteractor $interactor): int
     {
-        $interactor->execute(CarbonImmutable::parse($this->option('date')));
+        $expired = $interactor->execute(CarbonImmutable::parse($this->option('date')));
+
+        $this->info("{$expired} trial(s) expired.");
 
         return self::SUCCESS;
     }
