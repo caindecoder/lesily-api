@@ -88,7 +88,8 @@ class Company extends Model
 
     /**
      * The single member holding the Owner role (UC-1-049 owner notification, ownership
-     * transfer) — null when no owner is linked.
+     * transfer) — null when no owner is linked. `owner` is one system-seeded role; `roles.code`
+     * is unique, so `findByCode` resolves it unambiguously (a null id matches no pivot row).
      */
     public function owner(): ?User
     {
