@@ -34,9 +34,10 @@
         // it is public OR protected — public->protected changes nothing observable. The
         // only way to "kill" it is to call the handler directly (needs public), i.e. a
         // forbidden reflection/visibility test (Rule #13) that also spies ES internals
-        // (slice §6). Scoped to projector handlers ONLY — public->protected stays a real,
-        // killable regression elsewhere. Add new projector handlers here as they land
-        // (or switch to a wildcard if they proliferate). See increment #05, PR #39 (2026-06-02).
+        // (slice §6). Scoped to projector + reactor handlers ONLY — public->protected stays a
+        // real, killable regression elsewhere. Add new projector/reactor handlers here as they
+        // land (or switch to a wildcard if they proliferate). See increment #05, PR #39
+        // (2026-06-02) for projectors; increment #08 (2026-06-04) for the reactor.
         "PublicVisibility": {
             ignore: [
                 "App\\Foundation\\RolesPermissions\\Entities\\Role::findByCode",
@@ -44,6 +45,7 @@
                 "App\\Companies\\Projectors\\CompanyProjector::onCompanyTrialExpired",
                 "App\\Billing\\Subscriptions\\Projectors\\SubscriptionProjector::onSubscriptionTrialStarted",
                 "App\\Billing\\Subscriptions\\Projectors\\SubscriptionProjector::onSubscriptionTrialEnded",
+                "App\\Companies\\Reactors\\TrialExpiredEmailReactor::onCompanyTrialExpired",
             ],
         },
         // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only

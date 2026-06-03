@@ -8,6 +8,7 @@ use Database\Factories\CompanyFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\Billing\Enums\BillingPlan;
+use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -83,6 +84,16 @@ class Company extends Model
     {
         return $this->belongsToMany(User::class, 'company_user', 'company_id', 'user_id')
             ->withPivot('role_id');
+    }
+
+    /**
+     * The single member holding the Owner role (UC-1-049 owner notification, ownership
+     * transfer) — null when no owner is linked. `owner` is one system-seeded role; `roles.code`
+     * is unique, so `findByCode` resolves it unambiguously (a null id matches no pivot row).
+     */
+    public function owner(): ?User
+    {
+        return $this->users()->wherePivot('role_id', Role::findByCode('owner')?->id)->first();
     }
 
     protected static function newFactory(): CompanyFactory
