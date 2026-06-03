@@ -96,6 +96,23 @@ class ExpireTrialsCommandTest extends BillingTestCase
         $this->assertSubscriptionCancelledAsTrialExpired($subscriptionId);
     }
 
+    // Happy (UC-1-049 Sc1, multiple) — one daily run expires every elapsed trial, not just the first.
+    #[Test]
+    public function when_multiple_trials_have_elapsed_then_all_of_them_are_expired(): void
+    {
+        // Given two companies whose trials have elapsed
+        $firstCompanyId = (string) Str::uuid();
+        $secondCompanyId = (string) Str::uuid();
+        $this->givenTrialEndingAt($firstCompanyId, (string) Str::uuid(), CarbonImmutable::now()->subDay());
+        $this->givenTrialEndingAt($secondCompanyId, (string) Str::uuid(), CarbonImmutable::now()->subDay());
+
+        // When the daily scan runs
+        $this->runExpireTrials()->expectsOutputToContain('2 trial(s) expired.')->assertSuccessful();
+
+        // Then both companies are read-only
+        $this->assertBothCompaniesExpired($firstCompanyId, $secondCompanyId);
+    }
+
     protected function givenTrialEndingAt(string $companyId, string $subscriptionId, CarbonInterface $trialEndsAt): void
     {
         Company::retrieve($companyId)->create('Contoso')->persist();
@@ -128,5 +145,11 @@ class ExpireTrialsCommandTest extends BillingTestCase
 
         $this->assertSame(1, $companyExpiries);
         $this->assertSame(1, $subscriptionEndings);
+    }
+
+    protected function assertBothCompaniesExpired(string $firstCompanyId, string $secondCompanyId): void
+    {
+        $this->assertSame(CompanyStatus::TrialExpired, CompanyReadModel::findOrFail($firstCompanyId)->status);
+        $this->assertSame(CompanyStatus::TrialExpired, CompanyReadModel::findOrFail($secondCompanyId)->status);
     }
 }
