@@ -9,11 +9,14 @@ use App\Companies\Aggregates\Company;
 use App\Companies\Enums\CompanyStatus;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Events\CompanyTrialExpired;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
 use App\Companies\Entities\Company as CompanyReadModel;
+use App\Billing\Subscriptions\Events\SubscriptionTrialEnded;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 class ExpireTrialsCommandTest extends BillingTestCase
@@ -25,6 +28,24 @@ class ExpireTrialsCommandTest extends BillingTestCase
         parent::setUp();
 
         $this->travelTo(CarbonImmutable::parse('2026-07-02 09:00:00'));
+    }
+
+    // Sad (UC-1-049 Sc5 guard / idempotency) — once a trial has been expired, a later daily
+    // scan must not re-process it: the cancelled subscription is filtered out of the scan, so
+    // the second run reports zero and records no further events.
+    #[Test]
+    public function when_an_already_expired_trial_is_scanned_again_then_nothing_is_re_expired(): void
+    {
+        // Given a company whose elapsed trial was already expired by an earlier run
+        $companyId = (string) Str::uuid();
+        $subscriptionId = (string) Str::uuid();
+        $this->givenTrialEndingAt($companyId, $subscriptionId, CarbonImmutable::now()->subDay());
+        $this->runExpireTrials()->assertSuccessful();
+
+        // When the daily scan runs again
+        // Then nothing is re-expired — zero reported and each expiry event recorded exactly once
+        $this->runExpireTrials()->expectsOutputToContain('0 trial(s) expired.')->assertSuccessful();
+        $this->assertExpiredExactlyOnce($companyId);
     }
 
     // Edge/selection (UC-1-049 Sc1 selection) — a company is expired only when its trial
@@ -96,5 +117,16 @@ class ExpireTrialsCommandTest extends BillingTestCase
         $this->assertSame(SubscriptionStatus::Cancelled, $subscription->status);
         $this->assertSame('trial-expired', $subscription->ended_source);
         $this->assertNotNull($subscription->cancelled_at);
+    }
+
+    protected function assertExpiredExactlyOnce(string $companyId): void
+    {
+        $companyExpiries = LesilyStoredEvent::query()->whereForCompany($companyId)
+            ->where('event_class', CompanyTrialExpired::class)->count();
+        $subscriptionEndings = LesilyStoredEvent::query()->whereForCompany($companyId)
+            ->where('event_class', SubscriptionTrialEnded::class)->count();
+
+        $this->assertSame(1, $companyExpiries);
+        $this->assertSame(1, $subscriptionEndings);
     }
 }
