@@ -48,6 +48,22 @@ class ExpireTrialsCommandTest extends BillingTestCase
         $this->assertExpiredExactlyOnce($companyId);
     }
 
+    // Sad (default clock) — with no --date the scan uses "now"; a trial still inside its window
+    // is excluded, so a genuinely empty first scan reports zero and changes nothing.
+    #[Test]
+    public function when_no_trial_has_elapsed_then_the_default_scan_expires_nothing(): void
+    {
+        // Given a company still within its trial
+        $companyId = (string) Str::uuid();
+        $this->givenTrialEndingAt($companyId, (string) Str::uuid(), CarbonImmutable::now()->addDay());
+
+        // When the daily scan runs with no --date (defaults to now)
+        $this->runExpireTrials()->expectsOutputToContain('0 trial(s) expired.')->assertSuccessful();
+
+        // Then the company is untouched
+        $this->assertSame(CompanyStatus::Trial, CompanyReadModel::findOrFail($companyId)->status);
+    }
+
     // Edge/selection (UC-1-049 Sc1 selection) — a company is expired only when its trial
     // elapsed strictly before the run cutoff; the within-trial and exactly-at-cutoff rows are
     // the sad/edge cases that force the `trial_ends_at < asOf` filter.
@@ -70,6 +86,8 @@ class ExpireTrialsCommandTest extends BillingTestCase
         $this->assertSame($expectedStatus, CompanyReadModel::findOrFail($companyId)->status);
     }
 
+    // The exact-cutoff row sits at midnight = the parsed --date, so trial_ends_at < asOf is
+    // strictly false — this is the row that pins `<` against a `<=` mutation.
     public static function cutoffBoundaryProvider(): array
     {
         return [
