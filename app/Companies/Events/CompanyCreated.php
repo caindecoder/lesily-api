@@ -14,6 +14,10 @@ class CompanyCreated extends ShouldBeStored
 {
     public function __construct(
         public string $name,
+        public string $brNumber,
+        public string $epfNumber,
+        public string $country,
+        public string $ownerUserId,
         public CarbonInterface $trialEndsAt,
     ) {}
 }

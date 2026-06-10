@@ -4,11 +4,11 @@ namespace Tests\Feature\Billing;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
-use App\Companies\Aggregates\Company;
 use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Events\CompanyTrialExpired;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Feature\Companies\CreatesTrialCompanies;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
 use App\Companies\Entities\Company as CompanyReadModel;
@@ -20,6 +20,7 @@ use App\Billing\Subscriptions\UseCases\Interactors\ApplyTrialExpirationInteracto
 
 class TrialExpiryTest extends BillingTestCase
 {
+    use CreatesTrialCompanies;
     use RefreshDatabase;
 
     // Sad/guard (UC-1-049 Sc5 guard) — once a trial has ended, expiring it again is a no-op.
@@ -66,7 +67,7 @@ class TrialExpiryTest extends BillingTestCase
 
     protected function givenCompanyAndSubscriptionOnTrial(string $companyId, string $subscriptionId): void
     {
-        Company::retrieve($companyId)->create('Contoso')->persist();
+        $this->createCompanyOnTrial($companyId);
         Subscription::retrieve($subscriptionId)->startTrial($companyId, CarbonImmutable::now()->addDays(30))->persist();
     }
 

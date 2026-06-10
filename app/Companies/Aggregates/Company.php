@@ -7,6 +7,7 @@ use App\Companies\Enums\CompanyStatus;
 use App\Companies\Events\CompanyCreated;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\Events\CompanyTrialExpired;
+use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use App\Companies\Exceptions\CompanyAlreadyExistsException;
 
 class Company extends AggregateRoot
@@ -15,7 +16,7 @@ class Company extends AggregateRoot
 
     protected ?CompanyStatus $status = null;
 
-    public function create(string $name): static
+    public function create(CreateCompanyCommand $command): static
     {
         if ($this->status !== null) {
             throw CompanyAlreadyExistsException::withId($this->uuid());
@@ -23,7 +24,11 @@ class Company extends AggregateRoot
 
         return $this->forCompany($this->uuid())
             ->recordThat(new CompanyCreated(
-                name: $name,
+                name: $command->name,
+                brNumber: $command->brNumber,
+                epfNumber: $command->epfNumber,
+                country: $command->country,
+                ownerUserId: $command->ownerUserId,
                 trialEndsAt: CarbonImmutable::now()->addDays(self::TRIAL_DAYS),
             ));
     }

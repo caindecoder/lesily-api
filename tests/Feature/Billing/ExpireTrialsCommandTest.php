@@ -5,13 +5,13 @@ namespace Tests\Feature\Billing;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Str;
-use App\Companies\Aggregates\Company;
 use App\Companies\Enums\CompanyStatus;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Events\CompanyTrialExpired;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Feature\Companies\CreatesTrialCompanies;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
 use App\Companies\Entities\Company as CompanyReadModel;
@@ -21,6 +21,7 @@ use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 class ExpireTrialsCommandTest extends BillingTestCase
 {
+    use CreatesTrialCompanies;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -133,7 +134,7 @@ class ExpireTrialsCommandTest extends BillingTestCase
 
     protected function givenTrialEndingAt(string $companyId, string $subscriptionId, CarbonInterface $trialEndsAt): void
     {
-        Company::retrieve($companyId)->create('Contoso')->persist();
+        $this->createCompanyOnTrial($companyId);
         Subscription::retrieve($subscriptionId)->startTrial($companyId, $trialEndsAt)->persist();
     }
 

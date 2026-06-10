@@ -11,6 +11,7 @@ use App\Companies\Entities\Company as CompanyReadModel;
 
 class CompanyProjectionTest extends CompaniesTestCase
 {
+    use CreatesTrialCompanies;
     use RefreshDatabase;
 
     // Happy — the read side mirrors a genesis: creating a company projects a trial row.
@@ -22,7 +23,7 @@ class CompanyProjectionTest extends CompaniesTestCase
         $companyId = (string) Str::uuid();
 
         // When the company is created and persisted (the projector runs synchronously)
-        Company::retrieve($companyId)->create('Contoso')->persist();
+        $this->createCompanyOnTrial($companyId);
 
         // Then the read model shows a trial company expiring in 30 days, with no plan yet
         $row = CompanyReadModel::findOrFail($companyId);
