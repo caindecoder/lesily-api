@@ -53,6 +53,23 @@ class CompanyMembershipTest extends CompaniesTestCase
         $this->company->delete();
     }
 
+    // Sad — companies.owner_id is RESTRICT for the same reason: hard-deleting an
+    // owner must never silently cascade their company away. The fixture company
+    // deliberately has NO memberships — with members, the company_user FK chain
+    // would throw anyway and mask a cascade regression on owner_id.
+    #[Test]
+    public function when_a_companys_owner_is_hard_deleted_then_the_database_refuses(): void
+    {
+        // Given a company whose owner has no other links
+        $ownedCompany = Company::factory()->create();
+        $owner = User::findOrFail($ownedCompany->owner_id);
+
+        // When the owner is hard-deleted / Then the owner FK refuses
+        $this->expectException(QueryException::class);
+
+        $owner->delete();
+    }
+
     // Happy — attach() routes through the CompanyUser pivot, which mints the
     // membership's char(36) UUID primary key (ERD-1-01, R-042).
     #[Test]
