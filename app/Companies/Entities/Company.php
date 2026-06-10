@@ -34,6 +34,10 @@ class Company extends Model
     protected $fillable = [
         'id',
         'name',
+        'br_number',
+        'epf_number',
+        'country',
+        'owner_id',
         'current_billing_plan',
         'status',
         'trial_ends_at',

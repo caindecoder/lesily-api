@@ -23,8 +23,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('companies', function (Blueprint $table) {
-            $table->string('current_billing_plan', 32)->nullable(false)->change();
-        });
+        //
     }
 };

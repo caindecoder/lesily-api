@@ -15,6 +15,7 @@ use App\Foundation\Notifications\Notifications\SystemNotification;
 
 class TrialExpiredNotificationTest extends CompaniesTestCase
 {
+    use CreatesTrialCompanies;
     use RefreshDatabase;
 
     private const COMPANY_NAME = 'Contoso';
@@ -78,11 +79,6 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
 
         // Then only its own owner is notified, not the other company's
         $this->assertNotifiedExactly($owner, $otherOwner, self::COMPANY_NAME);
-    }
-
-    protected function createCompanyOnTrial(string $companyId, string $name = self::COMPANY_NAME): void
-    {
-        Company::retrieve($companyId)->create($name)->persist();
     }
 
     protected function givenOtherTrialCompany(): string
