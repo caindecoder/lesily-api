@@ -3,6 +3,8 @@
 namespace Tests\Feature\Companies;
 
 use App\Models\User;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Database\QueryException;
@@ -49,5 +51,18 @@ class CompanyMembershipTest extends CompaniesTestCase
         $this->expectException(QueryException::class);
 
         $this->company->delete();
+    }
+
+    // Happy — attach() routes through the CompanyUser pivot, which mints the
+    // membership's char(36) UUID primary key (ERD-1-01, R-042).
+    #[Test]
+    public function when_a_member_is_attached_then_the_membership_id_is_a_uuid(): void
+    {
+        // When the membership row written by setUp's attach is read back
+        $membershipId = DB::table('company_user')->value('id');
+
+        // Then its primary key is an application-generated UUID
+        $this->assertIsString($membershipId);
+        $this->assertTrue(Str::isUuid($membershipId), 'company_user.id must be a char(36) UUID (ERD-1-01, R-042)');
     }
 }
