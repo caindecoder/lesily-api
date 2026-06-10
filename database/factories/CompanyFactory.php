@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\User;
 use App\Companies\Entities\Company;
 use App\Foundation\Billing\Enums\Addon;
 use App\Foundation\Billing\Enums\BillingPlan;
@@ -21,6 +22,10 @@ class CompanyFactory extends Factory
     {
         return [
             'name' => fake()->company(),
+            'br_number' => fake()->unique()->numerify('PV-########'),
+            'epf_number' => fake()->unique()->numerify('EPF-#######'),
+            'country' => 'LK',
+            'owner_id' => User::factory(),
             'current_billing_plan' => BillingPlan::Free,
         ];
     }

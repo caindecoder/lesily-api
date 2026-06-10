@@ -20,6 +20,10 @@ class CompanyProjector extends Projector
         CompanyReadModel::query()->create([
             'id' => $event->aggregateRootUuid(),
             'name' => $event->name,
+            'br_number' => $event->brNumber,
+            'epf_number' => $event->epfNumber,
+            'country' => $event->country,
+            'owner_id' => $event->ownerUserId,
             'status' => CompanyStatus::Trial,
             'trial_ends_at' => $event->trialEndsAt,
         ]);
