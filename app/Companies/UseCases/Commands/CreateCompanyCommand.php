@@ -29,9 +29,13 @@ class CreateCompanyCommand extends Data
      */
     public static function rules(ValidationContext $context): array
     {
-        // `required` is inferred from the non-nullable string properties; only the
-        // country and owner-id formats need explicit rules.
+        // max:255 bounds every varchar-backed field at the command boundary — an
+        // over-long value would otherwise record a CompanyCreated event whose
+        // projection can never succeed (poison event on replay).
         return [
+            'name' => self::nameRules(),
+            'brNumber' => self::brNumberRules(),
+            'epfNumber' => self::epfNumberRules(),
             'country' => self::countryRules(),
             'ownerUserId' => self::ownerUserIdRules(),
         ];

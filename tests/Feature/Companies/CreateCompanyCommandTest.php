@@ -36,7 +36,10 @@ class CreateCompanyCommandTest extends CompaniesTestCase
             'missing name' => ['name', ''],
             'missing brNumber' => ['brNumber', ''],
             'missing epfNumber' => ['epfNumber', ''],
-            'country not an ISO alpha-2 code' => ['country', 'LKA'],
+            'name longer than its column' => ['name', str_repeat('a', 256)],
+            'brNumber longer than its column' => ['brNumber', str_repeat('b', 256)],
+            'epfNumber longer than its column' => ['epfNumber', str_repeat('e', 256)],
+            'country longer than 2 chars' => ['country', 'LKA'],
             'ownerUserId not a uuid' => ['ownerUserId', 'not-a-uuid'],
         ];
     }

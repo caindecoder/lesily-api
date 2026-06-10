@@ -12,6 +12,30 @@ trait CompanyRegistrationRules
     /**
      * @return array<int, string>
      */
+    protected static function nameRules(): array
+    {
+        return ['required', 'string', 'max:255'];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected static function brNumberRules(): array
+    {
+        return ['required', 'string', 'max:255'];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected static function epfNumberRules(): array
+    {
+        return ['required', 'string', 'max:255'];
+    }
+
+    /**
+     * @return array<int, string>
+     */
     protected static function countryRules(): array
     {
         return ['required', 'string', 'size:2'];
