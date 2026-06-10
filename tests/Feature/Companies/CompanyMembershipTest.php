@@ -41,4 +41,13 @@ class CompanyMembershipTest extends CompaniesTestCase
 
         $this->member->delete();
     }
+
+    #[Test]
+    public function when_a_company_with_a_live_membership_is_hard_deleted_then_the_database_refuses(): void
+    {
+        // When the company is hard-deleted / Then the membership FK refuses
+        $this->expectException(QueryException::class);
+
+        $this->company->delete();
+    }
 }
