@@ -14,12 +14,12 @@ return new class extends Migration
         Schema::create('company_user', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('company_id');
+            // Both FKs RESTRICT: the lifecycle soft-deletes; a hard delete of a user
+            // or company with live memberships must fail loudly, never cascade silently.
             $table->foreignUuid('user_id')->constrained()->restrictOnDelete();
             $table->uuid('role_id');
             $table->timestamps();
 
-            // RESTRICT: the lifecycle soft-deletes; a hard delete with live
-            // memberships must fail loudly, never cascade them away silently.
             $table->foreign('company_id')->references('id')->on('companies')->restrictOnDelete();
             $table->foreign('role_id')->references('id')->on('roles');
             $table->unique(['company_id', 'user_id']);

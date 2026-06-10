@@ -14,7 +14,7 @@ class UserModelTest extends FoundationTestCase
     use RefreshDatabase;
 
     #[Test]
-    public function when_a_user_is_persisted_then_its_id_is_a_uuid_and_attributes_are_cast(): void
+    public function when_a_user_is_persisted_then_it_honours_the_model_contract(): void
     {
         // Given / When a user is persisted
         $user = User::factory()->withPassword('plain-text-secret')->create();
