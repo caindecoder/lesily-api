@@ -23,8 +23,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('subscriptions', function (Blueprint $table) {
-            $table->dropIndex(['status', 'trial_ends_at']);
-        });
+        //
     }
 };

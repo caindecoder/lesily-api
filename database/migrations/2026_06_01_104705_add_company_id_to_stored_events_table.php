@@ -21,8 +21,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('stored_events', function (Blueprint $table) {
-            $table->dropColumn('company_id');
-        });
+        //
     }
 };

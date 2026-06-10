@@ -25,12 +25,12 @@ return new class extends Migration
 
     /**
      * Reverse the migrations.
+     *
+     * Forward-only (questionnaire §24, LeaveDates pattern) — fix forward with a
+     * new migration instead of rolling back.
      */
     public function down(): void
     {
-        Schema::table('companies', function (Blueprint $table) {
-            $table->dropConstrainedForeignId('owner_id');
-            $table->dropColumn(['br_number', 'epf_number', 'country']);
-        });
+        //
     }
 };
