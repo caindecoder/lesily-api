@@ -19,8 +19,10 @@ class UserModelTest extends FoundationTestCase
         // Given / When a user is persisted
         $user = User::factory()->withPassword('plain-text-secret')->create();
 
-        // Then its key and attribute casts honour the model contract
-        $this->assertPersistedUserHonoursModelContract($user);
+        // Then its key and attribute casts honour the model contract — asserted after a
+        // DB refresh so the casts are exercised on the raw stored values (an in-memory
+        // model echoes back whatever object the factory set, cast or not)
+        $this->assertPersistedUserHonoursModelContract($user->refresh());
     }
 
     protected function assertPersistedUserHonoursModelContract(User $user): void
