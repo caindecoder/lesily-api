@@ -8,8 +8,9 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
  * Start a company's 30-day trial subscription. trialEndsAt is supplied by the
- * orchestrating interactor so the Subscription stays consistent with the Company
- * genesis it accompanies (both anchor to the same registration instant).
+ * orchestrating interactor, computed to the same 30-day window as the Company
+ * genesis it accompanies (the subscription date drives the trials:expire scan;
+ * the company date is pinned equal in the register acceptance test).
  *
  * A Spatie\LaravelData command (reference_architecture-patterns.md §Commands —
  * aggregate-takes-Command standing convention, locked company-onboarding #02) —

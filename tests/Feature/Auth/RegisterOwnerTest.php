@@ -88,6 +88,8 @@ class RegisterOwnerTest extends AuthTestCase
     {
         $response->assertCreated();
         $response->assertJsonStructure(['data' => ['token', 'user' => ['id'], 'company' => ['id']]]);
+        $response->assertJsonPath('data.user.name', 'Nimal Perera');
+        $response->assertJsonPath('data.user.email', 'nimal@contoso.lk');
     }
 
     protected function assertOwnerAccountProjected(string $email): void
@@ -106,7 +108,11 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertSame('Contoso', $company->name);
         $this->assertSame(CompanyStatus::Trial, $company->status);
         $this->assertSame('2026-07-08 00:00:00', $company->trial_ends_at?->toDateTimeString());
-        $this->assertDatabaseHas('subscriptions', ['company_id' => $company->id, 'status' => 'trial']);
+        $this->assertDatabaseHas('subscriptions', [
+            'company_id' => $company->id,
+            'status' => 'trial',
+            'trial_ends_at' => '2026-07-08 00:00:00',
+        ]);
     }
 
     protected function assertConsentRecorded(string $ownerEmail): void
@@ -115,7 +121,12 @@ class RegisterOwnerTest extends AuthTestCase
         $company = Company::query()->where('owner_id', $owner->id)->sole();
 
         // One version-stamped record per policy type (UC-1-069); sole() doubles
-        // as the exactly-one-per-type count assertion.
+        // as the exactly-one-per-type count assertion, and the total bounds the set.
+        $this->assertSame(2, LesilyStoredEvent::query()
+            ->whereForCompany($company->id)
+            ->where('event_class', ConsentRecorded::class)
+            ->count());
+
         foreach (['tos', 'privacy'] as $policyType) {
             $consent = LesilyStoredEvent::query()
                 ->whereForCompany($company->id)
@@ -139,6 +150,9 @@ class RegisterOwnerTest extends AuthTestCase
             'currency' => 'LKR',
             'timezone' => 'Asia/Colombo',
             'locale_default' => 'en',
+            'fiscal_year_start_month' => 1,
+            'working_days_per_week' => 5,
+            'default_work_hours_per_day' => 8.0,
         ]);
     }
 
