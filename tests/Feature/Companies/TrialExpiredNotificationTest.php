@@ -21,18 +21,17 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
     private const COMPANY_NAME = 'Contoso';
 
     // Sad — a company with members but no one holding the Owner role expires without error and
-    // sends nothing. This is production's real no-owner case (the owner role is always seeded;
-    // it is the link that is absent), and it pins the owner-role filter: a "notify any member"
-    // regression would email the admin here.
+    // sends nothing. Post-#04 every genesis enrolls its owner, so the no-owner case is arranged
+    // by demoting that membership (legacy/degenerate streams); it pins the owner-role filter:
+    // a "notify any member" regression would email the admin here.
     #[Test]
     public function when_an_expired_company_has_members_but_no_owner_then_no_notification_is_sent(): void
     {
-        // Given a trial company with an admin member but no owner, with the owner role seeded
+        // Given a trial company whose only membership no longer holds the owner role
         Notification::fake();
         $companyId = (string) Str::uuid();
         $this->createCompanyOnTrial($companyId);
-        $this->attachUserWithRole($companyId, 'admin');
-        $this->ensureRoleExists('owner');
+        $this->demoteGenesisOwner($companyId);
 
         // When the trial expires
         $this->expire($companyId);
@@ -47,11 +46,11 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
     #[Test]
     public function when_a_trial_expires_then_only_the_owner_is_notified(): void
     {
-        // Given a trial company with an owner and a non-owner member
+        // Given a trial company with its genesis-enrolled owner and a non-owner member
         Notification::fake();
         $companyId = (string) Str::uuid();
         $this->createCompanyOnTrial($companyId);
-        $owner = $this->attachUserWithRole($companyId, 'owner');
+        $owner = $this->genesisOwnerOf($companyId);
         $member = $this->attachUserWithRole($companyId, 'admin');
 
         // When the trial expires
@@ -67,12 +66,12 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
     #[Test]
     public function when_a_trial_expires_then_another_companys_owner_is_not_notified(): void
     {
-        // Given two trial companies, each with its own owner
+        // Given two trial companies, each with its genesis-enrolled owner
         Notification::fake();
         $companyId = (string) Str::uuid();
         $this->createCompanyOnTrial($companyId);
-        $owner = $this->attachUserWithRole($companyId, 'owner');
-        $otherOwner = $this->attachUserWithRole($this->givenOtherTrialCompany(), 'owner');
+        $owner = $this->genesisOwnerOf($companyId);
+        $otherOwner = $this->genesisOwnerOf($this->givenOtherTrialCompany());
 
         // When the first company's trial expires
         $this->expire($companyId);
@@ -106,6 +105,22 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
     protected function ensureRoleExists(string $roleCode): Role
     {
         return Role::findByCode($roleCode) ?? Role::factory()->code($roleCode)->create();
+    }
+
+    protected function genesisOwnerOf(string $companyId): User
+    {
+        $ownerId = CompanyReadModel::query()->findOrFail($companyId)->owner_id;
+
+        return User::query()->findOrFail($ownerId);
+    }
+
+    protected function demoteGenesisOwner(string $companyId): void
+    {
+        CompanyReadModel::query()->findOrFail($companyId)
+            ->users()->updateExistingPivot(
+                $this->genesisOwnerOf($companyId)->id,
+                ['role_id' => $this->ensureRoleExists('admin')->id],
+            );
     }
 
     protected function assertNotifiedExactly(User $recipient, User $notNotified, string $companyName): void

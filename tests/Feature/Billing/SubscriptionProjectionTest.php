@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
+use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 class SubscriptionProjectionTest extends BillingTestCase
@@ -24,7 +25,11 @@ class SubscriptionProjectionTest extends BillingTestCase
         $subscriptionId = (string) Str::uuid();
 
         // When the trial is started and persisted (the projector runs synchronously)
-        Subscription::retrieve($subscriptionId)->startTrial($companyId, CarbonImmutable::now()->addDays(30))->persist();
+        $command = StartTrialCommand::validateAndCreate([
+            'companyId' => $companyId,
+            'trialEndsAt' => CarbonImmutable::now()->addDays(30),
+        ]);
+        Subscription::retrieve($subscriptionId)->startTrial($command)->persist();
 
         // Then the read model shows a trial subscription for the company expiring in 30 days
         $row = SubscriptionReadModel::findOrFail($subscriptionId);

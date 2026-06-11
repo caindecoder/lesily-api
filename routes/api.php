@@ -2,9 +2,15 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
+use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 
 // Health is operational tooling and opts out of the platform cross-cutting
 // middleware (no Correlation-Id) — UC-1-118 / cd-foundation-http §4.2.
 Route::get('/health', HealthCheckController::class)
     ->withoutMiddleware(AssignCorrelationId::class);
+
+// Owner signup — public per api-1-auth-onboarding §register. Idempotency-Key
+// (UC-1-119) + auth-tier throttle (OQ-1-098 / slice #05) attach when their
+// middleware land.
+Route::post('/v1/auth/register', RegisterController::class);

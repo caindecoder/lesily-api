@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use App\Companies\Events\CompanyTrialExpired;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Companies\CreatesTrialCompanies;
@@ -13,6 +14,7 @@ use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
 use App\Companies\Entities\Company as CompanyReadModel;
 use App\Billing\Subscriptions\Events\SubscriptionTrialEnded;
+use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Billing\Subscriptions\UseCases\Commands\ApplyTrialExpirationCommand;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
@@ -22,6 +24,15 @@ class TrialExpiryTest extends BillingTestCase
 {
     use CreatesTrialCompanies;
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Post-#04 every genesis enrolls its owner, so expiry fires the #08
+        // owner-notification reactor; this suite tests expiry mechanics only.
+        Notification::fake();
+    }
 
     // Sad/guard (UC-1-049 Sc5 guard) — once a trial has ended, expiring it again is a no-op.
     // This is the status guard that also skips a company that already subscribed.
@@ -68,7 +79,11 @@ class TrialExpiryTest extends BillingTestCase
     protected function givenCompanyAndSubscriptionOnTrial(string $companyId, string $subscriptionId): void
     {
         $this->createCompanyOnTrial($companyId);
-        Subscription::retrieve($subscriptionId)->startTrial($companyId, CarbonImmutable::now()->addDays(30))->persist();
+        $command = StartTrialCommand::validateAndCreate([
+            'companyId' => $companyId,
+            'trialEndsAt' => CarbonImmutable::now()->addDays(30),
+        ]);
+        Subscription::retrieve($subscriptionId)->startTrial($command)->persist();
     }
 
     protected function assertCompanyTrialExpired(string $companyId): void

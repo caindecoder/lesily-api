@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use App\Companies\Enums\CompanyStatus;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use App\Companies\Events\CompanyTrialExpired;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,6 +17,7 @@ use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
 use App\Companies\Entities\Company as CompanyReadModel;
 use App\Billing\Subscriptions\Events\SubscriptionTrialEnded;
+use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
@@ -29,6 +31,10 @@ class ExpireTrialsCommandTest extends BillingTestCase
         parent::setUp();
 
         $this->travelTo(CarbonImmutable::parse('2026-07-02 09:00:00'));
+
+        // Post-#04 every genesis enrolls its owner, so expiry fires the #08
+        // owner-notification reactor; this suite tests expiry mechanics only.
+        Notification::fake();
     }
 
     // Sad (default clock) — with no --date the scan uses "now"; a trial still inside its window
@@ -135,7 +141,11 @@ class ExpireTrialsCommandTest extends BillingTestCase
     protected function givenTrialEndingAt(string $companyId, string $subscriptionId, CarbonInterface $trialEndsAt): void
     {
         $this->createCompanyOnTrial($companyId);
-        Subscription::retrieve($subscriptionId)->startTrial($companyId, $trialEndsAt)->persist();
+        $command = StartTrialCommand::validateAndCreate([
+            'companyId' => $companyId,
+            'trialEndsAt' => $trialEndsAt,
+        ]);
+        Subscription::retrieve($subscriptionId)->startTrial($command)->persist();
     }
 
     protected function runExpireTrials(?string $asOf = null): PendingCommand

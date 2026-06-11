@@ -22,6 +22,10 @@ trait CreatesTrialCompanies
 
     protected function buildCreateCompanyCommand(string $companyId, string $name = 'Contoso'): CreateCompanyCommand
     {
+        // The genesis projection enrolls the owner against the seeded 'owner'
+        // role (CompanyProjector) — the catalog is part of the genesis fixture.
+        $this->seedRbacCatalog();
+
         return CreateCompanyCommand::validateAndCreate([
             'name' => $name,
             'brNumber' => "BR-{$companyId}",

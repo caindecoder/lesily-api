@@ -9,6 +9,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Events\SubscriptionTrialStarted;
 use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
+use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Billing\Subscriptions\Exceptions\SubscriptionAlreadyStartedException;
 
@@ -23,13 +24,16 @@ class SubscriptionAggregateTest extends BillingTestCase
         // Given a subscription that already started a trial
         $companyId = (string) Str::uuid();
         $subscriptionId = (string) Str::uuid();
-        $trialEndsAt = CarbonImmutable::now()->addDays(30);
-        Subscription::retrieve($subscriptionId)->startTrial($companyId, $trialEndsAt)->persist();
+        $command = StartTrialCommand::validateAndCreate([
+            'companyId' => $companyId,
+            'trialEndsAt' => CarbonImmutable::now()->addDays(30),
+        ]);
+        Subscription::retrieve($subscriptionId)->startTrial($command)->persist();
 
         // When the same subscription starts a trial again, Then it is rejected
         $this->expectException(SubscriptionAlreadyStartedException::class);
 
-        Subscription::retrieve($subscriptionId)->startTrial($companyId, $trialEndsAt);
+        Subscription::retrieve($subscriptionId)->startTrial($command);
     }
 
     // Happy — genesis: starting a trial opens a trial scoped to the owning company.
@@ -42,7 +46,11 @@ class SubscriptionAggregateTest extends BillingTestCase
         $subscriptionId = (string) Str::uuid();
 
         // When the trial is started and persisted
-        Subscription::retrieve($subscriptionId)->startTrial($companyId, CarbonImmutable::now()->addDays(30))->persist();
+        $command = StartTrialCommand::validateAndCreate([
+            'companyId' => $companyId,
+            'trialEndsAt' => CarbonImmutable::now()->addDays(30),
+        ]);
+        Subscription::retrieve($subscriptionId)->startTrial($command)->persist();
 
         // Then a SubscriptionTrialStarted event is stored, scoped to the owning company, ending in 30 days
         $event = LesilyStoredEvent::query()->whereForCompany($companyId)->sole();

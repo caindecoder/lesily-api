@@ -3,10 +3,13 @@
 namespace App\Companies\Aggregates;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use App\Companies\Enums\CompanyStatus;
 use App\Companies\Events\CompanyCreated;
+use App\Companies\Support\CountryDefaults;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\Events\CompanyTrialExpired;
+use App\Companies\Events\CompanySettingsCreated;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use App\Companies\Exceptions\CompanyAlreadyExistsException;
 
@@ -22,6 +25,8 @@ class Company extends AggregateRoot
             throw CompanyAlreadyExistsException::withId($this->uuid());
         }
 
+        $defaults = CountryDefaults::for($command->country);
+
         return $this->forCompany($this->uuid())
             ->recordThat(new CompanyCreated(
                 name: $command->name,
@@ -30,6 +35,16 @@ class Company extends AggregateRoot
                 country: $command->country,
                 ownerUserId: $command->ownerUserId,
                 trialEndsAt: CarbonImmutable::now()->addDays(self::TRIAL_DAYS),
+            ))
+            ->recordThat(new CompanySettingsCreated(
+                companyId: $this->uuid(),
+                settingsId: (string) Str::uuid7(),
+                timezone: $defaults['timezone'],
+                currency: $defaults['currency'],
+                localeDefault: $defaults['localeDefault'],
+                fiscalYearStartMonth: $defaults['fiscalYearStartMonth'],
+                workingDaysPerWeek: $defaults['workingDaysPerWeek'],
+                defaultWorkHoursPerDay: $defaults['defaultWorkHoursPerDay'],
             ));
     }
 

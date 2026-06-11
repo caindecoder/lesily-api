@@ -3,25 +3,28 @@
 namespace App\Billing\Subscriptions\Aggregates;
 
 use Carbon\CarbonImmutable;
-use Carbon\CarbonInterface;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
 use App\Billing\Subscriptions\Events\SubscriptionTrialEnded;
 use App\Billing\Subscriptions\Events\SubscriptionTrialStarted;
+use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Billing\Subscriptions\Exceptions\SubscriptionAlreadyStartedException;
 
 class Subscription extends AggregateRoot
 {
     protected ?SubscriptionStatus $status = null;
 
-    public function startTrial(string $companyId, CarbonInterface $trialEndsAt): static
+    public function startTrial(StartTrialCommand $command): static
     {
         if ($this->status !== null) {
             throw SubscriptionAlreadyStartedException::withId($this->uuid());
         }
 
-        return $this->forCompany($companyId)
-            ->recordThat(new SubscriptionTrialStarted(companyId: $companyId, trialEndsAt: $trialEndsAt));
+        return $this->forCompany($command->companyId)
+            ->recordThat(new SubscriptionTrialStarted(
+                companyId: $command->companyId,
+                trialEndsAt: $command->trialEndsAt,
+            ));
     }
 
     public function endTrial(string $source): static
