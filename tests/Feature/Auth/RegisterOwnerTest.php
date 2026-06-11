@@ -33,7 +33,42 @@ class RegisterOwnerTest extends AuthTestCase
     {
         // Given a guest with the full signup payload
         // When the guest registers as owner
-        $response = $this->postJson('/api/v1/auth/register', [
+        $response = $this->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
+
+        // Then the owner account is stood up atomically
+        $this->assertRegistrationSucceeded($response);
+        $this->assertOwnerAccountProjected('nimal@contoso.lk');
+        $this->assertCompanyOnTrialWithOwner('nimal@contoso.lk');
+        $this->assertOwnerEnrolledWithEmergencyContact('nimal@contoso.lk');
+        $this->assertConsentRecorded('nimal@contoso.lk');
+        $this->assertCompanySettingsSeeded('nimal@contoso.lk');
+    }
+
+    // Happy — the issued token is a real credential: it authenticates the new owner
+    // straight through auth:sanctum + auth.company (#03) with the fresh membership.
+    #[Test]
+    public function when_the_registration_token_is_used_then_it_authenticates_the_new_owner(): void
+    {
+        // Given a freshly registered owner and the token + company from the response
+        $registration = $this->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
+        $token = $registration->json('data.token');
+        $companyId = $registration->json('data.company.id');
+
+        // When the token is used against a company-scoped route
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/_test/company-context-probe', ['X-Company-Context' => $companyId]);
+
+        // Then it authenticates the owner and binds their company
+        $response->assertOk();
+        $response->assertJsonPath('company_id', $companyId);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function validRegistrationPayload(): array
+    {
+        return [
             'name' => 'Nimal Perera',
             'email' => 'nimal@contoso.lk',
             'password' => 'S3cure-Pass!',
@@ -46,15 +81,7 @@ class RegisterOwnerTest extends AuthTestCase
             'emergencyContactEmail' => 'kamala@contoso.lk',
             'emergencyContactPhone' => '+94771234567',
             'emergencyContactRelationship' => 'spouse',
-        ]);
-
-        // Then the owner account is stood up atomically
-        $this->assertRegistrationSucceeded($response);
-        $this->assertOwnerAccountProjected('nimal@contoso.lk');
-        $this->assertCompanyOnTrialWithOwner('nimal@contoso.lk');
-        $this->assertOwnerEnrolledWithEmergencyContact('nimal@contoso.lk');
-        $this->assertConsentRecorded('nimal@contoso.lk');
-        $this->assertCompanySettingsSeeded('nimal@contoso.lk');
+        ];
     }
 
     protected function assertRegistrationSucceeded(TestResponse $response): void
