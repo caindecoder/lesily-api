@@ -16,7 +16,7 @@ use Illuminate\Contracts\Translation\HasLocalePreference;
 /**
  * @property string $locale
  */
-#[Fillable(['name', 'email', 'password', 'locale'])]
+#[Fillable(['id', 'name', 'email', 'password', 'locale'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements HasLocalePreference
 {
