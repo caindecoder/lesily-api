@@ -9,21 +9,20 @@ use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Symfony\Component\HttpFoundation\Response;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
-use App\Foundation\Http\Middleware\Concerns\ResolvesCompanyContext;
 
 /**
- * The billing gate (first of the two gates per api-conventions §11). Resolves the
- * current company and denies the request when the company's plan + active add-ons
- * do not grant the route's feature, pointing at the lowest tier that would.
+ * The billing gate (first of the two gates per api-conventions §11). Denies the
+ * request when the current company's plan + active add-ons do not grant the
+ * route's feature, pointing at the lowest tier that would. The company context
+ * is resolved and validated upstream by AuthorizeCompany (cd-foundation-http
+ * step 4) and consumed via $request->company().
  */
 class EnsureFeatureAvailable
 {
-    use ResolvesCompanyContext;
-
     public function handle(Request $request, Closure $next, string $feature): Response
     {
         $required = Feature::from($feature);
-        $company = $this->resolveCompany($request);
+        $company = $request->company();
 
         if ($company->canUseFeature($required)) {
             return $next($request);
