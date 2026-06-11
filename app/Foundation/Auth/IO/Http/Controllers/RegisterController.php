@@ -21,7 +21,7 @@ class RegisterController extends Controller
     public function __invoke(Request $request, RegisterOwnerInteractor $interactor): JsonResponse
     {
         $command = RegisterOwnerCommand::validateAndCreate($request);
-        $result = $interactor->execute($command);
+        $result = $interactor->execute($command, (string) $request->ip());
 
         $owner = User::query()->findOrFail($result->userId);
         $token = $owner->createToken('web')->plainTextToken;

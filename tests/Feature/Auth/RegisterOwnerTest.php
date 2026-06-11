@@ -8,8 +8,10 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
+use App\Consent\Events\ConsentRecorded;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RegisterOwnerTest extends AuthTestCase
 {
@@ -51,6 +53,7 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertOwnerAccountProjected('nimal@contoso.lk');
         $this->assertCompanyOnTrialWithOwner('nimal@contoso.lk');
         $this->assertOwnerEnrolledWithEmergencyContact('nimal@contoso.lk');
+        $this->assertConsentRecorded('nimal@contoso.lk');
     }
 
     protected function assertRegistrationSucceeded(TestResponse $response): void
@@ -76,6 +79,26 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertSame(CompanyStatus::Trial, $company->status);
         $this->assertSame('2026-07-08 00:00:00', $company->trial_ends_at?->toDateTimeString());
         $this->assertDatabaseHas('subscriptions', ['company_id' => $company->id, 'status' => 'trial']);
+    }
+
+    protected function assertConsentRecorded(string $ownerEmail): void
+    {
+        $owner = User::query()->where('email', $ownerEmail)->sole();
+        $company = Company::query()->where('owner_id', $owner->id)->sole();
+
+        // One version-stamped record per policy type (UC-1-069); sole() doubles
+        // as the exactly-one-per-type count assertion.
+        foreach (['tos', 'privacy'] as $policyType) {
+            $consent = LesilyStoredEvent::query()
+                ->whereForCompany($company->id)
+                ->where('event_class', ConsentRecorded::class)
+                ->where('event_properties->policyType', $policyType)
+                ->sole();
+
+            $this->assertSame('v1.0', $consent->event_properties['version']);
+            $this->assertSame($owner->id, $consent->event_properties['userId']);
+            $this->assertSame('127.0.0.1', $consent->event_properties['ip']);
+        }
     }
 
     protected function assertOwnerEnrolledWithEmergencyContact(string $ownerEmail): void

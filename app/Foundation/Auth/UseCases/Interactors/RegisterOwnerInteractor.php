@@ -5,6 +5,7 @@ namespace App\Foundation\Auth\UseCases\Interactors;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
+use App\Consent\Aggregates\Consent;
 use App\Companies\Aggregates\Company;
 use App\Foundation\Auth\Aggregates\User;
 use App\Billing\Subscriptions\Aggregates\Subscription;
@@ -20,9 +21,9 @@ use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
  */
 class RegisterOwnerInteractor
 {
-    public function execute(RegisterOwnerCommand $command): RegisterResult
+    public function execute(RegisterOwnerCommand $command, string $clientIp): RegisterResult
     {
-        return DB::transaction(function () use ($command): RegisterResult {
+        return DB::transaction(function () use ($command, $clientIp): RegisterResult {
             $userId = (string) Str::uuid7();
             $companyId = (string) Str::uuid7();
 
@@ -39,6 +40,10 @@ class RegisterOwnerInteractor
                 ->persist();
 
             $owner->setEmergencyContact($companyId, $command)->persist();
+
+            Consent::retrieve((string) Str::uuid7())
+                ->record($userId, $companyId, config('lesily.policies'), $clientIp)
+                ->persist();
 
             Subscription::retrieve((string) Str::uuid7())
                 ->startTrial(StartTrialCommand::validateAndCreate([
