@@ -29,6 +29,7 @@ class TwoGateCheckTest extends FoundationTestCase
         // Given
         $company = Company::factory()->onPlan($plan)->create();
         $user = User::factory()->create();
+        $this->joinCompany($company, $user);
 
         // When
         $response = $this->attemptGatedAction($route, $user, $company);
@@ -54,7 +55,7 @@ class TwoGateCheckTest extends FoundationTestCase
     }
 
     #[Test]
-    public function when_a_member_has_no_role_in_the_company_then_the_permission_gate_denies(): void
+    public function when_the_authenticated_user_is_not_a_member_of_the_requested_company_then_company_access_is_denied(): void
     {
         // Given
         $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
@@ -63,8 +64,8 @@ class TwoGateCheckTest extends FoundationTestCase
         // When (the user is authenticated but never joined the company)
         $response = $this->attemptGatedAction('two-gate/secured', $user, $company);
 
-        // Then
-        $this->assertPermissionDenied($response, 'manage_security');
+        // Then (denied upstream by AuthorizeCompany — the gates are never reached)
+        $this->assertCompanyAccessDenied($response);
     }
 
     #[Test]
@@ -73,6 +74,7 @@ class TwoGateCheckTest extends FoundationTestCase
         // Given (a company that has not chosen a plan — e.g. still on trial)
         $company = Company::factory()->withoutPlan()->create();
         $user = User::factory()->create();
+        $this->joinCompany($company, $user);
 
         // When it attempts a plan-gated feature
         $response = $this->attemptGatedAction('two-gate/starter-feature', $user, $company);
@@ -87,6 +89,7 @@ class TwoGateCheckTest extends FoundationTestCase
         // Given (a deprecated feature granted by no plan or add-on, even on the top tier)
         $company = Company::factory()->onPlan(BillingPlan::Enterprise)->create();
         $user = User::factory()->create();
+        $this->joinCompany($company, $user);
         $loggedContext = null;
         Log::listen(function (MessageLogged $log) use (&$loggedContext): void {
             if ($log->level === 'warning') {
@@ -109,6 +112,7 @@ class TwoGateCheckTest extends FoundationTestCase
         // Given (each tier grants its own features and inherits every lower tier's)
         $company = Company::factory()->onPlan($plan)->create();
         $user = User::factory()->create();
+        $this->joinCompany($company, $user);
 
         // When
         $response = $this->attemptGatedAction($route, $user, $company);
@@ -137,6 +141,7 @@ class TwoGateCheckTest extends FoundationTestCase
         // Given (Free plan lacks TemplateEngine, but the Template Engine add-on grants it)
         $company = Company::factory()->onPlan(BillingPlan::Free)->withAddon(Addon::TemplateEngine)->create();
         $user = User::factory()->create();
+        $this->joinCompany($company, $user);
 
         // When
         $response = $this->attemptGatedAction('two-gate/templates', $user, $company);
@@ -151,6 +156,7 @@ class TwoGateCheckTest extends FoundationTestCase
         // Given (a plan-less trial company that holds the Template Engine add-on)
         $company = Company::factory()->withoutPlan()->withAddon(Addon::TemplateEngine)->create();
         $user = User::factory()->create();
+        $this->joinCompany($company, $user);
 
         // When it attempts the add-on-granted feature
         $response = $this->attemptGatedAction('two-gate/templates', $user, $company);
