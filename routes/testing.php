@@ -65,3 +65,9 @@ Route::get('two-gate/deprecated', fn () => response()->json(['ok' => true]))
 
 Route::get('two-gate/templates', fn () => response()->json(['ok' => true]))
     ->middleware(['auth:sanctum', 'auth.company', 'feature:template_engine']);
+
+// Company-context probe (OQ-1-101). Proves AuthorizeCompany binds the resolved
+// company to the request for downstream consumers via $request->company().
+Route::get('company-context-probe', fn (Request $request) => response()->json([
+    'company_id' => $request->company()->getKey(),
+]))->middleware(['auth:sanctum', 'auth.company']);

@@ -29,6 +29,8 @@ class AuthorizeCompany
             throw new CompanyAccessDeniedException;
         }
 
+        $request->attributes->set('company', $company);
+
         return $next($request);
     }
 }

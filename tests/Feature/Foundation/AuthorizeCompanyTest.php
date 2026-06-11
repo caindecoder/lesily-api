@@ -66,6 +66,25 @@ class AuthorizeCompanyTest extends FoundationTestCase
         $this->assertResourceNotFoundEnvelope($response);
     }
 
+    #[Test]
+    public function when_an_authenticated_member_supplies_their_company_context_then_the_company_is_bound_to_the_request(): void
+    {
+        // Given an authenticated member of a company
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = User::factory()->create();
+        $this->joinCompany($company, $user);
+        Sanctum::actingAs($user);
+
+        // When the member supplies their company context
+        $response = $this->getJson('/api/_test/company-context-probe', [
+            'X-Company-Context' => $company->getKey(),
+        ]);
+
+        // Then the resolved company is bound to the request for downstream consumers
+        $response->assertOk();
+        $response->assertJsonPath('company_id', $company->getKey());
+    }
+
     /**
      * @return array<string, array{string}>
      */
