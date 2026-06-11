@@ -9,6 +9,7 @@ use App\Consent\Aggregates\Consent;
 use App\Companies\Aggregates\Company;
 use App\Foundation\Auth\Aggregates\User;
 use App\Billing\Subscriptions\Aggregates\Subscription;
+use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Foundation\Auth\UseCases\Results\RegisterResult;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
@@ -42,7 +43,12 @@ class RegisterOwnerInteractor
             $owner->setEmergencyContact($companyId, $command)->persist();
 
             Consent::retrieve((string) Str::uuid7())
-                ->record($userId, $companyId, config('lesily.policies'), $clientIp)
+                ->record(RecordConsentCommand::validateAndCreate([
+                    'userId' => $userId,
+                    'companyId' => $companyId,
+                    'policyVersions' => config('lesily.policies'),
+                    'ip' => $clientIp,
+                ]))
                 ->persist();
 
             Subscription::retrieve((string) Str::uuid7())

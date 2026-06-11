@@ -4,6 +4,7 @@ namespace App\Consent\Aggregates;
 
 use App\Consent\Events\ConsentRecorded;
 use App\Foundation\EventStore\AggregateRoot;
+use App\Consent\UseCases\Commands\RecordConsentCommand;
 
 /**
  * Append-only consent stream (UC-1-069): no lifecycle, no guards — every consent
@@ -12,20 +13,17 @@ use App\Foundation\EventStore\AggregateRoot;
  */
 class Consent extends AggregateRoot
 {
-    /**
-     * @param  array<string, string>  $policyVersions  policyType => version
-     */
-    public function record(string $userId, string $companyId, array $policyVersions, string $ip): static
+    public function record(RecordConsentCommand $command): static
     {
-        $this->forCompany($companyId);
+        $this->forCompany($command->companyId);
 
-        foreach ($policyVersions as $policyType => $version) {
+        foreach ($command->policyVersions as $policyType => $version) {
             $this->recordThat(new ConsentRecorded(
-                userId: $userId,
-                companyId: $companyId,
+                userId: $command->userId,
+                companyId: $command->companyId,
                 policyType: $policyType,
                 version: $version,
-                ip: $ip,
+                ip: $command->ip,
             ));
         }
 
