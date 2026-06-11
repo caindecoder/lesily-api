@@ -13,6 +13,7 @@ use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
 use App\Companies\Entities\Company as CompanyReadModel;
 use App\Billing\Subscriptions\Events\SubscriptionTrialEnded;
+use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Billing\Subscriptions\UseCases\Commands\ApplyTrialExpirationCommand;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
@@ -68,7 +69,11 @@ class TrialExpiryTest extends BillingTestCase
     protected function givenCompanyAndSubscriptionOnTrial(string $companyId, string $subscriptionId): void
     {
         $this->createCompanyOnTrial($companyId);
-        Subscription::retrieve($subscriptionId)->startTrial($companyId, CarbonImmutable::now()->addDays(30))->persist();
+        $command = StartTrialCommand::validateAndCreate([
+            'companyId' => $companyId,
+            'trialEndsAt' => CarbonImmutable::now()->addDays(30),
+        ]);
+        Subscription::retrieve($subscriptionId)->startTrial($command)->persist();
     }
 
     protected function assertCompanyTrialExpired(string $companyId): void

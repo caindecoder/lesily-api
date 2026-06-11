@@ -16,6 +16,7 @@ use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
 use App\Companies\Entities\Company as CompanyReadModel;
 use App\Billing\Subscriptions\Events\SubscriptionTrialEnded;
+use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
@@ -135,7 +136,11 @@ class ExpireTrialsCommandTest extends BillingTestCase
     protected function givenTrialEndingAt(string $companyId, string $subscriptionId, CarbonInterface $trialEndsAt): void
     {
         $this->createCompanyOnTrial($companyId);
-        Subscription::retrieve($subscriptionId)->startTrial($companyId, $trialEndsAt)->persist();
+        $command = StartTrialCommand::validateAndCreate([
+            'companyId' => $companyId,
+            'trialEndsAt' => $trialEndsAt,
+        ]);
+        Subscription::retrieve($subscriptionId)->startTrial($command)->persist();
     }
 
     protected function runExpireTrials(?string $asOf = null): PendingCommand
