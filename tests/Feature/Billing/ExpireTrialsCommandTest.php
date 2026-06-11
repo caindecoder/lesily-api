@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use App\Companies\Enums\CompanyStatus;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use App\Companies\Events\CompanyTrialExpired;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -30,6 +31,10 @@ class ExpireTrialsCommandTest extends BillingTestCase
         parent::setUp();
 
         $this->travelTo(CarbonImmutable::parse('2026-07-02 09:00:00'));
+
+        // Post-#04 every genesis enrolls its owner, so expiry fires the #08
+        // owner-notification reactor; this suite tests expiry mechanics only.
+        Notification::fake();
     }
 
     // Sad (default clock) — with no --date the scan uses "now"; a trial still inside its window

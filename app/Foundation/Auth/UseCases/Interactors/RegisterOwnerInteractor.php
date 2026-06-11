@@ -26,14 +26,19 @@ class RegisterOwnerInteractor
             $userId = (string) Str::uuid7();
             $companyId = (string) Str::uuid7();
 
-            // The owner user persists first: companies.owner_id is a RESTRICT FK
-            // to users (#02), so the projector needs the users row in place before
-            // the company row lands. Same transaction — atomicity is unchanged.
-            User::retrieve($userId)->createOwner($companyId, $command)->persist();
+            // Persist order follows the FK chain (users → companies → company_user;
+            // owner_id is a RESTRICT FK per #02): the owner user first, then the
+            // company (whose projection also enrolls the owner pivot), and only
+            // then the emergency contact, which projects onto that pivot row.
+            // One transaction throughout — atomicity is unchanged.
+            $owner = User::retrieve($userId)->createOwner($companyId, $command);
+            $owner->persist();
 
             Company::retrieve($companyId)
                 ->create($this->buildCreateCompanyCommand($command, $userId))
                 ->persist();
+
+            $owner->setEmergencyContact($companyId, $command)->persist();
 
             Subscription::retrieve((string) Str::uuid7())
                 ->startTrial(StartTrialCommand::validateAndCreate([

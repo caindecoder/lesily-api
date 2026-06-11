@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use App\Companies\Events\CompanyTrialExpired;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Companies\CreatesTrialCompanies;
@@ -23,6 +24,15 @@ class TrialExpiryTest extends BillingTestCase
 {
     use CreatesTrialCompanies;
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Post-#04 every genesis enrolls its owner, so expiry fires the #08
+        // owner-notification reactor; this suite tests expiry mechanics only.
+        Notification::fake();
+    }
 
     // Sad/guard (UC-1-049 Sc5 guard) — once a trial has ended, expiring it again is a no-op.
     // This is the status guard that also skips a company that already subscribed.

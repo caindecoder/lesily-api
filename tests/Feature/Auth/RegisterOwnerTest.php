@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
-use Database\Seeders\RolesPermissionsSeeder;
+use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class RegisterOwnerTest extends AuthTestCase
@@ -23,15 +23,6 @@ class RegisterOwnerTest extends AuthTestCase
         // UC-1-136 catalog; production runs the seeder at deploy.
         $this->seedRbacCatalog();
         $this->travelTo('2026-06-08 00:00:00');
-    }
-
-    protected function seedRbacCatalog(): void
-    {
-        (new RolesPermissionsSeeder(
-            rolesYamlPath: database_path('seeders/data/roles.yaml'),
-            permissionsYamlPath: database_path('seeders/data/permissions.yaml'),
-            rolePermissionsYamlPath: database_path('seeders/data/role-permissions.yaml'),
-        ))->run();
     }
 
     // Happy — the walking skeleton: one POST stands up the whole owner account.
@@ -59,6 +50,7 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertRegistrationSucceeded($response);
         $this->assertOwnerAccountProjected('nimal@contoso.lk');
         $this->assertCompanyOnTrialWithOwner('nimal@contoso.lk');
+        $this->assertOwnerEnrolledWithEmergencyContact('nimal@contoso.lk');
     }
 
     protected function assertRegistrationSucceeded(TestResponse $response): void
@@ -82,7 +74,25 @@ class RegisterOwnerTest extends AuthTestCase
 
         $this->assertSame('Contoso', $company->name);
         $this->assertSame(CompanyStatus::Trial, $company->status);
-        $this->assertSame('2026-07-08 00:00:00', $company->trial_ends_at->toDateTimeString());
+        $this->assertSame('2026-07-08 00:00:00', $company->trial_ends_at?->toDateTimeString());
         $this->assertDatabaseHas('subscriptions', ['company_id' => $company->id, 'status' => 'trial']);
+    }
+
+    protected function assertOwnerEnrolledWithEmergencyContact(string $ownerEmail): void
+    {
+        $owner = User::query()->where('email', $ownerEmail)->sole();
+        $company = Company::query()->where('owner_id', $owner->id)->sole();
+        $ownerRole = Role::findByCode('owner');
+
+        $this->assertNotNull($ownerRole);
+        $this->assertDatabaseHas('company_user', [
+            'user_id' => $owner->id,
+            'company_id' => $company->id,
+            'role_id' => $ownerRole->getKey(),
+            'emergency_contact_name' => 'Kamala Perera',
+            'emergency_contact_email' => 'kamala@contoso.lk',
+            'emergency_contact_phone' => '+94771234567',
+            'emergency_contact_relationship' => 'spouse',
+        ]);
     }
 }
