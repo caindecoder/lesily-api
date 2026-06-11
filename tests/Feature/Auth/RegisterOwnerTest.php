@@ -3,8 +3,10 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
+use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
 use Database\Seeders\RolesPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -56,6 +58,7 @@ class RegisterOwnerTest extends AuthTestCase
         // Then the owner account is stood up atomically
         $this->assertRegistrationSucceeded($response);
         $this->assertOwnerAccountProjected('nimal@contoso.lk');
+        $this->assertCompanyOnTrialWithOwner('nimal@contoso.lk');
     }
 
     protected function assertRegistrationSucceeded(TestResponse $response): void
@@ -70,5 +73,16 @@ class RegisterOwnerTest extends AuthTestCase
 
         $this->assertSame('Nimal Perera', $user->name);
         $this->assertTrue(Hash::check('S3cure-Pass!', $user->password));
+    }
+
+    protected function assertCompanyOnTrialWithOwner(string $ownerEmail): void
+    {
+        $owner = User::query()->where('email', $ownerEmail)->sole();
+        $company = Company::query()->where('owner_id', $owner->id)->sole();
+
+        $this->assertSame('Contoso', $company->name);
+        $this->assertSame(CompanyStatus::Trial, $company->status);
+        $this->assertSame('2026-07-08 00:00:00', $company->trial_ends_at->toDateTimeString());
+        $this->assertDatabaseHas('subscriptions', ['company_id' => $company->id, 'status' => 'trial']);
     }
 }
