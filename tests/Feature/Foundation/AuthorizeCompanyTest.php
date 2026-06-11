@@ -63,7 +63,7 @@ class AuthorizeCompanyTest extends FoundationTestCase
         ]);
 
         // Then the resource is not found (per OQ-1-101(c) + api-conventions §6)
-        $this->assertResourceNotFoundEnvelope($response);
+        $this->assertResourceNotFound($response);
     }
 
     #[Test]
@@ -97,7 +97,7 @@ class AuthorizeCompanyTest extends FoundationTestCase
         ];
     }
 
-    protected function assertResourceNotFoundEnvelope(TestResponse $response): void
+    protected function assertResourceNotFound(TestResponse $response): void
     {
         $response->assertNotFound();
         $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
