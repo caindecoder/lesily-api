@@ -8,6 +8,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class AuthorizeCompanyTest extends FoundationTestCase
@@ -44,6 +45,44 @@ class AuthorizeCompanyTest extends FoundationTestCase
 
         // Then the company-scope claim is rejected
         $this->assertCompanyAccessDenied($response);
+    }
+
+    #[Test]
+    #[DataProvider('provideUnknownCompanyContexts')]
+    public function when_the_requested_company_is_unknown_then_the_resource_is_not_found(string $companyContext): void
+    {
+        // Given an authenticated member of a real company
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = User::factory()->create();
+        $this->joinCompany($company, $user);
+        Sanctum::actingAs($user);
+
+        // When the supplied company context resolves to no company
+        $response = $this->getJson('/api/_test/two-gate/secured', [
+            'X-Company-Context' => $companyContext,
+        ]);
+
+        // Then the resource is not found (per OQ-1-101(c) + api-conventions §6)
+        $this->assertResourceNotFoundEnvelope($response);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideUnknownCompanyContexts(): array
+    {
+        return [
+            'nonexistent uuid' => ['0193abcd-0000-7000-8000-000000000000'],
+            'garbage string' => ['not-a-company-id'],
+            'numeric value' => ['12345'],
+        ];
+    }
+
+    protected function assertResourceNotFoundEnvelope(TestResponse $response): void
+    {
+        $response->assertNotFound();
+        $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
     protected function assertCompanyAccessDenied(TestResponse $response): void
