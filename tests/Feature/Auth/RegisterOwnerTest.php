@@ -54,6 +54,7 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertCompanyOnTrialWithOwner('nimal@contoso.lk');
         $this->assertOwnerEnrolledWithEmergencyContact('nimal@contoso.lk');
         $this->assertConsentRecorded('nimal@contoso.lk');
+        $this->assertCompanySettingsSeeded('nimal@contoso.lk');
     }
 
     protected function assertRegistrationSucceeded(TestResponse $response): void
@@ -99,6 +100,19 @@ class RegisterOwnerTest extends AuthTestCase
             $this->assertSame($owner->id, $consent->event_properties['userId']);
             $this->assertSame('127.0.0.1', $consent->event_properties['ip']);
         }
+    }
+
+    protected function assertCompanySettingsSeeded(string $ownerEmail): void
+    {
+        $owner = User::query()->where('email', $ownerEmail)->sole();
+        $company = Company::query()->where('owner_id', $owner->id)->sole();
+
+        $this->assertDatabaseHas('company_settings', [
+            'company_id' => $company->id,
+            'currency' => 'LKR',
+            'timezone' => 'Asia/Colombo',
+            'locale_default' => 'en',
+        ]);
     }
 
     protected function assertOwnerEnrolledWithEmergencyContact(string $ownerEmail): void
