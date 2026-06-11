@@ -32,7 +32,8 @@ class AuthorizeCompanyTest extends FoundationTestCase
     }
 
     #[Test]
-    public function when_no_company_context_is_supplied_then_company_access_is_denied(): void
+    #[DataProvider('provideAbsentCompanyContexts')]
+    public function when_no_company_context_is_supplied_then_company_access_is_denied(?string $companyContext): void
     {
         // Given an authenticated member of a company
         $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
@@ -40,11 +41,23 @@ class AuthorizeCompanyTest extends FoundationTestCase
         $this->joinCompany($company, $user);
         Sanctum::actingAs($user);
 
-        // When the request supplies no company context at all
-        $response = $this->getJson('/api/_test/two-gate/secured');
+        // When the request supplies no usable company context
+        $headers = $companyContext === null ? [] : ['X-Company-Context' => $companyContext];
+        $response = $this->getJson('/api/_test/two-gate/secured', $headers);
 
         // Then the company-scope claim is rejected
         $this->assertCompanyAccessDenied($response);
+    }
+
+    /**
+     * @return array<string, array{?string}>
+     */
+    public static function provideAbsentCompanyContexts(): array
+    {
+        return [
+            'header omitted' => [null],
+            'header blank' => [''],
+        ];
     }
 
     #[Test]
@@ -104,17 +117,11 @@ class AuthorizeCompanyTest extends FoundationTestCase
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
-    protected function assertCompanyAccessDenied(TestResponse $response): void
-    {
-        $response->assertForbidden();
-        $response->assertJsonPath('error_code', 'COMPANY_ACCESS_DENIED');
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
-    }
-
     protected function assertUnauthenticatedResponse(TestResponse $response): void
     {
         $response->assertUnauthorized();
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
+        $response->assertJsonPath('message', 'Unauthenticated.');
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
         $response->assertJsonPath('errors', []);
     }

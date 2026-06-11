@@ -221,13 +221,6 @@ class TwoGateCheckTest extends FoundationTestCase
         $response->assertJsonPath('upgrade_url', '/settings/billing/upgrade');
     }
 
-    protected function assertCompanyAccessDenied(TestResponse $response): void
-    {
-        $response->assertForbidden();
-        $response->assertJsonPath('error_code', 'COMPANY_ACCESS_DENIED');
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
-    }
-
     protected function assertPermissionDenied(TestResponse $response, string $permission): void
     {
         $response->assertForbidden();

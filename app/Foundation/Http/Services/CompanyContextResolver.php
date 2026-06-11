@@ -20,7 +20,7 @@ class CompanyContextResolver
     {
         $companyKey = $request->header('X-Company-Context');
 
-        if ($companyKey === null) {
+        if ($companyKey === null || $companyKey === '') {
             throw new CompanyAccessDeniedException;
         }
 

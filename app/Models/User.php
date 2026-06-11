@@ -24,6 +24,7 @@ class User extends Authenticatable implements HasLocalePreference
 
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
+
     use HasUuids;
 
     /**
