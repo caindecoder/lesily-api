@@ -6,6 +6,7 @@ enum ApiErrorCode: string
 {
     case ValidationFailed = 'VALIDATION_FAILED';
     case Unauthenticated = 'UNAUTHENTICATED';
+    case CompanyAccessDenied = 'COMPANY_ACCESS_DENIED';
     case FeatureNotAvailable = 'FEATURE_NOT_AVAILABLE';
     case RoleInsufficient = 'ROLE_INSUFFICIENT';
     case ResourceNotFound = 'RESOURCE_NOT_FOUND';
@@ -17,6 +18,7 @@ enum ApiErrorCode: string
         return match ($this) {
             self::ValidationFailed => 422,
             self::Unauthenticated => 401,
+            self::CompanyAccessDenied => 403,
             self::FeatureNotAvailable => 403,
             self::RoleInsufficient => 403,
             self::ResourceNotFound => 404,

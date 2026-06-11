@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Laravel\Sanctum\HasApiTokens;
 use Database\Factories\UserFactory;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -19,9 +20,10 @@ use Illuminate\Contracts\Translation\HasLocalePreference;
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements HasLocalePreference
 {
+    use HasApiTokens;
+
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
-
     use HasUuids;
 
     /**
