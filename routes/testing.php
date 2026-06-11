@@ -47,20 +47,21 @@ RateLimiter::for('rate-limit-tenant', fn (Request $request) => Limit::perMinute(
 Route::get('rate-limit-tenant-probe', fn () => response()->json(['ok' => true]))
     ->middleware('throttle:rate-limit-tenant');
 
-// Two-gate probes (UC-1-055). Real feature:/permission: middleware drive the
-// billing + role gates end-to-end; the acting user + X-Company-Context header are
-// supplied by tests via WithRolePermissionFixtures.
+// Two-gate probes (UC-1-055 + OQ-1-101). The production middleware stack per
+// api-conventions §7 — auth:sanctum then the gates — drives the probes end-to-end;
+// the acting user + X-Company-Context header are supplied by tests via
+// WithRolePermissionFixtures.
 Route::get('two-gate/starter-feature', fn () => response()->json(['ok' => true]))
-    ->middleware('feature:employee_directory');
+    ->middleware(['auth:sanctum', 'feature:employee_directory']);
 
 Route::get('two-gate/pro-feature', fn () => response()->json(['ok' => true]))
-    ->middleware('feature:two_factor_auth');
+    ->middleware(['auth:sanctum', 'feature:two_factor_auth']);
 
 Route::get('two-gate/secured', fn () => response()->json(['ok' => true]))
-    ->middleware(['feature:two_factor_auth', 'permission:manage_security']);
+    ->middleware(['auth:sanctum', 'feature:two_factor_auth', 'permission:manage_security']);
 
 Route::get('two-gate/deprecated', fn () => response()->json(['ok' => true]))
-    ->middleware('feature:legacy_import');
+    ->middleware(['auth:sanctum', 'feature:legacy_import']);
 
 Route::get('two-gate/templates', fn () => response()->json(['ok' => true]))
-    ->middleware('feature:template_engine');
+    ->middleware(['auth:sanctum', 'feature:template_engine']);

@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Foundation\Application;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Validation\ValidationException;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Http\Responses\EnvelopeBuilder;
@@ -42,6 +43,11 @@ return Application::configure(basePath: dirname(__DIR__))
             ApiErrorCode::ValidationFailed,
             $e->getMessage(),
             ['errors' => $e->errors()],
+        ));
+
+        $exceptions->render(fn (AuthenticationException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::Unauthenticated,
+            'Unauthenticated.',
         ));
 
         $exceptions->render(fn (FeatureUnavailableException $e) => EnvelopeBuilder::build(
