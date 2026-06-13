@@ -54,4 +54,12 @@ class CompanyFactory extends Factory
             $company->addons()->create(['addon' => $addon]);
         });
     }
+
+    public function registeredAs(string $brNumber, string $epfNumber): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'br_number' => $brNumber,
+            'epf_number' => $epfNumber,
+        ]);
+    }
 }

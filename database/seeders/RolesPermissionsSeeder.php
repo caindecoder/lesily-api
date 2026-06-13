@@ -20,6 +20,20 @@ class RolesPermissionsSeeder extends Seeder
         private readonly string $rolePermissionsYamlPath = '',
     ) {}
 
+    /**
+     * Build the seeder against the bundled catalog YAML. The single source of the
+     * deploy/test path wiring (the ctor paths are not container-resolvable, so
+     * `$this->call(...)` can't construct it).
+     */
+    public static function fromDefaultPaths(): self
+    {
+        return new self(
+            rolesYamlPath: database_path('seeders/data/roles.yaml'),
+            permissionsYamlPath: database_path('seeders/data/permissions.yaml'),
+            rolePermissionsYamlPath: database_path('seeders/data/role-permissions.yaml'),
+        );
+    }
+
     public function run(): void
     {
         $rolesData = $this->loadYaml($this->rolesYamlPath);

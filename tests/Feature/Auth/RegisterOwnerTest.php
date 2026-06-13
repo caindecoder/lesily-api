@@ -63,27 +63,6 @@ class RegisterOwnerTest extends AuthTestCase
         $response->assertJsonPath('company_id', $companyId);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    protected function validRegistrationPayload(): array
-    {
-        return [
-            'name' => 'Nimal Perera',
-            'email' => 'nimal@contoso.lk',
-            'password' => 'S3cure-Pass!',
-            'acceptedTos' => true,
-            'companyName' => 'Contoso',
-            'brNumber' => 'PV-12345678',
-            'epfNumber' => 'A-1234567',
-            'country' => 'LK',
-            'emergencyContactName' => 'Kamala Perera',
-            'emergencyContactEmail' => 'kamala@contoso.lk',
-            'emergencyContactPhone' => '+94771234567',
-            'emergencyContactRelationship' => 'spouse',
-        ];
-    }
-
     protected function assertRegistrationSucceeded(TestResponse $response): void
     {
         $response->assertCreated();

@@ -33,7 +33,7 @@ class RegisterOwnerSadPathTest extends AuthTestCase
     public function when_the_registration_payload_is_invalid_then_it_is_rejected(array $override, string $invalidField): void
     {
         // Given an otherwise-valid signup with one invalid field
-        $payload = [...$this->validPayload(), ...$override];
+        $payload = [...$this->validRegistrationPayload(), ...$override];
 
         // When the guest submits it
         $response = $this->postJson('/api/v1/auth/register', $payload);
@@ -43,6 +43,11 @@ class RegisterOwnerSadPathTest extends AuthTestCase
     }
 
     /**
+     * Each row blanks or corrupts one field of an otherwise-valid payload. The
+     * weak-password + unaccepted-ToS rows are #05's new rules; the empty-field
+     * rows are regression guards over the `required` rules established in #02/#04
+     * (one per shape-validated field, so a dropped `required` can't survive).
+     *
      * @return array<string, array{0: array<string, mixed>, 1: string}>
      */
     public static function invalidPayloadProvider(): array
@@ -52,6 +57,12 @@ class RegisterOwnerSadPathTest extends AuthTestCase
             'terms not accepted' => [['acceptedTos' => false], 'acceptedTos'],
             'missing name' => [['name' => ''], 'name'],
             'missing email' => [['email' => ''], 'email'],
+            'missing company name' => [['companyName' => ''], 'companyName'],
+            'missing BR number' => [['brNumber' => ''], 'brNumber'],
+            'missing EPF number' => [['epfNumber' => ''], 'epfNumber'],
+            'missing country' => [['country' => ''], 'country'],
+            'missing emergency contact name' => [['emergencyContactName' => ''], 'emergencyContactName'],
+            'missing emergency contact phone' => [['emergencyContactPhone' => ''], 'emergencyContactPhone'],
         ];
     }
 
@@ -75,7 +86,7 @@ class RegisterOwnerSadPathTest extends AuthTestCase
         $companiesBefore = Company::query()->count();
 
         // When a guest registers colliding on one of them
-        $response = $this->postJson('/api/v1/auth/register', [...$this->validPayload(), ...$override]);
+        $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), ...$override]);
 
         // Then the registration conflicts and creates nothing new
         $this->assertConflict($response, $expectedCode);
@@ -96,17 +107,17 @@ class RegisterOwnerSadPathTest extends AuthTestCase
 
     protected function givenAnExistingOwnerAccount(): void
     {
-        User::factory()->create(['email' => self::EXISTING_EMAIL]);
-        Company::factory()->create([
-            'br_number' => self::EXISTING_BR,
-            'epf_number' => self::EXISTING_EPF,
-        ]);
+        User::factory()->withEmail(self::EXISTING_EMAIL)->create();
+        Company::factory()->registeredAs(self::EXISTING_BR, self::EXISTING_EPF)->create();
     }
 
     protected function assertConflict(TestResponse $response, string $expectedCode): void
     {
         $response->assertStatus(409);
         $response->assertJsonPath('error_code', $expectedCode);
+        $response->assertJsonPath('errors', []);
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+        $this->assertNotEmpty($response->json('correlation_id'));
     }
 
     protected function assertNoNewAccounts(int $usersBefore, int $companiesBefore): void
@@ -122,7 +133,7 @@ class RegisterOwnerSadPathTest extends AuthTestCase
     public function when_an_unsupported_country_is_submitted_then_nothing_is_persisted(): void
     {
         // Given a signup for a country with no seeded defaults
-        $payload = [...$this->validPayload(), 'country' => 'ZZ'];
+        $payload = [...$this->validRegistrationPayload(), 'country' => 'ZZ'];
 
         // When the guest submits it
         $response = $this->postJson('/api/v1/auth/register', $payload);
@@ -157,11 +168,31 @@ class RegisterOwnerSadPathTest extends AuthTestCase
         $this->assertThrottled($response);
     }
 
+    // Edge (rate limit) — the limit is keyed per-IP, so one abusive client can't
+    // throttle signups for everyone (the limiter is excluded from mutation testing,
+    // so this behavioural test is the only guard on the ->by(ip) key).
+    #[Test]
+    public function when_a_separate_ip_registers_then_it_is_unaffected_by_another_ips_throttle(): void
+    {
+        // Given one IP has exhausted its auth quota for the minute
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.1']);
+        $this->exhaustAuthLimit(10);
+        $this->postJson('/api/v1/auth/register', [])->assertStatus(429);
+
+        // When a different IP makes its first attempt
+        $response = $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.2'])
+            ->postJson('/api/v1/auth/register', []);
+
+        // Then it is not throttled by the other IP's exhausted quota
+        $response->assertStatus(422);
+    }
+
     protected function exhaustAuthLimit(int $allowed): void
     {
         // Each request up to the limit must pass the throttle (and only then be
         // rejected by validation) — this pins the allowance at exactly $allowed,
-        // so an off-by-one on the limit throttles one of these instead.
+        // so an off-by-one on the limit throttles one of these instead. Relies on
+        // the test array cache resetting the limiter per test method (CACHE_STORE=array).
         for ($i = 0; $i < $allowed; $i++) {
             $this->postJson('/api/v1/auth/register', [])->assertStatus(422);
         }
@@ -172,26 +203,5 @@ class RegisterOwnerSadPathTest extends AuthTestCase
         $response->assertStatus(429);
         $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
         $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    protected function validPayload(): array
-    {
-        return [
-            'name' => 'Nimal Perera',
-            'email' => 'nimal@contoso.lk',
-            'password' => 'S3cure-Pass!',
-            'acceptedTos' => true,
-            'companyName' => 'Contoso',
-            'brNumber' => 'PV-12345678',
-            'epfNumber' => 'A-1234567',
-            'country' => 'LK',
-            'emergencyContactName' => 'Kamala Perera',
-            'emergencyContactEmail' => 'kamala@contoso.lk',
-            'emergencyContactPhone' => '+94771234567',
-            'emergencyContactRelationship' => 'spouse',
-        ];
     }
 }

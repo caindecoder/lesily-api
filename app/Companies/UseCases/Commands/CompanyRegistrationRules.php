@@ -4,8 +4,9 @@ namespace App\Companies\UseCases\Commands;
 
 /**
  * Shared rule-builders for the company-registration commands (this command now;
- * RegisterOwnerCommand reuses them at the HTTP seam — slice increments 04/05,
- * where the BR/EPF Rule::unique guards are added).
+ * RegisterOwnerCommand reuses them at the HTTP seam). These are shape-level only:
+ * BR/EPF global uniqueness is a 409 conflict enforced by RegistrationUniquenessGuard
+ * (slice #05), not a 422 validation rule here.
  */
 trait CompanyRegistrationRules
 {

@@ -19,10 +19,6 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        (new RolesPermissionsSeeder(
-            rolesYamlPath: database_path('seeders/data/roles.yaml'),
-            permissionsYamlPath: database_path('seeders/data/permissions.yaml'),
-            rolePermissionsYamlPath: database_path('seeders/data/role-permissions.yaml'),
-        ))->run();
+        RolesPermissionsSeeder::fromDefaultPaths()->run();
     }
 }
