@@ -142,6 +142,35 @@ class RegisterOwnerSadPathTest extends AuthTestCase
         $this->assertDatabaseCount('stored_events', 0);
     }
 
+    // Edge (rate limit) — the public register endpoint runs under the auth-tier
+    // per-IP limit (10/min) so credential-stuffing and signup abuse are throttled.
+    #[Test]
+    public function when_registration_attempts_exceed_the_auth_rate_limit_then_they_are_throttled(): void
+    {
+        // Given the per-IP auth quota for the minute is exhausted
+        $this->exhaustAuthLimit(10);
+
+        // When another registration is attempted
+        $response = $this->postJson('/api/v1/auth/register', []);
+
+        // Then it is throttled with retry guidance
+        $this->assertThrottled($response);
+    }
+
+    protected function exhaustAuthLimit(int $allowed): void
+    {
+        for ($i = 0; $i < $allowed; $i++) {
+            $this->postJson('/api/v1/auth/register', []);
+        }
+    }
+
+    protected function assertThrottled(TestResponse $response): void
+    {
+        $response->assertStatus(429);
+        $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
+        $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
+    }
+
     /**
      * @return array<string, mixed>
      */
