@@ -12,6 +12,7 @@ use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Foundation\Auth\UseCases\Results\RegisterResult;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
+use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 
@@ -22,8 +23,15 @@ use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
  */
 class RegisterOwnerInteractor
 {
+    public function __construct(private RegistrationUniquenessGuard $uniqueness) {}
+
     public function execute(RegisterOwnerCommand $command, string $clientIp): RegisterResult
     {
+        // Reject a taken email / BR / EPF before opening the transaction, so a
+        // conflict never leaves a partial account behind (E04 §13 — do something
+        // or handle errors, not both).
+        $this->uniqueness->ensureUnique($command);
+
         return DB::transaction(function () use ($command, $clientIp): RegisterResult {
             $userId = (string) Str::uuid7();
             $companyId = (string) Str::uuid7();

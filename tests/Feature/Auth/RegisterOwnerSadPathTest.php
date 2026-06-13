@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\User;
+use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -10,6 +12,12 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 class RegisterOwnerSadPathTest extends AuthTestCase
 {
     use RefreshDatabase;
+
+    private const EXISTING_EMAIL = 'existing@contoso.lk';
+
+    private const EXISTING_BR = 'PV-99999999';
+
+    private const EXISTING_EPF = 'A-9999999';
 
     protected function setUp(): void
     {
@@ -52,6 +60,59 @@ class RegisterOwnerSadPathTest extends AuthTestCase
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
         $response->assertJsonValidationErrors($invalidField);
+    }
+
+    // Sad (conflict) — a globally-unique identifier already in use is rejected
+    // with 409 (well-formed but conflicts with current state — api-conventions §6),
+    // and nothing new is persisted.
+    #[Test]
+    #[DataProvider('duplicateFieldProvider')]
+    public function when_a_registration_field_is_already_registered_then_it_conflicts(array $override, string $expectedCode): void
+    {
+        // Given an account already holds these identifiers
+        $this->givenAnExistingOwnerAccount();
+        $usersBefore = User::query()->count();
+        $companiesBefore = Company::query()->count();
+
+        // When a guest registers colliding on one of them
+        $response = $this->postJson('/api/v1/auth/register', [...$this->validPayload(), ...$override]);
+
+        // Then the registration conflicts and creates nothing new
+        $this->assertConflict($response, $expectedCode);
+        $this->assertNoNewAccounts($usersBefore, $companiesBefore);
+    }
+
+    /**
+     * @return array<string, array{0: array<string, mixed>, 1: string}>
+     */
+    public static function duplicateFieldProvider(): array
+    {
+        return [
+            'email' => [['email' => self::EXISTING_EMAIL], 'EMAIL_REGISTERED'],
+            'business registration number' => [['brNumber' => self::EXISTING_BR], 'BR_NUMBER_REGISTERED'],
+            'employer provident fund number' => [['epfNumber' => self::EXISTING_EPF], 'EPF_NUMBER_REGISTERED'],
+        ];
+    }
+
+    protected function givenAnExistingOwnerAccount(): void
+    {
+        User::factory()->create(['email' => self::EXISTING_EMAIL]);
+        Company::factory()->create([
+            'br_number' => self::EXISTING_BR,
+            'epf_number' => self::EXISTING_EPF,
+        ]);
+    }
+
+    protected function assertConflict(TestResponse $response, string $expectedCode): void
+    {
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', $expectedCode);
+    }
+
+    protected function assertNoNewAccounts(int $usersBefore, int $companiesBefore): void
+    {
+        $this->assertSame($usersBefore, User::query()->count(), 'No user may be created on a conflict.');
+        $this->assertSame($companiesBefore, Company::query()->count(), 'No company may be created on a conflict.');
     }
 
     /**

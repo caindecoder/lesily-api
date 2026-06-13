@@ -17,6 +17,7 @@ use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
+use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -55,6 +56,11 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(fn (CompanyAccessDeniedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::CompanyAccessDenied,
+            $e->getMessage(),
+        ));
+
+        $exceptions->render(fn (RegistrationConflictException $e) => EnvelopeBuilder::build(
+            $e->errorCode,
             $e->getMessage(),
         ));
 
