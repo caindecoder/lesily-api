@@ -115,6 +115,33 @@ class RegisterOwnerSadPathTest extends AuthTestCase
         $this->assertSame($companiesBefore, Company::query()->count(), 'No company may be created on a conflict.');
     }
 
+    // Edge (atomic rollback) — an unsupported country passes shape validation but
+    // throws mid-transaction (after the owner is written), proving the whole
+    // registration rolls back as one unit.
+    #[Test]
+    public function when_an_unsupported_country_is_submitted_then_nothing_is_persisted(): void
+    {
+        // Given a signup for a country with no seeded defaults
+        $payload = [...$this->validPayload(), 'country' => 'ZZ'];
+
+        // When the guest submits it
+        $response = $this->postJson('/api/v1/auth/register', $payload);
+
+        // Then the request is rejected and the half-built account is rolled back
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'UNSUPPORTED_COUNTRY');
+        $this->assertNothingPersisted();
+    }
+
+    protected function assertNothingPersisted(): void
+    {
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('companies', 0);
+        $this->assertDatabaseCount('subscriptions', 0);
+        $this->assertDatabaseCount('company_user', 0);
+        $this->assertDatabaseCount('stored_events', 0);
+    }
+
     /**
      * @return array<string, mixed>
      */

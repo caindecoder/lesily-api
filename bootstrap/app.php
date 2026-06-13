@@ -12,6 +12,7 @@ use App\Foundation\Http\Middleware\AuthorizeCompany;
 use App\Foundation\Http\Middleware\EnsurePermission;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
@@ -61,6 +62,11 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(fn (RegistrationConflictException $e) => EnvelopeBuilder::build(
             $e->errorCode,
+            $e->getMessage(),
+        ));
+
+        $exceptions->render(fn (UnsupportedCountryException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::UnsupportedCountry,
             $e->getMessage(),
         ));
 
