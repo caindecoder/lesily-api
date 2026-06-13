@@ -10,6 +10,10 @@ enum ApiErrorCode: string
     case FeatureNotAvailable = 'FEATURE_NOT_AVAILABLE';
     case RoleInsufficient = 'ROLE_INSUFFICIENT';
     case ResourceNotFound = 'RESOURCE_NOT_FOUND';
+    case EmailRegistered = 'EMAIL_REGISTERED';
+    case BrNumberRegistered = 'BR_NUMBER_REGISTERED';
+    case EpfNumberRegistered = 'EPF_NUMBER_REGISTERED';
+    case UnsupportedCountry = 'UNSUPPORTED_COUNTRY';
     case RateLimitExceeded = 'RATE_LIMIT_EXCEEDED';
     case InternalError = 'INTERNAL_ERROR';
 
@@ -22,6 +26,10 @@ enum ApiErrorCode: string
             self::FeatureNotAvailable => 403,
             self::RoleInsufficient => 403,
             self::ResourceNotFound => 404,
+            self::EmailRegistered => 409,
+            self::BrNumberRegistered => 409,
+            self::EpfNumberRegistered => 409,
+            self::UnsupportedCountry => 422,
             self::RateLimitExceeded => 429,
             self::InternalError => 500,
         };

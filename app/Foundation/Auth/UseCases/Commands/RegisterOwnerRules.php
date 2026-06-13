@@ -31,7 +31,7 @@ trait RegisterOwnerRules
      */
     protected static function passwordRules(): array
     {
-        return ['required', 'string', 'max:255'];
+        return ['required', 'string', 'min:8', 'max:255'];
     }
 
     /**
@@ -39,7 +39,7 @@ trait RegisterOwnerRules
      */
     protected static function acceptedTosRules(): array
     {
-        return ['required', 'boolean'];
+        return ['required', 'accepted'];
     }
 
     /**

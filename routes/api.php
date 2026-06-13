@@ -10,7 +10,8 @@ use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 Route::get('/health', HealthCheckController::class)
     ->withoutMiddleware(AssignCorrelationId::class);
 
-// Owner signup — public per api-1-auth-onboarding §register. Idempotency-Key
-// (UC-1-119) + auth-tier throttle (OQ-1-098 / slice #05) attach when their
-// middleware land.
-Route::post('/v1/auth/register', RegisterController::class);
+// Owner signup — public per api-1-auth-onboarding §register, under the auth-tier
+// per-IP limit (10/min, defined in AppServiceProvider). Idempotency-Key
+// (UC-1-119) attaches when its middleware lands.
+Route::post('/v1/auth/register', RegisterController::class)
+    ->middleware('throttle:auth-tier');

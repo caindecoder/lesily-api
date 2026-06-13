@@ -57,4 +57,11 @@ class UserFactory extends Factory
             'password' => $password,
         ]);
     }
+
+    public function withEmail(string $email): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'email' => $email,
+        ]);
+    }
 }
