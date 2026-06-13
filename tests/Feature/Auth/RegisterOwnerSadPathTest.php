@@ -159,8 +159,11 @@ class RegisterOwnerSadPathTest extends AuthTestCase
 
     protected function exhaustAuthLimit(int $allowed): void
     {
+        // Each request up to the limit must pass the throttle (and only then be
+        // rejected by validation) — this pins the allowance at exactly $allowed,
+        // so an off-by-one on the limit throttles one of these instead.
         for ($i = 0; $i < $allowed; $i++) {
-            $this->postJson('/api/v1/auth/register', []);
+            $this->postJson('/api/v1/auth/register', [])->assertStatus(422);
         }
     }
 
