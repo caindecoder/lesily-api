@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 
@@ -12,14 +11,18 @@ class DatabaseSeeder extends Seeder
 
     /**
      * Seed the application's database.
+     *
+     * The RBAC catalog (UC-1-136) is a deploy precondition, not demo data:
+     * owner signup enrolls the creator against the seeded 'owner' role, so
+     * `db:seed` must run it on every environment (OQ-1-110). Instantiated
+     * directly because the seeder's YAML-source paths are not container-resolvable.
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        (new RolesPermissionsSeeder(
+            rolesYamlPath: database_path('seeders/data/roles.yaml'),
+            permissionsYamlPath: database_path('seeders/data/permissions.yaml'),
+            rolePermissionsYamlPath: database_path('seeders/data/role-permissions.yaml'),
+        ))->run();
     }
 }
