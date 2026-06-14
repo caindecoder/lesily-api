@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -22,6 +23,10 @@ class RegisterOwnerSadPathTest extends AuthTestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Registration fires the welcome + verification reactors (genesis side
+        // effects); spy them at the boundary so this suite stays about rejection.
+        Notification::fake();
 
         $this->seedRbacCatalog();
         $this->travelTo('2026-06-08 00:00:00');

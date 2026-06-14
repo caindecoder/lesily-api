@@ -33,6 +33,7 @@ class User extends AggregateRoot
             ->recordThat(new UserSignedUpAsOwner(
                 userId: $this->uuid(),
                 companyId: $companyId,
+                companyName: $command->companyName,
                 email: $command->email,
                 name: $command->name,
                 passwordHash: Hash::make($command->password),
