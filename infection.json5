@@ -49,6 +49,10 @@
                 // company-onboarding #04 (PR #47, 2026-06-12): CI cold flagged the new
                 // EC handler — same equivalent class as the entries above.
                 "App\\Companies\\Memberships\\Projectors\\MembershipProjector::onUserMembershipEmergencyContactSet",
+                // company-onboarding #07 (PR #50, 2026-06-14): CI cold flagged the welcome
+                // reactor handler — confirmed equivalent (protected still sends; local
+                // Xdebug falsely killed it, CI/PCOV escaped — amendment H).
+                "App\\Foundation\\Auth\\Reactors\\WelcomeEmailReactor::onUserSignedUpAsOwner",
             ],
         },
         // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only
