@@ -21,6 +21,8 @@ class User extends AggregateRoot
 {
     protected bool $registered = false;
 
+    protected bool $verified = false;
+
     public function createOwner(string $companyId, RegisterOwnerCommand $command): static
     {
         if ($this->registered) {
@@ -51,6 +53,10 @@ class User extends AggregateRoot
 
     public function verifyEmail(): static
     {
+        if ($this->verified) {
+            return $this;
+        }
+
         return $this->recordThat(new UserEmailVerified(
             userId: $this->uuid(),
             verifiedAt: CarbonImmutable::now(),
@@ -60,5 +66,10 @@ class User extends AggregateRoot
     protected function applyUserSignedUpAsOwner(UserSignedUpAsOwner $event): void
     {
         $this->registered = true;
+    }
+
+    protected function applyUserEmailVerified(UserEmailVerified $event): void
+    {
+        $this->verified = true;
     }
 }

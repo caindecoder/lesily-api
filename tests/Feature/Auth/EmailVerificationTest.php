@@ -39,6 +39,23 @@ class EmailVerificationTest extends AuthTestCase
         $this->assertEmailNotVerified($user);
     }
 
+    // Edge — re-following the link after verification is a harmless no-op.
+    #[Test]
+    public function when_the_email_is_already_verified_then_re_verifying_records_no_further_change(): void
+    {
+        // Given an owner who has already verified via the link
+        $user = User::factory()->unverified()->create();
+        $link = $this->verificationLinkFor($user);
+        $this->getJson($link);
+
+        // When the same link is followed again
+        $response = $this->getJson($link);
+
+        // Then it still succeeds but records no second verification
+        $response->assertOk();
+        $this->assertEmailVerifiedOnce($user);
+    }
+
     // Happy — a valid signed link verifies the owner's email exactly once.
     #[Test]
     public function when_the_owner_follows_a_valid_verification_link_then_their_email_is_verified(): void
