@@ -97,12 +97,12 @@ class EmailVerificationTest extends AuthTestCase
 
     protected function assertEmailNotVerified(User $user): void
     {
-        $this->assertNull($user->fresh()->email_verified_at);
+        $this->assertNull($user->refresh()->email_verified_at);
     }
 
     protected function assertEmailVerifiedOnce(User $user): void
     {
-        $this->assertNotNull($user->fresh()->email_verified_at);
+        $this->assertNotNull($user->refresh()->email_verified_at);
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', UserEmailVerified::class)
             ->where('event_properties->userId', $user->id)
