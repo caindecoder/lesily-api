@@ -63,19 +63,21 @@ class EmailVerificationTest extends AuthTestCase
         $this->assertEmailVerifiedOnce($user);
     }
 
-    // Happy — a valid signed link verifies the owner's email exactly once.
+    // Happy — a valid signed link verifies the owner's email exactly once, stamped now.
     #[Test]
     public function when_the_owner_follows_a_valid_verification_link_then_their_email_is_verified(): void
     {
-        // Given an unverified owner
+        // Given an unverified owner at a known instant
+        $this->travelTo('2026-06-14 12:00:00');
         $user = User::factory()->unverified()->create();
 
         // When the owner visits a valid verification link
         $response = $this->getJson($this->verificationLinkFor($user));
 
-        // Then the email is verified, recorded once
+        // Then the email is verified once and stamped with the verification time
         $response->assertOk();
         $this->assertEmailVerifiedOnce($user);
+        $this->assertSame('2026-06-14 12:00:00', $user->refresh()->email_verified_at?->toDateTimeString());
     }
 
     // Side-effect — registering as owner sends the verification email (Pattern D).
@@ -108,6 +110,15 @@ class EmailVerificationTest extends AuthTestCase
         // Then the handler is deferred to the queue and nothing is sent inline
         Queue::assertPushed(HandleStoredEventJob::class);
         Notification::assertNothingSent();
+    }
+
+    // Config contract — the deferral above only discards the email on rollback if
+    // the real queue connection waits for commit. The sync test queue can't exercise
+    // that, so pin the connection's after_commit flag against an accidental revert.
+    #[Test]
+    public function the_async_queue_connection_defers_jobs_until_after_commit(): void
+    {
+        $this->assertTrue(config('queue.connections.database.after_commit'));
     }
 
     protected function verificationLinkFor(User $user): string
