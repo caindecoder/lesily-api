@@ -2,8 +2,10 @@
 
 namespace App\Foundation\Auth\Aggregates;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Hash;
 use App\Foundation\EventStore\AggregateRoot;
+use App\Foundation\Auth\Events\UserEmailVerified;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
@@ -18,6 +20,8 @@ use App\Foundation\Auth\Exceptions\UserAlreadyRegisteredException;
 class User extends AggregateRoot
 {
     protected bool $registered = false;
+
+    protected bool $verified = false;
 
     public function createOwner(string $companyId, RegisterOwnerCommand $command): static
     {
@@ -47,8 +51,25 @@ class User extends AggregateRoot
         ));
     }
 
+    public function verifyEmail(): static
+    {
+        if ($this->verified) {
+            return $this;
+        }
+
+        return $this->recordThat(new UserEmailVerified(
+            userId: $this->uuid(),
+            verifiedAt: CarbonImmutable::now(),
+        ));
+    }
+
     protected function applyUserSignedUpAsOwner(UserSignedUpAsOwner $event): void
     {
         $this->registered = true;
+    }
+
+    protected function applyUserEmailVerified(UserEmailVerified $event): void
+    {
+        $this->verified = true;
     }
 }

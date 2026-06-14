@@ -14,6 +14,7 @@ enum ApiErrorCode: string
     case BrNumberRegistered = 'BR_NUMBER_REGISTERED';
     case EpfNumberRegistered = 'EPF_NUMBER_REGISTERED';
     case UnsupportedCountry = 'UNSUPPORTED_COUNTRY';
+    case InvalidSignature = 'INVALID_SIGNATURE';
     case RateLimitExceeded = 'RATE_LIMIT_EXCEEDED';
     case InternalError = 'INTERNAL_ERROR';
 
@@ -30,6 +31,7 @@ enum ApiErrorCode: string
             self::BrNumberRegistered => 409,
             self::EpfNumberRegistered => 409,
             self::UnsupportedCountry => 422,
+            self::InvalidSignature => 403,
             self::RateLimitExceeded => 429,
             self::InternalError => 500,
         };
