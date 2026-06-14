@@ -30,15 +30,19 @@ class EmailVerificationTest extends AuthTestCase
     #[Test]
     public function when_the_verification_link_signature_is_invalid_then_verification_is_rejected(): void
     {
-        // Given an unverified owner and a tampered verification link
+        // Given production error rendering (debug off — debug=true masks the
+        // envelope path by letting Laravel render HttpExceptions natively) and an
+        // unverified owner with a tampered verification link
+        config(['app.debug' => false]);
         $user = User::factory()->unverified()->create();
         $tamperedLink = $this->verificationLinkFor($user).'tampered';
 
         // When the tampered link is visited
         $response = $this->getJson($tamperedLink);
 
-        // Then it is rejected and the email stays unverified
+        // Then it is rejected as a forbidden envelope and the email stays unverified
         $response->assertForbidden();
+        $response->assertJsonPath('error_code', 'INVALID_SIGNATURE');
         $this->assertEmailNotVerified($user);
     }
 

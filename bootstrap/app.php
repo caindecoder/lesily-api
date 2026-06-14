@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
+use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
@@ -90,6 +91,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (NotFoundHttpException $e) => EnvelopeBuilder::build(
             ApiErrorCode::ResourceNotFound,
             'The requested resource was not found.',
+        ));
+
+        // A tampered or expired signed URL (e.g. the email-verification link). Mapped
+        // explicitly to the §S21 403 envelope — otherwise it falls through to the
+        // Throwable catch-all below, which renders 500 whenever APP_DEBUG is off (prod/CI).
+        $exceptions->render(fn (InvalidSignatureException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::InvalidSignature,
+            'The link is invalid or has expired.',
         ));
 
         $exceptions->render(function (ThrottleRequestsException $e) {
