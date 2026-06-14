@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Auth\Aggregates\User;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 use App\Foundation\Auth\Exceptions\UserAlreadyRegisteredException;
@@ -12,6 +13,15 @@ use App\Foundation\Auth\Exceptions\UserAlreadyRegisteredException;
 class UserAggregateTest extends AuthTestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // The genesis persist fires the welcome + verification reactors; spy them
+        // at the boundary so this aggregate test stays about the re-fire guard.
+        Notification::fake();
+    }
 
     // Sad — an owner can only sign up once: replaying the genesis on an existing user is rejected.
     #[Test]

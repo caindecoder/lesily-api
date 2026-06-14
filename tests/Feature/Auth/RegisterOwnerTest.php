@@ -9,6 +9,7 @@ use Illuminate\Testing\TestResponse;
 use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
 use App\Consent\Events\ConsentRecorded;
+use Illuminate\Support\Facades\Notification;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -20,6 +21,10 @@ class RegisterOwnerTest extends AuthTestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Registration fires the welcome + verification reactors (genesis side
+        // effects); spy them at the boundary so this suite stays about the account.
+        Notification::fake();
 
         // The owner pivot resolves Role::findByCode('owner') from the real
         // UC-1-136 catalog; production runs the seeder at deploy.
