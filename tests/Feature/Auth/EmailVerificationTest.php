@@ -7,6 +7,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\URL;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use App\Foundation\Auth\Events\UserEmailVerified;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -71,6 +72,20 @@ class EmailVerificationTest extends AuthTestCase
         $this->assertEmailVerifiedOnce($user);
     }
 
+    // Side-effect — registering as owner sends the verification email (Pattern D).
+    #[Test]
+    public function when_an_owner_registers_then_a_verification_email_is_sent(): void
+    {
+        // Given the RBAC catalog the owner pivot resolves against
+        $this->seedRbacCatalog();
+
+        // When a guest registers as owner
+        $this->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
+
+        // Then a verification email is sent to the new owner
+        $this->assertVerificationEmailSentTo('nimal@contoso.lk');
+    }
+
     protected function verificationLinkFor(User $user, ?CarbonImmutable $expiresAt = null): string
     {
         return URL::temporarySignedRoute(
@@ -92,5 +107,12 @@ class EmailVerificationTest extends AuthTestCase
             ->where('event_class', UserEmailVerified::class)
             ->where('event_properties->userId', $user->id)
             ->count());
+    }
+
+    protected function assertVerificationEmailSentTo(string $email): void
+    {
+        $owner = User::query()->where('email', $email)->sole();
+
+        Notification::assertSentTo($owner, VerifyEmail::class);
     }
 }
