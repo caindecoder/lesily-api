@@ -5,11 +5,13 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use App\Foundation\Auth\Events\UserEmailVerified;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\EventSourcing\StoredEvents\HandleStoredEventJob;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class EmailVerificationTest extends AuthTestCase
@@ -84,6 +86,24 @@ class EmailVerificationTest extends AuthTestCase
 
         // Then a verification email is sent to the new owner
         $this->assertVerificationEmailSentTo('nimal@contoso.lk');
+    }
+
+    // Side-effect (deferral) — the verification email is dispatched as a queued
+    // after-commit job, not sent inline; that deferral is what lets a rolled-back
+    // registration send nothing (after_commit discards the job — config property).
+    #[Test]
+    public function when_an_owner_registers_then_the_verification_email_is_queued_not_sent_inline(): void
+    {
+        // Given the email handler can only run off the queue
+        Queue::fake();
+        $this->seedRbacCatalog();
+
+        // When a guest registers as owner
+        $this->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
+
+        // Then the handler is deferred to the queue and nothing is sent inline
+        Queue::assertPushed(HandleStoredEventJob::class);
+        Notification::assertNothingSent();
     }
 
     protected function verificationLinkFor(User $user): string
