@@ -2,8 +2,10 @@
 
 namespace App\Foundation\Auth\Aggregates;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Hash;
 use App\Foundation\EventStore\AggregateRoot;
+use App\Foundation\Auth\Events\UserEmailVerified;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
@@ -44,6 +46,14 @@ class User extends AggregateRoot
             email: $command->emergencyContactEmail,
             phone: $command->emergencyContactPhone,
             relationship: $command->emergencyContactRelationship,
+        ));
+    }
+
+    public function verifyEmail(): static
+    {
+        return $this->recordThat(new UserEmailVerified(
+            userId: $this->uuid(),
+            verifiedAt: CarbonImmutable::now(),
         ));
     }
 

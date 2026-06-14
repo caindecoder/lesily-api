@@ -3,6 +3,7 @@
 namespace App\Foundation\Auth\Projectors;
 
 use App\Models\User as UserReadModel;
+use App\Foundation\Auth\Events\UserEmailVerified;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 
@@ -23,5 +24,12 @@ class UserProjector extends Projector
             'email' => $event->email,
             'password' => $event->passwordHash,
         ]);
+    }
+
+    public function onUserEmailVerified(UserEmailVerified $event): void
+    {
+        UserReadModel::query()
+            ->whereKey($event->userId)
+            ->update(['email_verified_at' => $event->verifiedAt]);
     }
 }

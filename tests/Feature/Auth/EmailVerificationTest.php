@@ -7,7 +7,9 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\URL;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
+use App\Foundation\Auth\Events\UserEmailVerified;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class EmailVerificationTest extends AuthTestCase
 {
@@ -37,6 +39,21 @@ class EmailVerificationTest extends AuthTestCase
         $this->assertEmailNotVerified($user);
     }
 
+    // Happy — a valid signed link verifies the owner's email exactly once.
+    #[Test]
+    public function when_the_owner_follows_a_valid_verification_link_then_their_email_is_verified(): void
+    {
+        // Given an unverified owner
+        $user = User::factory()->unverified()->create();
+
+        // When the owner visits a valid verification link
+        $response = $this->getJson($this->verificationLinkFor($user));
+
+        // Then the email is verified, recorded once
+        $response->assertOk();
+        $this->assertEmailVerifiedOnce($user);
+    }
+
     protected function verificationLinkFor(User $user, ?CarbonImmutable $expiresAt = null): string
     {
         return URL::temporarySignedRoute(
@@ -49,5 +66,14 @@ class EmailVerificationTest extends AuthTestCase
     protected function assertEmailNotVerified(User $user): void
     {
         $this->assertNull($user->fresh()->email_verified_at);
+    }
+
+    protected function assertEmailVerifiedOnce(User $user): void
+    {
+        $this->assertNotNull($user->fresh()->email_verified_at);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserEmailVerified::class)
+            ->where('event_properties->userId', $user->id)
+            ->count());
     }
 }
