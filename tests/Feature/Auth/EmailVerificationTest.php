@@ -86,11 +86,11 @@ class EmailVerificationTest extends AuthTestCase
         $this->assertVerificationEmailSentTo('nimal@contoso.lk');
     }
 
-    protected function verificationLinkFor(User $user, ?CarbonImmutable $expiresAt = null): string
+    protected function verificationLinkFor(User $user): string
     {
         return URL::temporarySignedRoute(
             'verification.verify',
-            $expiresAt ?? CarbonImmutable::now()->addHour(),
+            CarbonImmutable::now()->addHour(),
             ['id' => $user->id, 'hash' => sha1($user->email)],
         );
     }
@@ -98,6 +98,10 @@ class EmailVerificationTest extends AuthTestCase
     protected function assertEmailNotVerified(User $user): void
     {
         $this->assertNull($user->refresh()->email_verified_at);
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('event_class', UserEmailVerified::class)
+            ->where('event_properties->userId', $user->id)
+            ->count());
     }
 
     protected function assertEmailVerifiedOnce(User $user): void
