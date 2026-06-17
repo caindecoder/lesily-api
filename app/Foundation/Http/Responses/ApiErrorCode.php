@@ -16,6 +16,7 @@ enum ApiErrorCode: string
     case UnsupportedCountry = 'UNSUPPORTED_COUNTRY';
     case InvalidSignature = 'INVALID_SIGNATURE';
     case RateLimitExceeded = 'RATE_LIMIT_EXCEEDED';
+    case IdempotencyKeyRequired = 'IDEMPOTENCY_KEY_REQUIRED';
     case InternalError = 'INTERNAL_ERROR';
 
     public function status(): int
@@ -33,6 +34,7 @@ enum ApiErrorCode: string
             self::UnsupportedCountry => 422,
             self::InvalidSignature => 403,
             self::RateLimitExceeded => 429,
+            self::IdempotencyKeyRequired => 422,
             self::InternalError => 500,
         };
     }

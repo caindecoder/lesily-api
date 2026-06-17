@@ -11,6 +11,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use App\Foundation\Http\Middleware\AuthorizeCompany;
 use App\Foundation\Http\Middleware\EnsurePermission;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
+use App\Foundation\Http\Middleware\EnsureIdempotencyKey;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
@@ -21,6 +22,7 @@ use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -42,6 +44,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth.company' => AuthorizeCompany::class,
             'feature' => EnsureFeatureAvailable::class,
             'permission' => EnsurePermission::class,
+            'idempotency-key' => EnsureIdempotencyKey::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -99,6 +102,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (InvalidSignatureException $e) => EnvelopeBuilder::build(
             ApiErrorCode::InvalidSignature,
             'The link is invalid or has expired.',
+        ));
+
+        $exceptions->render(fn (IdempotencyKeyRequiredException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::IdempotencyKeyRequired,
+            $e->getMessage(),
         ));
 
         $exceptions->render(function (ThrottleRequestsException $e) {
