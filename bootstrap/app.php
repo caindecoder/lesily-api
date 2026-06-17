@@ -147,7 +147,7 @@ return Application::configure(basePath: dirname(__DIR__))
             $e->getStatusCode(),
             ApiErrorCode::HttpError,
             'The request could not be completed.',
-        ));
+        )->withHeaders($e->getHeaders()));
 
         $exceptions->render(function (Throwable $e) {
             if (config('app.debug')) {

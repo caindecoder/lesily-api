@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 
 Route::get('correlation-probe', fn () => response()->json([
     'downstream_correlation_id' => Context::get('correlation_id'),
@@ -93,7 +94,12 @@ Route::patch('idempotent-optional', function () {
 
 // Unmapped-HttpException probes (OQ-1-112). Any Symfony HttpException without a
 // dedicated render handler must preserve its status code (not collapse to 500
-// when APP_DEBUG=false) via the HttpExceptionInterface fallback in bootstrap.
-Route::get('error-method-not-allowed', fn () => throw new HttpException(405));
+// when APP_DEBUG=false) AND its status-mandated headers via the
+// HttpExceptionInterface fallback in bootstrap. error-method-not-allowed uses
+// the real routing exception (carries an Allow header); error-http-detail
+// proves the internal message is never leaked.
+Route::get('error-method-not-allowed', fn () => throw new MethodNotAllowedHttpException(['POST']));
 
 Route::get('error-gone', fn () => throw new HttpException(410));
+
+Route::get('error-http-detail', fn () => throw new HttpException(410, 'sensitive internal detail'));
