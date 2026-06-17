@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Context;
@@ -71,3 +72,20 @@ Route::get('two-gate/templates', fn () => response()->json(['ok' => true]))
 Route::get('company-context-probe', fn (Request $request) => response()->json([
     'company_id' => $request->company()->getKey(),
 ]))->middleware(['auth:sanctum', 'auth.company']);
+
+// Idempotency probes (UC-1-119). The production middleware (auth:sanctum then
+// idempotency-key) drives the probe. The side-effect is a dispatched event so
+// tests can assert it ran exactly once; the uuid body proves a replay is
+// byte-identical (a wrongful re-execution would mint a new uuid). Tests
+// authenticate via Sanctum::actingAs().
+Route::post('idempotent-required', function () {
+    event('probe.idempotent.executed');
+
+    return response()->json(['id' => (string) Str::uuid()], 201);
+})->middleware(['auth:sanctum', 'idempotency-key:required']);
+
+Route::patch('idempotent-optional', function () {
+    event('probe.idempotent.executed');
+
+    return response()->json(['id' => (string) Str::uuid()]);
+})->middleware(['auth:sanctum', 'idempotency-key:optional']);
