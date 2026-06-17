@@ -5,6 +5,8 @@ namespace Tests\Feature\Foundation;
 use Mockery;
 use App\Models\User;
 use RuntimeException;
+use Mockery\Expectation;
+use Mockery\MockInterface;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Event;
@@ -148,8 +150,12 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
 
     protected function mockStoreUnavailable(): void
     {
+        /** @var Repository&MockInterface $store */
         $store = Mockery::mock(Repository::class);
-        $store->shouldReceive('get')->andThrow(new RuntimeException('Redis connection refused'));
+
+        /** @var Expectation $get */
+        $get = $store->shouldReceive('get');
+        $get->andThrow(new RuntimeException('Redis connection refused'));
 
         $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
     }
