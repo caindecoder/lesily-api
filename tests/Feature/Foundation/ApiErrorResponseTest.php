@@ -5,6 +5,7 @@ namespace Tests\Feature\Foundation;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
 
 class ApiErrorResponseTest extends FoundationTestCase
 {
@@ -100,6 +101,43 @@ class ApiErrorResponseTest extends FoundationTestCase
         $response->assertSee('boom', false);
     }
 
+    #[Test]
+    public function when_an_unmapped_http_exception_carries_status_headers_then_they_are_preserved(): void
+    {
+        // Given (a method-not-allowed route, whose exception sets an Allow header)
+        config(['app.debug' => false]);
+
+        // When
+        $response = $this->getErrorProbe('error-method-not-allowed');
+
+        // Then the spec-mandated header survives the envelope rewrite (RFC 7231)
+        $response->assertStatus(405);
+        $response->assertHeader('Allow', 'POST');
+    }
+
+    #[Test]
+    public function when_an_unmapped_http_exception_has_an_internal_message_then_it_is_not_leaked(): void
+    {
+        // Given (an HttpException whose message holds developer-facing detail)
+        config(['app.debug' => false]);
+
+        // When
+        $response = $this->getErrorProbe('error-http-detail');
+
+        // Then the envelope shows the opaque generic message, never the raw detail
+        $response->assertStatus(410);
+        $response->assertJsonPath('message', 'The request could not be completed.');
+        $response->assertDontSee('sensitive internal detail', false);
+    }
+
+    #[Test]
+    public function when_the_generic_http_error_code_is_used_without_an_explicit_status_then_it_defaults_to_server_error(): void
+    {
+        // The HttpException fallback supplies the real status via buildWithStatus();
+        // used directly through the code->status() path the generic code is a 500.
+        $this->assertSame(500, ApiErrorCode::HttpError->status());
+    }
+
     public static function provideApiErrors(): array
     {
         return [
@@ -107,6 +145,8 @@ class ApiErrorResponseTest extends FoundationTestCase
             'feature gate' => ['error-feature-gate', 403, 'FEATURE_NOT_AVAILABLE'],
             'resource not found' => ['error-not-found', 404, 'RESOURCE_NOT_FOUND'],
             'http not found' => ['error-http-not-found', 404, 'RESOURCE_NOT_FOUND'],
+            'unmapped http exception preserves method-not-allowed status' => ['error-method-not-allowed', 405, 'HTTP_ERROR'],
+            'unmapped http exception preserves gone status' => ['error-gone', 410, 'HTTP_ERROR'],
             'internal error' => ['error-internal', 500, 'INTERNAL_ERROR'],
         ];
     }

@@ -12,6 +12,18 @@ class EnvelopeBuilder
      */
     public static function build(ApiErrorCode $code, string $message, array $additional = []): JsonResponse
     {
+        return self::buildWithStatus($code->status(), $code, $message, $additional);
+    }
+
+    /**
+     * Build the §S21 error envelope with an explicit HTTP status — used when the
+     * status is not fixed by the error code (e.g. the generic HTTP_ERROR fallback
+     * preserves an unmapped HttpException's own getStatusCode()).
+     *
+     * @param  array<string, mixed>  $additional
+     */
+    public static function buildWithStatus(int $status, ApiErrorCode $code, string $message, array $additional = []): JsonResponse
+    {
         $correlationId = Context::get('correlation_id');
 
         return response()->json([
@@ -24,6 +36,6 @@ class EnvelopeBuilder
             'errors' => (object) [],
             'correlation_id' => $correlationId,
             ...$additional,
-        ], $code->status())->header('Correlation-Id', $correlationId);
+        ], $status)->header('Correlation-Id', $correlationId);
     }
 }

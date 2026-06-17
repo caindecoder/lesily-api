@@ -19,6 +19,7 @@ enum ApiErrorCode: string
     case IdempotencyKeyRequired = 'IDEMPOTENCY_KEY_REQUIRED';
     case IdempotencyCacheUnavailable = 'IDEMPOTENCY_CACHE_UNAVAILABLE';
     case IdempotencyKeyConflict = 'IDEMPOTENCY_KEY_CONFLICT';
+    case HttpError = 'HTTP_ERROR';
     case InternalError = 'INTERNAL_ERROR';
 
     public function status(): int
@@ -39,6 +40,10 @@ enum ApiErrorCode: string
             self::IdempotencyKeyRequired => 422,
             self::IdempotencyCacheUnavailable => 503,
             self::IdempotencyKeyConflict => 409,
+            // Generic fallback for an unmapped HttpException. Production always
+            // preserves the exception's real status via buildWithStatus(); this 500
+            // is only the default required for match() exhaustiveness.
+            self::HttpError => 500,
             self::InternalError => 500,
         };
     }
