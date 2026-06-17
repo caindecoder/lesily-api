@@ -83,6 +83,35 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_two_users_send_the_same_key_then_each_request_is_processed_independently(): void
+    {
+        // Given two authenticated users sharing one Idempotency-Key
+        Event::fake();
+        $key = 'shared-key-1234';
+        $otherUser = User::factory()->create();
+
+        // When both send a mutation with that key
+        $first = $this->sendRequiredMutation(key: $key, user: $this->user);
+        $second = $this->sendRequiredMutation(key: $key, user: $otherUser);
+
+        // Then each request is processed independently, not replayed against the other
+        $this->assertBothProcessedIndependently($first, $second);
+    }
+
+    #[Test]
+    public function when_a_first_request_carries_a_new_key_then_it_is_processed_and_its_outcome_is_remembered(): void
+    {
+        // Given a fresh Idempotency-Key never seen before
+        Event::fake();
+
+        // When the user sends the mutation
+        $response = $this->sendRequiredMutation(key: 'a1b2c3d4-fresh');
+
+        // Then it is processed once, with no replay
+        $this->assertProcessedFreshly($response);
+    }
+
+    #[Test]
     public function when_a_processed_key_is_retried_then_the_original_outcome_is_replayed_without_repeating_side_effects(): void
     {
         // Given a mutation already succeeded under an Idempotency-Key
@@ -159,6 +188,21 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $replay->assertHeader('Idempotency-Replayed', 'true');
         $replay->assertHeader('Content-Type', $first->headers->get('Content-Type'));
         $this->assertSame($first->json('id'), $replay->json('id'));
+        Event::assertDispatchedTimes('probe.idempotent.executed', 1);
+    }
+
+    protected function assertBothProcessedIndependently(TestResponse $first, TestResponse $second): void
+    {
+        $first->assertCreated();
+        $second->assertCreated();
+        $this->assertNotSame($first->json('id'), $second->json('id'));
+        Event::assertDispatchedTimes('probe.idempotent.executed', 2);
+    }
+
+    protected function assertProcessedFreshly(TestResponse $response): void
+    {
+        $response->assertCreated();
+        $response->assertHeaderMissing('Idempotency-Replayed');
         Event::assertDispatchedTimes('probe.idempotent.executed', 1);
     }
 }
