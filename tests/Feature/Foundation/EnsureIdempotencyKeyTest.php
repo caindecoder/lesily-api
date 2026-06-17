@@ -2,13 +2,16 @@
 
 namespace Tests\Feature\Foundation;
 
+use Mockery;
 use App\Models\User;
+use RuntimeException;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Event;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Contracts\Cache\Repository;
 use App\Foundation\Http\Services\IdempotencyCache;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 
 class EnsureIdempotencyKeyTest extends FoundationTestCase
 {
@@ -52,6 +55,21 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $this->assertRefusedAsStoreUnavailable($response);
     }
 
+    #[Test]
+    public function when_the_same_key_is_reused_for_a_different_request_then_it_is_rejected_as_a_key_conflict(): void
+    {
+        // Given a mutation already succeeded under an Idempotency-Key
+        Event::fake();
+        $key = 'a1b2c3d4-conflict';
+        $this->sendRequiredMutation(key: $key, body: ['type' => 'access'])->assertCreated();
+
+        // When the same key is reused with a different request body
+        $response = $this->sendRequiredMutation(key: $key, body: ['type' => 'deletion']);
+
+        // Then the request is rejected and the original side-effect is not repeated
+        $this->assertRejectedAsKeyConflict($response);
+    }
+
     protected function sendRequiredMutation(?string $key = null, array $body = [], ?User $user = null): TestResponse
     {
         Sanctum::actingAs($user ?? $this->user);
@@ -63,9 +81,10 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
 
     protected function mockStoreUnavailable(): void
     {
-        $this->mock(IdempotencyCache::class)
-            ->shouldReceive('lookup')
-            ->andThrow(new IdempotencyCacheUnavailableException);
+        $store = Mockery::mock(Repository::class);
+        $store->shouldReceive('get')->andThrow(new RuntimeException('Redis connection refused'));
+
+        $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
     }
 
     protected function assertRejectedAsMissingKey(TestResponse $response): void
@@ -80,5 +99,12 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $response->assertStatus(503);
         $response->assertJsonPath('error_code', 'IDEMPOTENCY_CACHE_UNAVAILABLE');
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    protected function assertRejectedAsKeyConflict(TestResponse $response): void
+    {
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', 'IDEMPOTENCY_KEY_CONFLICT');
+        Event::assertDispatchedTimes('probe.idempotent.executed', 1);
     }
 }

@@ -22,6 +22,7 @@ use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 
@@ -112,6 +113,11 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(fn (IdempotencyCacheUnavailableException $e) => EnvelopeBuilder::build(
             ApiErrorCode::IdempotencyCacheUnavailable,
+            $e->getMessage(),
+        ));
+
+        $exceptions->render(fn (IdempotencyKeyConflictException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::IdempotencyKeyConflict,
             $e->getMessage(),
         ));
 
