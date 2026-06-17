@@ -82,6 +82,23 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $this->assertProcessedWithoutReplay($response);
     }
 
+    #[Test]
+    public function when_a_processed_key_is_retried_then_the_original_outcome_is_replayed_without_repeating_side_effects(): void
+    {
+        // Given a mutation already succeeded under an Idempotency-Key
+        Event::fake();
+        $key = 'a1b2c3d4-replay';
+        $body = ['type' => 'access'];
+        $first = $this->sendRequiredMutation(key: $key, body: $body);
+        $first->assertCreated();
+
+        // When the identical request is retried with the same key
+        $replay = $this->sendRequiredMutation(key: $key, body: $body);
+
+        // Then the original response is replayed and the side-effect is not repeated
+        $this->assertReplayed($first, $replay);
+    }
+
     protected function sendRequiredMutation(?string $key = null, array $body = [], ?User $user = null): TestResponse
     {
         Sanctum::actingAs($user ?? $this->user);
@@ -134,5 +151,14 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $response->assertOk();
         $response->assertHeaderMissing('Idempotency-Replayed');
         $response->assertJsonStructure(['id']);
+    }
+
+    protected function assertReplayed(TestResponse $first, TestResponse $replay): void
+    {
+        $replay->assertCreated();
+        $replay->assertHeader('Idempotency-Replayed', 'true');
+        $replay->assertHeader('Content-Type', $first->headers->get('Content-Type'));
+        $this->assertSame($first->json('id'), $replay->json('id'));
+        Event::assertDispatchedTimes('probe.idempotent.executed', 1);
     }
 }

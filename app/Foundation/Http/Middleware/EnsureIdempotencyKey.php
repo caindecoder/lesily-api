@@ -41,8 +41,12 @@ class EnsureIdempotencyKey
         $requestHash = $this->requestHash($request);
         $cached = $this->cache->lookup($compositeKey);
 
-        if ($cached !== null && $cached['request_hash'] !== $requestHash) {
-            throw new IdempotencyKeyConflictException;
+        if ($cached !== null) {
+            if ($cached['request_hash'] !== $requestHash) {
+                throw new IdempotencyKeyConflictException;
+            }
+
+            return $this->replay($cached);
         }
 
         $response = $next($request);
@@ -76,6 +80,17 @@ class EnsureIdempotencyKey
             'request_hash' => $requestHash,
             'status' => $response->getStatusCode(),
             'body' => (string) $response->getContent(),
+            'content_type' => (string) $response->headers->get('Content-Type'),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $cached
+     */
+    private function replay(array $cached): Response
+    {
+        return response((string) $cached['body'], (int) $cached['status'])
+            ->header('Content-Type', (string) $cached['content_type'])
+            ->header('Idempotency-Replayed', 'true');
     }
 }
