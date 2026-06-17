@@ -70,6 +70,18 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $this->assertRejectedAsKeyConflict($response);
     }
 
+    #[Test]
+    public function when_an_optional_route_is_called_without_a_key_then_the_request_is_processed_without_caching(): void
+    {
+        // Given a route where the Idempotency-Key is optional and the client omits it
+
+        // When the user sends the mutation
+        $response = $this->sendOptionalMutation();
+
+        // Then it is processed normally, with no replay guarantee
+        $this->assertProcessedWithoutReplay($response);
+    }
+
     protected function sendRequiredMutation(?string $key = null, array $body = [], ?User $user = null): TestResponse
     {
         Sanctum::actingAs($user ?? $this->user);
@@ -77,6 +89,15 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $headers = $key === null ? [] : ['Idempotency-Key' => $key];
 
         return $this->postJson('/api/_test/idempotent-required', $body, $headers);
+    }
+
+    protected function sendOptionalMutation(?string $key = null): TestResponse
+    {
+        Sanctum::actingAs($this->user);
+
+        $headers = $key === null ? [] : ['Idempotency-Key' => $key];
+
+        return $this->patchJson('/api/_test/idempotent-optional', [], $headers);
     }
 
     protected function mockStoreUnavailable(): void
@@ -106,5 +127,12 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $response->assertStatus(409);
         $response->assertJsonPath('error_code', 'IDEMPOTENCY_KEY_CONFLICT');
         Event::assertDispatchedTimes('probe.idempotent.executed', 1);
+    }
+
+    protected function assertProcessedWithoutReplay(TestResponse $response): void
+    {
+        $response->assertOk();
+        $response->assertHeaderMissing('Idempotency-Replayed');
+        $response->assertJsonStructure(['id']);
     }
 }

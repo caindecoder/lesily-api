@@ -83,3 +83,9 @@ Route::post('idempotent-required', function () {
 
     return response()->json(['id' => (string) Str::uuid()], 201);
 })->middleware(['auth:sanctum', 'idempotency-key:required']);
+
+Route::patch('idempotent-optional', function () {
+    event('probe.idempotent.executed');
+
+    return response()->json(['id' => (string) Str::uuid()]);
+})->middleware(['auth:sanctum', 'idempotency-key:optional']);
