@@ -58,6 +58,19 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_the_store_fails_after_a_mutation_succeeds_then_the_response_is_still_returned(): void
+    {
+        // Given the store misses on lookup but fails on the write afterwards
+        $this->mockStoreWriteFails();
+
+        // When the mutation is processed and the cache write fails
+        $response = $this->sendRequiredMutation(key: 'a1b2c3d4-write-fail');
+
+        // Then the already-successful mutation is returned, not turned into an error
+        $response->assertCreated();
+    }
+
+    #[Test]
     public function when_the_same_key_is_reused_for_a_different_request_then_it_is_rejected_as_a_key_conflict(): void
     {
         // Given a mutation already succeeded under an Idempotency-Key
@@ -101,6 +114,21 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_the_same_key_is_used_on_two_different_routes_then_each_is_processed_independently(): void
+    {
+        // Given one Idempotency-Key reused across two different routes
+        Event::fake();
+        $key = 'cross-route-key';
+
+        // When the user sends it to the required (POST) route and the optional (PATCH) route
+        $required = $this->sendRequiredMutation(key: $key);
+        $optional = $this->sendOptionalMutation(key: $key);
+
+        // Then each route processes independently — no cross-route replay
+        $this->assertProcessedOnDistinctRoutes($required, $optional);
+    }
+
+    #[Test]
     public function when_a_first_request_carries_a_new_key_then_it_is_processed_and_its_outcome_is_remembered(): void
     {
         // Given a fresh Idempotency-Key never seen before
@@ -111,6 +139,30 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
 
         // Then it is processed once, with no replay
         $this->assertProcessedFreshly($response);
+    }
+
+    #[Test]
+    public function when_a_fresh_request_is_cached_then_it_is_stored_for_the_24h_dedup_window(): void
+    {
+        // Given a cache store whose write we can observe
+        /** @var Repository&MockInterface $store */
+        $store = Mockery::mock(Repository::class);
+
+        /** @var Expectation $get */
+        $get = $store->shouldReceive('get');
+        $get->andReturnNull();
+
+        /** @var Expectation $put */
+        $put = $store->shouldReceive('put');
+        $put->once()->with(Mockery::type('string'), Mockery::type('array'), 86400);
+
+        $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
+
+        // When a fresh mutation is processed
+        $response = $this->sendRequiredMutation(key: 'a1b2c3d4-ttl');
+
+        // Then it is cached with a 24-hour TTL
+        $response->assertCreated();
     }
 
     #[Test]
@@ -160,6 +212,22 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
     }
 
+    protected function mockStoreWriteFails(): void
+    {
+        /** @var Repository&MockInterface $store */
+        $store = Mockery::mock(Repository::class);
+
+        /** @var Expectation $get */
+        $get = $store->shouldReceive('get');
+        $get->andReturnNull();
+
+        /** @var Expectation $put */
+        $put = $store->shouldReceive('put');
+        $put->andThrow(new RuntimeException('Redis connection refused'));
+
+        $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
+    }
+
     protected function assertRejectedAsMissingKey(TestResponse $response): void
     {
         $response->assertStatus(422);
@@ -202,6 +270,14 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $first->assertCreated();
         $second->assertCreated();
         $this->assertNotSame($first->json('id'), $second->json('id'));
+        Event::assertDispatchedTimes('probe.idempotent.executed', 2);
+    }
+
+    protected function assertProcessedOnDistinctRoutes(TestResponse $required, TestResponse $optional): void
+    {
+        $required->assertCreated();
+        $optional->assertOk();
+        $this->assertNotSame($required->json('id'), $optional->json('id'));
         Event::assertDispatchedTimes('probe.idempotent.executed', 2);
     }
 

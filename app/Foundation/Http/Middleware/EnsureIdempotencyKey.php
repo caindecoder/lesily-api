@@ -24,7 +24,7 @@ class EnsureIdempotencyKey
 {
     public function __construct(private readonly IdempotencyCache $cache) {}
 
-    public function handle(Request $request, Closure $next, string $mode = 'required'): Response
+    public function handle(Request $request, Closure $next, string $mode): Response
     {
         $key = $request->header('Idempotency-Key');
 
@@ -59,16 +59,17 @@ class EnsureIdempotencyKey
     private function compositeKey(Request $request, string $key): string
     {
         return sprintf(
-            'idempotency:%s:%s:%s',
+            'idempotency:%s:%s:%s:%s',
             $key,
-            (string) $request->route()?->uri(),
+            $request->method(),
+            $request->path(),
             (string) $request->user()?->getAuthIdentifier(),
         );
     }
 
     private function requestHash(Request $request): string
     {
-        return hash('sha256', $request->getContent());
+        return hash('sha256', (string) $request->getQueryString().'|'.$request->getContent());
     }
 
     /**
