@@ -6,7 +6,9 @@ use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Http\Services\IdempotencyCache;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 
 class EnsureIdempotencyKeyTest extends FoundationTestCase
 {
@@ -18,6 +20,11 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
     {
         parent::setUp();
         $this->user = User::factory()->create();
+
+        // Error-path render parity (amendment M): APP_DEBUG=true (the local
+        // default) masks the prod render path. Idempotency rejections must
+        // render their mapped envelopes the same way CI/prod do.
+        config(['app.debug' => false]);
     }
 
     #[Test]
@@ -32,6 +39,19 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $this->assertRejectedAsMissingKey($response);
     }
 
+    #[Test]
+    public function when_the_idempotency_store_is_unreachable_on_a_required_route_then_the_request_is_refused(): void
+    {
+        // Given the idempotency store is unreachable
+        $this->mockStoreUnavailable();
+
+        // When an authenticated user sends a mutation carrying a valid key
+        $response = $this->sendRequiredMutation(key: 'a1b2c3d4-store-down');
+
+        // Then the request is refused rather than risking a duplicate side-effect
+        $this->assertRefusedAsStoreUnavailable($response);
+    }
+
     protected function sendRequiredMutation(?string $key = null, array $body = [], ?User $user = null): TestResponse
     {
         Sanctum::actingAs($user ?? $this->user);
@@ -41,10 +61,24 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         return $this->postJson('/api/_test/idempotent-required', $body, $headers);
     }
 
+    protected function mockStoreUnavailable(): void
+    {
+        $this->mock(IdempotencyCache::class)
+            ->shouldReceive('lookup')
+            ->andThrow(new IdempotencyCacheUnavailableException);
+    }
+
     protected function assertRejectedAsMissingKey(TestResponse $response): void
     {
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'IDEMPOTENCY_KEY_REQUIRED');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    protected function assertRefusedAsStoreUnavailable(TestResponse $response): void
+    {
+        $response->assertStatus(503);
+        $response->assertJsonPath('error_code', 'IDEMPOTENCY_CACHE_UNAVAILABLE');
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 }

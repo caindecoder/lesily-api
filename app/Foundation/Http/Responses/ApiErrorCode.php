@@ -17,6 +17,7 @@ enum ApiErrorCode: string
     case InvalidSignature = 'INVALID_SIGNATURE';
     case RateLimitExceeded = 'RATE_LIMIT_EXCEEDED';
     case IdempotencyKeyRequired = 'IDEMPOTENCY_KEY_REQUIRED';
+    case IdempotencyCacheUnavailable = 'IDEMPOTENCY_CACHE_UNAVAILABLE';
     case InternalError = 'INTERNAL_ERROR';
 
     public function status(): int
@@ -35,6 +36,7 @@ enum ApiErrorCode: string
             self::InvalidSignature => 403,
             self::RateLimitExceeded => 429,
             self::IdempotencyKeyRequired => 422,
+            self::IdempotencyCacheUnavailable => 503,
             self::InternalError => 500,
         };
     }
