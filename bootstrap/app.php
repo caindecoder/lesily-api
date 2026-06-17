@@ -22,6 +22,7 @@ use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
@@ -136,6 +137,17 @@ return Application::configure(basePath: dirname(__DIR__))
                 'X-RateLimit-Reset' => (string) $e->getHeaders()['X-RateLimit-Reset'],
             ]);
         });
+
+        // Status-preserving fallback for any Symfony HttpException without a
+        // dedicated handler (405, 410, 415, …). Registered AFTER the specific
+        // HttpException handlers (404, 403 signed-link, 429) so those win, and
+        // BEFORE the Throwable catch-all so unmapped HttpExceptions keep their
+        // real status instead of collapsing to 500 when APP_DEBUG=false (OQ-1-112).
+        $exceptions->render(fn (HttpExceptionInterface $e) => EnvelopeBuilder::buildWithStatus(
+            $e->getStatusCode(),
+            ApiErrorCode::HttpError,
+            'The request could not be completed.',
+        ));
 
         $exceptions->render(function (Throwable $e) {
             if (config('app.debug')) {

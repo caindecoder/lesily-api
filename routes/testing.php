@@ -8,6 +8,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -89,3 +90,10 @@ Route::patch('idempotent-optional', function () {
 
     return response()->json(['id' => (string) Str::uuid()]);
 })->middleware(['auth:sanctum', 'idempotency-key:optional']);
+
+// Unmapped-HttpException probes (OQ-1-112). Any Symfony HttpException without a
+// dedicated render handler must preserve its status code (not collapse to 500
+// when APP_DEBUG=false) via the HttpExceptionInterface fallback in bootstrap.
+Route::get('error-method-not-allowed', fn () => throw new HttpException(405));
+
+Route::get('error-gone', fn () => throw new HttpException(410));
