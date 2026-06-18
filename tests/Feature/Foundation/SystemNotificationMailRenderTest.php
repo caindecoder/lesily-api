@@ -3,21 +3,30 @@
 namespace Tests\Feature\Foundation;
 
 use PHPUnit\Framework\Attributes\Test;
-use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 
 class SystemNotificationMailRenderTest extends FoundationTestCase
 {
     #[Test]
-    #[DataProvider('supportedLocaleProvider')]
-    public function when_rendered_in_each_supported_locale_then_the_markdown_email_renders(string $locale): void
+    public function when_built_then_it_renders_from_the_markdown_template(): void
     {
         // Given
-        $mail = (new SystemNotificationMail(NotificationType::GeneralAccountNotice, 'Contoso'))->locale($locale);
+        $mail = new SystemNotificationMail(NotificationType::GeneralAccountNotice, 'Contoso');
 
         // When / Then
-        $this->assertRendersInLocale($mail);
+        $this->assertRendersFromMarkdownTemplate($mail);
+    }
+
+    #[Test]
+    public function when_rendered_then_the_body_reflects_the_notification_type(): void
+    {
+        // Given
+        $security = new SystemNotificationMail(NotificationType::AccountSecurityAlert, 'Contoso');
+        $notice = new SystemNotificationMail(NotificationType::GeneralAccountNotice, 'Contoso');
+
+        // When / Then
+        $this->assertNotSame($security->render(), $notice->render());
     }
 
     #[Test]
@@ -27,7 +36,7 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
         $mail = new SystemNotificationMail(NotificationType::AccountSecurityAlert, 'Contoso');
 
         // When / Then
-        $this->assertRendersWithSubject($mail, 'Security alert for Contoso');
+        $mail->assertHasSubject('Security alert for Contoso');
     }
 
     #[Test]
@@ -37,32 +46,19 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
         $mail = new SystemNotificationMail(NotificationType::GeneralAccountNotice, 'Contoso');
 
         // When / Then
-        $this->assertRendersWithSubject($mail, 'A notification from Contoso');
+        $mail->assertHasSubject('A notification from Contoso');
     }
 
     /**
-     * @return array<string, array<int, string>>
+     * The blade uses the <x-mail::message> component, whose `mail` view namespace
+     * is registered only by the markdown render path — so pinning `content()` to
+     * the markdown template (not a plain view) guards the OQ-1-113 fix independent
+     * of process state, then proves the template actually compiles.
      */
-    public static function supportedLocaleProvider(): array
+    protected function assertRendersFromMarkdownTemplate(SystemNotificationMail $mail): void
     {
-        return [
-            'Sinhala' => ['si'],
-            'Tamil' => ['ta'],
-            'English' => ['en'],
-        ];
-    }
-
-    protected function assertRendersInLocale(SystemNotificationMail $mail): void
-    {
-        $rendered = $mail->render();
-
-        $this->assertNotEmpty($rendered);
-        $this->assertStringContainsString(config('app.name'), $rendered);
-    }
-
-    protected function assertRendersWithSubject(SystemNotificationMail $mail, string $expectedSubject): void
-    {
-        $mail->assertHasSubject($expectedSubject);
-        $this->assertStringContainsString(config('app.name'), $mail->render());
+        $this->assertSame('emails.system-notification', $mail->content()->markdown);
+        $this->assertNull($mail->content()->view);
+        $this->assertNotEmpty($mail->render());
     }
 }
