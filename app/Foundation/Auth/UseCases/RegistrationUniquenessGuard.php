@@ -4,6 +4,7 @@ namespace App\Foundation\Auth\UseCases;
 
 use App\Models\User;
 use App\Companies\Entities\Company;
+use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 
@@ -28,5 +29,10 @@ class RegistrationUniquenessGuard
         if (Company::query()->where('epf_number', $command->epfNumber)->exists()) {
             throw RegistrationConflictException::forEpfNumber();
         }
+    }
+
+    public function conflictFor(UniqueConstraintViolationException $violation): ?RegistrationConflictException
+    {
+        return null;
     }
 }
