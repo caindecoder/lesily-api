@@ -2,13 +2,12 @@
 
 namespace Tests\Feature\Auth;
 
-use Tests\TestCase;
 use RuntimeException;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
 
-class RegistrationUniquenessGuardTest extends TestCase
+class RegistrationUniquenessGuardTest extends AuthTestCase
 {
     // Edge — a unique violation on a constraint outside the registration field set
     // (email / BR / EPF) must NOT be disguised as a registration conflict. The

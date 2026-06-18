@@ -9,8 +9,10 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
+use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 
 class RegisterOwnerSadPathTest extends AuthTestCase
 {
@@ -131,6 +133,7 @@ class RegisterOwnerSadPathTest extends AuthTestCase
     {
         $this->assertSame($usersBefore, User::query()->count(), 'No user may be created on a conflict.');
         $this->assertSame($companiesBefore, Company::query()->count(), 'No company may be created on a conflict.');
+        $this->assertDatabaseCount('stored_events', 0);
     }
 
     // Edge (race backstop) — two concurrent signups can both pass the pre-tx
@@ -142,7 +145,6 @@ class RegisterOwnerSadPathTest extends AuthTestCase
     {
         // Given an account already holds these identifiers, and the pre-tx guard is
         // bypassed to reproduce the concurrent race that slips past check-then-act
-        config(['app.debug' => false]);
         $this->givenAnExistingOwnerAccount();
         $this->bypassUniquenessGuard();
         $usersBefore = User::query()->count();
@@ -165,6 +167,37 @@ class RegisterOwnerSadPathTest extends AuthTestCase
         {
             public function ensureUnique(RegisterOwnerCommand $command): void {}
         });
+    }
+
+    // Edge (re-raise) — a unique violation the translator cannot map (an index
+    // outside email/BR/EPF) must surface as the original 500, never be masked as a
+    // registration 409. Bypassing the guard AND nulling the translation forces the
+    // backstop down the unmapped path while a real duplicate still trips the index.
+    #[Test]
+    public function when_the_backstop_cannot_map_the_violation_then_the_original_error_is_not_masked(): void
+    {
+        // Given the pre-tx guard is bypassed and the translator maps nothing
+        config(['app.debug' => false]);
+        $this->givenAnExistingOwnerAccount();
+        $this->app->instance(RegistrationUniquenessGuard::class, new class extends RegistrationUniquenessGuard
+        {
+            public function ensureUnique(RegisterOwnerCommand $command): void {}
+
+            public function conflictFor(UniqueConstraintViolationException $violation): ?RegistrationConflictException
+            {
+                return null;
+            }
+        });
+        $usersBefore = User::query()->count();
+        $companiesBefore = Company::query()->count();
+
+        // When a guest collides on email so the DB UNIQUE constraint genuinely fires
+        $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), 'email' => self::EXISTING_EMAIL]);
+
+        // Then the original database fault surfaces, never a masked conflict
+        $response->assertStatus(500);
+        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
+        $this->assertNoNewAccounts($usersBefore, $companiesBefore);
     }
 
     // Edge (atomic rollback) — an unsupported country passes shape validation but
