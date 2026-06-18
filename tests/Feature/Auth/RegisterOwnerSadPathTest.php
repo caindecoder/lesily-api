@@ -9,6 +9,8 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
+use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 
 class RegisterOwnerSadPathTest extends AuthTestCase
 {
@@ -129,6 +131,40 @@ class RegisterOwnerSadPathTest extends AuthTestCase
     {
         $this->assertSame($usersBefore, User::query()->count(), 'No user may be created on a conflict.');
         $this->assertSame($companiesBefore, Company::query()->count(), 'No company may be created on a conflict.');
+    }
+
+    // Edge (race backstop) — two concurrent signups can both pass the pre-tx
+    // check-then-act guard; the second to persist hits the DB UNIQUE constraint.
+    // That backstop must surface the same field-specific 409, never a 500.
+    #[Test]
+    #[DataProvider('duplicateFieldProvider')]
+    public function when_a_race_slips_past_the_uniqueness_guard_then_the_database_backstop_still_conflicts(array $override, string $expectedCode): void
+    {
+        // Given an account already holds these identifiers, and the pre-tx guard is
+        // bypassed to reproduce the concurrent race that slips past check-then-act
+        config(['app.debug' => false]);
+        $this->givenAnExistingOwnerAccount();
+        $this->bypassUniquenessGuard();
+        $usersBefore = User::query()->count();
+        $companiesBefore = Company::query()->count();
+
+        // When a guest registers colliding on one of them
+        $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), ...$override]);
+
+        // Then the database backstop conflicts identically and creates nothing new
+        $this->assertConflict($response, $expectedCode);
+        $this->assertNoNewAccounts($usersBefore, $companiesBefore);
+    }
+
+    protected function bypassUniquenessGuard(): void
+    {
+        // Replace the pre-transaction check with a no-op so the request reaches the
+        // DB UNIQUE constraint — the only honest single-process way to exercise the
+        // race backstop, where the conflict is detected by the database, not the guard.
+        $this->app->instance(RegistrationUniquenessGuard::class, new class extends RegistrationUniquenessGuard
+        {
+            public function ensureUnique(RegisterOwnerCommand $command): void {}
+        });
     }
 
     // Edge (atomic rollback) — an unsupported country passes shape validation but

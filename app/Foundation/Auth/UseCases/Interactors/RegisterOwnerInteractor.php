@@ -12,6 +12,7 @@ use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Foundation\Auth\UseCases\Results\RegisterResult;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
+use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
@@ -32,42 +33,54 @@ class RegisterOwnerInteractor
         // or handle errors, not both).
         $this->uniqueness->ensureUnique($command);
 
-        return DB::transaction(function () use ($command, $clientIp): RegisterResult {
-            $userId = (string) Str::uuid7();
-            $companyId = (string) Str::uuid7();
+        return $this->persistRegistration($command, $clientIp);
+    }
 
-            // Persist order follows the FK chain (users → companies → company_user;
-            // owner_id is a RESTRICT FK per #02): the owner user first, then the
-            // company (whose projection also enrolls the owner pivot), and only
-            // then the emergency contact, which projects onto that pivot row.
-            // One transaction throughout — atomicity is unchanged.
-            $owner = User::retrieve($userId)->createOwner($companyId, $command);
-            $owner->persist();
+    private function persistRegistration(RegisterOwnerCommand $command, string $clientIp): RegisterResult
+    {
+        try {
+            return DB::transaction(function () use ($command, $clientIp): RegisterResult {
+                $userId = (string) Str::uuid7();
+                $companyId = (string) Str::uuid7();
 
-            Company::retrieve($companyId)
-                ->create($this->buildCreateCompanyCommand($command, $userId))
-                ->persist();
+                // Persist order follows the FK chain (users → companies → company_user;
+                // owner_id is a RESTRICT FK per #02): the owner user first, then the
+                // company (whose projection also enrolls the owner pivot), and only
+                // then the emergency contact, which projects onto that pivot row.
+                // One transaction throughout — atomicity is unchanged.
+                $owner = User::retrieve($userId)->createOwner($companyId, $command);
+                $owner->persist();
 
-            $owner->setEmergencyContact($companyId, $command)->persist();
+                Company::retrieve($companyId)
+                    ->create($this->buildCreateCompanyCommand($command, $userId))
+                    ->persist();
 
-            Consent::retrieve((string) Str::uuid7())
-                ->record(RecordConsentCommand::validateAndCreate([
-                    'userId' => $userId,
-                    'companyId' => $companyId,
-                    'policyVersions' => config('lesily.policies'),
-                    'ip' => $clientIp,
-                ]))
-                ->persist();
+                $owner->setEmergencyContact($companyId, $command)->persist();
 
-            Subscription::retrieve((string) Str::uuid7())
-                ->startTrial(StartTrialCommand::validateAndCreate([
-                    'companyId' => $companyId,
-                    'trialEndsAt' => CarbonImmutable::now()->addDays(Company::TRIAL_DAYS),
-                ]))
-                ->persist();
+                Consent::retrieve((string) Str::uuid7())
+                    ->record(RecordConsentCommand::validateAndCreate([
+                        'userId' => $userId,
+                        'companyId' => $companyId,
+                        'policyVersions' => config('lesily.policies'),
+                        'ip' => $clientIp,
+                    ]))
+                    ->persist();
 
-            return new RegisterResult(userId: $userId, companyId: $companyId);
-        });
+                Subscription::retrieve((string) Str::uuid7())
+                    ->startTrial(StartTrialCommand::validateAndCreate([
+                        'companyId' => $companyId,
+                        'trialEndsAt' => CarbonImmutable::now()->addDays(Company::TRIAL_DAYS),
+                    ]))
+                    ->persist();
+
+                return new RegisterResult(userId: $userId, companyId: $companyId);
+            });
+        } catch (UniqueConstraintViolationException $violation) {
+            // A concurrent signup slipped past the pre-tx guard; the DB UNIQUE index
+            // is the backstop. Surface the same field-specific conflict — or re-raise
+            // an unmapped violation untouched, so a genuine fault is never masked as a 409.
+            throw $this->uniqueness->conflictFor($violation) ?? $violation;
+        }
     }
 
     protected function buildCreateCompanyCommand(RegisterOwnerCommand $command, string $ownerUserId): CreateCompanyCommand

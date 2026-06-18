@@ -16,6 +16,14 @@ use App\Foundation\Auth\Exceptions\RegistrationConflictException;
  */
 class RegistrationUniquenessGuard
 {
+    // Laravel's default unique-index names ({table}_{column}_unique); the DB
+    // backstop reports these when a concurrent signup races past ensureUnique().
+    private const EMAIL_INDEX = 'users_email_unique';
+
+    private const BR_NUMBER_INDEX = 'companies_br_number_unique';
+
+    private const EPF_NUMBER_INDEX = 'companies_epf_number_unique';
+
     public function ensureUnique(RegisterOwnerCommand $command): void
     {
         if (User::query()->where('email', $command->email)->exists()) {
@@ -33,6 +41,11 @@ class RegistrationUniquenessGuard
 
     public function conflictFor(UniqueConstraintViolationException $violation): ?RegistrationConflictException
     {
-        return null;
+        return match ($violation->index) {
+            self::EMAIL_INDEX => RegistrationConflictException::forEmail(),
+            self::BR_NUMBER_INDEX => RegistrationConflictException::forBrNumber(),
+            self::EPF_NUMBER_INDEX => RegistrationConflictException::forEpfNumber(),
+            default => null,
+        };
     }
 }
