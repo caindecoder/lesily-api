@@ -49,6 +49,6 @@ class SystemNotificationMail extends Mailable implements ShouldQueue
 
     public function content(): Content
     {
-        return new Content(view: 'emails.system-notification');
+        return new Content(markdown: 'emails.system-notification');
     }
 }
