@@ -68,6 +68,32 @@ class RegisterOwnerTest extends AuthTestCase
         $response->assertJsonPath('company_id', $companyId);
     }
 
+    // Happy — a double-submitted signup (double-click / network retry) carrying an
+    // Idempotency-Key replays the first account instead of hitting the uniqueness
+    // backstop (OQ-1-114 register optional mount).
+    #[Test]
+    public function when_an_owner_signup_is_double_submitted_with_a_key_then_the_account_is_returned_without_a_duplicate(): void
+    {
+        // Given a guest signs up carrying an Idempotency-Key
+        $payload = $this->validRegistrationPayload();
+        $headers = ['Idempotency-Key' => 'a1b2c3d4-signup'];
+        $first = $this->postJson('/api/v1/auth/register', $payload, $headers);
+
+        // When the identical signup is submitted again with the same key
+        $second = $this->postJson('/api/v1/auth/register', $payload, $headers);
+
+        // Then the original account is replayed and no duplicate company is created
+        $this->assertReplayedWithoutDuplicate($first, $second);
+    }
+
+    protected function assertReplayedWithoutDuplicate(TestResponse $first, TestResponse $second): void
+    {
+        $first->assertCreated();
+        $second->assertHeader('Idempotency-Replayed', 'true');
+        $this->assertSame($first->json('data.company.id'), $second->json('data.company.id'));
+        $this->assertSame(1, Company::query()->count());
+    }
+
     protected function assertRegistrationSucceeded(TestResponse $response): void
     {
         $response->assertCreated();
