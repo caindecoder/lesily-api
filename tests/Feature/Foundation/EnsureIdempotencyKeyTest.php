@@ -148,9 +148,10 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         /** @var Repository&MockInterface $store */
         $store = Mockery::mock(Repository::class);
 
-        /** @var Expectation $get */
-        $get = $store->shouldReceive('get');
-        $get->andReturnNull();
+        // Winner reserves, then completes — the remembered result carries the 24h TTL.
+        /** @var Expectation $add */
+        $add = $store->shouldReceive('add');
+        $add->andReturnTrue();
 
         /** @var Expectation $put */
         $put = $store->shouldReceive('put');
@@ -182,6 +183,21 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $this->assertReplayed($first, $replay);
     }
 
+    #[Test]
+    public function when_a_concurrent_duplicate_arrives_while_the_first_is_in_flight_then_it_is_rejected_as_already_processing(): void
+    {
+        // Given a first request already holds the reservation and is still in flight
+        Event::fake();
+        $this->mockStoreReservationHeld();
+
+        // When a concurrent request reuses the same key before the first completes
+        $response = $this->sendRequiredMutation(key: 'a1b2c3d4-in-flight');
+
+        // Then it is rejected as already processing, without re-running the mutation
+        $this->assertRejectedAsProcessing($response);
+        Event::assertNotDispatched('probe.idempotent.executed');
+    }
+
     protected function sendRequiredMutation(?string $key = null, array $body = [], ?User $user = null): TestResponse
     {
         Sanctum::actingAs($user ?? $this->user);
@@ -205,9 +221,11 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         /** @var Repository&MockInterface $store */
         $store = Mockery::mock(Repository::class);
 
-        /** @var Expectation $get */
-        $get = $store->shouldReceive('get');
-        $get->andThrow(new RuntimeException('Redis connection refused'));
+        // Reserve-first: the atomic add is the first store touch, so failing it
+        // exercises the fail-closed path.
+        /** @var Expectation $add */
+        $add = $store->shouldReceive('add');
+        $add->andThrow(new RuntimeException('Redis connection refused'));
 
         $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
     }
@@ -217,13 +235,32 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         /** @var Repository&MockInterface $store */
         $store = Mockery::mock(Repository::class);
 
-        /** @var Expectation $get */
-        $get = $store->shouldReceive('get');
-        $get->andReturnNull();
+        // Winner reserves successfully, then the result write (complete) fails.
+        /** @var Expectation $add */
+        $add = $store->shouldReceive('add');
+        $add->andReturnTrue();
 
         /** @var Expectation $put */
         $put = $store->shouldReceive('put');
         $put->andThrow(new RuntimeException('Redis connection refused'));
+
+        $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
+    }
+
+    protected function mockStoreReservationHeld(): void
+    {
+        /** @var Repository&MockInterface $store */
+        $store = Mockery::mock(Repository::class);
+
+        // Another request won the reservation race — the atomic add fails and the
+        // entry is still PENDING (the winner has not completed yet).
+        /** @var Expectation $add */
+        $add = $store->shouldReceive('add');
+        $add->andReturnFalse();
+
+        /** @var Expectation $get */
+        $get = $store->shouldReceive('get');
+        $get->andReturn(['state' => 'pending']);
 
         $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
     }
@@ -247,6 +284,14 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $response->assertStatus(409);
         $response->assertJsonPath('error_code', 'IDEMPOTENCY_KEY_CONFLICT');
         Event::assertDispatchedTimes('probe.idempotent.executed', 1);
+    }
+
+    protected function assertRejectedAsProcessing(TestResponse $response): void
+    {
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', 'IDEMPOTENCY_KEY_PROCESSING');
+        $response->assertHeader('Retry-After', '1');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
     protected function assertProcessedWithoutReplay(TestResponse $response): void

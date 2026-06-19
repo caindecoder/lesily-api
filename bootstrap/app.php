@@ -25,6 +25,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
+use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -121,6 +122,16 @@ return Application::configure(basePath: dirname(__DIR__))
             ApiErrorCode::IdempotencyKeyConflict,
             $e->getMessage(),
         ));
+
+        // A concurrent duplicate lost the atomic reservation race while the first
+        // request is still in flight (OQ-1-114). Mirrors the throttle handler:
+        // retry_after in the body + a Retry-After header so the client retries
+        // into the replay path once the winner completes.
+        $exceptions->render(fn (IdempotencyKeyProcessingException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::IdempotencyKeyProcessing,
+            $e->getMessage(),
+            ['retry_after' => $e->retryAfter],
+        )->withHeaders(['Retry-After' => (string) $e->retryAfter]));
 
         $exceptions->render(function (ThrottleRequestsException $e) {
             // Laravel's ThrottleRequests middleware is the only source of this exception and
