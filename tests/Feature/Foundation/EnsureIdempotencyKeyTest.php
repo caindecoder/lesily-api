@@ -338,6 +338,7 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
     {
         $response->assertStatus(409);
         $response->assertJsonPath('error_code', 'IDEMPOTENCY_KEY_PROCESSING');
+        $response->assertJsonPath('retry_after', 1);
         $response->assertHeader('Retry-After', '1');
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }

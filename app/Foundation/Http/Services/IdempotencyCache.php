@@ -21,6 +21,11 @@ use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
  */
 class IdempotencyCache
 {
+    // The reservation TTL is both the crash safety-net and the ceiling on safe
+    // in-flight duration: it MUST exceed worst-case request processing time, or a
+    // winner still running when it expires lets a concurrent duplicate re-reserve
+    // and double-execute. 60s comfortably exceeds any current synchronous mutation
+    // (register is one fast transaction, further backstopped by its DB-unique 409).
     private const int RESERVATION_TTL_SECONDS = 60;
 
     private const int RESULT_TTL_SECONDS = 86400;

@@ -52,10 +52,11 @@ class EnsureIdempotencyKey
         if ($response->isSuccessful()) {
             $this->cache->complete($compositeKey, $this->snapshot($response, $requestHash));
         } else {
-            // A failed attempt protected no side-effect — release the reservation so
-            // the key can be retried immediately rather than waiting out its TTL.
-            // Laravel's routing pipeline renders a thrown exception into a non-2xx
-            // response below this middleware, so this also covers errored attempts.
+            // Release a failed attempt's reservation so the key is retryable
+            // immediately rather than waiting out its TTL. Safe for mutations whose
+            // side-effects are atomic + uniqueness-backstopped (register persists in
+            // one event-sourced transaction behind its DB-unique 409). Laravel's
+            // routing pipeline also lands thrown exceptions here as a rendered non-2xx.
             $this->cache->release($compositeKey);
         }
 
@@ -72,7 +73,7 @@ class EnsureIdempotencyKey
     {
         $entry = $this->cache->lookup($compositeKey);
 
-        if ($entry === null || $entry['state'] === 'pending') {
+        if ($entry === null || ($entry['state'] ?? null) === 'pending') {
             throw new IdempotencyKeyProcessingException;
         }
 

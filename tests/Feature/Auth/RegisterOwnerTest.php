@@ -89,6 +89,7 @@ class RegisterOwnerTest extends AuthTestCase
     protected function assertReplayedWithoutDuplicate(TestResponse $first, TestResponse $second): void
     {
         $first->assertCreated();
+        $second->assertCreated();
         $second->assertHeader('Idempotency-Replayed', 'true');
         $this->assertSame($first->json('data.company.id'), $second->json('data.company.id'));
         $this->assertSame(1, Company::query()->count());
