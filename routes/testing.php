@@ -102,6 +102,16 @@ Route::post('idempotent-failing', function () {
     return response()->json(['error' => 'rejected'], 422);
 })->middleware(['auth:sanctum', 'idempotency-key:required']);
 
+// Throwing-mutation probe (OQ-1-114). Throws after firing the executed event so
+// tests can prove the reservation is released when the attempt errors out (the
+// common register failure mode is a thrown exception, not a non-2xx response):
+// a retry with the same key re-executes instead of being blocked.
+Route::post('idempotent-throwing', function () {
+    event('probe.idempotent.executed');
+
+    throw new RuntimeException('boom');
+})->middleware(['auth:sanctum', 'idempotency-key:required']);
+
 // Unmapped-HttpException probes (OQ-1-112). Any Symfony HttpException without a
 // dedicated render handler must preserve its status code (not collapse to 500
 // when APP_DEBUG=false) AND its status-mandated headers via the

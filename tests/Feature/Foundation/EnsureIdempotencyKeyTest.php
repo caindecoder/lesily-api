@@ -213,6 +213,21 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $this->assertReattemptedAfterFailure($first, $second);
     }
 
+    #[Test]
+    public function when_an_attempt_throws_then_the_reservation_is_released_so_the_key_can_be_retried(): void
+    {
+        // Given a mutation that errors out (throws) under an Idempotency-Key
+        Event::fake();
+        $key = 'a1b2c3d4-threw';
+
+        // When it is sent, errors, and is retried with the same key
+        $first = $this->sendThrowingMutation(key: $key);
+        $second = $this->sendThrowingMutation(key: $key);
+
+        // Then the reservation was released, so the retry re-executes rather than being blocked
+        $this->assertReattemptedAfterError($first, $second);
+    }
+
     protected function sendRequiredMutation(?string $key = null, array $body = [], ?User $user = null): TestResponse
     {
         Sanctum::actingAs($user ?? $this->user);
@@ -238,6 +253,15 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $headers = $key === null ? [] : ['Idempotency-Key' => $key];
 
         return $this->postJson('/api/_test/idempotent-failing', [], $headers);
+    }
+
+    protected function sendThrowingMutation(?string $key = null): TestResponse
+    {
+        Sanctum::actingAs($this->user);
+
+        $headers = $key === null ? [] : ['Idempotency-Key' => $key];
+
+        return $this->postJson('/api/_test/idempotent-throwing', [], $headers);
     }
 
     protected function mockStoreUnavailable(): void
@@ -322,6 +346,13 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
     {
         $first->assertStatus(422);
         $second->assertStatus(422);
+        Event::assertDispatchedTimes('probe.idempotent.executed', 2);
+    }
+
+    protected function assertReattemptedAfterError(TestResponse $first, TestResponse $second): void
+    {
+        $first->assertStatus(500);
+        $second->assertStatus(500);
         Event::assertDispatchedTimes('probe.idempotent.executed', 2);
     }
 

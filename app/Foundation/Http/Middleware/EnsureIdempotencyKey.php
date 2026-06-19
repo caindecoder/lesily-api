@@ -54,6 +54,8 @@ class EnsureIdempotencyKey
         } else {
             // A failed attempt protected no side-effect — release the reservation so
             // the key can be retried immediately rather than waiting out its TTL.
+            // Laravel's routing pipeline renders a thrown exception into a non-2xx
+            // response below this middleware, so this also covers errored attempts.
             $this->cache->release($compositeKey);
         }
 
