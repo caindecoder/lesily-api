@@ -51,6 +51,10 @@ class EnsureIdempotencyKey
 
         if ($response->isSuccessful()) {
             $this->cache->complete($compositeKey, $this->snapshot($response, $requestHash));
+        } else {
+            // A failed attempt protected no side-effect — release the reservation so
+            // the key can be retried immediately rather than waiting out its TTL.
+            $this->cache->release($compositeKey);
         }
 
         return $response;

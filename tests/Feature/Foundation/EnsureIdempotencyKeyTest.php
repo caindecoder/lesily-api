@@ -198,6 +198,21 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         Event::assertNotDispatched('probe.idempotent.executed');
     }
 
+    #[Test]
+    public function when_the_first_attempt_fails_then_the_reservation_is_released_so_the_key_can_be_retried(): void
+    {
+        // Given a mutation that fails under an Idempotency-Key
+        Event::fake();
+        $key = 'a1b2c3d4-released';
+
+        // When it is sent, fails, and is retried with the same key
+        $first = $this->sendFailingMutation(key: $key);
+        $second = $this->sendFailingMutation(key: $key);
+
+        // Then the reservation was released, so the retry re-executes rather than being blocked
+        $this->assertReattemptedAfterFailure($first, $second);
+    }
+
     protected function sendRequiredMutation(?string $key = null, array $body = [], ?User $user = null): TestResponse
     {
         Sanctum::actingAs($user ?? $this->user);
@@ -214,6 +229,15 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $headers = $key === null ? [] : ['Idempotency-Key' => $key];
 
         return $this->patchJson('/api/_test/idempotent-optional', [], $headers);
+    }
+
+    protected function sendFailingMutation(?string $key = null): TestResponse
+    {
+        Sanctum::actingAs($this->user);
+
+        $headers = $key === null ? [] : ['Idempotency-Key' => $key];
+
+        return $this->postJson('/api/_test/idempotent-failing', [], $headers);
     }
 
     protected function mockStoreUnavailable(): void
@@ -292,6 +316,13 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $response->assertJsonPath('error_code', 'IDEMPOTENCY_KEY_PROCESSING');
         $response->assertHeader('Retry-After', '1');
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    protected function assertReattemptedAfterFailure(TestResponse $first, TestResponse $second): void
+    {
+        $first->assertStatus(422);
+        $second->assertStatus(422);
+        Event::assertDispatchedTimes('probe.idempotent.executed', 2);
     }
 
     protected function assertProcessedWithoutReplay(TestResponse $response): void

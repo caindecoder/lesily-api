@@ -73,4 +73,18 @@ class IdempotencyCache
             // Best effort (see the reserve() docblock).
         }
     }
+
+    /**
+     * Drop a reservation whose request did not succeed, so the key can be retried
+     * immediately instead of waiting out the reservation TTL. Best-effort: a
+     * failed release just leaves the short-lived reservation to self-expire.
+     */
+    public function release(string $compositeKey): void
+    {
+        try {
+            $this->store->forget($compositeKey);
+        } catch (Throwable) {
+            // Best effort (see above).
+        }
+    }
 }
