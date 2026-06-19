@@ -8,17 +8,20 @@ use Symfony\Component\HttpFoundation\Response;
 use App\Foundation\Http\Services\IdempotencyCache;
 use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
+use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 
 /**
- * Mutation idempotency (UC-1-119) — applied per-route on POST/PATCH/DELETE. A
- * route opts in as `idempotency-key:required` or `idempotency-key:optional`.
+ * Mutation idempotency (UC-1-119 + OQ-1-114) — applied per-route on
+ * POST/PATCH/DELETE. A route opts in as `idempotency-key:required` or
+ * `idempotency-key:optional`.
  *
+ * Reserve-first (atomic put-if-absent) closes the concurrent check-then-act race:
  * - Required route, no `Idempotency-Key` header → IdempotencyKeyRequiredException (422)
  * - Store unreachable                           → IdempotencyCacheUnavailableException (503, fail closed)
- * - Same key, different request body            → IdempotencyKeyConflictException (409)
- * - Cache miss                                  → process, then cache the response under the composite key
- *
- * Replaying a matching repeat is layered on in the final UC-1-119 cycle.
+ * - Reservation won (winner)                    → process, then remember the response (pending → done)
+ * - Reservation lost, first still in flight     → IdempotencyKeyProcessingException (409 + Retry-After)
+ * - Reservation lost, completed, same body      → replay the remembered response
+ * - Reservation lost, completed, different body → IdempotencyKeyConflictException (409)
  */
 class EnsureIdempotencyKey
 {
@@ -39,21 +42,46 @@ class EnsureIdempotencyKey
 
         $compositeKey = $this->compositeKey($request, $key);
         $requestHash = $this->requestHash($request);
-        $cached = $this->cache->lookup($compositeKey);
 
-        if ($cached !== null) {
-            if ($cached['request_hash'] !== $requestHash) {
-                throw new IdempotencyKeyConflictException;
-            }
-
-            return $this->replay($cached);
+        if (! $this->cache->reserve($compositeKey)) {
+            return $this->resolveExisting($compositeKey, $requestHash);
         }
 
         $response = $next($request);
 
-        $this->cache->remember($compositeKey, $this->snapshot($response, $requestHash));
+        if ($response->isSuccessful()) {
+            $this->cache->complete($compositeKey, $this->snapshot($response, $requestHash));
+        } else {
+            // Release a failed attempt's reservation so the key is retryable
+            // immediately rather than waiting out its TTL. Safe for mutations whose
+            // side-effects are atomic + uniqueness-backstopped (register persists in
+            // one event-sourced transaction behind its DB-unique 409). Laravel's
+            // routing pipeline also lands thrown exceptions here as a rendered non-2xx.
+            $this->cache->release($compositeKey);
+        }
 
         return $response;
+    }
+
+    /**
+     * The reservation was already held — branch on the existing entry. A still
+     * in-flight (pending) reservation, or one that expired in the race gap, is
+     * told to retry; a completed entry replays for a matching body or conflicts
+     * for a different one.
+     */
+    private function resolveExisting(string $compositeKey, string $requestHash): Response
+    {
+        $entry = $this->cache->lookup($compositeKey);
+
+        if ($entry === null || ($entry['state'] ?? null) === 'pending') {
+            throw new IdempotencyKeyProcessingException;
+        }
+
+        if ($entry['request_hash'] !== $requestHash) {
+            throw new IdempotencyKeyConflictException;
+        }
+
+        return $this->replay($entry);
     }
 
     private function compositeKey(Request $request, string $key): string
