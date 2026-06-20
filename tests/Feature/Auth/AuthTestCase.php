@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use Tests\TestCase;
 use App\Models\User;
+use Illuminate\Testing\TestResponse;
 
 abstract class AuthTestCase extends TestCase
 {
@@ -49,5 +50,33 @@ abstract class AuthTestCase extends TestCase
             'emergencyContactPhone' => '+94771234567',
             'emergencyContactRelationship' => 'spouse',
         ];
+    }
+
+    /**
+     * Exhaust the shared auth-tier per-IP limit against $endpoint. Each request up
+     * to the limit must pass the throttle (and only then be rejected by validation),
+     * pinning the allowance at exactly $allowed — an off-by-one on the limit
+     * throttles one of these instead. Relies on the array cache resetting the
+     * limiter per test method (CACHE_STORE=array). Shared by the auth suites (§2.10).
+     */
+    protected function exhaustAuthLimit(int $allowed, string $endpoint): void
+    {
+        for ($i = 0; $i < $allowed; $i++) {
+            $this->postJson($endpoint, [])->assertStatus(422);
+        }
+    }
+
+    protected function assertThrottled(TestResponse $response): void
+    {
+        $response->assertStatus(429);
+        $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
+        $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
+    }
+
+    protected function assertValidationRejected(TestResponse $response, string $invalidField): void
+    {
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
+        $response->assertJsonValidationErrors($invalidField);
     }
 }

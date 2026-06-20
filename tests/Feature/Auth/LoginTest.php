@@ -106,7 +106,7 @@ class LoginTest extends AuthTestCase
     public function when_login_attempts_from_one_ip_exceed_the_limit_then_further_attempts_are_throttled(): void
     {
         // Given the per-IP auth quota for the minute is exhausted
-        $this->exhaustAuthLimit(10);
+        $this->exhaustAuthLimit(10, '/api/v1/auth/login');
 
         // When another login is attempted
         $response = $this->postJson('/api/v1/auth/login', []);
@@ -203,6 +203,8 @@ class LoginTest extends AuthTestCase
         $response->assertOk();
         $response->assertJsonStructure(['data' => ['token', 'expiresAt', 'user' => ['id', 'name', 'email']]]);
         $response->assertJsonPath('data.user.email', $user->email);
+        // The user block whitelists {id,name,email}; pin that the hash never leaks.
+        $response->assertJsonMissingPath('data.user.password');
     }
 
     protected function assertCredentialsRejected(TestResponse $response): void
@@ -210,31 +212,6 @@ class LoginTest extends AuthTestCase
         $response->assertStatus(401);
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
         $response->assertJsonPath('message', 'Invalid credentials.');
-    }
-
-    protected function assertValidationRejected(TestResponse $response, string $invalidField): void
-    {
-        $response->assertStatus(422);
-        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
-        $response->assertJsonValidationErrors($invalidField);
-    }
-
-    protected function exhaustAuthLimit(int $allowed): void
-    {
-        // Each request up to the limit must pass the throttle (and only then be
-        // rejected by validation) — this pins the allowance at exactly $allowed, so
-        // an off-by-one on the limit throttles one of these instead. Relies on the
-        // test array cache resetting the limiter per test method (CACHE_STORE=array).
-        for ($i = 0; $i < $allowed; $i++) {
-            $this->postJson('/api/v1/auth/login', [])->assertStatus(422);
-        }
-    }
-
-    protected function assertThrottled(TestResponse $response): void
-    {
-        $response->assertStatus(429);
-        $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
-        $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
     }
 
     protected function assertSameRejection(TestResponse $unknownEmail, TestResponse $wrongPassword): void

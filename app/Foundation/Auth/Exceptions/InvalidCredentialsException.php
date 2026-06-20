@@ -2,7 +2,7 @@
 
 namespace App\Foundation\Auth\Exceptions;
 
-use Exception;
+use RuntimeException;
 
 /**
  * A login attempt failed the credential check — unknown email OR wrong password.
@@ -10,4 +10,4 @@ use Exception;
  * response never discloses which was wrong (anti-enumeration, UC-1-002 3a/3b).
  * Rendered to the §S21 401 envelope reusing ApiErrorCode::Unauthenticated.
  */
-class InvalidCredentialsException extends Exception {}
+class InvalidCredentialsException extends RuntimeException {}

@@ -17,11 +17,16 @@ use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 class AuthenticateUserInteractor
 {
     /**
-     * A throwaway bcrypt hash (cost 12 — matches config('hashing.bcrypt.rounds'))
-     * checked against when no user matches, so a Hash::check ALWAYS runs. An
-     * unknown email then costs the same as a wrong password and the two cannot be
-     * told apart by response timing — the timing half of UC-1-002 anti-enumeration
-     * (the body half is the single InvalidCredentialsException).
+     * A throwaway bcrypt hash checked against when no user matches, so a Hash::check
+     * ALWAYS runs and an unknown email costs the same as a wrong password — the
+     * timing half of UC-1-002 anti-enumeration (the body half is the single
+     * InvalidCredentialsException). Pre-computed (not Hash::make-d per request) so the
+     * unknown-email path is exactly one Hash::check, matching the wrong-password path.
+     *
+     * Fixed at cost 12 to match production BCRYPT_ROUNDS (config/hashing default).
+     * The match is manual, not enforced: regenerate this if production rounds change.
+     * (Test/CI run a lower cost; the timing property is prod-focused and untested by
+     * design — a timing assertion would be flaky, forbidden by Rule #13.)
      */
     private const TIMING_SAFE_DUMMY_HASH = '$2y$12$rc/xHxvyPz3y0IfKBMF5Zenttym7cQMSCCFx.9JaiV3IuaMW2FJo2';
 
