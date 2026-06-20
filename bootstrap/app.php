@@ -18,6 +18,7 @@ use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
 use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
+use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
@@ -61,6 +62,15 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (AuthenticationException $e) => EnvelopeBuilder::build(
             ApiErrorCode::Unauthenticated,
             'Unauthenticated.',
+        ));
+
+        // A failed login (unknown email OR wrong password). Distinct from the
+        // missing-token AuthenticationException above: same 401 code, but a
+        // login-specific message — and byte-identical for both failure causes so
+        // the response never reveals which was wrong (UC-1-002 anti-enumeration).
+        $exceptions->render(fn (InvalidCredentialsException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::Unauthenticated,
+            'Invalid credentials.',
         ));
 
         $exceptions->render(fn (CompanyAccessDeniedException $e) => EnvelopeBuilder::build(

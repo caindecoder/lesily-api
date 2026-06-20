@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
+use App\Foundation\Auth\IO\Http\Controllers\LoginController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
@@ -18,6 +19,12 @@ Route::get('/health', HealthCheckController::class)
 // for 24h. Concurrent duplicates are data-safe via the DB-uniqueness 409
 // backstop (OQ-1-111); mount idempotency here only once token caching is resolved.
 Route::post('/v1/auth/register', RegisterController::class)
+    ->middleware('throttle:auth-tier');
+
+// Email+password login (UC-1-002) — public per api-1-auth-onboarding §login, under
+// the same auth-tier per-IP limit (10/min) as register. Token-only (cd-auth token-only
+// banner): the credential check issues a Sanctum token, no domain event.
+Route::post('/v1/auth/login', LoginController::class)
     ->middleware('throttle:auth-tier');
 
 // Email verification (UC-1-001 alt-6a) — the signed link IS the credential (no
