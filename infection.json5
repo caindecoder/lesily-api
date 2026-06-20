@@ -67,20 +67,6 @@
                 "App\\Foundation\\Billing\\Enums\\BillingPlan::features",
             ],
         },
-        // MethodCallRemoval on AuthenticateUserInteractor::execute is an equivalent
-        // mutant for ONE call only: the timing-equalization Hash::check on the
-        // unknown-email path, whose return is deliberately discarded (it runs purely
-        // so an unknown email costs the same as a wrong password — anti-enumeration
-        // timing half, UC-1-002). Removing it changes no observable behavior (the
-        // throw still fires the identical 401), so no behavioral test can kill it;
-        // only a forbidden timing test could. The other Hash::check in the method
-        // has its result USED in the condition, so it is not an MCR target and stays
-        // a real, killable mutant. Scoped to this ONE method. See UC-1-002 (2026-06-21).
-        "MethodCallRemoval": {
-            ignore: [
-                "App\\Foundation\\Auth\\UseCases\\Interactors\\AuthenticateUserInteractor::execute",
-            ],
-        },
     },
     minMsi: 80,
     minCoveredMsi: 85,
