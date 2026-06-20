@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
 use App\Foundation\Auth\UseCases\Commands\LoginCommand;
+use App\Foundation\Auth\IO\Http\Resources\LoginResource;
 use App\Foundation\Auth\UseCases\Interactors\AuthenticateUserInteractor;
 
 /**
@@ -18,9 +19,9 @@ class LoginController extends Controller
     public function __invoke(Request $request, AuthenticateUserInteractor $interactor): JsonResponse
     {
         $command = LoginCommand::validateAndCreate($request);
-        $interactor->execute($command);
+        $user = $interactor->execute($command);
+        $token = $user->createToken($command->deviceName ?? 'web');
 
-        // Happy-path token issuance + LoginResource built RED-first in UC-1-002 #5–#7.
-        return response()->json([]);
+        return (new LoginResource($user, $token->plainTextToken, $token->accessToken->expires_at))->response();
     }
 }

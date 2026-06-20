@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\User;
 use Illuminate\Support\Arr;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -111,6 +112,30 @@ class LoginTest extends AuthTestCase
 
         // Then it is throttled with retry guidance
         $this->assertThrottled($response);
+    }
+
+    // Happy — valid credentials return a Sanctum token and the user record.
+    #[Test]
+    public function when_valid_credentials_are_submitted_then_the_token_and_user_are_returned(): void
+    {
+        // Given a registered user
+        $user = $this->aRegisteredUser();
+
+        // When they submit valid credentials
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then a token and their user record are returned
+        $this->assertLoginSucceeded($response, $user);
+    }
+
+    protected function assertLoginSucceeded(TestResponse $response, User $user): void
+    {
+        $response->assertOk();
+        $response->assertJsonStructure(['data' => ['token', 'expiresAt', 'user' => ['id', 'name', 'email']]]);
+        $response->assertJsonPath('data.user.email', $user->email);
     }
 
     protected function assertCredentialsRejected(TestResponse $response): void
