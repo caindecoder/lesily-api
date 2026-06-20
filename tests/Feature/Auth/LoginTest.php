@@ -98,6 +98,21 @@ class LoginTest extends AuthTestCase
         ];
     }
 
+    // Sad — the public login endpoint runs under the auth-tier per-IP limit
+    // (10/min) so credential stuffing against one IP is throttled.
+    #[Test]
+    public function when_login_attempts_from_one_ip_exceed_the_limit_then_further_attempts_are_throttled(): void
+    {
+        // Given the per-IP auth quota for the minute is exhausted
+        $this->exhaustAuthLimit(10);
+
+        // When another login is attempted
+        $response = $this->postJson('/api/v1/auth/login', []);
+
+        // Then it is throttled with retry guidance
+        $this->assertThrottled($response);
+    }
+
     protected function assertCredentialsRejected(TestResponse $response): void
     {
         $response->assertStatus(401);
@@ -110,6 +125,24 @@ class LoginTest extends AuthTestCase
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
         $response->assertJsonValidationErrors($invalidField);
+    }
+
+    protected function exhaustAuthLimit(int $allowed): void
+    {
+        // Each request up to the limit must pass the throttle (and only then be
+        // rejected by validation) — this pins the allowance at exactly $allowed, so
+        // an off-by-one on the limit throttles one of these instead. Relies on the
+        // test array cache resetting the limiter per test method (CACHE_STORE=array).
+        for ($i = 0; $i < $allowed; $i++) {
+            $this->postJson('/api/v1/auth/login', [])->assertStatus(422);
+        }
+    }
+
+    protected function assertThrottled(TestResponse $response): void
+    {
+        $response->assertStatus(429);
+        $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
+        $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
     }
 
     protected function assertSameRejection(TestResponse $unknownEmail, TestResponse $wrongPassword): void
