@@ -75,6 +75,13 @@ Route::get('company-context-probe', fn (Request $request) => response()->json([
     'company_id' => $request->company()->getKey(),
 ]))->middleware(['auth:sanctum', 'auth.company']);
 
+// Authenticated-user probe (UC-1-002 / UC-1-004). Bare auth:sanctum (no company
+// context). Proves a token issued by login authenticates a guarded route as that
+// user, and — after logout (Task 2) — that the revoked token no longer does.
+Route::get('authenticated-probe', fn (Request $request) => response()->json([
+    'user_id' => $request->user()?->getAuthIdentifier(),
+]))->middleware('auth:sanctum');
+
 // Idempotency probes (UC-1-119). The production middleware (auth:sanctum then
 // idempotency-key) drives the probe. The side-effect is a dispatched event so
 // tests can assert it ran exactly once; the uuid body proves a replay is

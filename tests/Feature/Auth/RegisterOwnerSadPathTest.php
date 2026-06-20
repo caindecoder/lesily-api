@@ -48,7 +48,7 @@ class RegisterOwnerSadPathTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/register', $payload);
 
         // Then registration is rejected and the offending field is reported
-        $this->assertRejectedValidation($response, $invalidField);
+        $this->assertValidationRejected($response, $invalidField);
     }
 
     /**
@@ -73,13 +73,6 @@ class RegisterOwnerSadPathTest extends AuthTestCase
             'missing emergency contact name' => [['emergencyContactName' => ''], 'emergencyContactName'],
             'missing emergency contact phone' => [['emergencyContactPhone' => ''], 'emergencyContactPhone'],
         ];
-    }
-
-    protected function assertRejectedValidation(TestResponse $response, string $invalidField): void
-    {
-        $response->assertStatus(422);
-        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
-        $response->assertJsonValidationErrors($invalidField);
     }
 
     // Sad (conflict) — a globally-unique identifier already in use is rejected
@@ -233,7 +226,7 @@ class RegisterOwnerSadPathTest extends AuthTestCase
     public function when_registration_attempts_exceed_the_auth_rate_limit_then_they_are_throttled(): void
     {
         // Given the per-IP auth quota for the minute is exhausted
-        $this->exhaustAuthLimit(10);
+        $this->exhaustAuthLimit(10, '/api/v1/auth/register');
 
         // When another registration is attempted
         $response = $this->postJson('/api/v1/auth/register', []);
@@ -250,7 +243,7 @@ class RegisterOwnerSadPathTest extends AuthTestCase
     {
         // Given one IP has exhausted its auth quota for the minute
         $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.1']);
-        $this->exhaustAuthLimit(10);
+        $this->exhaustAuthLimit(10, '/api/v1/auth/register');
         $this->postJson('/api/v1/auth/register', [])->assertStatus(429);
 
         // When a different IP makes its first attempt
@@ -259,23 +252,5 @@ class RegisterOwnerSadPathTest extends AuthTestCase
 
         // Then it is not throttled by the other IP's exhausted quota
         $response->assertStatus(422);
-    }
-
-    protected function exhaustAuthLimit(int $allowed): void
-    {
-        // Each request up to the limit must pass the throttle (and only then be
-        // rejected by validation) — this pins the allowance at exactly $allowed,
-        // so an off-by-one on the limit throttles one of these instead. Relies on
-        // the test array cache resetting the limiter per test method (CACHE_STORE=array).
-        for ($i = 0; $i < $allowed; $i++) {
-            $this->postJson('/api/v1/auth/register', [])->assertStatus(422);
-        }
-    }
-
-    protected function assertThrottled(TestResponse $response): void
-    {
-        $response->assertStatus(429);
-        $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
-        $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
     }
 }
