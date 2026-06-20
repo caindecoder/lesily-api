@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use Illuminate\Support\Arr;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,10 +37,44 @@ class LoginTest extends AuthTestCase
         $this->assertCredentialsRejected($response);
     }
 
+    // Sad — an unknown email is rejected identically to a wrong password, so the
+    // response never discloses whether an email is registered (anti-enumeration).
+    #[Test]
+    public function when_the_email_is_unknown_then_login_is_rejected_with_the_same_generic_error(): void
+    {
+        // Given a registered user, so a wrong-password rejection exists to compare against
+        $this->aRegisteredUser();
+
+        // When an unknown email and the known email with a wrong password are each tried
+        $unknownEmail = $this->postJson('/api/v1/auth/login', [
+            'email' => 'ghost@contoso.lk',
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+        $wrongPassword = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => 'not-the-password',
+        ]);
+
+        // Then the unknown-email response is rejected identically to the wrong-password one
+        $this->assertCredentialsRejected($unknownEmail);
+        $this->assertSameRejection($unknownEmail, $wrongPassword);
+    }
+
     protected function assertCredentialsRejected(TestResponse $response): void
     {
         $response->assertStatus(401);
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
         $response->assertJsonPath('message', 'Invalid credentials.');
+    }
+
+    protected function assertSameRejection(TestResponse $unknownEmail, TestResponse $wrongPassword): void
+    {
+        // The per-request correlation_id legitimately differs and reveals nothing;
+        // every other field must match so the two failures are indistinguishable.
+        $this->assertSame($unknownEmail->status(), $wrongPassword->status());
+        $this->assertSame(
+            Arr::except($unknownEmail->json(), 'correlation_id'),
+            Arr::except($wrongPassword->json(), 'correlation_id'),
+        );
     }
 }

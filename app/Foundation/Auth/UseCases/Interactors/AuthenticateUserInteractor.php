@@ -16,11 +16,27 @@ use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
  */
 class AuthenticateUserInteractor
 {
+    /**
+     * A throwaway bcrypt hash (cost 12 — matches config('hashing.bcrypt.rounds'))
+     * checked against when no user matches, so a Hash::check ALWAYS runs. An
+     * unknown email then costs the same as a wrong password and the two cannot be
+     * told apart by response timing — the timing half of UC-1-002 anti-enumeration
+     * (the body half is the single InvalidCredentialsException).
+     */
+    private const TIMING_SAFE_DUMMY_HASH = '$2y$12$rc/xHxvyPz3y0IfKBMF5Zenttym7cQMSCCFx.9JaiV3IuaMW2FJo2';
+
     public function execute(LoginCommand $command): User
     {
         $user = User::query()->where('email', $command->email)->first();
 
-        if ($user === null || ! Hash::check($command->password, $user->password)) {
+        if ($user === null) {
+            // Equalize timing against the wrong-password path; result intentionally discarded.
+            Hash::check($command->password, self::TIMING_SAFE_DUMMY_HASH);
+
+            throw new InvalidCredentialsException;
+        }
+
+        if (! Hash::check($command->password, $user->password)) {
             throw new InvalidCredentialsException;
         }
 
