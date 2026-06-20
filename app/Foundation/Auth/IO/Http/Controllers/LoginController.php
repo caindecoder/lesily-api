@@ -20,7 +20,11 @@ class LoginController extends Controller
     {
         $command = LoginCommand::validateAndCreate($request);
         $user = $interactor->execute($command);
-        $token = $user->createToken($command->deviceName ?? 'web');
+        $token = $user->createToken(
+            $command->deviceName ?? 'web',
+            ['*'],
+            now()->addMinutes((int) config('sanctum.expiration')),
+        );
 
         return (new LoginResource($user, $token->plainTextToken, $token->accessToken->expires_at))->response();
     }

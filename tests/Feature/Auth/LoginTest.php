@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -135,6 +136,29 @@ class LoginTest extends AuthTestCase
         $response->assertJsonPath('user_id', $user->id);
     }
 
+    // Edge — the issued token carries the locked 90-day expiry (api-conventions §7 /
+    // sanctum config), surfaced to the client as `expiresAt`.
+    #[Test]
+    public function when_a_token_is_issued_then_it_carries_the_ninety_day_expiry(): void
+    {
+        // Given a registered user (the clock is frozen in setUp)
+        $this->aRegisteredUser();
+
+        // When they log in
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then the returned expiry is exactly 90 days out
+        $expiresAt = $response->json('data.expiresAt');
+        $this->assertNotNull($expiresAt);
+        $this->assertSame(
+            now()->addDays(90)->toDateTimeString(),
+            Carbon::parse($expiresAt)->toDateTimeString(),
+        );
+    }
+
     // Happy — valid credentials return a Sanctum token and the user record.
     #[Test]
     public function when_valid_credentials_are_submitted_then_the_token_and_user_are_returned(): void
@@ -149,6 +173,28 @@ class LoginTest extends AuthTestCase
         ]);
 
         // Then a token and their user record are returned
+        $this->assertLoginSucceeded($response, $user);
+    }
+
+    // Happy — an unverified user can still log in: email verification is NOT enforced
+    // this slice (slice-auth-login C4). Guards against a verification gate creeping in.
+    #[Test]
+    public function when_an_unverified_user_submits_valid_credentials_then_login_still_succeeds(): void
+    {
+        // Given a registered but unverified user
+        $user = User::factory()
+            ->withEmail(self::LOGIN_EMAIL)
+            ->withPassword(self::LOGIN_PASSWORD)
+            ->unverified()
+            ->create();
+
+        // When they submit valid credentials
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then login still succeeds (no email-verification gate)
         $this->assertLoginSucceeded($response, $user);
     }
 
