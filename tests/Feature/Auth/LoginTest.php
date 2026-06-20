@@ -114,6 +114,27 @@ class LoginTest extends AuthTestCase
         $this->assertThrottled($response);
     }
 
+    // Edge — the issued token is a real credential: it authenticates a Sanctum-guarded
+    // route as the logged-in user (the token round-trip truth oracle).
+    #[Test]
+    public function when_a_valid_login_succeeds_then_the_issued_token_authenticates_a_protected_route(): void
+    {
+        // Given a registered user who logs in and receives a token
+        $user = $this->aRegisteredUser();
+        $token = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ])->json('data.token');
+
+        // When the token is presented to a Sanctum-guarded route
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/_test/authenticated-probe');
+
+        // Then it authenticates as that user
+        $response->assertOk();
+        $response->assertJsonPath('user_id', $user->id);
+    }
+
     // Happy — valid credentials return a Sanctum token and the user record.
     #[Test]
     public function when_valid_credentials_are_submitted_then_the_token_and_user_are_returned(): void
