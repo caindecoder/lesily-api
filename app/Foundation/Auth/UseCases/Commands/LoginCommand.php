@@ -25,9 +25,9 @@ class LoginCommand extends Data
     public static function rules(ValidationContext $context): array
     {
         return [
-            'email' => ['required', 'string'],
-            'password' => ['required', 'string'],
-            'deviceName' => ['nullable', 'string'],
+            'email' => ['required', 'string', 'email', 'max:255'],
+            'password' => ['required', 'string', 'max:255'],
+            'deviceName' => ['nullable', 'string', 'max:255'],
         ];
     }
 }

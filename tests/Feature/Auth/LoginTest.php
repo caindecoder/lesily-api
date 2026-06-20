@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use Illuminate\Support\Arr;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class LoginTest extends AuthTestCase
@@ -60,11 +61,55 @@ class LoginTest extends AuthTestCase
         $this->assertSameRejection($unknownEmail, $wrongPassword);
     }
 
+    // Sad — a missing or malformed credential field is rejected by shape validation
+    // before the credential check runs (the login seam stays lenient otherwise: no
+    // password policy is surfaced here — a too-short password is a 401, not a 422).
+    #[Test]
+    #[DataProvider('invalidCredentialPayloadProvider')]
+    public function when_a_required_credential_field_is_missing_or_malformed_then_the_request_is_rejected_as_invalid(array $override, string $invalidField): void
+    {
+        // Given an otherwise-valid login with one missing or malformed field
+        $payload = [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+            ...$override,
+        ];
+
+        // When the guest submits it
+        $response = $this->postJson('/api/v1/auth/login', $payload);
+
+        // Then login is rejected by validation and the offending field is reported
+        $this->assertValidationRejected($response, $invalidField);
+    }
+
+    /**
+     * Each row blanks or corrupts one field of an otherwise-valid login. The blank
+     * rows are regression guards over the `required` rules; the malformed-email row
+     * drives the `email` format rule (a non-email string must not reach the lookup).
+     *
+     * @return array<string, array{0: array<string, mixed>, 1: string}>
+     */
+    public static function invalidCredentialPayloadProvider(): array
+    {
+        return [
+            'blank email' => [['email' => ''], 'email'],
+            'blank password' => [['password' => ''], 'password'],
+            'malformed email' => [['email' => 'not-an-email'], 'email'],
+        ];
+    }
+
     protected function assertCredentialsRejected(TestResponse $response): void
     {
         $response->assertStatus(401);
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
         $response->assertJsonPath('message', 'Invalid credentials.');
+    }
+
+    protected function assertValidationRejected(TestResponse $response, string $invalidField): void
+    {
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
+        $response->assertJsonValidationErrors($invalidField);
     }
 
     protected function assertSameRejection(TestResponse $unknownEmail, TestResponse $wrongPassword): void
