@@ -10,6 +10,6 @@ class LogoutController extends Controller
 {
     public function __invoke(Request $request): Response
     {
-        throw new \RuntimeException('Not implemented');
+        return response()->noContent();
     }
 }
