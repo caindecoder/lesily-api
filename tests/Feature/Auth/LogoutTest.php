@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -22,6 +23,23 @@ class LogoutTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/logout');
 
         // Then the Sanctum guard rejects it
+        $this->assertUnauthenticated($response);
+    }
+
+    // Edge — the revert-verified oracle: after logout the same token no longer
+    // authenticates a protected route. Goes RED if currentAccessToken()->delete()
+    // is removed, since a no-op logout would leave the token live.
+    #[Test]
+    public function when_a_user_has_logged_out_then_the_revoked_token_no_longer_authenticates(): void
+    {
+        // Given a registered user who has logged out with their token
+        $token = $this->tokenFor($this->aRegisteredUser());
+        $this->logoutWith($token);
+
+        // When the same now-revoked token is presented to a protected route
+        $response = $this->probeWith($token);
+
+        // Then it no longer authenticates
         $this->assertUnauthenticated($response);
     }
 
@@ -53,6 +71,17 @@ class LogoutTest extends AuthTestCase
     private function logoutWith(string $token): TestResponse
     {
         return $this->withToken($token)->postJson('/api/v1/auth/logout');
+    }
+
+    private function probeWith(string $token): TestResponse
+    {
+        // A probe must reflect the CURRENT token state, like a fresh client request.
+        // Within one test the container reuses the RequestGuard, which caches the user
+        // resolved by a prior request (e.g. the logout call) — forgetting guards forces
+        // re-resolution from the DB so a revoked token is genuinely re-checked.
+        Auth::forgetGuards();
+
+        return $this->withToken($token)->getJson('/api/_test/authenticated-probe');
     }
 
     protected function assertUnauthenticated(TestResponse $response): void
