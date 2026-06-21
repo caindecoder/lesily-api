@@ -58,8 +58,7 @@ class LogoutTest extends AuthTestCase
         $this->logoutWith($current);
 
         // Then the current token is revoked but the other session still authenticates
-        $this->assertUnauthenticated($this->probeWith($current));
-        $this->probeWith($other)->assertOk()->assertJsonPath('user_id', $user->id);
+        $this->assertOnlyCurrentSessionRevoked($this->probeWith($current), $this->probeWith($other), $user);
     }
 
     // Happy — an authenticated user logs out and the request succeeds with no body.
@@ -107,5 +106,16 @@ class LogoutTest extends AuthTestCase
     {
         $response->assertStatus(401);
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
+    }
+
+    /**
+     * The single current-token-only outcome: the logged-out session's token no longer
+     * authenticates, while the user's other session still does (one invariant, two
+     * inseparable facets — neither alone distinguishes current-only from logout-all).
+     */
+    protected function assertOnlyCurrentSessionRevoked(TestResponse $current, TestResponse $other, User $user): void
+    {
+        $this->assertUnauthenticated($current);
+        $other->assertOk()->assertJsonPath('user_id', $user->id);
     }
 }
