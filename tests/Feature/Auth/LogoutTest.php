@@ -43,6 +43,25 @@ class LogoutTest extends AuthTestCase
         $this->assertUnauthenticated($response);
     }
 
+    // Edge — logout revokes only the CURRENT session's token: the user's other
+    // active sessions keep working. Distinguishes UC-1-004 from UC-1-011 logout-all
+    // and catches a wrong tokens()->delete() that the single-token oracle would miss.
+    #[Test]
+    public function when_one_session_logs_out_then_the_users_other_sessions_remain_active(): void
+    {
+        // Given a user with two active sessions
+        $user = $this->aRegisteredUser();
+        $current = $this->tokenFor($user, 'web');
+        $other = $this->tokenFor($user, 'mobile');
+
+        // When they log out of the current session
+        $this->logoutWith($current);
+
+        // Then the current token is revoked but the other session still authenticates
+        $this->assertUnauthenticated($this->probeWith($current));
+        $this->probeWith($other)->assertOk()->assertJsonPath('user_id', $user->id);
+    }
+
     // Happy — an authenticated user logs out and the request succeeds with no body.
     #[Test]
     public function when_an_authenticated_user_logs_out_then_the_session_ends(): void
