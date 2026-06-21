@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Foundation\Auth\IO\Http\Controllers\LoginController;
+use App\Foundation\Auth\IO\Http\Controllers\LogoutController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
@@ -26,6 +27,15 @@ Route::post('/v1/auth/register', RegisterController::class)
 // banner): the credential check issues a Sanctum token, no domain event.
 Route::post('/v1/auth/login', LoginController::class)
     ->middleware('throttle:auth-tier');
+
+// Log out (UC-1-004) — revoke the CURRENT Sanctum token only (not other devices;
+// logout-all is UC-1-011, deferred). Token-only (cd-auth §5): a thin controller
+// deletes the access token, no domain event. Bare auth:sanctum, no throttle — the
+// slice's authoritative contract (the api-doc's tenant-tier row predates this and
+// has no limiter to bind to; reconciled at slice close). LeaveDates parity: its
+// auth-gated token-destroy is likewise un-throttled.
+Route::post('/v1/auth/logout', LogoutController::class)
+    ->middleware('auth:sanctum');
 
 // Email verification (UC-1-001 alt-6a) — the signed link IS the credential (no
 // auth token); `hash` = sha1(user email) per api-1-auth-onboarding. No route is
