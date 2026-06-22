@@ -13,9 +13,11 @@ use Illuminate\Support\Facades\Cache;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\Billing\Enums\BillingPlan;
+use App\Foundation\Auth\Events\User2FAEnabled;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class EnableTwoFactorTest extends AuthTestCase
 {
@@ -100,6 +102,22 @@ class EnableTwoFactorTest extends AuthTestCase
 
         // Then exactly 10 distinct codes are returned, stored hashed (never plaintext)
         $this->assertRecoveryCodesHashed($user, $codes);
+    }
+
+    #[Test]
+    public function when_enrollment_is_confirmed_then_the_recorded_event_carries_no_secret(): void
+    {
+        // Given (a Pro member completing enrollment)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = $this->aMemberOf($company);
+        $this->fakeTotpVerifier(verifies: true);
+        $stagedSecret = (string) $this->enable($user, $company)->json('data.secret');
+
+        // When they confirm
+        $this->confirm($user, $company, '123456');
+
+        // Then the recorded User2FAEnabled marker holds only non-secret metadata (Design-Y)
+        $this->assertEnableMarkerCarriesNoSecret($stagedSecret);
     }
 
     #[Test]
@@ -225,6 +243,14 @@ class EnableTwoFactorTest extends AuthTestCase
         $this->assertCount(10, array_unique($returnedCodes), 'Recovery codes must be distinct.');
         $this->assertNotContains($returnedCodes[0], $stored, 'Codes must be stored hashed, never plaintext.');
         $this->assertTrue(Hash::check($returnedCodes[0], $stored[0]), 'A returned code must verify against its stored hash.');
+    }
+
+    protected function assertEnableMarkerCarriesNoSecret(string $stagedSecret): void
+    {
+        $marker = LesilyStoredEvent::query()->where('event_class', User2FAEnabled::class)->sole();
+        $properties = $marker->event_properties;
+        $this->assertSame(['userId', 'confirmedAt'], array_keys($properties), 'The marker must carry only non-secret metadata.');
+        $this->assertStringNotContainsString($stagedSecret, (string) json_encode($properties), 'The TOTP secret must never enter the event store.');
     }
 
     protected function assertNoTwoFactorPersisted(User $user): void
