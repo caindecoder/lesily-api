@@ -85,6 +85,22 @@ class EnableTwoFactorTest extends AuthTestCase
         $this->assertProvisioningReturnedWithoutPersisting($response, $user);
     }
 
+    #[Test]
+    public function when_a_pro_user_completes_enrollment_then_two_factor_is_enabled(): void
+    {
+        // Given (a Pro member mid-enrollment whose authenticator code verifies)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = $this->aMemberOf($company);
+        $this->fakeTotpVerifier(verifies: true);
+        $stagedSecret = (string) $this->enable($user, $company)->json('data.secret');
+
+        // When they confirm with a valid code
+        $response = $this->confirm($user, $company, '123456');
+
+        // Then 2FA is enabled and the secret is stored encrypted
+        $this->assertTwoFactorEnabled($response, $user, $stagedSecret);
+    }
+
     /**
      * @return array<string, array{BillingPlan}>
      */
@@ -171,6 +187,15 @@ class EnableTwoFactorTest extends AuthTestCase
         $this->assertStringStartsWith('otpauth://', $uri);
         $this->assertStringContainsString($secret, $uri);
         $this->assertNoTwoFactorPersisted($user);
+    }
+
+    protected function assertTwoFactorEnabled(TestResponse $response, User $user, string $stagedSecret): void
+    {
+        $response->assertOk();
+        $reloaded = User::findOrFail($user->getKey());
+        $this->assertNotNull($reloaded->two_factor_confirmed_at, '2FA must be marked enabled at confirm.');
+        $this->assertSame($stagedSecret, $reloaded->two_factor_secret, 'The stored secret must decrypt to the staged secret.');
+        $this->assertNotEmpty($response->json('data.recovery_codes'), 'Recovery codes are shown once at confirm.');
     }
 
     protected function assertNoTwoFactorPersisted(User $user): void

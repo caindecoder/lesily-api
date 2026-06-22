@@ -3,6 +3,7 @@
 namespace App\Foundation\Auth\Projectors;
 
 use App\Models\User as UserReadModel;
+use App\Foundation\Auth\Events\User2FAEnabled;
 use App\Foundation\Auth\Events\UserEmailVerified;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
@@ -13,6 +14,10 @@ use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
  * forceCreate: the projector supplies the stream's uuid as the PK without the
  * auth model carrying `id` in its fillable surface (future profile-update fills
  * must never be able to touch the key).
+ *
+ * 2FA marker (Design-Y): onUser2FAEnabled sets only the non-secret
+ * two_factor_confirmed_at flag — the encrypted secret + hashed recovery codes are
+ * written to the users row directly by the confirm interactor, never projected.
  */
 class UserProjector extends Projector
 {
@@ -31,5 +36,12 @@ class UserProjector extends Projector
         UserReadModel::query()
             ->whereKey($event->userId)
             ->update(['email_verified_at' => $event->verifiedAt]);
+    }
+
+    public function onUser2FAEnabled(User2FAEnabled $event): void
+    {
+        UserReadModel::query()
+            ->whereKey($event->userId)
+            ->update(['two_factor_confirmed_at' => $event->confirmedAt]);
     }
 }

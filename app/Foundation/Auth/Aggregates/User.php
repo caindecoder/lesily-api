@@ -5,6 +5,7 @@ namespace App\Foundation\Auth\Aggregates;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Hash;
 use App\Foundation\EventStore\AggregateRoot;
+use App\Foundation\Auth\Events\User2FAEnabled;
 use App\Foundation\Auth\Events\UserEmailVerified;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
@@ -22,6 +23,8 @@ class User extends AggregateRoot
     protected bool $registered = false;
 
     protected bool $verified = false;
+
+    protected bool $twoFactorEnabled = false;
 
     public function createOwner(string $companyId, RegisterOwnerCommand $command): static
     {
@@ -64,6 +67,18 @@ class User extends AggregateRoot
         ));
     }
 
+    public function confirmTwoFactor(): static
+    {
+        if ($this->twoFactorEnabled) {
+            return $this;
+        }
+
+        return $this->recordThat(new User2FAEnabled(
+            userId: $this->uuid(),
+            confirmedAt: CarbonImmutable::now(),
+        ));
+    }
+
     protected function applyUserSignedUpAsOwner(UserSignedUpAsOwner $event): void
     {
         $this->registered = true;
@@ -72,5 +87,10 @@ class User extends AggregateRoot
     protected function applyUserEmailVerified(UserEmailVerified $event): void
     {
         $this->verified = true;
+    }
+
+    protected function applyUser2FAEnabled(User2FAEnabled $event): void
+    {
+        $this->twoFactorEnabled = true;
     }
 }

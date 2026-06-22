@@ -5,6 +5,7 @@ namespace App\Foundation\Auth\IO\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use App\Foundation\Auth\IO\Http\Resources\RecoveryCodesResource;
 use App\Foundation\Auth\UseCases\Commands\ConfirmTwoFactorCommand;
 use App\Foundation\Auth\UseCases\Interactors\ConfirmTwoFactorInteractor;
 
@@ -17,8 +18,8 @@ class ConfirmTwoFactorController
         /** @var User $user */
         $user = $request->user();
 
-        $interactor->execute($user, $command);
+        $codes = $interactor->execute($user, $command);
 
-        throw new \RuntimeException('Not implemented');
+        return (new RecoveryCodesResource($codes))->response();
     }
 }
