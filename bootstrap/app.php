@@ -21,6 +21,7 @@ use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
+use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -79,6 +80,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (TwoFactorSetupNotStartedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::TwoFactorSetupNotStarted,
             'Two-factor setup has not been started. Restart setup and try again.',
+        ));
+
+        // The submitted TOTP code did not verify against the staged secret (UC-1-006 4a).
+        $exceptions->render(fn (InvalidTwoFactorCodeException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::InvalidTwoFactorCode,
+            'That code is not valid. Open your authenticator app and enter the current code.',
         ));
 
         $exceptions->render(fn (CompanyAccessDeniedException $e) => EnvelopeBuilder::build(

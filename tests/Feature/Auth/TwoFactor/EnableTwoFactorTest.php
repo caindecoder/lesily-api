@@ -53,6 +53,24 @@ class EnableTwoFactorTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_enrollment_is_confirmed_with_an_invalid_code_then_nothing_is_persisted(): void
+    {
+        // Given (a Pro member mid-enrollment whose authenticator code will not verify)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = $this->aMemberOf($company);
+        $this->fakeTotpVerifier(verifies: false);
+        $this->enable($user, $company);
+
+        // When they submit a code the authenticator does not accept
+        $response = $this->confirm($user, $company, '000000');
+
+        // Then it is rejected and 2FA stays disabled
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'INVALID_TWO_FACTOR_CODE');
+        $this->assertNoTwoFactorPersisted($user);
+    }
+
+    #[Test]
     public function when_enrollment_starts_then_a_provisioning_uri_and_secret_are_returned_without_persisting(): void
     {
         // Given (a Pro member who has not yet enabled 2FA)

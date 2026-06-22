@@ -4,6 +4,8 @@ namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
+use App\Foundation\Auth\Totp\TotpVerifier;
+use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\UseCases\Commands\ConfirmTwoFactorCommand;
 use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 
@@ -16,6 +18,8 @@ use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
  */
 class ConfirmTwoFactorInteractor
 {
+    public function __construct(private readonly TotpVerifier $totp) {}
+
     /**
      * @return list<string>
      */
@@ -23,8 +27,12 @@ class ConfirmTwoFactorInteractor
     {
         $secret = Cache::get("2fa-setup:{$user->getKey()}");
 
-        if ($secret === null) {
+        if (! is_string($secret)) {
             throw new TwoFactorSetupNotStartedException;
+        }
+
+        if (! $this->totp->verify($secret, $command->code)) {
+            throw new InvalidTwoFactorCodeException;
         }
 
         throw new \RuntimeException('Not implemented');
