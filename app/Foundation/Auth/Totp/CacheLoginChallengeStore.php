@@ -17,10 +17,10 @@ class CacheLoginChallengeStore implements LoginChallengeStore
     {
         $challengeId = (string) Str::uuid7();
 
-        Cache::forever($this->key($challengeId), [
+        Cache::put($this->key($challengeId), [
             'userId' => $userId,
             'attemptsRemaining' => self::MAX_ATTEMPTS,
-        ]);
+        ], now()->addMinutes(self::TTL_MINUTES));
 
         return $challengeId;
     }
