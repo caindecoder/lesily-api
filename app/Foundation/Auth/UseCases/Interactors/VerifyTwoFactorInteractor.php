@@ -4,9 +4,12 @@ namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
 use RuntimeException;
+use Illuminate\Support\Facades\Hash;
+use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\UseCases\Commands\VerifyTwoFactorCommand;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
+use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 
 /**
  * Completes a 2FA login (UC-1-005): resolves the opaque challenge, verifies the second
@@ -20,6 +23,7 @@ class VerifyTwoFactorInteractor
 {
     public function __construct(
         private readonly LoginChallengeStore $challenges,
+        private readonly TotpVerifier $totp,
     ) {}
 
     public function execute(VerifyTwoFactorCommand $command): User
@@ -30,6 +34,20 @@ class VerifyTwoFactorInteractor
             throw new LoginChallengeNotFoundException;
         }
 
-        throw new RuntimeException('Not implemented');
+        $user = User::query()->findOrFail($challenge->userId);
+
+        if ($this->totp->verify((string) $user->two_factor_secret, $command->code)) {
+            throw new RuntimeException('Not implemented');
+        }
+
+        foreach ($user->two_factor_recovery_codes ?? [] as $hash) {
+            if (Hash::check($command->code, $hash)) {
+                throw new RuntimeException('Not implemented');
+            }
+        }
+
+        $this->challenges->recordFailure($command->challengeId);
+
+        throw new TwoFactorVerificationFailedException;
     }
 }

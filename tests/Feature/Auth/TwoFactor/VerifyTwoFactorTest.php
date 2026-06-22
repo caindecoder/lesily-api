@@ -39,6 +39,27 @@ class VerifyTwoFactorTest extends AuthTestCase
         $response->assertJsonMissingPath('data.token');
     }
 
+    #[Test]
+    public function when_an_invalid_code_is_submitted_then_verification_is_refused(): void
+    {
+        // Given a 2FA user with an open challenge and an authenticator that rejects the code
+        $user = $this->aTwoFactorUser();
+        $challengeId = $this->openChallenge($user);
+        $this->fakeTotpVerifier(verifies: false);
+
+        // When a code matching neither the TOTP nor any recovery code is submitted
+        $response = $this->verify($challengeId, 'wrong-code');
+
+        // Then verification is refused, no token is issued, and the attempt is counted
+        $this->assertRefusedWith($response, ApiErrorCode::TwoFactorVerificationFailed);
+        $this->assertNoTokenMinted($response, $user);
+        $this->assertSame(
+            LoginChallengeStore::MAX_ATTEMPTS - 1,
+            app(LoginChallengeStore::class)->find($challengeId)?->attemptsRemaining,
+            'A failed verify must count one attempt against the challenge.',
+        );
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
@@ -68,5 +89,11 @@ class VerifyTwoFactorTest extends AuthTestCase
     {
         $response->assertStatus($code->status());
         $response->assertJsonPath('error_code', $code->value);
+    }
+
+    protected function assertNoTokenMinted(TestResponse $response, User $user): void
+    {
+        $response->assertJsonMissingPath('data.token');
+        $this->assertSame(0, $user->tokens()->count(), 'No token may be minted on a failed verify.');
     }
 }

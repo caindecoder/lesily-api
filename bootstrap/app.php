@@ -31,6 +31,7 @@ use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
 use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
 use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
+use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -101,6 +102,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (LoginChallengeNotFoundException $e) => EnvelopeBuilder::build(
             ApiErrorCode::TwoFactorChallengeNotFound,
             'This verification session has expired. Please log in again.',
+        ));
+
+        // The second factor at /2fa/verify matched neither the TOTP nor a recovery code
+        // (UC-1-005 4a/3a). 401, one message — a single code field can't reveal which
+        // factor was intended (the locked-out user is steered to support in the copy).
+        $exceptions->render(fn (TwoFactorVerificationFailedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::TwoFactorVerificationFailed,
+            'Invalid verification code. Please try again, or contact support if you have lost your authenticator.',
         ));
 
         $exceptions->render(fn (CompanyAccessDeniedException $e) => EnvelopeBuilder::build(
