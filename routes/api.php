@@ -7,6 +7,7 @@ use App\Foundation\Auth\IO\Http\Controllers\LogoutController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 use App\Foundation\Auth\IO\Http\Controllers\EnableTwoFactorController;
+use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\ConfirmTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
 
@@ -58,3 +59,10 @@ Route::post('/v1/auth/2fa/enable', EnableTwoFactorController::class)
 // throttle:auth-tier (brute-force surface — the code is being checked here).
 Route::post('/v1/auth/2fa/confirm', ConfirmTwoFactorController::class)
     ->middleware(['auth:sanctum', 'auth.company', 'feature:two_factor_auth', 'throttle:auth-tier']);
+
+// Verify 2FA at login (UC-1-005) — the second factor. Public: the opaque challenge_id
+// (issued by the login 202, alt-4a) is the auth proof, consumed here. Token-only — mints
+// the Sanctum token, records no UserLoggedIn (cd-auth token-only). throttle:auth-tier
+// guards the per-IP brute-force surface; the per-challenge 5-attempt cap lives in the store.
+Route::post('/v1/auth/2fa/verify', VerifyTwoFactorController::class)
+    ->middleware('throttle:auth-tier');
