@@ -23,6 +23,19 @@ class CacheLoginChallengeStoreTest extends TestCase
     }
 
     #[Test]
+    public function when_a_failure_is_recorded_for_an_unknown_challenge_then_it_is_a_no_op(): void
+    {
+        // Given an id with no live challenge
+        $unknownId = (string) Str::uuid();
+
+        // When a failure is recorded against it
+        $this->store()->recordFailure($unknownId);
+
+        // Then nothing errors and nothing resolves
+        $this->assertNull($this->store()->find($unknownId), 'Recording a failure on an unknown challenge must be a safe no-op.');
+    }
+
+    #[Test]
     public function when_a_challenge_runs_out_of_attempts_then_it_is_deleted(): void
     {
         // Given a fresh challenge with the full attempt allowance
@@ -35,6 +48,21 @@ class CacheLoginChallengeStoreTest extends TestCase
 
         // Then the challenge is gone
         $this->assertNull($this->store()->find($challengeId), 'A challenge with no attempts left must be deleted.');
+    }
+
+    #[Test]
+    public function when_a_challenge_is_failed_mid_window_then_it_still_expires_on_its_original_lifetime(): void
+    {
+        // Given a challenge created now
+        $challengeId = $this->store()->create((string) Str::uuid());
+
+        // When a failure is recorded partway through its lifetime, then the rest of it elapses
+        $this->travel(LoginChallengeStore::TTL_MINUTES - 1)->minutes();
+        $this->store()->recordFailure($challengeId);
+        $this->travel(2)->minutes();
+
+        // Then it has still expired — a failure must not slide the original window forward
+        $this->assertNull($this->store()->find($challengeId), 'A failure must not extend the challenge lifetime.');
     }
 
     #[Test]
@@ -55,21 +83,45 @@ class CacheLoginChallengeStoreTest extends TestCase
     }
 
     #[Test]
+    public function when_a_single_attempt_remains_then_the_challenge_still_resolves(): void
+    {
+        // Given a challenge that has spent all but its last attempt
+        $challengeId = $this->store()->create((string) Str::uuid());
+        for ($attempt = 0; $attempt < LoginChallengeStore::MAX_ATTEMPTS - 1; $attempt++) {
+            $this->store()->recordFailure($challengeId);
+        }
+
+        // When it is resolved, then it survives with exactly one attempt left (not deleted early)
+        $this->assertSame(1, $this->store()->find($challengeId)?->attemptsRemaining);
+    }
+
+    #[Test]
     public function when_a_challenge_is_created_then_it_resolves_to_its_user(): void
     {
         // Given a challenge opened for a user
         $userId = (string) Str::uuid();
         $challengeId = $this->store()->create($userId);
 
-        // When the challenge is resolved, then forgotten
+        // When the challenge is resolved
         $challenge = $this->store()->find($challengeId);
-        $this->store()->forget($challengeId);
 
-        // Then it resolved to that user with a full attempt allowance, and forgetting cleared it
-        $this->assertNotNull($challenge, 'The challenge must resolve to its user.');
+        // Then it resolves to that user with a full attempt allowance
+        $this->assertNotNull($challenge, 'A created challenge must resolve.');
         $this->assertSame($userId, $challenge->userId);
         $this->assertSame(LoginChallengeStore::MAX_ATTEMPTS, $challenge->attemptsRemaining);
-        $this->assertNull($this->store()->find($challengeId), 'A forgotten challenge must no longer resolve.');
+    }
+
+    #[Test]
+    public function when_a_challenge_is_forgotten_then_it_no_longer_resolves(): void
+    {
+        // Given a live challenge
+        $challengeId = $this->store()->create((string) Str::uuid());
+
+        // When it is forgotten
+        $this->store()->forget($challengeId);
+
+        // Then it no longer resolves
+        $this->assertNull($this->store()->find($challengeId), 'A forgotten challenge must not resolve.');
     }
 
     protected function store(): LoginChallengeStore

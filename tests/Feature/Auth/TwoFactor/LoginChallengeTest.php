@@ -13,6 +13,14 @@ class LoginChallengeTest extends AuthTestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Freeze the clock so the advertised challenge expiry is exactly assertable.
+        $this->freezeTime();
+    }
+
     #[Test]
     public function when_a_non_two_factor_user_logs_in_then_a_usable_token_is_issued(): void
     {
@@ -70,9 +78,13 @@ class LoginChallengeTest extends AuthTestCase
     {
         $response->assertStatus(202);
         $response->assertJsonMissingPath('data.token');
+        $this->assertSame(0, $user->tokens()->count(), 'No Sanctum token may be minted until 2FA verification.');
         $challengeId = (string) $response->json('data.challenge_id');
         $this->assertNotEmpty($challengeId, 'A challenge id must be returned.');
-        $this->assertNotNull($response->json('data.expires_at'), 'The challenge must carry an expiry.');
+        $this->assertTrue(
+            now()->addMinutes(LoginChallengeStore::TTL_MINUTES)->equalTo($response->json('data.expires_at')),
+            'The challenge must advertise its real 5-minute expiry.',
+        );
         $this->assertSame($user->id, app(LoginChallengeStore::class)->find($challengeId)?->userId);
     }
 }
