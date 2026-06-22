@@ -25,6 +25,7 @@ use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
 use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
@@ -93,6 +94,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (TwoFactorAlreadyEnabledException $e) => EnvelopeBuilder::build(
             ApiErrorCode::TwoFactorAlreadyEnabled,
             'Two-factor authentication is already enabled.',
+        ));
+
+        // The 2FA login challenge at /2fa/verify expired / never existed / was spent
+        // (UC-1-005). 404 — the client restarts login to get a fresh challenge.
+        $exceptions->render(fn (LoginChallengeNotFoundException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::TwoFactorChallengeNotFound,
+            'This verification session has expired. Please log in again.',
         ));
 
         $exceptions->render(fn (CompanyAccessDeniedException $e) => EnvelopeBuilder::build(

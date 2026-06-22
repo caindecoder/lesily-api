@@ -2,9 +2,13 @@
 
 namespace Tests\Feature\Auth\TwoFactor;
 
+use App\Models\User;
+use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\Auth\Totp\LoginChallengeStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class VerifyTwoFactorTest extends AuthTestCase
@@ -23,6 +27,18 @@ class VerifyTwoFactorTest extends AuthTestCase
         $this->assertValidationRejected($response, $invalidField);
     }
 
+    #[Test]
+    public function when_the_challenge_is_unknown_or_expired_then_verification_is_refused(): void
+    {
+        // Given no live challenge for the submitted id (never created, or expired)
+        // When a verify is attempted against it
+        $response = $this->verify('not-a-live-challenge', '123456');
+
+        // Then verification is refused as a missing challenge and no token is issued
+        $this->assertRefusedWith($response, ApiErrorCode::TwoFactorChallengeNotFound);
+        $response->assertJsonMissingPath('data.token');
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
@@ -33,5 +49,24 @@ class VerifyTwoFactorTest extends AuthTestCase
             'missing code' => [['challenge_id' => 'a-challenge-id'], 'code'],
             'blank code' => [['challenge_id' => 'a-challenge-id', 'code' => ''], 'code'],
         ];
+    }
+
+    protected function verify(string $challengeId, string $code): TestResponse
+    {
+        return $this->postJson('/api/v1/auth/2fa/verify', [
+            'challenge_id' => $challengeId,
+            'code' => $code,
+        ]);
+    }
+
+    protected function openChallenge(User $user): string
+    {
+        return app(LoginChallengeStore::class)->create($user->id);
+    }
+
+    protected function assertRefusedWith(TestResponse $response, ApiErrorCode $code): void
+    {
+        $response->assertStatus($code->status());
+        $response->assertJsonPath('error_code', $code->value);
     }
 }
