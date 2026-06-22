@@ -23,6 +23,23 @@ class CacheLoginChallengeStoreTest extends TestCase
     }
 
     #[Test]
+    public function when_a_failure_is_recorded_then_the_remaining_attempts_decrement(): void
+    {
+        // Given a fresh challenge with the full attempt allowance
+        $challengeId = $this->store()->create((string) Str::uuid());
+
+        // When one verify attempt fails
+        $this->store()->recordFailure($challengeId);
+
+        // Then the challenge still resolves with one fewer attempt
+        $this->assertSame(
+            LoginChallengeStore::MAX_ATTEMPTS - 1,
+            $this->store()->find($challengeId)?->attemptsRemaining,
+            'A recorded failure must decrement the remaining attempts.',
+        );
+    }
+
+    #[Test]
     public function when_a_challenge_is_created_then_it_resolves_to_its_user(): void
     {
         // Given a challenge opened for a user

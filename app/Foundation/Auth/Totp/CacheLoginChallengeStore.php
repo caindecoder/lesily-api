@@ -41,7 +41,16 @@ class CacheLoginChallengeStore implements LoginChallengeStore
 
     public function recordFailure(string $challengeId): void
     {
-        throw new \RuntimeException('Not implemented');
+        $challenge = $this->find($challengeId);
+
+        if ($challenge === null) {
+            return;
+        }
+
+        Cache::put($this->key($challengeId), [
+            'userId' => $challenge->userId,
+            'attemptsRemaining' => $challenge->attemptsRemaining - 1,
+        ], now()->addMinutes(self::TTL_MINUTES));
     }
 
     public function forget(string $challengeId): void
