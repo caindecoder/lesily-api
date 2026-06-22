@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use Illuminate\Support\Facades\Cache;
@@ -83,6 +84,22 @@ class EnableTwoFactorTest extends AuthTestCase
 
         // Then a TOTP secret + provisioning URI are returned, but nothing is persisted yet
         $this->assertProvisioningReturnedWithoutPersisting($response, $user);
+    }
+
+    #[Test]
+    public function when_enrollment_is_confirmed_then_ten_unique_recovery_codes_are_returned_hashed(): void
+    {
+        // Given (a Pro member completing enrollment)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = $this->aMemberOf($company);
+        $this->fakeTotpVerifier(verifies: true);
+        $this->enable($user, $company);
+
+        // When they confirm with a valid code
+        $codes = (array) $this->confirm($user, $company, '123456')->json('data.recovery_codes');
+
+        // Then exactly 10 distinct codes are returned, stored hashed (never plaintext)
+        $this->assertRecoveryCodesHashed($user, $codes);
     }
 
     #[Test]
@@ -196,6 +213,18 @@ class EnableTwoFactorTest extends AuthTestCase
         $this->assertNotNull($reloaded->two_factor_confirmed_at, '2FA must be marked enabled at confirm.');
         $this->assertSame($stagedSecret, $reloaded->two_factor_secret, 'The stored secret must decrypt to the staged secret.');
         $this->assertNotEmpty($response->json('data.recovery_codes'), 'Recovery codes are shown once at confirm.');
+    }
+
+    /**
+     * @param  list<string>  $returnedCodes
+     */
+    protected function assertRecoveryCodesHashed(User $user, array $returnedCodes): void
+    {
+        $stored = User::findOrFail($user->getKey())->two_factor_recovery_codes ?? [];
+        $this->assertCount(10, $returnedCodes);
+        $this->assertCount(10, array_unique($returnedCodes), 'Recovery codes must be distinct.');
+        $this->assertNotContains($returnedCodes[0], $stored, 'Codes must be stored hashed, never plaintext.');
+        $this->assertTrue(Hash::check($returnedCodes[0], $stored[0]), 'A returned code must verify against its stored hash.');
     }
 
     protected function assertNoTwoFactorPersisted(User $user): void
