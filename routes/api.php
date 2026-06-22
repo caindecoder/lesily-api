@@ -7,6 +7,7 @@ use App\Foundation\Auth\IO\Http\Controllers\LogoutController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 use App\Foundation\Auth\IO\Http\Controllers\EnableTwoFactorController;
+use App\Foundation\Auth\IO\Http\Controllers\ConfirmTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
 
 // Health is operational tooling and opts out of the platform cross-cutting
@@ -51,3 +52,9 @@ Route::get('/v1/auth/email/verify/{id}/{hash}', EmailVerificationController::cla
 // feature:two_factor_auth (no permission gate — self-service, all roles per UC-1-006).
 Route::post('/v1/auth/2fa/enable', EnableTwoFactorController::class)
     ->middleware(['auth:sanctum', 'auth.company', 'feature:two_factor_auth']);
+
+// Confirm 2FA — verify the TOTP code against the staged secret (UC-1-006 step 5),
+// then enable 2FA and return the one-time recovery codes. Same gate as enable, plus
+// throttle:auth-tier (brute-force surface — the code is being checked here).
+Route::post('/v1/auth/2fa/confirm', ConfirmTwoFactorController::class)
+    ->middleware(['auth:sanctum', 'auth.company', 'feature:two_factor_auth', 'throttle:auth-tier']);

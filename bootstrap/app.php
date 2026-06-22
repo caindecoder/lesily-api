@@ -26,6 +26,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
+use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 
@@ -71,6 +72,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (InvalidCredentialsException $e) => EnvelopeBuilder::build(
             ApiErrorCode::Unauthenticated,
             'Invalid credentials.',
+        ));
+
+        // A 2FA confirmation with no enrollment in progress (the staged secret expired
+        // or setup was never started). UC-1-006: restart setup to get a fresh secret.
+        $exceptions->render(fn (TwoFactorSetupNotStartedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::TwoFactorSetupNotStarted,
+            'Two-factor setup has not been started. Restart setup and try again.',
         ));
 
         $exceptions->render(fn (CompanyAccessDeniedException $e) => EnvelopeBuilder::build(
