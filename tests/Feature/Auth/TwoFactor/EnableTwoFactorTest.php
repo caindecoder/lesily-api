@@ -115,7 +115,8 @@ class EnableTwoFactorTest extends AuthTestCase
         $this->enable($user, $company);
 
         // When they confirm with a valid code
-        $codes = (array) $this->confirm($user, $company, '123456')->json('data.recovery_codes');
+        /** @var list<string> $codes */
+        $codes = $this->confirm($user, $company, '123456')->json('data.recovery_codes');
 
         // Then exactly 10 distinct codes are returned, stored hashed (never plaintext)
         $this->assertRecoveryCodesHashed($user, $codes);
@@ -244,7 +245,7 @@ class EnableTwoFactorTest extends AuthTestCase
     protected function assertTwoFactorEnabled(TestResponse $response, User $user, string $stagedSecret): void
     {
         $response->assertOk();
-        $reloaded = User::findOrFail($user->getKey());
+        $reloaded = User::query()->whereKey($user->getKey())->firstOrFail();
         $this->assertNotNull($reloaded->two_factor_confirmed_at, '2FA must be marked enabled at confirm.');
         $this->assertSame($stagedSecret, $reloaded->two_factor_secret, 'The stored secret must decrypt to the staged secret.');
         $this->assertNotEmpty($response->json('data.recovery_codes'), 'Recovery codes are shown once at confirm.');
@@ -255,7 +256,7 @@ class EnableTwoFactorTest extends AuthTestCase
      */
     protected function assertRecoveryCodesHashed(User $user, array $returnedCodes): void
     {
-        $stored = User::findOrFail($user->getKey())->two_factor_recovery_codes ?? [];
+        $stored = User::query()->whereKey($user->getKey())->firstOrFail()->two_factor_recovery_codes ?? [];
         $this->assertCount(10, $returnedCodes);
         $this->assertCount(10, array_unique($returnedCodes), 'Recovery codes must be distinct.');
         $this->assertNotContains($returnedCodes[0], $stored, 'Codes must be stored hashed, never plaintext.');
