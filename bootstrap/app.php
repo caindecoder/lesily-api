@@ -27,6 +27,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
+use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
 use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
@@ -86,6 +87,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (InvalidTwoFactorCodeException $e) => EnvelopeBuilder::build(
             ApiErrorCode::InvalidTwoFactorCode,
             'That code is not valid. Open your authenticator app and enter the current code.',
+        ));
+
+        // Enrollment started on an account that already has 2FA enabled (UC-1-006 1b).
+        $exceptions->render(fn (TwoFactorAlreadyEnabledException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::TwoFactorAlreadyEnabled,
+            'Two-factor authentication is already enabled.',
         ));
 
         $exceptions->render(fn (CompanyAccessDeniedException $e) => EnvelopeBuilder::build(

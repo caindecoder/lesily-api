@@ -74,6 +74,23 @@ class EnableTwoFactorTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_an_enrolled_user_starts_enrollment_again_then_it_is_rejected(): void
+    {
+        // Given (a Pro member who already has 2FA enabled)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = User::factory()->withTwoFactor()->create();
+        $this->joinCompany($company, $user);
+
+        // When they start enrollment a second time
+        $response = $this->enable($user, $company);
+
+        // Then it is refused as a conflict and no new secret is staged
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', 'TWO_FACTOR_ALREADY_ENABLED');
+        $this->assertNull(Cache::get("2fa-setup:{$user->id}"), 'A rejected re-enrollment must stage no pending secret.');
+    }
+
+    #[Test]
     public function when_enrollment_starts_then_a_provisioning_uri_and_secret_are_returned_without_persisting(): void
     {
         // Given (a Pro member who has not yet enabled 2FA)
