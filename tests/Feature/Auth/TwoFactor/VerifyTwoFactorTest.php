@@ -40,6 +40,7 @@ class VerifyTwoFactorTest extends AuthTestCase
 
         // Then verification is refused as a missing challenge and no token is issued
         $this->assertRefusedWith($response, ApiErrorCode::TwoFactorChallengeNotFound);
+        $response->assertStatus(404); // literal pins the 404 contract independent of the enum
         $response->assertJsonMissingPath('data.token');
     }
 
@@ -56,6 +57,7 @@ class VerifyTwoFactorTest extends AuthTestCase
 
         // Then verification is refused, no token is issued, and the attempt is counted
         $this->assertRefusedWith($response, ApiErrorCode::TwoFactorVerificationFailed);
+        $response->assertStatus(401); // literal pins the 401 contract independent of the enum
         $this->assertNoTokenMinted($response, $user);
         $this->assertSame(
             LoginChallengeStore::MAX_ATTEMPTS - 1,
@@ -128,7 +130,36 @@ class VerifyTwoFactorTest extends AuthTestCase
         // Then a token is issued, that code is consumed (single-use), and a marker is recorded
         $this->assertSessionTokenIssued($response, $user);
         $this->assertRecoveryCodeConsumed($user, 'HAPY-CODE', expectedRemaining: 1);
-        $this->assertRecoveryCodeUsedRecorded(remaining: 1);
+        $this->assertRecoveryCodeUsedRecorded($user, remaining: 1);
+    }
+
+    #[Test]
+    public function when_no_recovery_codes_remain_then_a_recovery_attempt_is_refused(): void
+    {
+        // Given a 2FA user who has exhausted every recovery code (none remain)
+        $user = $this->aTwoFactorUser([]);
+        $challengeId = $this->openChallenge($user);
+        $this->fakeTotpVerifier(verifies: false);
+
+        // When they submit a recovery code (the lost-authenticator / support path)
+        $response = $this->verify($challengeId, 'ANY-CODE');
+
+        // Then it is refused — there is nothing left to match
+        $this->assertRefusedWith($response, ApiErrorCode::TwoFactorVerificationFailed);
+        $response->assertJsonMissingPath('data.token');
+    }
+
+    #[Test]
+    public function when_verification_is_attempted_past_the_rate_limit_then_it_is_throttled(): void
+    {
+        // Given the shared per-IP auth-tier allowance is exhausted against the verify endpoint
+        $this->exhaustAuthLimit(10, '/api/v1/auth/2fa/verify');
+
+        // When one more verify is attempted
+        $response = $this->postJson('/api/v1/auth/2fa/verify', []);
+
+        // Then it is throttled — the brute-force surface is rate-limited
+        $this->assertThrottled($response);
     }
 
     /**
@@ -196,10 +227,12 @@ class VerifyTwoFactorTest extends AuthTestCase
         }
     }
 
-    protected function assertRecoveryCodeUsedRecorded(int $remaining): void
+    protected function assertRecoveryCodeUsedRecorded(User $user, int $remaining): void
     {
         $markers = LesilyStoredEvent::query()->where('event_class', User2FARecoveryCodeUsed::class)->get();
         $this->assertCount(1, $markers, 'Using a recovery code must record exactly one marker.');
-        $this->assertSame($remaining, $markers->first()?->event_properties['remaining'] ?? null, 'The marker must carry the codes still usable.');
+        $properties = $markers->first()?->event_properties ?? [];
+        $this->assertSame($user->id, $properties['userId'] ?? null, 'The marker must be scoped to the verifying user.');
+        $this->assertSame($remaining, $properties['remaining'] ?? null, 'The marker must carry the codes still usable.');
     }
 }
