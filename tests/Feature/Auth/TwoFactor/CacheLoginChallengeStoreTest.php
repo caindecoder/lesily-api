@@ -66,8 +66,9 @@ class CacheLoginChallengeStoreTest extends TestCase
         $this->store()->forget($challengeId);
 
         // Then it resolved to that user with a full attempt allowance, and forgetting cleared it
-        $this->assertSame($userId, $challenge?->userId, 'The challenge must resolve to its user.');
-        $this->assertSame(LoginChallengeStore::MAX_ATTEMPTS, $challenge?->attemptsRemaining);
+        $this->assertNotNull($challenge, 'The challenge must resolve to its user.');
+        $this->assertSame($userId, $challenge->userId);
+        $this->assertSame(LoginChallengeStore::MAX_ATTEMPTS, $challenge->attemptsRemaining);
         $this->assertNull($this->store()->find($challengeId), 'A forgotten challenge must no longer resolve.');
     }
 
