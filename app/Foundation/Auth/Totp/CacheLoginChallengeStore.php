@@ -47,9 +47,17 @@ class CacheLoginChallengeStore implements LoginChallengeStore
             return;
         }
 
+        $remaining = $challenge->attemptsRemaining - 1;
+
+        if ($remaining <= 0) {
+            $this->forget($challengeId);
+
+            return;
+        }
+
         Cache::put($this->key($challengeId), [
             'userId' => $challenge->userId,
-            'attemptsRemaining' => $challenge->attemptsRemaining - 1,
+            'attemptsRemaining' => $remaining,
         ], now()->addMinutes(self::TTL_MINUTES));
     }
 

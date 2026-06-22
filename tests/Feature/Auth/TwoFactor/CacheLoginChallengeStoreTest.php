@@ -23,6 +23,21 @@ class CacheLoginChallengeStoreTest extends TestCase
     }
 
     #[Test]
+    public function when_a_challenge_runs_out_of_attempts_then_it_is_deleted(): void
+    {
+        // Given a fresh challenge with the full attempt allowance
+        $challengeId = $this->store()->create((string) Str::uuid());
+
+        // When every attempt is spent
+        for ($attempt = 0; $attempt < LoginChallengeStore::MAX_ATTEMPTS; $attempt++) {
+            $this->store()->recordFailure($challengeId);
+        }
+
+        // Then the challenge is gone
+        $this->assertNull($this->store()->find($challengeId), 'A challenge with no attempts left must be deleted.');
+    }
+
+    #[Test]
     public function when_a_failure_is_recorded_then_the_remaining_attempts_decrement(): void
     {
         // Given a fresh challenge with the full attempt allowance
