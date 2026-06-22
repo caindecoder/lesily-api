@@ -12,6 +12,7 @@
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^3.0",
         "nyholm/psr7": "^1.8",
+        "pragmarx/google2fa": "^9.0",
         "railsware/mailtrap-php": "^3.11",
         "sentry/sentry-laravel": "^4.25",
         "spatie/laravel-data": "^4.23",
