@@ -3,6 +3,7 @@
 namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
 use App\Foundation\Auth\Totp\TotpVerifier;
@@ -44,12 +45,19 @@ class ConfirmTwoFactorInteractor
 
         $plaintextCodes = $this->recoveryCodes->generate();
 
-        $user->two_factor_secret = $secret;
-        $user->two_factor_recovery_codes = array_map(Hash::make(...), $plaintextCodes);
-        $user->save();
+        // Atomic: the direct credential write and the marker-event persist commit
+        // together, so a failure can never leave a stored secret with a null
+        // two_factor_confirmed_at (which reads as "2FA disabled" — orphan material).
+        DB::transaction(function () use ($user, $secret, $plaintextCodes): void {
+            $user->two_factor_secret = $secret;
+            $user->two_factor_recovery_codes = array_map(Hash::make(...), $plaintextCodes);
+            $user->save();
 
-        UserAggregate::retrieve($user->getKey())->confirmTwoFactor()->persist();
+            UserAggregate::retrieve($user->getKey())->confirmTwoFactor()->persist();
+        });
 
+        // Clear AFTER commit — if the transaction rolled back, the staged secret
+        // survives so the user can retry confirm without restarting enrollment.
         Cache::forget("2fa-setup:{$user->getKey()}");
 
         return $plaintextCodes;

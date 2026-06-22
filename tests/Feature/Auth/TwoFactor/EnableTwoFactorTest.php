@@ -5,11 +5,13 @@ namespace Tests\Feature\Auth\TwoFactor;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\Billing\Enums\BillingPlan;
@@ -88,6 +90,23 @@ class EnableTwoFactorTest extends AuthTestCase
         $response->assertStatus(409);
         $response->assertJsonPath('error_code', 'TWO_FACTOR_ALREADY_ENABLED');
         $this->assertNull(Cache::get("2fa-setup:{$user->id}"), 'A rejected re-enrollment must stage no pending secret.');
+    }
+
+    #[Test]
+    public function when_confirmation_attempts_exceed_the_limit_then_they_are_throttled(): void
+    {
+        // Given (an authenticated Pro member)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = $this->aMemberOf($company);
+
+        // When confirm is called past the per-IP auth-tier allowance (the TOTP brute-force surface)
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $this->confirm($user, $company, '123456');
+        }
+        $response = $this->confirm($user, $company, '123456');
+
+        // Then the over-limit attempt is throttled
+        $this->assertThrottled($response);
     }
 
     #[Test]
@@ -247,8 +266,17 @@ class EnableTwoFactorTest extends AuthTestCase
         $response->assertOk();
         $reloaded = User::query()->whereKey($user->getKey())->firstOrFail();
         $this->assertNotNull($reloaded->two_factor_confirmed_at, '2FA must be marked enabled at confirm.');
-        $this->assertSame($stagedSecret, $reloaded->two_factor_secret, 'The stored secret must decrypt to the staged secret.');
         $this->assertNotEmpty($response->json('data.recovery_codes'), 'Recovery codes are shown once at confirm.');
+        $this->assertSecretStoredEncrypted($user, $stagedSecret);
+    }
+
+    protected function assertSecretStoredEncrypted(User $user, string $stagedSecret): void
+    {
+        // Read the RAW column (bypassing the model's `encrypted` cast) so the test
+        // would RED if the secret were ever stored in plaintext.
+        $raw = (string) DB::table('users')->where('id', $user->getKey())->value('two_factor_secret');
+        $this->assertNotSame($stagedSecret, $raw, 'The TOTP secret must be encrypted at rest, not plaintext.');
+        $this->assertSame($stagedSecret, Crypt::decryptString($raw), 'The encrypted secret must decrypt to the staged value.');
     }
 
     /**
@@ -259,8 +287,10 @@ class EnableTwoFactorTest extends AuthTestCase
         $stored = User::query()->whereKey($user->getKey())->firstOrFail()->two_factor_recovery_codes ?? [];
         $this->assertCount(10, $returnedCodes);
         $this->assertCount(10, array_unique($returnedCodes), 'Recovery codes must be distinct.');
-        $this->assertNotContains($returnedCodes[0], $stored, 'Codes must be stored hashed, never plaintext.');
-        $this->assertTrue(Hash::check($returnedCodes[0], $stored[0]), 'A returned code must verify against its stored hash.');
+        $this->assertSame([], array_intersect($returnedCodes, $stored), 'No plaintext code may appear in storage.');
+        foreach ($returnedCodes as $index => $code) {
+            $this->assertTrue(Hash::check($code, $stored[$index]), 'Every returned code must verify against its stored hash.');
+        }
     }
 
     protected function assertEnableMarkerCarriesNoSecret(string $stagedSecret): void

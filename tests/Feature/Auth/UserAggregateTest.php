@@ -6,9 +6,11 @@ use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Auth\Aggregates\User;
 use Illuminate\Support\Facades\Notification;
+use App\Foundation\Auth\Events\User2FAEnabled;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 use App\Foundation\Auth\Exceptions\UserAlreadyRegisteredException;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class UserAggregateTest extends AuthTestCase
 {
@@ -37,6 +39,21 @@ class UserAggregateTest extends AuthTestCase
         $this->expectException(UserAlreadyRegisteredException::class);
 
         User::retrieve($userId)->createOwner($companyId, $command);
+    }
+
+    // Sad — 2FA confirm is idempotent on the aggregate: re-confirming records no second marker.
+    #[Test]
+    public function when_two_factor_is_already_confirmed_then_re_confirming_records_no_further_change(): void
+    {
+        // Given a user who has already confirmed 2FA
+        $userId = (string) Str::uuid();
+        User::retrieve($userId)->confirmTwoFactor()->persist();
+
+        // When 2FA is confirmed again
+        User::retrieve($userId)->confirmTwoFactor()->persist();
+
+        // Then only one enable marker was ever recorded
+        $this->assertSame(1, LesilyStoredEvent::query()->where('event_class', User2FAEnabled::class)->count());
     }
 
     protected function buildRegisterOwnerCommand(): RegisterOwnerCommand
