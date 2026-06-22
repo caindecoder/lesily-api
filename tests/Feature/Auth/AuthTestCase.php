@@ -4,7 +4,9 @@ namespace Tests\Feature\Auth;
 
 use Tests\TestCase;
 use App\Models\User;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use App\Foundation\Auth\Totp\TotpVerifier;
 
 abstract class AuthTestCase extends TestCase
 {
@@ -26,6 +28,52 @@ abstract class AuthTestCase extends TestCase
         string $password = self::LOGIN_PASSWORD,
     ): User {
         return User::factory()->withEmail($email)->withPassword($password)->create();
+    }
+
+    /**
+     * A registered, login-ready user with 2FA already enabled. Shared by the 2FA
+     * login-challenge (UC-1-002 alt-4a) and verify (UC-1-005) suites. Pass
+     * $recoveryCodes to seed known plaintext codes for the recovery-path tests;
+     * null generates 10 random codes.
+     *
+     * @param  list<string>|null  $recoveryCodes
+     */
+    protected function aTwoFactorUser(?array $recoveryCodes = null): User
+    {
+        return User::factory()
+            ->withEmail(self::LOGIN_EMAIL)
+            ->withPassword(self::LOGIN_PASSWORD)
+            ->withTwoFactor($recoveryCodes)
+            ->create();
+    }
+
+    /**
+     * Bind a deterministic TotpVerifier double — the only mocked boundary (E23). It
+     * stages a runtime-generated secret (no literal — SonarCloud) and lets the test
+     * decide whether a submitted code verifies. Shared by the 2FA enrollment
+     * (UC-1-006) and verify (UC-1-005) suites.
+     */
+    protected function fakeTotpVerifier(bool $verifies = true): void
+    {
+        $this->app->instance(TotpVerifier::class, new class($verifies) implements TotpVerifier
+        {
+            public function __construct(private bool $verifies) {}
+
+            public function generateSecret(): string
+            {
+                return 'STAGED'.Str::upper(Str::random(10));
+            }
+
+            public function provisioningUri(string $secret, string $accountName): string
+            {
+                return "otpauth://totp/Lesily:{$accountName}?secret={$secret}&issuer=Lesily";
+            }
+
+            public function verify(string $secret, string $code): bool
+            {
+                return $this->verifies;
+            }
+        });
     }
 
     /**

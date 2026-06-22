@@ -67,16 +67,19 @@ class UserFactory extends Factory
 
     /**
      * A user with 2FA already enabled — secret + hashed recovery codes + a confirmed
-     * timestamp, all generated at runtime (no literal secrets, per SonarCloud).
+     * timestamp, all generated at runtime (no literal secrets, per SonarCloud). Pass
+     * $recoveryCodes to hash known plaintext codes (the recovery-path verify tests need
+     * a code they can actually submit); null generates 10 random codes; [] leaves none.
+     *
+     * @param  list<string>|null  $recoveryCodes
      */
-    public function withTwoFactor(): static
+    public function withTwoFactor(?array $recoveryCodes = null): static
     {
+        $codes = $recoveryCodes ?? array_map(static fn (): string => Str::random(10), range(1, 10));
+
         return $this->state(fn (array $attributes): array => [
             'two_factor_secret' => Str::random(32),
-            'two_factor_recovery_codes' => array_map(
-                static fn (): string => Hash::make(Str::random(10)),
-                range(1, 10),
-            ),
+            'two_factor_recovery_codes' => array_map(Hash::make(...), $codes),
             'two_factor_confirmed_at' => now(),
         ]);
     }
