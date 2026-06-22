@@ -8,7 +8,9 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use Illuminate\Support\Facades\RateLimiter;
+use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\Totp\Google2faTotpVerifier;
+use App\Foundation\Auth\Totp\CacheLoginChallengeStore;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -20,6 +22,9 @@ class AppServiceProvider extends ServiceProvider
         // The TOTP boundary (DIP, slice-2fa): production resolves the
         // pragmarx/google2fa adapter; feature tests bind a deterministic double.
         $this->app->bind(TotpVerifier::class, Google2faTotpVerifier::class);
+
+        // The 2FA login-challenge boundary (DIP, slice-2fa #02): bridges login -> /2fa/verify.
+        $this->app->bind(LoginChallengeStore::class, CacheLoginChallengeStore::class);
     }
 
     /**
