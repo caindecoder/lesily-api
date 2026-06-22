@@ -9,6 +9,9 @@ enum ApiErrorCode: string
     case CompanyAccessDenied = 'COMPANY_ACCESS_DENIED';
     case FeatureNotAvailable = 'FEATURE_NOT_AVAILABLE';
     case RoleInsufficient = 'ROLE_INSUFFICIENT';
+    case TwoFactorSetupNotStarted = 'TWO_FACTOR_SETUP_NOT_STARTED';
+    case InvalidTwoFactorCode = 'INVALID_TWO_FACTOR_CODE';
+    case TwoFactorAlreadyEnabled = 'TWO_FACTOR_ALREADY_ENABLED';
     case ResourceNotFound = 'RESOURCE_NOT_FOUND';
     case EmailRegistered = 'EMAIL_REGISTERED';
     case BrNumberRegistered = 'BR_NUMBER_REGISTERED';
@@ -31,6 +34,9 @@ enum ApiErrorCode: string
             self::CompanyAccessDenied => 403,
             self::FeatureNotAvailable => 403,
             self::RoleInsufficient => 403,
+            self::TwoFactorSetupNotStarted => 422,
+            self::InvalidTwoFactorCode => 422,
+            self::TwoFactorAlreadyEnabled => 409,
             self::ResourceNotFound => 404,
             self::EmailRegistered => 409,
             self::BrNumberRegistered => 409,

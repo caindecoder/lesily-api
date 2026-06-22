@@ -64,4 +64,20 @@ class UserFactory extends Factory
             'email' => $email,
         ]);
     }
+
+    /**
+     * A user with 2FA already enabled — secret + hashed recovery codes + a confirmed
+     * timestamp, all generated at runtime (no literal secrets, per SonarCloud).
+     */
+    public function withTwoFactor(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'two_factor_secret' => Str::random(32),
+            'two_factor_recovery_codes' => array_map(
+                static fn (): string => Hash::make(Str::random(10)),
+                range(1, 10),
+            ),
+            'two_factor_confirmed_at' => now(),
+        ]);
+    }
 }

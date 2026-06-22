@@ -21,11 +21,14 @@ use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
+use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
+use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
+use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 
@@ -71,6 +74,25 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (InvalidCredentialsException $e) => EnvelopeBuilder::build(
             ApiErrorCode::Unauthenticated,
             'Invalid credentials.',
+        ));
+
+        // A 2FA confirmation with no enrollment in progress (the staged secret expired
+        // or setup was never started). UC-1-006: restart setup to get a fresh secret.
+        $exceptions->render(fn (TwoFactorSetupNotStartedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::TwoFactorSetupNotStarted,
+            'Two-factor setup has not been started. Restart setup and try again.',
+        ));
+
+        // The submitted TOTP code did not verify against the staged secret (UC-1-006 4a).
+        $exceptions->render(fn (InvalidTwoFactorCodeException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::InvalidTwoFactorCode,
+            'That code is not valid. Open your authenticator app and enter the current code.',
+        ));
+
+        // Enrollment started on an account that already has 2FA enabled (UC-1-006 1b).
+        $exceptions->render(fn (TwoFactorAlreadyEnabledException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::TwoFactorAlreadyEnabled,
+            'Two-factor authentication is already enabled.',
         ));
 
         $exceptions->render(fn (CompanyAccessDeniedException $e) => EnvelopeBuilder::build(
