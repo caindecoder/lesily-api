@@ -65,6 +65,40 @@ class VerifyTwoFactorTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_attempt_allowance_is_exhausted_then_the_challenge_is_abandoned(): void
+    {
+        // Given a 2FA user with an open challenge and an authenticator that always rejects
+        $user = $this->aTwoFactorUser();
+        $challengeId = $this->openChallenge($user);
+        $this->fakeTotpVerifier(verifies: false);
+
+        // When the full attempt allowance is spent on invalid codes
+        for ($attempt = 0; $attempt < LoginChallengeStore::MAX_ATTEMPTS; $attempt++) {
+            $this->verify($challengeId, 'wrong-code')
+                ->assertStatus(ApiErrorCode::TwoFactorVerificationFailed->status());
+        }
+
+        // Then the challenge is abandoned — a further attempt is refused as missing, not invalid
+        $this->assertRefusedWith($this->verify($challengeId, 'wrong-code'), ApiErrorCode::TwoFactorChallengeNotFound);
+    }
+
+    #[Test]
+    public function when_a_consumed_recovery_code_is_reused_then_verification_is_refused(): void
+    {
+        // Given a 2FA user who has already spent a recovery code on a prior verify
+        $user = $this->aTwoFactorUser(['ONCE-ONLY', 'KEEP-CODE']);
+        $this->fakeTotpVerifier(verifies: false);
+        $this->verify($this->openChallenge($user), 'ONCE-ONLY')->assertOk();
+
+        // When the same code is presented again on a fresh challenge
+        $response = $this->verify($this->openChallenge($user), 'ONCE-ONLY');
+
+        // Then it is refused — a single-use code cannot authenticate twice
+        $this->assertRefusedWith($response, ApiErrorCode::TwoFactorVerificationFailed);
+        $response->assertJsonMissingPath('data.token');
+    }
+
+    #[Test]
     public function when_a_valid_totp_code_is_submitted_then_a_session_token_is_issued(): void
     {
         // Given a 2FA user with an open challenge and an authenticator that accepts the code
