@@ -8,6 +8,7 @@ use App\Foundation\EventStore\AggregateRoot;
 use App\Foundation\Auth\Events\User2FAEnabled;
 use App\Foundation\Auth\Events\UserEmailVerified;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
+use App\Foundation\Auth\Events\User2FARecoveryCodeUsed;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 use App\Foundation\Auth\Exceptions\UserAlreadyRegisteredException;
@@ -76,6 +77,14 @@ class User extends AggregateRoot
         return $this->recordThat(new User2FAEnabled(
             userId: $this->uuid(),
             confirmedAt: CarbonImmutable::now(),
+        ));
+    }
+
+    public function useRecoveryCode(int $remaining): static
+    {
+        return $this->recordThat(new User2FARecoveryCodeUsed(
+            userId: $this->uuid(),
+            remaining: $remaining,
         ));
     }
 

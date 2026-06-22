@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth\TwoFactor;
 
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
@@ -11,6 +12,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\Auth\Events\User2FARecoveryCodeUsed;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class VerifyTwoFactorTest extends AuthTestCase
@@ -78,6 +80,23 @@ class VerifyTwoFactorTest extends AuthTestCase
         $this->assertNoEventRecorded();
     }
 
+    #[Test]
+    public function when_a_valid_recovery_code_is_used_then_a_session_token_is_issued_and_the_code_is_consumed(): void
+    {
+        // Given a 2FA user holding known recovery codes, an open challenge, and a TOTP that won't match
+        $user = $this->aTwoFactorUser(['HAPY-CODE', 'KEEP-CODE']);
+        $challengeId = $this->openChallenge($user);
+        $this->fakeTotpVerifier(verifies: false);
+
+        // When one recovery code is submitted
+        $response = $this->verify($challengeId, 'HAPY-CODE');
+
+        // Then a token is issued, that code is consumed (single-use), and a marker is recorded
+        $this->assertSessionTokenIssued($response, $user);
+        $this->assertRecoveryCodeConsumed($user, 'HAPY-CODE', expectedRemaining: 1);
+        $this->assertRecoveryCodeUsedRecorded(remaining: 1);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
@@ -132,5 +151,21 @@ class VerifyTwoFactorTest extends AuthTestCase
     protected function assertNoEventRecorded(): void
     {
         $this->assertSame(0, LesilyStoredEvent::query()->count(), 'A TOTP verify is token-only — it records no domain event.');
+    }
+
+    protected function assertRecoveryCodeConsumed(User $user, string $usedCode, int $expectedRemaining): void
+    {
+        $stored = User::query()->whereKey($user->getKey())->firstOrFail()->two_factor_recovery_codes ?? [];
+        $this->assertCount($expectedRemaining, $stored, 'The consumed code must be removed, leaving the others.');
+        foreach ($stored as $hash) {
+            $this->assertFalse(Hash::check($usedCode, $hash), 'A consumed recovery code must no longer be stored.');
+        }
+    }
+
+    protected function assertRecoveryCodeUsedRecorded(int $remaining): void
+    {
+        $markers = LesilyStoredEvent::query()->where('event_class', User2FARecoveryCodeUsed::class)->get();
+        $this->assertCount(1, $markers, 'Using a recovery code must record exactly one marker.');
+        $this->assertSame($remaining, $markers->first()?->event_properties['remaining'] ?? null, 'The marker must carry the codes still usable.');
     }
 }

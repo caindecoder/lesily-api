@@ -3,10 +3,11 @@
 namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
-use RuntimeException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
+use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\Auth\UseCases\Commands\VerifyTwoFactorCommand;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
@@ -42,14 +43,36 @@ class VerifyTwoFactorInteractor
             return $user;
         }
 
-        foreach ($user->two_factor_recovery_codes ?? [] as $hash) {
+        foreach ($user->two_factor_recovery_codes ?? [] as $index => $hash) {
             if (Hash::check($command->code, $hash)) {
-                throw new RuntimeException('Not implemented');
+                $this->consumeRecoveryCode($user, $index);
+                $this->challenges->forget($command->challengeId);
+
+                return $user;
             }
         }
 
         $this->challenges->recordFailure($command->challengeId);
 
         throw new TwoFactorVerificationFailedException;
+    }
+
+    /**
+     * Remove the matched recovery-code hash from the users row (single-use) and record
+     * the non-secret marker, atomically (Design-Y — the credential write lives outside
+     * the event store; the two commit together so a marker can never outrun its column).
+     */
+    private function consumeRecoveryCode(User $user, int $index): void
+    {
+        $remaining = $user->two_factor_recovery_codes ?? [];
+        unset($remaining[$index]);
+        $remaining = array_values($remaining);
+
+        DB::transaction(function () use ($user, $remaining): void {
+            $user->two_factor_recovery_codes = $remaining;
+            $user->save();
+
+            UserAggregate::retrieve($user->getKey())->useRecoveryCode(count($remaining))->persist();
+        });
     }
 }
