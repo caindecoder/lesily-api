@@ -37,7 +37,9 @@ class VerifyTwoFactorInteractor
         $user = User::query()->findOrFail($challenge->userId);
 
         if ($this->totp->verify((string) $user->two_factor_secret, $command->code)) {
-            throw new RuntimeException('Not implemented');
+            $this->challenges->forget($command->challengeId);
+
+            return $user;
         }
 
         foreach ($user->two_factor_recovery_codes ?? [] as $hash) {

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth\TwoFactor;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
@@ -10,6 +11,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class VerifyTwoFactorTest extends AuthTestCase
 {
@@ -60,6 +62,22 @@ class VerifyTwoFactorTest extends AuthTestCase
         );
     }
 
+    #[Test]
+    public function when_a_valid_totp_code_is_submitted_then_a_session_token_is_issued(): void
+    {
+        // Given a 2FA user with an open challenge and an authenticator that accepts the code
+        $user = $this->aTwoFactorUser();
+        $challengeId = $this->openChallenge($user);
+        $this->fakeTotpVerifier(verifies: true);
+
+        // When the current TOTP code is submitted
+        $response = $this->verify($challengeId, '123456');
+
+        // Then a working session token is issued and no domain event is recorded (token-only)
+        $this->assertSessionTokenIssued($response, $user);
+        $this->assertNoEventRecorded();
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
@@ -95,5 +113,24 @@ class VerifyTwoFactorTest extends AuthTestCase
     {
         $response->assertJsonMissingPath('data.token');
         $this->assertSame(0, $user->tokens()->count(), 'No token may be minted on a failed verify.');
+    }
+
+    protected function assertSessionTokenIssued(TestResponse $response, User $user): void
+    {
+        $response->assertOk();
+        $token = (string) $response->json('data.token');
+        $this->assertNotEmpty($token, 'A completed 2FA verify must issue a session token.');
+
+        // forgetGuards so the probe re-resolves the new token from scratch — the
+        // container-cached guard would otherwise answer from the test's prior state.
+        Auth::forgetGuards();
+        $probe = $this->withToken($token)->getJson('/api/_test/authenticated-probe');
+        $probe->assertOk();
+        $probe->assertJsonPath('user_id', $user->id);
+    }
+
+    protected function assertNoEventRecorded(): void
+    {
+        $this->assertSame(0, LesilyStoredEvent::query()->count(), 'A TOTP verify is token-only — it records no domain event.');
     }
 }
