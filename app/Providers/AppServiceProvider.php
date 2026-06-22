@@ -6,7 +6,9 @@ use Illuminate\Http\Request;
 use App\Companies\Entities\Company;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
+use App\Foundation\Auth\Totp\TotpVerifier;
 use Illuminate\Support\Facades\RateLimiter;
+use App\Foundation\Auth\Totp\Google2faTotpVerifier;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -15,7 +17,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // The TOTP boundary (DIP, slice-2fa): production resolves the
+        // pragmarx/google2fa adapter; feature tests bind a deterministic double.
+        $this->app->bind(TotpVerifier::class, Google2faTotpVerifier::class);
     }
 
     /**
