@@ -229,9 +229,12 @@ class VerifyTwoFactorTest extends AuthTestCase
 
     protected function assertRecoveryCodeUsedRecorded(User $user, int $remaining): void
     {
-        $markers = LesilyStoredEvent::query()->where('event_class', User2FARecoveryCodeUsed::class)->get();
-        $this->assertCount(1, $markers, 'Using a recovery code must record exactly one marker.');
-        $properties = $markers->first()?->event_properties ?? [];
+        // sole() enforces exactly-one marker (throws otherwise) and is non-null, so the
+        // property reads below need no nullsafe (mirrors EnableTwoFactorTest).
+        $properties = LesilyStoredEvent::query()
+            ->where('event_class', User2FARecoveryCodeUsed::class)
+            ->sole()
+            ->event_properties;
         $this->assertSame($user->id, $properties['userId'] ?? null, 'The marker must be scoped to the verifying user.');
         $this->assertSame($remaining, $properties['remaining'] ?? null, 'The marker must carry the codes still usable.');
     }

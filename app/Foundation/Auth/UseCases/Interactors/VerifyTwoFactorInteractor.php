@@ -5,6 +5,7 @@ namespace App\Foundation\Auth\UseCases\Interactors;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Cache;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
@@ -43,18 +44,41 @@ class VerifyTwoFactorInteractor
             return $user;
         }
 
-        foreach ($user->two_factor_recovery_codes ?? [] as $index => $hash) {
-            if (Hash::check($command->code, $hash)) {
-                $this->consumeRecoveryCode($user, $index);
-                $this->challenges->forget($command->challengeId);
+        if ($this->consumeMatchingRecoveryCode($user, $command->code)) {
+            $this->challenges->forget($command->challengeId);
 
-                return $user;
-            }
+            return $user;
         }
 
         $this->challenges->recordFailure($command->challengeId);
 
         throw new TwoFactorVerificationFailedException;
+    }
+
+    /**
+     * Match and consume a recovery code under a per-user lock so two concurrent verifies
+     * presenting the SAME code cannot both spend it (the single-use invariant — the same
+     * read-modify-write race class as recordFailure/OQ-1-119). The loser blocks on the
+     * lock, re-reads inside it, finds the code already gone, and returns false.
+     */
+    private function consumeMatchingRecoveryCode(User $user, string $code): bool
+    {
+        $matched = false;
+
+        Cache::lock("2fa-recovery-lock:{$user->getKey()}", seconds: 5)->block(seconds: 5, callback: function () use ($user, $code, &$matched): void {
+            $user->refresh();
+
+            foreach ($user->two_factor_recovery_codes ?? [] as $index => $hash) {
+                if (Hash::check($code, $hash)) {
+                    $this->consumeRecoveryCode($user, $index);
+                    $matched = true;
+
+                    return;
+                }
+            }
+        });
+
+        return $matched;
     }
 
     /**
