@@ -3,7 +3,6 @@
 namespace Tests\Feature\Auth\TwoFactor;
 
 use App\Models\User;
-use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
@@ -13,7 +12,6 @@ use Tests\Feature\Auth\AuthTestCase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use PHPUnit\Framework\Attributes\Test;
-use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Auth\Events\User2FAEnabled;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -212,34 +210,6 @@ class EnableTwoFactorTest extends AuthTestCase
             ['code' => $code],
             ['X-Company-Context' => $company->getKey()],
         );
-    }
-
-    /**
-     * Bind a deterministic TotpVerifier double — the only mocked boundary (E23). It
-     * stages a runtime-generated secret (no literal — SonarCloud) and lets the test
-     * decide whether a submitted code verifies.
-     */
-    protected function fakeTotpVerifier(bool $verifies = true): void
-    {
-        $this->app->instance(TotpVerifier::class, new class($verifies) implements TotpVerifier
-        {
-            public function __construct(private bool $verifies) {}
-
-            public function generateSecret(): string
-            {
-                return 'STAGED'.Str::upper(Str::random(10));
-            }
-
-            public function provisioningUri(string $secret, string $accountName): string
-            {
-                return "otpauth://totp/Lesily:{$accountName}?secret={$secret}&issuer=Lesily";
-            }
-
-            public function verify(string $secret, string $code): bool
-            {
-                return $this->verifies;
-            }
-        });
     }
 
     protected function assertFeatureUnavailable(TestResponse $response, User $user): void

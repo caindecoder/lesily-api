@@ -45,25 +45,32 @@ class CacheLoginChallengeStore implements LoginChallengeStore
 
     public function recordFailure(string $challengeId): void
     {
-        $data = $this->read($challengeId);
+        // Serialize the decrement under an atomic lock (OQ-1-119): a bare
+        // read-modify-write lets two concurrent /2fa/verify requests both read N and
+        // both write N-1, letting a parallelized attacker slip past the attempt cap.
+        // The lock is held only for the microseconds of the decrement; block() waits
+        // briefly for it so every concurrent failure is counted, not dropped.
+        Cache::lock($this->lockKey($challengeId), seconds: 5)->block(seconds: 5, callback: function () use ($challengeId): void {
+            $data = $this->read($challengeId);
 
-        if ($data === null) {
-            return;
-        }
+            if ($data === null) {
+                return;
+            }
 
-        $remaining = $data['attemptsRemaining'] - 1;
+            $remaining = $data['attemptsRemaining'] - 1;
 
-        if ($remaining <= 0) {
-            $this->forget($challengeId);
+            if ($remaining <= 0) {
+                $this->forget($challengeId);
 
-            return;
-        }
+                return;
+            }
 
-        Cache::put($this->key($challengeId), [
-            'userId' => $data['userId'],
-            'attemptsRemaining' => $remaining,
-            'expiresAt' => $data['expiresAt'],
-        ], CarbonImmutable::createFromTimestamp($data['expiresAt']));
+            Cache::put($this->key($challengeId), [
+                'userId' => $data['userId'],
+                'attemptsRemaining' => $remaining,
+                'expiresAt' => $data['expiresAt'],
+            ], CarbonImmutable::createFromTimestamp($data['expiresAt']));
+        });
     }
 
     public function forget(string $challengeId): void
@@ -92,5 +99,10 @@ class CacheLoginChallengeStore implements LoginChallengeStore
     private function key(string $challengeId): string
     {
         return "2fa-challenge:{$challengeId}";
+    }
+
+    private function lockKey(string $challengeId): string
+    {
+        return "2fa-challenge-lock:{$challengeId}";
     }
 }

@@ -47,15 +47,6 @@ class LoginChallengeTest extends AuthTestCase
         $this->assertChallengeIssued($response, $user);
     }
 
-    protected function aTwoFactorUser(): User
-    {
-        return User::factory()
-            ->withEmail(self::LOGIN_EMAIL)
-            ->withPassword(self::LOGIN_PASSWORD)
-            ->withTwoFactor()
-            ->create();
-    }
-
     protected function login(): TestResponse
     {
         return $this->postJson('/api/v1/auth/login', [

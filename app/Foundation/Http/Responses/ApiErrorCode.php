@@ -12,6 +12,8 @@ enum ApiErrorCode: string
     case TwoFactorSetupNotStarted = 'TWO_FACTOR_SETUP_NOT_STARTED';
     case InvalidTwoFactorCode = 'INVALID_TWO_FACTOR_CODE';
     case TwoFactorAlreadyEnabled = 'TWO_FACTOR_ALREADY_ENABLED';
+    case TwoFactorChallengeNotFound = 'TWO_FACTOR_CHALLENGE_NOT_FOUND';
+    case TwoFactorVerificationFailed = 'TWO_FACTOR_VERIFICATION_FAILED';
     case ResourceNotFound = 'RESOURCE_NOT_FOUND';
     case EmailRegistered = 'EMAIL_REGISTERED';
     case BrNumberRegistered = 'BR_NUMBER_REGISTERED';
@@ -37,6 +39,8 @@ enum ApiErrorCode: string
             self::TwoFactorSetupNotStarted => 422,
             self::InvalidTwoFactorCode => 422,
             self::TwoFactorAlreadyEnabled => 409,
+            self::TwoFactorChallengeNotFound => 404,
+            self::TwoFactorVerificationFailed => 401,
             self::ResourceNotFound => 404,
             self::EmailRegistered => 409,
             self::BrNumberRegistered => 409,
