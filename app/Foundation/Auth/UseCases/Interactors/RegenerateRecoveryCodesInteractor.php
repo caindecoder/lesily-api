@@ -3,7 +3,10 @@
 namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use App\Foundation\Auth\Totp\RecoveryCodeGenerator;
+use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
 use App\Foundation\Auth\UseCases\Commands\RegenerateRecoveryCodesCommand;
@@ -17,6 +20,10 @@ use App\Foundation\Auth\UseCases\Commands\RegenerateRecoveryCodesCommand;
  */
 class RegenerateRecoveryCodesInteractor
 {
+    public function __construct(
+        private readonly RecoveryCodeGenerator $recoveryCodes,
+    ) {}
+
     /**
      * @return list<string>
      */
@@ -30,6 +37,18 @@ class RegenerateRecoveryCodesInteractor
             throw new IncorrectPasswordException;
         }
 
-        return [];
+        $plaintextCodes = $this->recoveryCodes->generate();
+
+        // Atomic: the direct recovery-code overwrite and the marker-event persist commit
+        // together. The TOTP secret + two_factor_confirmed_at are untouched — only the
+        // codes rotate (Design-Y; the marker carries no secret material).
+        DB::transaction(function () use ($user, $plaintextCodes): void {
+            $user->two_factor_recovery_codes = array_map(Hash::make(...), $plaintextCodes);
+            $user->save();
+
+            UserAggregate::retrieve($user->getKey())->regenerateRecoveryCodes()->persist();
+        });
+
+        return $plaintextCodes;
     }
 }

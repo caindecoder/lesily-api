@@ -10,6 +10,7 @@ use App\Foundation\Auth\Events\User2FADisabled;
 use App\Foundation\Auth\Events\UserEmailVerified;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use App\Foundation\Auth\Events\User2FARecoveryCodeUsed;
+use App\Foundation\Auth\Events\User2FARecoveryCodesRegenerated;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 use App\Foundation\Auth\Exceptions\UserAlreadyRegisteredException;
@@ -100,6 +101,19 @@ class User extends AggregateRoot
         return $this->recordThat(new User2FADisabled(
             userId: $this->uuid(),
             disabledAt: CarbonImmutable::now(),
+        ));
+    }
+
+    /**
+     * Guardless with no apply (mirrors useRecoveryCode): rotating the recovery codes does
+     * not change the enrollment state — the new hashes are written to the users column by
+     * the interactor and this is a pure non-secret audit marker.
+     */
+    public function regenerateRecoveryCodes(): static
+    {
+        return $this->recordThat(new User2FARecoveryCodesRegenerated(
+            userId: $this->uuid(),
+            regeneratedAt: CarbonImmutable::now(),
         ));
     }
 

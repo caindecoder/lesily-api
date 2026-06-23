@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth\TwoFactor;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -91,6 +92,21 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
         $this->assertThrottled($response);
     }
 
+    #[Test]
+    public function when_the_correct_password_is_submitted_then_the_recovery_codes_are_rotated(): void
+    {
+        // Given an authenticated 2FA user
+        $user = $this->aTwoFactorUser();
+        Sanctum::actingAs($user);
+        $secretBefore = (string) User::query()->whereKey($user->getKey())->firstOrFail()->two_factor_secret;
+
+        // When they regenerate with the correct password
+        $response = $this->postJson('/api/v1/auth/2fa/recovery-codes', ['password' => self::LOGIN_PASSWORD]);
+
+        // Then 10 fresh codes are returned once, stored hashed, the TOTP secret is kept, and a marker is recorded
+        $this->assertCodesRotated($response, $user, $secretBefore);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>}>
      */
@@ -108,5 +124,36 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
         $matches = array_filter($stored, static fn (string $hash): bool => Hash::check($survivingCode, $hash));
         $this->assertNotEmpty($matches, 'A refused regenerate must leave the existing recovery codes valid.');
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', User2FARecoveryCodesRegenerated::class)->count(), 'A refused regenerate records no marker.');
+    }
+
+    protected function assertCodesRotated(TestResponse $response, User $user, string $secretBefore): void
+    {
+        $response->assertOk();
+        /** @var list<string> $returned */
+        $returned = $response->json('data.recovery_codes');
+        $reloaded = User::query()->whereKey($user->getKey())->firstOrFail();
+        $stored = $reloaded->two_factor_recovery_codes ?? [];
+
+        $this->assertCount(10, $returned);
+        $this->assertCount(10, array_unique($returned), 'Regenerated codes must be distinct.');
+        $this->assertSame([], array_intersect($returned, $stored), 'No plaintext code may appear in storage.');
+        foreach ($returned as $index => $code) {
+            $this->assertTrue(Hash::check($code, $stored[$index]), 'Every returned code must verify against its stored hash.');
+        }
+        $this->assertSame($secretBefore, (string) $reloaded->two_factor_secret, 'The TOTP secret must be unchanged (no QR re-scan).');
+        $this->assertNotNull($reloaded->two_factor_confirmed_at, '2FA must remain enabled.');
+        $this->assertRegenerateMarkerRecorded($user);
+    }
+
+    protected function assertRegenerateMarkerRecorded(User $user): void
+    {
+        // sole() enforces exactly-one marker (throws otherwise) and is non-null, so the
+        // property reads below need no nullsafe (mirrors EnableTwoFactorTest).
+        $properties = LesilyStoredEvent::query()
+            ->where('event_class', User2FARecoveryCodesRegenerated::class)
+            ->sole()
+            ->event_properties;
+        $this->assertSame(['userId', 'regeneratedAt'], array_keys($properties), 'The marker must carry only non-secret metadata (Design-Y).');
+        $this->assertSame($user->id, $properties['userId'] ?? null, 'The marker must be scoped to the regenerating user.');
     }
 }
