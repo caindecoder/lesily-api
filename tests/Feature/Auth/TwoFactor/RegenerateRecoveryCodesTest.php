@@ -118,6 +118,7 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
         // When they regenerate their recovery codes
         /** @var list<string> $newCodes */
         $newCodes = $this->postJson('/api/v1/auth/2fa/recovery-codes', ['password' => self::LOGIN_PASSWORD])
+            ->assertOk()
             ->json('data.recovery_codes');
 
         // Then the old code no longer authenticates at verify, but a new one does (rotation end-to-end)
