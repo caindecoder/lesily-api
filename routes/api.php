@@ -81,4 +81,4 @@ Route::delete('/v1/auth/2fa', DisableTwoFactorController::class)
 // rotates the 10 recovery codes (old set invalidated). throttle:auth-tier (credential
 // surface like disable + confirm — R9). 200 with the new codes shown once.
 Route::post('/v1/auth/2fa/recovery-codes', RegenerateRecoveryCodesController::class)
-    ->middleware('auth:sanctum');
+    ->middleware(['auth:sanctum', 'throttle:auth-tier']);
