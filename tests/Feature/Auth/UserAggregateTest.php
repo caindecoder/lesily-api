@@ -56,6 +56,23 @@ class UserAggregateTest extends AuthTestCase
         $this->assertSame(1, LesilyStoredEvent::query()->where('event_class', User2FAEnabled::class)->count());
     }
 
+    // Sad — disabling resets the enrollment flag, so a later re-enable is recorded rather
+    // than swallowed by confirmTwoFactor's already-enabled guard (proves applyUser2FADisabled).
+    #[Test]
+    public function when_two_factor_is_re_enabled_after_being_disabled_then_a_new_enable_marker_is_recorded(): void
+    {
+        // Given a user who enabled then disabled 2FA
+        $userId = (string) Str::uuid();
+        User::retrieve($userId)->confirmTwoFactor()->persist();
+        User::retrieve($userId)->disableTwoFactor()->persist();
+
+        // When they enable 2FA again
+        User::retrieve($userId)->confirmTwoFactor()->persist();
+
+        // Then a second enable marker is recorded — the disable reset the flag
+        $this->assertSame(2, LesilyStoredEvent::query()->where('event_class', User2FAEnabled::class)->count());
+    }
+
     protected function buildRegisterOwnerCommand(): RegisterOwnerCommand
     {
         return RegisterOwnerCommand::validateAndCreate([

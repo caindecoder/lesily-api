@@ -102,12 +102,6 @@ class LogoutTest extends AuthTestCase
         return $this->withToken($token)->getJson('/api/_test/authenticated-probe');
     }
 
-    protected function assertUnauthenticated(TestResponse $response): void
-    {
-        $response->assertStatus(401);
-        $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
-    }
-
     /**
      * The single current-token-only outcome: the logged-out session's token no longer
      * authenticates, while the user's other session still does (one invariant, two
