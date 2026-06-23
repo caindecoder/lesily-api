@@ -11,6 +11,7 @@ use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\ConfirmTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\DisableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
+use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
 
 // Health is operational tooling and opts out of the platform cross-cutting
 // middleware (no Correlation-Id) — UC-1-118 / cd-foundation-http §4.2.
@@ -74,4 +75,10 @@ Route::post('/v1/auth/2fa/verify', VerifyTwoFactorController::class)
 // NOT a credential-free action like logout/enable (slice R9 reconciled). On success it
 // wipes the secret + recovery codes and records a non-secret User2FADisabled marker → 204.
 Route::delete('/v1/auth/2fa', DisableTwoFactorController::class)
+    ->middleware(['auth:sanctum', 'throttle:auth-tier']);
+
+// Regenerate 2FA recovery codes (UC-1-137) — password re-auth, keeps the TOTP secret,
+// rotates the 10 recovery codes (old set invalidated). throttle:auth-tier (credential
+// surface like disable + confirm — R9). 200 with the new codes shown once.
+Route::post('/v1/auth/2fa/recovery-codes', RegenerateRecoveryCodesController::class)
     ->middleware(['auth:sanctum', 'throttle:auth-tier']);

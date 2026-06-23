@@ -137,12 +137,6 @@ class DisableTwoFactorTest extends AuthTestCase
         ];
     }
 
-    protected function assertRefusedWith(TestResponse $response, ApiErrorCode $code): void
-    {
-        $response->assertStatus($code->status());
-        $response->assertJsonPath('error_code', $code->value);
-    }
-
     protected function assertTwoFactorStillEnabled(User $user): void
     {
         $stored = User::query()->whereKey($user->getKey())->firstOrFail();
