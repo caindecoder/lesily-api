@@ -9,6 +9,7 @@ use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 use App\Foundation\Auth\IO\Http\Controllers\EnableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\ConfirmTwoFactorController;
+use App\Foundation\Auth\IO\Http\Controllers\DisableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
 
 // Health is operational tooling and opts out of the platform cross-cutting
@@ -66,3 +67,9 @@ Route::post('/v1/auth/2fa/confirm', ConfirmTwoFactorController::class)
 // guards the per-IP brute-force surface; the per-challenge 5-attempt cap lives in the store.
 Route::post('/v1/auth/2fa/verify', VerifyTwoFactorController::class)
     ->middleware('throttle:auth-tier');
+
+// Disable 2FA (UC-1-007) — password re-auth. auth:sanctum only, no throttle (behind
+// auth, mirrors logout). The interactor re-checks the password, wipes the secret +
+// recovery codes, and records a non-secret User2FADisabled marker. 204 on success.
+Route::delete('/v1/auth/2fa', DisableTwoFactorController::class)
+    ->middleware('auth:sanctum');

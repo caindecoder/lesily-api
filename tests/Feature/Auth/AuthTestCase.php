@@ -127,4 +127,10 @@ abstract class AuthTestCase extends TestCase
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
         $response->assertJsonValidationErrors($invalidField);
     }
+
+    protected function assertUnauthenticated(TestResponse $response): void
+    {
+        $response->assertStatus(401);
+        $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
+    }
 }
