@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth\TwoFactor;
 
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
@@ -85,6 +86,26 @@ class DisableTwoFactorTest extends AuthTestCase
 
         // Then 2FA is fully removed and a non-secret marker is recorded
         $this->assertTwoFactorDisabled($response, $user);
+    }
+
+    #[Test]
+    public function when_two_factor_is_disabled_then_login_no_longer_requires_a_second_factor(): void
+    {
+        // Given a 2FA user who disables 2FA via the endpoint
+        $user = $this->aTwoFactorUser();
+        Sanctum::actingAs($user);
+        $this->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD])->assertNoContent();
+
+        // When they log in again with email + password
+        Auth::forgetGuards();
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then no second factor is required — a session token is issued (200, not a 202 challenge)
+        $response->assertOk();
+        $this->assertNotEmpty($response->json('data.token'), 'Disabling 2FA must let the user log in without a 2FA challenge.');
     }
 
     /**

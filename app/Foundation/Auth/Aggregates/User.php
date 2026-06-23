@@ -117,4 +117,9 @@ class User extends AggregateRoot
     {
         $this->twoFactorEnabled = true;
     }
+
+    protected function applyUser2FADisabled(User2FADisabled $event): void
+    {
+        $this->twoFactorEnabled = false;
+    }
 }
