@@ -56,6 +56,7 @@ class DisableTwoFactorTest extends AuthTestCase
         // Then it is refused — there is no 2FA to disable
         $this->assertRefusedWith($response, ApiErrorCode::TwoFactorNotEnabled);
         $response->assertStatus(422); // literal pins the 422 contract independent of the enum
+        $response->assertJsonPath('message', 'Two-factor authentication is not enabled.'); // pins the bootstrap copy (Infection-blind)
     }
 
     #[Test]
@@ -71,6 +72,7 @@ class DisableTwoFactorTest extends AuthTestCase
         // Then it is refused and 2FA is left fully intact (the Minimal Guarantee)
         $this->assertRefusedWith($response, ApiErrorCode::IncorrectPassword);
         $response->assertStatus(401); // literal pins the 401 contract independent of the enum
+        $response->assertJsonPath('message', 'Incorrect password. Please try again.'); // pins the bootstrap copy (Infection-blind)
         $this->assertTwoFactorStillEnabled($user);
     }
 
@@ -106,6 +108,22 @@ class DisableTwoFactorTest extends AuthTestCase
         // Then no second factor is required — a session token is issued (200, not a 202 challenge)
         $response->assertOk();
         $this->assertNotEmpty($response->json('data.token'), 'Disabling 2FA must let the user log in without a 2FA challenge.');
+    }
+
+    #[Test]
+    public function when_disabling_past_the_rate_limit_then_it_is_throttled(): void
+    {
+        // Given an authenticated user hammering the disable endpoint (the password-guessing surface)
+        Sanctum::actingAs($this->aTwoFactorUser());
+
+        // When the shared per-IP auth-tier allowance is exhausted on wrong-password attempts
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $this->deleteJson('/api/v1/auth/2fa', ['password' => 'wrong-password']);
+        }
+        $response = $this->deleteJson('/api/v1/auth/2fa', ['password' => 'wrong-password']);
+
+        // Then the over-limit attempt is throttled — the brute-force surface is bounded
+        $this->assertThrottled($response);
     }
 
     /**

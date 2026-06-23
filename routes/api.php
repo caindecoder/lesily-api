@@ -68,8 +68,10 @@ Route::post('/v1/auth/2fa/confirm', ConfirmTwoFactorController::class)
 Route::post('/v1/auth/2fa/verify', VerifyTwoFactorController::class)
     ->middleware('throttle:auth-tier');
 
-// Disable 2FA (UC-1-007) — password re-auth. auth:sanctum only, no throttle (behind
-// auth, mirrors logout). The interactor re-checks the password, wipes the secret +
-// recovery codes, and records a non-secret User2FADisabled marker. 204 on success.
+// Disable 2FA (UC-1-007) — password re-auth. throttle:auth-tier AFTER auth:sanctum: the
+// interactor runs Hash::check, so this is a brute-force surface like /2fa/confirm and
+// /2fa/verify (a stolen token must not become an unthrottled password-guessing oracle) —
+// NOT a credential-free action like logout/enable (slice R9 reconciled). On success it
+// wipes the secret + recovery codes and records a non-secret User2FADisabled marker → 204.
 Route::delete('/v1/auth/2fa', DisableTwoFactorController::class)
-    ->middleware('auth:sanctum');
+    ->middleware(['auth:sanctum', 'throttle:auth-tier']);
