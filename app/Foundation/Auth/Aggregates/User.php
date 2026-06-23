@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Hash;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Foundation\Auth\Events\User2FAEnabled;
+use App\Foundation\Auth\Events\User2FADisabled;
 use App\Foundation\Auth\Events\UserEmailVerified;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use App\Foundation\Auth\Events\User2FARecoveryCodeUsed;
@@ -85,6 +86,20 @@ class User extends AggregateRoot
         return $this->recordThat(new User2FARecoveryCodeUsed(
             userId: $this->uuid(),
             remaining: $remaining,
+        ));
+    }
+
+    /**
+     * Guardless (mirrors useRecoveryCode, not the guarded confirmTwoFactor): the disable
+     * interactor's read-model not-enabled check is the gate, and the happy path drives the
+     * aggregate from a factory-arranged user with no replayed User2FAEnabled — a guard would
+     * swallow the marker. applyUser2FADisabled resets the flag so a later re-enable records.
+     */
+    public function disableTwoFactor(): static
+    {
+        return $this->recordThat(new User2FADisabled(
+            userId: $this->uuid(),
+            disabledAt: CarbonImmutable::now(),
         ));
     }
 

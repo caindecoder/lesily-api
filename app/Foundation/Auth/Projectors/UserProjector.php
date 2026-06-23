@@ -4,6 +4,7 @@ namespace App\Foundation\Auth\Projectors;
 
 use App\Models\User as UserReadModel;
 use App\Foundation\Auth\Events\User2FAEnabled;
+use App\Foundation\Auth\Events\User2FADisabled;
 use App\Foundation\Auth\Events\UserEmailVerified;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
@@ -43,5 +44,12 @@ class UserProjector extends Projector
         UserReadModel::query()
             ->whereKey($event->userId)
             ->update(['two_factor_confirmed_at' => $event->confirmedAt]);
+    }
+
+    public function onUser2FADisabled(User2FADisabled $event): void
+    {
+        UserReadModel::query()
+            ->whereKey($event->userId)
+            ->update(['two_factor_confirmed_at' => null]);
     }
 }
