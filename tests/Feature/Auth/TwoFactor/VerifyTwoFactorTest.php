@@ -174,14 +174,6 @@ class VerifyTwoFactorTest extends AuthTestCase
         ];
     }
 
-    protected function verify(string $challengeId, string $code): TestResponse
-    {
-        return $this->postJson('/api/v1/auth/2fa/verify', [
-            'challenge_id' => $challengeId,
-            'code' => $code,
-        ]);
-    }
-
     protected function assertNoTokenMinted(TestResponse $response, User $user): void
     {
         $response->assertJsonMissingPath('data.token');

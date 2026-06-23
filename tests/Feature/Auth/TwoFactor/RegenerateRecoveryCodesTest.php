@@ -107,6 +107,23 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
         $this->assertCodesRotated($response, $user, $secretBefore);
     }
 
+    #[Test]
+    public function when_codes_are_regenerated_then_old_codes_stop_working_and_new_codes_authenticate(): void
+    {
+        // Given a 2FA user holding a known recovery code, whose TOTP will not match (forcing the recovery path)
+        $user = $this->aTwoFactorUser(['OLD-CODE', 'KEEP-CODE']);
+        $this->fakeTotpVerifier(verifies: false);
+        Sanctum::actingAs($user);
+
+        // When they regenerate their recovery codes
+        /** @var list<string> $newCodes */
+        $newCodes = $this->postJson('/api/v1/auth/2fa/recovery-codes', ['password' => self::LOGIN_PASSWORD])
+            ->json('data.recovery_codes');
+
+        // Then the old code no longer authenticates at verify, but a new one does (rotation end-to-end)
+        $this->assertOldCodeRejectedAndNewAccepted('OLD-CODE', $newCodes[0], $user);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>}>
      */
@@ -143,6 +160,17 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
         $this->assertSame($secretBefore, (string) $reloaded->two_factor_secret, 'The TOTP secret must be unchanged (no QR re-scan).');
         $this->assertNotNull($reloaded->two_factor_confirmed_at, '2FA must remain enabled.');
         $this->assertRegenerateMarkerRecorded($user);
+    }
+
+    /**
+     * One rotation invariant, two inseparable facets: the pre-rotation code is dead at
+     * verify while a freshly issued code authenticates. Each verify consumes its own
+     * challenge (single-use).
+     */
+    protected function assertOldCodeRejectedAndNewAccepted(string $oldCode, string $newCode, User $user): void
+    {
+        $this->verify($this->openChallenge($user), $oldCode)->assertStatus(401);
+        $this->verify($this->openChallenge($user), $newCode)->assertOk();
     }
 
     protected function assertRegenerateMarkerRecorded(User $user): void

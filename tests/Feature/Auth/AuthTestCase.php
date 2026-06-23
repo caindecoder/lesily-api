@@ -155,4 +155,16 @@ abstract class AuthTestCase extends TestCase
     {
         return app(LoginChallengeStore::class)->create($user->id);
     }
+
+    /**
+     * POST a second factor to /2fa/verify against an open challenge. Shared by the verify
+     * (UC-1-005) + regenerate (UC-1-137) suites.
+     */
+    protected function verify(string $challengeId, string $code): TestResponse
+    {
+        return $this->postJson('/api/v1/auth/2fa/verify', [
+            'challenge_id' => $challengeId,
+            'code' => $code,
+        ]);
+    }
 }
