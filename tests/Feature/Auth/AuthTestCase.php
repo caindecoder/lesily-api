@@ -7,6 +7,8 @@ use App\Models\User;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use App\Foundation\Auth\Totp\TotpVerifier;
+use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\Auth\Totp\LoginChallengeStore;
 
 abstract class AuthTestCase extends TestCase
 {
@@ -132,5 +134,25 @@ abstract class AuthTestCase extends TestCase
     {
         $response->assertStatus(401);
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
+    }
+
+    /**
+     * Assert a request was refused with the §S21 envelope for $code (status + error_code).
+     * Shared by the 2FA verify / disable / regenerate suites (§2.10).
+     */
+    protected function assertRefusedWith(TestResponse $response, ApiErrorCode $code): void
+    {
+        $response->assertStatus($code->status());
+        $response->assertJsonPath('error_code', $code->value);
+    }
+
+    /**
+     * Open a 2FA login challenge for $user and return its opaque id — the bridge a
+     * /2fa/verify call consumes. Shared by the verify (UC-1-005) + regenerate (UC-1-137)
+     * suites (the latter proves a regenerated code rotation end-to-end at verify).
+     */
+    protected function openChallenge(User $user): string
+    {
+        return app(LoginChallengeStore::class)->create($user->id);
     }
 }

@@ -182,17 +182,6 @@ class VerifyTwoFactorTest extends AuthTestCase
         ]);
     }
 
-    protected function openChallenge(User $user): string
-    {
-        return app(LoginChallengeStore::class)->create($user->id);
-    }
-
-    protected function assertRefusedWith(TestResponse $response, ApiErrorCode $code): void
-    {
-        $response->assertStatus($code->status());
-        $response->assertJsonPath('error_code', $code->value);
-    }
-
     protected function assertNoTokenMinted(TestResponse $response, User $user): void
     {
         $response->assertJsonMissingPath('data.token');
