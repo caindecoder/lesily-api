@@ -8,8 +8,10 @@ use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Auth\Events\User2FADisabled;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class DisableTwoFactorTest extends AuthTestCase
 {
@@ -55,6 +57,22 @@ class DisableTwoFactorTest extends AuthTestCase
         $response->assertStatus(422); // literal pins the 422 contract independent of the enum
     }
 
+    #[Test]
+    public function when_the_password_is_incorrect_then_two_factor_remains_enabled(): void
+    {
+        // Given an authenticated user with 2FA enabled
+        $user = $this->aTwoFactorUser();
+        Sanctum::actingAs($user);
+
+        // When they submit the wrong password to disable
+        $response = $this->deleteJson('/api/v1/auth/2fa', ['password' => 'not-my-password']);
+
+        // Then it is refused and 2FA is left fully intact (the Minimal Guarantee)
+        $this->assertRefusedWith($response, ApiErrorCode::IncorrectPassword);
+        $response->assertStatus(401); // literal pins the 401 contract independent of the enum
+        $this->assertTwoFactorStillEnabled($user);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>}>
      */
@@ -70,5 +88,14 @@ class DisableTwoFactorTest extends AuthTestCase
     {
         $response->assertStatus($code->status());
         $response->assertJsonPath('error_code', $code->value);
+    }
+
+    protected function assertTwoFactorStillEnabled(User $user): void
+    {
+        $stored = User::query()->whereKey($user->getKey())->firstOrFail();
+        $this->assertNotNull($stored->two_factor_secret, 'The TOTP secret must survive a refused disable.');
+        $this->assertNotNull($stored->two_factor_recovery_codes, 'Recovery codes must survive a refused disable.');
+        $this->assertNotNull($stored->two_factor_confirmed_at, '2FA must remain enabled after a refused disable.');
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', User2FADisabled::class)->count(), 'A refused disable records no marker.');
     }
 }

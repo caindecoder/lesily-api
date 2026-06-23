@@ -18,6 +18,7 @@ use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
 use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
+use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
@@ -118,6 +119,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (TwoFactorNotEnabledException $e) => EnvelopeBuilder::build(
             ApiErrorCode::TwoFactorNotEnabled,
             'Two-factor authentication is not enabled.',
+        ));
+
+        // A password re-auth for a sensitive 2FA change failed (UC-1-007 5a / UC-1-137).
+        // 401 — a distinct INCORRECT_PASSWORD code (not the login UNAUTHENTICATED) so the
+        // client surfaces "wrong password" inline instead of bouncing to login.
+        $exceptions->render(fn (IncorrectPasswordException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::IncorrectPassword,
+            'Incorrect password. Please try again.',
         ));
 
         $exceptions->render(fn (CompanyAccessDeniedException $e) => EnvelopeBuilder::build(

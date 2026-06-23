@@ -3,6 +3,8 @@
 namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
 use App\Foundation\Auth\UseCases\Commands\DisableTwoFactorCommand;
 
@@ -19,6 +21,10 @@ class DisableTwoFactorInteractor
     {
         if ($user->two_factor_confirmed_at === null) {
             throw new TwoFactorNotEnabledException;
+        }
+
+        if (! Hash::check($command->password, $user->password)) {
+            throw new IncorrectPasswordException;
         }
     }
 }
