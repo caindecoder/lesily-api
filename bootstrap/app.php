@@ -20,6 +20,7 @@ use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
+use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
 use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
@@ -110,6 +111,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (TwoFactorVerificationFailedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::TwoFactorVerificationFailed,
             'Invalid verification code. Please try again, or contact support if you have lost your authenticator.',
+        ));
+
+        // A disable / regenerate-recovery-codes request on an account with no 2FA enabled
+        // (UC-1-007 1a). 422 — there is nothing to act on.
+        $exceptions->render(fn (TwoFactorNotEnabledException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::TwoFactorNotEnabled,
+            'Two-factor authentication is not enabled.',
         ));
 
         $exceptions->render(fn (CompanyAccessDeniedException $e) => EnvelopeBuilder::build(
