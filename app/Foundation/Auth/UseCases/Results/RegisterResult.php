@@ -2,15 +2,19 @@
 
 namespace App\Foundation\Auth\UseCases\Results;
 
+use App\Models\User;
+
 /**
- * The interactor's response model (E07) — what crosses back over the use-case
- * boundary to the delivery ring. The controller turns it into HTTP (token issue,
- * resource, status); the interactor never sees those concerns.
+ * The owner-registration response model (E07) crossing back over the use-case boundary to
+ * the delivery ring: the materialised owner read-model, their company id, and the issued
+ * session (token minted inside the interactor via SessionIssuer, session 090). The controller
+ * shapes the 201 resource from it — it no longer re-queries the user or mints the token.
  */
 class RegisterResult
 {
     public function __construct(
-        public readonly string $userId,
+        public readonly User $user,
         public readonly string $companyId,
+        public readonly IssuedSession $session,
     ) {}
 }
