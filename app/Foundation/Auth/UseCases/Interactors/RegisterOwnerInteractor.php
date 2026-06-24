@@ -7,7 +7,9 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use App\Consent\Aggregates\Consent;
 use App\Companies\Aggregates\Company;
+use App\Models\User as UserReadModel;
 use App\Foundation\Auth\Aggregates\User;
+use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Foundation\Auth\UseCases\Results\RegisterResult;
@@ -24,7 +26,10 @@ use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
  */
 class RegisterOwnerInteractor
 {
-    public function __construct(private RegistrationUniquenessGuard $uniqueness) {}
+    public function __construct(
+        private RegistrationUniquenessGuard $uniqueness,
+        private SessionIssuer $sessionIssuer,
+    ) {}
 
     public function execute(RegisterOwnerCommand $command, string $clientIp): RegisterResult
     {
@@ -33,13 +38,29 @@ class RegisterOwnerInteractor
         // or handle errors, not both).
         $this->uniqueness->ensureUnique($command);
 
-        return $this->persistRegistration($command, $clientIp);
+        [$userId, $companyId] = $this->persistRegistration($command, $clientIp);
+
+        // After the transaction commits, the projectors have written the owner's `users`
+        // read-model row. Materialise it and issue the session here — token mint is a
+        // credential side-effect, deliberately OUTSIDE the registration's atomic transaction
+        // (a failed mint leaves a registered owner who can simply log in), and it belongs in
+        // the use case, not the controller (E07 — the relocated findOrFail + createToken).
+        $user = UserReadModel::query()->findOrFail($userId);
+
+        return new RegisterResult($user, $companyId, $this->sessionIssuer->issue($user));
     }
 
-    private function persistRegistration(RegisterOwnerCommand $command, string $clientIp): RegisterResult
+    /**
+     * Persist the fused owner-signup aggregates atomically and return the generated ids.
+     * The DB UNIQUE backstop maps a concurrent duplicate to the field-specific 409; an
+     * unmapped violation re-raises untouched.
+     *
+     * @return array{string, string} [userId, companyId]
+     */
+    private function persistRegistration(RegisterOwnerCommand $command, string $clientIp): array
     {
         try {
-            return DB::transaction(function () use ($command, $clientIp): RegisterResult {
+            return DB::transaction(function () use ($command, $clientIp): array {
                 $userId = (string) Str::uuid7();
                 $companyId = (string) Str::uuid7();
 
@@ -73,7 +94,7 @@ class RegisterOwnerInteractor
                     ]))
                     ->persist();
 
-                return new RegisterResult(userId: $userId, companyId: $companyId);
+                return [$userId, $companyId];
             });
         } catch (UniqueConstraintViolationException $violation) {
             // A concurrent signup slipped past the pre-tx guard; the DB UNIQUE index
