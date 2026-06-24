@@ -9,7 +9,7 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  * The login payload (UC-1-002 / api-1-auth-onboarding §login). Shape-level rules
  * only and deliberately lenient — a too-short or oddly-shaped password is a 401
  * credential failure, not a 422, so the login seam never discloses the password
- * policy. The credential check itself lives in AuthenticateUserInteractor.
+ * policy. The credential check itself lives in LogInInteractor.
  *
  * The optional `device_name` (token naming for the Active Sessions list) is
  * deferred to the sessions slice, which builds the view that consumes it.
