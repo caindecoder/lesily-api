@@ -5,9 +5,9 @@ namespace App\Foundation\Auth\UseCases\Results;
 use App\Models\User;
 
 /**
- * LogInInteractor / VerifyTwoFactorInteractor outcome for a completed authentication: the
- * minted session plus the authenticated user. The controller renders this as a 200
- * (LoginResource).
+ * LogInInteractor outcome for a completed authentication (VerifyTwoFactorInteractor adopts it
+ * in increment 02): the minted session plus the authenticated user. The controller renders this
+ * as a 200 (LoginResource).
  */
 class SessionIssued extends LoginOutcome
 {

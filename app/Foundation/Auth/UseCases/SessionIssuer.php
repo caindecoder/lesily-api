@@ -7,9 +7,10 @@ use Illuminate\Support\Facades\Config;
 use App\Foundation\Auth\UseCases\Results\IssuedSession;
 
 /**
- * Mints a Sanctum session token for an authenticated user — the single token-mint site
- * shared by login, 2FA-verify, and register (E07: token issuance is application work, not
- * a delivery concern; relocated out of the controllers, session 090). A concrete
+ * Mints a Sanctum session token for an authenticated user (E07: token issuance is application
+ * work, not a delivery concern; relocated out of the controllers, session 090). Login routes its
+ * mint through here now; 2FA-verify and register move onto it in increments 02-03 of the
+ * token-lifecycle slice, making it the single shared mint site. A concrete
  * collaborator with no interface — Sanctum is the only implementation and tests mint real
  * tokens, so there is no substitution/mock boundary (cf. RegistrationUniquenessGuard).
  * Returns an IssuedSession so the Sanctum NewAccessToken never leaks past the use case.
