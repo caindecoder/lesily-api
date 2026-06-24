@@ -1,0 +1,28 @@
+<?php
+
+namespace App\Foundation\Auth\UseCases;
+
+use App\Models\User;
+use Illuminate\Support\Facades\Config;
+use App\Foundation\Auth\UseCases\Results\IssuedSession;
+
+/**
+ * Mints a Sanctum session token for an authenticated user — the single token-mint site
+ * shared by login, 2FA-verify, and register (E07: token issuance is application work, not
+ * a delivery concern; relocated out of the controllers, session 090). A concrete
+ * collaborator with no interface — Sanctum is the only implementation and tests mint real
+ * tokens, so there is no substitution/mock boundary (cf. RegistrationUniquenessGuard).
+ * Returns an IssuedSession so the Sanctum NewAccessToken never leaks past the use case.
+ */
+class SessionIssuer
+{
+    public function issue(User $user): IssuedSession
+    {
+        // Stamp the 90-day expiry explicitly so the column (and the returned expiresAt) is
+        // authoritative — createToken leaves it null otherwise, and config('sanctum.expiration')
+        // only governs the auth-time check.
+        $token = $user->createToken('web', expiresAt: now()->addMinutes(Config::integer('sanctum.expiration')));
+
+        return new IssuedSession($token->plainTextToken, $token->accessToken->expires_at);
+    }
+}
