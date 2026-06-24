@@ -7,7 +7,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
 use App\Foundation\Auth\Totp\TotpVerifier;
+use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
+use App\Foundation\Auth\UseCases\Results\SessionIssued;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\Auth\UseCases\Commands\VerifyTwoFactorCommand;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
@@ -15,9 +17,9 @@ use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 
 /**
  * Completes a 2FA login (UC-1-005): resolves the opaque challenge, verifies the second
- * factor (TOTP or a single-use recovery code), and returns the authenticated user for
- * the controller to mint a token. Token-only — records no UserLoggedIn (mirrors
- * LogInInteractor). The recovery path is the only event-sourced branch
+ * factor (TOTP or a single-use recovery code), then mints the session via SessionIssuer and
+ * returns a SessionIssued (the mint moved out of the controller, session 090). Token-only —
+ * records no UserLoggedIn (mirrors LogInInteractor). The recovery path is the only event-sourced branch
  * (User2FARecoveryCodeUsed); the secret + code hashes live in the users columns
  * (Design-Y), never the event store.
  */
@@ -26,9 +28,10 @@ class VerifyTwoFactorInteractor
     public function __construct(
         private readonly LoginChallengeStore $challenges,
         private readonly TotpVerifier $totp,
+        private readonly SessionIssuer $sessionIssuer,
     ) {}
 
-    public function execute(VerifyTwoFactorCommand $command): User
+    public function execute(VerifyTwoFactorCommand $command): SessionIssued
     {
         $challenge = $this->challenges->find($command->challengeId);
 
@@ -41,13 +44,13 @@ class VerifyTwoFactorInteractor
         if ($this->totp->verify((string) $user->two_factor_secret, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return $user;
+            return new SessionIssued($this->sessionIssuer->issue($user), $user);
         }
 
         if ($this->consumeMatchingRecoveryCode($user, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return $user;
+            return new SessionIssued($this->sessionIssuer->issue($user), $user);
         }
 
         $this->challenges->recordFailure($command->challengeId);
