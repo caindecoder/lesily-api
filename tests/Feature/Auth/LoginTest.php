@@ -159,6 +159,45 @@ class LoginTest extends AuthTestCase
         );
     }
 
+    // Edge — the issued token is named for the device so the Active Sessions list can
+    // identify it: an explicit device name wins, else the parsed User-Agent, else a
+    // safe "Unknown device" floor (sessions slice).
+    #[Test]
+    #[DataProvider('deviceNameResolutionProvider')]
+    public function when_login_issues_a_token_then_it_is_named_by_the_device_resolution_rules(?string $suppliedDeviceName, string $userAgent, string $expectedTokenName): void
+    {
+        // Given a registered user
+        $user = $this->aRegisteredUser();
+        $payload = ['email' => self::LOGIN_EMAIL, 'password' => self::LOGIN_PASSWORD];
+        if ($suppliedDeviceName !== null) {
+            $payload['deviceName'] = $suppliedDeviceName;
+        }
+
+        // When they log in from a device — supplying a name, or relying on the User-Agent
+        $this->withHeader('User-Agent', $userAgent)
+            ->postJson('/api/v1/auth/login', $payload)
+            ->assertOk();
+
+        // Then the issued token carries the resolved device name
+        $this->assertTokenNamed($user, $expectedTokenName);
+    }
+
+    /**
+     * The device-name resolution rules: an explicit `deviceName` wins; absent it, the
+     * parsed User-Agent names the token; a blank User-Agent falls back to "Unknown device"
+     * (the degenerate floor — a token must always carry a meaningful name).
+     *
+     * @return array<string, array{0: ?string, 1: string, 2: string}>
+     */
+    public static function deviceNameResolutionProvider(): array
+    {
+        return [
+            'blank user agent falls back to unknown device' => [null, '', 'Unknown device'],
+            'user agent names the device when none supplied' => [null, 'Mozilla/5.0 (TestAgent)', 'Mozilla/5.0 (TestAgent)'],
+            'explicit device name wins' => ['Alice iPhone', 'Mozilla/5.0 (TestAgent)', 'Alice iPhone'],
+        ];
+    }
+
     // Happy — valid credentials return a Sanctum token and the user record.
     #[Test]
     public function when_valid_credentials_are_submitted_then_the_token_and_user_are_returned(): void

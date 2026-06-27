@@ -47,7 +47,7 @@ class RegisterOwnerInteractor
         // the use case, not the controller (E07 — the relocated findOrFail + createToken).
         $user = UserReadModel::query()->findOrFail($userId);
 
-        return new RegisterResult($user, $companyId, $this->sessionIssuer->issue($user));
+        return new RegisterResult($user, $companyId, $this->sessionIssuer->issue($user, 'web'));
     }
 
     /**

@@ -44,13 +44,13 @@ class VerifyTwoFactorInteractor
         if ($this->totp->verify((string) $user->two_factor_secret, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return new SessionIssued($this->sessionIssuer->issue($user), $user);
+            return new SessionIssued($this->sessionIssuer->issue($user, 'web'), $user);
         }
 
         if ($this->consumeMatchingRecoveryCode($user, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return new SessionIssued($this->sessionIssuer->issue($user), $user);
+            return new SessionIssued($this->sessionIssuer->issue($user, 'web'), $user);
         }
 
         $this->challenges->recordFailure($command->challengeId);

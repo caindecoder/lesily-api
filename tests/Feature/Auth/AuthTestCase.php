@@ -147,6 +147,26 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
+     * Assert the user's single issued session token is named for $expectedName — the
+     * device-name resolution oracle (sessions slice). `sole()` doubles as the
+     * exactly-one-token-minted guard. Shared by the login / 2FA-verify / register suites.
+     */
+    protected function assertTokenNamed(User $user, string $expectedName): void
+    {
+        $this->assertSame($expectedName, $user->tokens()->sole()->name);
+    }
+
+    /**
+     * Assert the user's `last_logged_at` was stamped to the current (frozen) time on a
+     * successful login. Relies on a frozen clock in the calling test. Shared by the
+     * login / 2FA-verify / register suites (sessions slice).
+     */
+    protected function assertLastLoggedAtStamped(User $user): void
+    {
+        $this->assertSame(now()->toDateTimeString(), $user->fresh()->last_logged_at?->toDateTimeString());
+    }
+
+    /**
      * Open a 2FA login challenge for $user and return its opaque id — the bridge a
      * /2fa/verify call consumes. Shared by the verify (UC-1-005) + regenerate (UC-1-137)
      * suites (the latter proves a regenerated code rotation end-to-end at verify).
