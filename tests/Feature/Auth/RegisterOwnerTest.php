@@ -104,6 +104,22 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertTokenNamed($owner, 'Mozilla/5.0 (TestAgent)');
     }
 
+    // Edge — a registration whose client IP can't be resolved (no REMOTE_ADDR) is rejected
+    // with a clean 422, NOT a 500: the controller casts $request->ip() to string, so a null
+    // IP becomes '' and fails the consent record's `required` ip rule (a validation error).
+    // Without the cast a null reaches the interactor's `string $clientIp` and TypeErrors -> 500.
+    #[Test]
+    public function when_the_client_ip_is_undeterminable_then_registration_is_rejected_as_invalid(): void
+    {
+        // Given a guest whose request carries no resolvable client IP
+        // When they register
+        $response = $this->withServerVariables(['REMOTE_ADDR' => null])
+            ->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
+
+        // Then it is rejected as a validation error (a clean 4xx), not a server crash
+        $this->assertValidationRejected($response, 'ip');
+    }
+
     protected function assertRegistrationSucceeded(TestResponse $response): void
     {
         $response->assertCreated();
