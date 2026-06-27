@@ -5,6 +5,7 @@ namespace App\Foundation\Auth\IO\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
+use App\Foundation\Auth\Support\DeviceName;
 use App\Foundation\Auth\IO\Http\Resources\LoginResource;
 use App\Foundation\Auth\UseCases\Commands\VerifyTwoFactorCommand;
 use App\Foundation\Auth\UseCases\Interactors\VerifyTwoFactorInteractor;
@@ -19,7 +20,9 @@ class VerifyTwoFactorController extends Controller
 {
     public function __invoke(Request $request, VerifyTwoFactorInteractor $interactor): JsonResponse
     {
-        $outcome = $interactor->execute(VerifyTwoFactorCommand::validateAndCreate($request));
+        $outcome = $interactor->execute(VerifyTwoFactorCommand::validateAndCreate(
+            $request->merge(['deviceName' => DeviceName::resolve($request->input('deviceName'), $request)])
+        ));
 
         return (new LoginResource($outcome->user, $outcome->session->token, $outcome->session->expiresAt))->response();
     }

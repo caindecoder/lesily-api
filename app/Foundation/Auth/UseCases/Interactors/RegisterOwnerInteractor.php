@@ -31,7 +31,7 @@ class RegisterOwnerInteractor
         private SessionIssuer $sessionIssuer,
     ) {}
 
-    public function execute(RegisterOwnerCommand $command, string $clientIp): RegisterResult
+    public function execute(RegisterOwnerCommand $command, string $clientIp, string $deviceName): RegisterResult
     {
         // Reject a taken email / BR / EPF before opening the transaction, so a
         // conflict never leaves a partial account behind (E04 §13 — do something
@@ -46,8 +46,10 @@ class RegisterOwnerInteractor
         // (a failed mint leaves a registered owner who can simply log in), and it belongs in
         // the use case, not the controller (E07 — the relocated findOrFail + createToken).
         $user = UserReadModel::query()->findOrFail($userId);
+        $user->last_logged_at = now();
+        $user->save();
 
-        return new RegisterResult($user, $companyId, $this->sessionIssuer->issue($user));
+        return new RegisterResult($user, $companyId, $this->sessionIssuer->issue($user, $deviceName));
     }
 
     /**

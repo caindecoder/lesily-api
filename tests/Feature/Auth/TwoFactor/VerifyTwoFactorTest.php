@@ -116,6 +116,56 @@ class VerifyTwoFactorTest extends AuthTestCase
         $this->assertNoEventRecorded();
     }
 
+    // Edge — completing 2FA mints the session, so the device name + "last seen" stamp
+    // apply here too (the cap/naming/stamp are enforced at the mint, sessions slice).
+    #[Test]
+    public function when_a_two_factor_verify_completes_then_the_token_is_named_for_the_device_and_last_logged_at_is_stamped(): void
+    {
+        // Given a 2FA user with an open challenge and an accepting authenticator (clock frozen)
+        $this->travelTo('2026-06-23 00:00:00');
+        $user = $this->aTwoFactorUser();
+        $challengeId = $this->openChallenge($user);
+        $this->fakeTotpVerifier(verifies: true);
+
+        // When they verify, naming their device
+        $this->withHeader('User-Agent', 'Mozilla/5.0 (TestAgent)')
+            ->postJson('/api/v1/auth/2fa/verify', [
+                'challenge_id' => $challengeId,
+                'code' => '123456',
+                'deviceName' => 'Alice iPhone',
+            ])->assertOk();
+
+        // Then the issued token carries the device name and last_logged_at is stamped
+        $this->assertTokenNamed($user, 'Alice iPhone');
+        $this->assertLastLoggedAtStamped($user);
+    }
+
+    // Edge — completing 2FA via a RECOVERY code (the distinct lost-authenticator branch)
+    // also names the token + stamps "last seen". Both factors route the mint through the
+    // shared issueSession, but the recovery branch deserves its own oracle so a future
+    // divergence of the two branches can't regress recovery logins to unnamed tokens.
+    #[Test]
+    public function when_a_recovery_code_verify_completes_then_the_token_is_named_for_the_device_and_last_logged_at_is_stamped(): void
+    {
+        // Given a 2FA user holding a known recovery code, an open challenge, a non-matching TOTP (clock frozen)
+        $this->travelTo('2026-06-23 00:00:00');
+        $user = $this->aTwoFactorUser(['HAPY-CODE', 'KEEP-CODE']);
+        $challengeId = $this->openChallenge($user);
+        $this->fakeTotpVerifier(verifies: false);
+
+        // When they complete 2FA via the recovery code, naming their device
+        $this->withHeader('User-Agent', 'Mozilla/5.0 (TestAgent)')
+            ->postJson('/api/v1/auth/2fa/verify', [
+                'challenge_id' => $challengeId,
+                'code' => 'HAPY-CODE',
+                'deviceName' => 'Alice iPhone',
+            ])->assertOk();
+
+        // Then the issued token carries the device name and last_logged_at is stamped
+        $this->assertTokenNamed($user, 'Alice iPhone');
+        $this->assertLastLoggedAtStamped($user);
+    }
+
     #[Test]
     public function when_a_valid_recovery_code_is_used_then_a_session_token_is_issued_and_the_code_is_consumed(): void
     {

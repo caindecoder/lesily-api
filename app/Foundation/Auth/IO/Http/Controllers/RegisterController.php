@@ -5,6 +5,7 @@ namespace App\Foundation\Auth\IO\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
+use App\Foundation\Auth\Support\DeviceName;
 use Symfony\Component\HttpFoundation\Response;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 use App\Foundation\Auth\IO\Http\Resources\RegisterSuccessResource;
@@ -20,7 +21,13 @@ class RegisterController extends Controller
 {
     public function __invoke(Request $request, RegisterOwnerInteractor $interactor): JsonResponse
     {
-        $result = $interactor->execute(RegisterOwnerCommand::validateAndCreate($request), (string) $request->ip());
+        $result = $interactor->execute(
+            RegisterOwnerCommand::validateAndCreate($request),
+            (string) $request->ip(),
+            // Register is UA-derived: pass null so a client-supplied deviceName in the body
+            // can't name the token — the register contract has no deviceName field (per design).
+            DeviceName::resolve(null, $request),
+        );
 
         return (new RegisterSuccessResource($result->user, $result->session->token, $result->companyId))
             ->response()

@@ -5,6 +5,7 @@ namespace App\Foundation\Auth\IO\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
+use App\Foundation\Auth\Support\DeviceName;
 use App\Foundation\Auth\UseCases\Commands\LoginCommand;
 use App\Foundation\Auth\IO\Http\Resources\LoginResource;
 use App\Foundation\Auth\UseCases\Results\ChallengeRequired;
@@ -22,7 +23,9 @@ class LoginController extends Controller
 {
     public function __invoke(Request $request, LogInInteractor $interactor): JsonResponse
     {
-        $outcome = $interactor->execute(LoginCommand::validateAndCreate($request));
+        $outcome = $interactor->execute(LoginCommand::validateAndCreate(
+            $request->merge(['deviceName' => DeviceName::resolve($request->input('deviceName'), $request)])
+        ));
 
         if ($outcome instanceof ChallengeRequired) {
             return (new TwoFactorChallengeResource($outcome->challengeId, $outcome->expiresAt))

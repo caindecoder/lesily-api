@@ -159,6 +159,84 @@ class LoginTest extends AuthTestCase
         );
     }
 
+    // Edge — the issued token is named for the device so the Active Sessions list can
+    // identify it: an explicit device name wins, else the parsed User-Agent, else a
+    // safe "Unknown device" floor (sessions slice).
+    #[Test]
+    #[DataProvider('deviceNameResolutionProvider')]
+    public function when_login_issues_a_token_then_it_is_named_by_the_device_resolution_rules(?string $suppliedDeviceName, string $userAgent, string $expectedTokenName): void
+    {
+        // Given a registered user
+        $user = $this->aRegisteredUser();
+        $payload = ['email' => self::LOGIN_EMAIL, 'password' => self::LOGIN_PASSWORD];
+        if ($suppliedDeviceName !== null) {
+            $payload['deviceName'] = $suppliedDeviceName;
+        }
+
+        // When they log in from a device — supplying a name, or relying on the User-Agent
+        $this->withHeader('User-Agent', $userAgent)
+            ->postJson('/api/v1/auth/login', $payload)
+            ->assertOk();
+
+        // Then the issued token carries the resolved device name
+        $this->assertTokenNamed($user, $expectedTokenName);
+    }
+
+    /**
+     * The device-name resolution rules: an explicit `deviceName` wins; absent it, the
+     * parsed User-Agent names the token; a blank User-Agent falls back to "Unknown device"
+     * (the degenerate floor — a token must always carry a meaningful name).
+     *
+     * @return array<string, array{0: ?string, 1: string, 2: string}>
+     */
+    public static function deviceNameResolutionProvider(): array
+    {
+        return [
+            'blank user agent falls back to unknown device' => [null, '', 'Unknown device'],
+            'user agent names the device when none supplied' => [null, 'Mozilla/5.0 (TestAgent)', 'Mozilla/5.0 (TestAgent)'],
+            'explicit device name wins' => ['Alice iPhone', 'Mozilla/5.0 (TestAgent)', 'Alice iPhone'],
+        ];
+    }
+
+    // Edge — a malformed (non-string) deviceName is tolerated, not a 500: the resolver
+    // runs before validation, so an array body must be treated as "not supplied" and
+    // fall back to the User-Agent rather than reaching the typed sink and crashing.
+    #[Test]
+    public function when_the_supplied_device_name_is_not_a_string_then_it_is_ignored_in_favour_of_the_user_agent(): void
+    {
+        // Given a registered user
+        $user = $this->aRegisteredUser();
+
+        // When they log in with a non-string deviceName (an array) from a known device
+        $this->withHeader('User-Agent', 'Mozilla/5.0 (TestAgent)')
+            ->postJson('/api/v1/auth/login', [
+                'email' => self::LOGIN_EMAIL,
+                'password' => self::LOGIN_PASSWORD,
+                'deviceName' => ['not', 'a', 'string'],
+            ])->assertOk();
+
+        // Then the malformed name is ignored and the token is named for the User-Agent
+        $this->assertTokenNamed($user, 'Mozilla/5.0 (TestAgent)');
+    }
+
+    // Edge — a successful (non-2FA) login stamps the user's "last seen" timestamp
+    // (sessions slice R10); the stamp lives in the interactor, not the mint service.
+    #[Test]
+    public function when_a_non_two_factor_login_succeeds_then_last_logged_at_is_stamped(): void
+    {
+        // Given a registered user who has never logged in (the clock is frozen in setUp)
+        $user = $this->aRegisteredUser();
+
+        // When they log in
+        $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ])->assertOk();
+
+        // Then their last_logged_at is stamped to now
+        $this->assertLastLoggedAtStamped($user);
+    }
+
     // Happy — valid credentials return a Sanctum token and the user record.
     #[Test]
     public function when_valid_credentials_are_submitted_then_the_token_and_user_are_returned(): void

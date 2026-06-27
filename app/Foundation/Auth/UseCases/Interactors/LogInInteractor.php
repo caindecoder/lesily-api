@@ -42,7 +42,10 @@ class LogInInteractor
             );
         }
 
-        return new SessionIssued($this->sessionIssuer->issue($user), $user);
+        $user->last_logged_at = now();
+        $user->save();
+
+        return new SessionIssued($this->sessionIssuer->issue($user, $command->deviceName), $user);
     }
 
     private function authenticate(LoginCommand $command): User
