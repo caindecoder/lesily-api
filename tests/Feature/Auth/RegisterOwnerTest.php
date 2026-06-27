@@ -68,6 +68,23 @@ class RegisterOwnerTest extends AuthTestCase
         $response->assertJsonPath('company_id', $companyId);
     }
 
+    // Edge — registration mints the owner's first session, so the device name + "last
+    // seen" stamp apply here too (register has no deviceName field — UA-derived).
+    #[Test]
+    public function when_an_owner_registers_then_the_token_is_named_for_the_device_and_last_logged_at_is_stamped(): void
+    {
+        // Given a guest registering from a device (the clock is frozen in setUp)
+        // When they register
+        $this->withHeader('User-Agent', 'Mozilla/5.0 (TestAgent)')
+            ->postJson('/api/v1/auth/register', $this->validRegistrationPayload())
+            ->assertCreated();
+
+        // Then the owner's session token is named for the device and last_logged_at is stamped
+        $owner = User::query()->where('email', 'nimal@contoso.lk')->sole();
+        $this->assertTokenNamed($owner, 'Mozilla/5.0 (TestAgent)');
+        $this->assertLastLoggedAtStamped($owner);
+    }
+
     protected function assertRegistrationSucceeded(TestResponse $response): void
     {
         $response->assertCreated();
