@@ -42,6 +42,9 @@ class LogInInteractor
             );
         }
 
+        $user->last_logged_at = now();
+        $user->save();
+
         return new SessionIssued($this->sessionIssuer->issue($user, $command->deviceName), $user);
     }
 

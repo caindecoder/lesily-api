@@ -198,6 +198,24 @@ class LoginTest extends AuthTestCase
         ];
     }
 
+    // Edge — a successful (non-2FA) login stamps the user's "last seen" timestamp
+    // (sessions slice R10); the stamp lives in the interactor, not the mint service.
+    #[Test]
+    public function when_a_non_two_factor_login_succeeds_then_last_logged_at_is_stamped(): void
+    {
+        // Given a registered user who has never logged in (the clock is frozen in setUp)
+        $user = $this->aRegisteredUser();
+
+        // When they log in
+        $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ])->assertOk();
+
+        // Then their last_logged_at is stamped to now
+        $this->assertLastLoggedAtStamped($user);
+    }
+
     // Happy — valid credentials return a Sanctum token and the user record.
     #[Test]
     public function when_valid_credentials_are_submitted_then_the_token_and_user_are_returned(): void
