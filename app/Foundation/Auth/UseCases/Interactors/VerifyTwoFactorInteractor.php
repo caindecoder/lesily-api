@@ -44,18 +44,31 @@ class VerifyTwoFactorInteractor
         if ($this->totp->verify((string) $user->two_factor_secret, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return new SessionIssued($this->sessionIssuer->issue($user, 'web'), $user);
+            return $this->issueSession($user, $command->deviceName);
         }
 
         if ($this->consumeMatchingRecoveryCode($user, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return new SessionIssued($this->sessionIssuer->issue($user, 'web'), $user);
+            return $this->issueSession($user, $command->deviceName);
         }
 
         $this->challenges->recordFailure($command->challengeId);
 
         throw new TwoFactorVerificationFailedException;
+    }
+
+    /**
+     * Stamp the user's "last seen" and mint the session, naming the token for the device
+     * (sessions slice R10). Shared by both completing factors (TOTP and recovery); the
+     * stamp lives here, not in SessionIssuer, so a future token refresh won't bump it.
+     */
+    private function issueSession(User $user, string $deviceName): SessionIssued
+    {
+        $user->last_logged_at = now();
+        $user->save();
+
+        return new SessionIssued($this->sessionIssuer->issue($user, $deviceName), $user);
     }
 
     /**
