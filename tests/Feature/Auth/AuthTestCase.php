@@ -163,7 +163,7 @@ abstract class AuthTestCase extends TestCase
      */
     protected function assertLastLoggedAtStamped(User $user): void
     {
-        $this->assertSame(now()->toDateTimeString(), $user->fresh()->last_logged_at?->toDateTimeString());
+        $this->assertSame(now()->toDateTimeString(), $user->refresh()->last_logged_at?->toDateTimeString());
     }
 
     /**
