@@ -198,6 +198,27 @@ class LoginTest extends AuthTestCase
         ];
     }
 
+    // Edge — a malformed (non-string) deviceName is tolerated, not a 500: the resolver
+    // runs before validation, so an array body must be treated as "not supplied" and
+    // fall back to the User-Agent rather than reaching the typed sink and crashing.
+    #[Test]
+    public function when_the_supplied_device_name_is_not_a_string_then_it_is_ignored_in_favour_of_the_user_agent(): void
+    {
+        // Given a registered user
+        $user = $this->aRegisteredUser();
+
+        // When they log in with a non-string deviceName (an array) from a known device
+        $this->withHeader('User-Agent', 'Mozilla/5.0 (TestAgent)')
+            ->postJson('/api/v1/auth/login', [
+                'email' => self::LOGIN_EMAIL,
+                'password' => self::LOGIN_PASSWORD,
+                'deviceName' => ['not', 'a', 'string'],
+            ])->assertOk();
+
+        // Then the malformed name is ignored and the token is named for the User-Agent
+        $this->assertTokenNamed($user, 'Mozilla/5.0 (TestAgent)');
+    }
+
     // Edge — a successful (non-2FA) login stamps the user's "last seen" timestamp
     // (sessions slice R10); the stamp lives in the interactor, not the mint service.
     #[Test]

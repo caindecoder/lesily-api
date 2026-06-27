@@ -85,6 +85,25 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertLastLoggedAtStamped($owner);
     }
 
+    // Edge — register is UA-derived (no deviceName on the register contract, per design):
+    // a client-supplied deviceName smuggled into the body is ignored in favour of the
+    // User-Agent, so the signup seam can't be used to set an arbitrary token name.
+    #[Test]
+    public function when_an_owner_registers_with_a_supplied_device_name_then_it_is_ignored_in_favour_of_the_user_agent(): void
+    {
+        // Given a guest registering from a device, also smuggling a deviceName into the body
+        // When they register
+        $this->withHeader('User-Agent', 'Mozilla/5.0 (TestAgent)')
+            ->postJson('/api/v1/auth/register', [
+                ...$this->validRegistrationPayload(),
+                'deviceName' => 'Smuggled Device',
+            ])->assertCreated();
+
+        // Then the supplied name is ignored — the token is named for the User-Agent
+        $owner = User::query()->where('email', 'nimal@contoso.lk')->sole();
+        $this->assertTokenNamed($owner, 'Mozilla/5.0 (TestAgent)');
+    }
+
     protected function assertRegistrationSucceeded(TestResponse $response): void
     {
         $response->assertCreated();

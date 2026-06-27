@@ -23,6 +23,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        //
+        // Forward-only: migrations are never rolled back (questionnaire §24 + LeaveDates).
     }
 };
