@@ -66,6 +66,26 @@ class ViewSessionsTest extends AuthTestCase
         $this->assertSessionExcluded($response, $expiredTokenId);
     }
 
+    // Edge — a session whose created_at predates the global expiry window is excluded,
+    // even with a null/future expires_at. Mirrors Sanctum's auth rule (a token older than
+    // config('sanctum.expiration') from creation is rejected), so the list can never show
+    // a session that would in fact fail to authenticate.
+    #[Test]
+    public function when_a_session_predates_the_global_expiry_window_then_it_is_excluded(): void
+    {
+        // Given a user with one fresh active session and one whose created_at predates
+        // the global expiry window (a null-expiry token old enough that Sanctum rejects it)
+        $user = $this->aRegisteredUser();
+        $freshToken = $this->aSessionFor($user)->plainTextToken;
+        $staleTokenId = $this->aSessionPredatingTheWindow($user, 'ancient')->accessToken->getKey();
+
+        // When they list their active sessions
+        $response = $this->listSessions($freshToken);
+
+        // Then the stale session is excluded — only the fresh one remains
+        $this->assertSessionExcluded($response, $staleTokenId);
+    }
+
     // Edge — the requesting token is flagged as the current session; the user's other
     // sessions are not. "Current" is the token that authenticated THIS request (Sanctum
     // currentAccessToken), letting the UI mark "this device" and guard it from self-revoke.
@@ -131,6 +151,19 @@ class ViewSessionsTest extends AuthTestCase
     private function anExpiredSessionFor(User $user, string $name): NewAccessToken
     {
         return $user->createToken($name, ['*'], now()->subDay());
+    }
+
+    /**
+     * Mint a null-expiry token whose created_at predates the global expiration window —
+     * Sanctum would refuse to authenticate it, so the active-session list must exclude it.
+     */
+    private function aSessionPredatingTheWindow(User $user, string $name): NewAccessToken
+    {
+        $session = $user->createToken($name); // null expires_at — relies on the global window
+        $window = Config::integer('sanctum.expiration');
+        $session->accessToken->forceFill(['created_at' => now()->subMinutes($window + 1)])->save();
+
+        return $session;
     }
 
     /**
