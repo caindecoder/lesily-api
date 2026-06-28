@@ -64,6 +64,25 @@ class ViewSessionsTest extends AuthTestCase
         $this->assertExpiredSessionExcluded($response, $expiredTokenId);
     }
 
+    // Edge — the requesting token is flagged as the current session; the user's other
+    // sessions are not. "Current" is the token that authenticated THIS request (Sanctum
+    // currentAccessToken), letting the UI mark "this device" and guard it from self-revoke.
+    #[Test]
+    public function when_listing_sessions_then_the_requesting_token_is_flagged_as_current(): void
+    {
+        // Given a user holding two active sessions
+        $user = $this->aRegisteredUser();
+        $currentToken = $this->tokenFor($user, 'web');
+        $currentTokenId = $user->tokens()->sole()->getKey();
+        $this->tokenFor($user, 'mobile');
+
+        // When they list their sessions using one of those tokens
+        $response = $this->listSessions($currentToken);
+
+        // Then only the requesting token is flagged as the current session
+        $this->assertExactlyCurrentSession($response, $currentTokenId);
+    }
+
     private function listSessions(string $token): TestResponse
     {
         return $this->withToken($token)->getJson('/api/v1/me/sessions');
@@ -94,5 +113,16 @@ class ViewSessionsTest extends AuthTestCase
         $tokenIds = collect($response->json('data'))->pluck('token_id')->all();
         $this->assertNotContains($expiredTokenId, $tokenIds);
         $this->assertCount(1, $tokenIds);
+    }
+
+    /**
+     * Exactly one session is flagged current, and it is the requesting token.
+     */
+    protected function assertExactlyCurrentSession(TestResponse $response, int $currentTokenId): void
+    {
+        $response->assertOk();
+        $current = collect($response->json('data'))->where('current_session', true);
+        $this->assertCount(1, $current);
+        $this->assertSame($currentTokenId, $current->first()['token_id']);
     }
 }
