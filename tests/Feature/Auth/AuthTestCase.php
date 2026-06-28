@@ -147,6 +147,17 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
+     * Issue a real Sanctum token for $user and return its plain-text value. The
+     * suite authenticates with real tokens (not Sanctum::actingAs, which yields a
+     * TransientToken with no id/delete()) so the session-list and revocation paths
+     * exercise genuine personal_access_tokens rows. Shared by the logout + sessions suites.
+     */
+    protected function tokenFor(User $user, string $name = 'web'): string
+    {
+        return $user->createToken($name)->plainTextToken;
+    }
+
+    /**
      * Assert the user's single issued session token is named for $expectedName — the
      * device-name resolution oracle (sessions slice). `sole()` doubles as the
      * exactly-one-token-minted guard. Shared by the login / 2FA-verify / register suites.
