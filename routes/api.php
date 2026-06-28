@@ -5,6 +5,7 @@ use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Foundation\Auth\IO\Http\Controllers\LoginController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
+use App\Foundation\Auth\IO\Http\Controllers\ViewSessionsController;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 use App\Foundation\Auth\IO\Http\Controllers\EnableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
@@ -82,3 +83,12 @@ Route::delete('/v1/auth/2fa', DisableTwoFactorController::class)
 // surface like disable + confirm — R9). 200 with the new codes shown once.
 Route::post('/v1/auth/2fa/recovery-codes', RegenerateRecoveryCodesController::class)
     ->middleware(['auth:sanctum', 'throttle:auth-tier']);
+
+// View active sessions (UC-1-010) — the authenticated user's own non-expired
+// Sanctum tokens. Bare auth:sanctum: a `me/` self-service read (no company
+// context), no throttle (a read with no credential check isn't a brute-force
+// surface; LeaveDates' PAT list is likewise un-throttled — the api-doc's
+// tenant-tier row predates this and has no registered limiter; reconciled at
+// slice close). Read-only token-table query, no domain event.
+Route::get('/v1/me/sessions', ViewSessionsController::class)
+    ->middleware('auth:sanctum');
