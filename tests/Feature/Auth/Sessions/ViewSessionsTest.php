@@ -3,8 +3,10 @@
 namespace Tests\Feature\Auth\Sessions;
 
 use App\Models\User;
+use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
+use Illuminate\Support\Facades\Config;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -28,16 +30,16 @@ class ViewSessionsTest extends AuthTestCase
 
     // Sad/isolation — the list is scoped to the requester. Another user's sessions
     // are never exposed. The UC's cross-tenant scenario collapses here: account-level
-    // tokens carry no company scope, so "own only" IS the tenant boundary.
+    // tokens carry no company scope, so "own only" IS the tenant boundary. The foreign
+    // session has a future expiry so that dropping the OR-grouping would leak it.
     #[Test]
     public function when_listing_sessions_then_only_the_users_own_sessions_are_returned(): void
     {
         // Given two users, each holding an active session
         $viewer = $this->aRegisteredUser();
         $other = $this->aRegisteredUser('bob@contoso.lk');
-        $viewerToken = $this->tokenFor($viewer, 'web');
-        $this->tokenFor($other, 'mobile');
-        $foreignTokenId = $other->tokens()->sole()->getKey();
+        $viewerToken = $this->aSessionFor($viewer)->plainTextToken;
+        $foreignTokenId = $this->aSessionFor($other, 'mobile')->accessToken->getKey();
 
         // When the viewer lists their active sessions
         $response = $this->listSessions($viewerToken);
@@ -54,14 +56,14 @@ class ViewSessionsTest extends AuthTestCase
     {
         // Given a user with one active session and one expired session
         $user = $this->aRegisteredUser();
-        $activeToken = $this->tokenFor($user, 'web');
-        $expiredTokenId = $this->expiredTokenFor($user, 'old-laptop');
+        $activeToken = $this->aSessionFor($user)->plainTextToken;
+        $expiredTokenId = $this->anExpiredSessionFor($user, 'old-laptop')->accessToken->getKey();
 
         // When they list their active sessions
         $response = $this->listSessions($activeToken);
 
         // Then only the active session remains — the expired one is excluded
-        $this->assertExpiredSessionExcluded($response, $expiredTokenId);
+        $this->assertSessionExcluded($response, $expiredTokenId);
     }
 
     // Edge — the requesting token is flagged as the current session; the user's other
@@ -72,15 +74,14 @@ class ViewSessionsTest extends AuthTestCase
     {
         // Given a user holding two active sessions
         $user = $this->aRegisteredUser();
-        $currentToken = $this->tokenFor($user, 'web');
-        $currentTokenId = $user->tokens()->sole()->getKey();
-        $this->tokenFor($user, 'mobile');
+        $currentSession = $this->aSessionFor($user);
+        $this->aSessionFor($user, 'mobile');
 
         // When they list their sessions using one of those tokens
-        $response = $this->listSessions($currentToken);
+        $response = $this->listSessions($currentSession->plainTextToken);
 
         // Then only the requesting token is flagged as the current session
-        $this->assertExactlyCurrentSession($response, $currentTokenId);
+        $this->assertExactlyCurrentSession($response, $currentSession->accessToken->getKey());
     }
 
     // Happy — a session is listed with its full row shape: id, the device it was minted
@@ -95,14 +96,15 @@ class ViewSessionsTest extends AuthTestCase
         $this->travelTo(now()->startOfSecond());
         $user = $this->aRegisteredUser();
         $deviceName = 'Chrome on Windows';
-        $token = $this->tokenFor($user, $deviceName);
-        $tokenId = $user->tokens()->sole()->getKey();
+        $session = $this->aSessionFor($user, $deviceName);
 
-        // When they list their active sessions
-        $response = $this->listSessions($token);
+        // When they list their active sessions — minted earlier, listed now, so
+        // last_used_at (stamped at list time) is provably distinct from created_at.
+        $this->travel(5)->minutes();
+        $response = $this->listSessions($session->plainTextToken);
 
         // Then the row carries its id, device, last-active time, and current flag
-        $this->assertSessionListed($response, $tokenId, $deviceName);
+        $this->assertSessionListed($response, $session->accessToken->getKey(), $deviceName);
     }
 
     private function listSessions(string $token): TestResponse
@@ -110,9 +112,25 @@ class ViewSessionsTest extends AuthTestCase
         return $this->withToken($token)->getJson('/api/v1/me/sessions');
     }
 
-    private function expiredTokenFor(User $user, string $name): int
+    /**
+     * Mint a production-faithful active session: an explicit ~90-day expiry exactly as
+     * SessionIssuer stamps it. createToken alone leaves expires_at null, which no real
+     * login produces — so the suite must set it to exercise the live "future expiry"
+     * filter arm. Returns the NewAccessToken so callers get both the plain text (to
+     * authenticate) and the token id (to assert on).
+     */
+    private function aSessionFor(User $user, string $name = 'web'): NewAccessToken
     {
-        return $user->createToken($name, ['*'], now()->subDay())->accessToken->getKey();
+        return $user->createToken($name, ['*'], now()->addMinutes(Config::integer('sanctum.expiration')));
+    }
+
+    /**
+     * Mint a session whose explicit expiry is already in the past — a dead session whose
+     * row lingers until pruned.
+     */
+    private function anExpiredSessionFor(User $user, string $name): NewAccessToken
+    {
+        return $user->createToken($name, ['*'], now()->subDay());
     }
 
     /**
@@ -127,13 +145,13 @@ class ViewSessionsTest extends AuthTestCase
     }
 
     /**
-     * The expired token is absent and only the single active session remains.
+     * The excluded token is absent and only the single active session remains.
      */
-    protected function assertExpiredSessionExcluded(TestResponse $response, int $expiredTokenId): void
+    protected function assertSessionExcluded(TestResponse $response, int $excludedTokenId): void
     {
         $response->assertOk();
         $tokenIds = $response->collect('data')->pluck('token_id')->all();
-        $this->assertNotContains($expiredTokenId, $tokenIds);
+        $this->assertNotContains($excludedTokenId, $tokenIds);
         $this->assertCount(1, $tokenIds);
     }
 
