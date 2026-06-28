@@ -23,6 +23,8 @@ class SessionResource extends JsonResource
     {
         return [
             'token_id' => $this->getKey(),
+            'device_name' => $this->name,
+            'last_used_at' => $this->last_used_at,
             'current_session' => $this->isCurrentSession($request),
         ];
     }

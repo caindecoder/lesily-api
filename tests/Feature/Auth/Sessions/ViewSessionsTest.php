@@ -83,6 +83,28 @@ class ViewSessionsTest extends AuthTestCase
         $this->assertExactlyCurrentSession($response, $currentTokenId);
     }
 
+    // Happy — a session is listed with its full row shape: id, the device it was minted
+    // for, when it was last active, and the current-session flag. This is exactly what
+    // the Active Sessions screen renders per row (wireframe WF-1-024).
+    #[Test]
+    public function when_a_user_has_active_sessions_then_each_is_listed_with_its_device_and_last_active_time(): void
+    {
+        // Given a user with one active session minted for a named device. Freeze on a
+        // whole-second boundary: last_used_at is a second-precision column, so a frozen
+        // sub-second now() would not round-trip through the database.
+        $this->travelTo(now()->startOfSecond());
+        $user = $this->aRegisteredUser();
+        $deviceName = 'Chrome on Windows';
+        $token = $this->tokenFor($user, $deviceName);
+        $tokenId = $user->tokens()->sole()->getKey();
+
+        // When they list their active sessions
+        $response = $this->listSessions($token);
+
+        // Then the row carries its id, device, last-active time, and current flag
+        $this->assertSessionListed($response, $tokenId, $deviceName);
+    }
+
     private function listSessions(string $token): TestResponse
     {
         return $this->withToken($token)->getJson('/api/v1/me/sessions');
@@ -123,5 +145,18 @@ class ViewSessionsTest extends AuthTestCase
         $response->assertOk();
         $currentTokenIds = $response->collect('data')->where('current_session', true)->pluck('token_id')->all();
         $this->assertSame([$currentTokenId], $currentTokenIds);
+    }
+
+    /**
+     * The single listed session carries its id, device name, last-active time, and
+     * current-session flag — the full shape one session row renders.
+     */
+    protected function assertSessionListed(TestResponse $response, int $tokenId, string $deviceName): void
+    {
+        $response->assertOk()
+            ->assertJsonPath('data.0.token_id', $tokenId)
+            ->assertJsonPath('data.0.device_name', $deviceName)
+            ->assertJsonPath('data.0.last_used_at', now()->toJSON())
+            ->assertJsonPath('data.0.current_session', true);
     }
 }
