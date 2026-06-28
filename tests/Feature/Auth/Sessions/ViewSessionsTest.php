@@ -46,9 +46,32 @@ class ViewSessionsTest extends AuthTestCase
         $this->assertOnlyOwnSessions($response, $viewer, $foreignTokenId);
     }
 
+    // Edge — the list shows only ACTIVE sessions: an expired token (a dead session
+    // whose row lingers until pruned) is excluded. Sanctum won't authenticate it and
+    // the UI must not surface terminated devices (wireframe WF-1-024 §8).
+    #[Test]
+    public function when_a_session_has_expired_then_it_is_excluded_from_the_list(): void
+    {
+        // Given a user with one active session and one expired session
+        $user = $this->aRegisteredUser();
+        $activeToken = $this->tokenFor($user, 'web');
+        $expiredTokenId = $this->expiredTokenFor($user, 'old-laptop');
+
+        // When they list their active sessions
+        $response = $this->listSessions($activeToken);
+
+        // Then only the active session remains — the expired one is excluded
+        $this->assertExpiredSessionExcluded($response, $expiredTokenId);
+    }
+
     private function listSessions(string $token): TestResponse
     {
         return $this->withToken($token)->getJson('/api/v1/me/sessions');
+    }
+
+    private function expiredTokenFor(User $user, string $name): int
+    {
+        return $user->createToken($name, ['*'], now()->subDay())->accessToken->getKey();
     }
 
     /**
@@ -60,5 +83,16 @@ class ViewSessionsTest extends AuthTestCase
         $tokenIds = collect($response->json('data'))->pluck('token_id')->all();
         $this->assertEqualsCanonicalizing($viewer->tokens()->pluck('id')->all(), $tokenIds);
         $this->assertNotContains($foreignTokenId, $tokenIds);
+    }
+
+    /**
+     * The expired token is absent and only the single active session remains.
+     */
+    protected function assertExpiredSessionExcluded(TestResponse $response, int $expiredTokenId): void
+    {
+        $response->assertOk();
+        $tokenIds = collect($response->json('data'))->pluck('token_id')->all();
+        $this->assertNotContains($expiredTokenId, $tokenIds);
+        $this->assertCount(1, $tokenIds);
     }
 }

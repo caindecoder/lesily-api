@@ -4,6 +4,7 @@ namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
 use Laravel\Sanctum\PersonalAccessToken;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
@@ -20,8 +21,15 @@ class ListSessionsInteractor
      */
     public function execute(User $user): Collection
     {
+        // Active-only: a never-expiring token (null) or one whose expiry is still in
+        // the future. The closure GROUPS the OR so it stays inside the relationship's
+        // tokenable scope — an ungrouped OR would leak other users' active tokens.
         /** @var Collection<int, PersonalAccessToken> $tokens */
-        $tokens = $user->tokens()->get();
+        $tokens = $user->tokens()
+            ->where(function (Builder $query): void {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->get();
 
         return $tokens;
     }
