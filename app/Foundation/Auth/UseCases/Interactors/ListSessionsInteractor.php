@@ -31,14 +31,11 @@ class ListSessionsInteractor
         // configured here (SessionIssuer mints against it).
         $windowStart = now()->subMinutes(Config::integer('sanctum.expiration'));
 
-        /** @var Collection<int, PersonalAccessToken> $tokens */
-        $tokens = $user->tokens()
+        return $user->tokens()
             ->where(function (Builder $query): void {
                 $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
             })
             ->where('created_at', '>', $windowStart)
             ->get();
-
-        return $tokens;
     }
 }
