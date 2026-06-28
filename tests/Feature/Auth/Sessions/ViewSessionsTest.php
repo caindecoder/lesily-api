@@ -99,7 +99,7 @@ class ViewSessionsTest extends AuthTestCase
     protected function assertOnlyOwnSessions(TestResponse $response, User $viewer, int $foreignTokenId): void
     {
         $response->assertOk();
-        $tokenIds = collect($response->json('data'))->pluck('token_id')->all();
+        $tokenIds = $response->collect('data')->pluck('token_id')->all();
         $this->assertEqualsCanonicalizing($viewer->tokens()->pluck('id')->all(), $tokenIds);
         $this->assertNotContains($foreignTokenId, $tokenIds);
     }
@@ -110,7 +110,7 @@ class ViewSessionsTest extends AuthTestCase
     protected function assertExpiredSessionExcluded(TestResponse $response, int $expiredTokenId): void
     {
         $response->assertOk();
-        $tokenIds = collect($response->json('data'))->pluck('token_id')->all();
+        $tokenIds = $response->collect('data')->pluck('token_id')->all();
         $this->assertNotContains($expiredTokenId, $tokenIds);
         $this->assertCount(1, $tokenIds);
     }
@@ -121,8 +121,7 @@ class ViewSessionsTest extends AuthTestCase
     protected function assertExactlyCurrentSession(TestResponse $response, int $currentTokenId): void
     {
         $response->assertOk();
-        $current = collect($response->json('data'))->where('current_session', true);
-        $this->assertCount(1, $current);
-        $this->assertSame($currentTokenId, $current->first()['token_id']);
+        $currentTokenIds = $response->collect('data')->where('current_session', true)->pluck('token_id')->all();
+        $this->assertSame([$currentTokenId], $currentTokenIds);
     }
 }
