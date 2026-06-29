@@ -2,9 +2,12 @@
 
 namespace Tests\Feature\Auth\Sessions;
 
+use App\Models\User;
+use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class LogoutAllTest extends AuthTestCase
@@ -41,6 +44,27 @@ class LogoutAllTest extends AuthTestCase
         $this->assertValidationRejected($response, 'password');
     }
 
+    // Sad — wrong password is the re-auth gate: it is refused and NONE of the user's sessions
+    // are revoked (the Minimal Guarantee — a failed confirm must leave every device logged in).
+    #[Test]
+    public function when_the_password_is_incorrect_then_all_sessions_are_preserved(): void
+    {
+        // Given a user with three active sessions (the current one plus two others)
+        $user = $this->aRegisteredUser();
+        $current = $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->aSessionFor($user, 'tablet');
+
+        // When they confirm logout-all with the wrong password
+        $response = $this->logoutAll($current->plainTextToken, 'not-my-password');
+
+        // Then it is refused and all three sessions remain intact
+        $this->assertRefusedWith($response, ApiErrorCode::IncorrectPassword);
+        $response->assertStatus(401); // literal pins the 401 contract independent of the enum
+        $response->assertJsonPath('message', 'Incorrect password. Please try again.'); // pins the bootstrap copy (Infection-blind)
+        $this->assertSessionsPreserved($user, 3);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>}>
      */
@@ -50,5 +74,20 @@ class LogoutAllTest extends AuthTestCase
             'missing password' => [[]],
             'blank password' => [['password' => '']],
         ];
+    }
+
+    private function logoutAll(string $token, string $password): TestResponse
+    {
+        return $this->withToken($token)->postJson('/api/v1/auth/logout-all', ['password' => $password]);
+    }
+
+    /**
+     * No session was revoked: the user still holds exactly $expected tokens. The "nothing
+     * revoked" oracle for the refused / no-op paths — goes RED if a revoke ever runs before
+     * (or instead of) the password gate (the Minimal Guarantee).
+     */
+    protected function assertSessionsPreserved(User $user, int $expected): void
+    {
+        $this->assertSame($expected, $user->tokens()->count());
     }
 }
