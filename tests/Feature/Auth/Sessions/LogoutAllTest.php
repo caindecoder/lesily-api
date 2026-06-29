@@ -65,6 +65,25 @@ class LogoutAllTest extends AuthTestCase
         $this->assertSessionsPreserved($user, 3);
     }
 
+    // Sad — logout-all runs Hash::check, so it is a password-guessing surface: once the shared
+    // per-IP auth-tier allowance is exhausted, further attempts are throttled (the brute-force
+    // surface is bounded, exactly like /2fa disable).
+    #[Test]
+    public function when_logging_out_all_past_the_rate_limit_then_it_is_throttled(): void
+    {
+        // Given an authenticated user hammering logout-all with wrong-password attempts
+        $token = $this->aSessionFor($this->aRegisteredUser())->plainTextToken;
+
+        // When the shared per-IP auth-tier allowance is exhausted
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $this->logoutAll($token, 'wrong-password');
+        }
+        $response = $this->logoutAll($token, 'wrong-password');
+
+        // Then the over-limit attempt is throttled — the brute-force surface is bounded
+        $this->assertThrottled($response);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>}>
      */
