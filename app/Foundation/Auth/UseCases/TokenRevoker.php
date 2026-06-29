@@ -16,6 +16,6 @@ class TokenRevoker
 {
     public function revokeAllForUserExcept(User $user, string $exceptTokenId): int
     {
-        return $user->tokens()->where('id', '!=', $exceptTokenId)->delete();
+        return $user->tokens()->whereKeyNot($exceptTokenId)->delete();
     }
 }

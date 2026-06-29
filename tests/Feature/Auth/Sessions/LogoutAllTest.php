@@ -122,6 +122,29 @@ class LogoutAllTest extends AuthTestCase
         $this->assertOnlyCurrentSurvives($response, $current->plainTextToken, 0);
     }
 
+    // Edge — revoke is expiry-agnostic: logout-all deletes EVERY other session row the user owns,
+    // including an expired-but-unpruned one, and counts it — deliberately distinct from the active
+    // sessions LIST (UC-1-010), which hides expired rows (consistent with the Task-3 single-revoke
+    // semantic: revoke = "delete my rows", not "delete my active rows").
+    #[Test]
+    public function when_other_sessions_include_an_expired_one_then_logging_out_all_revokes_them_all(): void
+    {
+        // Given a user with the current session, one live other device, and one expired (unpruned) row
+        $user = $this->aRegisteredUser();
+        $current = $this->aSessionFor($user, 'web');
+        $liveOther = $this->aSessionFor($user, 'mobile');
+        $this->anExpiredSessionFor($user, 'old-laptop');
+
+        // When they log out all other devices with the correct password
+        $response = $this->logoutAll($current->plainTextToken, self::LOGIN_PASSWORD);
+
+        // Then both other rows (live + expired) are revoked and counted, only the current remains,
+        // and the live other device no longer authenticates
+        $this->assertOnlyCurrentSurvives($response, $current->plainTextToken, 2);
+        $this->assertSessionsPreserved($user, 1);
+        $this->assertUnauthenticated($this->probeWith($liveOther->plainTextToken));
+    }
+
     // Happy — the core flow: a user with several devices confirms with the correct password and
     // every OTHER session is revoked, while the device they are using stays logged in.
     #[Test]
