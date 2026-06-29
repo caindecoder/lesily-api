@@ -16,8 +16,6 @@ class TokenRevoker
 {
     public function revokeAllForUserExcept(User $user, string $exceptTokenId): int
     {
-        // Faked to the only-current count until the multi-token happy path (#7) triangulates
-        // the real except-current delete — keeps the revoke logic RED-first.
-        return 0;
+        return $user->tokens()->where('id', '!=', $exceptTokenId)->delete();
     }
 }

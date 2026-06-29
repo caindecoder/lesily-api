@@ -106,6 +106,42 @@ class LogoutAllTest extends AuthTestCase
         $this->assertSessionsIntact($bob, $bobToken->plainTextToken, 2);
     }
 
+    // Edge — a user whose only session is the current one has nothing else to revoke: logout-all
+    // succeeds, reports zero revoked, and leaves them logged in.
+    #[Test]
+    public function when_only_the_current_session_exists_then_logging_out_all_revokes_none(): void
+    {
+        // Given a user holding exactly one (current) session
+        $user = $this->aRegisteredUser();
+        $current = $this->aSessionFor($user);
+
+        // When they log out all other devices with the correct password
+        $response = $this->logoutAll($current->plainTextToken, self::LOGIN_PASSWORD);
+
+        // Then nothing is revoked and their current session still authenticates
+        $this->assertOnlyCurrentSurvives($response, $current->plainTextToken, 0);
+    }
+
+    // Happy — the core flow: a user with several devices confirms with the correct password and
+    // every OTHER session is revoked, while the device they are using stays logged in.
+    #[Test]
+    public function when_the_correct_password_is_submitted_then_the_other_sessions_are_revoked(): void
+    {
+        // Given a user with four active sessions: the current one plus three others
+        $user = $this->aRegisteredUser();
+        $current = $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->aSessionFor($user, 'tablet');
+        $this->aSessionFor($user, 'laptop');
+
+        // When they log out all other devices with the correct password
+        $response = $this->logoutAll($current->plainTextToken, self::LOGIN_PASSWORD);
+
+        // Then the three other sessions are revoked and only the current one remains
+        $this->assertOnlyCurrentSurvives($response, $current->plainTextToken, 3);
+        $this->assertSessionsPreserved($user, 1);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>}>
      */
@@ -141,5 +177,16 @@ class LogoutAllTest extends AuthTestCase
     {
         $this->assertSame($expected, $user->tokens()->count());
         $this->probeWith($survivingToken)->assertOk();
+    }
+
+    /**
+     * Logout-all succeeded, reported exactly $expectedRevoked tokens revoked, and the current
+     * session still authenticates (forgetGuards forces a fresh DB re-check) — the user is never
+     * accidentally logged out of the device they are using.
+     */
+    protected function assertOnlyCurrentSurvives(TestResponse $response, string $currentToken, int $expectedRevoked): void
+    {
+        $response->assertOk()->assertJsonPath('data.tokens_revoked', $expectedRevoked);
+        $this->probeWith($currentToken)->assertOk();
     }
 }
