@@ -84,6 +84,28 @@ class LogoutAllTest extends AuthTestCase
         $this->assertThrottled($response);
     }
 
+    // Edge — logout-all is account-scoped: when Alice logs out all her devices, another user's
+    // sessions are never touched. Account-level tokens carry no company scope, so "own only" IS
+    // the tenant-isolation guarantee.
+    #[Test]
+    public function when_a_user_logs_out_all_then_other_users_sessions_remain_active(): void
+    {
+        // Given Alice (with a second device) and Bob, each holding active sessions
+        $alice = $this->aRegisteredUser();
+        $aliceCurrent = $this->aSessionFor($alice, 'web');
+        $this->aSessionFor($alice, 'mobile');
+
+        $bob = $this->aRegisteredUser('bob@contoso.lk');
+        $bobToken = $this->aSessionFor($bob, 'web');
+        $this->aSessionFor($bob, 'mobile');
+
+        // When Alice logs out all her other devices with her correct password
+        $this->logoutAll($aliceCurrent->plainTextToken, self::LOGIN_PASSWORD)->assertOk();
+
+        // Then Bob's sessions are wholly untouched
+        $this->assertSessionsIntact($bob, $bobToken->plainTextToken, 2);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>}>
      */
@@ -108,5 +130,16 @@ class LogoutAllTest extends AuthTestCase
     protected function assertSessionsPreserved(User $user, int $expected): void
     {
         $this->assertSame($expected, $user->tokens()->count());
+    }
+
+    /**
+     * Another user's sessions are wholly unaffected by the actor's logout-all: their token
+     * count is unchanged AND one of their tokens still authenticates (the cross-user isolation
+     * oracle — count alone would miss a swapped row).
+     */
+    protected function assertSessionsIntact(User $user, string $survivingToken, int $expected): void
+    {
+        $this->assertSame($expected, $user->tokens()->count());
+        $this->probeWith($survivingToken)->assertOk();
     }
 }
