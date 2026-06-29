@@ -5,7 +5,10 @@ namespace Tests\Feature\Auth;
 use Tests\TestCase;
 use App\Models\User;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\NewAccessToken;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Config;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
@@ -186,5 +189,41 @@ abstract class AuthTestCase extends TestCase
             'challenge_id' => $challengeId,
             'code' => $code,
         ]);
+    }
+
+    /**
+     * Mint a production-faithful active session for $user: an explicit ~90-day expiry
+     * exactly as SessionIssuer stamps it (createToken alone leaves expires_at null, which
+     * no real login produces). Returns the NewAccessToken so callers get both the plain
+     * text (to authenticate) and the token id (to target / assert on). Shared by the
+     * view-sessions (UC-1-010) and revoke-session suites.
+     */
+    protected function aSessionFor(User $user, string $name = 'web'): NewAccessToken
+    {
+        return $user->createToken($name, ['*'], now()->addMinutes(Config::integer('sanctum.expiration')));
+    }
+
+    /**
+     * Mint a session whose explicit expiry is already in the past — a dead session whose row
+     * lingers until pruned. Shared by the view-sessions (expired-exclusion) and revoke-session
+     * (revoke-an-expired-row) suites.
+     */
+    protected function anExpiredSessionFor(User $user, string $name = 'old-laptop'): NewAccessToken
+    {
+        return $user->createToken($name, ['*'], now()->subDay());
+    }
+
+    /**
+     * Probe a protected route with $token so it reflects the token's CURRENT state, like a
+     * fresh client request. Within one test the container reuses the RequestGuard, which
+     * caches the user resolved by a prior request, so a just-revoked token false-passes
+     * unless guards are forgotten first (amendment P / feedback_sanctum-guard-cache-test).
+     * Shared by the logout (UC-1-004) and revoke-session suites.
+     */
+    protected function probeWith(string $token): TestResponse
+    {
+        Auth::forgetGuards();
+
+        return $this->withToken($token)->getJson('/api/_test/authenticated-probe');
     }
 }

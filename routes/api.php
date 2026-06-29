@@ -6,6 +6,7 @@ use App\Foundation\Auth\IO\Http\Controllers\LoginController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
 use App\Foundation\Auth\IO\Http\Controllers\ViewSessionsController;
+use App\Foundation\Auth\IO\Http\Controllers\RevokeSessionController;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 use App\Foundation\Auth\IO\Http\Controllers\EnableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
@@ -92,3 +93,15 @@ Route::post('/v1/auth/2fa/recovery-codes', RegenerateRecoveryCodesController::cl
 // slice close). Read-only token-table query, no domain event.
 Route::get('/v1/me/sessions', ViewSessionsController::class)
     ->middleware('auth:sanctum');
+
+// Revoke a single session (UC-1-010 manage-sessions surface) — hard-delete one of the
+// user's own Sanctum tokens by id. User-scoped: an unknown or another user's token id
+// matches nothing and 404s (existence hidden), the foreign row left intact. Bare
+// auth:sanctum, no throttle — same self-service `me/` contract as the list above (the
+// api-doc's tenant-tier row has no registered limiter; reconciled at slice close).
+// Token-table side-effect, no domain event (slice §2; /simplicity-check 2026-06-27 inline).
+// whereNumber pins {tokenId} to digits so a malformed id (e.g. 12abc) 404s at routing rather
+// than MySQL-coercing the BIGINT id compare onto a real id and deleting the wrong own token.
+Route::delete('/v1/me/sessions/{tokenId}', RevokeSessionController::class)
+    ->middleware('auth:sanctum')
+    ->whereNumber('tokenId');
