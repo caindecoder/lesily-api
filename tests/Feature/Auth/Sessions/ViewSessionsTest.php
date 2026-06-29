@@ -133,15 +133,6 @@ class ViewSessionsTest extends AuthTestCase
     }
 
     /**
-     * Mint a session whose explicit expiry is already in the past — a dead session whose
-     * row lingers until pruned.
-     */
-    private function anExpiredSessionFor(User $user, string $name): NewAccessToken
-    {
-        return $user->createToken($name, ['*'], now()->subDay());
-    }
-
-    /**
      * Mint a null-expiry token whose created_at predates the global expiration window —
      * Sanctum would refuse to authenticate it, so the active-session list must exclude it.
      */

@@ -61,7 +61,43 @@ class RevokeSessionTest extends AuthTestCase
         $response = $this->revokeSession($callerToken, $foreign->accessToken->getKey());
 
         // Then it is not found and the other user's session is untouched
-        $this->assertForeignSessionUntouched($response, $foreign);
+        $this->assertSessionRefusedAndIntact($response, $foreign);
+    }
+
+    // Sad — a malformed token id (digits with trailing non-digits) must not coerce onto a real
+    // id and delete the wrong session. The route's numeric constraint 404s it before the query,
+    // so DELETE /sessions/{n}abc can never reach (and MySQL-coerce onto) the caller's token {n}.
+    #[Test]
+    public function when_revoking_a_malformed_token_id_then_it_is_not_found_and_no_session_is_deleted(): void
+    {
+        // Given a user holding one active session
+        $user = $this->aRegisteredUser();
+        $session = $this->aSessionFor($user);
+
+        // When they revoke a malformed id whose numeric prefix matches their own token id
+        $response = $this->revokeSession($session->plainTextToken, $session->accessToken->getKey().'abc');
+
+        // Then it is refused as not-found and their real session is untouched
+        $this->assertSessionRefusedAndIntact($response, $session);
+    }
+
+    // Edge — an expired (but unpruned) session is still the user's own row, so revoke deletes it
+    // (204) with no expiry filter: revoke = "delete my row", deliberately distinct from the
+    // session LIST, which hides expired sessions. Harmless dead-row cleanup — the token already
+    // cannot authenticate. (Decision: session 098 — "fix footgun, pin expired=204".)
+    #[Test]
+    public function when_revoking_an_expired_session_then_it_is_removed(): void
+    {
+        // Given a user with an active session (to authenticate) and an expired, unpruned one
+        $user = $this->aRegisteredUser();
+        $active = $this->aSessionFor($user);
+        $expired = $this->anExpiredSessionFor($user, 'old-laptop');
+
+        // When they revoke the expired session by id
+        $response = $this->revokeSession($active->plainTextToken, $expired->accessToken->getKey());
+
+        // Then it is removed despite being expired — revoke ignores the expiry the list filters on
+        $this->assertSessionRevoked($response, $expired);
     }
 
     // Happy boundary — a user may revoke the very session they are authenticating with: the
@@ -104,14 +140,15 @@ class RevokeSessionTest extends AuthTestCase
     }
 
     /**
-     * The foreign session is refused as not-found, its row remains, and it still
-     * authenticates — proving the revoke never reached another user's token.
+     * The session is refused as not-found, its row remains, and it still authenticates —
+     * proving the revoke never reached it. Used for both another user's token and a malformed
+     * id that must not coerce onto one of the caller's own sessions.
      */
-    protected function assertForeignSessionUntouched(TestResponse $response, NewAccessToken $foreign): void
+    protected function assertSessionRefusedAndIntact(TestResponse $response, NewAccessToken $session): void
     {
         $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
-        $this->assertDatabaseHas('personal_access_tokens', ['id' => $foreign->accessToken->getKey()]);
-        $this->probeWith($foreign->plainTextToken)->assertOk();
+        $this->assertDatabaseHas('personal_access_tokens', ['id' => $session->accessToken->getKey()]);
+        $this->probeWith($session->plainTextToken)->assertOk();
     }
 
     /**

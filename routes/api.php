@@ -100,5 +100,8 @@ Route::get('/v1/me/sessions', ViewSessionsController::class)
 // auth:sanctum, no throttle — same self-service `me/` contract as the list above (the
 // api-doc's tenant-tier row has no registered limiter; reconciled at slice close).
 // Token-table side-effect, no domain event (slice §2; /simplicity-check 2026-06-27 inline).
+// whereNumber pins {tokenId} to digits so a malformed id (e.g. 12abc) 404s at routing rather
+// than MySQL-coercing the BIGINT id compare onto a real id and deleting the wrong own token.
 Route::delete('/v1/me/sessions/{tokenId}', RevokeSessionController::class)
-    ->middleware('auth:sanctum');
+    ->middleware('auth:sanctum')
+    ->whereNumber('tokenId');

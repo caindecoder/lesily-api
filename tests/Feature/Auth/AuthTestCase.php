@@ -204,6 +204,16 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
+     * Mint a session whose explicit expiry is already in the past — a dead session whose row
+     * lingers until pruned. Shared by the view-sessions (expired-exclusion) and revoke-session
+     * (revoke-an-expired-row) suites.
+     */
+    protected function anExpiredSessionFor(User $user, string $name = 'old-laptop'): NewAccessToken
+    {
+        return $user->createToken($name, ['*'], now()->subDay());
+    }
+
+    /**
      * Probe a protected route with $token so it reflects the token's CURRENT state, like a
      * fresh client request. Within one test the container reuses the RequestGuard, which
      * caches the user resolved by a prior request, so a just-revoked token false-passes
