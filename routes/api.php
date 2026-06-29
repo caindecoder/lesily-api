@@ -5,6 +5,7 @@ use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Foundation\Auth\IO\Http\Controllers\LoginController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
+use App\Foundation\Auth\IO\Http\Controllers\LogoutAllController;
 use App\Foundation\Auth\IO\Http\Controllers\ViewSessionsController;
 use App\Foundation\Auth\IO\Http\Controllers\RevokeSessionController;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
@@ -43,6 +44,14 @@ Route::post('/v1/auth/login', LoginController::class)
 // auth-gated token-destroy is likewise un-throttled.
 Route::post('/v1/auth/logout', LogoutController::class)
     ->middleware('auth:sanctum');
+
+// Log out all other devices (UC-1-011) — password re-auth, then revoke every one of the
+// user's Sanctum tokens EXCEPT the current. throttle:auth-tier AFTER auth:sanctum: the
+// interactor runs Hash::check, so this is a brute-force/password-guessing surface like
+// /2fa disable+confirm (NOT a credential-free action like /logout, which is bare auth:sanctum).
+// Token-table side-effect, no domain event (slice §2; api-doc tenant-tier row reconciled s099).
+Route::post('/v1/auth/logout-all', LogoutAllController::class)
+    ->middleware(['auth:sanctum', 'throttle:auth-tier']);
 
 // Email verification (UC-1-001 alt-6a) — the signed link IS the credential (no
 // auth token); `hash` = sha1(user email) per api-1-auth-onboarding. No route is
