@@ -3,7 +3,6 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -89,17 +88,6 @@ class LogoutTest extends AuthTestCase
     private function logoutWith(string $token): TestResponse
     {
         return $this->withToken($token)->postJson('/api/v1/auth/logout');
-    }
-
-    private function probeWith(string $token): TestResponse
-    {
-        // A probe must reflect the CURRENT token state, like a fresh client request.
-        // Within one test the container reuses the RequestGuard, which caches the user
-        // resolved by a prior request (e.g. the logout call) — forgetting guards forces
-        // re-resolution from the DB so a revoked token is genuinely re-checked.
-        Auth::forgetGuards();
-
-        return $this->withToken($token)->getJson('/api/_test/authenticated-probe');
     }
 
     /**

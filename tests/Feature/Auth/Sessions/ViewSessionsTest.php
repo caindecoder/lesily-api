@@ -133,18 +133,6 @@ class ViewSessionsTest extends AuthTestCase
     }
 
     /**
-     * Mint a production-faithful active session: an explicit ~90-day expiry exactly as
-     * SessionIssuer stamps it. createToken alone leaves expires_at null, which no real
-     * login produces — so the suite must set it to exercise the live "future expiry"
-     * filter arm. Returns the NewAccessToken so callers get both the plain text (to
-     * authenticate) and the token id (to assert on).
-     */
-    private function aSessionFor(User $user, string $name = 'web'): NewAccessToken
-    {
-        return $user->createToken($name, ['*'], now()->addMinutes(Config::integer('sanctum.expiration')));
-    }
-
-    /**
      * Mint a session whose explicit expiry is already in the past — a dead session whose
      * row lingers until pruned.
      */
