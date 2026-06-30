@@ -296,8 +296,9 @@ class LoginTest extends AuthTestCase
             'password' => self::LOGIN_PASSWORD,
         ]);
 
-        // Then it is rejected and no fourth session is minted
+        // Then it is rejected, no fourth session is minted, and "last seen" is not bumped
         $this->assertDeviceLimitRejected($response, $user, 3);
+        $this->assertNull($user->refresh()->last_logged_at, 'A capped login must not stamp last_logged_at.');
     }
 
     /**
@@ -392,6 +393,76 @@ class LoginTest extends AuthTestCase
 
         // Then the cap allows it and the third session is issued
         $this->assertSessionIssued($response, $user, 3);
+    }
+
+    // Edge — a member of a planless (trial) company is uncapped: an absent plan enforces no
+    // device cap, so a fourth concurrent device logs in (UC-1-002 alt-5a — null plan → uncapped).
+    #[Test]
+    public function when_a_planless_company_member_exceeds_three_devices_then_login_is_allowed(): void
+    {
+        // Given a member of a company with no plan chosen yet (trial), holding three active sessions
+        $user = $this->aRegisteredUser();
+        $this->memberOfPlanlessCompany($user);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->aSessionFor($user, 'tablet');
+
+        // When they log in from a fourth device
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then login still succeeds — a null plan does not enforce the cap
+        $this->assertSessionIssued($response, $user, 4);
+    }
+
+    // Edge — the cap is per-account across memberships: a user in BOTH an uncapped (Free) and
+    // a capped (Pro) company is capped — one capped membership is enough (UC-1-002 alt-5a).
+    #[Test]
+    public function when_a_member_of_a_capped_and_an_uncapped_company_is_at_the_limit_then_login_is_rejected(): void
+    {
+        // Given a user on three active devices, a member of a Free company AND a Pro company
+        $user = $this->aRegisteredUser();
+        $this->memberOfCompanyOnPlan($user, BillingPlan::Free);
+        $this->memberOfCompanyOnPlan($user, BillingPlan::Pro);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->aSessionFor($user, 'tablet');
+
+        // When they log in from a fourth device
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then the Pro membership caps them — one capped membership is sufficient
+        $this->assertDeviceLimitRejected($response, $user, 3);
+    }
+
+    // Edge — a 2FA-enrolled capped user is NOT rejected at login: the cap is deferred to the
+    // verify mint site, so login still returns the 202 challenge (the guard sits after the
+    // 2FA gate, which mints no token) — UC-1-002 alt-5a / alt-4a.
+    #[Test]
+    public function when_a_capped_two_factor_user_logs_in_then_the_challenge_is_issued_not_the_cap_error(): void
+    {
+        // Given a 2FA-enrolled Pro member already at three active devices
+        $user = $this->aTwoFactorUser();
+        $this->memberOfCompanyOnPlan($user, BillingPlan::Pro);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->aSessionFor($user, 'tablet');
+
+        // When they log in with valid credentials
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then a 2FA challenge is issued (202), not the cap error — the cap is enforced at verify
+        $response->assertStatus(202);
+        $this->assertNotEmpty($response->json('data.challenge_id'), 'A 2FA login must return a challenge, not the device-cap error.');
+        $this->assertSame(3, $user->tokens()->count(), 'No token is minted at the challenge step.');
     }
 
     protected function assertLoginSucceeded(TestResponse $response, User $user): void

@@ -229,6 +229,17 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
+     * Make $user a member of a company that has not chosen a plan yet (a trial company,
+     * current_billing_plan = null). An absent plan enforces no device cap, so this arranges
+     * the "trial member is uncapped" path (UC-1-002 alt-5a — null plan).
+     */
+    protected function memberOfPlanlessCompany(User $user): void
+    {
+        Company::factory()->withoutPlan()->create()
+            ->users()->attach($user, ['role_id' => Role::factory()->create()->getKey()]);
+    }
+
+    /**
      * Assert a login / 2FA-verify was refused by the device cap (UC-1-002 alt-5a): the
      * §S21 403 DEVICE_LIMIT_REACHED envelope, the canonical message (which pins the
      * Infection-blind bootstrap copy), and that NO new session was minted — the user
