@@ -6,9 +6,9 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
+use App\Foundation\Auth\UseCases\PasswordVerifier;
 use App\Foundation\Auth\Totp\RecoveryCodeGenerator;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
-use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
 use App\Foundation\Auth\UseCases\Commands\RegenerateRecoveryCodesCommand;
 
@@ -23,6 +23,7 @@ class RegenerateRecoveryCodesInteractor
 {
     public function __construct(
         private readonly RecoveryCodeGenerator $recoveryCodes,
+        private readonly PasswordVerifier $passwordVerifier,
     ) {}
 
     /**
@@ -34,9 +35,7 @@ class RegenerateRecoveryCodesInteractor
             throw new TwoFactorNotEnabledException;
         }
 
-        if (! Hash::check($command->password, $user->password)) {
-            throw new IncorrectPasswordException;
-        }
+        $this->passwordVerifier->verify($user, $command->password);
 
         $plaintextCodes = $this->recoveryCodes->generate();
 
