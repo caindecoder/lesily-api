@@ -258,7 +258,7 @@ class VerifyTwoFactorTest extends AuthTestCase
 
         // Then it is rejected AND both recovery codes survive (the cap fires before consumption)
         $this->assertDeviceLimitRejected($response, $user, 3);
-        $this->assertCount(2, $user->refresh()->two_factor_recovery_codes, 'A capped rejection must not burn a recovery code.');
+        $this->assertCount(2, $user->refresh()->two_factor_recovery_codes ?? [], 'A capped rejection must not burn a recovery code.');
     }
 
     /**
