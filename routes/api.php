@@ -9,6 +9,7 @@ use App\Foundation\Auth\IO\Http\Controllers\LogoutAllController;
 use App\Foundation\Auth\IO\Http\Controllers\ViewSessionsController;
 use App\Foundation\Auth\IO\Http\Controllers\RevokeSessionController;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
+use App\Foundation\Auth\IO\Http\Controllers\ChangePasswordController;
 use App\Foundation\Auth\IO\Http\Controllers\EnableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\ConfirmTwoFactorController;
@@ -114,3 +115,10 @@ Route::get('/v1/me/sessions', ViewSessionsController::class)
 Route::delete('/v1/me/sessions/{tokenId}', RevokeSessionController::class)
     ->middleware('auth:sanctum')
     ->whereNumber('tokenId');
+
+// Change own password (UC-1-016) — authenticated self-service credential change at the
+// REST/Fortify-standard PUT /v1/me/password (the /v1/me/* self-service surface). auth:sanctum
+// gates it; throttle:auth-tier (Hash::check brute-force surface) + idempotency-key:required
+// (safe-to-cache 204, no sensitive body) are added as their tests drive them.
+Route::put('/v1/me/password', ChangePasswordController::class)
+    ->middleware('auth:sanctum');
