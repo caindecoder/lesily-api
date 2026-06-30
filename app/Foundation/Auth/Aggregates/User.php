@@ -121,9 +121,9 @@ class User extends AggregateRoot
     /**
      * Guardless with no apply: the password is not aggregate state (no invariant on it) — it is a
      * projected read-model column. The interactor hashes the new password and passes the hash, so the
-     * event carries the already-hashed credential (the register precedent); the projector applies it to
-     * users.password. Event-sourced precisely because that column is projected — a direct write would be
-     * reverted on replay.
+     * event carries the hash, never plaintext (as at register — though register hashes inside the
+     * aggregate, this hashes in the interactor); the projector applies it to users.password. Event-sourced
+     * precisely because that column is projected — a direct write would be reverted on replay.
      */
     public function changePassword(string $passwordHash): static
     {

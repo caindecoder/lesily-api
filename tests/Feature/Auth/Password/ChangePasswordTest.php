@@ -12,6 +12,8 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\Auth\Events\UserPasswordChanged;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class ChangePasswordTest extends AuthTestCase
 {
@@ -28,6 +30,8 @@ class ChangePasswordTest extends AuthTestCase
         // mapped envelopes the way CI/prod do.
         config(['app.debug' => false]);
     }
+
+    // --- Sad ---
 
     #[Test]
     public function when_no_session_is_provided_then_the_request_is_unauthenticated(): void
@@ -97,6 +101,8 @@ class ChangePasswordTest extends AuthTestCase
         $this->assertValidationRejected($response, $invalidField);
     }
 
+    // --- Edge ---
+
     #[Test]
     public function when_the_password_is_changed_then_the_other_sessions_are_revoked(): void
     {
@@ -114,24 +120,6 @@ class ChangePasswordTest extends AuthTestCase
         // Then the change succeeds, the other device no longer authenticates, and the current session survives
         $this->assertOtherSessionsRevoked($response, $current->plainTextToken, $other->plainTextToken);
         $this->assertSame(1, $user->tokens()->count(), 'Only the current session must remain after a change.');
-    }
-
-    #[Test]
-    public function when_the_current_password_is_correct_then_the_password_is_replaced(): void
-    {
-        // Given an authenticated user
-        $user = $this->aRegisteredUser();
-        $current = $this->aSessionFor($user);
-
-        // When they change their password with the correct current password
-        $response = $this->changePassword($current->plainTextToken, [
-            'currentPassword' => self::LOGIN_PASSWORD,
-            'newPassword' => self::NEW_PASSWORD,
-        ]);
-
-        // Then the change succeeds and the new password fully replaces the old one
-        $response->assertNoContent();
-        $this->assertPasswordReplaced($user, self::LOGIN_PASSWORD, self::NEW_PASSWORD);
     }
 
     #[Test]
@@ -167,6 +155,48 @@ class ChangePasswordTest extends AuthTestCase
         $response->assertStatus(422); // literal pins the 422 contract independent of the enum
     }
 
+    #[Test]
+    public function when_a_change_is_retried_with_the_same_idempotency_key_then_the_response_is_replayed(): void
+    {
+        // Given a user who has already changed their password under a fixed idempotency key (one other session)
+        $user = $this->aRegisteredUser();
+        $current = $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $key = (string) Str::uuid();
+        $payload = ['currentPassword' => self::LOGIN_PASSWORD, 'newPassword' => self::NEW_PASSWORD];
+        $this->changePassword($current->plainTextToken, $payload, $key)->assertNoContent();
+
+        // When the identical request is retried with the SAME key (a client retry of the 204)
+        $response = $this->changePassword($current->plainTextToken, $payload, $key);
+
+        // Then the cached 204 is replayed, NOT re-executed — a re-run would now reject the stale
+        // current password (401) and revoke a second time; replay leaves both unchanged
+        $response->assertNoContent();
+        $response->assertHeader('Idempotency-Replayed', 'true');
+        $this->assertSame(1, $user->tokens()->count(), 'A replayed retry must not revoke a second time.');
+    }
+
+    // --- Happy ---
+
+    #[Test]
+    public function when_the_current_password_is_correct_then_the_password_is_replaced(): void
+    {
+        // Given an authenticated user
+        $user = $this->aRegisteredUser();
+        $current = $this->aSessionFor($user);
+
+        // When they change their password with the correct current password
+        $response = $this->changePassword($current->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the change succeeds, the new password fully replaces the old one, and the write was event-sourced
+        $response->assertNoContent();
+        $this->assertPasswordReplaced($user, self::LOGIN_PASSWORD, self::NEW_PASSWORD);
+        $this->assertPasswordChangeWasEventSourced(self::NEW_PASSWORD);
+    }
+
     /**
      * @return array<string, array{array<string, string>, string}>
      */
@@ -175,6 +205,7 @@ class ChangePasswordTest extends AuthTestCase
         return [
             'missing new password' => [['currentPassword' => self::LOGIN_PASSWORD], 'newPassword'],
             'new password under eight characters' => [['currentPassword' => self::LOGIN_PASSWORD, 'newPassword' => 'Sh0rt!'], 'newPassword'],
+            'new password over the length cap' => [['currentPassword' => self::LOGIN_PASSWORD, 'newPassword' => str_repeat('a', 256)], 'newPassword'],
             'missing current password' => [['newPassword' => self::NEW_PASSWORD], 'currentPassword'],
         ];
     }
@@ -230,5 +261,20 @@ class ChangePasswordTest extends AuthTestCase
         $newLogin = $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $newPassword]);
         $newLogin->assertOk();
         $this->assertNotEmpty($newLogin->json('data.token'), 'The new password must authenticate and issue a session.');
+    }
+
+    /**
+     * The password write was event-sourced, not a direct read-model save: exactly one
+     * UserPasswordChanged was stored and it carries the NEW password's hash. Goes RED if the
+     * interactor writes users.password directly — the behavioural tests cannot catch that (a direct
+     * write yields identical read-model state), yet it would be silently reverted on a projection replay.
+     */
+    protected function assertPasswordChangeWasEventSourced(string $newPassword): void
+    {
+        $stored = LesilyStoredEvent::query()->where('event_class', UserPasswordChanged::class)->sole();
+        $this->assertTrue(
+            Hash::check($newPassword, $stored->event_properties['passwordHash']),
+            'The stored UserPasswordChanged must carry the new password hash (event-sourced write, not a direct save).',
+        );
     }
 }
