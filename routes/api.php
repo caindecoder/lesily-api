@@ -9,6 +9,7 @@ use App\Foundation\Auth\IO\Http\Controllers\LogoutAllController;
 use App\Foundation\Auth\IO\Http\Controllers\ViewSessionsController;
 use App\Foundation\Auth\IO\Http\Controllers\RevokeSessionController;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
+use App\Foundation\Auth\IO\Http\Controllers\ChangePasswordController;
 use App\Foundation\Auth\IO\Http\Controllers\EnableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\ConfirmTwoFactorController;
@@ -114,3 +115,12 @@ Route::get('/v1/me/sessions', ViewSessionsController::class)
 Route::delete('/v1/me/sessions/{tokenId}', RevokeSessionController::class)
     ->middleware('auth:sanctum')
     ->whereNumber('tokenId');
+
+// Change own password (UC-1-016) — authenticated self-service credential change at the
+// REST/Fortify-standard PUT /v1/me/password (the /v1/me/* self-service surface). throttle:auth-tier
+// AFTER auth:sanctum: the interactor runs Hash::check, a brute-force surface like /2fa disable +
+// logout-all. idempotency-key:required — the first route to mount it, safe because the 204 carries
+// no sensitive body (unlike register, OQ-1-114). On success the password write is event-sourced
+// (UserPasswordChanged -> UserProjector) and every OTHER session is revoked; the current survives -> 204.
+Route::put('/v1/me/password', ChangePasswordController::class)
+    ->middleware(['auth:sanctum', 'throttle:auth-tier', 'idempotency-key:required']);

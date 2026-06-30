@@ -3,10 +3,9 @@
 namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
-use Illuminate\Support\Facades\Hash;
 use App\Foundation\Auth\UseCases\TokenRevoker;
+use App\Foundation\Auth\UseCases\PasswordVerifier;
 use App\Foundation\Auth\UseCases\Commands\LogoutAllCommand;
-use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 
 /**
  * Log out all other devices (UC-1-011): re-authenticate the user with their current password,
@@ -19,13 +18,14 @@ use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
  */
 class RevokeAllSessionsInteractor
 {
-    public function __construct(private TokenRevoker $tokenRevoker) {}
+    public function __construct(
+        private TokenRevoker $tokenRevoker,
+        private PasswordVerifier $passwordVerifier,
+    ) {}
 
     public function execute(User $user, LogoutAllCommand $command, string $currentTokenId): int
     {
-        if (! Hash::check($command->password, $user->password)) {
-            throw new IncorrectPasswordException;
-        }
+        $this->passwordVerifier->verify($user, $command->password);
 
         return $this->tokenRevoker->revokeAllForUserExcept($user, $currentTokenId);
     }

@@ -53,6 +53,9 @@
                 // reactor handler — confirmed equivalent (protected still sends; local
                 // Xdebug falsely killed it, CI/PCOV escaped — amendment H).
                 "App\\Foundation\\Auth\\Reactors\\WelcomeEmailReactor::onUserSignedUpAsOwner",
+                // password slice / UC-1-016 (change own password): the new password-write
+                // projector handler — same equivalent class (protected still projects).
+                "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserPasswordChanged",
             ],
         },
         // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only

@@ -4,10 +4,9 @@ namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use App\Foundation\Auth\UseCases\TokenRevoker;
+use App\Foundation\Auth\UseCases\PasswordVerifier;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
-use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
 use App\Foundation\Auth\UseCases\Commands\DisableTwoFactorCommand;
 
@@ -22,7 +21,10 @@ use App\Foundation\Auth\UseCases\Commands\DisableTwoFactorCommand;
  */
 class DisableTwoFactorInteractor
 {
-    public function __construct(private TokenRevoker $tokenRevoker) {}
+    public function __construct(
+        private TokenRevoker $tokenRevoker,
+        private PasswordVerifier $passwordVerifier,
+    ) {}
 
     public function execute(User $user, DisableTwoFactorCommand $command, string $currentTokenId): void
     {
@@ -30,9 +32,7 @@ class DisableTwoFactorInteractor
             throw new TwoFactorNotEnabledException;
         }
 
-        if (! Hash::check($command->password, $user->password)) {
-            throw new IncorrectPasswordException;
-        }
+        $this->passwordVerifier->verify($user, $command->password);
 
         // Atomic: the direct credential wipe and the marker-event persist (whose projector
         // nulls two_factor_confirmed_at) commit together, so a marker can never outrun its

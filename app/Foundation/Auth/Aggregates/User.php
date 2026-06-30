@@ -8,6 +8,7 @@ use App\Foundation\EventStore\AggregateRoot;
 use App\Foundation\Auth\Events\User2FAEnabled;
 use App\Foundation\Auth\Events\User2FADisabled;
 use App\Foundation\Auth\Events\UserEmailVerified;
+use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use App\Foundation\Auth\Events\User2FARecoveryCodeUsed;
 use App\Foundation\Auth\Events\User2FARecoveryCodesRegenerated;
@@ -114,6 +115,22 @@ class User extends AggregateRoot
         return $this->recordThat(new User2FARecoveryCodesRegenerated(
             userId: $this->uuid(),
             regeneratedAt: CarbonImmutable::now(),
+        ));
+    }
+
+    /**
+     * Guardless with no apply: the password is not aggregate state (no invariant on it) — it is a
+     * projected read-model column. The interactor hashes the new password and passes the hash, so the
+     * event carries the hash, never plaintext (as at register — though register hashes inside the
+     * aggregate, this hashes in the interactor); the projector applies it to users.password. Event-sourced
+     * precisely because that column is projected — a direct write would be reverted on replay.
+     */
+    public function changePassword(string $passwordHash): static
+    {
+        return $this->recordThat(new UserPasswordChanged(
+            userId: $this->uuid(),
+            passwordHash: $passwordHash,
+            changedAt: CarbonImmutable::now(),
         ));
     }
 

@@ -6,6 +6,7 @@ use App\Models\User as UserReadModel;
 use App\Foundation\Auth\Events\User2FAEnabled;
 use App\Foundation\Auth\Events\User2FADisabled;
 use App\Foundation\Auth\Events\UserEmailVerified;
+use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 
@@ -37,6 +38,13 @@ class UserProjector extends Projector
         UserReadModel::query()
             ->whereKey($event->userId)
             ->update(['email_verified_at' => $event->verifiedAt]);
+    }
+
+    public function onUserPasswordChanged(UserPasswordChanged $event): void
+    {
+        UserReadModel::query()
+            ->whereKey($event->userId)
+            ->update(['password' => $event->passwordHash]);
     }
 
     public function onUser2FAEnabled(User2FAEnabled $event): void
