@@ -3,8 +3,10 @@
 namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 use App\Foundation\Auth\UseCases\TokenRevoker;
 use App\Foundation\Auth\UseCases\PasswordVerifier;
+use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\Auth\UseCases\Commands\ChangePasswordCommand;
 
 /**
@@ -24,6 +26,10 @@ class ChangePasswordInteractor
     public function execute(User $user, ChangePasswordCommand $command, string $currentTokenId): void
     {
         $this->passwordVerifier->verify($user, $command->currentPassword);
+
+        UserAggregate::retrieve($user->getKey())
+            ->changePassword(Hash::make($command->newPassword))
+            ->persist();
 
         $this->tokenRevoker->revokeAllForUserExcept($user, $currentTokenId);
     }
