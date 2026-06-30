@@ -134,6 +134,22 @@ class ChangePasswordTest extends AuthTestCase
         $this->assertPasswordReplaced($user, self::LOGIN_PASSWORD, self::NEW_PASSWORD);
     }
 
+    #[Test]
+    public function when_too_many_attempts_are_made_then_the_request_is_throttled(): void
+    {
+        // Given an authenticated user hammering the change endpoint (the password-guessing surface)
+        $token = $this->aSessionFor($this->aRegisteredUser())->plainTextToken;
+
+        // When the shared per-IP auth-tier allowance is exhausted on wrong-password attempts
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $this->changePassword($token, ['currentPassword' => 'wrong-password', 'newPassword' => self::NEW_PASSWORD]);
+        }
+        $response = $this->changePassword($token, ['currentPassword' => 'wrong-password', 'newPassword' => self::NEW_PASSWORD]);
+
+        // Then the over-limit attempt is throttled — the brute-force surface is bounded
+        $this->assertThrottled($response);
+    }
+
     /**
      * @return array<string, array{array<string, string>, string}>
      */

@@ -121,4 +121,4 @@ Route::delete('/v1/me/sessions/{tokenId}', RevokeSessionController::class)
 // gates it; throttle:auth-tier (Hash::check brute-force surface) + idempotency-key:required
 // (safe-to-cache 204, no sensitive body) are added as their tests drive them.
 Route::put('/v1/me/password', ChangePasswordController::class)
-    ->middleware('auth:sanctum');
+    ->middleware(['auth:sanctum', 'throttle:auth-tier']);
