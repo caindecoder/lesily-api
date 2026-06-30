@@ -48,10 +48,10 @@ class DisableTwoFactorTest extends AuthTestCase
     public function when_two_factor_is_not_enabled_then_disabling_is_rejected(): void
     {
         // Given an authenticated user who has never enabled 2FA
-        Sanctum::actingAs($this->aRegisteredUser());
+        $token = $this->aSessionFor($this->aRegisteredUser())->plainTextToken;
 
         // When they attempt to disable 2FA with their (correct) password
-        $response = $this->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
+        $response = $this->withToken($token)->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
 
         // Then it is refused — there is no 2FA to disable
         $this->assertRefusedWith($response, ApiErrorCode::TwoFactorNotEnabled);
@@ -64,10 +64,10 @@ class DisableTwoFactorTest extends AuthTestCase
     {
         // Given an authenticated user with 2FA enabled
         $user = $this->aTwoFactorUser();
-        Sanctum::actingAs($user);
+        $token = $this->aSessionFor($user)->plainTextToken;
 
         // When they submit the wrong password to disable
-        $response = $this->deleteJson('/api/v1/auth/2fa', ['password' => 'not-my-password']);
+        $response = $this->withToken($token)->deleteJson('/api/v1/auth/2fa', ['password' => 'not-my-password']);
 
         // Then it is refused and 2FA is left fully intact (the Minimal Guarantee)
         $this->assertRefusedWith($response, ApiErrorCode::IncorrectPassword);
@@ -81,10 +81,10 @@ class DisableTwoFactorTest extends AuthTestCase
     {
         // Given an authenticated user with 2FA enabled
         $user = $this->aTwoFactorUser();
-        Sanctum::actingAs($user);
+        $token = $this->aSessionFor($user)->plainTextToken;
 
         // When they confirm the disable with their correct password
-        $response = $this->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
+        $response = $this->withToken($token)->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
 
         // Then 2FA is fully removed and a non-secret marker is recorded
         $this->assertTwoFactorDisabled($response, $user);
@@ -95,8 +95,8 @@ class DisableTwoFactorTest extends AuthTestCase
     {
         // Given a 2FA user who disables 2FA via the endpoint
         $user = $this->aTwoFactorUser();
-        Sanctum::actingAs($user);
-        $this->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD])->assertNoContent();
+        $token = $this->aSessionFor($user)->plainTextToken;
+        $this->withToken($token)->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD])->assertNoContent();
 
         // When they log in again with email + password
         Auth::forgetGuards();
@@ -114,13 +114,13 @@ class DisableTwoFactorTest extends AuthTestCase
     public function when_disabling_past_the_rate_limit_then_it_is_throttled(): void
     {
         // Given an authenticated user hammering the disable endpoint (the password-guessing surface)
-        Sanctum::actingAs($this->aTwoFactorUser());
+        $token = $this->aSessionFor($this->aTwoFactorUser())->plainTextToken;
 
         // When the shared per-IP auth-tier allowance is exhausted on wrong-password attempts
         for ($attempt = 0; $attempt < 10; $attempt++) {
-            $this->deleteJson('/api/v1/auth/2fa', ['password' => 'wrong-password']);
+            $this->withToken($token)->deleteJson('/api/v1/auth/2fa', ['password' => 'wrong-password']);
         }
-        $response = $this->deleteJson('/api/v1/auth/2fa', ['password' => 'wrong-password']);
+        $response = $this->withToken($token)->deleteJson('/api/v1/auth/2fa', ['password' => 'wrong-password']);
 
         // Then the over-limit attempt is throttled — the brute-force surface is bounded
         $this->assertThrottled($response);
