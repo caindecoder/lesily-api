@@ -96,6 +96,25 @@ class ChangePasswordTest extends AuthTestCase
         $this->assertValidationRejected($response, $invalidField);
     }
 
+    #[Test]
+    public function when_the_password_is_changed_then_the_other_sessions_are_revoked(): void
+    {
+        // Given an authenticated user signed in on two devices — the current one plus one other
+        $user = $this->aRegisteredUser();
+        $current = $this->aSessionFor($user, 'web');
+        $other = $this->aSessionFor($user, 'mobile');
+
+        // When they change their password from the current device with the correct current password
+        $response = $this->changePassword($current->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the change succeeds, the other device no longer authenticates, and the current session survives
+        $this->assertOtherSessionsRevoked($response, $current->plainTextToken, $other->plainTextToken);
+        $this->assertSame(1, $user->tokens()->count(), 'Only the current session must remain after a change.');
+    }
+
     /**
      * @return array<string, array{array<string, string>, string}>
      */
@@ -129,5 +148,17 @@ class ChangePasswordTest extends AuthTestCase
         $this->assertTrue(Hash::check(self::LOGIN_PASSWORD, $stored->password), 'The original password must still authenticate.');
         $this->assertFalse(Hash::check(self::NEW_PASSWORD, $stored->password), 'A rejected new password must not be stored.');
         $this->assertSame($expectedSessions, $user->tokens()->count(), 'A rejected change must revoke no sessions.');
+    }
+
+    /**
+     * The change succeeded (204), revoked the user's OTHER sessions — the other device no longer
+     * authenticates (forgetGuards forces a fresh DB re-check) — and kept the current session alive.
+     * Goes RED if the revoke is removed (the other token would still authenticate).
+     */
+    protected function assertOtherSessionsRevoked(TestResponse $response, string $currentToken, string $otherToken): void
+    {
+        $response->assertNoContent();
+        $this->assertUnauthenticated($this->probeWith($otherToken));
+        $this->probeWith($currentToken)->assertOk();
     }
 }

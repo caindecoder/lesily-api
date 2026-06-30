@@ -3,6 +3,7 @@
 namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
+use App\Foundation\Auth\UseCases\TokenRevoker;
 use App\Foundation\Auth\UseCases\PasswordVerifier;
 use App\Foundation\Auth\UseCases\Commands\ChangePasswordCommand;
 
@@ -15,10 +16,15 @@ use App\Foundation\Auth\UseCases\Commands\ChangePasswordCommand;
  */
 class ChangePasswordInteractor
 {
-    public function __construct(private PasswordVerifier $passwordVerifier) {}
+    public function __construct(
+        private PasswordVerifier $passwordVerifier,
+        private TokenRevoker $tokenRevoker,
+    ) {}
 
     public function execute(User $user, ChangePasswordCommand $command, string $currentTokenId): void
     {
         $this->passwordVerifier->verify($user, $command->currentPassword);
+
+        $this->tokenRevoker->revokeAllForUserExcept($user, $currentTokenId);
     }
 }
