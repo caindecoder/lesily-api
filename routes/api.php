@@ -117,8 +117,10 @@ Route::delete('/v1/me/sessions/{tokenId}', RevokeSessionController::class)
     ->whereNumber('tokenId');
 
 // Change own password (UC-1-016) — authenticated self-service credential change at the
-// REST/Fortify-standard PUT /v1/me/password (the /v1/me/* self-service surface). auth:sanctum
-// gates it; throttle:auth-tier (Hash::check brute-force surface) + idempotency-key:required
-// (safe-to-cache 204, no sensitive body) are added as their tests drive them.
+// REST/Fortify-standard PUT /v1/me/password (the /v1/me/* self-service surface). throttle:auth-tier
+// AFTER auth:sanctum: the interactor runs Hash::check, a brute-force surface like /2fa disable +
+// logout-all. idempotency-key:required — the first route to mount it, safe because the 204 carries
+// no sensitive body (unlike register, OQ-1-114). On success the password write is event-sourced
+// (UserPasswordChanged -> UserProjector) and every OTHER session is revoked; the current survives -> 204.
 Route::put('/v1/me/password', ChangePasswordController::class)
-    ->middleware(['auth:sanctum', 'throttle:auth-tier']);
+    ->middleware(['auth:sanctum', 'throttle:auth-tier', 'idempotency-key:required']);

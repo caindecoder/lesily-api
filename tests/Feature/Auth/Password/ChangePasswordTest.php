@@ -150,6 +150,23 @@ class ChangePasswordTest extends AuthTestCase
         $this->assertThrottled($response);
     }
 
+    #[Test]
+    public function when_no_idempotency_key_is_supplied_then_the_change_is_refused(): void
+    {
+        // Given an authenticated user submitting an otherwise-valid change
+        $current = $this->aSessionFor($this->aRegisteredUser());
+
+        // When the request carries no Idempotency-Key header
+        $response = $this->withToken($current->plainTextToken)->putJson('/api/v1/me/password', [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the mutation is refused before any work — the route requires the key (idempotency-key:required)
+        $this->assertRefusedWith($response, ApiErrorCode::IdempotencyKeyRequired);
+        $response->assertStatus(422); // literal pins the 422 contract independent of the enum
+    }
+
     /**
      * @return array<string, array{array<string, string>, string}>
      */
