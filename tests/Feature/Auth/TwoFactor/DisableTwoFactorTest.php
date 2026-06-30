@@ -47,33 +47,38 @@ class DisableTwoFactorTest extends AuthTestCase
     #[Test]
     public function when_two_factor_is_not_enabled_then_disabling_is_rejected(): void
     {
-        // Given an authenticated user who has never enabled 2FA
-        Sanctum::actingAs($this->aRegisteredUser());
+        // Given an authenticated user who has never enabled 2FA, signed in on a second device too
+        $user = $this->aRegisteredUser();
+        $current = $this->aSessionFor($user, 'web')->plainTextToken;
+        $this->aSessionFor($user, 'mobile');
 
         // When they attempt to disable 2FA with their (correct) password
-        $response = $this->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
+        $response = $this->withToken($current)->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
 
-        // Then it is refused — there is no 2FA to disable
+        // Then it is refused — there is no 2FA to disable — and NO session is revoked (Minimal Guarantee)
         $this->assertRefusedWith($response, ApiErrorCode::TwoFactorNotEnabled);
         $response->assertStatus(422); // literal pins the 422 contract independent of the enum
         $response->assertJsonPath('message', 'Two-factor authentication is not enabled.'); // pins the bootstrap copy (Infection-blind)
+        $this->assertSame(2, $user->tokens()->count(), 'A not-enabled refusal must revoke no sessions.');
     }
 
     #[Test]
     public function when_the_password_is_incorrect_then_two_factor_remains_enabled(): void
     {
-        // Given an authenticated user with 2FA enabled
+        // Given an authenticated user with 2FA enabled, signed in on a second device too
         $user = $this->aTwoFactorUser();
-        Sanctum::actingAs($user);
+        $current = $this->aSessionFor($user, 'web')->plainTextToken;
+        $this->aSessionFor($user, 'mobile');
 
         // When they submit the wrong password to disable
-        $response = $this->deleteJson('/api/v1/auth/2fa', ['password' => 'not-my-password']);
+        $response = $this->withToken($current)->deleteJson('/api/v1/auth/2fa', ['password' => 'not-my-password']);
 
-        // Then it is refused and 2FA is left fully intact (the Minimal Guarantee)
+        // Then it is refused, 2FA is left fully intact, and NO session is revoked (the Minimal Guarantee)
         $this->assertRefusedWith($response, ApiErrorCode::IncorrectPassword);
         $response->assertStatus(401); // literal pins the 401 contract independent of the enum
         $response->assertJsonPath('message', 'Incorrect password. Please try again.'); // pins the bootstrap copy (Infection-blind)
         $this->assertTwoFactorStillEnabled($user);
+        $this->assertSame(2, $user->tokens()->count(), 'A refused disable must revoke no sessions.');
     }
 
     #[Test]
@@ -81,10 +86,10 @@ class DisableTwoFactorTest extends AuthTestCase
     {
         // Given an authenticated user with 2FA enabled
         $user = $this->aTwoFactorUser();
-        Sanctum::actingAs($user);
+        $token = $this->aSessionFor($user)->plainTextToken;
 
         // When they confirm the disable with their correct password
-        $response = $this->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
+        $response = $this->withToken($token)->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
 
         // Then 2FA is fully removed and a non-secret marker is recorded
         $this->assertTwoFactorDisabled($response, $user);
@@ -95,8 +100,8 @@ class DisableTwoFactorTest extends AuthTestCase
     {
         // Given a 2FA user who disables 2FA via the endpoint
         $user = $this->aTwoFactorUser();
-        Sanctum::actingAs($user);
-        $this->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD])->assertNoContent();
+        $token = $this->aSessionFor($user)->plainTextToken;
+        $this->withToken($token)->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD])->assertNoContent();
 
         // When they log in again with email + password
         Auth::forgetGuards();
@@ -111,16 +116,31 @@ class DisableTwoFactorTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_two_factor_is_disabled_then_the_users_other_sessions_are_revoked(): void
+    {
+        // Given a 2FA user signed in on two devices — the current one plus one other
+        $user = $this->aTwoFactorUser();
+        $current = $this->aSessionFor($user, 'web');
+        $other = $this->aSessionFor($user, 'mobile');
+
+        // When they disable 2FA with the correct password on the current device
+        $response = $this->withToken($current->plainTextToken)->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
+
+        // Then the disable succeeds, the other device no longer authenticates, and the current session survives
+        $this->assertOtherSessionsRevoked($response, $current->plainTextToken, $other->plainTextToken);
+    }
+
+    #[Test]
     public function when_disabling_past_the_rate_limit_then_it_is_throttled(): void
     {
         // Given an authenticated user hammering the disable endpoint (the password-guessing surface)
-        Sanctum::actingAs($this->aTwoFactorUser());
+        $token = $this->aSessionFor($this->aTwoFactorUser())->plainTextToken;
 
         // When the shared per-IP auth-tier allowance is exhausted on wrong-password attempts
         for ($attempt = 0; $attempt < 10; $attempt++) {
-            $this->deleteJson('/api/v1/auth/2fa', ['password' => 'wrong-password']);
+            $this->withToken($token)->deleteJson('/api/v1/auth/2fa', ['password' => 'wrong-password']);
         }
-        $response = $this->deleteJson('/api/v1/auth/2fa', ['password' => 'wrong-password']);
+        $response = $this->withToken($token)->deleteJson('/api/v1/auth/2fa', ['password' => 'wrong-password']);
 
         // Then the over-limit attempt is throttled — the brute-force surface is bounded
         $this->assertThrottled($response);
@@ -166,5 +186,17 @@ class DisableTwoFactorTest extends AuthTestCase
             ->event_properties;
         $this->assertSame(['userId', 'disabledAt'], array_keys($properties), 'The marker must carry only non-secret metadata (Design-Y).');
         $this->assertSame($user->id, $properties['userId'] ?? null, 'The marker must be scoped to the disabling user.');
+    }
+
+    /**
+     * Disabling 2FA succeeded (204), revoked the user's OTHER sessions — the other device no
+     * longer authenticates (forgetGuards forces a fresh DB re-check) — and kept the current
+     * session alive. Goes RED if the revoke is removed (the other token would still authenticate).
+     */
+    protected function assertOtherSessionsRevoked(TestResponse $response, string $currentToken, string $otherToken): void
+    {
+        $response->assertNoContent();
+        $this->assertUnauthenticated($this->probeWith($otherToken));
+        $this->probeWith($currentToken)->assertOk();
     }
 }

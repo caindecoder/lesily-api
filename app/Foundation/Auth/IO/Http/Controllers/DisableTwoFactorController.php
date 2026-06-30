@@ -6,14 +6,15 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use App\Http\Controllers\Controller;
+use Laravel\Sanctum\PersonalAccessToken;
 use App\Foundation\Auth\UseCases\Commands\DisableTwoFactorCommand;
 use App\Foundation\Auth\UseCases\Interactors\DisableTwoFactorInteractor;
 
 /**
  * Thin delivery appendix (E07) for DELETE /api/v1/auth/2fa — disabling 2FA after a
  * password re-auth (UC-1-007). Validation lives on the Command, the password check +
- * credential wipe + marker in the interactor; the controller only resolves the
- * authenticated user and shapes the 204.
+ * credential wipe + marker + other-session revoke in the interactor; the controller only
+ * resolves the authenticated user + the current token id (the session to keep) and shapes the 204.
  */
 class DisableTwoFactorController extends Controller
 {
@@ -24,7 +25,10 @@ class DisableTwoFactorController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $interactor->execute($user, $command);
+        /** @var PersonalAccessToken $current */
+        $current = $user->currentAccessToken();
+
+        $interactor->execute($user, $command, (string) $current->getKey());
 
         return response()->noContent();
     }
