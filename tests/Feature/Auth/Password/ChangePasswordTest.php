@@ -63,6 +63,24 @@ class ChangePasswordTest extends AuthTestCase
         $this->assertPasswordUnchanged($user, 2);
     }
 
+    #[Test]
+    public function when_the_new_password_matches_the_current_password_then_it_is_rejected(): void
+    {
+        // Given an authenticated user
+        $user = $this->aRegisteredUser();
+        $current = $this->aSessionFor($user);
+
+        // When they submit a new password identical to their current one
+        $response = $this->changePassword($current->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then it is rejected as a validation error naming the new password, and nothing changes
+        $this->assertValidationRejected($response, 'newPassword');
+        $this->assertPasswordUnchanged($user, 1);
+    }
+
     /**
      * @param  array<string, string>  $payload
      */
