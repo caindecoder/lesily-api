@@ -47,16 +47,19 @@ class DisableTwoFactorTest extends AuthTestCase
     #[Test]
     public function when_two_factor_is_not_enabled_then_disabling_is_rejected(): void
     {
-        // Given an authenticated user who has never enabled 2FA
-        $token = $this->aSessionFor($this->aRegisteredUser())->plainTextToken;
+        // Given an authenticated user who has never enabled 2FA, signed in on a second device too
+        $user = $this->aRegisteredUser();
+        $current = $this->aSessionFor($user, 'web')->plainTextToken;
+        $this->aSessionFor($user, 'mobile');
 
         // When they attempt to disable 2FA with their (correct) password
-        $response = $this->withToken($token)->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
+        $response = $this->withToken($current)->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
 
-        // Then it is refused — there is no 2FA to disable
+        // Then it is refused — there is no 2FA to disable — and NO session is revoked (Minimal Guarantee)
         $this->assertRefusedWith($response, ApiErrorCode::TwoFactorNotEnabled);
         $response->assertStatus(422); // literal pins the 422 contract independent of the enum
         $response->assertJsonPath('message', 'Two-factor authentication is not enabled.'); // pins the bootstrap copy (Infection-blind)
+        $this->assertSame(2, $user->tokens()->count(), 'A not-enabled refusal must revoke no sessions.');
     }
 
     #[Test]
