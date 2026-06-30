@@ -9,6 +9,7 @@ enum ApiErrorCode: string
     case CompanyAccessDenied = 'COMPANY_ACCESS_DENIED';
     case FeatureNotAvailable = 'FEATURE_NOT_AVAILABLE';
     case RoleInsufficient = 'ROLE_INSUFFICIENT';
+    case DeviceLimitReached = 'DEVICE_LIMIT_REACHED';
     case TwoFactorSetupNotStarted = 'TWO_FACTOR_SETUP_NOT_STARTED';
     case InvalidTwoFactorCode = 'INVALID_TWO_FACTOR_CODE';
     case TwoFactorAlreadyEnabled = 'TWO_FACTOR_ALREADY_ENABLED';
@@ -38,6 +39,7 @@ enum ApiErrorCode: string
             self::CompanyAccessDenied => 403,
             self::FeatureNotAvailable => 403,
             self::RoleInsufficient => 403,
+            self::DeviceLimitReached => 403,
             self::TwoFactorSetupNotStarted => 422,
             self::InvalidTwoFactorCode => 422,
             self::TwoFactorAlreadyEnabled => 409,

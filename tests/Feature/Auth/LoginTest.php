@@ -7,6 +7,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -276,6 +277,123 @@ class LoginTest extends AuthTestCase
         $this->assertLoginSucceeded($response, $user);
     }
 
+    // Sad — a Pro/Enterprise account already at its three active-device limit is refused
+    // a fourth session at login (UC-1-002 alt-5a); the cap is enforced before the mint.
+    #[Test]
+    #[DataProvider('provideDeviceCappedPlans')]
+    public function when_a_capped_account_at_the_limit_logs_in_then_it_is_rejected(BillingPlan $plan): void
+    {
+        // Given a user on a device-capped plan already holding three active sessions
+        $user = $this->aRegisteredUser();
+        $this->memberOfCompanyOnPlan($user, $plan);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->aSessionFor($user, 'tablet');
+
+        // When they log in from a fourth device
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then it is rejected and no fourth session is minted
+        $this->assertDeviceLimitRejected($response, $user, 3);
+    }
+
+    /**
+     * The two device-capped tiers — Pro and Enterprise both enforce the 3-device
+     * concurrent limit (S14); Free and Starter are uncapped.
+     *
+     * @return array<string, array{BillingPlan}>
+     */
+    public static function provideDeviceCappedPlans(): array
+    {
+        return [
+            'pro' => [BillingPlan::Pro],
+            'enterprise' => [BillingPlan::Enterprise],
+        ];
+    }
+
+    // Edge — Free and Starter accounts are uncapped: a fourth concurrent device logs in
+    // normally; the cap applies only to Pro+ members (UC-1-002 alt-5a / S14).
+    #[Test]
+    #[DataProvider('provideUncappedPlans')]
+    public function when_an_uncapped_plan_exceeds_three_devices_then_login_is_allowed(BillingPlan $plan): void
+    {
+        // Given a user on an uncapped plan already holding three active sessions
+        $user = $this->aRegisteredUser();
+        $this->memberOfCompanyOnPlan($user, $plan);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->aSessionFor($user, 'tablet');
+
+        // When they log in from a fourth device
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then login still succeeds and the fourth session is issued (uncapped)
+        $this->assertSessionIssued($response, $user, 4);
+    }
+
+    /**
+     * The uncapped tiers — Free and Starter carry no concurrent-device limit (S14).
+     *
+     * @return array<string, array{BillingPlan}>
+     */
+    public static function provideUncappedPlans(): array
+    {
+        return [
+            'free' => [BillingPlan::Free],
+            'starter' => [BillingPlan::Starter],
+        ];
+    }
+
+    // Edge — only active sessions count toward the cap: a Pro member with two live
+    // sessions plus one expired (unpruned) row is under the limit, so a third device
+    // logs in — the expired row must not be counted (UC-1-002 alt-5a).
+    #[Test]
+    public function when_an_expired_token_does_not_count_toward_the_limit(): void
+    {
+        // Given a Pro member with two active sessions and one expired (unpruned) row
+        $user = $this->aRegisteredUser();
+        $this->memberOfCompanyOnPlan($user, BillingPlan::Pro);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->anExpiredSessionFor($user, 'old-laptop');
+
+        // When they log in from a third active device
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then login succeeds — the expired row was not counted (else they'd be at the cap)
+        $this->assertSessionIssued($response, $user, 4);
+    }
+
+    // Happy — the cap permits a legitimate login: a Pro member below the limit (two active
+    // devices) logs in on a third device and the session is issued (UC-1-002 alt-5a).
+    #[Test]
+    public function when_a_pro_member_below_the_device_limit_logs_in_then_a_session_is_issued(): void
+    {
+        // Given a Pro member with two active sessions (under the cap)
+        $user = $this->aRegisteredUser();
+        $this->memberOfCompanyOnPlan($user, BillingPlan::Pro);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+
+        // When they log in from a third device
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then the cap allows it and the third session is issued
+        $this->assertSessionIssued($response, $user, 3);
+    }
+
     protected function assertLoginSucceeded(TestResponse $response, User $user): void
     {
         $response->assertOk();
@@ -283,6 +401,13 @@ class LoginTest extends AuthTestCase
         $response->assertJsonPath('data.user.email', $user->email);
         // The user block whitelists {id,name,email}; pin that the hash never leaks.
         $response->assertJsonMissingPath('data.user.password');
+    }
+
+    protected function assertSessionIssued(TestResponse $response, User $user, int $expectedTokens): void
+    {
+        $response->assertOk();
+        $this->assertNotEmpty($response->json('data.token'), 'A session token must be issued.');
+        $this->assertSame($expectedTokens, $user->tokens()->count(), 'The new session must be minted.');
     }
 
     protected function assertCredentialsRejected(TestResponse $response): void

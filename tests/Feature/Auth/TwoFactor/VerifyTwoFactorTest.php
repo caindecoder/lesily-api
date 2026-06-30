@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
@@ -210,6 +211,29 @@ class VerifyTwoFactorTest extends AuthTestCase
 
         // Then it is throttled — the brute-force surface is rate-limited
         $this->assertThrottled($response);
+    }
+
+    // Edge — the device cap is enforced at the 2FA-verify mint site too: a Pro member
+    // already at three active devices is refused a fourth even with a valid second factor
+    // (UC-1-002 alt-5a). The guard runs before the factor is consumed.
+    #[Test]
+    public function when_a_capped_account_completes_2fa_on_a_4th_device_then_it_is_rejected(): void
+    {
+        // Given a Pro 2FA member at three active devices, with an open challenge and an
+        // accepting authenticator
+        $user = $this->aTwoFactorUser();
+        $this->memberOfCompanyOnPlan($user, BillingPlan::Pro);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->aSessionFor($user, 'tablet');
+        $challengeId = $this->openChallenge($user);
+        $this->fakeTotpVerifier(verifies: true);
+
+        // When they complete 2FA from a fourth device
+        $response = $this->verify($challengeId, '123456');
+
+        // Then it is rejected and no fourth session is minted
+        $this->assertDeviceLimitRejected($response, $user, 3);
     }
 
     /**

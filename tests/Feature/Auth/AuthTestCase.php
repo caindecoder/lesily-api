@@ -5,13 +5,16 @@ namespace Tests\Feature\Auth;
 use Tests\TestCase;
 use App\Models\User;
 use Illuminate\Support\Str;
+use App\Companies\Entities\Company;
 use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Config;
 use App\Foundation\Auth\Totp\TotpVerifier;
+use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
+use App\Foundation\RolesPermissions\Entities\Role;
 
 abstract class AuthTestCase extends TestCase
 {
@@ -211,6 +214,32 @@ abstract class AuthTestCase extends TestCase
     protected function anExpiredSessionFor(User $user, string $name = 'old-laptop'): NewAccessToken
     {
         return $user->createToken($name, ['*'], now()->subDay());
+    }
+
+    /**
+     * Make $user a member of a company on $plan (the company_user pivot). The device cap
+     * is plan-only, so the membership role is irrelevant — a freshly-created role just
+     * satisfies the pivot's required role_id. Shared by the login + 2FA-verify device-cap
+     * suites (UC-1-002 alt-5a).
+     */
+    protected function memberOfCompanyOnPlan(User $user, BillingPlan $plan): void
+    {
+        Company::factory()->onPlan($plan)->create()
+            ->users()->attach($user, ['role_id' => Role::factory()->create()->getKey()]);
+    }
+
+    /**
+     * Assert a login / 2FA-verify was refused by the device cap (UC-1-002 alt-5a): the
+     * §S21 403 DEVICE_LIMIT_REACHED envelope, the canonical message (which pins the
+     * Infection-blind bootstrap copy), and that NO new session was minted — the user
+     * still holds exactly $expectedTokens. Shared by the login + verify device-cap suites.
+     */
+    protected function assertDeviceLimitRejected(TestResponse $response, User $user, int $expectedTokens): void
+    {
+        $this->assertRefusedWith($response, ApiErrorCode::DeviceLimitReached);
+        $response->assertStatus(403); // literal pins the 403 contract independent of the enum
+        $response->assertJsonPath('message', 'Maximum device limit reached. Log out from another device first.');
+        $this->assertSame($expectedTokens, $user->tokens()->count(), 'A capped attempt must mint no new session.');
     }
 
     /**
