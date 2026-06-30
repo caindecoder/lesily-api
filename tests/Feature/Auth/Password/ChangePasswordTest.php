@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -79,6 +80,32 @@ class ChangePasswordTest extends AuthTestCase
         // Then it is rejected as a validation error naming the new password, and nothing changes
         $this->assertValidationRejected($response, 'newPassword');
         $this->assertPasswordUnchanged($user, 1);
+    }
+
+    #[Test]
+    #[DataProvider('provideInvalidChangePasswordPayloads')]
+    public function when_the_new_password_is_invalid_then_it_is_rejected(array $payload, string $invalidField): void
+    {
+        // Given an authenticated user
+        $current = $this->aSessionFor($this->aRegisteredUser());
+
+        // When they submit a change payload that breaks a field rule
+        $response = $this->changePassword($current->plainTextToken, $payload);
+
+        // Then the request is rejected as a validation error naming the offending field
+        $this->assertValidationRejected($response, $invalidField);
+    }
+
+    /**
+     * @return array<string, array{array<string, string>, string}>
+     */
+    public static function provideInvalidChangePasswordPayloads(): array
+    {
+        return [
+            'missing new password' => [['currentPassword' => self::LOGIN_PASSWORD], 'newPassword'],
+            'new password under eight characters' => [['currentPassword' => self::LOGIN_PASSWORD, 'newPassword' => 'Sh0rt!'], 'newPassword'],
+            'missing current password' => [['newPassword' => self::NEW_PASSWORD], 'currentPassword'],
+        ];
     }
 
     /**

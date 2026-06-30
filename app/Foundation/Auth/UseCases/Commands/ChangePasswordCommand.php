@@ -18,7 +18,7 @@ class ChangePasswordCommand extends Data
     {
         return [
             'currentPassword' => ['required', 'string'],
-            'newPassword' => ['required', 'string', 'different:currentPassword'],
+            'newPassword' => ['required', 'string', 'min:8', 'max:255', 'different:currentPassword'],
         ];
     }
 }
