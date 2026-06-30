@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
@@ -210,6 +211,54 @@ class VerifyTwoFactorTest extends AuthTestCase
 
         // Then it is throttled — the brute-force surface is rate-limited
         $this->assertThrottled($response);
+    }
+
+    // Edge — the device cap is enforced at the 2FA-verify mint site too: a Pro member
+    // already at three active devices is refused a fourth even with a valid second factor
+    // (UC-1-002 alt-5a). The guard runs before the factor is consumed.
+    #[Test]
+    public function when_a_capped_account_completes_2fa_on_a_4th_device_then_it_is_rejected(): void
+    {
+        // Given a Pro 2FA member at three active devices, with an open challenge and an
+        // accepting authenticator
+        $user = $this->aTwoFactorUser();
+        $this->memberOfCompanyOnPlan($user, BillingPlan::Pro);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->aSessionFor($user, 'tablet');
+        $challengeId = $this->openChallenge($user);
+        $this->fakeTotpVerifier(verifies: true);
+
+        // When they complete 2FA from a fourth device
+        $response = $this->verify($challengeId, '123456');
+
+        // Then it is rejected, no fourth session is minted, and the challenge survives — the
+        // guard fires before the factor is consumed, so it stays re-verifiable once a device is freed
+        $this->assertDeviceLimitRejected($response, $user, 3);
+        $this->assertNotNull(app(LoginChallengeStore::class)->find($challengeId), 'A capped rejection must not consume the challenge.');
+    }
+
+    // Edge — a capped rejection at verify must not BURN the second factor: a Pro member at the
+    // device limit who submits a VALID recovery code is rejected with both codes intact — the
+    // guard fires before consumption, so the one-time code is not spent (UC-1-002 alt-5a).
+    #[Test]
+    public function when_a_capped_account_submits_a_recovery_code_then_it_is_rejected_without_burning_the_code(): void
+    {
+        // Given a capped Pro 2FA member, a non-matching TOTP, and a valid recovery code
+        $user = $this->aTwoFactorUser(['HAPY-CODE', 'KEEP-CODE']);
+        $this->memberOfCompanyOnPlan($user, BillingPlan::Pro);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->aSessionFor($user, 'tablet');
+        $challengeId = $this->openChallenge($user);
+        $this->fakeTotpVerifier(verifies: false); // force the recovery branch
+
+        // When they verify with a valid recovery code while at the device cap
+        $response = $this->verify($challengeId, 'HAPY-CODE');
+
+        // Then it is rejected AND both recovery codes survive (the cap fires before consumption)
+        $this->assertDeviceLimitRejected($response, $user, 3);
+        $this->assertCount(2, $user->refresh()->two_factor_recovery_codes ?? [], 'A capped rejection must not burn a recovery code.');
     }
 
     /**

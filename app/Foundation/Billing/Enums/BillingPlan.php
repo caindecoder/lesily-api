@@ -52,4 +52,16 @@ enum BillingPlan: string
     {
         return ucfirst($this->value);
     }
+
+    /**
+     * Whether this plan carries the concurrent-device cap (UC-1-002 alt-5a / S14):
+     * Pro and Enterprise enforce the 3-device limit; Free and Starter are uncapped.
+     */
+    public function enforcesDeviceLimit(): bool
+    {
+        return match ($this) {
+            self::Pro, self::Enterprise => true,
+            self::Free, self::Starter => false,
+        };
+    }
 }

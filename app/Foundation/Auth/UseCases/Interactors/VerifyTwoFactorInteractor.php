@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Cache;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
+use App\Foundation\Auth\UseCases\DeviceLimitGuard;
 use App\Foundation\Auth\UseCases\Results\SessionIssued;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\Auth\UseCases\Commands\VerifyTwoFactorCommand;
@@ -29,6 +30,7 @@ class VerifyTwoFactorInteractor
         private readonly LoginChallengeStore $challenges,
         private readonly TotpVerifier $totp,
         private readonly SessionIssuer $sessionIssuer,
+        private readonly DeviceLimitGuard $deviceLimitGuard,
     ) {}
 
     public function execute(VerifyTwoFactorCommand $command): SessionIssued
@@ -40,6 +42,11 @@ class VerifyTwoFactorInteractor
         }
 
         $user = User::query()->findOrFail($challenge->userId);
+
+        // Enforce the device cap before consuming the second factor (UC-1-002 alt-5a) — a
+        // capped account is rejected without burning the TOTP challenge or a one-time
+        // recovery code; the challenge survives, re-verifiable once a device is freed.
+        $this->deviceLimitGuard->enforce($user);
 
         if ($this->totp->verify((string) $user->two_factor_secret, $command->code)) {
             $this->challenges->forget($command->challengeId);

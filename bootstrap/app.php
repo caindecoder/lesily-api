@@ -19,6 +19,7 @@ use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
 use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
+use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
 use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
@@ -127,6 +128,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (IncorrectPasswordException $e) => EnvelopeBuilder::build(
             ApiErrorCode::IncorrectPassword,
             'Incorrect password. Please try again.',
+        ));
+
+        // A Pro/Enterprise account at its concurrent-device limit tried to open a 4th
+        // session at login / 2FA-verify (UC-1-002 alt-5a). 403 — the cap is enforced
+        // before the mint, so the existing sessions are untouched.
+        $exceptions->render(fn (DeviceLimitReachedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::DeviceLimitReached,
+            'Maximum device limit reached. Log out from another device first.',
         ));
 
         $exceptions->render(fn (CompanyAccessDeniedException $e) => EnvelopeBuilder::build(

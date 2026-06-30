@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
+use App\Foundation\Auth\UseCases\DeviceLimitGuard;
 use App\Foundation\Auth\UseCases\Commands\LoginCommand;
 use App\Foundation\Auth\UseCases\Results\SessionIssued;
 use App\Foundation\Auth\UseCases\Results\ChallengeRequired;
@@ -26,6 +27,7 @@ class LogInInteractor
     public function __construct(
         private readonly LoginChallengeStore $challenges,
         private readonly SessionIssuer $sessionIssuer,
+        private readonly DeviceLimitGuard $deviceLimitGuard,
     ) {}
 
     public function execute(LoginCommand $command): ChallengeRequired|SessionIssued
@@ -41,6 +43,11 @@ class LogInInteractor
                 now()->addMinutes(LoginChallengeStore::TTL_MINUTES),
             );
         }
+
+        // A non-2FA user mints here, so the device cap is enforced here (UC-1-002 alt-5a)
+        // before any side effect — a capped account is rejected without a token or a
+        // bumped last_logged_at. 2FA users mint at /2fa/verify, where the cap is enforced too.
+        $this->deviceLimitGuard->enforce($user);
 
         $user->last_logged_at = now();
         $user->save();

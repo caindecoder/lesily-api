@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Support\Carbon;
 use Laravel\Sanctum\HasApiTokens;
+use App\Companies\Entities\Company;
 use Database\Factories\UserFactory;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Contracts\Translation\HasLocalePreference;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
  * @property string $locale
@@ -57,5 +59,18 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
             'two_factor_recovery_codes' => 'array',
             'two_factor_confirmed_at' => 'datetime',
         ];
+    }
+
+    /**
+     * The companies this user is a member of — the company_user pivot, the inverse of
+     * Company::users(). The device-limit guard reads each membership's
+     * current_billing_plan to decide whether the per-account concurrent-device cap
+     * applies (UC-1-002 alt-5a).
+     *
+     * @return BelongsToMany<Company, $this>
+     */
+    public function companies(): BelongsToMany
+    {
+        return $this->belongsToMany(Company::class, 'company_user', 'user_id', 'company_id');
     }
 }
