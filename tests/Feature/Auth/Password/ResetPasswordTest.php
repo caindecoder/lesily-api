@@ -2,9 +2,12 @@
 
 namespace Tests\Feature\Auth\Password;
 
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
@@ -39,6 +42,26 @@ class ResetPasswordTest extends AuthTestCase
         $this->assertValidationRejected($response, $invalidField);
     }
 
+    #[Test]
+    public function when_the_reset_token_is_malformed_then_the_reset_is_refused(): void
+    {
+        // Given a registered user with an active session, and a token that was never issued
+        $user = $this->aRegisteredUser();
+        $this->aSessionFor($user);
+
+        // When a reset is submitted with that garbage token
+        $response = $this->resetPassword([
+            'token' => 'never-issued-token',
+            'email' => $user->email,
+            'password' => self::NEW_PASSWORD,
+        ]);
+
+        // Then it is refused, the password is untouched, and the session survives (Minimal Guarantee)
+        $this->assertRefusedWith($response, ApiErrorCode::ResetLinkInvalid);
+        $response->assertStatus(422); // literal pins the 422 contract independent of the enum
+        $this->assertResetRefused($user, self::LOGIN_PASSWORD, 1);
+    }
+
     /**
      * @return array<string, array{array<string, string>, string}>
      */
@@ -52,5 +75,18 @@ class ResetPasswordTest extends AuthTestCase
             'password under eight characters' => [['token' => 'a-token', 'email' => 'alice@contoso.lk', 'password' => 'Sh0rt!'], 'password'],
             'password over the length cap' => [['token' => 'a-token', 'email' => 'alice@contoso.lk', 'password' => str_repeat('a', 256)], 'password'],
         ];
+    }
+
+    /**
+     * The reset was refused: the original password still authenticates, the attempted new password
+     * (self::NEW_PASSWORD) was NOT stored, and not a single session was revoked (the Minimal Guarantee —
+     * goes RED if any write or revoke leaks past a refused reset).
+     */
+    protected function assertResetRefused(User $user, string $originalPassword, int $expectedSessions): void
+    {
+        $stored = User::query()->whereKey($user->getKey())->firstOrFail();
+        $this->assertTrue(Hash::check($originalPassword, $stored->password), 'The original password must still authenticate.');
+        $this->assertFalse(Hash::check(self::NEW_PASSWORD, $stored->password), 'A rejected new password must not be stored.');
+        $this->assertSame($expectedSessions, $user->tokens()->count(), 'A rejected reset must revoke no sessions.');
     }
 }
