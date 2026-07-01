@@ -10,4 +10,7 @@ return [
     'general_account_notice' => [
         'subject' => 'A notification from :company',
     ],
+    'password_changed' => [
+        'subject' => 'Your password was changed',
+    ],
 ];

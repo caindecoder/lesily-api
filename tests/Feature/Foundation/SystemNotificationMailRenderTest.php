@@ -49,6 +49,16 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
         $mail->assertHasSubject('A notification from Contoso');
     }
 
+    #[Test]
+    public function when_a_password_changed_mail_is_rendered_then_its_subject_is_the_confirmation_line(): void
+    {
+        // Given
+        $mail = new SystemNotificationMail(NotificationType::PasswordChanged, 'Contoso');
+
+        // When / Then — the UC-1-016 postcondition subject (company-agnostic — no :company placeholder)
+        $mail->assertHasSubject('Your password was changed');
+    }
+
     /**
      * The blade uses the <x-mail::message> component, whose `mail` view namespace
      * is registered only by the markdown render path — so pinning `content()` to

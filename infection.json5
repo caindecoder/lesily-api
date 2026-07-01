@@ -56,6 +56,10 @@
                 // password slice / UC-1-016 (change own password): the new password-write
                 // projector handler — same equivalent class (protected still projects).
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserPasswordChanged",
+                // password slice #2 / UC-1-016: the password-changed confirmation reactor
+                // handler — same spatie-discovery equivalent class as WelcomeEmailReactor /
+                // TrialExpiredEmailReactor above (protected still fires the notice).
+                "App\\Foundation\\Auth\\Reactors\\PasswordChangedNotificationReactor::onUserPasswordChanged",
             ],
         },
         // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only

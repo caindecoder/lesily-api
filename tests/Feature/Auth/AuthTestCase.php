@@ -26,6 +26,8 @@ abstract class AuthTestCase extends TestCase
 
     protected const LOGIN_PASSWORD = 'Str0ng-Pass!';
 
+    protected const NEW_PASSWORD = 'New-Str0ng-Pass!';
+
     /**
      * Arrange a registered, login-ready user. The raw password is hashed by the
      * model's `hashed` cast on save, so the user authenticates with $password.
@@ -265,5 +267,18 @@ abstract class AuthTestCase extends TestCase
         Auth::forgetGuards();
 
         return $this->withToken($token)->getJson('/api/_test/authenticated-probe');
+    }
+
+    /**
+     * Submit a password change to the self-service endpoint (which requires an idempotency key).
+     * Shared by the change-password (UC-1-016) and password-changed-notification suites.
+     *
+     * @param  array<string, string>  $payload
+     */
+    protected function changePassword(string $token, array $payload, ?string $idempotencyKey = null): TestResponse
+    {
+        return $this->withToken($token)->putJson('/api/v1/me/password', $payload, [
+            'Idempotency-Key' => $idempotencyKey ?? (string) Str::uuid(),
+        ]);
     }
 }
