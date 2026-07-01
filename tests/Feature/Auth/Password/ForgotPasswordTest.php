@@ -38,6 +38,21 @@ class ForgotPasswordTest extends AuthTestCase
         $this->assertValidationRejected($response, 'email');
     }
 
+    #[Test]
+    public function when_too_many_requests_are_made_then_they_are_throttled(): void
+    {
+        // Given a valid email (registration is irrelevant — the throttle runs before the broker)
+        $email = 'guest@contoso.lk';
+
+        // When the window's allowance of requests is used up
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $this->forgotPassword(['email' => $email])->assertNoContent();
+        }
+
+        // Then the next request is throttled
+        $this->assertThrottled($this->forgotPassword(['email' => $email]));
+    }
+
     /**
      * @return array<string, array{array<string, string>}>
      */
