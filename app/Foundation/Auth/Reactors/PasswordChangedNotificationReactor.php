@@ -27,7 +27,7 @@ class PasswordChangedNotificationReactor extends Reactor
 
         $user->notify(new SystemNotification(
             NotificationType::PasswordChanged,
-            $user->companies()->first()?->name ?? '',
+            (string) $user->companies()->value('name'),
         ));
     }
 }
