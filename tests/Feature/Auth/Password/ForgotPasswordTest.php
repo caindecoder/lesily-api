@@ -2,11 +2,14 @@
 
 namespace Tests\Feature\Auth\Password;
 
+use App\Models\User;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\Auth\Notifications\PasswordResetLinkNotification;
 
 /**
  * Requesting a password-reset link (UC-1-008, forgot portion). A guest submits an email; the
@@ -53,6 +56,20 @@ class ForgotPasswordTest extends AuthTestCase
         $this->assertThrottled($this->forgotPassword(['email' => $email]));
     }
 
+    #[Test]
+    public function when_a_registered_email_requests_a_reset_then_a_reset_link_is_sent(): void
+    {
+        // Given a registered user
+        $user = $this->aRegisteredUser();
+        Notification::fake();
+
+        // When they request a password reset
+        $this->forgotPassword(['email' => $user->email])->assertNoContent();
+
+        // Then a single-use reset link is emailed to them
+        $this->assertResetLinkSentTo($user);
+    }
+
     /**
      * @return array<string, array{array<string, string>}>
      */
@@ -71,5 +88,24 @@ class ForgotPasswordTest extends AuthTestCase
     private function forgotPassword(array $payload): TestResponse
     {
         return $this->postJson('/api/v1/auth/forgot-password', $payload);
+    }
+
+    /**
+     * A queued reset-link notification carrying a non-empty token was sent to $user, its link
+     * lands on the web reset-password page with the token + the keyed email, and the broker
+     * issued a single-use token row for that email.
+     */
+    private function assertResetLinkSentTo(User $user): void
+    {
+        Notification::assertSentTo(
+            $user,
+            PasswordResetLinkNotification::class,
+            fn (PasswordResetLinkNotification $notification): bool => $notification->token !== ''
+                && str_contains(
+                    $notification->toMail($user)->actionUrl,
+                    '/reset-password?token='.$notification->token.'&email='.urlencode($user->getEmailForPasswordReset()),
+                ),
+        );
+        $this->assertDatabaseHas('password_reset_tokens', ['email' => $user->email]);
     }
 }
