@@ -10,6 +10,7 @@ use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Password;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -280,5 +281,50 @@ abstract class AuthTestCase extends TestCase
         return $this->withToken($token)->putJson('/api/v1/me/password', $payload, [
             'Idempotency-Key' => $idempotencyKey ?? (string) Str::uuid(),
         ]);
+    }
+
+    /**
+     * Submit a password reset to the public reset endpoint. Shared by the reset (UC-1-008)
+     * and password-changed-notification suites (the latter proves the reset event also fires
+     * the confirmation email).
+     *
+     * @param  array<string, string>  $payload
+     */
+    protected function resetPassword(array $payload): TestResponse
+    {
+        return $this->postJson('/api/v1/auth/reset-password', $payload);
+    }
+
+    /**
+     * Mint a production-faithful single-use password-reset token for $user via the broker's own
+     * token repository (the same `password_reset_tokens` row + hashing `Password::broker()->reset`
+     * validates) — deterministic, no forgot-flow round-trip or Notification::fake needed. Shared by
+     * the reset (UC-1-008) and password-changed-notification suites.
+     */
+    protected function aResetTokenFor(User $user): string
+    {
+        // Password::createToken (facade @method) not broker()->createToken: broker() returns the
+        // PasswordBroker CONTRACT, which declares only sendResetLink/reset — createToken lives on the
+        // concrete impl and is exposed via the facade. Same default broker + password_reset_tokens row.
+        return Password::createToken($user);
+    }
+
+    /**
+     * The new password fully replaced the old one end-to-end: a fresh login with the OLD password is
+     * rejected (generic credentials error) and a fresh login with the NEW one succeeds with a session
+     * token. Proves the projector wrote the new hash to the read model (users.password is projected).
+     * forgetGuards between attempts forces fresh credential resolution, not a cached guard. Shared by
+     * the change-password (UC-1-016) and reset-password (UC-1-008) suites.
+     */
+    protected function assertPasswordReplaced(User $user, string $oldPassword, string $newPassword): void
+    {
+        Auth::forgetGuards();
+        $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $oldPassword])
+            ->assertStatus(401);
+
+        Auth::forgetGuards();
+        $newLogin = $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $newPassword]);
+        $newLogin->assertOk();
+        $this->assertNotEmpty($newLogin->json('data.token'), 'The new password must authenticate and issue a session.');
     }
 }

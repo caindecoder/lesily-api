@@ -8,6 +8,7 @@ use App\Foundation\EventStore\AggregateRoot;
 use App\Foundation\Auth\Events\User2FAEnabled;
 use App\Foundation\Auth\Events\User2FADisabled;
 use App\Foundation\Auth\Events\UserEmailVerified;
+use App\Foundation\Auth\Events\UserPasswordReset;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use App\Foundation\Auth\Events\User2FARecoveryCodeUsed;
@@ -131,6 +132,22 @@ class User extends AggregateRoot
             userId: $this->uuid(),
             passwordHash: $passwordHash,
             changedAt: CarbonImmutable::now(),
+        ));
+    }
+
+    /**
+     * Guardless with no apply (mirrors changePassword): the password is not aggregate state — it is a
+     * projected read-model column. The interactor (inside the broker's reset callback) hashes the new
+     * password and passes the hash, so the event carries the hash, never plaintext; the projector applies
+     * it to users.password. Event-sourced precisely because that column is projected — a direct write
+     * would be reverted on replay.
+     */
+    public function resetPassword(string $passwordHash): static
+    {
+        return $this->recordThat(new UserPasswordReset(
+            userId: $this->uuid(),
+            passwordHash: $passwordHash,
+            resetAt: CarbonImmutable::now(),
         ));
     }
 

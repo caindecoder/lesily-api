@@ -17,6 +17,7 @@ use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
 use Illuminate\Routing\Exceptions\InvalidSignatureException;
+use App\Foundation\Auth\Exceptions\InvalidResetLinkException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
@@ -128,6 +129,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (IncorrectPasswordException $e) => EnvelopeBuilder::build(
             ApiErrorCode::IncorrectPassword,
             'Incorrect password. Please try again.',
+        ));
+
+        // A reset submit whose token the broker rejected — never issued, expired (>60 min), or already
+        // used. Collapsed to one 422 RESET_LINK_INVALID (a consumed token is deleted, so expired vs used
+        // are indistinguishable, and collapsing avoids leaking token state) (UC-1-008 5a).
+        $exceptions->render(fn (InvalidResetLinkException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::ResetLinkInvalid,
+            'This reset link is invalid or has expired. Request a new one.',
         ));
 
         // A Pro/Enterprise account at its concurrent-device limit tried to open a 4th
