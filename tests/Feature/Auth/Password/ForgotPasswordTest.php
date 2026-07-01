@@ -57,6 +57,24 @@ class ForgotPasswordTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_one_email_is_throttled_then_only_that_email_is_affected(): void
+    {
+        // Given one email has used up its 3/15min allowance (the client IP is held constant here)
+        $exhausted = 'victim@contoso.lk';
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $this->forgotPassword(['email' => $exhausted])->assertNoContent();
+        }
+        $this->assertThrottled($this->forgotPassword(['email' => $exhausted]));
+
+        // Then a case-variant of the same email shares the bucket (the key is lowercased)
+        $this->assertThrottled($this->forgotPassword(['email' => 'VICTIM@contoso.lk']));
+
+        // ...but a genuinely different email from the same client keeps its own allowance —
+        // the limit is keyed per email, not per IP (if it were IP-keyed, this would be throttled too)
+        $this->forgotPassword(['email' => 'other@contoso.lk'])->assertNoContent();
+    }
+
+    #[Test]
     public function when_the_email_is_unregistered_then_the_response_is_identical_and_no_link_is_sent(): void
     {
         // Given no user for this email
@@ -106,20 +124,28 @@ class ForgotPasswordTest extends AuthTestCase
     }
 
     /**
-     * A queued reset-link notification carrying a non-empty token was sent to $user, its link
-     * lands on the web reset-password page with the token + the keyed email, and the broker
-     * issued a single-use token row for that email.
+     * A queued mail-channel reset-link notification carrying a non-empty token was sent to $user;
+     * its mail promises the 60-minute window and links the web reset-password page with the token +
+     * the keyed email; and the broker issued a single-use token row for that email. (Expiry
+     * ENFORCEMENT — rejecting an expired token — is covered by the reset increment, part 2.)
      */
     private function assertResetLinkSentTo(User $user): void
     {
         Notification::assertSentTo(
             $user,
             PasswordResetLinkNotification::class,
-            fn (PasswordResetLinkNotification $notification): bool => $notification->token !== ''
-                && str_contains(
-                    $notification->toMail($user)->actionUrl,
-                    '/reset-password?token='.$notification->token.'&email='.urlencode($user->getEmailForPasswordReset()),
-                ),
+            function (PasswordResetLinkNotification $notification) use ($user): bool {
+                $mail = $notification->toMail($user);
+
+                return $notification->token !== ''
+                    && $notification->via($user) === ['mail']
+                    && $mail->subject === 'Reset your password'
+                    && str_contains(
+                        $mail->actionUrl,
+                        '/reset-password?token='.$notification->token.'&email='.urlencode($user->getEmailForPasswordReset()),
+                    )
+                    && str_contains(implode(' ', $mail->outroLines), '60 minutes');
+            },
         );
         $this->assertDatabaseHas('password_reset_tokens', ['email' => $user->email]);
     }
