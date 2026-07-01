@@ -57,6 +57,21 @@ class ForgotPasswordTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_email_is_unregistered_then_the_response_is_identical_and_no_link_is_sent(): void
+    {
+        // Given no user for this email
+        $email = 'nobody@contoso.lk';
+        Notification::fake();
+
+        // When a reset is requested for it
+        $this->forgotPassword(['email' => $email])->assertNoContent();
+
+        // Then the response is the same 204, and no link or token is issued (enumeration-safe)
+        Notification::assertNothingSent();
+        $this->assertDatabaseMissing('password_reset_tokens', ['email' => $email]);
+    }
+
+    #[Test]
     public function when_a_registered_email_requests_a_reset_then_a_reset_link_is_sent(): void
     {
         // Given a registered user
