@@ -46,10 +46,12 @@ Route::post('/v1/auth/forgot-password', ForgotPasswordController::class)
     ->middleware('throttle:forgot-password');
 
 // Reset password (UC-1-008) — a guest sets a new password via the emailed single-use token.
-// Public: the token IS the credential. The broker validates the token (60-min expiry / single-use)
-// then the write is event-sourced (UserPasswordReset -> UserProjector) and ALL of the user's
-// sessions are revoked (they re-log in with the new password). throttle:auth-tier added below.
-Route::post('/v1/auth/reset-password', ResetPasswordController::class);
+// Public: the token IS the credential. throttle:auth-tier (the shared 10/min/IP public-auth limit)
+// bounds the brute-force surface. The broker validates the token (60-min expiry / single-use), then
+// the write is event-sourced (UserPasswordReset -> UserProjector) and ALL of the user's sessions are
+// revoked (they re-log in with the new password). No idempotency — the single-use token is the dedup.
+Route::post('/v1/auth/reset-password', ResetPasswordController::class)
+    ->middleware('throttle:auth-tier');
 
 // Log out (UC-1-004) — revoke the CURRENT Sanctum token only (not other devices;
 // logout-all is UC-1-011, deferred). Token-only (cd-auth §5): a thin controller

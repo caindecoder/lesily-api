@@ -129,6 +129,19 @@ class ResetPasswordTest extends AuthTestCase
         $this->assertResetRefused($bob, self::LOGIN_PASSWORD, 0);
     }
 
+    #[Test]
+    public function when_too_many_resets_are_attempted_then_they_are_throttled(): void
+    {
+        // Given the shared per-IP auth-tier allowance is exhausted against the reset endpoint
+        $this->exhaustAuthLimit(10, '/api/v1/auth/reset-password');
+
+        // When one more reset is attempted
+        $response = $this->resetPassword([]);
+
+        // Then the over-limit attempt is throttled — the reset endpoint is a brute-force surface
+        $this->assertThrottled($response);
+    }
+
     /**
      * @return array<string, array{array<string, string>, string}>
      */
