@@ -2,7 +2,10 @@
 
 namespace App\Foundation\Auth\UseCases\Interactors;
 
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
+use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\Auth\Exceptions\InvalidResetLinkException;
 use App\Foundation\Auth\UseCases\Commands\ResetPasswordCommand;
 
@@ -20,7 +23,11 @@ class ResetPasswordInteractor
     {
         $status = Password::broker()->reset(
             ['email' => $command->email, 'password' => $command->password, 'token' => $command->token],
-            fn () => null,
+            function (User $user, string $plainPassword): void {
+                UserAggregate::retrieve($user->getKey())
+                    ->resetPassword(Hash::make($plainPassword))
+                    ->persist();
+            },
         );
 
         if ($status !== Password::PASSWORD_RESET) {

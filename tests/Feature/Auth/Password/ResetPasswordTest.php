@@ -8,7 +8,9 @@ use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\Auth\Events\UserPasswordReset;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
  * Resetting a forgotten password via the emailed link (UC-1-008, reset portion). A guest submits a
@@ -142,6 +144,26 @@ class ResetPasswordTest extends AuthTestCase
         $this->assertThrottled($response);
     }
 
+    #[Test]
+    public function when_a_valid_reset_is_submitted_then_the_password_is_replaced(): void
+    {
+        // Given a registered user and a valid reset token issued for them
+        $user = $this->aRegisteredUser();
+        $token = $this->aResetTokenFor($user);
+
+        // When they reset their password with a valid new one
+        $response = $this->resetPassword([
+            'token' => $token,
+            'email' => $user->email,
+            'password' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the reset succeeds, the new password fully replaces the old one, and the write was event-sourced
+        $response->assertNoContent();
+        $this->assertPasswordReplaced($user, self::LOGIN_PASSWORD, self::NEW_PASSWORD);
+        $this->assertResetWasEventSourced(self::NEW_PASSWORD);
+    }
+
     /**
      * @return array<string, array{array<string, string>, string}>
      */
@@ -168,5 +190,20 @@ class ResetPasswordTest extends AuthTestCase
         $this->assertTrue(Hash::check($originalPassword, $stored->password), 'The original password must still authenticate.');
         $this->assertFalse(Hash::check(self::NEW_PASSWORD, $stored->password), 'A rejected new password must not be stored.');
         $this->assertSame($expectedSessions, $user->tokens()->count(), 'A rejected reset must revoke no sessions.');
+    }
+
+    /**
+     * The reset write was event-sourced, not a direct read-model save: exactly one UserPasswordReset was
+     * stored and it carries the NEW password's hash. Goes RED if the interactor writes users.password
+     * directly — the behavioural tests cannot catch that (a direct write yields identical read-model state),
+     * yet it would be silently reverted on a projection replay (amendment R).
+     */
+    protected function assertResetWasEventSourced(string $newPassword): void
+    {
+        $stored = LesilyStoredEvent::query()->where('event_class', UserPasswordReset::class)->sole();
+        $this->assertTrue(
+            Hash::check($newPassword, $stored->event_properties['passwordHash']),
+            'The stored UserPasswordReset must carry the new password hash (event-sourced write, not a direct save).',
+        );
     }
 }

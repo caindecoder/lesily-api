@@ -4,7 +4,6 @@ namespace Tests\Feature\Auth\Password;
 
 use App\Models\User;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
@@ -231,24 +230,6 @@ class ChangePasswordTest extends AuthTestCase
         $response->assertNoContent();
         $this->assertUnauthenticated($this->probeWith($otherToken));
         $this->probeWith($currentToken)->assertOk();
-    }
-
-    /**
-     * The new password fully replaced the old one end-to-end: a fresh login with the OLD password
-     * is rejected (generic credentials error) and a fresh login with the NEW one succeeds with a
-     * session token. Proves the projector wrote the new hash to the read model (the password column
-     * is projected). forgetGuards between attempts forces fresh credential resolution, not a cached guard.
-     */
-    protected function assertPasswordReplaced(User $user, string $oldPassword, string $newPassword): void
-    {
-        Auth::forgetGuards();
-        $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $oldPassword])
-            ->assertStatus(401);
-
-        Auth::forgetGuards();
-        $newLogin = $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $newPassword]);
-        $newLogin->assertOk();
-        $this->assertNotEmpty($newLogin->json('data.token'), 'The new password must authenticate and issue a session.');
     }
 
     /**

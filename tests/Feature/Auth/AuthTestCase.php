@@ -305,4 +305,23 @@ abstract class AuthTestCase extends TestCase
     {
         return Password::broker()->createToken($user);
     }
+
+    /**
+     * The new password fully replaced the old one end-to-end: a fresh login with the OLD password is
+     * rejected (generic credentials error) and a fresh login with the NEW one succeeds with a session
+     * token. Proves the projector wrote the new hash to the read model (users.password is projected).
+     * forgetGuards between attempts forces fresh credential resolution, not a cached guard. Shared by
+     * the change-password (UC-1-016) and reset-password (UC-1-008) suites.
+     */
+    protected function assertPasswordReplaced(User $user, string $oldPassword, string $newPassword): void
+    {
+        Auth::forgetGuards();
+        $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $oldPassword])
+            ->assertStatus(401);
+
+        Auth::forgetGuards();
+        $newLogin = $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $newPassword]);
+        $newLogin->assertOk();
+        $this->assertNotEmpty($newLogin->json('data.token'), 'The new password must authenticate and issue a session.');
+    }
 }
