@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth\Password;
 
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -164,6 +165,26 @@ class ResetPasswordTest extends AuthTestCase
         $this->assertResetWasEventSourced(self::NEW_PASSWORD);
     }
 
+    #[Test]
+    public function when_the_password_is_reset_then_all_sessions_are_revoked(): void
+    {
+        // Given a registered user signed in on two devices, with a valid reset token
+        $user = $this->aRegisteredUser();
+        $web = $this->aSessionFor($user, 'web');
+        $mobile = $this->aSessionFor($user, 'mobile');
+        $token = $this->aResetTokenFor($user);
+
+        // When they reset their password
+        $response = $this->resetPassword([
+            'token' => $token,
+            'email' => $user->email,
+            'password' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the reset succeeds and every one of their sessions is revoked (they re-log in with the new pw)
+        $this->assertAllSessionsRevoked($response, $user, [$web->plainTextToken, $mobile->plainTextToken]);
+    }
+
     /**
      * @return array<string, array{array<string, string>, string}>
      */
@@ -205,5 +226,21 @@ class ResetPasswordTest extends AuthTestCase
             Hash::check($newPassword, $stored->event_properties['passwordHash']),
             'The stored UserPasswordReset must carry the new password hash (event-sourced write, not a direct save).',
         );
+    }
+
+    /**
+     * The reset succeeded (204) and revoked ALL of the user's sessions — every prior token no longer
+     * authenticates (forgetGuards forces a fresh DB re-check) and not one token row remains. Goes RED if
+     * the revoke-all is a no-op — the TokenRevoker null (revoke-all) branch.
+     *
+     * @param  list<string>  $priorTokens
+     */
+    protected function assertAllSessionsRevoked(TestResponse $response, User $user, array $priorTokens): void
+    {
+        $response->assertNoContent();
+        foreach ($priorTokens as $token) {
+            $this->assertUnauthenticated($this->probeWith($token));
+        }
+        $this->assertSame(0, $user->tokens()->count(), 'A reset must revoke every one of the user\'s sessions.');
     }
 }
