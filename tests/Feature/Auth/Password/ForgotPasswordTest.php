@@ -1,0 +1,152 @@
+<?php
+
+namespace Tests\Feature\Auth\Password;
+
+use App\Models\User;
+use Illuminate\Testing\TestResponse;
+use Tests\Feature\Auth\AuthTestCase;
+use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\Auth\Notifications\PasswordResetLinkNotification;
+
+/**
+ * Requesting a password-reset link (UC-1-008, forgot portion). A guest submits an email; the
+ * response is an enumeration-safe 204 whether or not the email is registered, the request is
+ * rate-limited 3/15min per email, and a registered email is emailed a single-use reset link.
+ */
+class ForgotPasswordTest extends AuthTestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Error-path render parity (amendment M): APP_DEBUG=true masks the prod render path, so
+        // the 422/429 rejections below must render their mapped envelopes the way CI/prod do.
+        config(['app.debug' => false]);
+    }
+
+    #[Test]
+    #[DataProvider('invalidEmailProvider')]
+    public function when_the_email_is_invalid_then_the_request_is_rejected(array $payload): void
+    {
+        // Given an invalid forgot-password payload
+        // When it is submitted
+        $response = $this->forgotPassword($payload);
+
+        // Then it is rejected as a validation error
+        $this->assertValidationRejected($response, 'email');
+    }
+
+    #[Test]
+    public function when_too_many_requests_are_made_then_they_are_throttled(): void
+    {
+        // Given a valid email (registration is irrelevant — the throttle runs before the broker)
+        $email = 'guest@contoso.lk';
+
+        // When the window's allowance of requests is used up
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $this->forgotPassword(['email' => $email])->assertNoContent();
+        }
+
+        // Then the next request is throttled
+        $this->assertThrottled($this->forgotPassword(['email' => $email]));
+    }
+
+    #[Test]
+    public function when_one_email_is_throttled_then_only_that_email_is_affected(): void
+    {
+        // Given one email has used up its 3/15min allowance (the client IP is held constant here)
+        $exhausted = 'victim@contoso.lk';
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $this->forgotPassword(['email' => $exhausted])->assertNoContent();
+        }
+        $this->assertThrottled($this->forgotPassword(['email' => $exhausted]));
+
+        // Then a case-variant of the same email shares the bucket (the key is lowercased)
+        $this->assertThrottled($this->forgotPassword(['email' => 'VICTIM@contoso.lk']));
+
+        // ...but a genuinely different email from the same client keeps its own allowance —
+        // the limit is keyed per email, not per IP (if it were IP-keyed, this would be throttled too)
+        $this->forgotPassword(['email' => 'other@contoso.lk'])->assertNoContent();
+    }
+
+    #[Test]
+    public function when_the_email_is_unregistered_then_the_response_is_identical_and_no_link_is_sent(): void
+    {
+        // Given no user for this email
+        $email = 'nobody@contoso.lk';
+        Notification::fake();
+
+        // When a reset is requested for it
+        $this->forgotPassword(['email' => $email])->assertNoContent();
+
+        // Then the response is the same 204, and no link or token is issued (enumeration-safe)
+        Notification::assertNothingSent();
+        $this->assertDatabaseMissing('password_reset_tokens', ['email' => $email]);
+    }
+
+    #[Test]
+    public function when_a_registered_email_requests_a_reset_then_a_reset_link_is_sent(): void
+    {
+        // Given a registered user
+        $user = $this->aRegisteredUser();
+        Notification::fake();
+
+        // When they request a password reset
+        $this->forgotPassword(['email' => $user->email])->assertNoContent();
+
+        // Then a single-use reset link is emailed to them
+        $this->assertResetLinkSentTo($user);
+    }
+
+    /**
+     * @return array<string, array{array<string, string>}>
+     */
+    public static function invalidEmailProvider(): array
+    {
+        return [
+            'missing email' => [[]],
+            'empty email' => [['email' => '']],
+            'malformed email' => [['email' => 'not-an-email']],
+        ];
+    }
+
+    /**
+     * @param  array<string, string>  $payload
+     */
+    private function forgotPassword(array $payload): TestResponse
+    {
+        return $this->postJson('/api/v1/auth/forgot-password', $payload);
+    }
+
+    /**
+     * A queued mail-channel reset-link notification carrying a non-empty token was sent to $user;
+     * its mail promises the 60-minute window and links the web reset-password page with the token +
+     * the keyed email; and the broker issued a single-use token row for that email. (Expiry
+     * ENFORCEMENT — rejecting an expired token — is covered by the reset increment, part 2.)
+     */
+    private function assertResetLinkSentTo(User $user): void
+    {
+        Notification::assertSentTo(
+            $user,
+            PasswordResetLinkNotification::class,
+            function (PasswordResetLinkNotification $notification) use ($user): bool {
+                $mail = $notification->toMail($user);
+
+                return $notification->token !== ''
+                    && $notification->via($user) === ['mail']
+                    && $mail->subject === 'Reset your password'
+                    && str_contains(
+                        $mail->actionUrl,
+                        '/reset-password?token='.$notification->token.'&email='.urlencode($user->getEmailForPasswordReset()),
+                    )
+                    && str_contains(implode(' ', $mail->outroLines), '60 minutes');
+            },
+        );
+        $this->assertDatabaseHas('password_reset_tokens', ['email' => $user->email]);
+    }
+}

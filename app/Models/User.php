@@ -8,6 +8,7 @@ use App\Companies\Entities\Company;
 use Database\Factories\UserFactory;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Contracts\Auth\CanResetPassword;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -15,6 +16,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use App\Foundation\Auth\Notifications\PasswordResetLinkNotification;
+use Illuminate\Auth\Passwords\CanResetPassword as CanResetPasswordTrait;
 
 /**
  * @property string $locale
@@ -26,8 +29,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  */
 #[Fillable(['name', 'email', 'password', 'locale'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_confirmed_at'])]
-class User extends Authenticatable implements HasLocalePreference, MustVerifyEmail
+class User extends Authenticatable implements CanResetPassword, HasLocalePreference, MustVerifyEmail
 {
+    use CanResetPasswordTrait;
     use HasApiTokens;
 
     /** @use HasFactory<UserFactory> */
@@ -42,6 +46,17 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
     public function preferredLocale(): string
     {
         return $this->locale;
+    }
+
+    /**
+     * Route the "reset your password" link through our queued, web-app-targeted notification
+     * (UC-1-008) instead of Laravel's default. The broker passes the plain single-use token.
+     *
+     * @param  string  $token
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new PasswordResetLinkNotification($token));
     }
 
     /**
