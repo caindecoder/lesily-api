@@ -10,6 +10,7 @@ use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Password;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -280,5 +281,28 @@ abstract class AuthTestCase extends TestCase
         return $this->withToken($token)->putJson('/api/v1/me/password', $payload, [
             'Idempotency-Key' => $idempotencyKey ?? (string) Str::uuid(),
         ]);
+    }
+
+    /**
+     * Submit a password reset to the public reset endpoint. Shared by the reset (UC-1-008)
+     * and password-changed-notification suites (the latter proves the reset event also fires
+     * the confirmation email).
+     *
+     * @param  array<string, string>  $payload
+     */
+    protected function resetPassword(array $payload): TestResponse
+    {
+        return $this->postJson('/api/v1/auth/reset-password', $payload);
+    }
+
+    /**
+     * Mint a production-faithful single-use password-reset token for $user via the broker's own
+     * token repository (the same `password_reset_tokens` row + hashing `Password::broker()->reset`
+     * validates) — deterministic, no forgot-flow round-trip or Notification::fake needed. Shared by
+     * the reset (UC-1-008) and password-changed-notification suites.
+     */
+    protected function aResetTokenFor(User $user): string
+    {
+        return Password::broker()->createToken($user);
     }
 }
