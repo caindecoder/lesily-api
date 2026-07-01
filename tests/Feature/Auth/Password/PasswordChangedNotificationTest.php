@@ -104,6 +104,33 @@ class PasswordChangedNotificationTest extends AuthTestCase
         );
     }
 
+    #[Test]
+    public function when_the_password_is_reset_then_a_confirmation_is_sent(): void
+    {
+        // Given a company-attached user with a valid reset token
+        $user = $this->aRegisteredUser();
+        $company = $this->attachCompany($user);
+        $token = $this->aResetTokenFor($user);
+        Notification::fake();
+
+        // When they reset their password with a valid new one
+        $response = $this->resetPassword([
+            'token' => $token,
+            'email' => $user->email,
+            'password' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the same password-changed confirmation is sent — the reset event is wired into the
+        // same reactor as the change event
+        $response->assertNoContent();
+        Notification::assertSentTo(
+            $user,
+            SystemNotification::class,
+            fn (SystemNotification $notification): bool => $notification->type === NotificationType::PasswordChanged
+                && $notification->companyName === $company->name,
+        );
+    }
+
     /**
      * Make $user a member of a freshly-created company and return that company so the caller can
      * assert the confirmation carries its name — the notification's companyName is resolved from

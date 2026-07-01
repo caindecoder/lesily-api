@@ -60,6 +60,11 @@
                 // handler — same spatie-discovery equivalent class as WelcomeEmailReactor /
                 // TrialExpiredEmailReactor above (protected still fires the notice).
                 "App\\Foundation\\Auth\\Reactors\\PasswordChangedNotificationReactor::onUserPasswordChanged",
+                // password slice #4 / UC-1-008 (reset password): the reset-password projector arm +
+                // the shared confirmation reactor's reset arm — same spatie-discovery equivalent
+                // class (protected still projects / fires the notice).
+                "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserPasswordReset",
+                "App\\Foundation\\Auth\\Reactors\\PasswordChangedNotificationReactor::onUserPasswordReset",
             ],
         },
         // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only
