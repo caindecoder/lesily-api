@@ -17,7 +17,8 @@ use App\Foundation\Notifications\Notifications\SystemNotification;
  * rollback to defer the send past (the email leg still queues inside SystemNotification). The
  * companyName is denormalised from the acting user's membership; a company-less user — which never
  * occurs in production, where every user is a company owner — degrades to an empty label rather
- * than failing the notice.
+ * than failing the notice, and a multi-company user resolves to an arbitrary first membership
+ * (acceptable while chunk-1 users are single-company owners; revisit when employee memberships land).
  */
 class PasswordChangedNotificationReactor extends Reactor
 {

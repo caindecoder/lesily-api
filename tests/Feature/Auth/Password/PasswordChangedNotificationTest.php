@@ -3,10 +3,8 @@
 namespace Tests\Feature\Auth\Password;
 
 use App\Models\User;
-use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
@@ -29,12 +27,12 @@ class PasswordChangedNotificationTest extends AuthTestCase
 {
     use RefreshDatabase;
 
-    private const NEW_PASSWORD = 'New-Str0ng-Pass!';
-
     protected function setUp(): void
     {
         parent::setUp();
 
+        // Error-path render parity (amendment M): APP_DEBUG=true (the local default) masks the
+        // prod render path, so the Sad 401 rejection renders its mapped envelope the way CI/prod do.
         config(['app.debug' => false]);
     }
 
@@ -74,7 +72,11 @@ class PasswordChangedNotificationTest extends AuthTestCase
 
         // Then the confirmation email is still queued — a critical notice cannot be silenced
         $response->assertNoContent();
-        Mail::assertQueued(SystemNotificationMail::class);
+        Mail::assertQueued(
+            SystemNotificationMail::class,
+            fn (SystemNotificationMail $mail): bool => $mail->type === NotificationType::PasswordChanged
+                && $mail->hasTo($user->email),
+        );
     }
 
     #[Test]
@@ -100,18 +102,6 @@ class PasswordChangedNotificationTest extends AuthTestCase
             fn (SystemNotification $notification): bool => $notification->type === NotificationType::PasswordChanged
                 && $notification->companyName === $company->name,
         );
-    }
-
-    /**
-     * Submit a password change to the self-service endpoint (which requires an idempotency key).
-     *
-     * @param  array<string, string>  $payload
-     */
-    private function changePassword(string $token, array $payload, ?string $idempotencyKey = null): TestResponse
-    {
-        return $this->withToken($token)->putJson('/api/v1/me/password', $payload, [
-            'Idempotency-Key' => $idempotencyKey ?? (string) Str::uuid(),
-        ]);
     }
 
     /**

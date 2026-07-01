@@ -19,8 +19,6 @@ class ChangePasswordTest extends AuthTestCase
 {
     use RefreshDatabase;
 
-    private const NEW_PASSWORD = 'New-Str0ng-Pass!';
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -208,16 +206,6 @@ class ChangePasswordTest extends AuthTestCase
             'new password over the length cap' => [['currentPassword' => self::LOGIN_PASSWORD, 'newPassword' => str_repeat('a', 256)], 'newPassword'],
             'missing current password' => [['newPassword' => self::NEW_PASSWORD], 'currentPassword'],
         ];
-    }
-
-    /**
-     * @param  array<string, string>  $payload
-     */
-    private function changePassword(string $token, array $payload, ?string $idempotencyKey = null): TestResponse
-    {
-        return $this->withToken($token)->putJson('/api/v1/me/password', $payload, [
-            'Idempotency-Key' => $idempotencyKey ?? (string) Str::uuid(),
-        ]);
     }
 
     /**
