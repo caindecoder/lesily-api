@@ -62,6 +62,73 @@ class ResetPasswordTest extends AuthTestCase
         $this->assertResetRefused($user, self::LOGIN_PASSWORD, 1);
     }
 
+    #[Test]
+    public function when_the_reset_token_has_expired_then_the_reset_is_refused(): void
+    {
+        // Given a reset token that was issued more than 60 minutes ago
+        $user = $this->aRegisteredUser();
+        $token = $this->aResetTokenFor($user);
+        $this->travel(61)->minutes();
+
+        // When it is used to reset the password
+        $response = $this->resetPassword([
+            'token' => $token,
+            'email' => $user->email,
+            'password' => self::NEW_PASSWORD,
+        ]);
+
+        // Then it is refused with the same collapsed error and nothing changes
+        $this->assertRefusedWith($response, ApiErrorCode::ResetLinkInvalid);
+        $response->assertStatus(422);
+        $this->assertResetRefused($user, self::LOGIN_PASSWORD, 0);
+    }
+
+    #[Test]
+    public function when_the_reset_token_has_already_been_used_then_the_reset_is_refused(): void
+    {
+        // Given a token already consumed by a successful reset
+        $user = $this->aRegisteredUser();
+        $token = $this->aResetTokenFor($user);
+        $this->resetPassword([
+            'token' => $token,
+            'email' => $user->email,
+            'password' => self::NEW_PASSWORD,
+        ])->assertNoContent();
+
+        // When the same token is submitted again
+        $response = $this->resetPassword([
+            'token' => $token,
+            'email' => $user->email,
+            'password' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the reuse is refused with the collapsed error — the token is single-use
+        $this->assertRefusedWith($response, ApiErrorCode::ResetLinkInvalid);
+        $response->assertStatus(422);
+    }
+
+    #[Test]
+    public function when_the_email_does_not_match_the_token_then_the_reset_is_refused(): void
+    {
+        // Given a token issued for Alice and a second account, Bob
+        $alice = $this->aRegisteredUser();
+        $bob = $this->aRegisteredUser('bob@contoso.lk');
+        $aliceToken = $this->aResetTokenFor($alice);
+
+        // When Alice's token is submitted with Bob's email
+        $response = $this->resetPassword([
+            'token' => $aliceToken,
+            'email' => $bob->email,
+            'password' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the reset is refused and neither account's password changes (a token is bound to its email)
+        $this->assertRefusedWith($response, ApiErrorCode::ResetLinkInvalid);
+        $response->assertStatus(422);
+        $this->assertResetRefused($alice, self::LOGIN_PASSWORD, 0);
+        $this->assertResetRefused($bob, self::LOGIN_PASSWORD, 0);
+    }
+
     /**
      * @return array<string, array{array<string, string>, string}>
      */
