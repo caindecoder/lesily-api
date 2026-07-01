@@ -32,11 +32,11 @@ use Illuminate\Auth\Passwords\CanResetPassword as CanResetPasswordTrait;
 class User extends Authenticatable implements CanResetPassword, HasLocalePreference, MustVerifyEmail
 {
     use CanResetPasswordTrait;
-
     use HasApiTokens;
 
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
+
     use HasUuids;
 
     /**
