@@ -10,6 +10,7 @@ use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Notifications\Enums\NotificationType;
@@ -35,6 +36,25 @@ class PasswordChangedNotificationTest extends AuthTestCase
         parent::setUp();
 
         config(['app.debug' => false]);
+    }
+
+    #[Test]
+    public function when_a_change_attempt_fails_then_no_confirmation_is_sent(): void
+    {
+        // Given a user with an active session
+        $user = $this->aRegisteredUser();
+        $session = $this->aSessionFor($user);
+        Notification::fake();
+
+        // When they submit the wrong current password
+        $response = $this->changePassword($session->plainTextToken, [
+            'currentPassword' => 'wrong-password',
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the change is refused and no confirmation is sent — the notice is bound to the event
+        $this->assertRefusedWith($response, ApiErrorCode::IncorrectPassword);
+        Notification::assertNothingSent();
     }
 
     #[Test]
