@@ -65,7 +65,7 @@ jobs:
       - run: php artisan migrate --force
       - name: Run tests with coverage
         run: php artisan test -p --coverage --coverage-clover=coverage.xml --log-junit=junit.xml
-      - uses: codecov/codecov-action@v6
+      - uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
