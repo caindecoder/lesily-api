@@ -14,11 +14,14 @@ use App\Models\User;
  */
 class TokenRevoker
 {
-    public function revokeAllForUserExcept(User $user, ?string $exceptTokenId = null): int
+    public function revokeAllForUserExcept(User $user, ?string $exceptTokenId): int
     {
-        // whereKeyNot(null) is NOT a no-op: the query builder rewrites `id != null` into
-        // `id IS NOT NULL` (Query\Builder::where's null short-cut), which matches every row — so a
-        // null $exceptTokenId revokes ALL sessions, while a string keeps that one. Do not "simplify".
+        // Pass null to revoke ALL sessions; a string keeps that one alive. No default — callers pass
+        // the intent explicitly, so revoke-all is never an accidental omission. whereKeyNot(null) is
+        // NOT a no-op: the query builder rewrites `id != null` into `id IS NOT NULL` (Query\Builder's
+        // where null short-cut), which matches every row — so null revokes all. The branchless form is
+        // intentional: an explicit `if ($exceptTokenId === null)` return would be a behaviourally
+        // redundant (equivalent) mutant. Do not "simplify" to an if/else.
         return $user->tokens()->whereKeyNot($exceptTokenId)->delete();
     }
 }

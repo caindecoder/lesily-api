@@ -46,7 +46,7 @@ class ResetPasswordTest extends AuthTestCase
     }
 
     #[Test]
-    public function when_the_reset_token_is_malformed_then_the_reset_is_refused(): void
+    public function when_the_reset_token_was_never_issued_then_the_reset_is_refused(): void
     {
         // Given a registered user with an active session, and a token that was never issued
         $user = $this->aRegisteredUser();
@@ -62,6 +62,7 @@ class ResetPasswordTest extends AuthTestCase
         // Then it is refused, the password is untouched, and the session survives (Minimal Guarantee)
         $this->assertRefusedWith($response, ApiErrorCode::ResetLinkInvalid);
         $response->assertStatus(422); // literal pins the 422 contract independent of the enum
+        $response->assertJsonPath('message', 'This reset link is invalid or has expired. Request a new one.'); // pins the non-leaking security copy (Infection-blind bootstrap)
         $this->assertResetRefused($user, self::LOGIN_PASSWORD, 1);
     }
 
@@ -195,7 +196,7 @@ class ResetPasswordTest extends AuthTestCase
             'missing email' => [['token' => 'a-token', 'password' => self::NEW_PASSWORD], 'email'],
             'malformed email' => [['token' => 'a-token', 'email' => 'not-an-email', 'password' => self::NEW_PASSWORD], 'email'],
             'missing password' => [['token' => 'a-token', 'email' => 'alice@contoso.lk'], 'password'],
-            'password under eight characters' => [['token' => 'a-token', 'email' => 'alice@contoso.lk', 'password' => 'Sh0rt!'], 'password'],
+            'password one below the minimum' => [['token' => 'a-token', 'email' => 'alice@contoso.lk', 'password' => 'Sh0rt!x'], 'password'],
             'password over the length cap' => [['token' => 'a-token', 'email' => 'alice@contoso.lk', 'password' => str_repeat('a', 256)], 'password'],
         ];
     }
