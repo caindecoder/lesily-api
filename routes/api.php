@@ -10,6 +10,7 @@ use App\Foundation\Auth\IO\Http\Controllers\ViewSessionsController;
 use App\Foundation\Auth\IO\Http\Controllers\RevokeSessionController;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 use App\Foundation\Auth\IO\Http\Controllers\ChangePasswordController;
+use App\Foundation\Auth\IO\Http\Controllers\ForgotPasswordController;
 use App\Foundation\Auth\IO\Http\Controllers\EnableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\ConfirmTwoFactorController;
@@ -36,6 +37,12 @@ Route::post('/v1/auth/register', RegisterController::class)
 // banner): the credential check issues a Sanctum token, no domain event.
 Route::post('/v1/auth/login', LoginController::class)
     ->middleware('throttle:auth-tier');
+
+// Forgot password (UC-1-008) — a guest requests a reset link. Public; enumeration-safe (always
+// 204 whether or not the email is registered). throttle:forgot-password = 3/15min keyed by the
+// TARGET email (tighter than auth-tier), so a reset link can't be spammed to a victim's inbox.
+Route::post('/v1/auth/forgot-password', ForgotPasswordController::class)
+    ->middleware('throttle:forgot-password');
 
 // Log out (UC-1-004) — revoke the CURRENT Sanctum token only (not other devices;
 // logout-all is UC-1-011, deferred). Token-only (cd-auth §5): a thin controller

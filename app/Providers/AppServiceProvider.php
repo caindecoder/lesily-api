@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use App\Companies\Entities\Company;
 use Illuminate\Support\ServiceProvider;
@@ -45,5 +46,11 @@ class AppServiceProvider extends ServiceProvider
         // (10/min/IP). Distinct from the per-tenant-tier general-API limiter
         // (OQ-1-098), which resolves the limit from the company's plan.
         RateLimiter::for('auth-tier', fn (Request $request) => Limit::perMinute(10)->by((string) $request->ip()));
+
+        // Forgot-password is tighter than the shared auth-tier and keyed by the TARGET email
+        // (not IP): a reset link must not be spammable into a victim's inbox — 3/15min/email
+        // (questionnaire §S20). Enumeration-safe by design: the endpoint 204s regardless of
+        // registration, so the limiter is the only signal and it never differs known vs unknown.
+        RateLimiter::for('forgot-password', fn (Request $request) => Limit::perMinutes(15, 3)->by(Str::lower((string) $request->input('email', ''))));
     }
 }
