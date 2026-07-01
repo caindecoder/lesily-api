@@ -6,6 +6,7 @@ enum NotificationType: string
 {
     case AccountSecurityAlert = 'account_security_alert';
     case GeneralAccountNotice = 'general_account_notice';
+    case PasswordChanged = 'password_changed';
 
     /**
      * Critical notifications (e.g. account-security alerts) are mandatory: users
@@ -16,6 +17,7 @@ enum NotificationType: string
         return match ($this) {
             self::AccountSecurityAlert => true,
             self::GeneralAccountNotice => false,
+            self::PasswordChanged => false,
         };
     }
 }
