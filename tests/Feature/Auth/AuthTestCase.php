@@ -303,7 +303,10 @@ abstract class AuthTestCase extends TestCase
      */
     protected function aResetTokenFor(User $user): string
     {
-        return Password::broker()->createToken($user);
+        // Password::createToken (facade @method) not broker()->createToken: broker() returns the
+        // PasswordBroker CONTRACT, which declares only sendResetLink/reset — createToken lives on the
+        // concrete impl and is exposed via the facade. Same default broker + password_reset_tokens row.
+        return Password::createToken($user);
     }
 
     /**
