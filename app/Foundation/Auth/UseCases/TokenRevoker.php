@@ -14,7 +14,7 @@ use App\Models\User;
  */
 class TokenRevoker
 {
-    public function revokeAllForUserExcept(User $user, string $exceptTokenId): int
+    public function revokeAllForUserExcept(User $user, ?string $exceptTokenId = null): int
     {
         return $user->tokens()->whereKeyNot($exceptTokenId)->delete();
     }
