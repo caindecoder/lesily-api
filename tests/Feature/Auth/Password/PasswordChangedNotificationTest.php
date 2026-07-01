@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth\Password;
 use App\Models\User;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
@@ -12,6 +13,8 @@ use Illuminate\Support\Facades\Notification;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Notifications\Enums\NotificationType;
+use App\Foundation\Notifications\Mail\SystemNotificationMail;
+use App\Foundation\Notifications\Entities\NotificationPreference;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 
 /**
@@ -32,6 +35,26 @@ class PasswordChangedNotificationTest extends AuthTestCase
         parent::setUp();
 
         config(['app.debug' => false]);
+    }
+
+    #[Test]
+    public function when_the_owner_has_opted_out_then_the_confirmation_is_still_sent(): void
+    {
+        // Given a user who has opted their email out of the password-changed notice
+        $user = $this->aRegisteredUser();
+        NotificationPreference::factory()->mailDisabled($user, NotificationType::PasswordChanged)->create();
+        $session = $this->aSessionFor($user);
+        Mail::fake();
+
+        // When they change their password with the correct current password
+        $response = $this->changePassword($session->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the confirmation email is still queued — a critical notice cannot be silenced
+        $response->assertNoContent();
+        Mail::assertQueued(SystemNotificationMail::class);
     }
 
     #[Test]

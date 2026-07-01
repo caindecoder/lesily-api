@@ -9,15 +9,16 @@ enum NotificationType: string
     case PasswordChanged = 'password_changed';
 
     /**
-     * Critical notifications (e.g. account-security alerts) are mandatory: users
-     * cannot opt their email out of them. See foundation-brief / questionnaire S16.
+     * Critical notifications (account-security alerts, password-change confirmations)
+     * are mandatory: users cannot opt their email out of them. See foundation-brief /
+     * questionnaire S16 L474 (security notices reach all tiers and bypass preferences).
      */
     public function isCritical(): bool
     {
         return match ($this) {
             self::AccountSecurityAlert => true,
+            self::PasswordChanged => true,
             self::GeneralAccountNotice => false,
-            self::PasswordChanged => false,
         };
     }
 }
