@@ -23,6 +23,7 @@ use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
 use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
+use App\Companies\Memberships\Exceptions\AlreadyMemberException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
 use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
@@ -172,6 +173,12 @@ return Application::configure(basePath: dirname(__DIR__))
             ApiErrorCode::RoleInsufficient,
             $e->getMessage(),
             ['required_permission' => $e->permission],
+        ));
+
+        // An invite targeted an email that is already an active member (UC-1-018 3e).
+        $exceptions->render(fn (AlreadyMemberException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::AlreadyMember,
+            $e->getMessage(),
         ));
 
         $exceptions->render(fn (ModelNotFoundException $e) => EnvelopeBuilder::build(

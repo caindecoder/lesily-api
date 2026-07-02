@@ -14,6 +14,7 @@ use App\Foundation\Auth\IO\Http\Controllers\ChangePasswordController;
 use App\Foundation\Auth\IO\Http\Controllers\ForgotPasswordController;
 use App\Foundation\Auth\IO\Http\Controllers\EnableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
+use App\Companies\Memberships\IO\Http\Controllers\InviteUserController;
 use App\Foundation\Auth\IO\Http\Controllers\ConfirmTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\DisableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
@@ -140,3 +141,10 @@ Route::delete('/v1/me/sessions/{tokenId}', RevokeSessionController::class)
 // (UserPasswordChanged -> UserProjector) and every OTHER session is revoked; the current survives -> 204.
 Route::put('/v1/me/password', ChangePasswordController::class)
     ->middleware(['auth:sanctum', 'throttle:auth-tier', 'idempotency-key:required']);
+
+// Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
+// a pending invitation is created and the invite email dispatched inline. auth:sanctum
+// -> auth.company. The permission (users.invite) + throttle (invitations) gates arrive
+// with their driving tests (RED-first).
+Route::post('/v1/invitations', InviteUserController::class)
+    ->middleware(['auth:sanctum', 'auth.company']);
