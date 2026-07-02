@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class InviteUserTest extends MembershipsTestCase
 {
@@ -44,5 +45,36 @@ class InviteUserTest extends MembershipsTestCase
         // Then the owner role is refused as not invitable and nothing is created
         $this->assertInviteValidationRejected($response, 'roleCode');
         $this->assertNoInvitationCreated();
+    }
+
+    /**
+     * @param  array<string, string>  $body
+     */
+    #[Test]
+    #[DataProvider('provideInvalidInviteInputs')]
+    public function when_the_invite_input_is_invalid_then_the_invite_is_rejected(array $body, string $invalidField): void
+    {
+        // Given an admin of a company
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+
+        // When the admin submits an invite with invalid input
+        $response = $this->invite($admin, $company, $body);
+
+        // Then the input is refused as invalid and nothing is created
+        $this->assertInviteValidationRejected($response, $invalidField);
+        $this->assertNoInvitationCreated();
+    }
+
+    /**
+     * @return array<string, array{array<string, string>, string}>
+     */
+    public static function provideInvalidInviteInputs(): array
+    {
+        return [
+            'malformed email' => [['email' => 'not-an-email', 'roleCode' => 'employee'], 'email'],
+            'empty email' => [['email' => '', 'roleCode' => 'employee'], 'email'],
+            'missing role code' => [['email' => 'newuser@contoso.lk'], 'roleCode'],
+            'unknown role code' => [['email' => 'newuser@contoso.lk', 'roleCode' => 'super_admin'], 'roleCode'],
+        ];
     }
 }
