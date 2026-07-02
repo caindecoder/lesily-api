@@ -99,4 +99,27 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $response->assertStatus($code->status());
         $response->assertJsonPath('error_code', $code->value);
     }
+
+    /**
+     * Exhaust the per-actor hourly invite allowance with $allowed valid invites
+     * (unique emails, each accepted) — pinning the allowance at exactly $allowed,
+     * per AuthTestCase::exhaustAuthLimit. Relies on the array cache resetting the
+     * limiter per test method (CACHE_STORE=array).
+     */
+    protected function exhaustInviteLimit(User $actor, Company $company, int $allowed = 20): void
+    {
+        for ($i = 0; $i < $allowed; $i++) {
+            $this->invite($actor, $company, [
+                'email' => sprintf('invitee-%02d@contoso.lk', $i),
+                'roleCode' => 'employee',
+            ])->assertStatus(201);
+        }
+    }
+
+    protected function assertThrottled(TestResponse $response): void
+    {
+        $response->assertStatus(429);
+        $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
+        $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
+    }
 }

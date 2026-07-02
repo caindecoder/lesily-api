@@ -52,5 +52,10 @@ class AppServiceProvider extends ServiceProvider
         // (questionnaire §S20). Enumeration-safe by design: the endpoint 204s regardless of
         // registration, so the limiter is the only signal and it never differs known vs unknown.
         RateLimiter::for('forgot-password', fn (Request $request) => Limit::perMinutes(15, 3)->by(Str::lower((string) $request->input('email', ''))));
+
+        // Invites are keyed by the ACTING user (not IP): 20/hr per actor caps invite-email
+        // spam from one compromised or abusive account without letting a shared office IP
+        // starve legitimate admins (D9/OQ-1-029; questionnaire §S14 special rate limits).
+        RateLimiter::for('invitations', fn (Request $request) => Limit::perHour(20)->by((string) $request->user()?->getAuthIdentifier()));
     }
 }

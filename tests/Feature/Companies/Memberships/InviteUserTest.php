@@ -108,4 +108,21 @@ class InviteUserTest extends MembershipsTestCase
             'auditor' => ['auditor'],
         ];
     }
+
+    #[Test]
+    public function when_the_hourly_invite_allowance_is_spent_then_the_next_invite_is_throttled(): void
+    {
+        // Given an admin who has spent the full hourly invite allowance
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->exhaustInviteLimit($admin, $company);
+
+        // When they attempt one more invite within the hour
+        $response = $this->invite($admin, $company, [
+            'email' => 'one-too-many@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then the invite is throttled
+        $this->assertThrottled($response);
+    }
 }
