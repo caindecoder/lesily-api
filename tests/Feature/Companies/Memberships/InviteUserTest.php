@@ -3,9 +3,12 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Mail;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Companies\Memberships\Entities\Invitation;
+use App\Companies\Memberships\Mail\InvitationMail;
 
 class InviteUserTest extends MembershipsTestCase
 {
@@ -29,6 +32,32 @@ class InviteUserTest extends MembershipsTestCase
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'ALREADY_MEMBER');
         $this->assertNoInvitationCreated();
+    }
+
+    #[Test]
+    public function when_the_email_already_has_a_live_pending_invitation_then_the_invite_is_rejected(): void
+    {
+        // Given an admin whose earlier invite to an email is still pending
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->invite($admin, $company, [
+            'email' => 'pending@contoso.lk',
+            'roleCode' => 'employee',
+        ])->assertStatus(201);
+
+        // When they invite the same email again
+        $response = $this->invite($admin, $company, [
+            'email' => 'pending@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then it is refused (the pending invitation stands — resend rotates it,
+        // UC-1-021) and no second invitation row or email exists
+        $this->assertRefusedWith($response, ApiErrorCode::AlreadyMember);
+        $this->assertSame(1, Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', 'pending@contoso.lk')
+            ->count());
+        Mail::assertQueued(InvitationMail::class, 1);
     }
 
     #[Test]

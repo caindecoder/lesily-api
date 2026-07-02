@@ -33,6 +33,20 @@ class InviteUserInteractor
             throw new AlreadyMemberException;
         }
 
+        // One live invitation per (company, email): a standing pending invite is
+        // rejected the same way — rotating its token is Resend's job (UC-1-021).
+        // (Live = unaccepted + unexpired; unrevoked joins the guard at Task 5.)
+        $hasLivePendingInvitation = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $command->email)
+            ->whereNull('accepted_at')
+            ->where('expires_at', '>', now())
+            ->exists();
+
+        if ($hasLivePendingInvitation) {
+            throw AlreadyMemberException::pendingInvitation();
+        }
+
         // A removed member's re-invite resumes their membership stream (stable
         // UUID = the soft-deleted pivot's id — D5b); a fresh invite opens a new one.
         $membershipId = $this->removedMembershipId($company, $userId) ?? (string) Str::uuid7();
