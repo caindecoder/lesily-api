@@ -7,6 +7,7 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
+use App\Companies\Entities\CompanyUser;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Tests\Feature\Companies\CompaniesTestCase;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -121,5 +122,25 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $response->assertStatus(429);
         $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
         $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
+    }
+
+    /**
+     * A membership that was removed (UC-1-024 semantics): the company_user pivot
+     * exists but is soft-deleted. Returns the pivot id — the stable membership
+     * UUID a re-invite must reuse (D5b undelete-in-place).
+     */
+    protected function aRemovedMembership(Company $company, User $user): string
+    {
+        $this->attachMember($company, $user, $this->seededRole('employee'));
+
+        $membershipId = CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $user->getKey())
+            ->sole()
+            ->getKey();
+
+        CompanyUser::query()->whereKey($membershipId)->update(['deleted_at' => now()]);
+
+        return $membershipId;
     }
 }

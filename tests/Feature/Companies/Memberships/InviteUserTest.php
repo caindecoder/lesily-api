@@ -109,6 +109,34 @@ class InviteUserTest extends MembershipsTestCase
         ];
     }
 
+    // --- Edge ---
+
+    #[Test]
+    public function when_a_previously_removed_member_is_reinvited_then_the_same_membership_is_reengaged(): void
+    {
+        // Given a former member whose company_user pivot was soft-deleted on removal
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $target = User::factory()->withEmail('returning@contoso.lk')->create();
+        $membershipId = $this->aRemovedMembership($company, $target);
+
+        // When the admin re-invites that email
+        $response = $this->invite($admin, $company, [
+            'email' => 'returning@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then a pending invitation reuses the SAME membership UUID and the pivot
+        // stays removed until the invitee accepts (undelete happens at accept, UC-1-019)
+        $response->assertStatus(201);
+        $this->assertDatabaseHas('invitations', [
+            'id' => $membershipId,
+            'company_id' => $company->getKey(),
+            'email' => 'returning@contoso.lk',
+            'accepted_at' => null,
+        ]);
+        $this->assertSoftDeleted('company_user', ['id' => $membershipId]);
+    }
+
     #[Test]
     public function when_the_hourly_invite_allowance_is_spent_then_the_next_invite_is_throttled(): void
     {
