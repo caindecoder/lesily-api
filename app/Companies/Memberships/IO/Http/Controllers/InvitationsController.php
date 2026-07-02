@@ -2,10 +2,12 @@
 
 namespace App\Companies\Memberships\IO\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Companies\Entities\Company;
 use App\Companies\Memberships\UseCases\Commands\InviteUserCommand;
+use App\Companies\Memberships\IO\Http\Resources\InvitationResource;
 use App\Companies\Memberships\UseCases\Interactors\InviteUserInteractor;
 
 /**
@@ -22,9 +24,11 @@ class InvitationsController
         /** @var Company $company — resolved + membership-validated by auth.company */
         $company = $request->attributes->get('company');
 
-        $interactor->execute($company, $command);
+        /** @var User $actor — guaranteed by auth:sanctum */
+        $actor = $request->user();
 
-        // The InvitationResource payload arrives with the happy-path lap.
-        return response()->json([], 201);
+        $invitation = $interactor->execute($company, $actor, $command);
+
+        return (new InvitationResource($invitation))->response($request)->setStatusCode(201);
     }
 }

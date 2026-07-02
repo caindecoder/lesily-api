@@ -11,9 +11,13 @@ use App\Companies\Entities\CompanyUser;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Tests\Feature\Companies\CompaniesTestCase;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Companies\Memberships\Events\UserInvited;
+use App\Companies\Memberships\Entities\Invitation;
+use App\Companies\Memberships\Mail\InvitationMail;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
  * Shared fixtures for the membership (team-invite) feature tests (§2.10). Callers
@@ -142,5 +146,46 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         CompanyUser::query()->whereKey($membershipId)->update(['deleted_at' => now()]);
 
         return $membershipId;
+    }
+
+    /**
+     * A pending invitation for ($company, $email) is stored the D3 way — the role
+     * assigned, not yet accepted, a sha256 hash at rest (never the plaintext),
+     * 7-day expiry — and the write was event-sourced: a UserInvited stored event
+     * carries this invitation's id (amendment R — a direct read-model write must
+     * fail this assertion).
+     */
+    protected function assertPendingInvitationCreated(Company $company, string $email, string $roleCode): void
+    {
+        $invitation = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->sole();
+
+        $this->assertSame($this->seededRole($roleCode)->getKey(), $invitation->role_id);
+        $this->assertNull($invitation->accepted_at);
+        $this->assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $invitation->token_hash);
+        $this->assertEqualsWithDelta(now()->addDays(7)->getTimestamp(), $invitation->expires_at->getTimestamp(), 10);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserInvited::class)
+            ->where('event_properties->invitationId', $invitation->getKey())
+            ->count());
+    }
+
+    /**
+     * Exactly one InvitationMail was queued to $email, and its accept-link carries
+     * the plaintext token + the urlencoded email — the plaintext exists only in
+     * the mail, never at rest (D3).
+     */
+    protected function assertInvitationMailQueued(string $email): void
+    {
+        Mail::assertQueued(InvitationMail::class, 1);
+        Mail::assertQueued(InvitationMail::class, function (InvitationMail $mail) use ($email): bool {
+            $this->assertTrue($mail->hasTo($email));
+            $this->assertMatchesRegularExpression('/token=[A-Za-z0-9]{40}/', $mail->acceptUrl());
+            $this->assertStringContainsString('email='.urlencode($email), $mail->acceptUrl());
+
+            return true;
+        });
     }
 }

@@ -3,6 +3,8 @@
 namespace App\Companies\Memberships\Projectors;
 
 use App\Companies\Entities\CompanyUser;
+use App\Companies\Memberships\Events\UserInvited;
+use App\Companies\Memberships\Entities\Invitation;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 
@@ -15,6 +17,26 @@ use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
  */
 class MembershipProjector extends Projector
 {
+    /**
+     * Upsert, not insert: a re-invite of a removed member reuses the SAME
+     * invitation row (id = the resumed aggregate's UUID — D5b), so the fresh
+     * token/role/expiry replace the old ones and accepted_at resets to pending.
+     */
+    public function onUserInvited(UserInvited $event): void
+    {
+        Invitation::query()->updateOrCreate(
+            ['id' => $event->invitationId],
+            [
+                'company_id' => $event->companyId,
+                'role_id' => $event->roleId,
+                'email' => $event->email,
+                'token_hash' => $event->tokenHash,
+                'expires_at' => $event->expiresAt,
+                'accepted_at' => null,
+            ],
+        );
+    }
+
     public function onUserMembershipEmergencyContactSet(UserMembershipEmergencyContactSet $event): void
     {
         CompanyUser::query()

@@ -153,4 +153,39 @@ class InviteUserTest extends MembershipsTestCase
         // Then the invite is throttled
         $this->assertThrottled($response);
     }
+
+    // --- Happy ---
+
+    #[Test]
+    #[DataProvider('provideInvitingRoles')]
+    public function when_an_authorized_role_invites_a_new_email_then_a_pending_invitation_is_created(string $roleCode): void
+    {
+        // Given a member holding a role that may invite
+        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+
+        // When they invite a brand-new email
+        $response = $this->invite($actor, $company, [
+            'email' => 'newuser@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then a pending invitation is stored (hashed token at rest, 7-day expiry,
+        // event-sourced) and the invite email is queued with the plaintext accept-link
+        $response->assertStatus(201);
+        $response->assertJsonStructure(['data' => ['id', 'email', 'role', 'expires_at']]);
+        $this->assertPendingInvitationCreated($company, 'newuser@contoso.lk', 'employee');
+        $this->assertInvitationMailQueued('newuser@contoso.lk');
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideInvitingRoles(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+            'hr officer' => ['hr_officer'],
+        ];
+    }
 }

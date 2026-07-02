@@ -4,16 +4,26 @@ namespace App\Companies\Memberships\UseCases\Interactors;
 
 use App\Models\User;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Mail;
 use App\Companies\Entities\CompanyUser;
+use App\Companies\Memberships\Entities\Invitation;
+use App\Companies\Memberships\Mail\InvitationMail;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Companies\Memberships\Exceptions\AlreadyMemberException;
 use App\Companies\Memberships\UseCases\Commands\InviteUserCommand;
+use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 
+/**
+ * Invite a user to the company (UC-1-018): guard, mint the bearer token, record
+ * UserInvited (tokenHash only — D3), and dispatch the accept-link email INLINE —
+ * a reactor only sees the event, which deliberately lacks the plaintext
+ * (ForgotPasswordInteractor precedent; R8).
+ */
 class InviteUserInteractor
 {
-    public function execute(Company $company, InviteUserCommand $command): void
+    public function execute(Company $company, User $actor, InviteUserCommand $command): Invitation
     {
         $userId = User::query()->where('email', $command->email)->value('id');
 
@@ -23,26 +33,44 @@ class InviteUserInteractor
             throw new AlreadyMemberException;
         }
 
-        $removedMembershipId = $userId === null ? null : CompanyUser::onlyTrashed()
+        // A removed member's re-invite resumes their membership stream (stable
+        // UUID = the soft-deleted pivot's id — D5b); a fresh invite opens a new one.
+        $membershipId = $this->removedMembershipId($company, $userId) ?? (string) Str::uuid7();
+        $plaintextToken = Str::random(40);
+
+        UserMembership::retrieve($membershipId)
+            ->invite(CreateInvitationCommand::validateAndCreate([
+                'companyId' => $company->getKey(),
+                'email' => $command->email,
+                'roleId' => Role::query()->where('code', $command->roleCode)->sole()->getKey(),
+                'invitedByUserId' => $actor->getKey(),
+                'plaintextToken' => $plaintextToken,
+            ]))
+            ->persist();
+
+        $invitation = Invitation::query()->findOrFail($membershipId);
+
+        Mail::to($command->email)->queue(new InvitationMail(
+            companyName: $company->name,
+            email: $command->email,
+            plaintextToken: $plaintextToken,
+            expiresAt: $invitation->expires_at,
+        ));
+
+        return $invitation;
+    }
+
+    private function removedMembershipId(Company $company, ?string $userId): ?string
+    {
+        if ($userId === null) {
+            return null;
+        }
+
+        $membershipId = CompanyUser::onlyTrashed()
             ->where('company_id', $company->getKey())
             ->where('user_id', $userId)
             ->value('id');
 
-        // Fake-It (lap 6): a removed member's re-invite reuses the soft-deleted
-        // membership's UUID as the invitation id (D5b — stable FK anchor). The
-        // event-sourced UserMembership aggregate + MembershipProjector replace
-        // this direct write in the happy-path lap.
-        if ($removedMembershipId !== null) {
-            DB::table('invitations')->insert([
-                'id' => $removedMembershipId,
-                'company_id' => $company->getKey(),
-                'role_id' => Role::query()->where('code', $command->roleCode)->sole()->getKey(),
-                'email' => $command->email,
-                'token_hash' => hash('sha256', Str::random(40)),
-                'expires_at' => now()->addDays(7),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
+        return $membershipId === null ? null : (string) $membershipId;
     }
 }
