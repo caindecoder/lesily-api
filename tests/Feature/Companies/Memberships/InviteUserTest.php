@@ -3,8 +3,10 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
+use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Mail;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
@@ -239,5 +241,27 @@ class InviteUserTest extends MembershipsTestCase
             'company_id' => $company->getKey(),
             'user_id' => $alice->getKey(),
         ]);
+    }
+
+    #[Test]
+    public function when_a_multicompany_admin_invites_then_the_invitation_is_scoped_to_the_context_company(): void
+    {
+        // Given an admin of two companies, acting in the SECOND company's context
+        // (so resolving the actor's first company instead of the request context
+        // would be caught)
+        [$companyA, $admin] = $this->aCompanyWithMember('admin');
+        $companyB = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $this->attachMember($companyB, $admin, $this->seededRole('admin'));
+
+        // When they invite a new email under company B's context
+        $response = $this->invite($admin, $companyB, [
+            'email' => 'newuser@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then the invitation belongs to company B alone
+        $response->assertStatus(201);
+        $this->assertPendingInvitationCreated($companyB, 'newuser@contoso.lk', 'employee');
+        $this->assertDatabaseMissing('invitations', ['company_id' => $companyA->getKey()]);
     }
 }
