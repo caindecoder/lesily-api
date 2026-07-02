@@ -14,8 +14,10 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 /**
  * The team-invite email (UC-1-018, R8): a raw queued Mailable to the invitee's
  * address — NOT a SystemNotification, because a brand-new invitee has no User
- * yet (D8). The accept-link carries the plaintext token; only its sha256 is at
- * rest (D3).
+ * yet (D8). The accept-link carries the plaintext token; the invitations table
+ * and the event stream hold only its sha256 (D3). Being queued, the plaintext
+ * rides the serialized job payload until delivery — the accepted reset-link-
+ * parity tradeoff.
  */
 class InvitationMail extends Mailable implements ShouldQueue
 {

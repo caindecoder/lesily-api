@@ -7,8 +7,8 @@ use Spatie\EventSourcing\StoredEvents\ShouldBeStored;
 
 /**
  * Genesis of the UserMembership stream (SM-1-01 T1: [*] → Invited). Carries the
- * sha256 tokenHash, never the plaintext — the accept-link secret exists only in
- * the InvitationMail the interactor dispatches inline (D3/R10).
+ * sha256 tokenHash, never the plaintext — the accept-link secret leaves the
+ * interactor only inside the InvitationMail it dispatches inline (D3/R10).
  */
 class UserInvited extends ShouldBeStored
 {

@@ -9,8 +9,10 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class InviteUserTest extends MembershipsTestCase
 {
@@ -105,6 +107,7 @@ class InviteUserTest extends MembershipsTestCase
         return [
             'malformed email' => [['email' => 'not-an-email', 'roleCode' => 'employee'], 'email'],
             'empty email' => [['email' => '', 'roleCode' => 'employee'], 'email'],
+            'over-long email' => [['email' => str_repeat('a', 64).'@'.str_repeat('b', 60).'.'.str_repeat('c', 60).'.'.str_repeat('d', 60).'.'.str_repeat('e', 60).'.lk', 'roleCode' => 'employee'], 'email'],
             'missing role code' => [['email' => 'newuser@contoso.lk'], 'roleCode'],
             'unknown role code' => [['email' => 'newuser@contoso.lk', 'roleCode' => 'super_admin'], 'roleCode'],
         ];
@@ -169,6 +172,38 @@ class InviteUserTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_a_pending_invitation_has_expired_then_the_email_can_be_reinvited(): void
+    {
+        // Given an invitation that expired without acceptance
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->invite($admin, $company, [
+            'email' => 'slow@contoso.lk',
+            'roleCode' => 'employee',
+        ])->assertStatus(201);
+        $this->travel(8)->days();
+
+        // When the admin re-invites the same email
+        $response = $this->invite($admin, $company, [
+            'email' => 'slow@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then a FRESH pending invitation is issued (expiry is terminal — SM-1-01
+        // T5: re-engagement is a new stream/row) and the expired row is preserved
+        $response->assertStatus(201);
+        $rows = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', 'slow@contoso.lk')
+            ->orderBy('expires_at')
+            ->get();
+        $this->assertCount(2, $rows);
+        [$expired, $fresh] = $rows->all();
+        $this->assertTrue($expired->expires_at->isPast());
+        $this->assertTrue($fresh->expires_at->isFuture());
+        Mail::assertQueued(InvitationMail::class, 2);
+    }
+
+    #[Test]
     public function when_the_hourly_invite_allowance_is_spent_then_the_next_invite_is_throttled(): void
     {
         // Given an admin who has spent the full hourly invite allowance
@@ -205,7 +240,7 @@ class InviteUserTest extends MembershipsTestCase
         $response->assertStatus(201);
         $response->assertJsonStructure(['data' => ['id', 'email', 'role', 'expires_at']]);
         $this->assertPendingInvitationCreated($company, 'newuser@contoso.lk', 'employee');
-        $this->assertInvitationMailQueued('newuser@contoso.lk');
+        $this->assertInvitationMailQueued($company, 'newuser@contoso.lk');
     }
 
     /**
@@ -237,6 +272,7 @@ class InviteUserTest extends MembershipsTestCase
         // only by accepting while authenticated (D7; the pivot lands at UC-1-019)
         $response->assertStatus(201);
         $this->assertPendingInvitationCreated($company, 'alice@example.lk', 'employee');
+        $this->assertInvitationMailQueued($company, 'alice@example.lk');
         $this->assertDatabaseMissing('company_user', [
             'company_id' => $company->getKey(),
             'user_id' => $alice->getKey(),
@@ -259,9 +295,14 @@ class InviteUserTest extends MembershipsTestCase
             'roleCode' => 'employee',
         ]);
 
-        // Then the invitation belongs to company B alone
+        // Then the invitation belongs to company B alone and records the inviter
         $response->assertStatus(201);
         $this->assertPendingInvitationCreated($companyB, 'newuser@contoso.lk', 'employee');
         $this->assertDatabaseMissing('invitations', ['company_id' => $companyA->getKey()]);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserInvited::class)
+            ->where('event_properties->companyId', $companyB->getKey())
+            ->where('event_properties->invitedBy', $admin->getKey())
+            ->count());
     }
 }

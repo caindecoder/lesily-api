@@ -62,7 +62,7 @@ class InviteUserInteractor
             ]))
             ->persist();
 
-        $invitation = Invitation::query()->findOrFail($membershipId);
+        $invitation = Invitation::query()->with('role')->findOrFail($membershipId);
 
         Mail::to($command->email)->queue(new InvitationMail(
             companyName: $company->name,

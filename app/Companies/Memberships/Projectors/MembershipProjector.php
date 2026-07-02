@@ -9,11 +9,14 @@ use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 
 /**
- * Membership-attribute projections from the User identity stream (slice C1). The
- * owner pivot itself is written by CompanyProjector::onCompanyCreated — the FK
- * chain (users → companies → company_user) means the pivot can only land once the
- * company row exists, so CompanyCreated (which carries ownerUserId) is the trigger;
- * by the time this EC event persists, the pivot row is in place.
+ * The membership read-model writer, fed by TWO streams: the UserMembership
+ * aggregate's invite lifecycle (UserInvited → the invitations table; the later
+ * accept/revoke/expire/role-change/remove arms land with their slice tasks) and
+ * the User identity stream's membership attributes (emergency contact → the
+ * company_user pivot, slice C1). The owner pivot itself is written by
+ * CompanyProjector::onCompanyCreated — the FK chain (users → companies →
+ * company_user) means the pivot can only land once the company row exists;
+ * by the time the EC event persists, the pivot row is in place.
  */
 class MembershipProjector extends Projector
 {

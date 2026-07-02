@@ -75,12 +75,13 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
-     * No invitation was persisted and no invite email was queued — the guard
-     * rejected before any side effect.
+     * No invitation was persisted, no UserInvited event was recorded, and no
+     * invite email was queued — the guard rejected before any side effect.
      */
     protected function assertNoInvitationCreated(): void
     {
         $this->assertDatabaseCount('invitations', 0);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserInvited::class)->count());
         Mail::assertNothingQueued();
     }
 
@@ -166,26 +167,42 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $this->assertNull($invitation->accepted_at);
         $this->assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $invitation->token_hash);
         $this->assertEqualsWithDelta(now()->addDays(7)->getTimestamp(), $invitation->expires_at->getTimestamp(), 10);
+        // The event's own payload must match the projected row — proving the
+        // projector copied the event verbatim, not a coincidental direct write.
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', UserInvited::class)
             ->where('event_properties->invitationId', $invitation->getKey())
+            ->where('event_properties->companyId', $company->getKey())
+            ->where('event_properties->email', $email)
+            ->where('event_properties->tokenHash', $invitation->token_hash)
             ->count());
     }
 
     /**
-     * Exactly one InvitationMail was queued to $email, and its accept-link carries
-     * the plaintext token + the urlencoded email — the plaintext exists only in
-     * the mail, never at rest (D3).
+     * Exactly one InvitationMail was queued to $email, its accept-link carries the
+     * plaintext token + the urlencoded email, and that emailed plaintext sha256s to
+     * the stored token_hash — the correspondence that makes the accept lookup work
+     * (D3; the invitations table holds only the hash).
      */
-    protected function assertInvitationMailQueued(string $email): void
+    protected function assertInvitationMailQueued(Company $company, string $email): void
     {
         Mail::assertQueued(InvitationMail::class, 1);
-        Mail::assertQueued(InvitationMail::class, function (InvitationMail $mail) use ($email): bool {
+
+        $plaintextToken = null;
+        Mail::assertQueued(InvitationMail::class, function (InvitationMail $mail) use ($email, &$plaintextToken): bool {
             $this->assertTrue($mail->hasTo($email));
             $this->assertMatchesRegularExpression('/token=[A-Za-z0-9]{40}/', $mail->acceptUrl());
             $this->assertStringContainsString('email='.urlencode($email), $mail->acceptUrl());
+            $plaintextToken = $mail->plaintextToken;
 
             return true;
         });
+
+        $storedHash = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->sole()
+            ->token_hash;
+        $this->assertSame(hash('sha256', (string) $plaintextToken), $storedHash);
     }
 }
