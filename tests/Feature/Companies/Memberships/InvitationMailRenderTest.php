@@ -2,9 +2,11 @@
 
 namespace Tests\Feature\Companies\Memberships;
 
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Exceptions;
 use App\Companies\Memberships\Mail\InvitationMail;
 
 /**
@@ -51,6 +53,23 @@ class InvitationMailRenderTest extends MembershipsTestCase
 
         // When / Then
         $mail->assertHasSubject('You have been invited to join Contoso on Lesily');
+    }
+
+    #[Test]
+    public function when_the_invite_email_delivery_fails_then_the_failure_is_logged_without_alerting_the_inviter(): void
+    {
+        // Given
+        Exceptions::fake();
+        $mail = $this->anInvitationMail();
+
+        // When the queued mail exhausts its retries
+        $mail->failed(new RuntimeException('Mail server unavailable'));
+
+        // Then the failure is reported for ops with the retry config intact — the
+        // inviter is never alerted (the pending invitation stays resendable, UC-1-021)
+        Exceptions::assertReported(RuntimeException::class);
+        $this->assertSame(3, $mail->tries);
+        $this->assertSame([1, 5, 15], $mail->backoff);
     }
 
     private function anInvitationMail(): InvitationMail
