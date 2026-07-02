@@ -13,4 +13,10 @@ return [
      * broker's single-use token + the email it is keyed to (both needed by the reset submit).
      */
     'password_reset_url' => env('CLIENT_PASSWORD_RESET_URL', "$clientUrl/reset-password"),
+
+    /*
+     * The web app's accept-invitation page. The team-invite email links here, appending the
+     * single-use plaintext token + the invitee email (reset-link parity; UC-1-018/019).
+     */
+    'invitation_url' => env('CLIENT_INVITATION_URL', "$clientUrl/accept-invitation"),
 ];

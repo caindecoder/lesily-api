@@ -16,6 +16,7 @@ use App\Foundation\Auth\IO\Http\Controllers\EnableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\ConfirmTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\DisableTwoFactorController;
+use App\Companies\Memberships\IO\Http\Controllers\InvitationsController;
 use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
 use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
 
@@ -140,3 +141,10 @@ Route::delete('/v1/me/sessions/{tokenId}', RevokeSessionController::class)
 // (UserPasswordChanged -> UserProjector) and every OTHER session is revoked; the current survives -> 204.
 Route::put('/v1/me/password', ChangePasswordController::class)
     ->middleware(['auth:sanctum', 'throttle:auth-tier', 'idempotency-key:required']);
+
+// Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
+// a pending invitation is created and the invite email dispatched inline. auth:sanctum
+// -> auth.company -> permission:users.invite (D4 — seeded to owner/admin/hr_officer)
+// -> throttle:invitations (20/hr per actor, D9).
+Route::post('/v1/invitations', [InvitationsController::class, 'store'])
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.invite', 'throttle:invitations']);
