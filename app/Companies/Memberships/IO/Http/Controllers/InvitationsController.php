@@ -9,13 +9,13 @@ use App\Companies\Memberships\UseCases\Commands\InviteUserCommand;
 use App\Companies\Memberships\UseCases\Interactors\InviteUserInteractor;
 
 /**
- * Invite a user to the company by email (UC-1-018). Single-action, matching the
- * codebase's per-endpoint controller convention (the design's multi-action
- * InvitationsController is reconciled to per-action controllers at slice close).
+ * The company's invitation resource — invite (UC-1-018), resend (UC-1-021), and
+ * revoke (UC-1-022). Multi-action resource controller per the subscription-platform
+ * convention + cd-users §5.
  */
-class InviteUserController
+class InvitationsController
 {
-    public function __invoke(Request $request, InviteUserInteractor $interactor): JsonResponse
+    public function store(Request $request, InviteUserInteractor $interactor): JsonResponse
     {
         $command = InviteUserCommand::validateAndCreate($request);
 
