@@ -217,4 +217,27 @@ class InviteUserTest extends MembershipsTestCase
             'hr officer' => ['hr_officer'],
         ];
     }
+
+    #[Test]
+    public function when_an_existing_nonmember_user_is_invited_then_a_pending_invitation_is_created_without_a_membership(): void
+    {
+        // Given an existing user who is not a member of the company
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $alice = User::factory()->withEmail('alice@example.lk')->create();
+
+        // When the admin invites alice's email
+        $response = $this->invite($admin, $company, [
+            'email' => 'alice@example.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then a pending invitation exists but NO membership pivot — alice joins
+        // only by accepting while authenticated (D7; the pivot lands at UC-1-019)
+        $response->assertStatus(201);
+        $this->assertPendingInvitationCreated($company, 'alice@example.lk', 'employee');
+        $this->assertDatabaseMissing('company_user', [
+            'company_id' => $company->getKey(),
+            'user_id' => $alice->getKey(),
+        ]);
+    }
 }
