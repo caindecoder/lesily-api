@@ -28,4 +28,21 @@ class InviteUserTest extends MembershipsTestCase
         $response->assertJsonPath('error_code', 'ALREADY_MEMBER');
         $this->assertNoInvitationCreated();
     }
+
+    #[Test]
+    public function when_the_requested_role_is_owner_then_the_invite_is_rejected(): void
+    {
+        // Given an admin of a company
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+
+        // When the admin invites a new email with the owner role
+        $response = $this->invite($admin, $company, [
+            'email' => 'newuser@contoso.lk',
+            'roleCode' => 'owner',
+        ]);
+
+        // Then the owner role is refused as not invitable and nothing is created
+        $this->assertInviteValidationRejected($response, 'roleCode');
+        $this->assertNoInvitationCreated();
+    }
 }
