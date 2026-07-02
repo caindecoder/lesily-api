@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
 
 class InviteUserTest extends MembershipsTestCase
 {
@@ -75,6 +76,36 @@ class InviteUserTest extends MembershipsTestCase
             'empty email' => [['email' => '', 'roleCode' => 'employee'], 'email'],
             'missing role code' => [['email' => 'newuser@contoso.lk'], 'roleCode'],
             'unknown role code' => [['email' => 'newuser@contoso.lk', 'roleCode' => 'super_admin'], 'roleCode'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('provideNonInvitingRoles')]
+    public function when_the_actor_role_lacks_the_invite_permission_then_the_invite_is_denied(string $roleCode): void
+    {
+        // Given a member whose role does not carry users.invite
+        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+
+        // When they attempt to invite a new email
+        $response = $this->invite($actor, $company, [
+            'email' => 'newuser@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then the invite is denied for the missing permission and nothing is created
+        $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
+        $this->assertNoInvitationCreated();
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideNonInvitingRoles(): array
+    {
+        return [
+            'payroll officer' => ['payroll_officer'],
+            'employee' => ['employee'],
+            'auditor' => ['auditor'],
         ];
     }
 }

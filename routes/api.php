@@ -144,7 +144,7 @@ Route::put('/v1/me/password', ChangePasswordController::class)
 
 // Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
 // a pending invitation is created and the invite email dispatched inline. auth:sanctum
-// -> auth.company. The permission (users.invite) + throttle (invitations) gates arrive
-// with their driving tests (RED-first).
+// -> auth.company -> permission:users.invite (D4 — seeded to owner/admin/hr_officer).
+// The throttle (invitations) gate arrives with its driving test (RED-first).
 Route::post('/v1/invitations', [InvitationsController::class, 'store'])
-    ->middleware(['auth:sanctum', 'auth.company']);
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.invite']);

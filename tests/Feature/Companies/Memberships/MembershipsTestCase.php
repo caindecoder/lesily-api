@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Tests\Feature\Companies\CompaniesTestCase;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
@@ -87,5 +88,15 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
         $response->assertJsonValidationErrors($field);
+    }
+
+    /**
+     * Assert a request was refused with the §S21 envelope for $code (status +
+     * error_code). Mirrors AuthTestCase's helper (§2.10).
+     */
+    protected function assertRefusedWith(TestResponse $response, ApiErrorCode $code): void
+    {
+        $response->assertStatus($code->status());
+        $response->assertJsonPath('error_code', $code->value);
     }
 }
