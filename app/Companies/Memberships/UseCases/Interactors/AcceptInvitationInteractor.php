@@ -63,8 +63,12 @@ class AcceptInvitationInteractor
                 ->persist();
         });
 
+        // The live pivot for (company, joiner) — normally the invitation's own
+        // UUID (D5b); on an idempotent alt-4a accept, the earlier membership
+        // the projector kept canonical.
         return CompanyUser::query()
-            ->whereKey($invitation->getKey())
+            ->where('company_id', $invitation->company_id)
+            ->where('user_id', $joiner->getKey())
             ->with(['user', 'role'])
             ->sole();
     }

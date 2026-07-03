@@ -55,6 +55,20 @@ class MembershipProjector extends Projector
         $invitation = Invitation::query()->findOrFail($event->membershipId);
         $invitation->update(['accepted_at' => $event->joinedAt]);
 
+        // Idempotent accept (UC alt-4a): if the member already holds a LIVE
+        // pivot from an earlier stream (the OQ-1-126 duplicate-invite race),
+        // that membership stays canonical — consuming the leftover invitation
+        // must not mint a second row. Replay-safe: same outcome every replay.
+        $alreadyMember = CompanyUser::query()
+            ->where('company_id', $invitation->company_id)
+            ->where('user_id', $event->userId)
+            ->whereKeyNot($event->membershipId)
+            ->exists();
+
+        if ($alreadyMember) {
+            return;
+        }
+
         CompanyUser::withTrashed()->updateOrCreate(
             ['id' => $event->membershipId],
             [

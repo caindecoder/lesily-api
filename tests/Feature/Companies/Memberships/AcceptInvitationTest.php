@@ -3,9 +3,14 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
+use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Companies\Memberships\Entities\Invitation;
+use App\Companies\Memberships\Aggregates\UserMembership;
+use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 
 /**
  * UC-1-019 — Accept Company Invitation (membership slice #7, Task 3).
@@ -153,5 +158,38 @@ class AcceptInvitationTest extends MembershipsTestCase
         $response->assertOk();
         $response->assertJsonPath('data.id', $membershipId);
         $this->assertMembershipActivated($company, 'ruwan@member.lk');
+    }
+
+    #[Test]
+    public function when_an_active_member_accepts_a_second_pending_invitation_then_no_duplicate_membership_is_created(): void
+    {
+        // Given — an active member, plus a leftover pending invitation for their
+        // email: the OQ-1-126 concurrent-invite race artifact, seeded through the
+        // guardless aggregate exactly as the race would produce it
+        [$company, $actor] = $this->aCompanyWithMember();
+        $member = User::factory()->withEmail('ruwan@member.lk')->create();
+        $this->attachMember($company, $member, $this->seededRole('employee'));
+        $plaintext = Str::random(40);
+        UserMembership::retrieve((string) Str::uuid7())
+            ->invite(CreateInvitationCommand::from([
+                'companyId' => $company->getKey(),
+                'email' => 'ruwan@member.lk',
+                'roleId' => $this->seededRole('employee')->getKey(),
+                'invitedByUserId' => $actor->getKey(),
+                'plaintextToken' => $plaintext,
+            ]))
+            ->persist();
+
+        // When — they accept the leftover invitation while authenticated
+        $response = $this->acceptInvitation($plaintext, [], $member);
+
+        // Then — idempotent (UC alt-4a): the invitation is consumed but exactly
+        // ONE membership row exists; their original membership stays canonical
+        $response->assertOk();
+        $this->assertNotNull(Invitation::query()->where('email', 'ruwan@member.lk')->sole()->accepted_at);
+        $this->assertSame(1, CompanyUser::withTrashed()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $member->getKey())
+            ->count());
     }
 }
