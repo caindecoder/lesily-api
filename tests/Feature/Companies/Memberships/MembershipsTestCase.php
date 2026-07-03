@@ -223,6 +223,44 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
+     * Accept an invitation via its plaintext token — as a guest by default, or
+     * authenticated when $as is given (the existing-user branch, R9/D7).
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function acceptInvitation(string $token, array $body = [], ?User $as = null): TestResponse
+    {
+        if ($as instanceof User) {
+            Sanctum::actingAs($as);
+        }
+
+        return $this->postJson('/api/v1/invitations/accept/'.$token, $body);
+    }
+
+    /**
+     * A valid new-user acceptance body — name + a policy-passing password (H6:
+     * the token rides the route; the invitee email lives on the invitation row).
+     *
+     * @return array<string, string>
+     */
+    protected function validNewUserBody(): array
+    {
+        return ['name' => 'Nimal Perera', 'password' => 'Str0ng-Pass!'];
+    }
+
+    /**
+     * A refused accept changed nothing: no user account was created, no
+     * membership pivot was written, and no invitation was marked accepted —
+     * the guard rejected before any state change.
+     */
+    protected function assertNothingAccepted(): void
+    {
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('company_user', 0);
+        $this->assertSame(0, Invitation::query()->whereNotNull('accepted_at')->count());
+    }
+
+    /**
      * A pending invitation for ($company, $email) is stored the D3 way — the role
      * assigned, not yet accepted, a sha256 hash at rest (never the plaintext),
      * 7-day expiry — and the write was event-sourced: a UserInvited stored event

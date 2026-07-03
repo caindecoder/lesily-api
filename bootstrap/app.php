@@ -33,6 +33,7 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
+use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
 use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
@@ -138,6 +139,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (InvalidResetLinkException $e) => EnvelopeBuilder::build(
             ApiErrorCode::ResetLinkInvalid,
             'This reset link is invalid or has expired. Request a new one.',
+        ));
+
+        // An accept token that resolves to no live pending invitation — never issued,
+        // expired, already used, or (Task 5) revoked. ONE collapsed code + message for
+        // every cause so a probe cannot learn token state (UC-1-019, H4 session 109).
+        $exceptions->render(fn (InvalidInvitationException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::InviteInvalid,
+            $e->getMessage(),
         ));
 
         // A Pro/Enterprise account at its concurrent-device limit tried to open a 4th

@@ -19,6 +19,7 @@ enum ApiErrorCode: string
     case TwoFactorNotEnabled = 'TWO_FACTOR_NOT_ENABLED';
     case IncorrectPassword = 'INCORRECT_PASSWORD';
     case ResetLinkInvalid = 'RESET_LINK_INVALID';
+    case InviteInvalid = 'INVITE_INVALID';
     case ResourceNotFound = 'RESOURCE_NOT_FOUND';
     case EmailRegistered = 'EMAIL_REGISTERED';
     case BrNumberRegistered = 'BR_NUMBER_REGISTERED';
@@ -51,6 +52,7 @@ enum ApiErrorCode: string
             self::TwoFactorNotEnabled => 422,
             self::IncorrectPassword => 401,
             self::ResetLinkInvalid => 422,
+            self::InviteInvalid => 422,
             self::ResourceNotFound => 404,
             self::EmailRegistered => 409,
             self::BrNumberRegistered => 409,
