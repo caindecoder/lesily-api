@@ -18,6 +18,13 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
                 $filters->role !== null,
                 fn ($query) => $query->whereRelation('role', 'code', $filters->role)
             )
+            ->when(
+                // Every pivot row derives status 'active' this increment, so the
+                // invited filter matches nothing by construction — pending
+                // invitations join the roster at Task 4 (slice §7, declared s108).
+                $filters->status === 'invited',
+                fn ($query) => $query->whereRaw('0 = 1')
+            )
             ->with(['user', 'role'])
             ->orderBy(
                 // Default sort: member name ascending (api-1-users). Subquery over a

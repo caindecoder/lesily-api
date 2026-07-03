@@ -191,4 +191,32 @@ class ViewMembershipsTest extends MembershipsTestCase
         // Then only the HR officer memberships are listed
         $this->assertRosterUserIds($response, [$saman->getKey(), $ravi->getKey()]);
     }
+
+    #[Test]
+    #[DataProvider('provideStatusFilters')]
+    public function when_filtered_by_status_then_matching_members_listed(string $status, bool $expectsRoster): void
+    {
+        // Given a company with an owner and one more member
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $member = User::factory()->create();
+        $this->attachMember($company, $member, $this->seededRole('employee'));
+
+        // When the owner filters the roster by that status
+        $response = $this->viewMemberships($owner, $company, ['status' => $status]);
+
+        // Then active lists every membership; invited is empty until the
+        // pending-invitation union lands (Task 4, slice §7 — declared s108)
+        $this->assertRosterUserIds($response, $expectsRoster ? [$owner->getKey(), $member->getKey()] : []);
+    }
+
+    /**
+     * @return array<string, array{string, bool}>
+     */
+    public static function provideStatusFilters(): array
+    {
+        return [
+            'active lists memberships' => ['active', true],
+            'invited empty until the union lands' => ['invited', false],
+        ];
+    }
 }
