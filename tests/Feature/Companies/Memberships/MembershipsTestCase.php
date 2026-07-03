@@ -20,6 +20,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
+use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -369,6 +370,9 @@ abstract class MembershipsTestCase extends CompaniesTestCase
             'data->notification_type' => 'team_welcome',
             'data->company_name' => $company->name,
         ]);
+        // The mail leg is queued too (TeamWelcome is non-critical, no opt-out
+        // exists in these tests) — pins the QueuedMailChannel wiring.
+        Mail::assertQueued(SystemNotificationMail::class, fn (SystemNotificationMail $mail): bool => $mail->hasTo($email));
     }
 
     /**

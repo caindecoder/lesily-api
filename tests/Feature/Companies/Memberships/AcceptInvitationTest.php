@@ -134,9 +134,28 @@ class AcceptInvitationTest extends MembershipsTestCase
     {
         return [
             'password missing' => [['name' => 'Nimal Perera'], 'password'],
+            'password empty' => [['name' => 'Nimal Perera', 'password' => ''], 'password'],
             'password below the 8-char minimum' => [['name' => 'Nimal Perera', 'password' => 'Short7!'], 'password'],
             'name missing' => [['password' => 'Str0ng-Pass!'], 'name'],
+            'name whitespace only' => [['name' => '   ', 'password' => 'Str0ng-Pass!'], 'name'],
+            'name beyond the 255-char column' => [['name' => str_repeat('a', 256), 'password' => 'Str0ng-Pass!'], 'name'],
         ];
+    }
+
+    #[Test]
+    public function when_too_many_accept_attempts_arrive_then_they_are_throttled(): void
+    {
+        // Given — the shared public-auth allowance (10/min per IP) spent on
+        // token-guessing attempts
+        for ($i = 0; $i < 10; $i++) {
+            $this->acceptInvitation("guessed-token-{$i}")->assertStatus(422);
+        }
+
+        // When — one more attempt arrives from the same IP
+        $response = $this->acceptInvitation('guessed-token-final');
+
+        // Then — throttled with retry guidance (the token-guessing brake)
+        $this->assertThrottled($response);
     }
 
     #[Test]
@@ -190,6 +209,11 @@ class AcceptInvitationTest extends MembershipsTestCase
         [$company, $actor] = $this->aCompanyWithMember();
         $member = User::factory()->withEmail('ruwan@member.lk')->create();
         $this->attachMember($company, $member, $this->seededRole('employee'));
+        $originalMembershipId = CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $member->getKey())
+            ->sole()
+            ->getKey();
         $plaintext = Str::random(40);
         UserMembership::retrieve((string) Str::uuid7())
             ->invite(CreateInvitationCommand::from([
@@ -205,13 +229,15 @@ class AcceptInvitationTest extends MembershipsTestCase
         $response = $this->acceptInvitation($plaintext, [], $member);
 
         // Then — idempotent (UC alt-4a): the invitation is consumed but exactly
-        // ONE membership row exists; their original membership stays canonical
+        // ONE membership row exists, and it is their ORIGINAL membership (the
+        // leftover invitation's UUID never becomes a row)
         $response->assertOk();
         $this->assertNotNull(Invitation::query()->where('email', 'ruwan@member.lk')->sole()->accepted_at);
         $this->assertSame(1, CompanyUser::withTrashed()
             ->where('company_id', $company->getKey())
             ->where('user_id', $member->getKey())
             ->count());
+        $this->assertDatabaseHas('company_user', ['id' => $originalMembershipId]);
     }
 
     #[Test]

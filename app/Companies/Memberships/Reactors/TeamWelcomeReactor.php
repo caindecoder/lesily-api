@@ -3,7 +3,6 @@
 namespace App\Companies\Memberships\Reactors;
 
 use App\Models\User;
-use App\Companies\Entities\Company;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Events\UserJoinedCompany;
@@ -25,8 +24,11 @@ class TeamWelcomeReactor extends Reactor implements ShouldQueue
 {
     public function onUserJoinedCompany(UserJoinedCompany $event): void
     {
-        $invitation = Invitation::query()->findOrFail($event->membershipId);
-        $companyName = Company::query()->findOrFail($invitation->company_id)->name;
+        $companyName = Invitation::query()
+            ->findOrFail($event->membershipId)
+            ->company()
+            ->firstOrFail()
+            ->name;
 
         User::query()
             ->findOrFail($event->userId)

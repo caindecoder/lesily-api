@@ -41,6 +41,8 @@ class AcceptInvitationInteractor
 
         // A held session must belong to the invited email (UC alt-4b; matched
         // case-insensitively per alt-4c) — whoever else is logged in, 403.
+        // The DB email lookups above rely on MySQL's CI collation for the same
+        // property; the platform-wide normalization policy is OQ-1-127 (open).
         if ($authUser instanceof User && Str::lower($authUser->email) !== Str::lower($invitation->email)) {
             throw new InviteEmailMismatchException;
         }
@@ -70,7 +72,7 @@ class AcceptInvitationInteractor
 
         DB::transaction(function () use ($invitation, $command, $userId): void {
             UserAggregate::retrieve($userId)
-                ->createFromInvitation(CreateUserFromInvitationCommand::from([
+                ->createFromInvitation(CreateUserFromInvitationCommand::validateAndCreate([
                     'companyId' => $invitation->company_id,
                     'email' => $invitation->email,
                     'passwordHash' => Hash::make((string) $command->password),

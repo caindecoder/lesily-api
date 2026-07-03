@@ -28,7 +28,9 @@ class AcceptInvitationCommand extends Data
         return [
             'token' => ['required', 'string'],
             'password' => ['nullable', 'string', 'min:8'],
-            'name' => ['nullable', 'string'],
+            // max:255 bounds the varchar-backed users.name at the HTTP boundary —
+            // beyond it the genesis projection can never succeed (review pass).
+            'name' => ['nullable', 'string', 'max:255'],
         ];
     }
 }
