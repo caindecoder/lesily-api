@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 
 class ViewMembershipsTest extends MembershipsTestCase
@@ -35,5 +36,31 @@ class ViewMembershipsTest extends MembershipsTestCase
         // Then the company context is denied (AuthorizeCompany membership check —
         // an unknown company id 404s via the resolver instead; built #03 contract)
         $this->assertRefusedWith($response, ApiErrorCode::CompanyAccessDenied);
+    }
+
+    #[Test]
+    #[DataProvider('provideNonViewingRoles')]
+    public function when_non_permitted_role_lists_memberships_then_refused(string $roleCode): void
+    {
+        // Given a member whose role does not carry users.view (2026-05-24 matrix)
+        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+
+        // When they request the roster
+        $response = $this->viewMemberships($actor, $company);
+
+        // Then the roster is denied for the missing permission
+        $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideNonViewingRoles(): array
+    {
+        return [
+            'payroll officer' => ['payroll_officer'],
+            'employee' => ['employee'],
+            'manager' => ['manager'],
+        ];
     }
 }

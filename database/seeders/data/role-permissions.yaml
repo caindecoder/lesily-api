@@ -30,8 +30,10 @@ hr_officer:
   - users.view
   - companies.view
 
+# payroll_officer: NO users.view — the matrix (§Module-3 users.view row) denies it;
+# the roster is the company-membership list, not the payroll-facing employee
+# directory (chunk-2). Seed↔matrix divergence resolved 2026-07-03 (UC-1-017 lap 3).
 payroll_officer:
-  - users.view
   - companies.view
   - billing.view
 
