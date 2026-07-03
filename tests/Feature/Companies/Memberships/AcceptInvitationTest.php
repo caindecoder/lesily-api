@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Auth;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -52,6 +53,26 @@ class AcceptInvitationTest extends MembershipsTestCase
         $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
         $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
         $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
+    }
+
+    #[Test]
+    public function when_an_accepted_invitation_is_replayed_then_it_is_refused(): void
+    {
+        // Given — an invitation already consumed by its new user
+        [$company, $actor] = $this->aCompanyWithMember();
+        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
+        Auth::forgetGuards();
+
+        // When — the same token is replayed
+        $response = $this->acceptInvitation($token, $this->validNewUserBody());
+
+        // Then — the SAME collapsed envelope (a used token is indistinguishable
+        // from an unknown one — H4); the joiner still holds exactly ONE membership
+        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertSame(1, CompanyUser::withTrashed()
+            ->whereIn('user_id', User::query()->where('email', 'kasun@newjoiner.lk')->pluck('id'))
+            ->count());
     }
 
     #[Test]
@@ -211,5 +232,25 @@ class AcceptInvitationTest extends MembershipsTestCase
         $this->assertMembershipActivated($company, 'kasun@newjoiner.lk');
         $this->assertAutoLoggedIn($response, $company);
         $this->assertTeamWelcomeQueued('kasun@newjoiner.lk', $company);
+    }
+
+    #[Test]
+    public function when_a_new_user_accepts_then_their_chosen_password_becomes_their_login_credential(): void
+    {
+        // Given — an invitation accepted with a chosen password
+        [$company, $actor] = $this->aCompanyWithMember();
+        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
+        Auth::forgetGuards();
+
+        // When — they log in with that password
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => 'kasun@newjoiner.lk',
+            'password' => $this->validNewUserBody()['password'],
+        ]);
+
+        // Then — a fresh session is issued against the accept-time credential
+        $response->assertOk();
+        $this->assertNotSame('', (string) $response->json('data.token'), 'The accept-time password must log in.');
     }
 }
