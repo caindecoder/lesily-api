@@ -18,6 +18,7 @@ use App\Companies\Memberships\UseCases\Results\ExistingUserJoined;
 use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
+use App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand;
 
 /**
  * Accept a team invitation (UC-1-019). The emailed plaintext token is hashed
@@ -69,12 +70,12 @@ class AcceptInvitationInteractor
 
         DB::transaction(function () use ($invitation, $command, $userId): void {
             UserAggregate::retrieve($userId)
-                ->createFromInvitation(
-                    $invitation->company_id,
-                    $invitation->email,
-                    Hash::make((string) $command->password),
-                    (string) $command->name,
-                )
+                ->createFromInvitation(CreateUserFromInvitationCommand::from([
+                    'companyId' => $invitation->company_id,
+                    'email' => $invitation->email,
+                    'passwordHash' => Hash::make((string) $command->password),
+                    'name' => (string) $command->name,
+                ]))
                 ->persist();
 
             UserMembership::retrieve($invitation->getKey())
