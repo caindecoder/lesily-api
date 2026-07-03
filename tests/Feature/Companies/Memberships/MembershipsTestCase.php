@@ -330,7 +330,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $user = User::query()->where('email', $email)->sole();
 
         $this->assertSame($name, $user->name);
-        $this->assertNotNull($user->password);
+        $this->assertNotSame('', $user->password, 'The provisioned account must carry a set password.');
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', UserCreatedFromInvitation::class)
             ->where('event_properties->userId', $user->getKey())
