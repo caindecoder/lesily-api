@@ -17,6 +17,7 @@ use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\ConfirmTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\DisableTwoFactorController;
 use App\Companies\Memberships\IO\Http\Controllers\InvitationsController;
+use App\Companies\Memberships\IO\Http\Controllers\MembershipsController;
 use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
 use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
 
@@ -148,3 +149,8 @@ Route::put('/v1/me/password', ChangePasswordController::class)
 // -> throttle:invitations (20/hr per actor, D9).
 Route::post('/v1/invitations', [InvitationsController::class, 'store'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:users.invite', 'throttle:invitations']);
+
+// View the company roster (UC-1-017) — active memberships with user + role, paginated
+// per api-conventions §9. Read-only (no aggregate/event — cd-users §read-only-via-repository).
+Route::get('/v1/memberships', [MembershipsController::class, 'index'])
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.view']);

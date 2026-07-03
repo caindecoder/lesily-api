@@ -81,7 +81,9 @@ class Company extends Model
     /**
      * Members of this company; the pivot carries the member's role_id, which the
      * PermissionEvaluator resolves to evaluate the role gate. attach() routes
-     * through the CompanyUser pivot so its UUID primary key is minted.
+     * through the CompanyUser pivot so its UUID primary key is minted;
+     * withTimestamps() stamps the pivot's created_at — the member's join date the
+     * roster sorts on (UC-1-017 ?sort=-created_at).
      *
      * @return BelongsToMany<User, $this, CompanyUser>
      */
@@ -89,7 +91,8 @@ class Company extends Model
     {
         return $this->belongsToMany(User::class, 'company_user', 'company_id', 'user_id')
             ->using(CompanyUser::class)
-            ->withPivot('role_id');
+            ->withPivot('role_id')
+            ->withTimestamps();
     }
 
     /**

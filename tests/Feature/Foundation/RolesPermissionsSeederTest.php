@@ -92,7 +92,8 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $afterSecond = $this->tableCounts();
 
         // Then every table's row count is stable across runs (idempotent — no duplicates)
-        $this->assertSame(['roles' => 8, 'permissions' => 8, 'role_permission' => 26], $afterFirst);
+        // 25 grants since the payroll_officer users.view seed↔matrix fix (UC-1-017 lap 3, s108).
+        $this->assertSame(['roles' => 8, 'permissions' => 8, 'role_permission' => 25], $afterFirst);
         $this->assertSame($afterFirst, $afterSecond);
     }
 
@@ -157,7 +158,8 @@ class RolesPermissionsSeederTest extends FoundationTestCase
             'owner' => 8,
             'admin' => 7,
             'hr_officer' => 3,
-            'payroll_officer' => 3,
+            // 2 since the users.view grant came out (matrix denies it — D-A, s108).
+            'payroll_officer' => 2,
             'auditor' => 4,
             'employee' => 1,
             'manager' => 0,

@@ -77,7 +77,7 @@ class InviteUserTest extends MembershipsTestCase
         ]);
 
         // Then the owner role is refused as not invitable and nothing is created
-        $this->assertInviteValidationRejected($response, 'roleCode');
+        $this->assertValidationRejected($response, 'roleCode');
         $this->assertNoInvitationCreated();
     }
 
@@ -95,7 +95,7 @@ class InviteUserTest extends MembershipsTestCase
         $response = $this->invite($admin, $company, $body);
 
         // Then the input is refused as invalid and nothing is created
-        $this->assertInviteValidationRejected($response, $invalidField);
+        $this->assertValidationRejected($response, $invalidField);
         $this->assertNoInvitationCreated();
     }
 
