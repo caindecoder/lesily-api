@@ -4,6 +4,7 @@ namespace App\Companies\Memberships\IO\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 
 /**
  * The company's membership resource — the roster listing (UC-1-017); change-role
@@ -14,6 +15,8 @@ class MembershipsController
 {
     public function index(Request $request): JsonResponse
     {
+        MembershipFilters::fromQuery($request);
+
         return response()->json(['data' => []]);
     }
 }

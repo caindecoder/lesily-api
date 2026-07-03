@@ -100,10 +100,10 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
-     * The invite was refused as shape-invalid — the validation envelope
+     * The request was refused as shape-invalid — the validation envelope
      * (error_code VALIDATION_FAILED) with an error on $field.
      */
-    protected function assertInviteValidationRejected(TestResponse $response, string $field): void
+    protected function assertValidationRejected(TestResponse $response, string $field): void
     {
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');

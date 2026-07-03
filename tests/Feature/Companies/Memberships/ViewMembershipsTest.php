@@ -63,4 +63,35 @@ class ViewMembershipsTest extends MembershipsTestCase
             'manager' => ['manager'],
         ];
     }
+
+    /**
+     * @param  array<string, mixed>  $query
+     */
+    #[Test]
+    #[DataProvider('provideInvalidQueryInputs')]
+    public function when_query_input_is_invalid_then_invalid(array $query, string $invalidField): void
+    {
+        // Given an owner of a company
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+
+        // When they request the roster with invalid query input
+        $response = $this->viewMemberships($owner, $company, $query);
+
+        // Then the input is refused as invalid on that field (api-conventions §10 —
+        // per-endpoint filter/sort whitelist, unknown params 422)
+        $this->assertValidationRejected($response, $invalidField);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function provideInvalidQueryInputs(): array
+    {
+        return [
+            'unknown filter key' => [['team' => 'x'], 'team'],
+            'non-whitelisted sort' => [['sort' => 'email'], 'sort'],
+            'per_page over max' => [['per_page' => 101], 'per_page'],
+            'non-numeric page' => [['page' => 'abc'], 'page'],
+        ];
+    }
 }
