@@ -4,9 +4,11 @@ namespace App\Companies\Memberships\UseCases\Interactors;
 
 use App\Models\User;
 use RuntimeException;
+use Illuminate\Support\Str;
 use Illuminate\Auth\AuthenticationException;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Exceptions\InvalidInvitationException;
+use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 
 /**
  * Accept a team invitation (UC-1-019). The emailed plaintext token is hashed
@@ -22,6 +24,12 @@ class AcceptInvitationInteractor
     {
         $invitation = $this->livePendingInvitation($plaintextToken);
         $invitee = User::query()->where('email', $invitation->email)->first();
+
+        // A held session must belong to the invited email (UC alt-4b; matched
+        // case-insensitively per alt-4c) — whoever else is logged in, 403.
+        if ($authUser instanceof User && Str::lower($authUser->email) !== Str::lower($invitation->email)) {
+            throw new InviteEmailMismatchException;
+        }
 
         if ($invitee instanceof User && ! $authUser instanceof User) {
             throw new AuthenticationException;

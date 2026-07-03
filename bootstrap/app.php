@@ -37,6 +37,7 @@ use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
 use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
+use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 
@@ -146,6 +147,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // every cause so a probe cannot learn token state (UC-1-019, H4 session 109).
         $exceptions->render(fn (InvalidInvitationException $e) => EnvelopeBuilder::build(
             ApiErrorCode::InviteInvalid,
+            $e->getMessage(),
+        ));
+
+        // An authenticated user tried to consume an invitation addressed to a
+        // different email (UC-1-019 alt-4b) — only the invited account may accept.
+        $exceptions->render(fn (InviteEmailMismatchException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::InviteEmailMismatch,
             $e->getMessage(),
         ));
 

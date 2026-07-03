@@ -63,4 +63,21 @@ class AcceptInvitationTest extends MembershipsTestCase
         $this->assertRefusedWith($response, ApiErrorCode::Unauthenticated);
         $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
     }
+
+    #[Test]
+    public function when_the_authenticated_user_is_not_the_invitee_then_acceptance_is_refused(): void
+    {
+        // Given — an invitation for one account, a session belonging to another
+        [$company, $actor] = $this->aCompanyWithMember();
+        User::factory()->withEmail('anushka@member.lk')->create();
+        $someoneElse = User::factory()->withEmail('other@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+
+        // When — the wrong account tries to consume the invitation
+        $response = $this->acceptInvitation($token, [], $someoneElse);
+
+        // Then — only the invited email may accept (UC alt-4b); nothing joined
+        $this->assertRefusedWith($response, ApiErrorCode::InviteEmailMismatch);
+        $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
+    }
 }

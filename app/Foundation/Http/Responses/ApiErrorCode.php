@@ -20,6 +20,7 @@ enum ApiErrorCode: string
     case IncorrectPassword = 'INCORRECT_PASSWORD';
     case ResetLinkInvalid = 'RESET_LINK_INVALID';
     case InviteInvalid = 'INVITE_INVALID';
+    case InviteEmailMismatch = 'INVITE_EMAIL_MISMATCH';
     case ResourceNotFound = 'RESOURCE_NOT_FOUND';
     case EmailRegistered = 'EMAIL_REGISTERED';
     case BrNumberRegistered = 'BR_NUMBER_REGISTERED';
@@ -53,6 +54,7 @@ enum ApiErrorCode: string
             self::IncorrectPassword => 401,
             self::ResetLinkInvalid => 422,
             self::InviteInvalid => 422,
+            self::InviteEmailMismatch => 403,
             self::ResourceNotFound => 404,
             self::EmailRegistered => 409,
             self::BrNumberRegistered => 409,
