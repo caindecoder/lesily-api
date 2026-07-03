@@ -219,4 +219,34 @@ class ViewMembershipsTest extends MembershipsTestCase
             'invited empty until the union lands' => ['invited', false],
         ];
     }
+
+    #[Test]
+    #[DataProvider('provideSearchTerms')]
+    public function when_searched_then_matching_members_listed(string $term): void
+    {
+        // Given a roster of deterministic identities with one distinct member
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Bhanu Fernando', 'email' => 'bhanu@octane.lk']);
+        $alice = User::factory()->named('Alice Gunawardena')->withEmail('alice@octane.lk')->create();
+        $nuwan = User::factory()->named('Nuwan Jayasuriya')->withEmail('nuwan@octane.lk')->create();
+        $this->attachMember($company, $alice, $this->seededRole('employee'));
+        $this->attachMember($company, $nuwan, $this->seededRole('employee'));
+
+        // When the owner searches the roster
+        $response = $this->viewMemberships($owner, $company, ['search' => $term]);
+
+        // Then only the matching membership is listed
+        $this->assertRosterUserIds($response, [$alice->getKey()]);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideSearchTerms(): array
+    {
+        return [
+            'by name fragment' => ['Gunaward'],
+            'by email fragment' => ['alice@'],
+        ];
+    }
 }

@@ -25,6 +25,12 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
                 $filters->status === 'invited',
                 fn ($query) => $query->whereRaw('0 = 1')
             )
+            ->when(
+                $filters->search !== null,
+                fn ($query) => $query->whereHas('user', fn ($user) => $user
+                    ->where('name', 'like', "%{$filters->search}%")
+                    ->orWhere('email', 'like', "%{$filters->search}%"))
+            )
             ->with(['user', 'role'])
             ->orderBy(
                 // Default sort: member name ascending (api-1-users). Subquery over a
