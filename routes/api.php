@@ -19,6 +19,7 @@ use App\Foundation\Auth\IO\Http\Controllers\DisableTwoFactorController;
 use App\Companies\Memberships\IO\Http\Controllers\InvitationsController;
 use App\Companies\Memberships\IO\Http\Controllers\MembershipsController;
 use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
+use App\Companies\Memberships\IO\Http\Controllers\AcceptInvitationController;
 use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
 
 // Health is operational tooling and opts out of the platform cross-cutting
@@ -154,3 +155,11 @@ Route::post('/v1/invitations', [InvitationsController::class, 'store'])
 // per api-conventions §9. Read-only (no aggregate/event — cd-users §read-only-via-repository).
 Route::get('/v1/memberships', [MembershipsController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:users.view']);
+
+// Accept an invitation (UC-1-019) — guest-or-authenticated: the emailed single-use token
+// authenticates the new-user path; an existing-email invitee must additionally hold a
+// Sanctum session (R9/D7). Deliberately NO auth middleware (it would 401 guests; the
+// delivery layer resolves auth('sanctum') optionally). throttle:auth-tier guards token
+// guessing. Every token failure collapses to 422 INVITE_INVALID (H4 session 109).
+Route::post('/v1/invitations/accept/{token}', AcceptInvitationController::class)
+    ->middleware(['throttle:auth-tier']);

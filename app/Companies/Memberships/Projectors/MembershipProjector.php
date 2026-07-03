@@ -5,6 +5,7 @@ namespace App\Companies\Memberships\Projectors;
 use App\Companies\Entities\CompanyUser;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
+use App\Companies\Memberships\Events\UserJoinedCompany;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 
@@ -36,6 +37,46 @@ class MembershipProjector extends Projector
                 'token_hash' => $event->tokenHash,
                 'expires_at' => $event->expiresAt,
                 'accepted_at' => null,
+            ],
+        );
+    }
+
+    /**
+     * SM-1-01 T4: stamp the invitation accepted and write the pivot on the SAME
+     * UUID (D5b identity — invitation.id == company_user.id == invitation_id;
+     * a plain attach() would mint a fresh UUID). A re-invited Removed member's
+     * soft-deleted pivot carries this very id, so the write is an
+     * undelete-in-place (deleted_at cleared, role refreshed), never a second
+     * row. company_id comes off the invitation row this projector wrote at
+     * invite time (same transaction).
+     */
+    public function onUserJoinedCompany(UserJoinedCompany $event): void
+    {
+        $invitation = Invitation::query()->findOrFail($event->membershipId);
+        $invitation->update(['accepted_at' => $event->joinedAt]);
+
+        // Idempotent accept (UC alt-4a): if the member already holds a LIVE
+        // pivot from an earlier stream (the OQ-1-126 duplicate-invite race),
+        // that membership stays canonical — consuming the leftover invitation
+        // must not mint a second row. Replay-safe: same outcome every replay.
+        $alreadyMember = CompanyUser::query()
+            ->where('company_id', $invitation->company_id)
+            ->where('user_id', $event->userId)
+            ->whereKeyNot($event->membershipId)
+            ->exists();
+
+        if ($alreadyMember) {
+            return;
+        }
+
+        CompanyUser::withTrashed()->updateOrCreate(
+            ['id' => $event->membershipId],
+            [
+                'company_id' => $invitation->company_id,
+                'user_id' => $event->userId,
+                'role_id' => $event->roleId,
+                'invitation_id' => $event->membershipId,
+                'deleted_at' => null,
             ],
         );
     }

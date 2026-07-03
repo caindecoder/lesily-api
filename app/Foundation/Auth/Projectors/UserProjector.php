@@ -9,6 +9,7 @@ use App\Foundation\Auth\Events\UserEmailVerified;
 use App\Foundation\Auth\Events\UserPasswordReset;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
+use App\Foundation\Auth\Events\UserCreatedFromInvitation;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 
 /**
@@ -25,6 +26,16 @@ use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 class UserProjector extends Projector
 {
     public function onUserSignedUpAsOwner(UserSignedUpAsOwner $event): void
+    {
+        UserReadModel::query()->forceCreate([
+            'id' => $event->userId,
+            'name' => $event->name,
+            'email' => $event->email,
+            'password' => $event->passwordHash,
+        ]);
+    }
+
+    public function onUserCreatedFromInvitation(UserCreatedFromInvitation $event): void
     {
         UserReadModel::query()->forceCreate([
             'id' => $event->userId,

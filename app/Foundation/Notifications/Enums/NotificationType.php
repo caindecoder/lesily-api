@@ -7,6 +7,7 @@ enum NotificationType: string
     case AccountSecurityAlert = 'account_security_alert';
     case GeneralAccountNotice = 'general_account_notice';
     case PasswordChanged = 'password_changed';
+    case TeamWelcome = 'team_welcome';
 
     /**
      * Critical notifications (account-security alerts, password-change confirmations)
@@ -19,6 +20,7 @@ enum NotificationType: string
             self::AccountSecurityAlert => true,
             self::PasswordChanged => true,
             self::GeneralAccountNotice => false,
+            self::TeamWelcome => false,
         };
     }
 }

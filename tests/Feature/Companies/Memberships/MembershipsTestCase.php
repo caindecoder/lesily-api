@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanyUser;
@@ -16,7 +17,10 @@ use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Companies\Memberships\Events\UserJoinedCompany;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
+use App\Foundation\Auth\Events\UserCreatedFromInvitation;
+use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -220,6 +224,174 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         CompanyUser::query()->whereKey($membershipId)->update(['deleted_at' => now()]);
 
         return $membershipId;
+    }
+
+    /**
+     * Accept an invitation via its plaintext token — as a guest by default, or
+     * authenticated when $as is given (the existing-user branch, R9/D7).
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function acceptInvitation(string $token, array $body = [], ?User $as = null): TestResponse
+    {
+        if ($as instanceof User) {
+            Sanctum::actingAs($as);
+        }
+
+        return $this->postJson('/api/v1/invitations/accept/'.$token, $body);
+    }
+
+    /**
+     * A valid new-user acceptance body — name + a policy-passing password (H6:
+     * the token rides the route; the invitee email lives on the invitation row).
+     *
+     * @return array<string, string>
+     */
+    protected function validNewUserBody(): array
+    {
+        return ['name' => 'Nimal Perera', 'password' => 'Str0ng-Pass!'];
+    }
+
+    /**
+     * A refused accept changed nothing: no user account was created, no
+     * membership pivot was written, and no invitation was marked accepted —
+     * the guard rejected before any state change.
+     */
+    protected function assertNothingAccepted(): void
+    {
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('company_user', 0);
+        $this->assertSame(0, Invitation::query()->whereNotNull('accepted_at')->count());
+    }
+
+    /**
+     * Issue a REAL pending invitation for ($company, $email) through the invite
+     * endpoint and return the PLAINTEXT accept token, extracted from the faked
+     * InvitationMail (the DB holds only the sha256 — D3). Ends with a guard-cache
+     * reset (amendment P) so the arrange leaves no actingAs residue and the
+     * accept under test runs as a genuine guest unless it authenticates itself.
+     */
+    protected function aPendingInvitation(Company $company, User $actor, string $email): string
+    {
+        $this->invite($actor, $company, ['email' => $email, 'roleCode' => 'employee'])->assertStatus(201);
+
+        $plaintextToken = null;
+        Mail::assertQueued(InvitationMail::class, function (InvitationMail $mail) use ($email, &$plaintextToken): bool {
+            if ($mail->hasTo($email)) {
+                $plaintextToken = $mail->plaintextToken;
+            }
+
+            return true;
+        });
+        $this->assertNotNull($plaintextToken, "No InvitationMail was queued to {$email}.");
+
+        Auth::forgetGuards();
+
+        return (string) $plaintextToken;
+    }
+
+    /**
+     * The membership for ($company, $email) was ACTIVATED the D5b way: the
+     * pivot carries the SAME UUID as the invitation (id AND invitation_id), is
+     * live under the invitation's role, the invitation is stamped accepted —
+     * and the write was event-sourced: a UserJoinedCompany stored event carries
+     * this membership's ids verbatim (amendment R — a direct read-model write
+     * must fail this assertion).
+     */
+    protected function assertMembershipActivated(Company $company, string $email): void
+    {
+        $invitation = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->sole();
+        $membership = CompanyUser::query()->whereKey($invitation->getKey())->sole();
+
+        $this->assertNotNull($invitation->accepted_at);
+        $this->assertSame($invitation->getKey(), $membership->invitation_id);
+        $this->assertSame([$invitation->role_id, null], [$membership->role_id, $membership->deleted_at]);
+        // The welcome-wizard flags start false on every creation path — the
+        // schema defaults are the mechanism (H3 session 109).
+        $this->assertSame([0, 0], [(int) $membership->onboarding_completed, (int) $membership->onboarding_skipped]);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserJoinedCompany::class)
+            ->where('event_properties->membershipId', $invitation->getKey())
+            ->where('event_properties->userId', $membership->user_id)
+            ->where('event_properties->roleId', $invitation->role_id)
+            ->count());
+    }
+
+    /**
+     * The invite-accept genesis provisioned the account the event-sourced way:
+     * a users row under $name with a set password, born from a
+     * UserCreatedFromInvitation stored event whose payload matches the row
+     * verbatim (amendment R).
+     */
+    protected function assertNewUserProvisioned(string $email, string $name): void
+    {
+        $user = User::query()->where('email', $email)->sole();
+
+        $this->assertSame($name, $user->name);
+        $this->assertNotSame('', $user->password, 'The provisioned account must carry a set password.');
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserCreatedFromInvitation::class)
+            ->where('event_properties->userId', $user->getKey())
+            ->where('event_properties->email', $email)
+            ->where('event_properties->name', $name)
+            ->count());
+    }
+
+    /**
+     * The accept response carries a REAL credential: its data.token drives an
+     * auth+company-gated probe for $company. Guard cache reset first — the
+     * accept request itself resolved a guard (amendment P).
+     */
+    protected function assertAutoLoggedIn(TestResponse $response, Company $company): void
+    {
+        $token = (string) $response->json('data.token');
+        $this->assertNotSame('', $token, 'The accept response must carry a session token.');
+
+        Auth::forgetGuards();
+
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/_test/company-context-probe', ['X-Company-Context' => $company->getKey()])
+            ->assertOk();
+    }
+
+    /**
+     * The post-accept welcome (D8/R8) reached the joiner: one in-app
+     * notification row typed team_welcome carrying the inviting company's name.
+     */
+    protected function assertTeamWelcomeQueued(string $email, Company $company): void
+    {
+        $joiner = User::query()->where('email', $email)->sole();
+
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_id' => $joiner->getKey(),
+            'data->notification_type' => 'team_welcome',
+            'data->company_name' => $company->name,
+        ]);
+        // The mail leg is queued too (TeamWelcome is non-critical, no opt-out
+        // exists in these tests) — pins the QueuedMailChannel wiring.
+        Mail::assertQueued(SystemNotificationMail::class, fn (SystemNotificationMail $mail): bool => $mail->hasTo($email));
+    }
+
+    /**
+     * The invitation for ($company, $email) was NOT consumed: it remains
+     * un-accepted and no membership pivot (live or trashed) exists for that
+     * email's user in the company.
+     */
+    protected function assertInvitationNotConsumed(Company $company, string $email): void
+    {
+        $invitation = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->sole();
+
+        $this->assertNull($invitation->accepted_at);
+        $this->assertSame(0, CompanyUser::withTrashed()
+            ->where('company_id', $company->getKey())
+            ->whereIn('user_id', User::query()->where('email', $email)->pluck('id'))
+            ->count());
     }
 
     /**

@@ -13,4 +13,7 @@ return [
     'password_changed' => [
         'subject' => 'Your password was changed',
     ],
+    'team_welcome' => [
+        'subject' => 'Welcome to :company',
+    ],
 ];

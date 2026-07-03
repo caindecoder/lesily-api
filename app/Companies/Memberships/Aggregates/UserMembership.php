@@ -5,6 +5,7 @@ namespace App\Companies\Memberships\Aggregates;
 use Carbon\CarbonImmutable;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\Memberships\Events\UserInvited;
+use App\Companies\Memberships\Events\UserJoinedCompany;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 
 /**
@@ -38,5 +39,21 @@ class UserMembership extends AggregateRoot
                 expiresAt: CarbonImmutable::now()->addDays(self::INVITATION_TTL_DAYS),
                 tokenHash: hash('sha256', $command->plaintextToken),
             ));
+    }
+
+    /**
+     * SM-1-01 T4: the invitee consumed their token — guardless like invite()
+     * (the interactor's live-pending lookup is the gate; H4 collapses every
+     * failure before this method is ever reached). Scalars, not a Command:
+     * two fields sits inside the locked 1-2-field tolerance (s071).
+     */
+    public function acceptInvitation(string $userId, string $roleId): static
+    {
+        return $this->recordThat(new UserJoinedCompany(
+            membershipId: $this->uuid(),
+            userId: $userId,
+            roleId: $roleId,
+            joinedAt: CarbonImmutable::now(),
+        ));
     }
 }
