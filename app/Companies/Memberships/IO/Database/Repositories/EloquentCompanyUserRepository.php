@@ -32,10 +32,15 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
                     ->orWhere('email', 'like', "%{$filters->search}%"))
             )
             ->with(['user', 'role'])
-            ->orderBy(
-                // Default sort: member name ascending (api-1-users). Subquery over a
-                // join keeps the SoftDeletes scope + select untouched (§2 advanced-queries).
-                User::query()->select('name')->whereColumn('users.id', 'company_user.user_id')
+            ->when(
+                // Newest membership first (?sort=-created_at, api-1-users).
+                $filters->sort === '-created_at',
+                fn ($query) => $query->orderByDesc('created_at'),
+                // Default (and explicit sort=name): member name ascending. Subquery
+                // over a join keeps the SoftDeletes scope + select untouched.
+                fn ($query) => $query->orderBy(
+                    User::query()->select('name')->whereColumn('users.id', 'company_user.user_id')
+                )
             )
             ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
     }

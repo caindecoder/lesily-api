@@ -23,11 +23,12 @@ class MembershipFilters extends Data
     private const array QUERY_KEY_WHITELIST = ['role', 'status', 'search', 'sort', 'page', 'per_page'];
 
     /**
-     * The sortable fields (api-conventions §10.2 whitelist; `-` = descending).
+     * The sort tokens this endpoint accepts — exactly api-1-users' declared pair
+     * (`?sort=-created_at|name`; api-conventions §10.2 per-endpoint whitelist).
      *
      * @var list<string>
      */
-    private const array SORTABLE_FIELDS = ['name', '-name', 'created_at', '-created_at'];
+    private const array SORTABLE_FIELDS = ['name', '-created_at'];
 
     public ?string $role = null;
 

@@ -249,4 +249,29 @@ class ViewMembershipsTest extends MembershipsTestCase
             'by email fragment' => ['alice@'],
         ];
     }
+
+    #[Test]
+    public function when_sorted_by_join_date_descending_then_newest_member_first(): void
+    {
+        // Given members who joined on three distinct days, named so that join
+        // order and name order disagree (a default-sort fallback is observable)
+        $this->travelTo(now()->subDays(2));
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Bhanu Fernando']);
+
+        $this->travel(1)->days();
+        $anna = User::factory()->named('Anna Perera')->create();
+        $this->attachMember($company, $anna, $this->seededRole('employee'));
+
+        $this->travel(1)->days();
+        $chamil = User::factory()->named('Chamil Silva')->create();
+        $this->attachMember($company, $chamil, $this->seededRole('employee'));
+        $this->travelBack();
+
+        // When the owner sorts the roster by newest membership first
+        $response = $this->viewMemberships($owner, $company, ['sort' => '-created_at']);
+
+        // Then the most recently joined member leads
+        $this->assertRosterOrder($response, ['Chamil Silva', 'Anna Perera', 'Bhanu Fernando']);
+    }
 }
