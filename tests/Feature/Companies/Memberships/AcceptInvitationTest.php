@@ -112,4 +112,26 @@ class AcceptInvitationTest extends MembershipsTestCase
             'name missing' => [['password' => 'Str0ng-Pass!'], 'name'],
         ];
     }
+
+    #[Test]
+    public function when_an_authenticated_existing_user_accepts_then_they_join_the_new_company(): void
+    {
+        // Given — an account already on the platform, invited to a company it
+        // doesn't belong to; the invitation email differs only in case (alt-4c)
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'Anushka@Member.LK');
+        $accountsBefore = User::query()->count();
+
+        // When — they accept while authenticated; no registration details needed
+        $response = $this->acceptInvitation($token, [], $invitee);
+
+        // Then — the membership is activated on the invitation's own UUID with
+        // the invited role, no second account appears, and the welcome goes out
+        $response->assertOk();
+        $response->assertJsonPath('data.user.id', $invitee->getKey());
+        $this->assertMembershipActivated($company, 'Anushka@Member.LK');
+        $this->assertSame($accountsBefore, User::query()->count());
+        $this->assertTeamWelcomeQueued('anushka@member.lk', $company);
+    }
 }

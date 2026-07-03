@@ -4,6 +4,7 @@ namespace App\Companies\Memberships\IO\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use App\Companies\Memberships\IO\Http\Resources\MembershipResource;
 use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
 use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
 
@@ -23,8 +24,10 @@ class AcceptInvitationController
         // Command payload so one shape validates the whole request.
         $command = AcceptInvitationCommand::validateAndCreate([...$request->all(), 'token' => $token]);
 
-        $interactor->execute($command, $request->user('sanctum'));
+        $outcome = $interactor->execute($command, $request->user('sanctum'));
 
-        return new JsonResponse(null, 204);
+        // Existing user: 200 with the activated membership row — their current
+        // session stays; no token is minted (H5 session 109).
+        return (new MembershipResource($outcome->membership))->response($request)->setStatusCode(200);
     }
 }

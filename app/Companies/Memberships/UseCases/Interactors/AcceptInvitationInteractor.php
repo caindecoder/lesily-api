@@ -5,9 +5,13 @@ namespace App\Companies\Memberships\UseCases\Interactors;
 use App\Models\User;
 use RuntimeException;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
+use App\Companies\Entities\CompanyUser;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Validation\ValidationException;
 use App\Companies\Memberships\Entities\Invitation;
+use App\Companies\Memberships\Aggregates\UserMembership;
+use App\Companies\Memberships\UseCases\Results\ExistingUserJoined;
 use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
@@ -22,7 +26,7 @@ use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
  */
 class AcceptInvitationInteractor
 {
-    public function execute(AcceptInvitationCommand $command, ?User $authUser): void
+    public function execute(AcceptInvitationCommand $command, ?User $authUser): ExistingUserJoined
     {
         $invitation = $this->livePendingInvitation($command->token);
         $invitee = User::query()->where('email', $invitation->email)->first();
@@ -39,9 +43,30 @@ class AcceptInvitationInteractor
 
         if (! $invitee instanceof User) {
             $this->ensureRegistrationDetails($command);
+
+            throw new RuntimeException('Not implemented');
         }
 
-        throw new RuntimeException('Not implemented');
+        return new ExistingUserJoined($this->join($invitation, $invitee));
+    }
+
+    /**
+     * SM-1-01 T4 — the one atomic unit (UC-1-019 minimal guarantee): the
+     * aggregate records UserJoinedCompany and its projection stamps
+     * invitations.accepted_at + writes the pivot together, or none of it lands.
+     */
+    protected function join(Invitation $invitation, User $joiner): CompanyUser
+    {
+        DB::transaction(function () use ($invitation, $joiner): void {
+            UserMembership::retrieve($invitation->getKey())
+                ->acceptInvitation($joiner->getKey(), $invitation->role_id)
+                ->persist();
+        });
+
+        return CompanyUser::query()
+            ->whereKey($invitation->getKey())
+            ->with(['user', 'role'])
+            ->sole();
     }
 
     /**

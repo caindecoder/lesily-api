@@ -17,6 +17,7 @@ use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Companies\Memberships\Events\UserJoinedCompany;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -285,6 +286,48 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         Auth::forgetGuards();
 
         return (string) $plaintextToken;
+    }
+
+    /**
+     * The membership for ($company, $email) was ACTIVATED the D5b way: the
+     * pivot carries the SAME UUID as the invitation (id AND invitation_id), is
+     * live under the invitation's role, the invitation is stamped accepted —
+     * and the write was event-sourced: a UserJoinedCompany stored event carries
+     * this membership's ids verbatim (amendment R — a direct read-model write
+     * must fail this assertion).
+     */
+    protected function assertMembershipActivated(Company $company, string $email): void
+    {
+        $invitation = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->sole();
+        $membership = CompanyUser::query()->whereKey($invitation->getKey())->sole();
+
+        $this->assertNotNull($invitation->accepted_at);
+        $this->assertSame($invitation->getKey(), $membership->invitation_id);
+        $this->assertSame([$invitation->role_id, null], [$membership->role_id, $membership->deleted_at]);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserJoinedCompany::class)
+            ->where('event_properties->membershipId', $invitation->getKey())
+            ->where('event_properties->userId', $membership->user_id)
+            ->where('event_properties->roleId', $invitation->role_id)
+            ->count());
+    }
+
+    /**
+     * The post-accept welcome (D8/R8) reached the joiner: one in-app
+     * notification row typed team_welcome carrying the inviting company's name.
+     */
+    protected function assertTeamWelcomeQueued(string $email, Company $company): void
+    {
+        $joiner = User::query()->where('email', $email)->sole();
+
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_id' => $joiner->getKey(),
+            'data->notification_type' => 'team_welcome',
+            'data->company_name' => $company->name,
+        ]);
     }
 
     /**

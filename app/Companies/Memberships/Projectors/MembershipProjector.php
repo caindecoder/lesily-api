@@ -5,6 +5,7 @@ namespace App\Companies\Memberships\Projectors;
 use App\Companies\Entities\CompanyUser;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
+use App\Companies\Memberships\Events\UserJoinedCompany;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 
@@ -38,6 +39,26 @@ class MembershipProjector extends Projector
                 'accepted_at' => null,
             ],
         );
+    }
+
+    /**
+     * SM-1-01 T4: stamp the invitation accepted and write the pivot on the SAME
+     * UUID (D5b identity — invitation.id == company_user.id == invitation_id;
+     * a plain attach() would mint a fresh UUID). company_id comes off the
+     * invitation row this projector wrote at invite time (same transaction).
+     */
+    public function onUserJoinedCompany(UserJoinedCompany $event): void
+    {
+        $invitation = Invitation::query()->findOrFail($event->membershipId);
+        $invitation->update(['accepted_at' => $event->joinedAt]);
+
+        CompanyUser::query()->create([
+            'id' => $event->membershipId,
+            'company_id' => $invitation->company_id,
+            'user_id' => $event->userId,
+            'role_id' => $event->roleId,
+            'invitation_id' => $event->membershipId,
+        ]);
     }
 
     public function onUserMembershipEmergencyContactSet(UserMembershipEmergencyContactSet $event): void

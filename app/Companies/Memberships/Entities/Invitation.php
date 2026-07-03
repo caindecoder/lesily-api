@@ -2,6 +2,7 @@
 
 namespace App\Companies\Memberships\Entities;
 
+use App\Companies\Entities\Company;
 use Illuminate\Database\Eloquent\Model;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -40,5 +41,13 @@ class Invitation extends Model
     public function role(): BelongsTo
     {
         return $this->belongsTo(Role::class);
+    }
+
+    /**
+     * @return BelongsTo<Company, $this>
+     */
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
     }
 }
