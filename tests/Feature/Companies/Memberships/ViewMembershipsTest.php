@@ -3,7 +3,9 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
+use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 
@@ -111,5 +113,24 @@ class ViewMembershipsTest extends MembershipsTestCase
 
         // Then only the active membership is listed — the removed member is absent
         $this->assertRosterUserIds($response, [$owner->getKey()]);
+    }
+
+    #[Test]
+    public function when_user_belongs_to_two_companies_then_roster_shows_only_context_company(): void
+    {
+        // Given a user in companies A and B — staged in B's context so a
+        // first-company resolution bug is observable — with an A-only member
+        [$companyA, $shared] = $this->aCompanyWithMember('owner');
+        $aOnlyMember = User::factory()->create();
+        $this->attachMember($companyA, $aOnlyMember, $this->seededRole('employee'));
+
+        $companyB = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $this->attachMember($companyB, $shared, $this->seededRole('admin'));
+
+        // When they request company B's roster
+        $response = $this->viewMemberships($shared, $companyB);
+
+        // Then only company B's membership is listed — nothing leaks from A
+        $this->assertRosterUserIds($response, [$shared->getKey()]);
     }
 }
