@@ -192,4 +192,24 @@ class AcceptInvitationTest extends MembershipsTestCase
             ->where('user_id', $member->getKey())
             ->count());
     }
+
+    #[Test]
+    public function when_a_new_user_accepts_then_their_account_is_created_and_they_are_logged_in(): void
+    {
+        // Given — a pending invitation for a brand-new email
+        [$company, $actor] = $this->aCompanyWithMember();
+        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+
+        // When — the invitee sets their name + password on the accept link
+        $response = $this->acceptInvitation($token, $this->validNewUserBody());
+
+        // Then — the account is provisioned (event-sourced genesis), the
+        // membership activates on the invitation's UUID, a working session is
+        // issued (auto-login), and the welcome goes out
+        $response->assertCreated();
+        $this->assertNewUserProvisioned('kasun@newjoiner.lk', 'Nimal Perera');
+        $this->assertMembershipActivated($company, 'kasun@newjoiner.lk');
+        $this->assertAutoLoggedIn($response, $company);
+        $this->assertTeamWelcomeQueued('kasun@newjoiner.lk', $company);
+    }
 }

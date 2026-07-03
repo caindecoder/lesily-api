@@ -3,14 +3,17 @@
 namespace App\Companies\Memberships\UseCases\Interactors;
 
 use App\Models\User;
-use RuntimeException;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Validation\ValidationException;
+use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Aggregates\UserMembership;
+use App\Foundation\Auth\Aggregates\User as UserAggregate;
+use App\Companies\Memberships\UseCases\Results\NewUserJoined;
 use App\Companies\Memberships\UseCases\Results\ExistingUserJoined;
 use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
@@ -26,7 +29,11 @@ use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
  */
 class AcceptInvitationInteractor
 {
-    public function execute(AcceptInvitationCommand $command, ?User $authUser): ExistingUserJoined
+    public function __construct(
+        private readonly SessionIssuer $sessionIssuer,
+    ) {}
+
+    public function execute(AcceptInvitationCommand $command, ?User $authUser, string $deviceName): NewUserJoined|ExistingUserJoined
     {
         $invitation = $this->livePendingInvitation($command->token);
         $invitee = User::query()->where('email', $invitation->email)->first();
@@ -44,10 +51,47 @@ class AcceptInvitationInteractor
         if (! $invitee instanceof User) {
             $this->ensureRegistrationDetails($command);
 
-            throw new RuntimeException('Not implemented');
+            return $this->provisionAndJoin($invitation, $command, $deviceName);
         }
 
         return new ExistingUserJoined($this->join($invitation, $invitee));
+    }
+
+    /**
+     * The new-email main flow: genesis + join in ONE transaction (UC minimal
+     * guarantee), then — mirroring RegisterOwnerInteractor — materialise the
+     * read model, stamp last_logged_at, and mint the session OUTSIDE the
+     * transaction (a failed mint leaves a provisioned member who can log in).
+     */
+    protected function provisionAndJoin(Invitation $invitation, AcceptInvitationCommand $command, string $deviceName): NewUserJoined
+    {
+        $userId = (string) Str::uuid7();
+
+        DB::transaction(function () use ($invitation, $command, $userId): void {
+            UserAggregate::retrieve($userId)
+                ->createFromInvitation(
+                    $invitation->company_id,
+                    $invitation->email,
+                    Hash::make((string) $command->password),
+                    (string) $command->name,
+                )
+                ->persist();
+
+            UserMembership::retrieve($invitation->getKey())
+                ->acceptInvitation($userId, $invitation->role_id)
+                ->persist();
+        });
+
+        $user = User::query()->findOrFail($userId);
+        $user->last_logged_at = now();
+        $user->save();
+
+        $membership = CompanyUser::query()
+            ->whereKey($invitation->getKey())
+            ->with(['user', 'role'])
+            ->sole();
+
+        return new NewUserJoined($membership, $user, $this->sessionIssuer->issue($user, $deviceName));
     }
 
     /**

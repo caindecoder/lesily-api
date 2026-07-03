@@ -19,6 +19,7 @@ use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
+use App\Foundation\Auth\Events\UserCreatedFromInvitation;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -307,12 +308,52 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $this->assertNotNull($invitation->accepted_at);
         $this->assertSame($invitation->getKey(), $membership->invitation_id);
         $this->assertSame([$invitation->role_id, null], [$membership->role_id, $membership->deleted_at]);
+        // The welcome-wizard flags start false on every creation path — the
+        // schema defaults are the mechanism (H3 session 109).
+        $this->assertSame([0, 0], [(int) $membership->onboarding_completed, (int) $membership->onboarding_skipped]);
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', UserJoinedCompany::class)
             ->where('event_properties->membershipId', $invitation->getKey())
             ->where('event_properties->userId', $membership->user_id)
             ->where('event_properties->roleId', $invitation->role_id)
             ->count());
+    }
+
+    /**
+     * The invite-accept genesis provisioned the account the event-sourced way:
+     * a users row under $name with a set password, born from a
+     * UserCreatedFromInvitation stored event whose payload matches the row
+     * verbatim (amendment R).
+     */
+    protected function assertNewUserProvisioned(string $email, string $name): void
+    {
+        $user = User::query()->where('email', $email)->sole();
+
+        $this->assertSame($name, $user->name);
+        $this->assertNotNull($user->password);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserCreatedFromInvitation::class)
+            ->where('event_properties->userId', $user->getKey())
+            ->where('event_properties->email', $email)
+            ->where('event_properties->name', $name)
+            ->count());
+    }
+
+    /**
+     * The accept response carries a REAL credential: its data.token drives an
+     * auth+company-gated probe for $company. Guard cache reset first — the
+     * accept request itself resolved a guard (amendment P).
+     */
+    protected function assertAutoLoggedIn(TestResponse $response, Company $company): void
+    {
+        $token = (string) $response->json('data.token');
+        $this->assertNotSame('', $token, 'The accept response must carry a session token.');
+
+        Auth::forgetGuards();
+
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/_test/company-context-probe', ['X-Company-Context' => $company->getKey()])
+            ->assertOk();
     }
 
     /**

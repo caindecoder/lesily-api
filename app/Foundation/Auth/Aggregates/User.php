@@ -12,6 +12,7 @@ use App\Foundation\Auth\Events\UserPasswordReset;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use App\Foundation\Auth\Events\User2FARecoveryCodeUsed;
+use App\Foundation\Auth\Events\UserCreatedFromInvitation;
 use App\Foundation\Auth\Events\User2FARecoveryCodesRegenerated;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
@@ -45,6 +46,27 @@ class User extends AggregateRoot
                 email: $command->email,
                 name: $command->name,
                 passwordHash: Hash::make($command->password),
+            ));
+    }
+
+    /**
+     * The SECOND genesis (H1 session 109): an invitee with no account joins via
+     * the accept link (UC-1-019). Takes the already-hashed password (the
+     * interactor hashes — slice §5); tenant-stamped with the inviting company
+     * so the PDPA event-store walk can attribute why this account exists.
+     */
+    public function createFromInvitation(string $companyId, string $email, string $passwordHash, string $name): static
+    {
+        if ($this->registered) {
+            throw UserAlreadyRegisteredException::withId($this->uuid());
+        }
+
+        return $this->forCompany($companyId)
+            ->recordThat(new UserCreatedFromInvitation(
+                userId: $this->uuid(),
+                email: $email,
+                name: $name,
+                passwordHash: $passwordHash,
             ));
     }
 
@@ -152,6 +174,11 @@ class User extends AggregateRoot
     }
 
     protected function applyUserSignedUpAsOwner(UserSignedUpAsOwner $event): void
+    {
+        $this->registered = true;
+    }
+
+    protected function applyUserCreatedFromInvitation(UserCreatedFromInvitation $event): void
     {
         $this->registered = true;
     }

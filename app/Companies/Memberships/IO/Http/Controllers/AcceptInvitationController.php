@@ -4,6 +4,9 @@ namespace App\Companies\Memberships\IO\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use App\Foundation\Auth\Support\DeviceName;
+use App\Foundation\Auth\IO\Http\Resources\LoginResource;
+use App\Companies\Memberships\UseCases\Results\NewUserJoined;
 use App\Companies\Memberships\IO\Http\Resources\MembershipResource;
 use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
 use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
@@ -24,10 +27,18 @@ class AcceptInvitationController
         // Command payload so one shape validates the whole request.
         $command = AcceptInvitationCommand::validateAndCreate([...$request->all(), 'token' => $token]);
 
-        $outcome = $interactor->execute($command, $request->user('sanctum'));
+        $outcome = $interactor->execute(
+            $command,
+            $request->user('sanctum'),
+            // UA-derived like register — the accept contract has no deviceName field (H6).
+            DeviceName::resolve(null, $request),
+        );
 
-        // Existing user: 200 with the activated membership row — their current
-        // session stays; no token is minted (H5 session 109).
-        return (new MembershipResource($outcome->membership))->response($request)->setStatusCode(200);
+        // New user: 201 auto-login. Existing user: 200 with the activated
+        // membership — their current session stays, no token minted (H5).
+        return $outcome instanceof NewUserJoined
+            ? (new LoginResource($outcome->user, $outcome->session->token, $outcome->session->expiresAt))
+                ->response($request)->setStatusCode(201)
+            : (new MembershipResource($outcome->membership))->response($request)->setStatusCode(200);
     }
 }
