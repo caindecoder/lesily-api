@@ -28,4 +28,22 @@ class AcceptInvitationTest extends MembershipsTestCase
         $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
         $this->assertNothingAccepted();
     }
+
+    #[Test]
+    public function when_the_invitation_has_expired_then_acceptance_is_refused(): void
+    {
+        // Given — a pending invitation whose 7-day window has elapsed
+        [$company, $actor] = $this->aCompanyWithMember();
+        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $this->travel(8)->days();
+
+        // When — the invitee follows the stale link with valid details
+        $response = $this->acceptInvitation($token, $this->validNewUserBody());
+
+        // Then — the SAME collapsed envelope (no expired-vs-unknown leak, H4);
+        // the invitation stays unconsumed and no account was created
+        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
+        $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
+    }
 }

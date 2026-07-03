@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanyUser;
@@ -258,6 +259,51 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $this->assertDatabaseCount('users', 0);
         $this->assertDatabaseCount('company_user', 0);
         $this->assertSame(0, Invitation::query()->whereNotNull('accepted_at')->count());
+    }
+
+    /**
+     * Issue a REAL pending invitation for ($company, $email) through the invite
+     * endpoint and return the PLAINTEXT accept token, extracted from the faked
+     * InvitationMail (the DB holds only the sha256 — D3). Ends with a guard-cache
+     * reset (amendment P) so the arrange leaves no actingAs residue and the
+     * accept under test runs as a genuine guest unless it authenticates itself.
+     */
+    protected function aPendingInvitation(Company $company, User $actor, string $email): string
+    {
+        $this->invite($actor, $company, ['email' => $email, 'roleCode' => 'employee'])->assertStatus(201);
+
+        $plaintextToken = null;
+        Mail::assertQueued(InvitationMail::class, function (InvitationMail $mail) use ($email, &$plaintextToken): bool {
+            if ($mail->hasTo($email)) {
+                $plaintextToken = $mail->plaintextToken;
+            }
+
+            return true;
+        });
+        $this->assertNotNull($plaintextToken, "No InvitationMail was queued to {$email}.");
+
+        Auth::forgetGuards();
+
+        return (string) $plaintextToken;
+    }
+
+    /**
+     * The invitation for ($company, $email) was NOT consumed: it remains
+     * un-accepted and no membership pivot (live or trashed) exists for that
+     * email's user in the company.
+     */
+    protected function assertInvitationNotConsumed(Company $company, string $email): void
+    {
+        $invitation = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->sole();
+
+        $this->assertNull($invitation->accepted_at);
+        $this->assertSame(0, CompanyUser::withTrashed()
+            ->where('company_id', $company->getKey())
+            ->whereIn('user_id', User::query()->where('email', $email)->pluck('id'))
+            ->count());
     }
 
     /**
