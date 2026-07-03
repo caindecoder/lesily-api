@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Companies\Memberships;
 
+use App\Models\User;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -93,5 +94,22 @@ class ViewMembershipsTest extends MembershipsTestCase
             'per_page over max' => [['per_page' => 101], 'per_page'],
             'non-numeric page' => [['page' => 'abc'], 'page'],
         ];
+    }
+
+    // --- Edge ---
+
+    #[Test]
+    public function when_member_is_soft_deleted_then_absent_from_roster(): void
+    {
+        // Given a company whose second member was removed (soft-deleted pivot, D5)
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $removed = User::factory()->create();
+        $this->aRemovedMembership($company, $removed);
+
+        // When the owner requests the roster
+        $response = $this->viewMemberships($owner, $company);
+
+        // Then only the active membership is listed — the removed member is absent
+        $this->assertRosterUserIds($response, [$owner->getKey()]);
     }
 }

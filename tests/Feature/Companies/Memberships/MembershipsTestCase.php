@@ -144,6 +144,21 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
+     * The roster lists exactly the members whose user ids are $expectedUserIds —
+     * set equality on data.*.user.id (order-insensitive; ViewSessionsTest pattern).
+     *
+     * @param  array<int, string>  $expectedUserIds
+     */
+    protected function assertRosterUserIds(TestResponse $response, array $expectedUserIds): void
+    {
+        $response->assertOk();
+        $this->assertEqualsCanonicalizing(
+            $expectedUserIds,
+            $response->collect('data')->pluck('user.id')->all()
+        );
+    }
+
+    /**
      * A membership that was removed (UC-1-024 semantics): the company_user pivot
      * exists but is soft-deleted. Returns the pivot id — the stable membership
      * UUID a re-invite must reuse (D5b undelete-in-place).
