@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanyUser;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -95,6 +96,8 @@ class ViewMembershipsTest extends MembershipsTestCase
             'non-whitelisted sort' => [['sort' => 'email'], 'sort'],
             'per_page over max' => [['per_page' => 101], 'per_page'],
             'non-numeric page' => [['page' => 'abc'], 'page'],
+            'status not whitelisted' => [['status' => 'pending'], 'status'],
+            'page below minimum' => [['page' => 0], 'page'],
         ];
     }
 
@@ -292,5 +295,69 @@ class ViewMembershipsTest extends MembershipsTestCase
         // Then the remainder row is returned under the full pagination meta
         $this->assertRosterOrder($response, ['Chamil Silva']);
         $this->assertPaginationMeta($response, ['page' => 2, 'per_page' => 2, 'total' => 3, 'last_page' => 2]);
+    }
+
+    #[Test]
+    public function when_sorted_by_name_explicitly_then_members_listed_alphabetically(): void
+    {
+        // Given members whose join order disagrees with name order
+        $this->travelTo(now()->subDay());
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Chamil Silva']);
+        $this->travelBack();
+        $anna = User::factory()->named('Anna Perera')->create();
+        $this->attachMember($company, $anna, $this->seededRole('employee'));
+
+        // When the owner sorts the roster by name explicitly (the whitelisted token,
+        // not the default fallback)
+        $response = $this->viewMemberships($owner, $company, ['sort' => 'name']);
+
+        // Then the members are listed alphabetically
+        $this->assertRosterOrder($response, ['Anna Perera', 'Chamil Silva']);
+    }
+
+    #[Test]
+    public function when_per_page_is_at_the_maximum_then_accepted(): void
+    {
+        // Given a company with an owner
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+
+        // When they request the roster at the per_page ceiling (api-conventions §9 max)
+        $response = $this->viewMemberships($owner, $company, ['per_page' => 100]);
+
+        // Then the ceiling value is accepted and echoed in the meta
+        $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 100, 'total' => 1, 'last_page' => 1]);
+    }
+
+    #[Test]
+    public function when_roster_is_returned_then_envelope_shape_is_exact(): void
+    {
+        // Given a company whose roster is just the owner
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Bhanu Fernando', 'email' => 'bhanu@octane.lk']);
+        $membershipId = CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $owner->getKey())
+            ->sole()
+            ->getKey();
+
+        // When the owner requests the roster
+        $response = $this->viewMemberships($owner, $company);
+
+        // Then the envelope is EXACTLY the slice contract — no leaked pivot columns
+        // (role_id/company_id/deleted_at) and no Laravel default links/meta blocks
+        $response->assertExactJson([
+            'data' => [
+                [
+                    'id' => $membershipId,
+                    'user' => ['id' => $owner->getKey(), 'name' => 'Bhanu Fernando', 'email' => 'bhanu@octane.lk'],
+                    'role' => ['code' => 'owner', 'name' => $this->seededRole('owner')->name],
+                    'status' => 'active',
+                    'invited_at' => null,
+                    'last_active_at' => null,
+                ],
+            ],
+            'meta' => ['pagination' => ['page' => 1, 'per_page' => 15, 'total' => 1, 'last_page' => 1]],
+        ]);
     }
 }
