@@ -172,4 +172,23 @@ class ViewMembershipsTest extends MembershipsTestCase
             'auditor' => ['auditor'],
         ];
     }
+
+    #[Test]
+    public function when_filtered_by_role_then_only_matching_members_listed(): void
+    {
+        // Given a roster with two HR officers and an employee besides the owner
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $saman = User::factory()->named('Saman Perera')->create();
+        $ravi = User::factory()->named('Ravi Silva')->create();
+        $employee = User::factory()->create();
+        $this->attachMember($company, $saman, $this->seededRole('hr_officer'));
+        $this->attachMember($company, $ravi, $this->seededRole('hr_officer'));
+        $this->attachMember($company, $employee, $this->seededRole('employee'));
+
+        // When the owner filters the roster by the hr_officer role
+        $response = $this->viewMemberships($owner, $company, ['role' => 'hr_officer']);
+
+        // Then only the HR officer memberships are listed
+        $this->assertRosterUserIds($response, [$saman->getKey(), $ravi->getKey()]);
+    }
 }

@@ -14,6 +14,10 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
     {
         return CompanyUser::query()
             ->where('company_id', $companyId)
+            ->when(
+                $filters->role !== null,
+                fn ($query) => $query->whereRelation('role', 'code', $filters->role)
+            )
             ->with(['user', 'role'])
             ->orderBy(
                 // Default sort: member name ascending (api-1-users). Subquery over a
