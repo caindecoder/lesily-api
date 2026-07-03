@@ -153,4 +153,4 @@ Route::post('/v1/invitations', [InvitationsController::class, 'store'])
 // View the company roster (UC-1-017) — active memberships with user + role, paginated
 // per api-conventions §9. Read-only (no aggregate/event — cd-users §read-only-via-repository).
 Route::get('/v1/memberships', [MembershipsController::class, 'index'])
-    ->middleware(['auth:sanctum']);
+    ->middleware(['auth:sanctum', 'auth.company']);

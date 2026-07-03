@@ -75,6 +75,20 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
+     * Request the roster as $actor acting in $company's context (UC-1-017).
+     *
+     * @param  array<string, mixed>  $query
+     */
+    protected function viewMemberships(User $actor, Company $company, array $query = []): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        $queryString = $query === [] ? '' : '?'.http_build_query($query);
+
+        return $this->getJson('/api/v1/memberships'.$queryString, ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
      * No invitation was persisted, no UserInvited event was recorded, and no
      * invite email was queued — the guard rejected before any side effect.
      */
