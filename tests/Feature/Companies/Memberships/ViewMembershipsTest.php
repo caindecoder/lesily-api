@@ -274,4 +274,23 @@ class ViewMembershipsTest extends MembershipsTestCase
         // Then the most recently joined member leads
         $this->assertRosterOrder($response, ['Chamil Silva', 'Anna Perera', 'Bhanu Fernando']);
     }
+
+    #[Test]
+    public function when_results_exceed_per_page_then_page_two_returns_remainder(): void
+    {
+        // Given a three-member roster paged two at a time (name order: Anna, Bhanu | Chamil)
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Bhanu Fernando']);
+        $anna = User::factory()->named('Anna Perera')->create();
+        $chamil = User::factory()->named('Chamil Silva')->create();
+        $this->attachMember($company, $anna, $this->seededRole('employee'));
+        $this->attachMember($company, $chamil, $this->seededRole('employee'));
+
+        // When the owner requests the second page
+        $response = $this->viewMemberships($owner, $company, ['per_page' => 2, 'page' => 2]);
+
+        // Then the remainder row is returned under the full pagination meta
+        $this->assertRosterOrder($response, ['Chamil Silva']);
+        $this->assertPaginationMeta($response, ['page' => 2, 'per_page' => 2, 'total' => 3, 'last_page' => 2]);
+    }
 }
