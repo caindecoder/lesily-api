@@ -134,4 +134,24 @@ class AcceptInvitationTest extends MembershipsTestCase
         $this->assertSame($accountsBefore, User::query()->count());
         $this->assertTeamWelcomeQueued('anushka@member.lk', $company);
     }
+
+    #[Test]
+    public function when_a_removed_member_accepts_a_reinvite_then_the_same_membership_is_restored(): void
+    {
+        // Given — a member removed from the company (soft-deleted pivot),
+        // re-invited onto the SAME membership stream (D5b)
+        [$company, $actor] = $this->aCompanyWithMember();
+        $removed = User::factory()->withEmail('ruwan@member.lk')->create();
+        $membershipId = $this->aRemovedMembership($company, $removed);
+        $token = $this->aPendingInvitation($company, $actor, 'ruwan@member.lk');
+
+        // When — they accept the re-invite while authenticated
+        $response = $this->acceptInvitation($token, [], $removed);
+
+        // Then — the SAME pivot UUID comes back live (undelete-in-place),
+        // not a second row
+        $response->assertOk();
+        $response->assertJsonPath('data.id', $membershipId);
+        $this->assertMembershipActivated($company, 'ruwan@member.lk');
+    }
 }

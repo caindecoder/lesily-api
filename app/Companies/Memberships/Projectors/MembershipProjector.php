@@ -44,21 +44,27 @@ class MembershipProjector extends Projector
     /**
      * SM-1-01 T4: stamp the invitation accepted and write the pivot on the SAME
      * UUID (D5b identity — invitation.id == company_user.id == invitation_id;
-     * a plain attach() would mint a fresh UUID). company_id comes off the
-     * invitation row this projector wrote at invite time (same transaction).
+     * a plain attach() would mint a fresh UUID). A re-invited Removed member's
+     * soft-deleted pivot carries this very id, so the write is an
+     * undelete-in-place (deleted_at cleared, role refreshed), never a second
+     * row. company_id comes off the invitation row this projector wrote at
+     * invite time (same transaction).
      */
     public function onUserJoinedCompany(UserJoinedCompany $event): void
     {
         $invitation = Invitation::query()->findOrFail($event->membershipId);
         $invitation->update(['accepted_at' => $event->joinedAt]);
 
-        CompanyUser::query()->create([
-            'id' => $event->membershipId,
-            'company_id' => $invitation->company_id,
-            'user_id' => $event->userId,
-            'role_id' => $event->roleId,
-            'invitation_id' => $event->membershipId,
-        ]);
+        CompanyUser::withTrashed()->updateOrCreate(
+            ['id' => $event->membershipId],
+            [
+                'company_id' => $invitation->company_id,
+                'user_id' => $event->userId,
+                'role_id' => $event->roleId,
+                'invitation_id' => $event->membershipId,
+                'deleted_at' => null,
+            ],
+        );
     }
 
     public function onUserMembershipEmergencyContactSet(UserMembershipEmergencyContactSet $event): void
