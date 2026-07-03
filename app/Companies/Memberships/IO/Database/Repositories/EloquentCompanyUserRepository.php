@@ -30,9 +30,15 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             )
             ->when(
                 $filters->search !== null,
-                fn ($query) => $query->whereHas('user', fn ($user) => $user
-                    ->where('name', 'like', "%{$filters->search}%")
-                    ->orWhere('email', 'like', "%{$filters->search}%"))
+                function ($query) use ($filters) {
+                    // LIKE metacharacters in user input are inert — a literal `_`/`%`
+                    // search must not wildcard-over-match (MySQL's default escape is \).
+                    $term = addcslashes((string) $filters->search, '%_\\');
+
+                    return $query->whereHas('user', fn ($user) => $user
+                        ->where('name', 'like', "%{$term}%")
+                        ->orWhere('email', 'like', "%{$term}%"));
+                }
             )
             ->with(['user', 'role'])
             ->when(

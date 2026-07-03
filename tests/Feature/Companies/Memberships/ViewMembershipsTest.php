@@ -254,6 +254,25 @@ class ViewMembershipsTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_search_term_contains_a_like_wildcard_then_it_matches_literally(): void
+    {
+        // Given two members whose emails differ exactly where the term has a
+        // literal underscore (an unescaped LIKE `_` would match both)
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Bhanu Fernando', 'email' => 'bhanu@octane.lk']);
+        $underscored = User::factory()->named('Sam One')->withEmail('sam_one@octane.lk')->create();
+        $lookalike = User::factory()->named('Samsone Perera')->withEmail('samsone@octane.lk')->create();
+        $this->attachMember($company, $underscored, $this->seededRole('employee'));
+        $this->attachMember($company, $lookalike, $this->seededRole('employee'));
+
+        // When the owner searches with the literal-underscore term
+        $response = $this->viewMemberships($owner, $company, ['search' => 'sam_one']);
+
+        // Then only the literal match is listed — wildcards in user input are inert
+        $this->assertRosterUserIds($response, [$underscored->getKey()]);
+    }
+
+    #[Test]
     public function when_sorted_by_join_date_descending_then_newest_member_first(): void
     {
         // Given members who joined on three distinct days, named so that join
