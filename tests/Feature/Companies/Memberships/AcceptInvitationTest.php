@@ -11,7 +11,10 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Aggregates\UserMembership;
+use App\Foundation\Auth\Aggregates\User as UserAggregate;
+use App\Foundation\Auth\Exceptions\UserAlreadyRegisteredException;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
+use App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand;
 
 /**
  * UC-1-019 — Accept Company Invitation (membership slice #7, Task 3).
@@ -278,5 +281,26 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Then — a fresh session is issued against the accept-time credential
         $response->assertOk();
         $this->assertNotSame('', (string) $response->json('data.token'), 'The accept-time password must log in.');
+    }
+
+    #[Test]
+    public function when_a_provisioned_user_stream_is_asked_to_provision_again_then_it_refuses(): void
+    {
+        // Given — a user stream already born from an invitation genesis
+        // (unreachable over HTTP — the interactor mints a fresh uuid per accept —
+        // so the re-fire guard is proven at the aggregate seam, mirroring the
+        // Company::create re-create guard precedent)
+        $genesis = CreateUserFromInvitationCommand::validateAndCreate([
+            'companyId' => (string) Str::uuid7(),
+            'email' => 'kasun@newjoiner.lk',
+            'passwordHash' => 'a-bcrypt-hash-stand-in',
+            'name' => 'Nimal Perera',
+        ]);
+        $userId = (string) Str::uuid7();
+        UserAggregate::retrieve($userId)->createFromInvitation($genesis)->persist();
+
+        // When / Then — a second genesis on the SAME stream is refused
+        $this->expectException(UserAlreadyRegisteredException::class);
+        UserAggregate::retrieve($userId)->createFromInvitation($genesis);
     }
 }
