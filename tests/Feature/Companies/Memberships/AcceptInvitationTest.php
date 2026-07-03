@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Companies\Memberships;
 
+use App\Models\User;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Http\Responses\ApiErrorCode;
 
@@ -45,5 +46,21 @@ class AcceptInvitationTest extends MembershipsTestCase
         $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
         $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
         $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
+    }
+
+    #[Test]
+    public function when_an_existing_users_invitation_is_accepted_as_guest_then_authentication_is_required(): void
+    {
+        // Given — the invitee already has an account (a multi-company joiner)
+        [$company, $actor] = $this->aCompanyWithMember();
+        User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+
+        // When — the invitation is accepted without logging in
+        $response = $this->acceptInvitation($token);
+
+        // Then — authentication is demanded first (R9/D7); nothing joined
+        $this->assertRefusedWith($response, ApiErrorCode::Unauthenticated);
+        $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
     }
 }
