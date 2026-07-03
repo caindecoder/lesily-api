@@ -2,9 +2,11 @@
 
 namespace App\Companies\Memberships\IO\Http\Resources;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Foundation\RolesPermissions\Entities\Role;
 
 /**
  * One roster row (UC-1-017, slice §2): the membership id, the member's user and
@@ -22,16 +24,21 @@ class MembershipResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        /** @var User $user — company_user.user_id is a RESTRICT FK, always present */
+        $user = $this->user;
+        /** @var Role $role — company_user.role_id is a FK, always present */
+        $role = $this->role;
+
         return [
             'id' => $this->getKey(),
             'user' => [
-                'id' => $this->user->id,
-                'name' => $this->user->name,
-                'email' => $this->user->email,
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
             ],
             'role' => [
-                'code' => $this->role->code,
-                'name' => $this->role->name,
+                'code' => $role->code,
+                'name' => $role->name,
             ],
             'status' => 'active',
             'invited_at' => null,

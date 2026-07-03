@@ -10,6 +10,9 @@ use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterfa
 
 class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
 {
+    /**
+     * @return LengthAwarePaginator<int, CompanyUser>
+     */
     public function listForCompany(string $companyId, MembershipFilters $filters): LengthAwarePaginator
     {
         return CompanyUser::query()
