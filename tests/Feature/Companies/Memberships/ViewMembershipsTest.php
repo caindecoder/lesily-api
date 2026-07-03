@@ -133,4 +133,43 @@ class ViewMembershipsTest extends MembershipsTestCase
         // Then only company B's membership is listed — nothing leaks from A
         $this->assertRosterUserIds($response, [$shared->getKey()]);
     }
+
+    // --- Happy ---
+
+    #[Test]
+    #[DataProvider('provideViewingRoles')]
+    public function when_permitted_role_lists_memberships_then_roster_returned(string $roleCode): void
+    {
+        // Given a company whose roster is the actor + two named members
+        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        $actor->update(['name' => 'Bhanu Fernando']);
+        $anna = User::factory()->named('Anna Perera')->create();
+        $chamil = User::factory()->named('Chamil Silva')->create();
+        $this->attachMember($company, $anna, $this->seededRole('employee'));
+        $this->attachMember($company, $chamil, $this->seededRole('hr_officer'));
+
+        // When they request the roster
+        $response = $this->viewMemberships($actor, $company);
+
+        // Then all three memberships are listed with the full row shape, in the
+        // default name-ascending order, under the paginated envelope
+        $this->assertMembershipListed($response, $actor, $roleCode);
+        $this->assertMembershipListed($response, $anna, 'employee');
+        $this->assertMembershipListed($response, $chamil, 'hr_officer');
+        $this->assertRosterOrder($response, ['Anna Perera', 'Bhanu Fernando', 'Chamil Silva']);
+        $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 15, 'total' => 3, 'last_page' => 1]);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideViewingRoles(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+            'hr officer' => ['hr_officer'],
+            'auditor' => ['auditor'],
+        ];
+    }
 }

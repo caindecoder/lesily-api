@@ -66,6 +66,17 @@ class UserFactory extends Factory
     }
 
     /**
+     * A deterministic display name — for roster ordering/search assertions
+     * (UC-1-017) where faker's random names would make expectations flaky.
+     */
+    public function named(string $name): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'name' => $name,
+        ]);
+    }
+
+    /**
      * A user with 2FA already enabled — secret + hashed recovery codes + a confirmed
      * timestamp, all generated at runtime (no literal secrets, per SonarCloud). Pass
      * $recoveryCodes to hash known plaintext codes (the recovery-path verify tests need

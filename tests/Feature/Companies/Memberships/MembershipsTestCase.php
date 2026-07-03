@@ -159,6 +159,50 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
+     * $user appears in the roster with the full contract row shape (slice §2):
+     * a membership id, the user sub-object, the role {code, name}, and the
+     * derived status trio (status 'active'; invited_at/last_active_at null until
+     * their sources land — Task 3+, declared s108).
+     */
+    protected function assertMembershipListed(TestResponse $response, User $user, string $roleCode): void
+    {
+        $response->assertOk();
+
+        /** @var array<string, mixed>|null $row */
+        $row = $response->collect('data')->firstWhere('user.id', $user->getKey());
+
+        $this->assertNotNull($row, "No roster row for {$user->email}.");
+        $this->assertNotEmpty($row['id'], 'A roster row must carry the membership id.');
+        $this->assertSame(['id' => $user->getKey(), 'name' => $user->name, 'email' => $user->email], $row['user']);
+        $this->assertSame($roleCode, $row['role']['code']);
+        $this->assertSame($this->seededRole($roleCode)->name, $row['role']['name']);
+        $this->assertSame(['active', null, null], [$row['status'], $row['invited_at'], $row['last_active_at']]);
+    }
+
+    /**
+     * The roster rows appear exactly in $namesInOrder (data.*.user.name).
+     *
+     * @param  array<int, string>  $namesInOrder
+     */
+    protected function assertRosterOrder(TestResponse $response, array $namesInOrder): void
+    {
+        $response->assertOk();
+        $this->assertSame($namesInOrder, $response->collect('data')->pluck('user.name')->all());
+    }
+
+    /**
+     * The meta.pagination block matches $expected exactly — the api-conventions
+     * §8.3 list envelope {page, per_page, total, last_page}.
+     *
+     * @param  array{page: int, per_page: int, total: int, last_page: int}  $expected
+     */
+    protected function assertPaginationMeta(TestResponse $response, array $expected): void
+    {
+        $response->assertOk();
+        $this->assertSame($expected, $response->json('meta.pagination'));
+    }
+
+    /**
      * A membership that was removed (UC-1-024 semantics): the company_user pivot
      * exists but is soft-deleted. Returns the pivot id — the stable membership
      * UUID a re-invite must reuse (D5b undelete-in-place).

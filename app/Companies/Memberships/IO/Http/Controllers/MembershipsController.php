@@ -3,9 +3,8 @@
 namespace App\Companies\Memberships\IO\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
-use App\Companies\Entities\CompanyUser;
 use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
+use App\Companies\Memberships\IO\Http\Resources\MembershipCollection;
 use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterface;
 
 /**
@@ -15,16 +14,12 @@ use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterfa
  */
 class MembershipsController
 {
-    public function index(Request $request, CompanyUserRepositoryInterface $memberships): JsonResponse
+    public function index(Request $request, CompanyUserRepositoryInterface $memberships): MembershipCollection
     {
         $filters = MembershipFilters::fromQuery($request);
 
-        $roster = $memberships->listForCompany($request->company()->getKey(), $filters);
-
-        return response()->json([
-            'data' => $roster->map(fn (CompanyUser $membership): array => [
-                'user' => ['id' => $membership->user_id],
-            ]),
-        ]);
+        return new MembershipCollection(
+            $memberships->listForCompany($request->company()->getKey(), $filters)
+        );
     }
 }
