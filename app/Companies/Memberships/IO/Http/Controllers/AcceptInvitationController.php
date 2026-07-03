@@ -4,6 +4,7 @@ namespace App\Companies\Memberships\IO\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
 use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
 
 /**
@@ -18,7 +19,11 @@ class AcceptInvitationController
 {
     public function __invoke(Request $request, string $token, AcceptInvitationInteractor $interactor): JsonResponse
     {
-        $interactor->execute($token, $request->user('sanctum'));
+        // The token is a route param, not body input (H6) — fold it into the
+        // Command payload so one shape validates the whole request.
+        $command = AcceptInvitationCommand::validateAndCreate([...$request->all(), 'token' => $token]);
+
+        $interactor->execute($command, $request->user('sanctum'));
 
         return new JsonResponse(null, 204);
     }

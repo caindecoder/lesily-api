@@ -6,9 +6,11 @@ use App\Models\User;
 use RuntimeException;
 use Illuminate\Support\Str;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Validation\ValidationException;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
+use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
 
 /**
  * Accept a team invitation (UC-1-019). The emailed plaintext token is hashed
@@ -20,9 +22,9 @@ use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
  */
 class AcceptInvitationInteractor
 {
-    public function execute(string $plaintextToken, ?User $authUser): void
+    public function execute(AcceptInvitationCommand $command, ?User $authUser): void
     {
-        $invitation = $this->livePendingInvitation($plaintextToken);
+        $invitation = $this->livePendingInvitation($command->token);
         $invitee = User::query()->where('email', $invitation->email)->first();
 
         // A held session must belong to the invited email (UC alt-4b; matched
@@ -35,7 +37,33 @@ class AcceptInvitationInteractor
             throw new AuthenticationException;
         }
 
+        if (! $invitee instanceof User) {
+            $this->ensureRegistrationDetails($command);
+        }
+
         throw new RuntimeException('Not implemented');
+    }
+
+    /**
+     * The new-email branch creates an account, so name + password become
+     * required HERE (their presence depends on invitee existence, which the
+     * shape rules cannot know — AcceptInvitationCommand::rules covers shape).
+     */
+    protected function ensureRegistrationDetails(AcceptInvitationCommand $command): void
+    {
+        $errors = [];
+
+        if (! is_string($command->password) || $command->password === '') {
+            $errors['password'] = 'A password is required to create your account.';
+        }
+
+        if (! is_string($command->name) || trim($command->name) === '') {
+            $errors['name'] = 'Your name is required to create your account.';
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
     }
 
     /**

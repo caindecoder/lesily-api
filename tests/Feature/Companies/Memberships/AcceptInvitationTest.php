@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 
 /**
@@ -79,5 +80,36 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Then — only the invited email may accept (UC alt-4b); nothing joined
         $this->assertRefusedWith($response, ApiErrorCode::InviteEmailMismatch);
         $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
+    }
+
+    /**
+     * @param  array<string, string>  $body
+     */
+    #[Test, DataProvider('invalidNewUserDetailsProvider')]
+    public function when_a_new_users_registration_details_are_invalid_then_no_account_is_created(array $body, string $field): void
+    {
+        // Given — a pending invitation for a brand-new email
+        [$company, $actor] = $this->aCompanyWithMember();
+        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+
+        // When — accepting with a broken registration body
+        $response = $this->acceptInvitation($token, $body);
+
+        // Then — shape-rejected on the offending field; nothing was created
+        $this->assertValidationRejected($response, $field);
+        $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
+        $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
+    }
+
+    /**
+     * @return array<string, array{0: array<string, string>, 1: string}>
+     */
+    public static function invalidNewUserDetailsProvider(): array
+    {
+        return [
+            'password missing' => [['name' => 'Nimal Perera'], 'password'],
+            'password below the 8-char minimum' => [['name' => 'Nimal Perera', 'password' => 'Short7!'], 'password'],
+            'name missing' => [['password' => 'Str0ng-Pass!'], 'name'],
+        ];
     }
 }
