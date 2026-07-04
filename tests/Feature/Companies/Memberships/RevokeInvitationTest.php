@@ -11,6 +11,8 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
+use App\Companies\Memberships\Events\UserInvitationRevoked;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RevokeInvitationTest extends MembershipsTestCase
 {
@@ -149,6 +151,23 @@ class RevokeInvitationTest extends MembershipsTestCase
         $this->assertInvitationRevoked($company, 'invitee@contoso.lk', $actor);
     }
 
+    #[Test]
+    public function when_reason_given_then_revocation_reason_recorded(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->reason = 'Sent to the wrong address';
+
+        // When
+        $response = $this->revokeInvitationWithReason($admin, $company, $invitation->getKey());
+
+        // Then
+        $response->assertNoContent();
+        $this->assertRevocationReasonRecorded($company, 'invitee@contoso.lk', $this->reason);
+    }
+
     /**
      * Roles WITH users.revoke-invitation (matrix D4/R1) — each may revoke.
      *
@@ -207,5 +226,22 @@ class RevokeInvitationTest extends MembershipsTestCase
     {
         $this->assertRefusedWith($response, ApiErrorCode::InviteNotPending);
         $response->assertJsonPath('message', 'This invitation is no longer pending.');
+    }
+
+    /**
+     * The optional reason landed on BOTH sides of the projection: the
+     * revocation_reason column AND the stored UserInvitationRevoked payload
+     * carry $reason verbatim (column ↔ event agreement).
+     */
+    protected function assertRevocationReasonRecorded(Company $company, string $email, string $reason): void
+    {
+        $invitation = $this->theInvitation($company, $email);
+
+        $this->assertSame($reason, $invitation->revocation_reason);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserInvitationRevoked::class)
+            ->where('event_properties->membershipId', $invitation->getKey())
+            ->where('event_properties->reason', $reason)
+            ->count());
     }
 }
