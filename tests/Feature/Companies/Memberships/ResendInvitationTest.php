@@ -9,6 +9,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
@@ -26,6 +27,40 @@ class ResendInvitationTest extends MembershipsTestCase
 
         // Then
         $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+    }
+
+    #[Test]
+    #[DataProvider('provideDeniedResendRoles')]
+    public function when_actor_lacks_permission_then_resend_refused(string $roleCode): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $actor = User::factory()->create();
+        $this->attachMember($company, $actor, $this->seededRole($roleCode));
+
+        // When
+        $response = $this->resendInvitation($actor, $company, $invitation->getKey());
+
+        // Then
+        $this->assertInvitationNotResent($response, ApiErrorCode::RoleInsufficient, $invitation->token_hash);
+    }
+
+    /**
+     * Roles WITHOUT users.invite — resend is denied for them (matrix D4/R1:
+     * owner/admin/hr_officer hold it; auditor is read-only).
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function provideDeniedResendRoles(): array
+    {
+        return [
+            'payroll officer' => ['payroll_officer'],
+            'employee' => ['employee'],
+            'manager' => ['manager'],
+            'auditor' => ['auditor'],
+        ];
     }
 
     #[Test]
