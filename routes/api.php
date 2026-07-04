@@ -160,7 +160,7 @@ Route::post('/v1/invitations/{invitationId}/resend', [InvitationsController::cla
 // revoked/expired collapse to 422 INVITE_NOT_PENDING (R-B s111). No throttle: revoke
 // sends no mail, so it stays outside the invitations spam budget (R-D s111).
 Route::delete('/v1/invitations/{invitationId}', [InvitationsController::class, 'destroy'])
-    ->middleware(['auth:sanctum', 'auth.company']);
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.revoke-invitation']);
 
 // View the company roster (UC-1-017) — active memberships with user + role, paginated
 // per api-conventions §9. Read-only (no aggregate/event — cd-users §read-only-via-repository).

@@ -381,6 +381,23 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      * un-accepted and no membership pivot (live or trashed) exists for that
      * email's user in the company.
      */
+    /**
+     * The invitation was NOT revoked: all three revocation columns are untouched
+     * — sad paths change nothing (the LD DeletePersonalAccessToken
+     * state-unchanged discipline).
+     */
+    protected function assertInvitationNotRevoked(Company $company, string $email): void
+    {
+        $invitation = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->sole();
+
+        $this->assertNull($invitation->revoked_at);
+        $this->assertNull($invitation->revoked_by_user_id);
+        $this->assertNull($invitation->revocation_reason);
+    }
+
     protected function assertInvitationNotConsumed(Company $company, string $email): void
     {
         $invitation = Invitation::query()

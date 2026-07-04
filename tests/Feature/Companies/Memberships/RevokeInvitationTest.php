@@ -8,6 +8,7 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
 
@@ -24,6 +25,41 @@ class RevokeInvitationTest extends MembershipsTestCase
 
         // Then
         $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+    }
+
+    #[Test]
+    #[DataProvider('provideDeniedRevokeRoles')]
+    public function when_actor_lacks_permission_then_revoke_refused(string $roleCode): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $actor = User::factory()->create();
+        $this->attachMember($company, $actor, $this->seededRole($roleCode));
+
+        // When
+        $response = $this->revokeInvitation($actor, $company, $invitation->getKey());
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
+        $this->assertInvitationNotRevoked($company, 'invitee@contoso.lk');
+    }
+
+    /**
+     * Roles WITHOUT users.revoke-invitation — revoke is denied for them
+     * (matrix D4/R1: owner/admin/hr_officer hold it; auditor is read-only).
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function provideDeniedRevokeRoles(): array
+    {
+        return [
+            'payroll officer' => ['payroll_officer'],
+            'employee' => ['employee'],
+            'manager' => ['manager'],
+            'auditor' => ['auditor'],
+        ];
     }
 
     #[Test]
