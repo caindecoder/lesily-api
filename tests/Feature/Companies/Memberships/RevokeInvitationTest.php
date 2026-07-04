@@ -107,7 +107,7 @@ class RevokeInvitationTest extends MembershipsTestCase
         [$company, $admin] = $this->aCompanyWithMember();
         $this->aRevokedInvitation($company, $admin, 'invitee@contoso.lk');
         $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
-        $stamps = [$invitation->revoked_at, $invitation->revoked_by_user_id];
+        $stamps = [$invitation->revoked_at, $invitation->revoked_by_user_id, $invitation->revocation_reason];
 
         // When
         $response = $this->revokeInvitation($admin, $company, $invitation->getKey());
@@ -185,6 +185,24 @@ class RevokeInvitationTest extends MembershipsTestCase
         $this->assertRevocationReasonRecorded($company, 'invitee@contoso.lk', $this->reason);
     }
 
+    #[Test]
+    public function when_reason_is_at_the_length_limit_then_the_revoke_succeeds(): void
+    {
+        // Given a reason of exactly the 255-char maximum (the accepted boundary —
+        // guards a max:254 off-by-one that would wrongly reject it)
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->reason = str_repeat('a', 255);
+
+        // When
+        $response = $this->revokeInvitationWithReason($admin, $company, $invitation->getKey());
+
+        // Then
+        $response->assertNoContent();
+        $this->assertRevocationReasonRecorded($company, 'invitee@contoso.lk', $this->reason);
+    }
+
     /**
      * Roles WITH users.revoke-invitation (matrix D4/R1) — each may revoke.
      *
@@ -250,7 +268,7 @@ class RevokeInvitationTest extends MembershipsTestCase
      * the first-revoke capture, and only ONE UserInvitationRevoked event was ever
      * recorded on the stream (the guard rejected the repeat — no second event).
      *
-     * @param  array{0: mixed, 1: ?string}  $before
+     * @param  array{0: mixed, 1: ?string, 2: ?string}  $before
      */
     protected function assertRevocationStampsUnchanged(Company $company, string $email, array $before): void
     {
@@ -258,6 +276,7 @@ class RevokeInvitationTest extends MembershipsTestCase
 
         $this->assertSame($before[0]?->getTimestamp(), $invitation->revoked_at?->getTimestamp());
         $this->assertSame($before[1], $invitation->revoked_by_user_id);
+        $this->assertSame($before[2], $invitation->revocation_reason);
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', UserInvitationRevoked::class)
             ->where('event_properties->membershipId', $invitation->getKey())

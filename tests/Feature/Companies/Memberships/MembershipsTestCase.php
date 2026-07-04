@@ -404,11 +404,6 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
-     * The invitation for ($company, $email) was NOT consumed: it remains
-     * un-accepted and no membership pivot (live or trashed) exists for that
-     * email's user in the company.
-     */
-    /**
      * The invitation was revoked the event-sourced way: revoked_at stamped now
      * (±10s), revoked_by_user_id = $revokedBy, no reason by default, exactly one
      * UserInvitationRevoked stored event carrying this row's id + actor verbatim
@@ -451,8 +446,17 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $this->assertNull($invitation->revoked_at);
         $this->assertNull($invitation->revoked_by_user_id);
         $this->assertNull($invitation->revocation_reason);
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('event_class', UserInvitationRevoked::class)
+            ->where('event_properties->membershipId', $invitation->getKey())
+            ->count());
     }
 
+    /**
+     * The invitation for ($company, $email) was NOT consumed: it remains
+     * un-accepted and no membership pivot (live or trashed) exists for that
+     * email's user in the company.
+     */
     protected function assertInvitationNotConsumed(Company $company, string $email): void
     {
         $invitation = Invitation::query()
