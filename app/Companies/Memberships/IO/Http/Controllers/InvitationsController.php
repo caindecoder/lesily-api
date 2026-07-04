@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Companies\Memberships\UseCases\Commands\InviteUserCommand;
 use App\Companies\Memberships\IO\Http\Resources\InvitationResource;
+use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
 use App\Companies\Memberships\UseCases\Interactors\InviteUserInteractor;
 
 /**
@@ -26,5 +27,10 @@ class InvitationsController
         $invitation = $interactor->execute($request->company(), $actor, $command);
 
         return (new InvitationResource($invitation))->response($request)->setStatusCode(201);
+    }
+
+    public function resend(Request $request, string $invitationId): JsonResponse
+    {
+        throw new InvitationNotPendingException;
     }
 }

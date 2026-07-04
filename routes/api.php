@@ -151,6 +151,11 @@ Route::put('/v1/me/password', ChangePasswordController::class)
 Route::post('/v1/invitations', [InvitationsController::class, 'store'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:users.invite', 'throttle:invitations']);
 
+// Resend rotates the token + resets the 7-day expiry on a live pending invitation
+// (UC-1-021). Shares the invitations mail-spam budget with invite (R5 session 110).
+Route::post('/v1/invitations/{invitationId}/resend', [InvitationsController::class, 'resend'])
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.invite', 'throttle:invitations']);
+
 // View the company roster (UC-1-017) — active memberships with user + role, paginated
 // per api-conventions §9. Read-only (no aggregate/event — cd-users §read-only-via-repository).
 Route::get('/v1/memberships', [MembershipsController::class, 'index'])
