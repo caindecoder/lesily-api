@@ -95,6 +95,22 @@ class ResendInvitationTest extends MembershipsTestCase
         $this->assertInvitationNotResent($response, ApiErrorCode::InviteNotPending, $invitation->token_hash);
     }
 
+    #[Test]
+    public function when_invitation_expired_then_resend_refused(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->travel(8)->days();
+
+        // When
+        $response = $this->resendInvitation($admin, $company, $invitation->getKey());
+
+        // Then
+        $this->assertInvitationNotResent($response, ApiErrorCode::InviteNotPending, $invitation->token_hash);
+    }
+
     /**
      * Resend the invitation $invitationId as $actor acting in $company's context.
      */
