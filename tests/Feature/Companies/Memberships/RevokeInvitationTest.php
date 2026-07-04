@@ -14,6 +14,8 @@ use App\Companies\Memberships\Entities\Invitation;
 
 class RevokeInvitationTest extends MembershipsTestCase
 {
+    protected string $reason = '';
+
     #[Test]
     public function when_invitation_unknown_then_revoke_refused(): void
     {
@@ -80,6 +82,23 @@ class RevokeInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_revocation_reason_too_long_then_revoke_rejected(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->reason = str_repeat('a', 256);
+
+        // When
+        $response = $this->revokeInvitationWithReason($admin, $company, $invitation->getKey());
+
+        // Then
+        $this->assertValidationRejected($response, 'reason');
+        $this->assertInvitationNotRevoked($company, 'invitee@contoso.lk');
+    }
+
+    #[Test]
     public function when_invitation_already_accepted_then_revoke_refused(): void
     {
         // Given
@@ -106,6 +125,20 @@ class RevokeInvitationTest extends MembershipsTestCase
         return $this->deleteJson(
             "/api/v1/invitations/{$invitationId}",
             [],
+            ['X-Company-Context' => $company->getKey()]
+        );
+    }
+
+    /**
+     * Revoke with the shared $this->reason riding as the optional request body.
+     */
+    protected function revokeInvitationWithReason(User $actor, Company $company, string $invitationId): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->deleteJson(
+            "/api/v1/invitations/{$invitationId}",
+            ['reason' => $this->reason],
             ['X-Company-Context' => $company->getKey()]
         );
     }

@@ -2,10 +2,10 @@
 
 namespace App\Companies\Memberships\UseCases\Interactors;
 
-use App\Models\User;
 use App\Companies\Entities\Company;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
+use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
 
 /**
  * Revoke a pending invitation (UC-1-022) — the token is dead thereafter.
@@ -17,7 +17,7 @@ use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
  */
 class RevokeInvitationInteractor
 {
-    public function execute(Company $company, User $actor, string $invitationId): void
+    public function execute(Company $company, RevokeInvitationCommand $command, string $invitationId): void
     {
         Invitation::query()
             ->where('company_id', $company->getKey())

@@ -8,6 +8,7 @@ use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Companies\Memberships\UseCases\Commands\InviteUserCommand;
 use App\Companies\Memberships\IO\Http\Resources\InvitationResource;
+use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
 use App\Companies\Memberships\UseCases\Interactors\InviteUserInteractor;
 use App\Companies\Memberships\UseCases\Interactors\ResendInvitationInteractor;
 use App\Companies\Memberships\UseCases\Interactors\RevokeInvitationInteractor;
@@ -46,7 +47,12 @@ class InvitationsController
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
-        $interactor->execute($request->company(), $actor, $invitationId);
+        $command = RevokeInvitationCommand::validateAndCreate([
+            'revokedBy' => $actor->getKey(),
+            'reason' => $request->input('reason'),
+        ]);
+
+        $interactor->execute($request->company(), $command, $invitationId);
 
         return response()->noContent();
     }
