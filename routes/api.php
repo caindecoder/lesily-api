@@ -156,6 +156,12 @@ Route::post('/v1/invitations', [InvitationsController::class, 'store'])
 Route::post('/v1/invitations/{invitationId}/resend', [InvitationsController::class, 'resend'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:users.invite', 'throttle:invitations']);
 
+// Revoke a pending invitation (UC-1-022) — the token is dead thereafter; accepted/
+// revoked/expired collapse to 422 INVITE_NOT_PENDING (R-B s111). No throttle: revoke
+// sends no mail, so it stays outside the invitations spam budget (R-D s111).
+Route::delete('/v1/invitations/{invitationId}', [InvitationsController::class, 'destroy'])
+    ->middleware(['auth:sanctum', 'auth.company']);
+
 // View the company roster (UC-1-017) — active memberships with user + role, paginated
 // per api-conventions §9. Read-only (no aggregate/event — cd-users §read-only-via-repository).
 Route::get('/v1/memberships', [MembershipsController::class, 'index'])
