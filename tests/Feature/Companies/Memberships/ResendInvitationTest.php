@@ -111,6 +111,22 @@ class ResendInvitationTest extends MembershipsTestCase
         $this->assertInvitationNotResent($response, ApiErrorCode::InviteNotPending, $invitation->token_hash);
     }
 
+    #[Test]
+    public function when_invite_limit_exhausted_then_resend_throttled(): void
+    {
+        // Given — the arrange invite consumes 1 of the shared 20/hr budget (R5)
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->exhaustInviteLimit($admin, $company, 19);
+
+        // When
+        $response = $this->resendInvitation($admin, $company, $invitation->getKey());
+
+        // Then
+        $this->assertThrottled($response);
+    }
+
     /**
      * Resend the invitation $invitationId as $actor acting in $company's context.
      */
