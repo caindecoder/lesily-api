@@ -64,6 +64,22 @@ class ResendInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_invitation_belongs_to_another_company_then_resend_hidden(): void
+    {
+        // Given
+        [$companyA, $adminA] = $this->aCompanyWithMember();
+        [$companyB, $adminB] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($companyB, $adminB, 'invitee@contoso.lk');
+        $invitationB = $this->theInvitation($companyB, 'invitee@contoso.lk');
+
+        // When
+        $response = $this->resendInvitation($adminA, $companyA, $invitationB->getKey());
+
+        // Then
+        $this->assertInvitationNotResent($response, ApiErrorCode::ResourceNotFound, $invitationB->token_hash);
+    }
+
+    #[Test]
     public function when_invitation_already_accepted_then_resend_refused(): void
     {
         // Given
