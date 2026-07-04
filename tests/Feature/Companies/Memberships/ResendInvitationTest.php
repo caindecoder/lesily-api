@@ -13,6 +13,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
+use App\Companies\Memberships\Events\UserInvitationResent;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class ResendInvitationTest extends MembershipsTestCase
 {
@@ -144,6 +146,39 @@ class ResendInvitationTest extends MembershipsTestCase
         $this->assertInvitationNotConsumed($company, 'invitee@contoso.lk');
     }
 
+    #[Test]
+    #[DataProvider('provideAllowedResendRoles')]
+    public function when_pending_invitation_resent_then_token_rotated_and_mail_requeued(string $roleCode): void
+    {
+        // Given
+        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+        $before = $this->theInvitation($company, 'invitee@contoso.lk');
+
+        // When
+        $response = $this->resendInvitation($actor, $company, $before->getKey());
+
+        // Then
+        $response->assertOk()->assertJsonPath('data.id', $before->getKey());
+        $this->assertTokenRotated($before);
+        $this->assertResendMailQueued('invitee@contoso.lk');
+        $this->assertInvitationResentEventRecorded($actor->getKey());
+    }
+
+    /**
+     * Roles WITH users.invite (matrix D4/R1) — each may resend.
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function provideAllowedResendRoles(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+            'hr officer' => ['hr_officer'],
+        ];
+    }
+
     /**
      * Resend the invitation $invitationId as $actor acting in $company's context.
      */
@@ -176,5 +211,60 @@ class ResendInvitationTest extends MembershipsTestCase
         $this->assertRefusedWith($response, $code);
         $this->assertDatabaseHas('invitations', ['token_hash' => $oldTokenHash]);
         Mail::assertQueued(InvitationMail::class, 1);
+    }
+
+    /**
+     * The stored token was ROTATED in place: still a single invitations row,
+     * carrying a fresh sha256 differing from $before's, with the 7-day expiry
+     * reset from now (±10s).
+     */
+    protected function assertTokenRotated(Invitation $before): void
+    {
+        $after = Invitation::query()->whereKey($before->getKey())->sole();
+
+        $this->assertNotSame($before->token_hash, $after->token_hash);
+        $this->assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $after->token_hash);
+        $this->assertEqualsWithDelta(now()->addDays(7)->getTimestamp(), $after->expires_at->getTimestamp(), 10);
+        $this->assertDatabaseCount('invitations', 1);
+    }
+
+    /**
+     * Exactly one NEW InvitationMail rode the resend (two queued total with the
+     * arrange invite), addressed to $email, its plaintext distinct from the
+     * first mail's and sha256-matching the ROTATED stored hash (D3) — the new
+     * link works; the old one cannot.
+     */
+    protected function assertResendMailQueued(string $email): void
+    {
+        Mail::assertQueued(InvitationMail::class, 2);
+
+        $plaintexts = [];
+        Mail::assertQueued(InvitationMail::class, function (InvitationMail $mail) use ($email, &$plaintexts): bool {
+            $this->assertTrue($mail->hasTo($email));
+            $plaintexts[] = $mail->plaintextToken;
+
+            return true;
+        });
+
+        $rotatedHash = Invitation::query()->where('email', $email)->sole()->token_hash;
+        $this->assertContains($rotatedHash, array_map(fn (string $token): string => hash('sha256', $token), $plaintexts));
+        $this->assertCount(2, array_unique($plaintexts));
+    }
+
+    /**
+     * The rotation was event-sourced (amendment R — a direct read-model write
+     * must fail this): one UserInvitationResent stored event whose payload
+     * matches the rotated row and $resentBy verbatim.
+     */
+    protected function assertInvitationResentEventRecorded(string $resentBy): void
+    {
+        $invitation = Invitation::query()->sole();
+
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserInvitationResent::class)
+            ->where('event_properties->membershipId', $invitation->getKey())
+            ->where('event_properties->tokenHash', $invitation->token_hash)
+            ->where('event_properties->resentBy', $resentBy)
+            ->count());
     }
 }
