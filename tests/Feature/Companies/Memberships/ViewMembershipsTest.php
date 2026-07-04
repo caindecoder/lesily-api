@@ -445,6 +445,24 @@ class ViewMembershipsTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_sorted_by_join_date_descending_then_newest_invitation_first(): void
+    {
+        // Given a member who joined yesterday and an invitation issued today
+        $this->travelTo(now()->subDay());
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Bhanu Fernando']);
+        $this->travelBack();
+        $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
+
+        // When the owner sorts the roster by newest first
+        $response = $this->viewMemberships($owner, $company, ['sort' => '-created_at']);
+
+        // Then the invited row leads — the invitation's issue time rides the
+        // union's shared created_at sort column
+        $this->assertRosterOrder($response, [null, 'Bhanu Fernando']);
+    }
+
+    #[Test]
     public function when_filtered_by_role_then_invited_rows_with_that_role_listed(): void
     {
         // Given an owner, an hr_officer member, and a pending EMPLOYEE invitation

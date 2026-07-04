@@ -95,7 +95,7 @@ class ResendInvitationTest extends MembershipsTestCase
         $response = $this->resendInvitation($admin, $company, $invitation->getKey());
 
         // Then
-        $this->assertInvitationNotResent($response, ApiErrorCode::InviteNotPending, $invitation->token_hash);
+        $this->assertResendRefusedAsNotPending($response, $invitation->token_hash);
     }
 
     #[Test]
@@ -111,7 +111,27 @@ class ResendInvitationTest extends MembershipsTestCase
         $response = $this->resendInvitation($admin, $company, $invitation->getKey());
 
         // Then
-        $this->assertInvitationNotResent($response, ApiErrorCode::InviteNotPending, $invitation->token_hash);
+        $this->assertResendRefusedAsNotPending($response, $invitation->token_hash);
+    }
+
+    #[Test]
+    public function when_invitation_resent_twice_then_superseded_token_no_longer_accepts(): void
+    {
+        // Given a pending invitation resent twice
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->resendInvitation($admin, $company, $invitation->getKey())->assertOk();
+        $firstRotated = $this->theRotatedPlaintext('invitee@contoso.lk');
+        $this->resendInvitation($admin, $company, $invitation->getKey())->assertOk();
+
+        // When the invitee tries the superseded first-rotation link
+        $response = $this->acceptInvitation($firstRotated, $this->validNewUserBody());
+
+        // Then it is dead — no two tokens are ever live at once (the UC's
+        // Minimal Guarantee; each rotation kills every earlier link)
+        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertInvitationNotConsumed($company, 'invitee@contoso.lk');
     }
 
     #[Test]
@@ -266,6 +286,16 @@ class ResendInvitationTest extends MembershipsTestCase
     {
         $response->assertOk();
         $response->assertJsonPath('data.id', $invitationId);
+    }
+
+    /**
+     * The resend was refused as not-pending with the collapsed admin-facing
+     * message the UC pins (s110 R3), and changed nothing.
+     */
+    protected function assertResendRefusedAsNotPending(TestResponse $response, string $oldTokenHash): void
+    {
+        $this->assertInvitationNotResent($response, ApiErrorCode::InviteNotPending, $oldTokenHash);
+        $response->assertJsonPath('message', 'This invitation is no longer pending.');
     }
 
     /**
