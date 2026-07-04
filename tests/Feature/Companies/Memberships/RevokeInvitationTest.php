@@ -101,6 +101,23 @@ class RevokeInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_invitation_already_revoked_then_revoke_refused(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aRevokedInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $stamps = [$invitation->revoked_at, $invitation->revoked_by_user_id];
+
+        // When
+        $response = $this->revokeInvitation($admin, $company, $invitation->getKey());
+
+        // Then
+        $this->assertRevokeRefusedAsNotPending($response);
+        $this->assertRevocationStampsUnchanged($company, 'invitee@contoso.lk', $stamps);
+    }
+
+    #[Test]
     public function when_invitation_already_accepted_then_revoke_refused(): void
     {
         // Given
@@ -226,6 +243,25 @@ class RevokeInvitationTest extends MembershipsTestCase
     {
         $this->assertRefusedWith($response, ApiErrorCode::InviteNotPending);
         $response->assertJsonPath('message', 'This invitation is no longer pending.');
+    }
+
+    /**
+     * The second revoke changed nothing: the revocation stamps are byte-equal to
+     * the first-revoke capture, and only ONE UserInvitationRevoked event was ever
+     * recorded on the stream (the guard rejected the repeat — no second event).
+     *
+     * @param  array{0: mixed, 1: ?string}  $before
+     */
+    protected function assertRevocationStampsUnchanged(Company $company, string $email, array $before): void
+    {
+        $invitation = $this->theInvitation($company, $email);
+
+        $this->assertSame($before[0]?->getTimestamp(), $invitation->revoked_at?->getTimestamp());
+        $this->assertSame($before[1], $invitation->revoked_by_user_id);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserInvitationRevoked::class)
+            ->where('event_properties->membershipId', $invitation->getKey())
+            ->count());
     }
 
     /**

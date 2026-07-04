@@ -25,7 +25,9 @@ class RevokeInvitationInteractor
             ->whereKey($invitationId)
             ->firstOrFail();
 
-        $isLivePending = $invitation->accepted_at === null && $invitation->expires_at->isFuture();
+        $isLivePending = $invitation->accepted_at === null
+            && $invitation->revoked_at === null
+            && $invitation->expires_at->isFuture();
 
         if (! $isLivePending) {
             throw new InvitationNotPendingException;

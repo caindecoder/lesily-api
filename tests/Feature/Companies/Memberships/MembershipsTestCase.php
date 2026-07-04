@@ -293,6 +293,32 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
+     * Issue a pending invitation for ($company, $email) and REVOKE it through the
+     * DELETE endpoint acting as $actor (who must hold users.revoke-invitation).
+     * Returns the ORIGINAL plaintext token — now dead — so consumers can prove a
+     * revoked token no longer accepts/resends. Ends guard-clean (amendment P).
+     */
+    protected function aRevokedInvitation(Company $company, User $actor, string $email): string
+    {
+        $plaintextToken = $this->aPendingInvitation($company, $actor, $email);
+        $invitationId = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->value('id');
+
+        Sanctum::actingAs($actor);
+        $this->deleteJson(
+            "/api/v1/invitations/{$invitationId}",
+            [],
+            ['X-Company-Context' => $company->getKey()]
+        )->assertNoContent();
+
+        Auth::forgetGuards();
+
+        return $plaintextToken;
+    }
+
+    /**
      * The membership for ($company, $email) was ACTIVATED the D5b way: the
      * pivot carries the SAME UUID as the invitation (id AND invitation_id), is
      * live under the invitation's role, the invitation is stamped accepted —
