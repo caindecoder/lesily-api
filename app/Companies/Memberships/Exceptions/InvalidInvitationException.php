@@ -6,7 +6,7 @@ use Exception;
 
 /**
  * The accept token did not resolve to a live pending invitation — never issued,
- * expired, already used, or (Task 5) revoked. ONE collapsed message + error_code
+ * expired, already used, or revoked (H2, joined Task 5). ONE collapsed message + error_code
  * INVITE_INVALID (422) for every cause, so a probe cannot learn token state
  * (H4 session 109; RESET_LINK_INVALID parity).
  */

@@ -13,8 +13,9 @@ use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 
 /**
  * The membership read-model writer, fed by TWO streams: the UserMembership
- * aggregate's invite lifecycle (UserInvited → the invitations table; the later
- * accept/revoke/expire/role-change/remove arms land with their slice tasks) and
+ * aggregate's invite lifecycle (UserInvited → the invitations table; accept +
+ * revoke arms are BUILT, the later expire/role-change/remove arms land with
+ * their slice tasks) and
  * the User identity stream's membership attributes (emergency contact → the
  * company_user pivot, slice C1). The owner pivot itself is written by
  * CompanyProjector::onCompanyCreated — the FK chain (users → companies →
