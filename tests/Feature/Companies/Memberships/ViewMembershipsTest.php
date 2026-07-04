@@ -432,6 +432,57 @@ class ViewMembershipsTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_other_company_has_pending_invitations_then_not_in_roster(): void
+    {
+        // Given company A's owner and a pending invitation in company B only
+        [$companyA, $ownerA] = $this->aCompanyWithMember('owner');
+        [$companyB, $ownerB] = $this->aCompanyWithMember('owner');
+        $this->aPendingInvitation($companyB, $ownerB, 'kasun@contoso.lk');
+
+        // When A's owner requests A's roster
+        $response = $this->viewMemberships($ownerA, $companyA);
+
+        // Then B's pending invitation leaks nowhere — only A's own rows are
+        // listed (the union's second tenant surface, s110 #13)
+        $this->assertRosterUserIds($response, [$ownerA->getKey()]);
+    }
+
+    #[Test]
+    public function when_invitation_accepted_then_invited_row_replaced_by_active_row(): void
+    {
+        // Given a pending invitation that the invitee then accepts
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $token = $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
+        $invitationId = Invitation::query()->where('email', 'kasun@contoso.lk')->sole()->getKey();
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
+
+        // When the owner requests the roster
+        $response = $this->viewMemberships($owner, $company);
+
+        // Then the SAME row id is now active with no invited duplicate, and the
+        // roster counts exactly the two members
+        $this->assertInvitedRowBecameActive($response, $invitationId, 'kasun@contoso.lk');
+        $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 15, 'total' => 2, 'last_page' => 1]);
+    }
+
+    /**
+     * The accepted invitation kept its row id across the flip (D5b identity —
+     * invitation UUID == pivot UUID): the row is now active under the joiner's
+     * email and no invited row remains anywhere in the response.
+     */
+    protected function assertInvitedRowBecameActive(TestResponse $response, string $invitationId, string $email): void
+    {
+        $response->assertOk();
+
+        /** @var array<string, mixed>|null $row */
+        $row = $response->collect('data')->firstWhere('id', $invitationId);
+
+        $this->assertNotNull($row, 'The accepted invitation must keep its row id (D5b).');
+        $this->assertSame(['active', $email], [$row['status'], $row['user']['email']]);
+        $this->assertCount(0, $response->collect('data')->where('status', 'invited'));
+    }
+
+    #[Test]
     public function when_roster_is_returned_then_envelope_shape_is_exact(): void
     {
         // Given a company whose roster is just the owner
