@@ -37,10 +37,15 @@ class MembershipResource extends JsonResource
                 'name' => $this->resource->role_name,
             ],
             'status' => $this->resource->status,
-            'invited_at' => $this->resource->invited_at === null
-                ? null
-                : CarbonImmutable::parse((string) $this->resource->invited_at),
-            'last_active_at' => $this->resource->last_active_at,
+            'invited_at' => $this->parsedTimestamp($this->resource->invited_at),
+            // Locked to the same serialization as invited_at now, so the shape
+            // holds when its writer lands (declared s108).
+            'last_active_at' => $this->parsedTimestamp($this->resource->last_active_at),
         ];
+    }
+
+    private function parsedTimestamp(mixed $value): ?CarbonImmutable
+    {
+        return $value === null ? null : CarbonImmutable::parse((string) $value);
     }
 }

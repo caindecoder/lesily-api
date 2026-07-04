@@ -39,6 +39,9 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
                 fn (Builder $query) => $query->orderByDesc('created_at'),
                 fn (Builder $query) => $query->orderBy('sort_name'),
             )
+            // Stable tie-breaker: equal sort keys must not shuffle rows between
+            // page requests of a paginated union.
+            ->orderBy('id')
             ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
     }
 

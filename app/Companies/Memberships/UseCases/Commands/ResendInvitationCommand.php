@@ -13,8 +13,6 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  */
 class ResendInvitationCommand extends Data
 {
-    public string $invitationId;
-
     public string $plaintextToken;
 
     public string $resentBy;
@@ -24,8 +22,9 @@ class ResendInvitationCommand extends Data
      */
     public static function rules(ValidationContext $context): array
     {
+        // No id field: the aggregate is retrieved BY the invitation UUID and
+        // stamps membershipId from $this->uuid() — CreateInvitationCommand parity.
         return [
-            'invitationId' => ['required', 'uuid'],
             'plaintextToken' => ['required', 'string', 'min:40', 'max:255'],
             'resentBy' => ['required', 'uuid'],
         ];

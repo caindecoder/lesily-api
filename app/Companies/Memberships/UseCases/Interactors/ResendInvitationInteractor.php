@@ -38,7 +38,6 @@ class ResendInvitationInteractor
 
         UserMembership::retrieve($invitation->getKey())
             ->resendInvitation(ResendInvitationCommand::validateAndCreate([
-                'invitationId' => $invitation->getKey(),
                 'plaintextToken' => $plaintextToken,
                 'resentBy' => $actor->getKey(),
             ]))

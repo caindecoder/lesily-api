@@ -184,9 +184,10 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
-     * The roster rows appear exactly in $namesInOrder (data.*.user.name).
+     * The roster rows appear exactly in $namesInOrder (data.*.user.name) —
+     * null entries are invited rows, whose user has no name (s110 R4a).
      *
-     * @param  array<int, string>  $namesInOrder
+     * @param  array<int, string|null>  $namesInOrder
      */
     protected function assertRosterOrder(TestResponse $response, array $namesInOrder): void
     {
