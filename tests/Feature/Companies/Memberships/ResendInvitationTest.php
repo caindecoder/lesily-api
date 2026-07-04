@@ -160,7 +160,7 @@ class ResendInvitationTest extends MembershipsTestCase
         $response = $this->resendInvitation($actor, $company, $before->getKey());
 
         // Then
-        $response->assertOk()->assertJsonPath('data.id', $before->getKey());
+        $this->assertInvitationResourceReturned($response, $before->getKey());
         $this->assertTokenRotated($before);
         $this->assertResendMailQueued('invitee@contoso.lk');
         $this->assertInvitationResentEventRecorded($actor->getKey());
@@ -255,6 +255,17 @@ class ResendInvitationTest extends MembershipsTestCase
         $this->assertRefusedWith($response, $code);
         $this->assertDatabaseHas('invitations', ['token_hash' => $oldTokenHash]);
         Mail::assertQueued(InvitationMail::class, 1);
+    }
+
+    /**
+     * The resend returned the invitation resource: 200 carrying the SAME
+     * invitation UUID as the row id — the rotation happens in place, never
+     * via a new invitation.
+     */
+    protected function assertInvitationResourceReturned(TestResponse $response, string $invitationId): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data.id', $invitationId);
     }
 
     /**

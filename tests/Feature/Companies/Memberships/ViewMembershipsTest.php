@@ -219,7 +219,10 @@ class ViewMembershipsTest extends MembershipsTestCase
     {
         // Given an active member, one non-live invitation, and one live pending one
         [$company, $owner] = $this->aCompanyWithMember('owner');
-        $this->aNonLiveInvitation($company, $owner, 'stale@contoso.lk', $nonLiveState);
+        match ($nonLiveState) {
+            'accepted' => $this->anAcceptedInvitation($company, $owner, 'stale@contoso.lk'),
+            default => $this->anExpiredInvitation($company, $owner, 'stale@contoso.lk'),
+        };
         $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
 
         // When the owner filters the roster by the invited status
@@ -227,8 +230,7 @@ class ViewMembershipsTest extends MembershipsTestCase
 
         // Then ONLY the live pending invitation is listed (R1 s110 — live =
         // unaccepted + unexpired); the non-live one and every member are absent
-        $this->assertInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
-        $this->assertCount(1, $response->json('data'));
+        $this->assertOnlyInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
     }
 
     /**
@@ -246,21 +248,22 @@ class ViewMembershipsTest extends MembershipsTestCase
     }
 
     /**
-     * An invitation for $email that is no longer live: accepted (its member
-     * then holds an ACTIVE row), or expired by aging it past its 7-day window —
-     * the live invitation in the test arrange is created AFTER the time jump,
-     * so it alone stays unexpired.
+     * An invitation for $email consumed by its invitee — the accepted state
+     * the invited filter must exclude (its member holds an ACTIVE row instead).
      */
-    protected function aNonLiveInvitation(Company $company, User $actor, string $email, string $state): void
+    protected function anAcceptedInvitation(Company $company, User $actor, string $email): void
     {
         $token = $this->aPendingInvitation($company, $actor, $email);
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
+    }
 
-        if ($state === 'accepted') {
-            $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
-
-            return;
-        }
-
+    /**
+     * An invitation for $email aged past its 7-day window — the live invitation
+     * in the test arrange is created AFTER the jump, so it alone stays unexpired.
+     */
+    protected function anExpiredInvitation(Company $company, User $actor, string $email): void
+    {
+        $this->aPendingInvitation($company, $actor, $email);
         $this->travel(8)->days();
     }
 
@@ -401,11 +404,21 @@ class ViewMembershipsTest extends MembershipsTestCase
         $response = $this->viewMemberships($owner, $company);
 
         // Then the pending invitation appears as an invited row, placed by its
-        // email in the name-ascending order (COALESCE fallback — s110 sort
-        // ruling), and counted by the pagination meta
+        // email in the name-ascending order (the sort_name fallback — s110 sort
+        // ruling: 'Bhanu…' < 'kasun@…'), and counted by the pagination meta
         $this->assertInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
         $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 15, 'total' => 2, 'last_page' => 1]);
-        $this->assertSame(['Bhanu Fernando', null], $response->collect('data')->pluck('user.name')->all());
+        $this->assertRosterOrder($response, ['Bhanu Fernando', null]);
+    }
+
+    /**
+     * The invited row for $email is listed AND is the response's only row —
+     * every other roster candidate (members, non-live invitations) is excluded.
+     */
+    protected function assertOnlyInvitedRowListed(TestResponse $response, string $email, string $roleCode): void
+    {
+        $this->assertInvitedRowListed($response, $email, $roleCode);
+        $this->assertCount(1, $response->json('data'));
     }
 
     /**
@@ -445,8 +458,7 @@ class ViewMembershipsTest extends MembershipsTestCase
 
         // Then the invited row is the only match — the role filter spans both
         // union arms (uniform filters, s110)
-        $this->assertInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
-        $this->assertCount(1, $response->json('data'));
+        $this->assertOnlyInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
     }
 
     #[Test]
@@ -462,8 +474,7 @@ class ViewMembershipsTest extends MembershipsTestCase
 
         // Then the invited row is the only match — search spans both union arms
         // by email (an invited row has no name to match; uniform filters, s110)
-        $this->assertInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
-        $this->assertCount(1, $response->json('data'));
+        $this->assertOnlyInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
     }
 
     #[Test]
