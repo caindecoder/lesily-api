@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -165,6 +166,25 @@ class ResendInvitationTest extends MembershipsTestCase
         $this->assertInvitationResentEventRecorded($actor->getKey());
     }
 
+    #[Test]
+    public function when_resent_invitation_accepted_then_invitee_joins(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->resendInvitation($admin, $company, $invitation->getKey())->assertOk();
+        $newToken = $this->theRotatedPlaintext('invitee@contoso.lk');
+
+        // When
+        $response = $this->acceptInvitation($newToken, $this->validNewUserBody());
+
+        // Then
+        $response->assertStatus(201);
+        $this->assertMembershipActivated($company, 'invitee@contoso.lk');
+        $this->assertNewUserProvisioned('invitee@contoso.lk', 'Nimal Perera');
+    }
+
     /**
      * Roles WITH users.invite (matrix D4/R1) — each may resend.
      *
@@ -199,6 +219,30 @@ class ResendInvitationTest extends MembershipsTestCase
             ->where('company_id', $company->getKey())
             ->where('email', $email)
             ->sole();
+    }
+
+    /**
+     * The plaintext from the RESEND mail — the queued InvitationMail whose
+     * sha256 matches the ROTATED stored hash. Ends guard-clean (amendment P)
+     * so the accept under test runs as a genuine guest.
+     */
+    protected function theRotatedPlaintext(string $email): string
+    {
+        $storedHash = Invitation::query()->where('email', $email)->sole()->token_hash;
+
+        $plaintext = null;
+        Mail::assertQueued(InvitationMail::class, function (InvitationMail $mail) use ($storedHash, &$plaintext): bool {
+            if (hash('sha256', $mail->plaintextToken) === $storedHash) {
+                $plaintext = $mail->plaintextToken;
+            }
+
+            return true;
+        });
+        $this->assertNotNull($plaintext, 'No queued InvitationMail carries the rotated token.');
+
+        Auth::forgetGuards();
+
+        return (string) $plaintext;
     }
 
     /**
