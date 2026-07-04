@@ -63,6 +63,23 @@ class RevokeInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_invitation_belongs_to_another_company_then_revoke_hidden(): void
+    {
+        // Given
+        [$companyA, $adminA] = $this->aCompanyWithMember();
+        [$companyB, $adminB] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($companyB, $adminB, 'invitee@contoso.lk');
+        $invitationB = $this->theInvitation($companyB, 'invitee@contoso.lk');
+
+        // When
+        $response = $this->revokeInvitation($adminA, $companyA, $invitationB->getKey());
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertInvitationNotRevoked($companyB, 'invitee@contoso.lk');
+    }
+
+    #[Test]
     public function when_invitation_already_accepted_then_revoke_refused(): void
     {
         // Given
