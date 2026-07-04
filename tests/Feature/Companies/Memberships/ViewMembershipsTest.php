@@ -4,11 +4,13 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use App\Companies\Entities\Company;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Companies\Memberships\Entities\Invitation;
 
 class ViewMembershipsTest extends MembershipsTestCase
 {
@@ -346,6 +348,48 @@ class ViewMembershipsTest extends MembershipsTestCase
 
         // Then the ceiling value is accepted and echoed in the meta
         $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 100, 'total' => 1, 'last_page' => 1]);
+    }
+
+    #[Test]
+    public function when_pending_invitation_exists_then_roster_shows_invited_row(): void
+    {
+        // Given a one-member roster and a pending invitation
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Bhanu Fernando']);
+        $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
+
+        // When the owner requests the unfiltered roster
+        $response = $this->viewMemberships($owner, $company);
+
+        // Then the pending invitation appears as an invited row, placed by its
+        // email in the name-ascending order (COALESCE fallback — s110 sort
+        // ruling), and counted by the pagination meta
+        $this->assertInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
+        $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 15, 'total' => 2, 'last_page' => 1]);
+        $this->assertSame(['Bhanu Fernando', null], $response->collect('data')->pluck('user.name')->all());
+    }
+
+    /**
+     * The roster carries the pending invitation for $email as an invited row
+     * (s110 R4a/R4b): id = the invitation UUID (D5b), a null-identity user{}
+     * holding the invitation email, the invitation's role, status invited with
+     * invited_at set and last_active_at null.
+     */
+    protected function assertInvitedRowListed(TestResponse $response, string $email, string $roleCode): void
+    {
+        $response->assertOk();
+
+        /** @var array<string, mixed>|null $row */
+        $row = $response->collect('data')->firstWhere('user.email', $email);
+
+        $this->assertNotNull($row, "No invited roster row for {$email}.");
+        $invitation = Invitation::query()->where('email', $email)->sole();
+        $this->assertSame($invitation->getKey(), $row['id']);
+        $this->assertSame(['id' => null, 'name' => null, 'email' => $email], $row['user']);
+        $this->assertSame($roleCode, $row['role']['code']);
+        $this->assertSame('invited', $row['status']);
+        $this->assertNotNull($row['invited_at']);
+        $this->assertNull($row['last_active_at']);
     }
 
     #[Test]
