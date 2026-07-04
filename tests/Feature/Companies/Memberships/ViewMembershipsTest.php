@@ -432,6 +432,41 @@ class ViewMembershipsTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_filtered_by_role_then_invited_rows_with_that_role_listed(): void
+    {
+        // Given an owner, an hr_officer member, and a pending EMPLOYEE invitation
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $hr = User::factory()->create();
+        $this->attachMember($company, $hr, $this->seededRole('hr_officer'));
+        $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
+
+        // When the owner filters the roster by the employee role
+        $response = $this->viewMemberships($owner, $company, ['role' => 'employee']);
+
+        // Then the invited row is the only match — the role filter spans both
+        // union arms (uniform filters, s110)
+        $this->assertInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
+        $this->assertCount(1, $response->json('data'));
+    }
+
+    #[Test]
+    public function when_searched_by_invitee_email_then_invited_row_listed(): void
+    {
+        // Given a member whose identity never matches the term + a pending invitation
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Bhanu Fernando', 'email' => 'bhanu@octane.lk']);
+        $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
+
+        // When the owner searches by the invitee's email fragment
+        $response = $this->viewMemberships($owner, $company, ['search' => 'kasun@']);
+
+        // Then the invited row is the only match — search spans both union arms
+        // by email (an invited row has no name to match; uniform filters, s110)
+        $this->assertInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
+        $this->assertCount(1, $response->json('data'));
+    }
+
+    #[Test]
     public function when_other_company_has_pending_invitations_then_not_in_roster(): void
     {
         // Given company A's owner and a pending invitation in company B only
