@@ -4,12 +4,13 @@ namespace App\Companies\Memberships\IO\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Companies\Memberships\UseCases\Commands\InviteUserCommand;
 use App\Companies\Memberships\IO\Http\Resources\InvitationResource;
-use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
 use App\Companies\Memberships\UseCases\Interactors\InviteUserInteractor;
 use App\Companies\Memberships\UseCases\Interactors\ResendInvitationInteractor;
+use App\Companies\Memberships\UseCases\Interactors\RevokeInvitationInteractor;
 
 /**
  * The company's invitation resource — invite (UC-1-018), resend (UC-1-021), and
@@ -40,8 +41,13 @@ class InvitationsController
         return (new InvitationResource($invitation))->response($request)->setStatusCode(200);
     }
 
-    public function destroy(): never
+    public function destroy(Request $request, string $invitationId, RevokeInvitationInteractor $interactor): Response
     {
-        throw new InvitationNotPendingException;
+        /** @var User $actor — guaranteed by auth:sanctum */
+        $actor = $request->user();
+
+        $interactor->execute($request->company(), $actor, $invitationId);
+
+        return response()->noContent();
     }
 }

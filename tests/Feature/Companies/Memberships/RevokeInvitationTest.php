@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
@@ -12,6 +13,19 @@ use App\Companies\Memberships\Entities\Invitation;
 
 class RevokeInvitationTest extends MembershipsTestCase
 {
+    #[Test]
+    public function when_invitation_unknown_then_revoke_refused(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+
+        // When
+        $response = $this->revokeInvitation($admin, $company, (string) Str::uuid7());
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+    }
+
     #[Test]
     public function when_invitation_already_accepted_then_revoke_refused(): void
     {
