@@ -152,6 +152,7 @@ class AcceptInvitationInteractor
         $invitation = Invitation::query()
             ->where('token_hash', hash('sha256', $plaintextToken))
             ->whereNull('accepted_at')
+            ->whereNull('revoked_at')
             ->where('expires_at', '>', now())
             ->first();
 

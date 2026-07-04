@@ -59,6 +59,24 @@ class AcceptInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_invitation_was_revoked_then_acceptance_is_refused(): void
+    {
+        // Given — a pending invitation the admin then revoked (UC-1-022); the
+        // original link is dead thereafter
+        [$company, $actor] = $this->aCompanyWithMember();
+        $deadToken = $this->aRevokedInvitation($company, $actor, 'kasun@newjoiner.lk');
+
+        // When — the invitee follows the revoked link with valid details
+        $response = $this->acceptInvitation($deadToken, $this->validNewUserBody());
+
+        // Then — the SAME collapsed envelope (no revoked-vs-unknown leak, H4);
+        // the invitation stays unconsumed and no account was created
+        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
+        $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
+    }
+
+    #[Test]
     public function when_an_accepted_invitation_is_replayed_then_it_is_refused(): void
     {
         // Given — an invitation already consumed by its new user
