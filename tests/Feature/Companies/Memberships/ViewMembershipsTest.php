@@ -198,31 +198,70 @@ class ViewMembershipsTest extends MembershipsTestCase
     }
 
     #[Test]
-    #[DataProvider('provideStatusFilters')]
-    public function when_filtered_by_status_then_matching_members_listed(string $status, bool $expectsRoster): void
+    public function when_filtered_by_active_status_then_invited_rows_excluded(): void
     {
-        // Given a company with an owner and one more member
+        // Given a two-member roster and a pending invitation
         [$company, $owner] = $this->aCompanyWithMember('owner');
         $member = User::factory()->create();
         $this->attachMember($company, $member, $this->seededRole('employee'));
+        $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
 
-        // When the owner filters the roster by that status
-        $response = $this->viewMemberships($owner, $company, ['status' => $status]);
+        // When the owner filters the roster by the active status
+        $response = $this->viewMemberships($owner, $company, ['status' => 'active']);
 
-        // Then active lists every membership; invited is empty until the
-        // pending-invitation union lands (Task 4, slice §7 — declared s108)
-        $this->assertRosterUserIds($response, $expectsRoster ? [$owner->getKey(), $member->getKey()] : []);
+        // Then only the memberships are listed — the pending invitation is absent
+        $this->assertRosterUserIds($response, [$owner->getKey(), $member->getKey()]);
+    }
+
+    #[Test]
+    #[DataProvider('provideNonLiveInvitationStates')]
+    public function when_filtered_by_invited_status_then_only_live_pending_invitations_listed(string $nonLiveState): void
+    {
+        // Given an active member, one non-live invitation, and one live pending one
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $this->aNonLiveInvitation($company, $owner, 'stale@contoso.lk', $nonLiveState);
+        $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
+
+        // When the owner filters the roster by the invited status
+        $response = $this->viewMemberships($owner, $company, ['status' => 'invited']);
+
+        // Then ONLY the live pending invitation is listed (R1 s110 — live =
+        // unaccepted + unexpired); the non-live one and every member are absent
+        $this->assertInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
+        $this->assertCount(1, $response->json('data'));
     }
 
     /**
-     * @return array<string, array{string, bool}>
+     * The two non-live invitation states the invited filter must exclude
+     * (the revoked state joins at Task 5 with its column — H2/R6 s110).
+     *
+     * @return array<string, array{string}>
      */
-    public static function provideStatusFilters(): array
+    public static function provideNonLiveInvitationStates(): array
     {
         return [
-            'active lists memberships' => ['active', true],
-            'invited empty until the union lands' => ['invited', false],
+            'an accepted invitation' => ['accepted'],
+            'an expired invitation' => ['expired'],
         ];
+    }
+
+    /**
+     * An invitation for $email that is no longer live: accepted (its member
+     * then holds an ACTIVE row), or expired by aging it past its 7-day window —
+     * the live invitation in the test arrange is created AFTER the time jump,
+     * so it alone stays unexpired.
+     */
+    protected function aNonLiveInvitation(Company $company, User $actor, string $email, string $state): void
+    {
+        $token = $this->aPendingInvitation($company, $actor, $email);
+
+        if ($state === 'accepted') {
+            $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
+
+            return;
+        }
+
+        $this->travel(8)->days();
     }
 
     #[Test]
