@@ -144,8 +144,9 @@ class AcceptInvitationInteractor
 
     /**
      * The invitation this token resolves to, if it is still live: sha256 the
-     * plaintext (only the hash is at rest — D3/R10), require not-yet-accepted
-     * and not-yet-expired. Anything else is indistinguishably invalid.
+     * plaintext (only the hash is at rest — D3/R10), require not-yet-accepted,
+     * not-revoked (H2, joined Task 5) and not-yet-expired. Anything else is
+     * indistinguishably invalid.
      */
     protected function livePendingInvitation(string $plaintextToken): Invitation
     {

@@ -115,6 +115,21 @@ class ResendInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_invitation_revoked_then_resend_refused(): void
+    {
+        // Given — a pending invitation the admin then revoked (UC-1-022)
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aRevokedInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+
+        // When — the admin tries to resend the dead invitation
+        $response = $this->resendInvitation($admin, $company, $invitation->getKey());
+
+        // Then — refused as not-pending (a revoked invite is no longer pending, R6)
+        $this->assertResendRefusedAsNotPending($response, $invitation->token_hash);
+    }
+
+    #[Test]
     public function when_invitation_resent_twice_then_superseded_token_no_longer_accepts(): void
     {
         // Given a pending invitation resent twice
