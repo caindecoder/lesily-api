@@ -6,7 +6,9 @@ use Carbon\CarbonImmutable;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Events\UserJoinedCompany;
+use App\Companies\Memberships\Events\UserInvitationResent;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
+use App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand;
 
 /**
  * The invited-member lifecycle stream (SM-1-01): one aggregate per membership,
@@ -39,6 +41,23 @@ class UserMembership extends AggregateRoot
                 expiresAt: CarbonImmutable::now()->addDays(self::INVITATION_TTL_DAYS),
                 tokenHash: hash('sha256', $command->plaintextToken),
             ));
+    }
+
+    /**
+     * SM-1-01 T7 (Invited → Invited): rotate the bearer token + reset the 7-day
+     * expiry — guardless like invite() (the interactor's live-pending check is
+     * the gate, R1 s110). The command carries the freshly minted plaintext;
+     * only its sha256 enters the stream (D3), so the previous link dies with
+     * this event (single live token per membership).
+     */
+    public function resendInvitation(ResendInvitationCommand $command): static
+    {
+        return $this->recordThat(new UserInvitationResent(
+            membershipId: $this->uuid(),
+            tokenHash: hash('sha256', $command->plaintextToken),
+            expiresAt: CarbonImmutable::now()->addDays(self::INVITATION_TTL_DAYS),
+            resentBy: $command->resentBy,
+        ));
     }
 
     /**

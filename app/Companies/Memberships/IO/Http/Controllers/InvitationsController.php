@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use App\Companies\Memberships\UseCases\Commands\InviteUserCommand;
 use App\Companies\Memberships\IO\Http\Resources\InvitationResource;
 use App\Companies\Memberships\UseCases\Interactors\InviteUserInteractor;
+use App\Companies\Memberships\UseCases\Interactors\ResendInvitationInteractor;
 
 /**
  * The company's invitation resource — invite (UC-1-018), resend (UC-1-021), and
@@ -26,5 +27,15 @@ class InvitationsController
         $invitation = $interactor->execute($request->company(), $actor, $command);
 
         return (new InvitationResource($invitation))->response($request)->setStatusCode(201);
+    }
+
+    public function resend(Request $request, string $invitationId, ResendInvitationInteractor $interactor): JsonResponse
+    {
+        /** @var User $actor — guaranteed by auth:sanctum */
+        $actor = $request->user();
+
+        $invitation = $interactor->execute($request->company(), $actor, $invitationId);
+
+        return (new InvitationResource($invitation))->response($request)->setStatusCode(200);
     }
 }

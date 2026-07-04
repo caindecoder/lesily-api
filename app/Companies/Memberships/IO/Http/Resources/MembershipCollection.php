@@ -2,9 +2,9 @@
 
 namespace App\Companies\Memberships\IO\Http\Resources;
 
+use stdClass;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use App\Companies\Entities\CompanyUser;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Http\Resources\Json\ResourceCollection;
 
@@ -14,7 +14,7 @@ use Illuminate\Http\Resources\Json\ResourceCollection;
  * {meta: {pagination: {page, per_page, total, last_page}}}, replacing Laravel's
  * default links+meta paginator shape.
  *
- * @property-read Collection<int, CompanyUser> $collection
+ * @property-read Collection<int, stdClass> $collection
  */
 class MembershipCollection extends ResourceCollection
 {

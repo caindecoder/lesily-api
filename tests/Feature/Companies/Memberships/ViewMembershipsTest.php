@@ -4,11 +4,13 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use App\Companies\Entities\Company;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Companies\Memberships\Entities\Invitation;
 
 class ViewMembershipsTest extends MembershipsTestCase
 {
@@ -196,31 +198,73 @@ class ViewMembershipsTest extends MembershipsTestCase
     }
 
     #[Test]
-    #[DataProvider('provideStatusFilters')]
-    public function when_filtered_by_status_then_matching_members_listed(string $status, bool $expectsRoster): void
+    public function when_filtered_by_active_status_then_invited_rows_excluded(): void
     {
-        // Given a company with an owner and one more member
+        // Given a two-member roster and a pending invitation
         [$company, $owner] = $this->aCompanyWithMember('owner');
         $member = User::factory()->create();
         $this->attachMember($company, $member, $this->seededRole('employee'));
+        $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
 
-        // When the owner filters the roster by that status
-        $response = $this->viewMemberships($owner, $company, ['status' => $status]);
+        // When the owner filters the roster by the active status
+        $response = $this->viewMemberships($owner, $company, ['status' => 'active']);
 
-        // Then active lists every membership; invited is empty until the
-        // pending-invitation union lands (Task 4, slice §7 — declared s108)
-        $this->assertRosterUserIds($response, $expectsRoster ? [$owner->getKey(), $member->getKey()] : []);
+        // Then only the memberships are listed — the pending invitation is absent
+        $this->assertRosterUserIds($response, [$owner->getKey(), $member->getKey()]);
+    }
+
+    #[Test]
+    #[DataProvider('provideNonLiveInvitationStates')]
+    public function when_filtered_by_invited_status_then_only_live_pending_invitations_listed(string $nonLiveState): void
+    {
+        // Given an active member, one non-live invitation, and one live pending one
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        match ($nonLiveState) {
+            'accepted' => $this->anAcceptedInvitation($company, $owner, 'stale@contoso.lk'),
+            default => $this->anExpiredInvitation($company, $owner, 'stale@contoso.lk'),
+        };
+        $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
+
+        // When the owner filters the roster by the invited status
+        $response = $this->viewMemberships($owner, $company, ['status' => 'invited']);
+
+        // Then ONLY the live pending invitation is listed (R1 s110 — live =
+        // unaccepted + unexpired); the non-live one and every member are absent
+        $this->assertOnlyInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
     }
 
     /**
-     * @return array<string, array{string, bool}>
+     * The two non-live invitation states the invited filter must exclude
+     * (the revoked state joins at Task 5 with its column — H2/R6 s110).
+     *
+     * @return array<string, array{string}>
      */
-    public static function provideStatusFilters(): array
+    public static function provideNonLiveInvitationStates(): array
     {
         return [
-            'active lists memberships' => ['active', true],
-            'invited empty until the union lands' => ['invited', false],
+            'an accepted invitation' => ['accepted'],
+            'an expired invitation' => ['expired'],
         ];
+    }
+
+    /**
+     * An invitation for $email consumed by its invitee — the accepted state
+     * the invited filter must exclude (its member holds an ACTIVE row instead).
+     */
+    protected function anAcceptedInvitation(Company $company, User $actor, string $email): void
+    {
+        $token = $this->aPendingInvitation($company, $actor, $email);
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
+    }
+
+    /**
+     * An invitation for $email aged past its 7-day window — the live invitation
+     * in the test arrange is created AFTER the jump, so it alone stays unexpired.
+     */
+    protected function anExpiredInvitation(Company $company, User $actor, string $email): void
+    {
+        $this->aPendingInvitation($company, $actor, $email);
+        $this->travel(8)->days();
     }
 
     #[Test]
@@ -346,6 +390,160 @@ class ViewMembershipsTest extends MembershipsTestCase
 
         // Then the ceiling value is accepted and echoed in the meta
         $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 100, 'total' => 1, 'last_page' => 1]);
+    }
+
+    #[Test]
+    public function when_pending_invitation_exists_then_roster_shows_invited_row(): void
+    {
+        // Given a one-member roster and a pending invitation
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Bhanu Fernando']);
+        $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
+
+        // When the owner requests the unfiltered roster
+        $response = $this->viewMemberships($owner, $company);
+
+        // Then the pending invitation appears as an invited row, placed by its
+        // email in the name-ascending order (the sort_name fallback — s110 sort
+        // ruling: 'Bhanu…' < 'kasun@…'), and counted by the pagination meta
+        $this->assertInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
+        $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 15, 'total' => 2, 'last_page' => 1]);
+        $this->assertRosterOrder($response, ['Bhanu Fernando', null]);
+    }
+
+    /**
+     * The invited row for $email is listed AND is the response's only row —
+     * every other roster candidate (members, non-live invitations) is excluded.
+     */
+    protected function assertOnlyInvitedRowListed(TestResponse $response, string $email, string $roleCode): void
+    {
+        $this->assertInvitedRowListed($response, $email, $roleCode);
+        $this->assertCount(1, $response->json('data'));
+    }
+
+    /**
+     * The roster carries the pending invitation for $email as an invited row
+     * (s110 R4a/R4b): id = the invitation UUID (D5b), a null-identity user{}
+     * holding the invitation email, the invitation's role, status invited with
+     * invited_at set and last_active_at null.
+     */
+    protected function assertInvitedRowListed(TestResponse $response, string $email, string $roleCode): void
+    {
+        $response->assertOk();
+
+        /** @var array<string, mixed>|null $row */
+        $row = $response->collect('data')->firstWhere('user.email', $email);
+
+        $this->assertNotNull($row, "No invited roster row for {$email}.");
+        $invitation = Invitation::query()->where('email', $email)->sole();
+        $this->assertSame($invitation->getKey(), $row['id']);
+        $this->assertSame(['id' => null, 'name' => null, 'email' => $email], $row['user']);
+        $this->assertSame($roleCode, $row['role']['code']);
+        $this->assertSame('invited', $row['status']);
+        $this->assertNotNull($row['invited_at']);
+        $this->assertNull($row['last_active_at']);
+    }
+
+    #[Test]
+    public function when_sorted_by_join_date_descending_then_newest_invitation_first(): void
+    {
+        // Given a member who joined yesterday and an invitation issued today
+        $this->travelTo(now()->subDay());
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Bhanu Fernando']);
+        $this->travelBack();
+        $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
+
+        // When the owner sorts the roster by newest first
+        $response = $this->viewMemberships($owner, $company, ['sort' => '-created_at']);
+
+        // Then the invited row leads — the invitation's issue time rides the
+        // union's shared created_at sort column
+        $this->assertRosterOrder($response, [null, 'Bhanu Fernando']);
+    }
+
+    #[Test]
+    public function when_filtered_by_role_then_invited_rows_with_that_role_listed(): void
+    {
+        // Given an owner, an hr_officer member, and a pending EMPLOYEE invitation
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $hr = User::factory()->create();
+        $this->attachMember($company, $hr, $this->seededRole('hr_officer'));
+        $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
+
+        // When the owner filters the roster by the employee role
+        $response = $this->viewMemberships($owner, $company, ['role' => 'employee']);
+
+        // Then the invited row is the only match — the role filter spans both
+        // union arms (uniform filters, s110)
+        $this->assertOnlyInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
+    }
+
+    #[Test]
+    public function when_searched_by_invitee_email_then_invited_row_listed(): void
+    {
+        // Given a member whose identity never matches the term + a pending invitation
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Bhanu Fernando', 'email' => 'bhanu@octane.lk']);
+        $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
+
+        // When the owner searches by the invitee's email fragment
+        $response = $this->viewMemberships($owner, $company, ['search' => 'kasun@']);
+
+        // Then the invited row is the only match — search spans both union arms
+        // by email (an invited row has no name to match; uniform filters, s110)
+        $this->assertOnlyInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
+    }
+
+    #[Test]
+    public function when_other_company_has_pending_invitations_then_not_in_roster(): void
+    {
+        // Given company A's owner and a pending invitation in company B only
+        [$companyA, $ownerA] = $this->aCompanyWithMember('owner');
+        [$companyB, $ownerB] = $this->aCompanyWithMember('owner');
+        $this->aPendingInvitation($companyB, $ownerB, 'kasun@contoso.lk');
+
+        // When A's owner requests A's roster
+        $response = $this->viewMemberships($ownerA, $companyA);
+
+        // Then B's pending invitation leaks nowhere — only A's own rows are
+        // listed (the union's second tenant surface, s110 #13)
+        $this->assertRosterUserIds($response, [$ownerA->getKey()]);
+    }
+
+    #[Test]
+    public function when_invitation_accepted_then_invited_row_replaced_by_active_row(): void
+    {
+        // Given a pending invitation that the invitee then accepts
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $token = $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
+        $invitationId = Invitation::query()->where('email', 'kasun@contoso.lk')->sole()->getKey();
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
+
+        // When the owner requests the roster
+        $response = $this->viewMemberships($owner, $company);
+
+        // Then the SAME row id is now active with no invited duplicate, and the
+        // roster counts exactly the two members
+        $this->assertInvitedRowBecameActive($response, $invitationId, 'kasun@contoso.lk');
+        $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 15, 'total' => 2, 'last_page' => 1]);
+    }
+
+    /**
+     * The accepted invitation kept its row id across the flip (D5b identity —
+     * invitation UUID == pivot UUID): the row is now active under the joiner's
+     * email and no invited row remains anywhere in the response.
+     */
+    protected function assertInvitedRowBecameActive(TestResponse $response, string $invitationId, string $email): void
+    {
+        $response->assertOk();
+
+        /** @var array<string, mixed>|null $row */
+        $row = $response->collect('data')->firstWhere('id', $invitationId);
+
+        $this->assertNotNull($row, 'The accepted invitation must keep its row id (D5b).');
+        $this->assertSame(['active', $email], [$row['status'], $row['user']['email']]);
+        $this->assertCount(0, $response->collect('data')->where('status', 'invited'));
     }
 
     #[Test]

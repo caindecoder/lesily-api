@@ -6,6 +6,7 @@ use App\Companies\Entities\CompanyUser;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Events\UserJoinedCompany;
+use App\Companies\Memberships\Events\UserInvitationResent;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 
@@ -39,6 +40,20 @@ class MembershipProjector extends Projector
                 'accepted_at' => null,
             ],
         );
+    }
+
+    /**
+     * SM-1-01 T7: rotate the token + expiry IN PLACE on the same invitations
+     * row (single-row invariant — LD firstOrCreate parity; the rotation itself
+     * is our D3/R10 divergence). accepted_at is untouched: only a live pending
+     * row ever receives this event (the interactor gates).
+     */
+    public function onUserInvitationResent(UserInvitationResent $event): void
+    {
+        Invitation::query()->whereKey($event->membershipId)->update([
+            'token_hash' => $event->tokenHash,
+            'expires_at' => $event->expiresAt,
+        ]);
     }
 
     /**

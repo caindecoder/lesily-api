@@ -2,20 +2,21 @@
 
 namespace App\Companies\Memberships\IO\Http\Resources;
 
-use App\Models\User;
+use stdClass;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
-use App\Companies\Entities\CompanyUser;
 use Illuminate\Http\Resources\Json\JsonResource;
-use App\Foundation\RolesPermissions\Entities\Role;
 
 /**
- * One roster row (UC-1-017, slice §2): the membership id, the member's user and
- * role, and the derived status trio. status is always 'active' this increment —
- * removed members are excluded and invited people have no pivot row (the
- * status=invited union lands at Task 4). invited_at/last_active_at emit null
- * until their source columns/writers land (Task 3+; declared s108).
+ * One roster row (UC-1-017, slice §2): active memberships and live-pending
+ * invitations share this shape (the Task-4 union — s110 R4a/R4b). Rows arrive
+ * as the repository's aliased union columns. An active row carries the member's
+ * identity with invited_at/last_active_at null until their writers land (R4b;
+ * declared s108). An invited row carries the invitation UUID as id (D5b), a
+ * null-identity user{} holding the invitation email, and the invitation's
+ * issue time as invited_at.
  *
- * @mixin CompanyUser
+ * @property-read stdClass $resource
  */
 class MembershipResource extends JsonResource
 {
@@ -24,25 +25,27 @@ class MembershipResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        /** @var User $user — company_user.user_id is a RESTRICT FK, always present */
-        $user = $this->user;
-        /** @var Role $role — company_user.role_id is a FK, always present */
-        $role = $this->role;
-
         return [
-            'id' => $this->getKey(),
+            'id' => $this->resource->id,
             'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
+                'id' => $this->resource->user_id,
+                'name' => $this->resource->user_name,
+                'email' => $this->resource->user_email,
             ],
             'role' => [
-                'code' => $role->code,
-                'name' => $role->name,
+                'code' => $this->resource->role_code,
+                'name' => $this->resource->role_name,
             ],
-            'status' => 'active',
-            'invited_at' => null,
-            'last_active_at' => null,
+            'status' => $this->resource->status,
+            'invited_at' => $this->parsedTimestamp($this->resource->invited_at),
+            // Locked to the same serialization as invited_at now, so the shape
+            // holds when its writer lands (declared s108).
+            'last_active_at' => $this->parsedTimestamp($this->resource->last_active_at),
         ];
+    }
+
+    private function parsedTimestamp(mixed $value): ?CarbonImmutable
+    {
+        return $value === null ? null : CarbonImmutable::parse((string) $value);
     }
 }

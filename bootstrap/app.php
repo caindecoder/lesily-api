@@ -38,6 +38,7 @@ use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
 use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
+use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 
@@ -147,6 +148,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // every cause so a probe cannot learn token state (UC-1-019, H4 session 109).
         $exceptions->render(fn (InvalidInvitationException $e) => EnvelopeBuilder::build(
             ApiErrorCode::InviteInvalid,
+            $e->getMessage(),
+        ));
+
+        // A resend hit an invitation that is no longer pending — accepted, expired,
+        // or (Task 5) revoked. ONE collapsed code + message; admin-facing counterpart
+        // to the accept path's INVITE_INVALID (UC-1-021, R3 session 110).
+        $exceptions->render(fn (InvitationNotPendingException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::InviteNotPending,
             $e->getMessage(),
         ));
 
