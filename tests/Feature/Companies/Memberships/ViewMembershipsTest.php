@@ -221,6 +221,7 @@ class ViewMembershipsTest extends MembershipsTestCase
         [$company, $owner] = $this->aCompanyWithMember('owner');
         match ($nonLiveState) {
             'accepted' => $this->anAcceptedInvitation($company, $owner, 'stale@contoso.lk'),
+            'revoked' => $this->aRevokedInvitation($company, $owner, 'stale@contoso.lk'),
             default => $this->anExpiredInvitation($company, $owner, 'stale@contoso.lk'),
         };
         $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
@@ -234,8 +235,9 @@ class ViewMembershipsTest extends MembershipsTestCase
     }
 
     /**
-     * The two non-live invitation states the invited filter must exclude
-     * (the revoked state joins at Task 5 with its column — H2/R6 s110).
+     * The non-live invitation states the invited filter must exclude — accepted,
+     * expired, and (Task 5) revoked, all indistinguishable from "gone" to the
+     * roster (H2/R6 s110).
      *
      * @return array<string, array{string}>
      */
@@ -244,6 +246,7 @@ class ViewMembershipsTest extends MembershipsTestCase
         return [
             'an accepted invitation' => ['accepted'],
             'an expired invitation' => ['expired'],
+            'a revoked invitation' => ['revoked'],
         ];
     }
 
