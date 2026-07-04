@@ -35,11 +35,13 @@ class InviteUserInteractor
 
         // One live invitation per (company, email): a standing pending invite is
         // rejected the same way — rotating its token is Resend's job (UC-1-021).
-        // (Live = unaccepted + unexpired; unrevoked joins the guard at Task 5.)
+        // (Live = unaccepted + not-revoked + unexpired; a revoked invitation is
+        // terminal, so its email re-invites into a fresh row — R6 s111.)
         $hasLivePendingInvitation = Invitation::query()
             ->where('company_id', $company->getKey())
             ->where('email', $command->email)
             ->whereNull('accepted_at')
+            ->whereNull('revoked_at')
             ->where('expires_at', '>', now())
             ->exists();
 

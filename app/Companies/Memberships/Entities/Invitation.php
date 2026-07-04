@@ -28,11 +28,15 @@ class Invitation extends Model
         'token_hash',
         'expires_at',
         'accepted_at',
+        'revoked_at',
+        'revoked_by_user_id',
+        'revocation_reason',
     ];
 
     protected $casts = [
         'expires_at' => 'immutable_datetime',
         'accepted_at' => 'immutable_datetime',
+        'revoked_at' => 'immutable_datetime',
     ];
 
     /**

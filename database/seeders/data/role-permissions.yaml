@@ -10,6 +10,7 @@ owner:
   - users.invite
   - users.view
   - users.assign_role
+  - users.revoke-invitation
   - companies.view
   - companies.update
   - billing.view
@@ -20,6 +21,7 @@ admin:
   - users.invite
   - users.view
   - users.assign_role
+  - users.revoke-invitation
   - companies.view
   - companies.update
   - billing.view
@@ -28,6 +30,7 @@ admin:
 hr_officer:
   - users.invite
   - users.view
+  - users.revoke-invitation
   - companies.view
 
 # payroll_officer: NO users.view — the matrix (§Module-3 users.view row) denies it;

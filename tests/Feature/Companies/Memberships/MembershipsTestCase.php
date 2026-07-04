@@ -20,6 +20,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
+use App\Companies\Memberships\Events\UserInvitationRevoked;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -292,6 +293,32 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
+     * Issue a pending invitation for ($company, $email) and REVOKE it through the
+     * DELETE endpoint acting as $actor (who must hold users.revoke-invitation).
+     * Returns the ORIGINAL plaintext token — now dead — so consumers can prove a
+     * revoked token no longer accepts/resends. Ends guard-clean (amendment P).
+     */
+    protected function aRevokedInvitation(Company $company, User $actor, string $email): string
+    {
+        $plaintextToken = $this->aPendingInvitation($company, $actor, $email);
+        $invitationId = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->value('id');
+
+        Sanctum::actingAs($actor);
+        $this->deleteJson(
+            "/api/v1/invitations/{$invitationId}",
+            [],
+            ['X-Company-Context' => $company->getKey()]
+        )->assertNoContent();
+
+        Auth::forgetGuards();
+
+        return $plaintextToken;
+    }
+
+    /**
      * The membership for ($company, $email) was ACTIVATED the D5b way: the
      * pivot carries the SAME UUID as the invitation (id AND invitation_id), is
      * live under the invitation's role, the invitation is stamped accepted —
@@ -374,6 +401,55 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         // The mail leg is queued too (TeamWelcome is non-critical, no opt-out
         // exists in these tests) — pins the QueuedMailChannel wiring.
         Mail::assertQueued(SystemNotificationMail::class, fn (SystemNotificationMail $mail): bool => $mail->hasTo($email));
+    }
+
+    /**
+     * The invitation was revoked the event-sourced way: revoked_at stamped now
+     * (±10s), revoked_by_user_id = $revokedBy, no reason by default, exactly one
+     * UserInvitationRevoked stored event carrying this row's id + actor verbatim
+     * (amendment R — a direct read-model write must fail this), and no mail
+     * beyond the arrange-time invite (revoke sends nothing).
+     */
+    protected function assertInvitationRevoked(Company $company, string $email, User $revokedBy): void
+    {
+        $invitation = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->sole();
+
+        $this->assertNotNull($invitation->revoked_at);
+        $this->assertEqualsWithDelta(now()->getTimestamp(), $invitation->revoked_at->getTimestamp(), 10);
+        $this->assertSame($revokedBy->getKey(), $invitation->revoked_by_user_id);
+        $this->assertNull($invitation->revocation_reason);
+
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserInvitationRevoked::class)
+            ->where('event_properties->membershipId', $invitation->getKey())
+            ->where('event_properties->revokedBy', $revokedBy->getKey())
+            ->count());
+
+        Mail::assertQueued(InvitationMail::class, 1);
+    }
+
+    /**
+     * The invitation was NOT revoked: all three revocation columns are untouched
+     * — sad paths change nothing (the LD DeletePersonalAccessToken
+     * state-unchanged discipline).
+     */
+    protected function assertInvitationNotRevoked(Company $company, string $email): void
+    {
+        $invitation = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->sole();
+
+        $this->assertNull($invitation->revoked_at);
+        $this->assertNull($invitation->revoked_by_user_id);
+        $this->assertNull($invitation->revocation_reason);
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('event_class', UserInvitationRevoked::class)
+            ->where('event_properties->membershipId', $invitation->getKey())
+            ->count());
     }
 
     /**

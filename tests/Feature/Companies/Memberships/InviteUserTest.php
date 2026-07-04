@@ -204,6 +204,36 @@ class InviteUserTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_an_invitation_was_revoked_then_the_email_can_be_reinvited(): void
+    {
+        // Given an invitation that was revoked without acceptance (UC-1-022)
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->aRevokedInvitation($company, $admin, 'slow@contoso.lk');
+
+        // When the admin re-invites the same email
+        $response = $this->invite($admin, $company, [
+            'email' => 'slow@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then a FRESH pending invitation is issued (revocation is terminal —
+        // SM-1-01 T6: re-engagement is a new stream/row, mirroring expiry T5) and
+        // the revoked row is preserved with its audit-forensics stamps intact
+        $response->assertStatus(201);
+        $rows = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', 'slow@contoso.lk')
+            ->orderBy('created_at')
+            ->get();
+        $this->assertCount(2, $rows);
+        [$revoked, $fresh] = $rows->all();
+        $this->assertNotNull($revoked->revoked_at);
+        $this->assertNull($fresh->revoked_at);
+        $this->assertNull($fresh->accepted_at);
+        $this->assertTrue($fresh->expires_at->isFuture());
+    }
+
+    #[Test]
     public function when_the_hourly_invite_allowance_is_spent_then_the_next_invite_is_throttled(): void
     {
         // Given an admin who has spent the full hourly invite allowance

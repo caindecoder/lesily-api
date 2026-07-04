@@ -82,9 +82,11 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
         return DB::table('invitations')
             ->join('roles', 'roles.id', '=', 'invitations.role_id')
             ->where('invitations.company_id', $companyId)
-            // Live pending only (R1 s110): unaccepted + unexpired — an accepted
-            // or lapsed invitation never rides the roster.
+            // Live pending only (R1 s110 + R6 s111): unaccepted + not-revoked +
+            // unexpired — an accepted, revoked, or lapsed invitation never rides
+            // the roster.
             ->whereNull('invitations.accepted_at')
+            ->whereNull('invitations.revoked_at')
             ->where('invitations.expires_at', '>', now())
             ->when($filters->role !== null, fn (Builder $query) => $query->where('roles.code', $filters->role))
             ->when($filters->search !== null, function (Builder $query) use ($filters): Builder {

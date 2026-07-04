@@ -92,8 +92,9 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $afterSecond = $this->tableCounts();
 
         // Then every table's row count is stable across runs (idempotent — no duplicates)
-        // 25 grants since the payroll_officer users.view seed↔matrix fix (UC-1-017 lap 3, s108).
-        $this->assertSame(['roles' => 8, 'permissions' => 8, 'role_permission' => 25], $afterFirst);
+        // 9 permissions / 28 grants since users.revoke-invitation joined the catalog
+        // for owner/admin/hr_officer (D10, UC-1-022 lap 3, s111).
+        $this->assertSame(['roles' => 8, 'permissions' => 9, 'role_permission' => 28], $afterFirst);
         $this->assertSame($afterFirst, $afterSecond);
     }
 
@@ -132,11 +133,12 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $this->newSeeder($this->givenRealCatalogPath())->run();
 
         // Then every seeded permission code matches {module}.{action} dot-notation
+        // (a multi-word action may hyphenate — D10: users.revoke-invitation, users.change-role)
         $codes = Permission::query()->pluck('code')->all();
         $this->assertNotEmpty($codes, 'No permissions were seeded.');
         foreach ($codes as $code) {
             $this->assertMatchesRegularExpression(
-                '/^[a-z_]+\.[a-z_]+$/',
+                '/^[a-z_]+\.[a-z_-]+$/',
                 $code,
                 "Permission code '{$code}' is not {module}.{action} dot-notation."
             );
@@ -155,9 +157,10 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         // Then per-role grant counts match the locked matrix, and manager has none
         $expected = [
             'platform_super_admin' => 0,
-            'owner' => 8,
-            'admin' => 7,
-            'hr_officer' => 3,
+            // owner/admin/hr_officer each +1 for users.revoke-invitation (D10, s111).
+            'owner' => 9,
+            'admin' => 8,
+            'hr_officer' => 4,
             // 2 since the users.view grant came out (matrix denies it — D-A, s108).
             'payroll_officer' => 2,
             'auditor' => 4,

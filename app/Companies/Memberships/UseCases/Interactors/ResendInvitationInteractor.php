@@ -14,8 +14,9 @@ use App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand;
 
 /**
  * Resend a pending invitation (UC-1-021): guard live-pending (R1 s110 — the
- * pending definition is accepted_at NULL + unexpired; the revoked arm joins at
- * Task 5), mint a fresh bearer token, record UserInvitationResent (tokenHash
+ * pending definition is accepted_at NULL + not-revoked + unexpired; the revoked
+ * term joined at Task 5, R6), mint a fresh bearer token, record
+ * UserInvitationResent (tokenHash
  * only — D3), and re-dispatch the accept-link email INLINE on the SAME
  * invitations row (single live token; InviteUserInteractor precedent, R8).
  */
@@ -28,7 +29,9 @@ class ResendInvitationInteractor
             ->whereKey($invitationId)
             ->firstOrFail();
 
-        $isLivePending = $invitation->accepted_at === null && $invitation->expires_at->isFuture();
+        $isLivePending = $invitation->accepted_at === null
+            && $invitation->revoked_at === null
+            && $invitation->expires_at->isFuture();
 
         if (! $isLivePending) {
             throw new InvitationNotPendingException;
