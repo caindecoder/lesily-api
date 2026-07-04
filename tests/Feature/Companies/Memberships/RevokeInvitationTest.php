@@ -115,6 +115,23 @@ class RevokeInvitationTest extends MembershipsTestCase
         $this->assertMembershipActivated($company, 'invitee@contoso.lk');
     }
 
+    #[Test]
+    public function when_invitation_expired_then_revoke_refused(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->travel(8)->days();
+
+        // When
+        $response = $this->revokeInvitation($admin, $company, $invitation->getKey());
+
+        // Then
+        $this->assertRevokeRefusedAsNotPending($response);
+        $this->assertInvitationNotRevoked($company, 'invitee@contoso.lk');
+    }
+
     /**
      * Revoke the invitation $invitationId as $actor acting in $company's context.
      */
