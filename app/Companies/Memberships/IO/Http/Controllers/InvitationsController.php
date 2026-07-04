@@ -5,6 +5,7 @@ namespace App\Companies\Memberships\IO\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\UseCases\Commands\InviteUserCommand;
 use App\Companies\Memberships\IO\Http\Resources\InvitationResource;
 use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
@@ -31,6 +32,11 @@ class InvitationsController
 
     public function resend(Request $request, string $invitationId): JsonResponse
     {
+        Invitation::query()
+            ->where('company_id', $request->company()->getKey())
+            ->whereKey($invitationId)
+            ->firstOrFail();
+
         throw new InvitationNotPendingException;
     }
 }
