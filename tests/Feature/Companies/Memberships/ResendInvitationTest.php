@@ -127,6 +127,23 @@ class ResendInvitationTest extends MembershipsTestCase
         $this->assertThrottled($response);
     }
 
+    #[Test]
+    public function when_invitation_resent_then_previous_link_no_longer_accepts(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        $oldToken = $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->resendInvitation($admin, $company, $invitation->getKey())->assertOk();
+
+        // When
+        $response = $this->acceptInvitation($oldToken, $this->validNewUserBody());
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertInvitationNotConsumed($company, 'invitee@contoso.lk');
+    }
+
     /**
      * Resend the invitation $invitationId as $actor acting in $company's context.
      */
