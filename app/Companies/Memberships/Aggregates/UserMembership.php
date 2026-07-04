@@ -7,8 +7,10 @@ use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use App\Companies\Memberships\Events\UserInvitationResent;
+use App\Companies\Memberships\Events\UserInvitationRevoked;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand;
+use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
 
 /**
  * The invited-member lifecycle stream (SM-1-01): one aggregate per membership,
@@ -57,6 +59,22 @@ class UserMembership extends AggregateRoot
             tokenHash: hash('sha256', $command->plaintextToken),
             expiresAt: CarbonImmutable::now()->addDays(self::INVITATION_TTL_DAYS),
             resentBy: $command->resentBy,
+        ));
+    }
+
+    /**
+     * SM-1-01 T6 (Invited → InvitationRevoked, terminal): an admin cancelled the
+     * pending invitation — guardless like invite() (the interactor's live-pending
+     * check is the gate, R-B s111). The token dies with the row's revoked_at
+     * stamp; nothing is deleted (D5b stable identity survives a later re-invite).
+     */
+    public function revokeInvitation(RevokeInvitationCommand $command): static
+    {
+        return $this->recordThat(new UserInvitationRevoked(
+            membershipId: $this->uuid(),
+            revokedBy: $command->revokedBy,
+            revokedAt: CarbonImmutable::now(),
+            reason: $command->reason,
         ));
     }
 

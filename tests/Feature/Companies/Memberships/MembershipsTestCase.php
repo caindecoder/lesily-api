@@ -20,6 +20,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
+use App\Companies\Memberships\Events\UserInvitationRevoked;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -381,6 +382,34 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      * un-accepted and no membership pivot (live or trashed) exists for that
      * email's user in the company.
      */
+    /**
+     * The invitation was revoked the event-sourced way: revoked_at stamped now
+     * (±10s), revoked_by_user_id = $revokedBy, no reason by default, exactly one
+     * UserInvitationRevoked stored event carrying this row's id + actor verbatim
+     * (amendment R — a direct read-model write must fail this), and no mail
+     * beyond the arrange-time invite (revoke sends nothing).
+     */
+    protected function assertInvitationRevoked(Company $company, string $email, User $revokedBy): void
+    {
+        $invitation = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->sole();
+
+        $this->assertNotNull($invitation->revoked_at);
+        $this->assertEqualsWithDelta(now()->getTimestamp(), $invitation->revoked_at->getTimestamp(), 10);
+        $this->assertSame($revokedBy->getKey(), $invitation->revoked_by_user_id);
+        $this->assertNull($invitation->revocation_reason);
+
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserInvitationRevoked::class)
+            ->where('event_properties->membershipId', $invitation->getKey())
+            ->where('event_properties->revokedBy', $revokedBy->getKey())
+            ->count());
+
+        Mail::assertQueued(InvitationMail::class, 1);
+    }
+
     /**
      * The invitation was NOT revoked: all three revocation columns are untouched
      * — sad paths change nothing (the LD DeletePersonalAccessToken

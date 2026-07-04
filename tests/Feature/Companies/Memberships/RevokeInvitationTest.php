@@ -132,6 +132,37 @@ class RevokeInvitationTest extends MembershipsTestCase
         $this->assertInvitationNotRevoked($company, 'invitee@contoso.lk');
     }
 
+    #[Test]
+    #[DataProvider('provideAllowedRevokeRoles')]
+    public function when_authorized_role_revokes_pending_invitation_then_invitation_revoked(string $roleCode): void
+    {
+        // Given
+        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+
+        // When
+        $response = $this->revokeInvitation($actor, $company, $invitation->getKey());
+
+        // Then
+        $response->assertNoContent();
+        $this->assertInvitationRevoked($company, 'invitee@contoso.lk', $actor);
+    }
+
+    /**
+     * Roles WITH users.revoke-invitation (matrix D4/R1) — each may revoke.
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function provideAllowedRevokeRoles(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+            'hr officer' => ['hr_officer'],
+        ];
+    }
+
     /**
      * Revoke the invitation $invitationId as $actor acting in $company's context.
      */

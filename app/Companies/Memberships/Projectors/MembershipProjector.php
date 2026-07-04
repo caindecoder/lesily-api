@@ -7,6 +7,7 @@ use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use App\Companies\Memberships\Events\UserInvitationResent;
+use App\Companies\Memberships\Events\UserInvitationRevoked;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 
@@ -53,6 +54,20 @@ class MembershipProjector extends Projector
         Invitation::query()->whereKey($event->membershipId)->update([
             'token_hash' => $event->tokenHash,
             'expires_at' => $event->expiresAt,
+        ]);
+    }
+
+    /**
+     * SM-1-01 T6: stamp the row revoked IN PLACE — a status column, never a
+     * delete (D5b keeps the id shared with any later re-invite upsert). The
+     * token dies because every live-pending read excludes revoked rows.
+     */
+    public function onUserInvitationRevoked(UserInvitationRevoked $event): void
+    {
+        Invitation::query()->whereKey($event->membershipId)->update([
+            'revoked_at' => $event->revokedAt,
+            'revoked_by_user_id' => $event->revokedBy,
+            'revocation_reason' => $event->reason,
         ]);
     }
 

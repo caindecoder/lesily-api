@@ -4,6 +4,7 @@ namespace App\Companies\Memberships\UseCases\Interactors;
 
 use App\Companies\Entities\Company;
 use App\Companies\Memberships\Entities\Invitation;
+use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
 use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
 
@@ -19,11 +20,19 @@ class RevokeInvitationInteractor
 {
     public function execute(Company $company, RevokeInvitationCommand $command, string $invitationId): void
     {
-        Invitation::query()
+        $invitation = Invitation::query()
             ->where('company_id', $company->getKey())
             ->whereKey($invitationId)
             ->firstOrFail();
 
-        throw new InvitationNotPendingException;
+        $isLivePending = $invitation->accepted_at === null && $invitation->expires_at->isFuture();
+
+        if (! $isLivePending) {
+            throw new InvitationNotPendingException;
+        }
+
+        UserMembership::retrieve($invitation->getKey())
+            ->revokeInvitation($command)
+            ->persist();
     }
 }

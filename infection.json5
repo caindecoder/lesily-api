@@ -65,6 +65,10 @@
                 // class (protected still projects / fires the notice).
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserPasswordReset",
                 "App\\Foundation\\Auth\\Reactors\\PasswordChangedNotificationReactor::onUserPasswordReset",
+                // membership slice Task 5 / UC-1-022 (revoke invitation): the revoke
+                // projector arm — same spatie-discovery equivalent class (protected
+                // still projects the revocation stamps).
+                "App\\Companies\\Memberships\\Projectors\\MembershipProjector::onUserInvitationRevoked",
             ],
         },
         // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only
