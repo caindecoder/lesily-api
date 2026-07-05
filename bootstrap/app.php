@@ -40,6 +40,7 @@ use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
 use App\Companies\Memberships\Exceptions\OwnerTransferRequiredException;
+use App\Companies\Memberships\Exceptions\SelfRoleChangeBlockedException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 
@@ -164,6 +165,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // flow may change the Owner's role (UC-1-023 R-A s112; §S10b one-owner).
         $exceptions->render(fn (OwnerTransferRequiredException $e) => EnvelopeBuilder::build(
             ApiErrorCode::OwnerTransferRequired,
+            $e->getMessage(),
+        ));
+
+        // An actor tried to change their own role (UC-1-023 flow 4d, R-B s112) —
+        // another Owner/Admin must make the change.
+        $exceptions->render(fn (SelfRoleChangeBlockedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::SelfRoleChangeBlocked,
             $e->getMessage(),
         ));
 

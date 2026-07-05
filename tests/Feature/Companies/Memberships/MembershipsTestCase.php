@@ -219,13 +219,19 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $user = User::factory()->create();
         $this->attachMember($company, $user, $this->seededRole($roleCode));
 
-        $membershipId = CompanyUser::query()
+        return [$user, $this->membershipIdOf($company, $user)];
+    }
+
+    /**
+     * The membership pivot id for ($company, $user) — the aggregate identity.
+     */
+    protected function membershipIdOf(Company $company, User $user): string
+    {
+        return CompanyUser::query()
             ->where('company_id', $company->getKey())
             ->where('user_id', $user->getKey())
             ->sole()
             ->getKey();
-
-        return [$user, $membershipId];
     }
 
     /**

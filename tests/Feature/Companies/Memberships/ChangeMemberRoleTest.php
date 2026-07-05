@@ -44,7 +44,24 @@ class ChangeMemberRoleTest extends MembershipsTestCase
 
         // Then
         $this->assertRefusedWith($response, ApiErrorCode::OwnerTransferRequired);
+        $response->assertJsonPath('message', "The Owner's role can only be changed through an ownership transfer.");
         $this->assertMembershipRoleUnchanged($ownerMembershipId, $this->seededRole('owner'));
+    }
+
+    #[Test]
+    public function when_actor_targets_their_own_membership_then_change_is_refused(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        $ownMembershipId = $this->membershipIdOf($company, $admin);
+
+        // When
+        $response = $this->changeRole($admin, $company, $ownMembershipId);
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::SelfRoleChangeBlocked);
+        $response->assertJsonPath('message', 'You cannot change your own role. Ask another Owner/Admin.');
+        $this->assertMembershipRoleUnchanged($ownMembershipId, $this->seededRole('admin'));
     }
 
     /**

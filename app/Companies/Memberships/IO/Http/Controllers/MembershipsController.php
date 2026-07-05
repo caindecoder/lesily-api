@@ -2,10 +2,12 @@
 
 namespace App\Companies\Memberships\IO\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 use App\Companies\Memberships\IO\Http\Resources\MembershipCollection;
+use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
 use App\Companies\Memberships\UseCases\Interactors\ChangeMembershipRoleInteractor;
 use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterface;
 
@@ -28,7 +30,14 @@ class MembershipsController
 
     public function update(Request $request, string $membershipId, ChangeMembershipRoleInteractor $interactor): JsonResponse
     {
-        $interactor->execute($request->company(), $membershipId);
+        /** @var User $actor — guaranteed by auth:sanctum */
+        $actor = $request->user();
+
+        $command = ChangeMembershipRoleCommand::validateAndCreate([
+            'changedBy' => $actor->getKey(),
+        ]);
+
+        $interactor->execute($request->company(), $command, $membershipId);
 
         return response()->json();
     }

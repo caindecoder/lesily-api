@@ -23,6 +23,7 @@ enum ApiErrorCode: string
     case InviteNotPending = 'INVITE_NOT_PENDING';
     case InviteEmailMismatch = 'INVITE_EMAIL_MISMATCH';
     case OwnerTransferRequired = 'OWNER_TRANSFER_REQUIRED';
+    case SelfRoleChangeBlocked = 'SELF_ROLE_CHANGE_BLOCKED';
     case ResourceNotFound = 'RESOURCE_NOT_FOUND';
     case EmailRegistered = 'EMAIL_REGISTERED';
     case BrNumberRegistered = 'BR_NUMBER_REGISTERED';
@@ -59,6 +60,7 @@ enum ApiErrorCode: string
             self::InviteNotPending => 422,
             self::InviteEmailMismatch => 403,
             self::OwnerTransferRequired => 422,
+            self::SelfRoleChangeBlocked => 422,
             self::ResourceNotFound => 404,
             self::EmailRegistered => 409,
             self::BrNumberRegistered => 409,
