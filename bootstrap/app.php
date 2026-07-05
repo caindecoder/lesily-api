@@ -39,6 +39,7 @@ use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
+use App\Companies\Memberships\Exceptions\OwnerTransferRequiredException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 
@@ -156,6 +157,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // to the accept path's INVITE_INVALID (UC-1-021, R3 session 110).
         $exceptions->render(fn (InvitationNotPendingException $e) => EnvelopeBuilder::build(
             ApiErrorCode::InviteNotPending,
+            $e->getMessage(),
+        ));
+
+        // A role change targeted the Owner's membership — only the ownership-transfer
+        // flow may change the Owner's role (UC-1-023 R-A s112; §S10b one-owner).
+        $exceptions->render(fn (OwnerTransferRequiredException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::OwnerTransferRequired,
             $e->getMessage(),
         ));
 

@@ -209,6 +209,26 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
+     * A member of $company holding the SEEDED $roleCode. Returns the user and
+     * the membership pivot id (the aggregate identity, D5b).
+     *
+     * @return array{0: User, 1: string}
+     */
+    protected function aMembership(Company $company, string $roleCode): array
+    {
+        $user = User::factory()->create();
+        $this->attachMember($company, $user, $this->seededRole($roleCode));
+
+        $membershipId = CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $user->getKey())
+            ->sole()
+            ->getKey();
+
+        return [$user, $membershipId];
+    }
+
+    /**
      * A membership that was removed (UC-1-024 semantics): the company_user pivot
      * exists but is soft-deleted. Returns the pivot id — the stable membership
      * UUID a re-invite must reuse (D5b undelete-in-place).

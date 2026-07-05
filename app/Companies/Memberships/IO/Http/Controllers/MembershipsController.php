@@ -3,14 +3,17 @@
 namespace App\Companies\Memberships\IO\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 use App\Companies\Memberships\IO\Http\Resources\MembershipCollection;
+use App\Companies\Memberships\UseCases\Interactors\ChangeMembershipRoleInteractor;
 use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterface;
 
 /**
- * The company's membership resource — the roster listing (UC-1-017); change-role
- * (UC-1-023) and remove (UC-1-024) join here later in the slice. Multi-action
- * resource controller per the subscription-platform convention + cd-users §5.
+ * The company's membership resource — the roster listing (UC-1-017) and
+ * change-role (UC-1-023); remove (UC-1-024) joins here later in the slice.
+ * Multi-action resource controller per the subscription-platform convention +
+ * cd-users §5.
  */
 class MembershipsController
 {
@@ -21,5 +24,12 @@ class MembershipsController
         return new MembershipCollection(
             $memberships->listForCompany($request->company()->getKey(), $filters)
         );
+    }
+
+    public function update(Request $request, string $membershipId, ChangeMembershipRoleInteractor $interactor): JsonResponse
+    {
+        $interactor->execute($request->company(), $membershipId);
+
+        return response()->json();
     }
 }
