@@ -40,6 +40,6 @@ class ChangeMembershipRoleInteractor
             ->changeRole($command, (string) $membership->role_id, (string) $toRole->getKey())
             ->persist();
 
-        return $membership->refresh();
+        return $membership;
     }
 }

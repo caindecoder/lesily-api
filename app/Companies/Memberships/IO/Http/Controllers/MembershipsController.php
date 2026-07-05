@@ -35,17 +35,18 @@ class MembershipsController
     {
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
+        $company = $request->company();
 
         $command = ChangeMembershipRoleCommand::validateAndCreate([
             'roleCode' => $request->input('roleCode'),
             'changedBy' => $actor->getKey(),
         ]);
 
-        $membership = $interactor->execute($request->company(), $command, $membershipId);
+        $interactor->execute($company, $command, $membershipId);
 
         // The 200 envelope echoes the updated roster row (R-E s112) — the same
         // aliased shape the roster lists, so the client updates in place.
-        $row = $this->memberships->findById($request->company()->getKey(), (string) $membership->getKey());
+        $row = $this->memberships->findById($company->getKey(), $membershipId);
 
         return (new MembershipResource($row))->response($request)->setStatusCode(200);
     }
