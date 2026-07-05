@@ -11,6 +11,7 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Companies\Memberships\Events\UserMembershipRoleChanged;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -168,6 +169,27 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         // Then
         $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
         $this->assertMembershipRoleUnchanged($removedMembershipId, $this->seededRole('employee'));
+    }
+
+    #[Test]
+    public function when_target_is_still_a_pending_invitation_then_change_is_refused_as_not_found(): void
+    {
+        // Given an invitation whose UUID will become the membership id on accept
+        // (D5b shared identity) — but no company_user row exists yet
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitationId = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', 'invitee@contoso.lk')
+            ->sole()
+            ->getKey();
+
+        // When
+        $response = $this->changeRole($admin, $company, $invitationId);
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertNoRoleChangeRecorded();
     }
 
     #[Test]
