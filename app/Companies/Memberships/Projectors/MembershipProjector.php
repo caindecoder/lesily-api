@@ -9,6 +9,7 @@ use App\Companies\Memberships\Events\UserJoinedCompany;
 use App\Companies\Memberships\Events\UserInvitationResent;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
+use App\Companies\Memberships\Events\UserMembershipRoleChanged;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 
 /**
@@ -70,6 +71,18 @@ class MembershipProjector extends Projector
             'revoked_by_user_id' => $event->revokedBy,
             'revocation_reason' => $event->reason,
         ]);
+    }
+
+    /**
+     * UC-1-023: the role change lands IN PLACE on the pivot. withTrashed for
+     * replay fidelity — a later-removed membership still replays its role
+     * history onto the soft-deleted row (onUserJoinedCompany parity).
+     */
+    public function onUserMembershipRoleChanged(UserMembershipRoleChanged $event): void
+    {
+        CompanyUser::withTrashed()
+            ->whereKey($event->membershipId)
+            ->update(['role_id' => $event->toRoleId]);
     }
 
     /**

@@ -19,6 +19,8 @@ class ChangeMemberRoleTest extends MembershipsTestCase
 {
     protected ?string $roleCode = 'hr_officer';
 
+    protected string $fromRoleCode = 'employee';
+
     #[Test]
     public function when_membership_is_unknown_then_change_is_refused_as_not_found(): void
     {
@@ -153,6 +155,35 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $this->assertMembershipRoleUnchanged($ownMembershipId, $this->seededRole('admin'));
     }
 
+    #[Test]
+    #[DataProvider('provideAllowedChangeRoleRoles')]
+    public function when_authorized_actor_changes_member_role_then_role_is_updated(string $actorRole): void
+    {
+        // Given
+        [$company, $actor] = $this->aCompanyWithMember($actorRole);
+        [, $membershipId] = $this->anAcceptedMembership($company, $actor, 'bob@contoso.lk');
+
+        // When
+        $response = $this->changeRole($actor, $company, $membershipId);
+
+        // Then
+        $this->assertRoleChangeEnvelope($response, $this->seededRole('hr_officer'));
+        $this->assertMembershipRoleChanged($membershipId, $actor, $this->seededRole('hr_officer'));
+    }
+
+    /**
+     * Roles WITH users.change-role (matrix D4) — owner and admin only.
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function provideAllowedChangeRoleRoles(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+        ];
+    }
+
     /**
      * Change the role of membership $membershipId as $actor acting in $company's
      * context — the new role rides the shared $this->roleCode field (the
@@ -168,6 +199,41 @@ class ChangeMemberRoleTest extends MembershipsTestCase
             $this->roleCode === null ? [] : ['roleCode' => $this->roleCode],
             ['X-Company-Context' => $company->getKey()]
         );
+    }
+
+    /**
+     * The 200 envelope carries the updated roster row: {data: MembershipResource}
+     * with the NEW role and the active status (R-E s112 — no leaked pivot columns).
+     */
+    protected function assertRoleChangeEnvelope(TestResponse $response, Role $to): void
+    {
+        $response->assertOk();
+        $this->assertNotEmpty($response->json('data.id'), 'The envelope must carry the membership id.');
+        $this->assertSame([$to->code, $to->name], [$response->json('data.role.code'), $response->json('data.role.name')]);
+        $this->assertSame('active', $response->json('data.status'));
+    }
+
+    /**
+     * The role change landed the event-sourced way: company_user.role_id holds
+     * $to AND exactly one UserMembershipRoleChanged stored event carries this
+     * membership's from/to/changedBy verbatim with the company_id metadata
+     * (amendment R — a direct read-model write must fail this). The from-role
+     * rides the shared $this->fromRoleCode (§2.2 shared test data).
+     */
+    protected function assertMembershipRoleChanged(string $membershipId, User $changedBy, Role $to): void
+    {
+        $membership = CompanyUser::query()->whereKey($membershipId)->sole();
+
+        $this->assertSame($to->getKey(), $membership->role_id);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserMembershipRoleChanged::class)
+            ->where('event_properties->membershipId', $membershipId)
+            ->where('event_properties->fromRoleId', $this->seededRole($this->fromRoleCode)->getKey())
+            ->where('event_properties->toRoleId', $to->getKey())
+            ->where('event_properties->changedBy', $changedBy->getKey())
+            ->whereNotNull('event_properties->changedAt')
+            ->where('company_id', $membership->company_id)
+            ->count());
     }
 
     /**

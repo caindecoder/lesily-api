@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
+use App\Companies\Memberships\IO\Http\Resources\MembershipResource;
 use App\Companies\Memberships\IO\Http\Resources\MembershipCollection;
 use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
 use App\Companies\Memberships\UseCases\Interactors\ChangeMembershipRoleInteractor;
@@ -19,12 +20,14 @@ use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterfa
  */
 class MembershipsController
 {
-    public function index(Request $request, CompanyUserRepositoryInterface $memberships): MembershipCollection
+    public function __construct(private readonly CompanyUserRepositoryInterface $memberships) {}
+
+    public function index(Request $request): MembershipCollection
     {
         $filters = MembershipFilters::fromQuery($request);
 
         return new MembershipCollection(
-            $memberships->listForCompany($request->company()->getKey(), $filters)
+            $this->memberships->listForCompany($request->company()->getKey(), $filters)
         );
     }
 
@@ -38,8 +41,12 @@ class MembershipsController
             'changedBy' => $actor->getKey(),
         ]);
 
-        $interactor->execute($request->company(), $command, $membershipId);
+        $membership = $interactor->execute($request->company(), $command, $membershipId);
 
-        return response()->json();
+        // The 200 envelope echoes the updated roster row (R-E s112) — the same
+        // aliased shape the roster lists, so the client updates in place.
+        $row = $this->memberships->findById($request->company()->getKey(), (string) $membership->getKey());
+
+        return (new MembershipResource($row))->response($request)->setStatusCode(200);
     }
 }
