@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
@@ -16,6 +17,20 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 class ChangeMemberRoleTest extends MembershipsTestCase
 {
     protected string $roleCode = 'hr_officer';
+
+    #[Test]
+    public function when_membership_is_unknown_then_change_is_refused_as_not_found(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+
+        // When
+        $response = $this->changeRole($admin, $company, (string) Str::uuid7());
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertNoRoleChangeRecorded();
+    }
 
     #[Test]
     public function when_target_membership_is_the_owners_then_change_is_refused_as_owner_transfer_required(): void
@@ -46,6 +61,17 @@ class ChangeMemberRoleTest extends MembershipsTestCase
             ['role_code' => $this->roleCode],
             ['X-Company-Context' => $company->getKey()]
         );
+    }
+
+    /**
+     * No UserMembershipRoleChanged event was ever recorded — the sad path was
+     * rejected before any state change (for sads with no target row to inspect).
+     */
+    protected function assertNoRoleChangeRecorded(): void
+    {
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('event_class', UserMembershipRoleChanged::class)
+            ->count());
     }
 
     /**

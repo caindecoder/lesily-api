@@ -14,6 +14,11 @@ class ChangeMembershipRoleInteractor
 {
     public function execute(Company $company, string $membershipId): CompanyUser
     {
+        CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->whereKey($membershipId)
+            ->firstOrFail();
+
         throw new OwnerTransferRequiredException;
     }
 }
