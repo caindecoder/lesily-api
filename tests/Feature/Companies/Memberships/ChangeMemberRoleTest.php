@@ -264,6 +264,25 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $this->viewMemberships($bob, $company)->assertOk();
     }
 
+    #[Test]
+    public function when_target_belongs_to_two_companies_then_only_current_company_role_changes(): void
+    {
+        // Given Bob is an employee in company A AND an admin in company B
+        [$companyA, $adminA] = $this->aCompanyWithMember();
+        [$bob, $membershipIdA] = $this->anAcceptedMembership($companyA, $adminA, 'bob@contoso.lk');
+        [$companyB] = $this->aCompanyWithMember();
+        $this->attachMember($companyB, $bob, $this->seededRole('admin'));
+        $membershipIdB = $this->membershipIdOf($companyB, $bob);
+
+        // When Bob's role changes in company A's context
+        $response = $this->changeRole($adminA, $companyA, $membershipIdA);
+
+        // Then company A holds the new role and company B is untouched
+        $this->assertRoleChangeEnvelope($response, $this->seededRole('hr_officer'));
+        $this->assertMembershipRoleChanged($membershipIdA, $adminA, $this->seededRole('hr_officer'));
+        $this->assertMembershipRoleUnchanged($membershipIdB, $this->seededRole('admin'));
+    }
+
     /**
      * Roles WITH users.change-role (matrix D4) — owner and admin only.
      *
