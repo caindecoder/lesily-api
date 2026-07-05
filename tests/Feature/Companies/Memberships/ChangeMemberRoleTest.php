@@ -9,6 +9,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Companies\Memberships\Events\UserMembershipRoleChanged;
@@ -30,6 +31,41 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         // Then
         $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
         $this->assertNoRoleChangeRecorded();
+    }
+
+    #[Test]
+    #[DataProvider('provideDeniedChangeRoleRoles')]
+    public function when_actor_role_lacks_change_permission_then_change_is_refused(string $roleCode): void
+    {
+        // Given
+        [$company] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->aMembership($company, 'employee');
+        $actor = User::factory()->create();
+        $this->attachMember($company, $actor, $this->seededRole($roleCode));
+
+        // When
+        $response = $this->changeRole($actor, $company, $membershipId);
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
+        $this->assertMembershipRoleUnchanged($membershipId, $this->seededRole('employee'));
+    }
+
+    /**
+     * Roles WITHOUT users.change-role — only Owner/Admin hold it (matrix D4;
+     * hr_officer may invite/revoke-invitation but NOT change roles).
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function provideDeniedChangeRoleRoles(): array
+    {
+        return [
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'employee' => ['employee'],
+            'auditor' => ['auditor'],
+            'manager' => ['manager'],
+        ];
     }
 
     #[Test]

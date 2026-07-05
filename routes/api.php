@@ -171,7 +171,7 @@ Route::get('/v1/memberships', [MembershipsController::class, 'index'])
 // company_user.role_id. Owner-role target → 422 OWNER_TRANSFER_REQUIRED; self-change →
 // 422 SELF_ROLE_CHANGE_BLOCKED (R-A/R-B s112). No throttle (R-H s112 — revoke parity).
 Route::patch('/v1/memberships/{membershipId}', [MembershipsController::class, 'update'])
-    ->middleware(['auth:sanctum', 'auth.company']);
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.change-role']);
 
 // Accept an invitation (UC-1-019) — guest-or-authenticated: the emailed single-use token
 // authenticates the new-user path; an existing-email invitee must additionally hold a
