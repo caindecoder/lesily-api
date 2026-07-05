@@ -34,6 +34,7 @@ class MembershipsController
         $actor = $request->user();
 
         $command = ChangeMembershipRoleCommand::validateAndCreate([
+            'roleCode' => $request->input('roleCode'),
             'changedBy' => $actor->getKey(),
         ]);
 

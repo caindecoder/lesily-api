@@ -17,7 +17,7 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class ChangeMemberRoleTest extends MembershipsTestCase
 {
-    protected string $roleCode = 'hr_officer';
+    protected ?string $roleCode = 'hr_officer';
 
     #[Test]
     public function when_membership_is_unknown_then_change_is_refused_as_not_found(): void
@@ -85,6 +85,43 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     }
 
     #[Test]
+    #[DataProvider('provideNonAssignableRoleCodes')]
+    public function when_role_code_is_not_assignable_then_change_is_rejected(?string $roleCode): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->aMembership($company, 'employee');
+        $this->roleCode = $roleCode;
+
+        // When
+        $response = $this->changeRole($admin, $company, $membershipId);
+
+        // Then
+        $this->assertValidationRejected($response, 'roleCode');
+        $this->assertMembershipRoleUnchanged($membershipId, $this->seededRole('employee'));
+    }
+
+    /**
+     * Role codes the whitelist must reject — owner is never change-role-assignable
+     * (ownership transfer only, R-A s112), platform_super_admin is not a company
+     * role, manager is seeded is_assignable=false, unknown codes don't exist, and
+     * a missing field fails required. The chunk-1 Enterprise custom-role gate is a
+     * declared deferral (R-F s112) — this whitelist IS today's buildable edge.
+     *
+     * @return array<string, array{0: ?string}>
+     */
+    public static function provideNonAssignableRoleCodes(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'platform super admin' => ['platform_super_admin'],
+            'manager' => ['manager'],
+            'unknown code' => ['ninja'],
+            'missing' => [null],
+        ];
+    }
+
+    #[Test]
     public function when_target_membership_is_the_owners_then_change_is_refused_as_owner_transfer_required(): void
     {
         // Given
@@ -119,7 +156,8 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     /**
      * Change the role of membership $membershipId as $actor acting in $company's
      * context — the new role rides the shared $this->roleCode field (the
-     * RevokeInvitationTest $reason pattern).
+     * RevokeInvitationTest $reason pattern; camelCase body key = invite parity).
+     * A null roleCode omits the field entirely (the missing-body-field sad).
      */
     protected function changeRole(User $actor, Company $company, string $membershipId): TestResponse
     {
@@ -127,7 +165,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
 
         return $this->patchJson(
             "/api/v1/memberships/{$membershipId}",
-            ['role_code' => $this->roleCode],
+            $this->roleCode === null ? [] : ['roleCode' => $this->roleCode],
             ['X-Company-Context' => $company->getKey()]
         );
     }
