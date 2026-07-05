@@ -206,7 +206,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
 
         // Then a same-role change is a legitimate no-op success — the aggregate
         // is guardless (cd-users §5), so the event records from == to
-        $this->assertRoleChangeEnvelope($response, $this->seededRole('employee'));
+        $this->assertRoleChangeEnvelope($response, $this->seededRole('employee'), $membershipId);
         $this->assertMembershipRoleChanged($membershipId, $admin, $this->seededRole('employee'));
     }
 
@@ -222,7 +222,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $response = $this->changeRole($actor, $company, $membershipId);
 
         // Then
-        $this->assertRoleChangeEnvelope($response, $this->seededRole('hr_officer'));
+        $this->assertRoleChangeEnvelope($response, $this->seededRole('hr_officer'), $membershipId);
         $this->assertMembershipRoleChanged($membershipId, $actor, $this->seededRole('hr_officer'));
     }
 
@@ -243,7 +243,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $response = $this->changeRole($admin, $company, $membershipId);
 
         // Then
-        $this->assertRoleChangeEnvelope($response, $this->seededRole('employee'));
+        $this->assertRoleChangeEnvelope($response, $this->seededRole('employee'), $membershipId);
         $this->assertMembershipRoleChanged($membershipId, $admin, $this->seededRole('employee'));
     }
 
@@ -278,7 +278,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $response = $this->changeRole($adminA, $companyA, $membershipIdA);
 
         // Then company A holds the new role and company B is untouched
-        $this->assertRoleChangeEnvelope($response, $this->seededRole('hr_officer'));
+        $this->assertRoleChangeEnvelope($response, $this->seededRole('hr_officer'), $membershipIdA);
         $this->assertMembershipRoleChanged($membershipIdA, $adminA, $this->seededRole('hr_officer'));
         $this->assertMembershipRoleUnchanged($membershipIdB, $this->seededRole('admin'));
     }
@@ -315,12 +315,13 @@ class ChangeMemberRoleTest extends MembershipsTestCase
 
     /**
      * The 200 envelope carries the updated roster row: {data: MembershipResource}
-     * with the NEW role and the active status (R-E s112 — no leaked pivot columns).
+     * for exactly $membershipId with the NEW role and the active status
+     * (R-E s112 — no leaked pivot columns; the id pin guards findById's scope).
      */
-    protected function assertRoleChangeEnvelope(TestResponse $response, Role $to): void
+    protected function assertRoleChangeEnvelope(TestResponse $response, Role $to, string $membershipId): void
     {
         $response->assertOk();
-        $this->assertNotEmpty($response->json('data.id'), 'The envelope must carry the membership id.');
+        $this->assertSame($membershipId, $response->json('data.id'));
         $this->assertSame([$to->code, $to->name], [$response->json('data.role.code'), $response->json('data.role.name')]);
         $this->assertSame('active', $response->json('data.status'));
     }
