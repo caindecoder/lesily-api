@@ -69,6 +69,22 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_membership_belongs_to_another_company_then_change_is_refused_as_not_found(): void
+    {
+        // Given
+        [$companyA, $adminA] = $this->aCompanyWithMember();
+        [$companyB] = $this->aCompanyWithMember();
+        [, $membershipIdB] = $this->aMembership($companyB, 'employee');
+
+        // When
+        $response = $this->changeRole($adminA, $companyA, $membershipIdB);
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertMembershipRoleUnchanged($membershipIdB, $this->seededRole('employee'));
+    }
+
+    #[Test]
     public function when_target_membership_is_the_owners_then_change_is_refused_as_owner_transfer_required(): void
     {
         // Given
