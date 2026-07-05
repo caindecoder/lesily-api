@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
@@ -244,6 +245,23 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         // Then
         $this->assertRoleChangeEnvelope($response, $this->seededRole('employee'));
         $this->assertMembershipRoleChanged($membershipId, $admin, $this->seededRole('employee'));
+    }
+
+    #[Test]
+    public function when_role_changes_then_target_permissions_reflect_immediately_on_next_request(): void
+    {
+        // Given an employee who cannot view the roster (employee lacks users.view)
+        [$company, $admin] = $this->aCompanyWithMember();
+        [$bob, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $this->assertRefusedWith($this->viewMemberships($bob, $company), ApiErrorCode::RoleInsufficient);
+
+        // When their role changes to HR Officer (which holds users.view)
+        $this->changeRole($admin, $company, $membershipId)->assertOk();
+        Auth::forgetGuards();
+
+        // Then the very next request already runs under the new role — no stale
+        // permission state (UC postcondition; no permission cache, OQ-1-035)
+        $this->viewMemberships($bob, $company)->assertOk();
     }
 
     /**
