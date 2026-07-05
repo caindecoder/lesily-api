@@ -225,6 +225,27 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $this->assertMembershipRoleChanged($membershipId, $actor, $this->seededRole('hr_officer'));
     }
 
+    #[Test]
+    public function when_admin_changes_another_admins_role_then_change_succeeds(): void
+    {
+        // Given a second admin, promoted through the endpoint (arrange via the
+        // real flow — aRevokedInvitation precedent)
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $this->roleCode = 'admin';
+        $this->changeRole($admin, $company, $membershipId)->assertOk();
+
+        // When the admin demotes the other admin (UC alt-4b — allowed; R-G s112:
+        // no sole-admin guard, the immutable Owner is the escalation root)
+        $this->roleCode = 'employee';
+        $this->fromRoleCode = 'admin';
+        $response = $this->changeRole($admin, $company, $membershipId);
+
+        // Then
+        $this->assertRoleChangeEnvelope($response, $this->seededRole('employee'));
+        $this->assertMembershipRoleChanged($membershipId, $admin, $this->seededRole('employee'));
+    }
+
     /**
      * Roles WITH users.change-role (matrix D4) — owner and admin only.
      *
