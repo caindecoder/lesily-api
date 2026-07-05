@@ -193,6 +193,23 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_new_role_equals_current_role_then_change_succeeds(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $this->roleCode = 'employee';
+
+        // When
+        $response = $this->changeRole($admin, $company, $membershipId);
+
+        // Then a same-role change is a legitimate no-op success — the aggregate
+        // is guardless (cd-users §5), so the event records from == to
+        $this->assertRoleChangeEnvelope($response, $this->seededRole('employee'));
+        $this->assertMembershipRoleChanged($membershipId, $admin, $this->seededRole('employee'));
+    }
+
+    #[Test]
     #[DataProvider('provideAllowedChangeRoleRoles')]
     public function when_authorized_actor_changes_member_role_then_role_is_updated(string $actorRole): void
     {
