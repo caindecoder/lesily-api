@@ -156,6 +156,21 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_target_membership_is_removed_then_change_is_refused_as_not_found(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        $removedMembershipId = $this->aRemovedMembership($company, User::factory()->create());
+
+        // When
+        $response = $this->changeRole($admin, $company, $removedMembershipId);
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertMembershipRoleUnchanged($removedMembershipId, $this->seededRole('employee'));
+    }
+
+    #[Test]
     #[DataProvider('provideAllowedChangeRoleRoles')]
     public function when_authorized_actor_changes_member_role_then_role_is_updated(string $actorRole): void
     {
