@@ -158,6 +158,23 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_owner_targets_their_own_membership_then_self_block_wins(): void
+    {
+        // Given the company Owner — who satisfies BOTH 422 guards at once
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $ownMembershipId = $this->membershipIdOf($company, $owner);
+
+        // When
+        $response = $this->changeRole($owner, $company, $ownMembershipId);
+
+        // Then the self-guard takes precedence over the owner-target guard —
+        // locks the interactor's guard ORDER as contract (two distinct codes;
+        // pr-test-analyzer IMPORTANT-1, s112)
+        $this->assertRefusedWith($response, ApiErrorCode::SelfRoleChangeBlocked);
+        $this->assertMembershipRoleUnchanged($ownMembershipId, $this->seededRole('owner'));
+    }
+
+    #[Test]
     public function when_target_membership_is_removed_then_change_is_refused_as_not_found(): void
     {
         // Given

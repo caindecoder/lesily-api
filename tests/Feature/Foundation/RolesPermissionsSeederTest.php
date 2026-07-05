@@ -146,6 +146,10 @@ class RolesPermissionsSeederTest extends FoundationTestCase
 
         // And a representative permission is persisted faithfully (name/description/module mapping)
         $this->assertInviteUsersPermissionPersistedFaithfully();
+        // And the D10-renamed code is pinned directly — a YAML revert to
+        // users.assign_role must fail HERE, not as a 403 three files away
+        // (pr-test-analyzer IMPORTANT-2, s112).
+        $this->assertChangeRolePermissionPersistedFaithfully();
     }
 
     #[Test]
@@ -266,6 +270,16 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $this->assertSame([
             'name' => 'Invite Users',
             'description' => 'Send invitations to new users to join the company.',
+            'module' => 'users',
+        ], $permission->only(['name', 'description', 'module']));
+    }
+
+    protected function assertChangeRolePermissionPersistedFaithfully(): void
+    {
+        $permission = Permission::query()->where('code', 'users.change-role')->firstOrFail();
+        $this->assertSame([
+            'name' => 'Change User Role',
+            'description' => "Change a user's role within the company.",
             'module' => 'users',
         ], $permission->only(['name', 'description', 'module']));
     }
