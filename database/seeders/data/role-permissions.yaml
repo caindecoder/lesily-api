@@ -9,7 +9,7 @@ platform_super_admin: []
 owner:
   - users.invite
   - users.view
-  - users.assign_role
+  - users.change-role
   - users.revoke-invitation
   - companies.view
   - companies.update
@@ -20,7 +20,7 @@ owner:
 admin:
   - users.invite
   - users.view
-  - users.assign_role
+  - users.change-role
   - users.revoke-invitation
   - companies.view
   - companies.update

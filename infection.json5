@@ -69,6 +69,10 @@
                 // projector arm — same spatie-discovery equivalent class (protected
                 // still projects the revocation stamps).
                 "App\\Companies\\Memberships\\Projectors\\MembershipProjector::onUserInvitationRevoked",
+                // membership slice Task 6 / UC-1-023 (change role): the role-change
+                // projector arm — same spatie-discovery equivalent class (protected
+                // still projects the role_id write).
+                "App\\Companies\\Memberships\\Projectors\\MembershipProjector::onUserMembershipRoleChanged",
             ],
         },
         // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only

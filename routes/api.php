@@ -167,6 +167,12 @@ Route::delete('/v1/invitations/{invitationId}', [InvitationsController::class, '
 Route::get('/v1/memberships', [MembershipsController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:users.view']);
 
+// Change a member's role (UC-1-023) — event-sourced UserMembershipRoleChanged updates
+// company_user.role_id. Owner-role target → 422 OWNER_TRANSFER_REQUIRED; self-change →
+// 422 SELF_ROLE_CHANGE_BLOCKED (R-A/R-B s112). No throttle (R-H s112 — revoke parity).
+Route::patch('/v1/memberships/{membershipId}', [MembershipsController::class, 'update'])
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.change-role']);
+
 // Accept an invitation (UC-1-019) — guest-or-authenticated: the emailed single-use token
 // authenticates the new-user path; an existing-email invitee must additionally hold a
 // Sanctum session (R9/D7). Deliberately NO auth middleware (it would 401 guests; the

@@ -18,4 +18,11 @@ interface CompanyUserRepositoryInterface
      * @return LengthAwarePaginator<int, stdClass>
      */
     public function listForCompany(string $companyId, MembershipFilters $filters): LengthAwarePaginator;
+
+    /**
+     * One ACTIVE membership as its roster-row shape (the same aliased columns
+     * MembershipResource consumes), or null when unknown / removed /
+     * cross-tenant (UC-1-023 R-E s112 — the 200 envelope echoes this row).
+     */
+    public function findById(string $companyId, string $membershipId): ?stdClass;
 }

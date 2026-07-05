@@ -8,9 +8,11 @@ use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use App\Companies\Memberships\Events\UserInvitationResent;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
+use App\Companies\Memberships\Events\UserMembershipRoleChanged;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
+use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
 
 /**
  * The invited-member lifecycle stream (SM-1-01): one aggregate per membership,
@@ -75,6 +77,24 @@ class UserMembership extends AggregateRoot
             revokedBy: $command->revokedBy,
             revokedAt: CarbonImmutable::now(),
             reason: $command->reason,
+        ));
+    }
+
+    /**
+     * Non-lifecycle attribute mutation (no SM transition): reassign the member's
+     * role — guardless like invite() (the interactor's owner-target/self checks
+     * are the gates, R-A/R-B s112). from/to arrive resolved by the interactor
+     * (role-code lookups are read-model work the aggregate must not perform);
+     * changedBy rides the Command, changedAt is computed here (revoke parity).
+     */
+    public function changeRole(ChangeMembershipRoleCommand $command, string $fromRoleId, string $toRoleId): static
+    {
+        return $this->recordThat(new UserMembershipRoleChanged(
+            membershipId: $this->uuid(),
+            fromRoleId: $fromRoleId,
+            toRoleId: $toRoleId,
+            changedBy: $command->changedBy,
+            changedAt: CarbonImmutable::now(),
         ));
     }
 

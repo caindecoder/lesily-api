@@ -45,6 +45,13 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
     }
 
+    public function findById(string $companyId, string $membershipId): ?stdClass
+    {
+        return $this->activeMembers($companyId, MembershipFilters::validateAndCreate([]))
+            ->where('company_user.id', $membershipId)
+            ->first();
+    }
+
     private function activeMembers(string $companyId, MembershipFilters $filters): Builder
     {
         return DB::table('company_user')
