@@ -124,6 +124,22 @@ class RemoveMemberTest extends MembershipsTestCase
         $this->assertMemberStillActive($ownerMembershipId);
     }
 
+    #[Test]
+    public function when_owner_removes_their_own_membership_then_self_block_takes_precedence(): void
+    {
+        // Given the company Owner — who satisfies BOTH 422 guards at once
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $ownMembershipId = $this->membershipIdOf($company, $owner);
+
+        // When
+        $response = $this->removeMember($owner, $company, $ownMembershipId);
+
+        // Then the self-guard wins over the owner-target guard — locks the
+        // interactor's guard ORDER as contract (self before owner; s112 parity)
+        $this->assertRefusedWith($response, ApiErrorCode::SelfRemovalBlocked);
+        $this->assertMemberStillActive($ownMembershipId);
+    }
+
     /**
      * Roles WITHOUT users.remove — only Owner/Admin hold it (matrix D4/D10;
      * hr_officer may invite/revoke-invitation but NOT remove members).
