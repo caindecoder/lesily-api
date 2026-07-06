@@ -11,6 +11,7 @@ owner:
   - users.view
   - users.change-role
   - users.revoke-invitation
+  - users.remove
   - companies.view
   - companies.update
   - billing.view
@@ -22,6 +23,7 @@ admin:
   - users.view
   - users.change-role
   - users.revoke-invitation
+  - users.remove
   - companies.view
   - companies.update
   - billing.view

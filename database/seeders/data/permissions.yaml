@@ -27,6 +27,12 @@
   description: Revoke a pending invitation before the invitee accepts it.
   module: users
 
+- code: users.remove
+  id: 0193abcd-2222-7000-8000-00000000000a
+  name: Remove Users
+  description: Remove a user's access to the company.
+  module: users
+
 - code: companies.view
   id: 0193abcd-2222-7000-8000-000000000004
   name: View Company
