@@ -98,6 +98,26 @@ class AuthorizeCompanyTest extends FoundationTestCase
         $response->assertJsonPath('company_id', $company->getKey());
     }
 
+    #[Test]
+    public function when_a_members_membership_is_soft_deleted_then_company_access_is_denied(): void
+    {
+        // Given an authenticated user whose membership was soft-deleted (removed
+        // per UC-1-024) but whose session is still valid (R7 defense-in-depth)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = User::factory()->create();
+        $this->joinCompany($company, $user);
+        $this->softDeleteMembership($company, $user);
+        Sanctum::actingAs($user);
+
+        // When they hit a company-scoped route with that session
+        $response = $this->getJson('/api/_test/company-context-probe', [
+            'X-Company-Context' => $company->getKey(),
+        ]);
+
+        // Then the soft-deleted membership no longer grants company access
+        $this->assertCompanyAccessDenied($response);
+    }
+
     /**
      * @return array<string, array{string}>
      */
