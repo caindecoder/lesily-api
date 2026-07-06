@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Events\UserInvitationExpired;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -67,6 +68,43 @@ class ExpireInvitationsTest extends MembershipsTestCase
         // When the daily scan runs
         // Then nothing is expired — a revoked invitation is never expirable
         $this->runExpireInvitations()->expectsOutputToContain('0 invitation(s) expired.')->assertSuccessful();
+    }
+
+    // Edge (boundary) — an invitation is expired only when its window elapsed
+    // STRICTLY before the run cutoff; the exactly-at-cutoff row pins `<` against
+    // a `<=` mutation.
+    #[Test]
+    #[DataProvider('cutoffBoundaryProvider')]
+    public function when_the_scan_runs_then_an_invitation_is_expired_only_if_its_window_has_elapsed(
+        string $runAt,
+        bool $expectExpired,
+    ): void {
+        // Given a pending invitation whose window ends at T0 + 7d (2026-07-09 09:00:00)
+        [$company, $actor] = $this->aCompanyWithMember('admin');
+        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+
+        // When the daily scan runs at a given instant relative to that window
+        $this->travelTo(CarbonImmutable::parse($runAt));
+
+        // Then the invitation is expired only if its window elapsed before the cutoff
+        $expected = $expectExpired ? '1 invitation(s) expired.' : '0 invitation(s) expired.';
+        $this->runExpireInvitations()->expectsOutputToContain($expected)->assertSuccessful();
+    }
+
+    /**
+     * expires_at = T0 (2026-07-02 09:00:00) + 7d = 2026-07-09 09:00:00. The
+     * exactly-at row makes `expires_at < now()` strictly false — the row that
+     * kills a `<` -> `<=` mutation.
+     *
+     * @return array<string, array{0: string, 1: bool}>
+     */
+    public static function cutoffBoundaryProvider(): array
+    {
+        return [
+            'a day before the window ends' => ['2026-07-08 09:00:00', false],
+            'exactly when the window ends' => ['2026-07-09 09:00:00', false],
+            'a second after the window ends' => ['2026-07-09 09:00:01', true],
+        ];
     }
 
     // Edge (idempotency) — once a row is expired it carries an expired_at stamp;
