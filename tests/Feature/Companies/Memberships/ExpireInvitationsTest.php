@@ -126,6 +126,29 @@ class ExpireInvitationsTest extends MembershipsTestCase
         $this->assertInvitationExpired($company, 'invitee@contoso.lk');
     }
 
+    // Edge (re-invite) — re-inviting a membership returns it to a CLEAN pending
+    // state, so a later lapse expires it again. The re-pending upsert must clear
+    // the terminal expired_at marker; otherwise a stale stamp silently blocks T5
+    // forever (whereNull expired_at excludes a genuinely-pending row).
+    #[Test]
+    public function when_a_re_invited_membership_lapses_again_then_it_is_expired_again(): void
+    {
+        // Given a membership that was accepted, removed, re-invited, and expired
+        [$company, $actor] = $this->aCompanyWithMember('admin');
+        [, $membershipId] = $this->anAcceptedMembership($company, $actor, 'invitee@contoso.lk');
+        $this->removeMember($actor, $company, $membershipId)->assertNoContent();
+        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+        $this->travel(8)->days();
+        $this->runExpireInvitations()->assertSuccessful();
+
+        // When it is re-invited AGAIN (a fresh pending invitation) and lapses again
+        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+        $this->travel(8)->days();
+
+        // Then the daily scan expires it again — the stale expired_at did not block it
+        $this->runExpireInvitations()->expectsOutputToContain('1 invitation(s) expired.')->assertSuccessful();
+    }
+
     // Happy — a pending invitation past its 7-day window is expired: the scan
     // records UserInvitationExpired, the projector stamps expired_at, and the
     // command reports how many it expired.
