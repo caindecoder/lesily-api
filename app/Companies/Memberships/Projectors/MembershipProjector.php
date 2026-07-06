@@ -8,6 +8,7 @@ use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use App\Companies\Memberships\Events\UserInvitationResent;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
+use App\Companies\Memberships\Events\UserRemovedFromCompany;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Companies\Memberships\Events\UserMembershipRoleChanged;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
@@ -83,6 +84,18 @@ class MembershipProjector extends Projector
         CompanyUser::withTrashed()
             ->whereKey($event->membershipId)
             ->update(['role_id' => $event->toRoleId]);
+    }
+
+    /**
+     * SM-1-01 T8: soft-delete the pivot IN PLACE (deleted_at stamped) — the row
+     * survives (D5b) so a later re-invite undeletes it. withTrashed for replay
+     * fidelity (onUserMembershipRoleChanged parity).
+     */
+    public function onUserRemovedFromCompany(UserRemovedFromCompany $event): void
+    {
+        CompanyUser::withTrashed()
+            ->whereKey($event->membershipId)
+            ->update(['deleted_at' => $event->removedAt]);
     }
 
     /**

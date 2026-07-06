@@ -4,10 +4,14 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
+use App\Companies\Memberships\Events\UserRemovedFromCompany;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RemoveMemberTest extends MembershipsTestCase
 {
@@ -140,6 +144,23 @@ class RemoveMemberTest extends MembershipsTestCase
         $this->assertMemberStillActive($ownMembershipId);
     }
 
+    #[Test]
+    #[DataProvider('provideAuthorizedActors')]
+    public function when_an_authorized_actor_removes_a_member_then_the_member_is_removed(string $actorRole): void
+    {
+        // Given a real accepted member (a genuine event stream — amendment R)
+        [$company, $actor] = $this->aCompanyWithMember($actorRole);
+        [$target, $membershipId] = $this->anAcceptedMembership($company, $actor, 'bob@contoso.lk');
+
+        // When an authorized actor removes them
+        $response = $this->removeMember($actor, $company, $membershipId);
+
+        // Then the pivot is soft-deleted, the event is recorded, and they drop
+        // off the roster
+        $this->assertMemberRemoved($response, $actor, $membershipId);
+        $this->assertRosterExcludes($this->viewMemberships($actor, $company), $target);
+    }
+
     /**
      * Roles WITHOUT users.remove — only Owner/Admin hold it (matrix D4/D10;
      * hr_officer may invite/revoke-invitation but NOT remove members).
@@ -155,5 +176,50 @@ class RemoveMemberTest extends MembershipsTestCase
             'auditor' => ['auditor'],
             'manager' => ['manager'],
         ];
+    }
+
+    /**
+     * Roles WITH users.remove (matrix D4/D10) — owner and admin only.
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function provideAuthorizedActors(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+        ];
+    }
+
+    /**
+     * The member was removed the event-sourced way: 204, the company_user pivot
+     * soft-deleted (deleted_at set), and exactly one UserRemovedFromCompany
+     * stored event carries this membership + actor verbatim with the company_id
+     * metadata (amendment R — a direct read-model write must fail this).
+     */
+    protected function assertMemberRemoved(TestResponse $response, User $actor, string $membershipId): void
+    {
+        $response->assertNoContent();
+
+        $membership = CompanyUser::withTrashed()->whereKey($membershipId)->sole();
+        $this->assertNotNull($membership->deleted_at);
+
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserRemovedFromCompany::class)
+            ->where('event_properties->membershipId', $membershipId)
+            ->where('event_properties->removedBy', $actor->getKey())
+            ->whereNotNull('event_properties->removedAt')
+            ->where('company_id', $membership->company_id)
+            ->count());
+    }
+
+    /**
+     * The roster no longer lists $absent — the removed member dropped off the
+     * active-members read model.
+     */
+    protected function assertRosterExcludes(TestResponse $roster, User $absent): void
+    {
+        $roster->assertOk();
+        $this->assertNotContains($absent->getKey(), $roster->collect('data')->pluck('user.id')->all());
     }
 }

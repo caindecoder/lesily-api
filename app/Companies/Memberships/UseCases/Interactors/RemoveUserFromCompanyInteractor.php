@@ -4,6 +4,7 @@ namespace App\Companies\Memberships\UseCases\Interactors;
 
 use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
+use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Companies\Memberships\Exceptions\SelfRemovalBlockedException;
 use App\Companies\Memberships\Exceptions\OwnerRemovalBlockedException;
 use App\Companies\Memberships\UseCases\Commands\RemoveUserFromCompanyCommand;
@@ -29,5 +30,9 @@ class RemoveUserFromCompanyInteractor
         if ($membership->role()->where('code', 'owner')->exists()) {
             throw new OwnerRemovalBlockedException;
         }
+
+        UserMembership::retrieve($membership->getKey())
+            ->remove($command)
+            ->persist();
     }
 }
