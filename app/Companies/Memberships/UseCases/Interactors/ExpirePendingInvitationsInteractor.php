@@ -3,6 +3,7 @@
 namespace App\Companies\Memberships\UseCases\Interactors;
 
 use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Companies\Memberships\UseCases\Repositories\InvitationRepositoryInterface;
 
@@ -23,7 +24,13 @@ class ExpirePendingInvitationsInteractor
         $expirable = $this->invitations->listExpirablePending($asOf);
 
         foreach ($expirable as $membershipId) {
-            UserMembership::retrieve($membershipId)->expireIfPending($asOf)->persist();
+            // One transaction per row so a projector failure rolls back the stored
+            // event WITH its expired_at marker (ApplyTrialExpirationInteractor
+            // parity) — otherwise a committed event without the marker would be
+            // re-expired on the next scan (the guardless aggregate records again).
+            DB::transaction(
+                fn () => UserMembership::retrieve($membershipId)->expireIfPending($asOf)->persist(),
+            );
         }
 
         return count($expirable);

@@ -54,6 +54,7 @@ class ExpireInvitationsTest extends MembershipsTestCase
         // When the daily scan runs
         // Then nothing is expired — an accepted invitation is never expirable
         $this->runExpireInvitations()->expectsOutputToContain('0 invitation(s) expired.')->assertSuccessful();
+        $this->assertInvitationStillPending($company, 'joiner@contoso.lk');
     }
 
     // Edge — a revoked invitation is dead already, so the scan excludes it
@@ -69,6 +70,7 @@ class ExpireInvitationsTest extends MembershipsTestCase
         // When the daily scan runs
         // Then nothing is expired — a revoked invitation is never expirable
         $this->runExpireInvitations()->expectsOutputToContain('0 invitation(s) expired.')->assertSuccessful();
+        $this->assertInvitationStillPending($company, 'revoked@contoso.lk');
     }
 
     // Edge (boundary) — an invitation is expired only when its window elapsed
@@ -199,6 +201,9 @@ class ExpireInvitationsTest extends MembershipsTestCase
         $token = $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
         $this->travel(8)->days();
         $this->runExpireInvitations()->assertSuccessful();
+        // The scan's effect is load-bearing here: the token is dead because the
+        // window elapsed AND the scan expired the row (event + expired_at stamp).
+        $this->assertInvitationExpired($company, 'invitee@contoso.lk');
 
         // When the invitee tries to accept with the now-dead token
         $response = $this->acceptInvitation($token, $this->validNewUserBody());
