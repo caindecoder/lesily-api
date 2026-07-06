@@ -69,6 +69,24 @@ class ExpireInvitationsTest extends MembershipsTestCase
         $this->runExpireInvitations()->expectsOutputToContain('0 invitation(s) expired.')->assertSuccessful();
     }
 
+    // Edge (idempotency) — once a row is expired it carries an expired_at stamp;
+    // a later daily scan excludes it (whereNull expired_at), so nothing is
+    // re-expired and the event is recorded exactly once.
+    #[Test]
+    public function when_an_already_expired_invitation_is_rescanned_then_it_is_not_re_expired(): void
+    {
+        // Given a pending invitation an earlier daily scan already expired
+        [$company, $actor] = $this->aCompanyWithMember('admin');
+        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+        $this->travel(8)->days();
+        $this->runExpireInvitations()->assertSuccessful();
+
+        // When the daily scan runs again
+        // Then nothing is re-expired and the expiry event was recorded exactly once
+        $this->runExpireInvitations()->expectsOutputToContain('0 invitation(s) expired.')->assertSuccessful();
+        $this->assertInvitationExpired($company, 'invitee@contoso.lk');
+    }
+
     // Happy — a pending invitation past its 7-day window is expired: the scan
     // records UserInvitationExpired, the projector stamps expired_at, and the
     // command reports how many it expired.

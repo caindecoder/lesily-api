@@ -16,6 +16,7 @@ class EloquentInvitationRepository implements InvitationRepositoryInterface
         return Invitation::query()
             ->whereNull('accepted_at')
             ->whereNull('revoked_at')
+            ->whereNull('expired_at')
             ->where('expires_at', '<', $asOf)
             ->pluck('id')
             ->all();
