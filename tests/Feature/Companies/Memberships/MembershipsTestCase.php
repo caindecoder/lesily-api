@@ -5,9 +5,11 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Tests\Feature\Companies\CompaniesTestCase;
@@ -106,6 +108,16 @@ abstract class MembershipsTestCase extends CompaniesTestCase
             [],
             ['X-Company-Context' => $company->getKey()]
         );
+    }
+
+    /**
+     * Mint a production-faithful active session for $user (explicit ~90-day expiry,
+     * as SessionIssuer stamps it). Returns the NewAccessToken so callers get both
+     * the plaintext (to authenticate) and the id. Mirrors AuthTestCase::aSessionFor.
+     */
+    protected function aSessionFor(User $user, string $name = 'web'): NewAccessToken
+    {
+        return $user->createToken($name, ['*'], now()->addMinutes(Config::integer('sanctum.expiration')));
     }
 
     /**

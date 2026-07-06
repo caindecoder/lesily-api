@@ -4,6 +4,8 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\NewAccessToken;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
@@ -145,6 +147,22 @@ class RemoveMemberTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_a_member_with_active_sessions_is_removed_then_their_sessions_are_revoked(): void
+    {
+        // Given a member with two active sessions
+        [$company, $admin] = $this->aCompanyWithMember();
+        [$target, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $session = $this->aSessionFor($target, 'web');
+        $this->aSessionFor($target, 'mobile');
+
+        // When the member is removed
+        $this->removeMember($admin, $company, $membershipId)->assertNoContent();
+
+        // Then every one of their sessions is revoked — none authenticates
+        $this->assertMemberSessionsRevoked($target, $session);
+    }
+
+    #[Test]
     #[DataProvider('provideAuthorizedActors')]
     public function when_an_authorized_actor_removes_a_member_then_the_member_is_removed(string $actorRole): void
     {
@@ -221,5 +239,20 @@ class RemoveMemberTest extends MembershipsTestCase
     {
         $roster->assertOk();
         $this->assertNotContains($absent->getKey(), $roster->collect('data')->pluck('user.id')->all());
+    }
+
+    /**
+     * The removed member holds no session and a previously-valid token no longer
+     * authenticates (D6 inline coarse account-level kill; forgetGuards forces a
+     * fresh DB re-check — amendment P).
+     */
+    protected function assertMemberSessionsRevoked(User $target, NewAccessToken $session): void
+    {
+        $this->assertSame(0, $target->tokens()->count());
+
+        Auth::forgetGuards();
+        $this->withHeader('Authorization', "Bearer {$session->plainTextToken}")
+            ->getJson('/api/_test/authenticated-probe')
+            ->assertUnauthorized();
     }
 }
