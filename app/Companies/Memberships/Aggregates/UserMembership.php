@@ -3,10 +3,12 @@
 namespace App\Companies\Memberships\Aggregates;
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use App\Companies\Memberships\Events\UserInvitationResent;
+use App\Companies\Memberships\Events\UserInvitationExpired;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
 use App\Companies\Memberships\Events\UserRemovedFromCompany;
 use App\Companies\Memberships\Events\UserMembershipRoleChanged;
@@ -113,6 +115,23 @@ class UserMembership extends AggregateRoot
             userId: $userId,
             roleId: $roleId,
             joinedAt: CarbonImmutable::now(),
+        ));
+    }
+
+    /**
+     * SM-1-01 T5 (Invited → InvitationExpired, terminal): the 7-day window
+     * elapsed without acceptance — guardless like invite() (the interactor's
+     * listExpirablePending query is the gate: only unaccepted, unrevoked,
+     * not-yet-expired rows past their window are ever handed here). expiredAt is
+     * the run cutoff, threaded from the interactor so every row in one daily
+     * batch carries one consistent instant (the projector stamps expired_at,
+     * which then excludes the row from the next scan — emit-once).
+     */
+    public function expireIfPending(CarbonInterface $expiredAt): static
+    {
+        return $this->recordThat(new UserInvitationExpired(
+            membershipId: $this->uuid(),
+            expiredAt: $expiredAt,
         ));
     }
 

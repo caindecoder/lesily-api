@@ -7,6 +7,7 @@ use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use App\Companies\Memberships\Events\UserInvitationResent;
+use App\Companies\Memberships\Events\UserInvitationExpired;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
 use App\Companies\Memberships\Events\UserRemovedFromCompany;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
@@ -15,9 +16,9 @@ use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 
 /**
  * The membership read-model writer, fed by TWO streams: the UserMembership
- * aggregate's invite lifecycle (UserInvited → the invitations table; accept +
- * revoke arms are BUILT, the later expire/role-change/remove arms land with
- * their slice tasks) and
+ * aggregate's full invite lifecycle (invite/accept/resend/revoke → the
+ * invitations table; role-change/remove → the company_user pivot; expire →
+ * the invitations expired_at marker) and
  * the User identity stream's membership attributes (emergency contact → the
  * company_user pivot, slice C1). The owner pivot itself is written by
  * CompanyProjector::onCompanyCreated — the FK chain (users → companies →
@@ -71,6 +72,20 @@ class MembershipProjector extends Projector
             'revoked_at' => $event->revokedAt,
             'revoked_by_user_id' => $event->revokedBy,
             'revocation_reason' => $event->reason,
+        ]);
+    }
+
+    /**
+     * SM-1-01 T5: stamp expired_at IN PLACE — a marker column, never a delete
+     * (D5b keeps the id shared with any later re-invite upsert). This IS the
+     * idempotency gate: once stamped, listExpirablePending's whereNull(expired_at)
+     * excludes the row, so a re-run never re-records. Display "Expired" stays
+     * derived from expires_at; this column only marks the scan has processed it.
+     */
+    public function onUserInvitationExpired(UserInvitationExpired $event): void
+    {
+        Invitation::query()->whereKey($event->membershipId)->update([
+            'expired_at' => $event->expiredAt,
         ]);
     }
 

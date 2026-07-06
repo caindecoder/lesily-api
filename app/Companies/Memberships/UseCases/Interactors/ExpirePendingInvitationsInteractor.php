@@ -3,6 +3,7 @@
 namespace App\Companies\Memberships\UseCases\Interactors;
 
 use Carbon\CarbonInterface;
+use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Companies\Memberships\UseCases\Repositories\InvitationRepositoryInterface;
 
 /**
@@ -20,6 +21,10 @@ class ExpirePendingInvitationsInteractor
     public function execute(CarbonInterface $asOf): int
     {
         $expirable = $this->invitations->listExpirablePending($asOf);
+
+        foreach ($expirable as $membershipId) {
+            UserMembership::retrieve($membershipId)->expireIfPending($asOf)->persist();
+        }
 
         return count($expirable);
     }

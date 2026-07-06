@@ -3,8 +3,12 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use Carbon\CarbonImmutable;
+use App\Companies\Entities\Company;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Memberships\Entities\Invitation;
+use App\Companies\Memberships\Events\UserInvitationExpired;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
  * T5 of the User state machine — the daily `invitations:expire` scan expires
@@ -35,11 +39,50 @@ class ExpireInvitationsTest extends MembershipsTestCase
         $this->runExpireInvitations()->expectsOutputToContain('0 invitation(s) expired.')->assertSuccessful();
     }
 
+    // Happy — a pending invitation past its 7-day window is expired: the scan
+    // records UserInvitationExpired, the projector stamps expired_at, and the
+    // command reports how many it expired.
+    #[Test]
+    public function when_a_pending_invitation_is_past_expiry_then_it_is_expired(): void
+    {
+        // Given a pending invitation now past its 7-day window
+        [$company, $actor] = $this->aCompanyWithMember('admin');
+        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+        $this->travel(8)->days();
+
+        // When the daily scan runs
+        $this->runExpireInvitations()->expectsOutputToContain('1 invitation(s) expired.')->assertSuccessful();
+
+        // Then the invitation is marked expired (event-sourced + projected)
+        $this->assertInvitationExpired($company, 'invitee@contoso.lk');
+    }
+
     protected function runExpireInvitations(): PendingCommand
     {
         $command = $this->artisan('invitations:expire');
         assert($command instanceof PendingCommand);
 
         return $command;
+    }
+
+    /**
+     * The invitation for ($company, $email) was expired the event-sourced way:
+     * expired_at stamped at the run cutoff (±10s), and exactly one
+     * UserInvitationExpired stored event carries this row's id (amendment R — a
+     * direct read-model write must fail this assertion).
+     */
+    protected function assertInvitationExpired(Company $company, string $email): void
+    {
+        $invitation = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->sole();
+
+        $this->assertNotNull($invitation->expired_at);
+        $this->assertEqualsWithDelta(now()->getTimestamp(), $invitation->expired_at->getTimestamp(), 10);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserInvitationExpired::class)
+            ->where('event_properties->membershipId', $invitation->getKey())
+            ->count());
     }
 }

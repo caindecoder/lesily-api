@@ -11,8 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * The invitation read model — one row per UserMembership aggregate (id IS the
  * aggregate UUID, shared with the company_user pivot on accept — D5b). Written
- * exclusively by MembershipProjector; pending = accepted_at null and expires_at
- * in the future (UC-1-018/019).
+ * exclusively by MembershipProjector; pending = accepted_at null, revoked_at
+ * null, expired_at null, and expires_at in the future (UC-1-018/019; T5).
  */
 class Invitation extends Model
 {
@@ -31,12 +31,14 @@ class Invitation extends Model
         'revoked_at',
         'revoked_by_user_id',
         'revocation_reason',
+        'expired_at',
     ];
 
     protected $casts = [
         'expires_at' => 'immutable_datetime',
         'accepted_at' => 'immutable_datetime',
         'revoked_at' => 'immutable_datetime',
+        'expired_at' => 'immutable_datetime',
     ];
 
     /**
