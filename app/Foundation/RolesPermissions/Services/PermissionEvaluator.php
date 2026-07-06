@@ -21,6 +21,7 @@ class PermissionEvaluator
         $roleId = DB::table('company_user')
             ->where('company_id', $company->getKey())
             ->where('user_id', $user->getKey())
+            ->whereNull('deleted_at')
             ->value('role_id');
 
         if (! is_string($roleId)) {
