@@ -143,6 +143,27 @@ class ExpireInvitationsTest extends MembershipsTestCase
         $this->assertInvitationExpired($company, 'invitee@contoso.lk');
     }
 
+    // Happy — one daily run expires EVERY due invitation, not just the first,
+    // and leaves an in-window invitation pending (selectivity + one-to-many).
+    #[Test]
+    public function when_multiple_invitations_are_due_then_only_the_due_ones_are_expired(): void
+    {
+        // Given two invitations past their window and one still inside it
+        [$company, $actor] = $this->aCompanyWithMember('admin');
+        $this->aPendingInvitation($company, $actor, 'due-one@contoso.lk');
+        $this->aPendingInvitation($company, $actor, 'due-two@contoso.lk');
+        $this->travel(8)->days();
+        $this->aPendingInvitation($company, $actor, 'fresh@contoso.lk');
+
+        // When the daily scan runs
+        $this->runExpireInvitations()->expectsOutputToContain('2 invitation(s) expired.')->assertSuccessful();
+
+        // Then only the two due invitations are expired; the fresh one stays pending
+        $this->assertInvitationExpired($company, 'due-one@contoso.lk');
+        $this->assertInvitationExpired($company, 'due-two@contoso.lk');
+        $this->assertInvitationStillPending($company, 'fresh@contoso.lk');
+    }
+
     protected function runExpireInvitations(): PendingCommand
     {
         $command = $this->artisan('invitations:expire');
@@ -167,6 +188,25 @@ class ExpireInvitationsTest extends MembershipsTestCase
         $this->assertNotNull($invitation->expired_at);
         $this->assertEqualsWithDelta(now()->getTimestamp(), $invitation->expired_at->getTimestamp(), 10);
         $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserInvitationExpired::class)
+            ->where('event_properties->membershipId', $invitation->getKey())
+            ->count());
+    }
+
+    /**
+     * The invitation for ($company, $email) was NOT expired: no expired_at stamp
+     * and no UserInvitationExpired stored event (the LD state-unchanged
+     * discipline — a sad/excluded row changes nothing).
+     */
+    protected function assertInvitationStillPending(Company $company, string $email): void
+    {
+        $invitation = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->sole();
+
+        $this->assertNull($invitation->expired_at);
+        $this->assertSame(0, LesilyStoredEvent::query()
             ->where('event_class', UserInvitationExpired::class)
             ->where('event_properties->membershipId', $invitation->getKey())
             ->count());
