@@ -4,12 +4,14 @@ namespace App\Companies\Memberships\IO\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 use App\Companies\Memberships\IO\Http\Resources\MembershipResource;
 use App\Companies\Memberships\IO\Http\Resources\MembershipCollection;
 use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
 use App\Companies\Memberships\UseCases\Interactors\ChangeMembershipRoleInteractor;
+use App\Companies\Memberships\UseCases\Interactors\RemoveUserFromCompanyInteractor;
 use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterface;
 
 /**
@@ -51,8 +53,10 @@ class MembershipsController
         return (new MembershipResource($row))->response($request)->setStatusCode(200);
     }
 
-    public function destroy(Request $request, string $membershipId): JsonResponse
+    public function destroy(Request $request, string $membershipId, RemoveUserFromCompanyInteractor $interactor): Response
     {
-        throw new \RuntimeException('Not implemented');
+        $interactor->execute($request->company(), $membershipId);
+
+        return response()->noContent();
     }
 }

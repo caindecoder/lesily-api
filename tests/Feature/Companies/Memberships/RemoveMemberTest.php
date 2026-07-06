@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
+use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -25,6 +26,19 @@ class RemoveMemberTest extends MembershipsTestCase
         // Then the request is refused and the member is untouched
         $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
         $this->assertMemberStillActive($membershipId);
+    }
+
+    #[Test]
+    public function when_membership_id_is_unknown_then_removal_is_not_found(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+
+        // When
+        $response = $this->removeMember($admin, $company, (string) Str::uuid7());
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
     }
 
     /**
