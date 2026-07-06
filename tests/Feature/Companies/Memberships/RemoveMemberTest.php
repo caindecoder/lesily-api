@@ -163,6 +163,47 @@ class RemoveMemberTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_a_removed_member_is_re_invited_then_the_same_membership_row_is_restored(): void
+    {
+        // Given a member removed through the endpoint (event-sourced soft-delete)
+        [$company, $admin] = $this->aCompanyWithMember();
+        [$target, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $this->removeMember($admin, $company, $membershipId)->assertNoContent();
+
+        // When they are re-invited and accept while authenticated
+        $token = $this->aPendingInvitation($company, $admin, 'bob@contoso.lk');
+        $response = $this->acceptInvitation($token, [], $target);
+
+        // Then the SAME pivot UUID comes back live (undelete-in-place, D5b) — the
+        // real endpoint's removal leaves exactly the reusable soft-deleted state,
+        // and no second row is minted
+        $response->assertOk();
+        $response->assertJsonPath('data.id', $membershipId);
+        $this->assertMemberStillActive($membershipId);
+        $this->assertSame(1, CompanyUser::withTrashed()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $target->getKey())
+            ->count());
+    }
+
+    #[Test]
+    public function when_a_member_is_removed_then_their_other_company_membership_remains(): void
+    {
+        // Given Bob is a member of company A AND company B
+        [$companyA, $adminA] = $this->aCompanyWithMember();
+        [$bob, $membershipIdA] = $this->anAcceptedMembership($companyA, $adminA, 'bob@contoso.lk');
+        [$companyB] = $this->aCompanyWithMember();
+        $this->attachMember($companyB, $bob, $this->seededRole('employee'));
+        $membershipIdB = $this->membershipIdOf($companyB, $bob);
+
+        // When Bob is removed from company A
+        $this->removeMember($adminA, $companyA, $membershipIdA)->assertNoContent();
+
+        // Then only company A's pivot is soft-deleted — company B is untouched
+        $this->assertMemberStillActive($membershipIdB);
+    }
+
+    #[Test]
     #[DataProvider('provideAuthorizedActors')]
     public function when_an_authorized_actor_removes_a_member_then_the_member_is_removed(string $actorRole): void
     {
