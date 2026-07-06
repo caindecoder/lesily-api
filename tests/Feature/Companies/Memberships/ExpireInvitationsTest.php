@@ -54,6 +54,21 @@ class ExpireInvitationsTest extends MembershipsTestCase
         $this->runExpireInvitations()->expectsOutputToContain('0 invitation(s) expired.')->assertSuccessful();
     }
 
+    // Edge — a revoked invitation is dead already, so the scan excludes it
+    // (revoked_at is set).
+    #[Test]
+    public function when_a_revoked_invitation_past_expiry_then_it_is_not_expired(): void
+    {
+        // Given a revoked invitation now past its window
+        [$company, $actor] = $this->aCompanyWithMember('admin');
+        $this->aRevokedInvitation($company, $actor, 'revoked@contoso.lk');
+        $this->travel(8)->days();
+
+        // When the daily scan runs
+        // Then nothing is expired — a revoked invitation is never expirable
+        $this->runExpireInvitations()->expectsOutputToContain('0 invitation(s) expired.')->assertSuccessful();
+    }
+
     // Happy — a pending invitation past its 7-day window is expired: the scan
     // records UserInvitationExpired, the projector stamps expired_at, and the
     // command reports how many it expired.
