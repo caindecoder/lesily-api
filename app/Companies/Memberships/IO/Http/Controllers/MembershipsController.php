@@ -50,4 +50,9 @@ class MembershipsController
 
         return (new MembershipResource($row))->response($request)->setStatusCode(200);
     }
+
+    public function destroy(Request $request, string $membershipId): JsonResponse
+    {
+        throw new \RuntimeException('Not implemented');
+    }
 }

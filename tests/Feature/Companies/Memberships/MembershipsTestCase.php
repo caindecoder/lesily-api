@@ -94,6 +94,21 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
+     * Remove membership $membershipId as $actor acting in $company's context
+     * (UC-1-024). No body — the membership id rides the route (M1 parity).
+     */
+    protected function removeMember(User $actor, Company $company, string $membershipId): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->deleteJson(
+            "/api/v1/memberships/{$membershipId}",
+            [],
+            ['X-Company-Context' => $company->getKey()]
+        );
+    }
+
+    /**
      * No invitation was persisted, no UserInvited event was recorded, and no
      * invite email was queued — the guard rejected before any side effect.
      */
@@ -123,6 +138,18 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     {
         $response->assertStatus($code->status());
         $response->assertJsonPath('error_code', $code->value);
+    }
+
+    /**
+     * The membership still holds a live (non-soft-deleted) pivot — a sad path
+     * removed nothing (the LD state-unchanged discipline). withTrashed so the
+     * lookup survives regardless of the pivot's soft-delete state.
+     */
+    protected function assertMemberStillActive(string $membershipId): void
+    {
+        $membership = CompanyUser::withTrashed()->whereKey($membershipId)->sole();
+
+        $this->assertNull($membership->deleted_at);
     }
 
     /**

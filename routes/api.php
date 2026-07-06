@@ -173,6 +173,13 @@ Route::get('/v1/memberships', [MembershipsController::class, 'index'])
 Route::patch('/v1/memberships/{membershipId}', [MembershipsController::class, 'update'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:users.change-role']);
 
+// Remove a member from the company (UC-1-024) — event-sourced UserRemovedFromCompany
+// soft-deletes the company_user pivot + revokes the removed member's sessions. Owner
+// target → 422 OWNER_TRANSFER_REQUIRED; self → 422 SELF_REMOVAL_BLOCKED (self before
+// owner). No throttle (R-H s112 — revoke parity).
+Route::delete('/v1/memberships/{membershipId}', [MembershipsController::class, 'destroy'])
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.remove']);
+
 // Accept an invitation (UC-1-019) — guest-or-authenticated: the emailed single-use token
 // authenticates the new-user path; an existing-email invitee must additionally hold a
 // Sanctum session (R9/D7). Deliberately NO auth middleware (it would 401 guests; the
