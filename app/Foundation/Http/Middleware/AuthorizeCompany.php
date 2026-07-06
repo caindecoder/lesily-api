@@ -25,7 +25,10 @@ class AuthorizeCompany
         $user = $request->user();
         $company = $this->resolver->resolve($request);
 
-        if (! $company->users()->whereKey($user->getKey())->exists()) {
+        // wherePivotNull: a soft-deleted (removed, UC-1-024) membership is not a
+        // live member — belongsToMany reads must filter the pivot column
+        // explicitly (CompanyUser's global SoftDeletes scope does not reach it). R7.
+        if (! $company->users()->whereKey($user->getKey())->wherePivotNull('deleted_at')->exists()) {
             throw new CompanyAccessDeniedException;
         }
 

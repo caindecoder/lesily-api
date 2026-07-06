@@ -24,6 +24,7 @@ enum ApiErrorCode: string
     case InviteEmailMismatch = 'INVITE_EMAIL_MISMATCH';
     case OwnerTransferRequired = 'OWNER_TRANSFER_REQUIRED';
     case SelfRoleChangeBlocked = 'SELF_ROLE_CHANGE_BLOCKED';
+    case SelfRemovalBlocked = 'SELF_REMOVAL_BLOCKED';
     case ResourceNotFound = 'RESOURCE_NOT_FOUND';
     case EmailRegistered = 'EMAIL_REGISTERED';
     case BrNumberRegistered = 'BR_NUMBER_REGISTERED';
@@ -61,6 +62,7 @@ enum ApiErrorCode: string
             self::InviteEmailMismatch => 403,
             self::OwnerTransferRequired => 422,
             self::SelfRoleChangeBlocked => 422,
+            self::SelfRemovalBlocked => 422,
             self::ResourceNotFound => 404,
             self::EmailRegistered => 409,
             self::BrNumberRegistered => 409,

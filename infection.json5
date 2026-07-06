@@ -73,6 +73,10 @@
                 // projector arm — same spatie-discovery equivalent class (protected
                 // still projects the role_id write).
                 "App\\Companies\\Memberships\\Projectors\\MembershipProjector::onUserMembershipRoleChanged",
+                // membership slice Task 7 / UC-1-024 (remove member): the removal
+                // projector arm — same spatie-discovery equivalent class (protected
+                // still projects the soft-delete stamp).
+                "App\\Companies\\Memberships\\Projectors\\MembershipProjector::onUserRemovedFromCompany",
             ],
         },
         // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only

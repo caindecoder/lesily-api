@@ -5,9 +5,11 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Tests\Feature\Companies\CompaniesTestCase;
@@ -94,6 +96,31 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
+     * Remove membership $membershipId as $actor acting in $company's context
+     * (UC-1-024). No body — the membership id rides the route (M1 parity).
+     */
+    protected function removeMember(User $actor, Company $company, string $membershipId): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->deleteJson(
+            "/api/v1/memberships/{$membershipId}",
+            [],
+            ['X-Company-Context' => $company->getKey()]
+        );
+    }
+
+    /**
+     * Mint a production-faithful active session for $user (explicit ~90-day expiry,
+     * as SessionIssuer stamps it). Returns the NewAccessToken so callers get both
+     * the plaintext (to authenticate) and the id. Mirrors AuthTestCase::aSessionFor.
+     */
+    protected function aSessionFor(User $user, string $name = 'web'): NewAccessToken
+    {
+        return $user->createToken($name, ['*'], now()->addMinutes(Config::integer('sanctum.expiration')));
+    }
+
+    /**
      * No invitation was persisted, no UserInvited event was recorded, and no
      * invite email was queued — the guard rejected before any side effect.
      */
@@ -123,6 +150,18 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     {
         $response->assertStatus($code->status());
         $response->assertJsonPath('error_code', $code->value);
+    }
+
+    /**
+     * The membership still holds a live (non-soft-deleted) pivot — a sad path
+     * removed nothing (the LD state-unchanged discipline). withTrashed so the
+     * lookup survives regardless of the pivot's soft-delete state.
+     */
+    protected function assertMemberStillActive(string $membershipId): void
+    {
+        $membership = CompanyUser::withTrashed()->whereKey($membershipId)->sole();
+
+        $this->assertNull($membership->deleted_at);
     }
 
     /**

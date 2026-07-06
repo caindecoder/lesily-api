@@ -8,11 +8,13 @@ use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use App\Companies\Memberships\Events\UserInvitationResent;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
+use App\Companies\Memberships\Events\UserRemovedFromCompany;
 use App\Companies\Memberships\Events\UserMembershipRoleChanged;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
+use App\Companies\Memberships\UseCases\Commands\RemoveUserFromCompanyCommand;
 
 /**
  * The invited-member lifecycle stream (SM-1-01): one aggregate per membership,
@@ -111,6 +113,22 @@ class UserMembership extends AggregateRoot
             userId: $userId,
             roleId: $roleId,
             joinedAt: CarbonImmutable::now(),
+        ));
+    }
+
+    /**
+     * SM-1-01 T8 (Active → Removed, non-terminal): revoke the member's company
+     * access — guardless like invite() (the interactor's self/owner-target checks
+     * are the gates, R-A/R-B s113). removedBy rides the Command, removedAt is
+     * computed here (revoke parity); the projector soft-deletes the pivot, so a
+     * later re-invite resumes THIS stream (D5b undelete-in-place).
+     */
+    public function remove(RemoveUserFromCompanyCommand $command): static
+    {
+        return $this->recordThat(new UserRemovedFromCompany(
+            membershipId: $this->uuid(),
+            removedBy: $command->removedBy,
+            removedAt: CarbonImmutable::now(),
         ));
     }
 }

@@ -92,9 +92,10 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $afterSecond = $this->tableCounts();
 
         // Then every table's row count is stable across runs (idempotent — no duplicates)
-        // 9 permissions / 28 grants since users.revoke-invitation joined the catalog
-        // for owner/admin/hr_officer (D10, UC-1-022 lap 3, s111).
-        $this->assertSame(['roles' => 8, 'permissions' => 9, 'role_permission' => 28], $afterFirst);
+        // 10 permissions / 30 grants since users.remove joined the catalog for
+        // owner/admin (D10, UC-1-024, s113); users.revoke-invitation added the
+        // prior +1/+3 for owner/admin/hr_officer (UC-1-022 lap 3, s111).
+        $this->assertSame(['roles' => 8, 'permissions' => 10, 'role_permission' => 30], $afterFirst);
         $this->assertSame($afterFirst, $afterSecond);
     }
 
@@ -150,6 +151,8 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         // users.assign_role must fail HERE, not as a 403 three files away
         // (pr-test-analyzer IMPORTANT-2, s112).
         $this->assertChangeRolePermissionPersistedFaithfully();
+        // And users.remove is pinned the same way (D10, UC-1-024, s113).
+        $this->assertRemovePermissionPersistedFaithfully();
     }
 
     #[Test]
@@ -161,9 +164,10 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         // Then per-role grant counts match the locked matrix, and manager has none
         $expected = [
             'platform_super_admin' => 0,
-            // owner/admin/hr_officer each +1 for users.revoke-invitation (D10, s111).
-            'owner' => 9,
-            'admin' => 8,
+            // owner/admin each +1 for users.remove (D10, UC-1-024, s113); the prior
+            // +1 each (+ hr_officer) came from users.revoke-invitation (s111).
+            'owner' => 10,
+            'admin' => 9,
             'hr_officer' => 4,
             // 2 since the users.view grant came out (matrix denies it — D-A, s108).
             'payroll_officer' => 2,
@@ -280,6 +284,16 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $this->assertSame([
             'name' => 'Change User Role',
             'description' => "Change a user's role within the company.",
+            'module' => 'users',
+        ], $permission->only(['name', 'description', 'module']));
+    }
+
+    protected function assertRemovePermissionPersistedFaithfully(): void
+    {
+        $permission = Permission::query()->where('code', 'users.remove')->firstOrFail();
+        $this->assertSame([
+            'name' => 'Remove Users',
+            'description' => "Remove a user's access to the company.",
             'module' => 'users',
         ], $permission->only(['name', 'description', 'module']));
     }

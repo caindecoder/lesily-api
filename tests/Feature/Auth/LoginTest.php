@@ -7,6 +7,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanyUser;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -299,6 +300,31 @@ class LoginTest extends AuthTestCase
         // Then it is rejected, no fourth session is minted, and "last seen" is not bumped
         $this->assertDeviceLimitRejected($response, $user, 3);
         $this->assertNull($user->refresh()->last_logged_at, 'A capped login must not stamp last_logged_at.');
+    }
+
+    // Edge — a member removed from their device-capped company (soft-deleted pivot) is
+    // no longer capped: the trashed pivot must not count toward the per-account device
+    // limit. UC-1-024 is the first path that soft-deletes a pivot, so it activates this
+    // latent leak in User::companies() — the R7 sweep must close it (DeviceLimitGuard).
+    #[Test]
+    public function when_a_capped_membership_is_removed_then_the_account_is_no_longer_device_limited(): void
+    {
+        // Given a user removed from their only Pro company but still holding three sessions
+        $user = $this->aRegisteredUser();
+        $this->memberOfCompanyOnPlan($user, BillingPlan::Pro);
+        CompanyUser::query()->where('user_id', $user->getKey())->update(['deleted_at' => now()]);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->aSessionFor($user, 'tablet');
+
+        // When they log in from a fourth device
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then the removed membership no longer caps them — the login succeeds
+        $response->assertOk();
     }
 
     /**

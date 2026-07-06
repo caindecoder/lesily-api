@@ -4,12 +4,15 @@ namespace App\Companies\Memberships\IO\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 use App\Companies\Memberships\IO\Http\Resources\MembershipResource;
 use App\Companies\Memberships\IO\Http\Resources\MembershipCollection;
 use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
+use App\Companies\Memberships\UseCases\Commands\RemoveUserFromCompanyCommand;
 use App\Companies\Memberships\UseCases\Interactors\ChangeMembershipRoleInteractor;
+use App\Companies\Memberships\UseCases\Interactors\RemoveUserFromCompanyInteractor;
 use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterface;
 
 /**
@@ -49,5 +52,19 @@ class MembershipsController
         $row = $this->memberships->findById($company->getKey(), $membershipId);
 
         return (new MembershipResource($row))->response($request)->setStatusCode(200);
+    }
+
+    public function destroy(Request $request, string $membershipId, RemoveUserFromCompanyInteractor $interactor): Response
+    {
+        /** @var User $actor — guaranteed by auth:sanctum */
+        $actor = $request->user();
+
+        $command = RemoveUserFromCompanyCommand::validateAndCreate([
+            'removedBy' => $actor->getKey(),
+        ]);
+
+        $interactor->execute($request->company(), $command, $membershipId);
+
+        return response()->noContent();
     }
 }

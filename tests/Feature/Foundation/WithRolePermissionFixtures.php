@@ -6,6 +6,7 @@ use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use App\Companies\Entities\CompanyUser;
 use App\Foundation\RolesPermissions\Entities\Role;
 
 /**
@@ -40,5 +41,18 @@ trait WithRolePermissionFixtures
     protected function joinCompany(Company $company, User $user): void
     {
         $this->attachMember($company, $user, Role::factory()->create());
+    }
+
+    /**
+     * Soft-delete ($user)'s membership pivot in $company — the removed-member
+     * state (UC-1-024) without going through the endpoint's session kill, so a
+     * still-valid session can prove the R7 auth-gate filters trashed memberships.
+     */
+    protected function softDeleteMembership(Company $company, User $user): void
+    {
+        CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $user->getKey())
+            ->update(['deleted_at' => now()]);
     }
 }
