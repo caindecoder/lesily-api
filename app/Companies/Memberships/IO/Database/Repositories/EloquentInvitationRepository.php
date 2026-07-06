@@ -14,6 +14,7 @@ class EloquentInvitationRepository implements InvitationRepositoryInterface
     public function listExpirablePending(CarbonInterface $asOf): array
     {
         return Invitation::query()
+            ->whereNull('accepted_at')
             ->where('expires_at', '<', $asOf)
             ->pluck('id')
             ->all();

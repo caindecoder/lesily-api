@@ -39,6 +39,21 @@ class ExpireInvitationsTest extends MembershipsTestCase
         $this->runExpireInvitations()->expectsOutputToContain('0 invitation(s) expired.')->assertSuccessful();
     }
 
+    // Edge — an invitation accepted before its window elapsed is no longer
+    // pending, so the scan excludes it (accepted_at is set).
+    #[Test]
+    public function when_an_accepted_invitation_past_expiry_then_it_is_not_expired(): void
+    {
+        // Given an accepted invitation now past its original 7-day window
+        [$company, $actor] = $this->aCompanyWithMember('admin');
+        $this->anAcceptedMembership($company, $actor, 'joiner@contoso.lk');
+        $this->travel(8)->days();
+
+        // When the daily scan runs
+        // Then nothing is expired — an accepted invitation is never expirable
+        $this->runExpireInvitations()->expectsOutputToContain('0 invitation(s) expired.')->assertSuccessful();
+    }
+
     // Happy — a pending invitation past its 7-day window is expired: the scan
     // records UserInvitationExpired, the projector stamps expired_at, and the
     // command reports how many it expired.
