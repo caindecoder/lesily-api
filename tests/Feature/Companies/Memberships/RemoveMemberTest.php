@@ -108,6 +108,22 @@ class RemoveMemberTest extends MembershipsTestCase
         $this->assertMemberStillActive($ownMembershipId);
     }
 
+    #[Test]
+    public function when_target_is_the_company_owner_then_removal_requires_ownership_transfer(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $ownerMembershipId] = $this->aMembership($company, 'owner');
+
+        // When the admin targets the owner's membership
+        $response = $this->removeMember($admin, $company, $ownerMembershipId);
+
+        // Then the Owner is un-removable — ownership transfer required (R-A parity)
+        $this->assertRefusedWith($response, ApiErrorCode::OwnerTransferRequired);
+        $response->assertJsonPath('message', 'The company owner cannot be removed. Transfer ownership first.');
+        $this->assertMemberStillActive($ownerMembershipId);
+    }
+
     /**
      * Roles WITHOUT users.remove — only Owner/Admin hold it (matrix D4/D10;
      * hr_officer may invite/revoke-invitation but NOT remove members).
