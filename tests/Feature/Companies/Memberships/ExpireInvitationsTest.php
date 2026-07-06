@@ -7,6 +7,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Events\UserInvitationExpired;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -162,6 +163,26 @@ class ExpireInvitationsTest extends MembershipsTestCase
         $this->assertInvitationExpired($company, 'due-one@contoso.lk');
         $this->assertInvitationExpired($company, 'due-two@contoso.lk');
         $this->assertInvitationStillPending($company, 'fresh@contoso.lk');
+    }
+
+    // Happy (downstream chain) — after the scan expires an invitation, its token
+    // is dead: accepting it is rejected by the built accept guard (T5 -> 422),
+    // and nothing is provisioned.
+    #[Test]
+    public function when_an_expired_invitation_token_is_used_to_accept_then_it_is_rejected(): void
+    {
+        // Given a pending invitation the daily scan has since expired
+        [$company, $actor] = $this->aCompanyWithMember('admin');
+        $token = $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+        $this->travel(8)->days();
+        $this->runExpireInvitations()->assertSuccessful();
+
+        // When the invitee tries to accept with the now-dead token
+        $response = $this->acceptInvitation($token, $this->validNewUserBody());
+
+        // Then the accept is rejected and the invitation is never consumed
+        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertInvitationNotConsumed($company, 'invitee@contoso.lk');
     }
 
     protected function runExpireInvitations(): PendingCommand
