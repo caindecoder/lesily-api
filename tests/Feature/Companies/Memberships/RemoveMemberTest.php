@@ -92,6 +92,22 @@ class RemoveMemberTest extends MembershipsTestCase
         $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
     }
 
+    #[Test]
+    public function when_actor_removes_their_own_membership_then_removal_is_blocked(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        $ownMembershipId = $this->membershipIdOf($company, $admin);
+
+        // When the actor targets their own membership
+        $response = $this->removeMember($admin, $company, $ownMembershipId);
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::SelfRemovalBlocked);
+        $response->assertJsonPath('message', 'You cannot remove yourself. Ask another Owner/Admin.');
+        $this->assertMemberStillActive($ownMembershipId);
+    }
+
     /**
      * Roles WITHOUT users.remove — only Owner/Admin hold it (matrix D4/D10;
      * hr_officer may invite/revoke-invitation but NOT remove members).

@@ -35,6 +35,7 @@ use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
 use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
+use App\Companies\Memberships\Exceptions\SelfRemovalBlockedException;
 use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
@@ -172,6 +173,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // another Owner/Admin must make the change.
         $exceptions->render(fn (SelfRoleChangeBlockedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::SelfRoleChangeBlocked,
+            $e->getMessage(),
+        ));
+
+        // An actor tried to remove their own membership (UC-1-024 flow 2b, R-B s113)
+        // — another Owner/Admin must remove them.
+        $exceptions->render(fn (SelfRemovalBlockedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::SelfRemovalBlocked,
             $e->getMessage(),
         ));
 
