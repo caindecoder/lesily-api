@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Companies\Memberships\Entities\Invitation;
 
 class RemoveMemberTest extends MembershipsTestCase
 {
@@ -38,6 +39,56 @@ class RemoveMemberTest extends MembershipsTestCase
         $response = $this->removeMember($admin, $company, (string) Str::uuid7());
 
         // Then
+        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+    }
+
+    #[Test]
+    public function when_membership_belongs_to_another_company_then_removal_is_not_found(): void
+    {
+        // Given a member of company B and an admin acting in company A
+        [$companyA, $adminA] = $this->aCompanyWithMember();
+        [$companyB] = $this->aCompanyWithMember();
+        [, $membershipIdB] = $this->aMembership($companyB, 'employee');
+
+        // When the company-A admin targets company B's membership id
+        $response = $this->removeMember($adminA, $companyA, $membershipIdB);
+
+        // Then the company-scoped lookup hides it as not found
+        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertMemberStillActive($membershipIdB);
+    }
+
+    #[Test]
+    public function when_membership_is_already_removed_then_removal_is_not_found(): void
+    {
+        // Given a membership that was already removed (soft-deleted pivot)
+        [$company, $admin] = $this->aCompanyWithMember();
+        $removedMembershipId = $this->aRemovedMembership($company, User::factory()->create());
+
+        // When it is removed again
+        $response = $this->removeMember($admin, $company, $removedMembershipId);
+
+        // Then the SoftDeletes scope hides it — a member can't be removed twice
+        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+    }
+
+    #[Test]
+    public function when_target_is_still_a_pending_invitation_then_removal_is_not_found(): void
+    {
+        // Given an invitation whose UUID becomes the membership id on accept (D5b),
+        // but no company_user pivot exists yet
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitationId = Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', 'invitee@contoso.lk')
+            ->sole()
+            ->getKey();
+
+        // When the pending invitation id is targeted
+        $response = $this->removeMember($admin, $company, $invitationId);
+
+        // Then there is no pivot to remove — not found
         $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
     }
 
