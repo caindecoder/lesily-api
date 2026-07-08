@@ -22,6 +22,15 @@ use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterfa
 class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
 {
     /**
+     * The member's-role aliases every row shape shares — the roster arms and the
+     * switcher list all surface role {code, name} from the same join.
+     */
+    private const array ROLE_COLUMNS = [
+        'roles.code as role_code',
+        'roles.name as role_name',
+    ];
+
+    /**
      * @return LengthAwarePaginator<int, stdClass>
      */
     public function listForCompany(string $companyId, MembershipFilters $filters): LengthAwarePaginator
@@ -64,8 +73,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             ->select([
                 'companies.id as id',
                 'companies.name as name',
-                'roles.code as role_code',
-                'roles.name as role_name',
+                ...self::ROLE_COLUMNS,
                 'companies.current_billing_plan as plan',
                 'companies.status as status',
                 'company_user.onboarding_completed as onboarding_completed',
@@ -104,8 +112,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
                 'users.id as user_id',
                 'users.name as user_name',
                 'users.email as user_email',
-                'roles.code as role_code',
-                'roles.name as role_name',
+                ...self::ROLE_COLUMNS,
                 DB::raw("'active' as status"),
                 DB::raw('null as invited_at'),
                 DB::raw('null as last_active_at'),
@@ -136,8 +143,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
                 DB::raw('null as user_id'),
                 DB::raw('null as user_name'),
                 'invitations.email as user_email',
-                'roles.code as role_code',
-                'roles.name as role_name',
+                ...self::ROLE_COLUMNS,
                 DB::raw("'invited' as status"),
                 'invitations.created_at as invited_at',
                 DB::raw('null as last_active_at'),
