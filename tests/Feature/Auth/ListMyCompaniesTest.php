@@ -50,6 +50,25 @@ class ListMyCompaniesTest extends AuthTestCase
         $this->assertCompaniesListed($response, ['Acme']);
     }
 
+    // Sad — the list is scoped to the requester: another user's memberships are
+    // never exposed. Account-level read (no company context), so own-only IS the
+    // tenant boundary here (the sessions-list precedent).
+    #[Test]
+    public function when_other_users_have_companies_then_only_my_memberships_listed(): void
+    {
+        // Given two users, each a member of their own company
+        $me = $this->aRegisteredUser();
+        $other = $this->aRegisteredUser('bob@contoso.lk');
+        $this->aMemberOf($me, Company::factory()->named('Mine')->create());
+        $this->aMemberOf($other, Company::factory()->named('Theirs')->create());
+
+        // When I list my companies
+        $response = $this->listCompanies($me);
+
+        // Then only my membership is listed — the other user's company is absent
+        $this->assertCompaniesListed($response, ['Mine']);
+    }
+
     /**
      * The list responded with exactly the expected companies, in order: 200, one
      * row per expected name, data.*.name matching $expectedNames verbatim.
