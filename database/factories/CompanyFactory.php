@@ -32,13 +32,15 @@ class CompanyFactory extends Factory
     }
 
     /**
-     * A company whose 30-day trial has lapsed (Day-31 read-only state) — the
-     * as-built non-default CompanyStatus. The switcher list must still carry it.
+     * A company whose 30-day trial has lapsed (Day-31 read-only state). A
+     * trial-expired company has never subscribed, so its plan is NULL by
+     * construction (ERD-1-02) — the state encodes both for realism.
      */
     public function trialExpired(): static
     {
         return $this->state(fn (array $attributes): array => [
             'status' => CompanyStatus::TrialExpired,
+            'current_billing_plan' => null,
         ]);
     }
 

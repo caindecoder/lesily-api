@@ -38,12 +38,9 @@ class MyCompanyResource extends JsonResource
                 'completed' => (bool) $this->resource->onboarding_completed,
                 'skipped' => (bool) $this->resource->onboarding_skipped,
             ],
-            'joined_at' => $this->parsedTimestamp($this->resource->joined_at),
+            // Always present: company_user carries withTimestamps, so created_at
+            // is stamped on every attach — no null branch to guard.
+            'joined_at' => CarbonImmutable::parse((string) $this->resource->joined_at),
         ];
-    }
-
-    private function parsedTimestamp(mixed $value): ?CarbonImmutable
-    {
-        return $value === null ? null : CarbonImmutable::parse((string) $value);
     }
 }
