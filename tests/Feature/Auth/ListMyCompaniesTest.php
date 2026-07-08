@@ -155,6 +155,76 @@ class ListMyCompaniesTest extends AuthTestCase
         ]);
     }
 
+    // Edge — a user whose only membership was removed has an EMPTY list: 200 with
+    // data: [] (the client renders the no-companies state — there is never a
+    // server-side minimum-membership gate; exact envelope locks out pagination).
+    #[Test]
+    public function when_user_has_no_live_memberships_then_empty_list_returned(): void
+    {
+        // Given a user whose only membership was removed
+        $user = $this->aRegisteredUser();
+        $this->aRemovedMembershipIn(Company::factory()->named('Acme')->create(), $user);
+
+        // When they list their companies
+        $response = $this->listCompanies($user);
+
+        // Then the list is empty
+        $response->assertOk();
+        $response->assertExactJson(['data' => []]);
+    }
+
+    // Edge — identically-named companies keep a stable order: the membership id
+    // (time-ordered uuid) breaks the name tie, so the earlier-joined company leads
+    // deterministically (companies.name carries no unique constraint).
+    #[Test]
+    public function when_two_companies_share_a_name_then_join_order_breaks_the_tie(): void
+    {
+        // Given memberships in two companies both named Acme, joined in a known order
+        $user = $this->aRegisteredUser();
+        $first = Company::factory()->named('Acme')->create();
+        $second = Company::factory()->named('Acme')->create();
+        $this->aMembershipFor($user, $first);
+        $this->aMembershipFor($user, $second);
+
+        // When they list their companies
+        $response = $this->listCompanies($user);
+
+        // Then the earlier-joined membership leads
+        $this->assertCompaniesListed($response, ['Acme', 'Acme']);
+        $this->assertSame([$first->getKey(), $second->getKey()], $response->json('data.*.id'));
+    }
+
+    // Edge — edge row values serialize faithfully: a planless (trial) company and
+    // a skipped onboarding wizard surface as plan: null and skipped: true.
+    #[Test]
+    public function when_onboarding_was_skipped_in_a_planless_company_then_row_reflects_both(): void
+    {
+        // Given a member of a planless company who skipped the onboarding wizard
+        $user = $this->aRegisteredUser();
+        $company = Company::factory()->named('Acme')->withoutPlan()->create();
+        $this->aMembershipFor($user, $company);
+        $this->skippedOnboardingIn($company, $user);
+
+        // When they list their companies
+        $response = $this->listCompanies($user);
+
+        // Then the row carries the null plan and the skipped flag
+        $response->assertJsonPath('data.0.plan', null);
+        $response->assertJsonPath('data.0.onboarding', ['completed' => false, 'skipped' => true]);
+    }
+
+    /**
+     * Mark the user's membership in $company as having skipped the onboarding
+     * wizard — the counterpart flag to completedOnboardingIn.
+     */
+    protected function skippedOnboardingIn(Company $company, User $user): void
+    {
+        CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $user->getKey())
+            ->update(['onboarding_skipped' => true]);
+    }
+
     /**
      * Mark the user's membership in $company as having completed onboarding —
      * the wizard flag the switcher row surfaces (company_user pivot).
