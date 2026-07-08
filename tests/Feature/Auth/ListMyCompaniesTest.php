@@ -88,6 +88,24 @@ class ListMyCompaniesTest extends AuthTestCase
         $this->assertCompaniesListed($response, ['Acme']);
     }
 
+    // Edge — every live membership is listed regardless of the company's status:
+    // a trial-expired company stays in the switcher carrying its status, so the
+    // client can render the read-only/expired state screens (UC-1-034 3a/3b).
+    #[Test]
+    public function when_a_company_is_trial_expired_then_listed_with_its_status(): void
+    {
+        // Given a member of a trial-expired company
+        $user = $this->aRegisteredUser();
+        $this->aMemberOf($user, Company::factory()->named('Acme')->trialExpired()->create());
+
+        // When they list their companies
+        $response = $this->listCompanies($user);
+
+        // Then the company is listed carrying its status
+        $this->assertCompaniesListed($response, ['Acme']);
+        $response->assertJsonPath('data.0.status', 'trial_expired');
+    }
+
     /**
      * The list responded with exactly the expected companies, in order: 200, one
      * row per expected name, data.*.name matching $expectedNames verbatim.

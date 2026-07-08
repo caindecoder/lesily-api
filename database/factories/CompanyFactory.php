@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Models\User;
 use App\Companies\Entities\Company;
+use App\Companies\Enums\CompanyStatus;
 use App\Foundation\Billing\Enums\Addon;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -28,6 +29,17 @@ class CompanyFactory extends Factory
             'owner_id' => User::factory(),
             'current_billing_plan' => BillingPlan::Free,
         ];
+    }
+
+    /**
+     * A company whose 30-day trial has lapsed (Day-31 read-only state) — the
+     * as-built non-default CompanyStatus. The switcher list must still carry it.
+     */
+    public function trialExpired(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => CompanyStatus::TrialExpired,
+        ]);
     }
 
     public function named(string $name): static

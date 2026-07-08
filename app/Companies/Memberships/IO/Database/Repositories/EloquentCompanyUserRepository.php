@@ -63,6 +63,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             ->orderBy('company_user.id')
             ->select([
                 'companies.name as name',
+                'companies.status as status',
             ])
             ->get();
     }

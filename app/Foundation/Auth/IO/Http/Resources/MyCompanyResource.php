@@ -21,6 +21,7 @@ class MyCompanyResource extends JsonResource
     {
         return [
             'name' => $this->resource->name,
+            'status' => $this->resource->status,
         ];
     }
 }
