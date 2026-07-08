@@ -62,8 +62,15 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             // Stable tie-breaker for identically-named companies.
             ->orderBy('company_user.id')
             ->select([
+                'companies.id as id',
                 'companies.name as name',
+                'roles.code as role_code',
+                'roles.name as role_name',
+                'companies.current_billing_plan as plan',
                 'companies.status as status',
+                'company_user.onboarding_completed as onboarding_completed',
+                'company_user.onboarding_skipped as onboarding_skipped',
+                'company_user.created_at as joined_at',
             ])
             ->get();
     }

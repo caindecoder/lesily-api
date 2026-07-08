@@ -2,9 +2,13 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\User;
+use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanyUser;
+use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class ListMyCompaniesTest extends AuthTestCase
@@ -120,6 +124,76 @@ class ListMyCompaniesTest extends AuthTestCase
 
         // Then the single membership is returned
         $this->assertCompaniesListed($response, ['Acme']);
+    }
+
+    // Happy — the full switcher contract (slice-companies B4): every live
+    // membership with its role, plan, status, onboarding flags and join date,
+    // name-ordered, in the exact non-paginated envelope (leak-lock). Zeta is
+    // attached FIRST so the name ordering has teeth; is_default is false
+    // everywhere until UC-1-139 lands the default-company column.
+    #[Test]
+    public function when_user_belongs_to_multiple_companies_then_all_live_memberships_returned_name_ordered(): void
+    {
+        // Given a user who joined Zeta (Pro, admin, onboarded) before Acme (Free, employee)
+        $this->travelTo(CarbonImmutable::parse('2026-07-08 10:00:00'));
+        $user = $this->aRegisteredUser();
+        $zeta = Company::factory()->named('Zeta')->onPlan(BillingPlan::Pro)->create();
+        $acme = Company::factory()->named('Acme')->onPlan(BillingPlan::Free)->create();
+        $this->aMemberOf($user, $zeta, 'admin');
+        $this->completedOnboardingIn($zeta, $user);
+        $this->aMemberOf($user, $acme);
+
+        // When they list their companies
+        $response = $this->listCompanies($user);
+
+        // Then both memberships return name-ordered with the exact B4 row shape
+        $response->assertExactJson([
+            'data' => [
+                $this->expectedCompanyRow($acme, 'employee'),
+                $this->expectedCompanyRow($zeta, 'admin', onboarded: true),
+            ],
+        ]);
+    }
+
+    /**
+     * Mark the user's membership in $company as having completed onboarding —
+     * the wizard flag the switcher row surfaces (company_user pivot).
+     */
+    protected function completedOnboardingIn(Company $company, User $user): void
+    {
+        CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $user->getKey())
+            ->update(['onboarding_completed' => true]);
+    }
+
+    /**
+     * The exact B4 switcher row expected for $company: identity, the member's
+     * role (seeded catalog), plan/status, the T1 is_default:false pin, the
+     * onboarding flags and the frozen-clock join date.
+     *
+     * @return array<string, mixed>
+     */
+    protected function expectedCompanyRow(Company $company, string $roleCode, bool $onboarded = false): array
+    {
+        $company->refresh();
+
+        return [
+            'id' => $company->getKey(),
+            'name' => $company->name,
+            'role' => [
+                'code' => $roleCode,
+                'name' => $this->seededRole($roleCode)->name,
+            ],
+            'plan' => $company->current_billing_plan?->value,
+            'status' => $company->status->value,
+            'is_default' => false,
+            'onboarding' => [
+                'completed' => $onboarded,
+                'skipped' => false,
+            ],
+            'joined_at' => now()->toISOString(),
+        ];
     }
 
     /**
