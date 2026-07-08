@@ -106,6 +106,22 @@ class ListMyCompaniesTest extends AuthTestCase
         $response->assertJsonPath('data.0.status', 'trial_expired');
     }
 
+    // Edge — a single-company user still gets their one-row list: hiding the
+    // switcher is a client concern (UC-1-034 alt-2a), never a server-side gate.
+    #[Test]
+    public function when_user_belongs_to_one_company_then_single_row_returned(): void
+    {
+        // Given a user with exactly one live membership
+        $user = $this->aRegisteredUser();
+        $this->aMemberOf($user, Company::factory()->named('Acme')->create());
+
+        // When they list their companies
+        $response = $this->listCompanies($user);
+
+        // Then the single membership is returned
+        $this->assertCompaniesListed($response, ['Acme']);
+    }
+
     /**
      * The list responded with exactly the expected companies, in order: 200, one
      * row per expected name, data.*.name matching $expectedNames verbatim.
