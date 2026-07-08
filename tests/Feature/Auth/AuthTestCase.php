@@ -5,11 +5,13 @@ namespace Tests\Feature\Auth;
 use Tests\TestCase;
 use App\Models\User;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Config;
+use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Password;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\Billing\Enums\BillingPlan;
@@ -240,6 +242,56 @@ abstract class AuthTestCase extends TestCase
     {
         Company::factory()->withoutPlan()->create()
             ->users()->attach($user, ['role_id' => Role::factory()->create()->getKey()]);
+    }
+
+    /**
+     * Look up a seeded RBAC-catalog role by code — requires seedRbacCatalog() in the
+     * calling suite's setUp. Duplicated from MembershipsTestCase (module bases are
+     * independent; assertRefusedWith precedent). Shared by the list-companies
+     * (UC-1-034) and default-company (UC-1-139) suites.
+     */
+    protected function seededRole(string $code): Role
+    {
+        return Role::query()->where('code', $code)->sole();
+    }
+
+    /**
+     * Make $user a live member of $company under a seeded role — the company_user
+     * pivot row the companies list reads. Shared by the list-companies (UC-1-034)
+     * and default-company (UC-1-139) suites.
+     */
+    protected function aMemberOf(User $user, Company $company, string $roleCode = 'employee'): void
+    {
+        $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
+    }
+
+    /**
+     * A membership that was removed (UC-1-024 semantics): the company_user pivot
+     * exists but is soft-deleted — the companies list must exclude it. Mirrors
+     * MembershipsTestCase::aRemovedMembership. Shared by the list-companies
+     * (UC-1-034) and default-company (UC-1-139) suites.
+     */
+    protected function aRemovedMembershipIn(Company $company, User $user): void
+    {
+        $this->aMemberOf($user, $company);
+
+        CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $user->getKey())
+            ->update(['deleted_at' => now()]);
+    }
+
+    /**
+     * GET the authenticated user's companies list (UC-1-034) — no X-Company-Context,
+     * the me/ surface is account-level. Sanctum::actingAs suffices for the pure read
+     * (roster precedent). Shared by the list-companies (UC-1-034) and default-company
+     * (UC-1-139) suites.
+     */
+    protected function listCompanies(User $actor): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/me/companies');
     }
 
     /**

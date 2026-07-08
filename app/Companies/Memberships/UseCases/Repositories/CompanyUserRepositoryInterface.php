@@ -3,11 +3,21 @@
 namespace App\Companies\Memberships\UseCases\Repositories;
 
 use stdClass;
+use Illuminate\Support\Collection;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 
 interface CompanyUserRepositoryInterface
 {
+    /**
+     * The user's own live memberships as switcher-list rows (UC-1-034) —
+     * soft-deleted/removed memberships excluded, name-ordered, non-paginated
+     * (slice-companies B4).
+     *
+     * @return Collection<int, stdClass>
+     */
+    public function listForUser(string $userId): Collection;
+
     /**
      * The company's roster rows — ACTIVE memberships (soft-deleted/removed
      * members excluded — UC-1-024 D5) unioned with LIVE-PENDING invitations

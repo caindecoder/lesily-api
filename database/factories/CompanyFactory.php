@@ -30,6 +30,13 @@ class CompanyFactory extends Factory
         ];
     }
 
+    public function named(string $name): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'name' => $name,
+        ]);
+    }
+
     public function onPlan(BillingPlan $plan): static
     {
         return $this->state(fn (array $attributes): array => [

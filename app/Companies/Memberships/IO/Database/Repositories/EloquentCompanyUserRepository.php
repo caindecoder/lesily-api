@@ -3,6 +3,7 @@
 namespace App\Companies\Memberships\IO\Database\Repositories;
 
 use stdClass;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -43,6 +44,27 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             // page requests of a paginated union.
             ->orderBy('id')
             ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
+    }
+
+    /**
+     * @return Collection<int, stdClass>
+     */
+    public function listForUser(string $userId): Collection
+    {
+        return DB::table('company_user')
+            ->join('companies', 'companies.id', '=', 'company_user.company_id')
+            ->join('roles', 'roles.id', '=', 'company_user.role_id')
+            ->where('company_user.user_id', $userId)
+            // DB::table sees no Eloquent SoftDeletes scope — removed memberships
+            // are excluded here explicitly (UC-1-024 D5).
+            ->whereNull('company_user.deleted_at')
+            ->orderBy('companies.name')
+            // Stable tie-breaker for identically-named companies.
+            ->orderBy('company_user.id')
+            ->select([
+                'companies.name as name',
+            ])
+            ->get();
     }
 
     public function findById(string $companyId, string $membershipId): ?stdClass
