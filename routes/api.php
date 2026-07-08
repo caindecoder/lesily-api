@@ -6,6 +6,7 @@ use App\Foundation\Auth\IO\Http\Controllers\LoginController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutAllController;
+use App\Foundation\Auth\IO\Http\Controllers\MyCompaniesController;
 use App\Foundation\Auth\IO\Http\Controllers\ViewSessionsController;
 use App\Foundation\Auth\IO\Http\Controllers\ResetPasswordController;
 use App\Foundation\Auth\IO\Http\Controllers\RevokeSessionController;
@@ -113,6 +114,14 @@ Route::delete('/v1/auth/2fa', DisableTwoFactorController::class)
 // surface like disable + confirm — R9). 200 with the new codes shown once.
 Route::post('/v1/auth/2fa/recovery-codes', RegenerateRecoveryCodesController::class)
     ->middleware(['auth:sanctum', 'throttle:auth-tier']);
+
+// List my companies (UC-1-034) — the authenticated user's own live company
+// memberships, the switcher-list read. Bare auth:sanctum: a `me/` self-service
+// read (no company context — the memberships span companies), no throttle
+// (tiered limits deferred, OQ-1-098). Live pivots only; switching itself is
+// client-side via X-Company-Context (the designed switch endpoint is superseded).
+Route::get('/v1/me/companies', MyCompaniesController::class)
+    ->middleware('auth:sanctum');
 
 // View active sessions (UC-1-010) — the authenticated user's own non-expired
 // Sanctum tokens. Bare auth:sanctum: a `me/` self-service read (no company
