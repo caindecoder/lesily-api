@@ -69,6 +69,25 @@ class ListMyCompaniesTest extends AuthTestCase
         $this->assertCompaniesListed($response, ['Mine']);
     }
 
+    // Edge — an invitation alone is not a membership: a company that has only
+    // INVITED the user (a live-pending invitations row, no accepted pivot) must
+    // not appear. The roster's invited-row union (UC-1-017) is deliberately not
+    // replicated here — the switcher reads live pivots only.
+    #[Test]
+    public function when_only_a_pending_invitation_exists_then_that_company_absent_from_list(): void
+    {
+        // Given a member of Acme who is merely invited to Beta
+        $user = $this->aRegisteredUser();
+        $this->aMemberOf($user, Company::factory()->named('Acme')->create());
+        $this->anInvitationRowFor(Company::factory()->named('Beta')->create(), $user->email);
+
+        // When they list their companies
+        $response = $this->listCompanies($user);
+
+        // Then only Acme is listed — the invited-only Beta is absent
+        $this->assertCompaniesListed($response, ['Acme']);
+    }
+
     /**
      * The list responded with exactly the expected companies, in order: 200, one
      * row per expected name, data.*.name matching $expectedNames verbatim.

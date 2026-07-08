@@ -17,6 +17,7 @@ use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
+use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\RolesPermissions\Entities\Role;
 
 abstract class AuthTestCase extends TestCase
@@ -279,6 +280,24 @@ abstract class AuthTestCase extends TestCase
             ->where('company_id', $company->getKey())
             ->where('user_id', $user->getKey())
             ->update(['deleted_at' => now()]);
+    }
+
+    /**
+     * A live-pending invitation row for ($company, $email) with NO company_user
+     * pivot — the invited-not-yet-accepted state. Written directly: the projector
+     * is the production writer, but this fixture only needs the row's existence
+     * (the aRemovedMembership direct-write precedent). Shared by the
+     * list-companies (UC-1-034) suite.
+     */
+    protected function anInvitationRowFor(Company $company, string $email): void
+    {
+        Invitation::create([
+            'company_id' => $company->getKey(),
+            'role_id' => $this->seededRole('employee')->getKey(),
+            'email' => $email,
+            'token_hash' => hash('sha256', Str::random(40)),
+            'expires_at' => now()->addDays(7),
+        ]);
     }
 
     /**
