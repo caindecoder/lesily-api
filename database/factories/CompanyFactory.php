@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Models\User;
 use App\Companies\Entities\Company;
+use App\Companies\Enums\CompanyStatus;
 use App\Foundation\Billing\Enums\Addon;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -28,6 +29,26 @@ class CompanyFactory extends Factory
             'owner_id' => User::factory(),
             'current_billing_plan' => BillingPlan::Free,
         ];
+    }
+
+    /**
+     * A company whose 30-day trial has lapsed (Day-31 read-only state). A
+     * trial-expired company has never subscribed, so its plan is NULL by
+     * construction (ERD-1-02) — the state encodes both for realism.
+     */
+    public function trialExpired(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => CompanyStatus::TrialExpired,
+            'current_billing_plan' => null,
+        ]);
+    }
+
+    public function named(string $name): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'name' => $name,
+        ]);
     }
 
     public function onPlan(BillingPlan $plan): static

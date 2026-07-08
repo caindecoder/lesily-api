@@ -3,6 +3,7 @@
 namespace App\Companies\Memberships\IO\Database\Repositories;
 
 use stdClass;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -20,6 +21,15 @@ use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterfa
  */
 class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
 {
+    /**
+     * The member's-role aliases every row shape shares — the roster arms and the
+     * switcher list all surface role {code, name} from the same join.
+     */
+    private const array ROLE_COLUMNS = [
+        'roles.code as role_code',
+        'roles.name as role_name',
+    ];
+
     /**
      * @return LengthAwarePaginator<int, stdClass>
      */
@@ -43,6 +53,34 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             // page requests of a paginated union.
             ->orderBy('id')
             ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
+    }
+
+    /**
+     * @return Collection<int, stdClass>
+     */
+    public function listForUser(string $userId): Collection
+    {
+        return DB::table('company_user')
+            ->join('companies', 'companies.id', '=', 'company_user.company_id')
+            ->join('roles', 'roles.id', '=', 'company_user.role_id')
+            ->where('company_user.user_id', $userId)
+            // DB::table sees no Eloquent SoftDeletes scope — removed memberships
+            // are excluded here explicitly (UC-1-024 D5).
+            ->whereNull('company_user.deleted_at')
+            ->orderBy('companies.name')
+            // Stable tie-breaker for identically-named companies.
+            ->orderBy('company_user.id')
+            ->select([
+                'companies.id as id',
+                'companies.name as name',
+                ...self::ROLE_COLUMNS,
+                'companies.current_billing_plan as plan',
+                'companies.status as status',
+                'company_user.onboarding_completed as onboarding_completed',
+                'company_user.onboarding_skipped as onboarding_skipped',
+                'company_user.created_at as joined_at',
+            ])
+            ->get();
     }
 
     public function findById(string $companyId, string $membershipId): ?stdClass
@@ -74,8 +112,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
                 'users.id as user_id',
                 'users.name as user_name',
                 'users.email as user_email',
-                'roles.code as role_code',
-                'roles.name as role_name',
+                ...self::ROLE_COLUMNS,
                 DB::raw("'active' as status"),
                 DB::raw('null as invited_at'),
                 DB::raw('null as last_active_at'),
@@ -106,8 +143,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
                 DB::raw('null as user_id'),
                 DB::raw('null as user_name'),
                 'invitations.email as user_email',
-                'roles.code as role_code',
-                'roles.name as role_name',
+                ...self::ROLE_COLUMNS,
                 DB::raw("'invited' as status"),
                 'invitations.created_at as invited_at',
                 DB::raw('null as last_active_at'),
