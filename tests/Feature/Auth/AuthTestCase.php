@@ -261,7 +261,7 @@ abstract class AuthTestCase extends TestCase
      * pivot row the companies list reads. Shared by the list-companies (UC-1-034)
      * and default-company (UC-1-139) suites.
      */
-    protected function aMemberOf(User $user, Company $company, string $roleCode = 'employee'): void
+    protected function aMembershipFor(User $user, Company $company, string $roleCode = 'employee'): void
     {
         $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
     }
@@ -274,7 +274,7 @@ abstract class AuthTestCase extends TestCase
      */
     protected function aRemovedMembershipIn(Company $company, User $user): void
     {
-        $this->aMemberOf($user, $company);
+        $this->aMembershipFor($user, $company);
 
         CompanyUser::query()
             ->where('company_id', $company->getKey())

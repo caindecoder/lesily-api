@@ -44,7 +44,7 @@ class ListMyCompaniesTest extends AuthTestCase
     {
         // Given a user with a live membership in Acme and a removed one in Beta
         $user = $this->aRegisteredUser();
-        $this->aMemberOf($user, Company::factory()->named('Acme')->create());
+        $this->aMembershipFor($user, Company::factory()->named('Acme')->create());
         $this->aRemovedMembershipIn(Company::factory()->named('Beta')->create(), $user);
 
         // When they list their companies
@@ -63,8 +63,8 @@ class ListMyCompaniesTest extends AuthTestCase
         // Given two users, each a member of their own company
         $me = $this->aRegisteredUser();
         $other = $this->aRegisteredUser('bob@contoso.lk');
-        $this->aMemberOf($me, Company::factory()->named('Mine')->create());
-        $this->aMemberOf($other, Company::factory()->named('Theirs')->create());
+        $this->aMembershipFor($me, Company::factory()->named('Mine')->create());
+        $this->aMembershipFor($other, Company::factory()->named('Theirs')->create());
 
         // When I list my companies
         $response = $this->listCompanies($me);
@@ -82,7 +82,7 @@ class ListMyCompaniesTest extends AuthTestCase
     {
         // Given a member of Acme who is merely invited to Beta
         $user = $this->aRegisteredUser();
-        $this->aMemberOf($user, Company::factory()->named('Acme')->create());
+        $this->aMembershipFor($user, Company::factory()->named('Acme')->create());
         $this->anInvitationRowFor(Company::factory()->named('Beta')->create(), $user->email);
 
         // When they list their companies
@@ -100,7 +100,7 @@ class ListMyCompaniesTest extends AuthTestCase
     {
         // Given a member of a trial-expired company
         $user = $this->aRegisteredUser();
-        $this->aMemberOf($user, Company::factory()->named('Acme')->trialExpired()->create());
+        $this->aMembershipFor($user, Company::factory()->named('Acme')->trialExpired()->create());
 
         // When they list their companies
         $response = $this->listCompanies($user);
@@ -117,7 +117,7 @@ class ListMyCompaniesTest extends AuthTestCase
     {
         // Given a user with exactly one live membership
         $user = $this->aRegisteredUser();
-        $this->aMemberOf($user, Company::factory()->named('Acme')->create());
+        $this->aMembershipFor($user, Company::factory()->named('Acme')->create());
 
         // When they list their companies
         $response = $this->listCompanies($user);
@@ -139,9 +139,9 @@ class ListMyCompaniesTest extends AuthTestCase
         $user = $this->aRegisteredUser();
         $zeta = Company::factory()->named('Zeta')->onPlan(BillingPlan::Pro)->create();
         $acme = Company::factory()->named('Acme')->onPlan(BillingPlan::Free)->create();
-        $this->aMemberOf($user, $zeta, 'admin');
+        $this->aMembershipFor($user, $zeta, 'admin');
         $this->completedOnboardingIn($zeta, $user);
-        $this->aMemberOf($user, $acme);
+        $this->aMembershipFor($user, $acme);
 
         // When they list their companies
         $response = $this->listCompanies($user);
