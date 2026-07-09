@@ -213,6 +213,33 @@ class ListMyCompaniesTest extends AuthTestCase
         $response->assertJsonPath('data.0.onboarding', ['completed' => false, 'skipped' => true]);
     }
 
+    // Edge — the B2 read-time fallback (UC-1-139 Gherkin 5): a default pointing at
+    // a since-removed membership degrades gracefully — the row is excluded (live
+    // pivots only) so NOTHING is flagged; the stale users.default_company_id value
+    // is harmless and needs no cleanup job.
+    #[Test]
+    public function when_the_default_membership_was_removed_then_no_row_flagged_default(): void
+    {
+        // Given a member of Acme and Beta whose default Beta membership was then removed
+        $user = $this->aRegisteredUser();
+        $acme = Company::factory()->named('Acme')->create();
+        $beta = Company::factory()->named('Beta')->create();
+        $this->aMembershipFor($user, $acme);
+        $this->aMembershipFor($user, $beta);
+        $this->setDefaultCompany($user, ['companyId' => $beta->getKey()]);
+        CompanyUser::query()
+            ->where('company_id', $beta->getKey())
+            ->where('user_id', $user->getKey())
+            ->update(['deleted_at' => now()]);
+
+        // When they list their companies
+        $response = $this->listCompanies($user);
+
+        // Then the removed row is absent and no remaining row is flagged default
+        $this->assertCompaniesListed($response, ['Acme']);
+        $this->assertListFlagsDefault($user, null);
+    }
+
     /**
      * Mark the user's membership in $company as having skipped the onboarding
      * wizard — the counterpart flag to completedOnboardingIn.
