@@ -3,6 +3,7 @@
 namespace App\Foundation\Auth\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
+use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
  * Set the authenticated user's default company (UC-1-139, slice-companies B3).
@@ -17,10 +18,10 @@ class SetDefaultCompanyCommand extends Data
     /**
      * @return array<string, array<int, string>>
      */
-    public static function rules(): array
+    public static function rules(ValidationContext $context): array
     {
         return [
-            'companyId' => ['required', 'string', 'uuid'],
+            'companyId' => ['required', 'uuid'],
         ];
     }
 }

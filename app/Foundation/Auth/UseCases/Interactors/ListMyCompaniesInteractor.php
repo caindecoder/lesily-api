@@ -26,8 +26,9 @@ class ListMyCompaniesInteractor
         // Deriving the default flag is the use case's rule (UC-1-139 B2): comparing
         // live rows against users.default_company_id means a stale default (removed
         // membership) simply flags nothing — the read-time fallback, no cleanup job.
-        // Block closure deliberately: each() stops on a false return, and a
-        // non-default row's assignment evaluates to exactly that false.
+        // Void block body (not an arrow fn): the closure returns null, so each()
+        // never short-circuits — an arrow fn would return the assignment's value,
+        // and a non-default row's `= false` would abort the loop mid-list.
         return $this->memberships->listForUser($user->getKey())
             ->each(function (stdClass $row) use ($user): void {
                 $row->is_default = $row->id === $user->default_company_id;
