@@ -94,6 +94,7 @@ class DefaultCompanyTest extends AuthTestCase
                 Company::factory()->named('Other')->create(),
                 fn (Company $other) => $this->aRemovedMembershipIn($other, $user),
             )->getKey(),
+            default => self::fail("Unknown provider case: {$case}"),
         };
 
         // When

@@ -346,10 +346,10 @@ abstract class AuthTestCase extends TestCase
      */
     protected function assertListFlagsDefault(User $user, ?string $companyId): void
     {
-        $flagged = collect($this->listCompanies($user)->assertOk()->json('data'))
-            ->where('is_default', true)
-            ->pluck('id')
-            ->all();
+        /** @var list<array{id: string, is_default: bool}> $rows */
+        $rows = $this->listCompanies($user)->assertOk()->json('data');
+
+        $flagged = collect($rows)->where('is_default', true)->pluck('id')->all();
 
         $this->assertSame($companyId === null ? [] : [$companyId], $flagged);
     }
