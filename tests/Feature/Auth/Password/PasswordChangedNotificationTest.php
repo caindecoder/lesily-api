@@ -269,13 +269,16 @@ class PasswordChangedNotificationTest extends AuthTestCase
     /**
      * Make $user a member of a freshly-created company and return that company so the caller can
      * assert the confirmation carries its name — the notification's companyName is resolved from
-     * the acting user's membership. $joinedAt backdates the pivot's created_at AFTER attaching
-     * (attach-then-update, the aRemovedMembershipIn pattern) because withTimestamps() overwrites
-     * an explicitly-passed created_at — it lets a test invert insertion order vs joined time.
+     * the acting user's membership. The name is unique-per-test so the tier-distinguishing
+     * assertions cannot be satisfied by a faker name collision between two companies (a wrong
+     * resolution must FAIL, never alias). $joinedAt backdates the pivot's created_at AFTER
+     * attaching (attach-then-update, the aRemovedMembershipIn pattern) because withTimestamps()
+     * overwrites an explicitly-passed created_at — it lets a test invert insertion order vs
+     * joined time.
      */
     private function attachCompany(User $user, ?CarbonInterface $joinedAt = null): Company
     {
-        $company = Company::factory()->create();
+        $company = Company::factory()->named(fake()->unique()->company())->create();
         $company->users()->attach($user, ['role_id' => Role::factory()->create()->getKey()]);
 
         if ($joinedAt !== null) {
