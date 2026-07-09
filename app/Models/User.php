@@ -91,4 +91,22 @@ class User extends Authenticatable implements CanResetPassword, HasLocalePrefere
         return $this->belongsToMany(Company::class, 'company_user', 'user_id', 'company_id')
             ->wherePivotNull('deleted_at');
     }
+
+    /**
+     * The company label for account-level notices (OQ-1-124): the default company's name while
+     * a live membership backs it (both reads go through companies(), so a removed membership's
+     * default falls through), else the oldest live membership's — deterministic (pivot
+     * created_at asc, id asc tiebreak) — else '' for a company-less user (degrade, never fail).
+     */
+    public function notificationCompanyName(): string
+    {
+        $defaultName = $this->default_company_id === null
+            ? null
+            : $this->companies()->whereKey($this->default_company_id)->value('name');
+
+        return (string) ($defaultName ?? $this->companies()
+            ->orderByPivot('created_at')
+            ->orderByPivot('id')
+            ->value('name'));
+    }
 }
