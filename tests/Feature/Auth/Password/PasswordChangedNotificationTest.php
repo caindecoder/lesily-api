@@ -192,6 +192,28 @@ class PasswordChangedNotificationTest extends AuthTestCase
         $this->assertConfirmationNames($response, $user, $oldest->name);
     }
 
+    #[Test]
+    public function when_memberships_join_at_the_same_moment_then_the_earlier_row_names_the_confirmation(): void
+    {
+        // Given a defaultless user with two memberships joined at the same moment — the pivot
+        // id (uuid7, insertion-ordered) is the only thing separating them
+        $user = $this->aRegisteredUser();
+        $joinedAt = now();
+        $earlier = $this->attachCompany($user, $joinedAt);
+        $this->attachCompany($user, $joinedAt);
+        $session = $this->aSessionFor($user);
+        Notification::fake();
+
+        // When they change their password with the correct current password
+        $response = $this->changePassword($session->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the earlier-inserted row wins the tie — the id tiebreak keeps the label deterministic
+        $this->assertConfirmationNames($response, $user, $earlier->name);
+    }
+
     /**
      * The password-changed confirmation reached $user carrying exactly $companyName as its
      * label — the change was accepted and the critical notice names the expected company
