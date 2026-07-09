@@ -239,6 +239,28 @@ class PasswordChangedNotificationTest extends AuthTestCase
         $this->assertConfirmationNames($response, $user, $oldestLive->name);
     }
 
+    #[Test]
+    public function when_the_user_has_a_default_company_then_it_names_the_confirmation(): void
+    {
+        // Given a two-company user whose default is the NEWER membership — the one neither
+        // an arbitrary-first nor an oldest-first read would pick
+        $user = $this->aRegisteredUser();
+        $this->attachCompany($user, now()->subDays(2));
+        $default = $this->attachCompany($user, now());
+        $user->forceFill(['default_company_id' => $default->getKey()])->save();
+        $session = $this->aSessionFor($user);
+        Notification::fake();
+
+        // When they change their password with the correct current password
+        $response = $this->changePassword($session->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the confirmation is labeled with the default company — the user's own choice wins
+        $this->assertConfirmationNames($response, $user, $default->name);
+    }
+
     /**
      * The password-changed confirmation reached $user carrying exactly $companyName as its
      * label — the change was accepted and the critical notice names the expected company
