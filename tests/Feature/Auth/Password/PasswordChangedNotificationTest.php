@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth\Password;
 use App\Models\User;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
@@ -147,6 +148,41 @@ class PasswordChangedNotificationTest extends AuthTestCase
             SystemNotification::class,
             fn (SystemNotification $notification): bool => $notification->type === NotificationType::PasswordChanged
                 && $notification->companyName === $company->name,
+        );
+    }
+
+    #[Test]
+    public function when_a_company_less_user_changes_their_password_then_the_label_is_empty(): void
+    {
+        // Given a user who belongs to no company
+        $user = $this->aRegisteredUser();
+        $session = $this->aSessionFor($user);
+        Notification::fake();
+
+        // When they change their password with the correct current password
+        $response = $this->changePassword($session->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the confirmation still goes out with an empty company label — degrade, never fail
+        $this->assertConfirmationNames($response, $user, '');
+    }
+
+    /**
+     * The password-changed confirmation reached $user carrying exactly $companyName as its
+     * label — the change was accepted and the critical notice names the expected company
+     * (the OQ-1-124 deterministic-label contract: default → oldest live membership → '').
+     */
+    private function assertConfirmationNames(TestResponse $response, User $user, string $companyName): void
+    {
+        $response->assertNoContent();
+
+        Notification::assertSentTo(
+            $user,
+            SystemNotification::class,
+            fn (SystemNotification $notification): bool => $notification->type === NotificationType::PasswordChanged
+                && $notification->companyName === $companyName,
         );
     }
 
