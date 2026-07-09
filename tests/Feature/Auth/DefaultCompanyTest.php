@@ -80,6 +80,40 @@ class DefaultCompanyTest extends AuthTestCase
         ];
     }
 
+    #[Test, DataProvider('nonLiveMembershipProvider')]
+    public function when_target_company_is_not_a_live_membership_then_set_refused(string $case): void
+    {
+        // Given a member of Home whose target company is not a live membership
+        $user = $this->aRegisteredUser();
+        $this->aMembershipFor($user, Company::factory()->named('Home')->create());
+        $targetId = match ($case) {
+            'not a member' => Company::factory()->named('Other')->create()->getKey(),
+            'unknown company id' => Str::uuid7()->toString(),
+            'removed membership' => tap(
+                Company::factory()->named('Other')->create(),
+                fn (Company $other) => $this->aRemovedMembershipIn($other, $user),
+            )->getKey(),
+        };
+
+        // When
+        $response = $this->setDefaultCompany($user, ['companyId' => $targetId]);
+
+        // Then — the same collapsed envelope for every variant (no existence leak)
+        $this->assertSetRefusedLeavingDefault($response, $user, null);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function nonLiveMembershipProvider(): array
+    {
+        return [
+            'not a member' => ['not a member'],
+            'unknown company id' => ['unknown company id'],
+            'removed membership' => ['removed membership'],
+        ];
+    }
+
     /**
      * The refused set: the §S21 422 VALIDATION_FAILED envelope keyed on companyId
      * (collapsed — no company-id-existence leak) AND the stored default untouched

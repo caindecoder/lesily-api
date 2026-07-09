@@ -2,10 +2,12 @@
 
 namespace App\Foundation\Auth\IO\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use App\Http\Controllers\Controller;
 use App\Foundation\Auth\UseCases\Commands\SetDefaultCompanyCommand;
+use App\Foundation\Auth\UseCases\Interactors\SetDefaultCompanyInteractor;
 
 /**
  * Thin delivery appendix (E07) for PUT/DELETE /api/v1/me/default-company — the
@@ -15,9 +17,14 @@ use App\Foundation\Auth\UseCases\Commands\SetDefaultCompanyCommand;
  */
 class DefaultCompanyController extends Controller
 {
-    public function update(Request $request): Response
+    public function update(Request $request, SetDefaultCompanyInteractor $interactor): Response
     {
-        SetDefaultCompanyCommand::validateAndCreate($request);
+        $command = SetDefaultCompanyCommand::validateAndCreate($request);
+
+        /** @var User $user */
+        $user = $request->user();
+
+        $interactor->execute($user, $command);
 
         return response()->noContent();
     }
