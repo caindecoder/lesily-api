@@ -339,6 +339,22 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
+     * Assert the companies list flags exactly $companyId as the default (every
+     * other row false); null asserts NO row is flagged — the B2 read-time
+     * fallback oracle. Shared by the default-company (UC-1-139) and
+     * list-companies (UC-1-034) suites.
+     */
+    protected function assertListFlagsDefault(User $user, ?string $companyId): void
+    {
+        $flagged = collect($this->listCompanies($user)->assertOk()->json('data'))
+            ->where('is_default', true)
+            ->pluck('id')
+            ->all();
+
+        $this->assertSame($companyId === null ? [] : [$companyId], $flagged);
+    }
+
+    /**
      * Assert a login / 2FA-verify was refused by the device cap (UC-1-002 alt-5a): the
      * §S21 403 DEVICE_LIMIT_REACHED envelope, the canonical message (which pins the
      * Infection-blind bootstrap copy), and that NO new session was minted — the user

@@ -184,6 +184,24 @@ class DefaultCompanyTest extends AuthTestCase
         ]);
     }
 
+    #[Test]
+    public function when_member_sets_a_default_company_then_stored_and_flagged_in_list(): void
+    {
+        // Given a member of Acme and Beta with no default
+        $user = $this->aRegisteredUser();
+        $acme = Company::factory()->named('Acme')->create();
+        $beta = Company::factory()->named('Beta')->create();
+        $this->aMembershipFor($user, $acme);
+        $this->aMembershipFor($user, $beta);
+
+        // When Beta is set as the default
+        $response = $this->setDefaultCompany($user, ['companyId' => $beta->getKey()]);
+
+        // Then — stored AND the switcher list flags exactly that row (Gherkin 1)
+        $this->assertDefaultStored($response, $user, $beta->getKey());
+        $this->assertListFlagsDefault($user, $beta->getKey());
+    }
+
     /**
      * The successful write oracle: the 204 AND the stored users.default_company_id
      * value (set target or null after clear).
