@@ -127,6 +127,22 @@ class DefaultCompanyTest extends AuthTestCase
         $this->assertDefaultStored($response, $user, null);
     }
 
+    #[Test]
+    public function when_setting_the_same_default_again_then_replace_is_idempotent(): void
+    {
+        // Given a member whose default is already Home (set through the endpoint)
+        $user = $this->aRegisteredUser();
+        $home = Company::factory()->named('Home')->create();
+        $this->aMembershipFor($user, $home);
+        $this->setDefaultCompany($user, ['companyId' => $home->getKey()]);
+
+        // When the same default is set again
+        $response = $this->setDefaultCompany($user, ['companyId' => $home->getKey()]);
+
+        // Then — the idempotent replace: same 204, same stored value
+        $this->assertDefaultStored($response, $user, $home->getKey());
+    }
+
     /**
      * The successful write oracle: the 204 AND the stored users.default_company_id
      * value (set target or null after clear).

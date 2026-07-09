@@ -23,5 +23,8 @@ class SetDefaultCompanyInteractor
                 'companyId' => 'The selected company is invalid.',
             ]);
         }
+
+        $user->default_company_id = $command->companyId;
+        $user->save();
     }
 }
