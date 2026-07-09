@@ -254,6 +254,25 @@ class InviteUserTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_reinvite_after_a_revoked_reinvite_is_accepted_then_the_membership_reactivates(): void
+    {
+        // Given a fresh invitation re-issued on the once-revoked reused row
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $membershipId = $this->aRevokedReinviteOfARemovedMember($company, $admin, 'returning@contoso.lk');
+        $token = $this->aPendingInvitation($company, $admin, 'returning@contoso.lk');
+        $joiner = User::query()->where('email', 'returning@contoso.lk')->sole();
+
+        // When the returning member accepts with the fresh token
+        $response = $this->acceptInvitation($token, [], $joiner);
+
+        // Then the accept succeeds and the membership is live again on the same
+        // row — a stale revoked_at would have refused the token as invalid
+        $response->assertOk();
+        $this->assertMemberStillActive($membershipId);
+        $this->assertNotNull(Invitation::query()->whereKey($membershipId)->sole()->accepted_at);
+    }
+
+    #[Test]
     public function when_the_hourly_invite_allowance_is_spent_then_the_next_invite_is_throttled(): void
     {
         // Given an admin who has spent the full hourly invite allowance
