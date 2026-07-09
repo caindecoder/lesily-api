@@ -98,13 +98,7 @@ class PasswordChangedNotificationTest extends AuthTestCase
         ]);
 
         // Then a password-changed confirmation naming their company is sent to them
-        $response->assertNoContent();
-        Notification::assertSentTo(
-            $user,
-            SystemNotification::class,
-            fn (SystemNotification $notification): bool => $notification->type === NotificationType::PasswordChanged
-                && $notification->companyName === $company->name,
-        );
+        $this->assertConfirmationNames($response, $user, $company->name);
     }
 
     #[Test]
@@ -144,13 +138,7 @@ class PasswordChangedNotificationTest extends AuthTestCase
 
         // Then the same password-changed confirmation is sent — the reset event is wired into the
         // same reactor as the change event
-        $response->assertNoContent();
-        Notification::assertSentTo(
-            $user,
-            SystemNotification::class,
-            fn (SystemNotification $notification): bool => $notification->type === NotificationType::PasswordChanged
-                && $notification->companyName === $company->name,
-        );
+        $this->assertConfirmationNames($response, $user, $company->name);
     }
 
     #[Test]
