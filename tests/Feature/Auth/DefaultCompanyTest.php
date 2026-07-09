@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -159,6 +160,28 @@ class DefaultCompanyTest extends AuthTestCase
 
         // Then — one default per user by construction: Beta replaced Acme
         $this->assertDefaultStored($response, $user, $beta->getKey());
+    }
+
+    #[Test]
+    public function when_the_default_company_is_hard_deleted_then_the_default_clears(): void
+    {
+        // Given a member whose default is Home (set through the endpoint)
+        $user = $this->aRegisteredUser();
+        $home = Company::factory()->named('Home')->create();
+        $this->aMembershipFor($user, $home);
+        $this->setDefaultCompany($user, ['companyId' => $home->getKey()]);
+
+        // When the company row is hard-deleted (schema-level pin — no product
+        // delete path exists until UC-1-037; the pivot goes first, its FK is
+        // restrictOnDelete)
+        CompanyUser::query()->where('company_id', $home->getKey())->forceDelete();
+        Company::query()->whereKey($home->getKey())->forceDelete();
+
+        // Then — the nullOnDelete FK clears the preference instead of stranding it
+        $this->assertDatabaseHas('users', [
+            'id' => $user->getKey(),
+            'default_company_id' => null,
+        ]);
     }
 
     /**
