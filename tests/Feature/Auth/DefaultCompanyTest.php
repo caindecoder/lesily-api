@@ -143,6 +143,24 @@ class DefaultCompanyTest extends AuthTestCase
         $this->assertDefaultStored($response, $user, $home->getKey());
     }
 
+    #[Test]
+    public function when_setting_a_new_default_then_it_replaces_the_previous_one(): void
+    {
+        // Given a member of Acme and Beta whose default is Acme
+        $user = $this->aRegisteredUser();
+        $acme = Company::factory()->named('Acme')->create();
+        $beta = Company::factory()->named('Beta')->create();
+        $this->aMembershipFor($user, $acme);
+        $this->aMembershipFor($user, $beta);
+        $this->setDefaultCompany($user, ['companyId' => $acme->getKey()]);
+
+        // When Beta is set as the default
+        $response = $this->setDefaultCompany($user, ['companyId' => $beta->getKey()]);
+
+        // Then — one default per user by construction: Beta replaced Acme
+        $this->assertDefaultStored($response, $user, $beta->getKey());
+    }
+
     /**
      * The successful write oracle: the 204 AND the stored users.default_company_id
      * value (set target or null after clear).
