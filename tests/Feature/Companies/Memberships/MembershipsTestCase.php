@@ -379,6 +379,40 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
+     * The optional revocation reason revokeInvitationWithReason sends — tests set
+     * it per scenario (hoisted with the revoke helpers from RevokeInvitationTest).
+     */
+    protected string $reason = '';
+
+    /**
+     * Revoke the invitation $invitationId as $actor acting in $company's context.
+     */
+    protected function revokeInvitation(User $actor, Company $company, string $invitationId): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->deleteJson(
+            "/api/v1/invitations/{$invitationId}",
+            [],
+            ['X-Company-Context' => $company->getKey()]
+        );
+    }
+
+    /**
+     * Revoke with the shared $this->reason riding as the optional request body.
+     */
+    protected function revokeInvitationWithReason(User $actor, Company $company, string $invitationId): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->deleteJson(
+            "/api/v1/invitations/{$invitationId}",
+            ['reason' => $this->reason],
+            ['X-Company-Context' => $company->getKey()]
+        );
+    }
+
+    /**
      * Issue a pending invitation for ($company, $email) and REVOKE it through the
      * DELETE endpoint acting as $actor (who must hold users.revoke-invitation).
      * Returns the ORIGINAL plaintext token — now dead — so consumers can prove a

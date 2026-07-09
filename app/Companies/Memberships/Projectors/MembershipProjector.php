@@ -30,10 +30,12 @@ class MembershipProjector extends Projector
     /**
      * Upsert, not insert: a re-invite of a removed member reuses the SAME
      * invitation row (id = the resumed aggregate's UUID — D5b), so the fresh
-     * token/role/expiry replace the old ones and the terminal accepted/expired
-     * markers reset to pending — a stale expired_at would otherwise exclude the
-     * genuinely-pending row from the T5 scan (whereNull expired_at) forever.
-     * (The parallel revoked_at reset is deferred — see OQ-1-129.)
+     * token/role/expiry replace the old ones and EVERY terminal marker resets
+     * to pending — accept, expiry, and the revoke trio (OQ-1-129). A stale
+     * marker would otherwise exclude the genuinely-pending row from the roster
+     * and the T5 scan (whereNull filters) and block the invitee's accept. The
+     * revocation audit survives in the UserInvitationRevoked stored events;
+     * the projection row is disposable.
      */
     public function onUserInvited(UserInvited $event): void
     {
@@ -47,6 +49,9 @@ class MembershipProjector extends Projector
                 'expires_at' => $event->expiresAt,
                 'accepted_at' => null,
                 'expired_at' => null,
+                'revoked_at' => null,
+                'revoked_by_user_id' => null,
+                'revocation_reason' => null,
             ],
         );
     }

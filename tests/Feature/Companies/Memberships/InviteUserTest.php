@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
@@ -234,6 +235,44 @@ class InviteUserTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_a_removed_member_is_reinvited_after_a_revoked_reinvite_then_the_row_is_clean_pending(): void
+    {
+        // Given a removed member whose re-invite was itself revoked — the reused
+        // D5b row carries all three revoke stamps (the terminal-marker re-entry chain)
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $membershipId = $this->aRevokedReinviteOfARemovedMember($company, $admin, 'returning@contoso.lk');
+
+        // When the admin re-invites that email once more
+        $response = $this->invite($admin, $company, [
+            'email' => 'returning@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then the reused row returns to clean pending — every terminal marker reset
+        $response->assertStatus(201);
+        $this->assertReinvitedRowCleanPending($membershipId, $admin, $company);
+    }
+
+    #[Test]
+    public function when_the_reinvite_after_a_revoked_reinvite_is_accepted_then_the_membership_reactivates(): void
+    {
+        // Given a fresh invitation re-issued on the once-revoked reused row
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $membershipId = $this->aRevokedReinviteOfARemovedMember($company, $admin, 'returning@contoso.lk');
+        $token = $this->aPendingInvitation($company, $admin, 'returning@contoso.lk');
+        $joiner = User::query()->where('email', 'returning@contoso.lk')->sole();
+
+        // When the returning member accepts with the fresh token
+        $response = $this->acceptInvitation($token, [], $joiner);
+
+        // Then the accept succeeds and the membership is live again on the same
+        // row — a stale revoked_at would have refused the token as invalid
+        $response->assertOk();
+        $this->assertMemberStillActive($membershipId);
+        $this->assertNotNull(Invitation::query()->whereKey($membershipId)->sole()->accepted_at);
+    }
+
+    #[Test]
     public function when_the_hourly_invite_allowance_is_spent_then_the_next_invite_is_throttled(): void
     {
         // Given an admin who has spent the full hourly invite allowance
@@ -334,5 +373,49 @@ class InviteUserTest extends MembershipsTestCase
             ->where('event_properties->companyId', $companyB->getKey())
             ->where('event_properties->invitedBy', $admin->getKey())
             ->count());
+    }
+
+    /**
+     * The full terminal-marker re-entry chain (OQ-1-129): a member accepted, was
+     * removed, was re-invited onto the SAME row (D5b), and that re-invite was
+     * revoked WITH a reason — leaving all three revoke stamps set on the reused
+     * row. Returns the membership id the next re-invite must scrub clean.
+     */
+    private function aRevokedReinviteOfARemovedMember(Company $company, User $actor, string $email): string
+    {
+        [, $membershipId] = $this->anAcceptedMembership($company, $actor, $email);
+        $this->removeMember($actor, $company, $membershipId)->assertNoContent();
+        $this->aPendingInvitation($company, $actor, $email);
+        $this->reason = 'Position filled';
+        $this->revokeInvitationWithReason($actor, $company, $membershipId)->assertNoContent();
+        Auth::forgetGuards();
+
+        return $membershipId;
+    }
+
+    /**
+     * The reused row is clean pending again — every terminal marker (accept,
+     * expiry, and the revoke trio) is null — and the roster's pending arm lists
+     * it: a stale revoked_at would hide the row from the roster's whereNull
+     * filter and block the invitee's accept.
+     */
+    private function assertReinvitedRowCleanPending(string $membershipId, User $actor, Company $company): void
+    {
+        $this->assertDatabaseHas('invitations', [
+            'id' => $membershipId,
+            'accepted_at' => null,
+            'expired_at' => null,
+            'revoked_at' => null,
+            'revoked_by_user_id' => null,
+            'revocation_reason' => null,
+        ]);
+
+        $roster = $this->viewMemberships($actor, $company);
+        $roster->assertOk();
+        $this->assertContains(
+            $membershipId,
+            $roster->collect('data')->pluck('id')->all(),
+            'The re-invited pending row must appear in the roster.'
+        );
     }
 }

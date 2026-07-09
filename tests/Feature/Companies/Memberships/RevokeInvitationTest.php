@@ -4,7 +4,6 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use Illuminate\Support\Str;
-use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -16,8 +15,6 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RevokeInvitationTest extends MembershipsTestCase
 {
-    protected string $reason = '';
-
     #[Test]
     public function when_invitation_unknown_then_revoke_refused(): void
     {
@@ -215,34 +212,6 @@ class RevokeInvitationTest extends MembershipsTestCase
             'admin' => ['admin'],
             'hr officer' => ['hr_officer'],
         ];
-    }
-
-    /**
-     * Revoke the invitation $invitationId as $actor acting in $company's context.
-     */
-    protected function revokeInvitation(User $actor, Company $company, string $invitationId): TestResponse
-    {
-        Sanctum::actingAs($actor);
-
-        return $this->deleteJson(
-            "/api/v1/invitations/{$invitationId}",
-            [],
-            ['X-Company-Context' => $company->getKey()]
-        );
-    }
-
-    /**
-     * Revoke with the shared $this->reason riding as the optional request body.
-     */
-    protected function revokeInvitationWithReason(User $actor, Company $company, string $invitationId): TestResponse
-    {
-        Sanctum::actingAs($actor);
-
-        return $this->deleteJson(
-            "/api/v1/invitations/{$invitationId}",
-            ['reason' => $this->reason],
-            ['X-Company-Context' => $company->getKey()]
-        );
     }
 
     protected function theInvitation(Company $company, string $email): Invitation
