@@ -202,6 +202,25 @@ class DefaultCompanyTest extends AuthTestCase
         $this->assertListFlagsDefault($user, $beta->getKey());
     }
 
+    #[Test]
+    public function when_member_clears_the_default_then_no_row_flagged_in_list(): void
+    {
+        // Given a member of Acme and Beta whose default is Beta
+        $user = $this->aRegisteredUser();
+        $acme = Company::factory()->named('Acme')->create();
+        $beta = Company::factory()->named('Beta')->create();
+        $this->aMembershipFor($user, $acme);
+        $this->aMembershipFor($user, $beta);
+        $this->setDefaultCompany($user, ['companyId' => $beta->getKey()]);
+
+        // When the default is cleared
+        $response = $this->clearDefaultCompany($user);
+
+        // Then — stored null and the list flags nothing (Gherkin 3 + alt-1a)
+        $this->assertDefaultStored($response, $user, null);
+        $this->assertListFlagsDefault($user, null);
+    }
+
     /**
      * The successful write oracle: the 204 AND the stored users.default_company_id
      * value (set target or null after clear).

@@ -8,6 +8,7 @@ use Illuminate\Http\Response;
 use App\Http\Controllers\Controller;
 use App\Foundation\Auth\UseCases\Commands\SetDefaultCompanyCommand;
 use App\Foundation\Auth\UseCases\Interactors\SetDefaultCompanyInteractor;
+use App\Foundation\Auth\UseCases\Interactors\ClearDefaultCompanyInteractor;
 
 /**
  * Thin delivery appendix (E07) for PUT/DELETE /api/v1/me/default-company — the
@@ -29,8 +30,13 @@ class DefaultCompanyController extends Controller
         return response()->noContent();
     }
 
-    public function destroy(Request $request): Response
+    public function destroy(Request $request, ClearDefaultCompanyInteractor $interactor): Response
     {
+        /** @var User $user */
+        $user = $request->user();
+
+        $interactor->execute($user);
+
         return response()->noContent();
     }
 }
