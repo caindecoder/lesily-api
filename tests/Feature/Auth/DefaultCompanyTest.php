@@ -159,8 +159,55 @@ class DefaultCompanyTest extends AuthTestCase
         // When Beta is set as the default
         $response = $this->setDefaultCompany($user, ['companyId' => $beta->getKey()]);
 
-        // Then — one default per user by construction: Beta replaced Acme
+        // Then — one default per user by construction: Beta replaced Acme,
+        // and the list re-flags exactly Beta (Acme is not flagged)
         $this->assertDefaultStored($response, $user, $beta->getKey());
+        $this->assertListFlagsDefault($user, $beta->getKey());
+    }
+
+    #[Test]
+    public function when_set_is_refused_then_the_existing_default_is_retained(): void
+    {
+        // Given a member whose default is Acme (set through the endpoint)
+        $user = $this->aRegisteredUser();
+        $acme = Company::factory()->named('Acme')->create();
+        $this->aMembershipFor($user, $acme);
+        $this->setDefaultCompany($user, ['companyId' => $acme->getKey()]);
+
+        // When they attempt to set a company they are not a member of
+        $response = $this->setDefaultCompany($user, [
+            'companyId' => Company::factory()->named('Other')->create()->getKey(),
+        ]);
+
+        // Then — the refusal leaves the existing non-null default intact
+        // (UC-1-139 Minimal Guarantee against a write-before-guard reorder)
+        $this->assertSetRefusedLeavingDefault($response, $user, $acme->getKey());
+    }
+
+    #[Test]
+    public function when_a_member_clears_their_default_then_other_users_defaults_are_untouched(): void
+    {
+        // Given two users, each with their own company set as default (Bob's
+        // default survives Alice's set in this arrangement — a bulk write on
+        // either path would clobber it)
+        $alice = $this->aRegisteredUser();
+        $bob = $this->aRegisteredUser('bob@contoso.lk');
+        $acme = Company::factory()->named('Acme')->create();
+        $beta = Company::factory()->named('Beta')->create();
+        $this->aMembershipFor($bob, $beta);
+        $this->setDefaultCompany($bob, ['companyId' => $beta->getKey()]);
+        $this->aMembershipFor($alice, $acme);
+        $this->setDefaultCompany($alice, ['companyId' => $acme->getKey()]);
+
+        // When Alice clears her default
+        $response = $this->clearDefaultCompany($alice);
+
+        // Then — Alice's is null and Bob's is untouched (user-scoped writes)
+        $this->assertDefaultStored($response, $alice, null);
+        $this->assertDatabaseHas('users', [
+            'id' => $bob->getKey(),
+            'default_company_id' => $beta->getKey(),
+        ]);
     }
 
     #[Test]
