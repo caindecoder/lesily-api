@@ -314,6 +314,31 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
+     * PUT the default-company preference (UC-1-139) — payload-shaped so the
+     * malformed-body variations reuse the same seam. No X-Company-Context:
+     * the me/ surface is account-level (listCompanies precedent). Shared by
+     * the default-company (UC-1-139) and list-companies (UC-1-034) suites.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function setDefaultCompany(User $actor, array $payload): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->putJson('/api/v1/me/default-company', $payload);
+    }
+
+    /**
+     * DELETE (clear) the default-company preference (UC-1-139).
+     */
+    protected function clearDefaultCompany(User $actor): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->deleteJson('/api/v1/me/default-company');
+    }
+
+    /**
      * Assert a login / 2FA-verify was refused by the device cap (UC-1-002 alt-5a): the
      * §S21 403 DEVICE_LIMIT_REACHED envelope, the canonical message (which pins the
      * Infection-blind bootstrap copy), and that NO new session was minted — the user

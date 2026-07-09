@@ -2,8 +2,12 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\User;
 use Illuminate\Support\Str;
+use App\Companies\Entities\Company;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
@@ -48,5 +52,42 @@ class DefaultCompanyTest extends AuthTestCase
 
         // Then
         $this->assertUnauthenticated($response);
+    }
+
+    #[Test, DataProvider('malformedCompanyIdProvider')]
+    public function when_company_id_is_missing_or_malformed_then_set_refused(array $payload): void
+    {
+        // Given a member with a live membership (the guard must never be reached)
+        $user = $this->aRegisteredUser();
+        $this->aMembershipFor($user, Company::factory()->named('Home')->create());
+
+        // When
+        $response = $this->setDefaultCompany($user, $payload);
+
+        // Then
+        $this->assertSetRefusedLeavingDefault($response, $user, null);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>}>
+     */
+    public static function malformedCompanyIdProvider(): array
+    {
+        return [
+            'missing' => [[]],
+            'not a string' => [['companyId' => 123]],
+            'not a uuid' => [['companyId' => 'not-a-uuid']],
+        ];
+    }
+
+    /**
+     * The refused set: the §S21 422 VALIDATION_FAILED envelope keyed on companyId
+     * (collapsed — no company-id-existence leak) AND the stored default untouched
+     * (UC-1-139 Minimal Guarantee).
+     */
+    protected function assertSetRefusedLeavingDefault(TestResponse $response, User $user, ?string $expectedDefault): void
+    {
+        $this->assertValidationRejected($response, 'companyId');
+        $this->assertSame($expectedDefault, $user->refresh()->default_company_id);
     }
 }

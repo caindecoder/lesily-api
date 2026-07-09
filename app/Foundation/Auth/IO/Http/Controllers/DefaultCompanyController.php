@@ -5,6 +5,7 @@ namespace App\Foundation\Auth\IO\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use App\Http\Controllers\Controller;
+use App\Foundation\Auth\UseCases\Commands\SetDefaultCompanyCommand;
 
 /**
  * Thin delivery appendix (E07) for PUT/DELETE /api/v1/me/default-company — the
@@ -16,6 +17,8 @@ class DefaultCompanyController extends Controller
 {
     public function update(Request $request): Response
     {
+        SetDefaultCompanyCommand::validateAndCreate($request);
+
         return response()->noContent();
     }
 
