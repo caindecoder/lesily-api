@@ -31,7 +31,9 @@ class MyCompanyResource extends JsonResource
             ],
             'plan' => $this->resource->plan,
             'status' => $this->resource->status,
-            'is_default' => (bool) $this->resource->is_default,
+            // Already a real bool — the interactor's decoration sets it (unlike the
+            // onboarding columns below, which arrive as DB "0"/"1" and need the cast).
+            'is_default' => $this->resource->is_default,
             'onboarding' => [
                 'completed' => (bool) $this->resource->onboarding_completed,
                 'skipped' => (bool) $this->resource->onboarding_skipped,
