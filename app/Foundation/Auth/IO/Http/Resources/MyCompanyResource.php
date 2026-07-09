@@ -31,9 +31,9 @@ class MyCompanyResource extends JsonResource
             ],
             'plan' => $this->resource->plan,
             'status' => $this->resource->status,
-            // False until UC-1-139 lands users.default_company_id (T1 pin,
-            // slice-companies B4) — then derived against the user's default.
-            'is_default' => false,
+            // Already a real bool — the interactor's decoration sets it (unlike the
+            // onboarding columns below, which arrive as DB "0"/"1" and need the cast).
+            'is_default' => $this->resource->is_default,
             'onboarding' => [
                 'completed' => (bool) $this->resource->onboarding_completed,
                 'skipped' => (bool) $this->resource->onboarding_skipped,

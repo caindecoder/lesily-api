@@ -314,6 +314,47 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
+     * PUT the default-company preference (UC-1-139) — payload-shaped so the
+     * malformed-body variations reuse the same seam. No X-Company-Context:
+     * the me/ surface is account-level (listCompanies precedent). Shared by
+     * the default-company (UC-1-139) and list-companies (UC-1-034) suites.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function setDefaultCompany(User $actor, array $payload): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->putJson('/api/v1/me/default-company', $payload);
+    }
+
+    /**
+     * DELETE (clear) the default-company preference (UC-1-139).
+     */
+    protected function clearDefaultCompany(User $actor): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->deleteJson('/api/v1/me/default-company');
+    }
+
+    /**
+     * Assert the companies list flags exactly $companyId as the default (every
+     * other row false); null asserts NO row is flagged — the B2 read-time
+     * fallback oracle. Shared by the default-company (UC-1-139) and
+     * list-companies (UC-1-034) suites.
+     */
+    protected function assertListFlagsDefault(User $user, ?string $companyId): void
+    {
+        /** @var list<array{id: string, is_default: bool}> $rows */
+        $rows = $this->listCompanies($user)->assertOk()->json('data');
+
+        $flagged = collect($rows)->where('is_default', true)->pluck('id')->all();
+
+        $this->assertSame($companyId === null ? [] : [$companyId], $flagged);
+    }
+
+    /**
      * Assert a login / 2FA-verify was refused by the device cap (UC-1-002 alt-5a): the
      * §S21 403 DEVICE_LIMIT_REACHED envelope, the canonical message (which pins the
      * Infection-blind bootstrap copy), and that NO new session was minted — the user

@@ -12,6 +12,7 @@ use App\Foundation\Auth\IO\Http\Controllers\ResetPasswordController;
 use App\Foundation\Auth\IO\Http\Controllers\RevokeSessionController;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 use App\Foundation\Auth\IO\Http\Controllers\ChangePasswordController;
+use App\Foundation\Auth\IO\Http\Controllers\DefaultCompanyController;
 use App\Foundation\Auth\IO\Http\Controllers\ForgotPasswordController;
 use App\Foundation\Auth\IO\Http\Controllers\EnableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
@@ -152,6 +153,17 @@ Route::delete('/v1/me/sessions/{tokenId}', RevokeSessionController::class)
 // (UserPasswordChanged -> UserProjector) and every OTHER session is revoked; the current survives -> 204.
 Route::put('/v1/me/password', ChangePasswordController::class)
     ->middleware(['auth:sanctum', 'throttle:auth-tier', 'idempotency-key:required']);
+
+// Default company (UC-1-139) — the persisted switcher preference, a plain
+// users.default_company_id write (NOT event-sourced — slice-companies B2).
+// Bare auth:sanctum: a `me/` self-service preference with no credential check
+// (no throttle — not a brute-force surface) and no idempotency-key mount (both
+// verbs are naturally idempotent; the 204 carries no body). The set is guarded
+// to live memberships in the interactor, collapsed to 422 (no id-existence leak).
+Route::put('/v1/me/default-company', [DefaultCompanyController::class, 'update'])
+    ->middleware('auth:sanctum');
+Route::delete('/v1/me/default-company', [DefaultCompanyController::class, 'destroy'])
+    ->middleware('auth:sanctum');
 
 // Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
 // a pending invitation is created and the invite email dispatched inline. auth:sanctum
