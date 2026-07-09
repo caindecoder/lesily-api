@@ -91,4 +91,17 @@ class User extends Authenticatable implements CanResetPassword, HasLocalePrefere
         return $this->belongsToMany(Company::class, 'company_user', 'user_id', 'company_id')
             ->wherePivotNull('deleted_at');
     }
+
+    /**
+     * The company label for account-level notices (OQ-1-124): the oldest live membership's
+     * company name — deterministic (pivot created_at asc, id asc tiebreak) — degrading to ''
+     * for a company-less user rather than failing the notice.
+     */
+    public function notificationCompanyName(): string
+    {
+        return (string) $this->companies()
+            ->orderByPivot('created_at')
+            ->orderByPivot('id')
+            ->value('name');
+    }
 }
