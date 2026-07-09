@@ -114,6 +114,32 @@ class DefaultCompanyTest extends AuthTestCase
         ];
     }
 
+    #[Test]
+    public function when_clearing_with_no_default_set_then_clear_still_succeeds(): void
+    {
+        // Given a user with no default company set
+        $user = $this->aRegisteredUser();
+
+        // When
+        $response = $this->clearDefaultCompany($user);
+
+        // Then — idempotent: 204 even though nothing was set (UC-1-139 alt-1a)
+        $this->assertDefaultStored($response, $user, null);
+    }
+
+    /**
+     * The successful write oracle: the 204 AND the stored users.default_company_id
+     * value (set target or null after clear).
+     */
+    protected function assertDefaultStored(TestResponse $response, User $user, ?string $companyId): void
+    {
+        $response->assertNoContent();
+        $this->assertDatabaseHas('users', [
+            'id' => $user->getKey(),
+            'default_company_id' => $companyId,
+        ]);
+    }
+
     /**
      * The refused set: the §S21 422 VALIDATION_FAILED envelope keyed on companyId
      * (collapsed — no company-id-existence leak) AND the stored default untouched
