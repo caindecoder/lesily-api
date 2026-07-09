@@ -18,4 +18,9 @@ class DefaultCompanyController extends Controller
     {
         return response()->noContent();
     }
+
+    public function destroy(Request $request): Response
+    {
+        return response()->noContent();
+    }
 }

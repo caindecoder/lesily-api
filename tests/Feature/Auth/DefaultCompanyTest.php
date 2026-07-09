@@ -37,4 +37,16 @@ class DefaultCompanyTest extends AuthTestCase
         // Then
         $this->assertUnauthenticated($response);
     }
+
+    #[Test]
+    public function when_clearing_default_without_token_then_unauthenticated(): void
+    {
+        // Given no authenticated session
+
+        // When
+        $response = $this->deleteJson('/api/v1/me/default-company');
+
+        // Then
+        $this->assertUnauthenticated($response);
+    }
 }
