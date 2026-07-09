@@ -214,6 +214,31 @@ class PasswordChangedNotificationTest extends AuthTestCase
         $this->assertConfirmationNames($response, $user, $earlier->name);
     }
 
+    #[Test]
+    public function when_the_default_membership_was_removed_then_the_oldest_live_membership_names_the_confirmation(): void
+    {
+        // Given a user whose default company's membership was removed, leaving an older live one
+        $user = $this->aRegisteredUser();
+        $oldestLive = $this->attachCompany($user, now()->subDays(2));
+        $removedDefault = $this->attachCompany($user, now());
+        $user->forceFill(['default_company_id' => $removedDefault->getKey()])->save();
+        CompanyUser::query()
+            ->where('company_id', $removedDefault->getKey())
+            ->where('user_id', $user->getKey())
+            ->update(['deleted_at' => now()]);
+        $session = $this->aSessionFor($user);
+        Notification::fake();
+
+        // When they change their password with the correct current password
+        $response = $this->changePassword($session->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the label falls back to the oldest LIVE membership — a dead default never leaks
+        $this->assertConfirmationNames($response, $user, $oldestLive->name);
+    }
+
     /**
      * The password-changed confirmation reached $user carrying exactly $companyName as its
      * label — the change was accepted and the critical notice names the expected company
