@@ -193,4 +193,22 @@ class UpdateCompanyTest extends CompaniesTestCase
             'manager' => ['manager'],
         ];
     }
+
+    // Edge — a name-only update records the details event and nothing else:
+    // the settings event fires only when a settings field is present (conditional
+    // emission), so the settings stream stays silent.
+    #[Test]
+    public function when_only_name_submitted_then_only_the_details_event_is_recorded(): void
+    {
+        // Given the owner of a company named Old Co
+        $company = Company::factory()->withSettings()->named('Old Co')->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they submit only a new name
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['name' => 'New Co']);
+
+        // Then only the details event is recorded and the name is updated
+        $response->assertOk();
+        $this->assertOnlyDetailsEventRecorded($company, 'New Co');
+    }
 }

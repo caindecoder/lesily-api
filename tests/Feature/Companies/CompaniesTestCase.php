@@ -8,6 +8,7 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanySettings;
+use App\Companies\Events\CompanyDetailsUpdated;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -179,5 +180,21 @@ abstract class CompaniesTestCase extends TestCase
                 'default_work_hours_per_day' => $settings->default_work_hours_per_day,
             ],
         ];
+    }
+
+    /**
+     * A name-only update recorded exactly one CompanyDetailsUpdated event (the
+     * settings event stays silent — conditional emission) and the name landed on
+     * the read model. The single total event proves nothing else was recorded.
+     */
+    protected function assertOnlyDetailsEventRecorded(Company $company, string $expectedName): void
+    {
+        $company->refresh();
+
+        $this->assertSame($expectedName, $company->name);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanyDetailsUpdated::class)
+            ->whereForCompany($company->getKey())->count());
+        $this->assertSame(1, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
     }
 }

@@ -9,8 +9,10 @@ use App\Companies\Events\CompanyCreated;
 use App\Companies\Support\CountryDefaults;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\Events\CompanyTrialExpired;
+use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsCreated;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
+use App\Companies\UseCases\Commands\UpdateCompanyCommand;
 use App\Companies\Exceptions\CompanyAlreadyExistsException;
 
 class Company extends AggregateRoot
@@ -46,6 +48,28 @@ class Company extends AggregateRoot
                 workingDaysPerWeek: $defaults['workingDaysPerWeek'],
                 defaultWorkHoursPerDay: $defaults['defaultWorkHoursPerDay'],
             ));
+    }
+
+    /**
+     * Update the editable details (UC-1-033). Guardless (mirrors changePassword /
+     * changeRole — name/settings are projected columns, not aggregate state), and
+     * conditional: the details event fires only when a name is supplied, the
+     * settings event only when a settings field is. forCompany re-tags the tenant
+     * so the events carry company_id metadata even for a read-model-seeded company.
+     */
+    public function updateDetails(UpdateCompanyCommand $command, string $updatedBy): static
+    {
+        $this->forCompany($this->uuid());
+
+        if ($command->name !== null) {
+            $this->recordThat(new CompanyDetailsUpdated(
+                name: $command->name,
+                updatedBy: $updatedBy,
+                updatedAt: CarbonImmutable::now(),
+            ));
+        }
+
+        return $this;
     }
 
     public function trialExpire(): static

@@ -2,16 +2,18 @@
 
 namespace App\Companies\IO\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
 use App\Companies\IO\Http\Resources\CompanyResource;
 use App\Companies\UseCases\Commands\UpdateCompanyCommand;
+use App\Companies\UseCases\Interactors\UpdateCompanyDetailsInteractor;
 
 /**
  * The company resource — details view (UC-1-032) and update (UC-1-033).
  * Repository-direct read (cd-companies §5): AuthorizeCompany resolves +
  * membership-checks the company upstream, so show only shapes it; update
- * records events through the Company aggregate.
+ * refuses immutable fields at the command whitelist then records events through
+ * the Company aggregate, returning the refreshed resource.
  */
 class CompaniesController
 {
@@ -20,10 +22,15 @@ class CompaniesController
         return new CompanyResource($request->company());
     }
 
-    public function update(Request $request, string $companyId): JsonResponse
+    public function update(Request $request, UpdateCompanyDetailsInteractor $interactor): CompanyResource
     {
-        UpdateCompanyCommand::fromRequest($request);
+        $command = UpdateCompanyCommand::fromRequest($request);
 
-        return response()->json(['data' => []]);
+        /** @var User $actor — guaranteed by auth:sanctum */
+        $actor = $request->user();
+
+        $company = $interactor->execute($request->company(), $actor, $command);
+
+        return new CompanyResource($company);
     }
 }
