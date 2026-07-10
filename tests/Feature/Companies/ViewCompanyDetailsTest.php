@@ -125,4 +125,22 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
         $response->assertOk();
         $response->assertJsonPath('data.id', $companyB->getKey());
     }
+
+    // Edge — the URL alone carries the company claim: no X-Company-Context
+    // header is required on param routes (the R8 fallback is optional, not a
+    // second mandatory claim).
+    #[Test]
+    public function when_no_company_context_accompanies_the_request_then_requested_company_returned(): void
+    {
+        // Given a member of a company
+        $company = Company::factory()->withSettings()->create();
+        $member = $this->aCompanyMember($company);
+
+        // When they request its details with no context header
+        $response = $this->viewCompanyDetails($member, $company->getKey());
+
+        // Then the company's details are returned
+        $response->assertOk();
+        $response->assertJsonPath('data.id', $company->getKey());
+    }
 }
