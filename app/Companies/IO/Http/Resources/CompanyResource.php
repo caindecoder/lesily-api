@@ -29,7 +29,9 @@ class CompanyResource extends JsonResource
             'country' => $this->resource->country,
             'plan' => $this->resource->current_billing_plan?->value,
             'status' => $this->resource->status->value,
-            'trial_ends_at' => $this->resource->trial_ends_at,
+            // Explicit UTC ISO-8601 — decouples the wire contract from the
+            // ambient app timezone (reviewer S2).
+            'trial_ends_at' => $this->resource->trial_ends_at?->toISOString(),
             'settings' => new CompanySettingResource($this->resource->settings),
         ];
     }

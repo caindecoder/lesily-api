@@ -69,6 +69,7 @@ abstract class CompaniesTestCase extends TestCase
     {
         $response->assertStatus(401);
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
     /**

@@ -200,4 +200,22 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
         // Then the complete details are returned — and nothing more
         $response->assertExactJson(['data' => $this->expectedCompanyDetails($company)]);
     }
+
+    // Happy variant — a trial-expired company (Day-31 read-only, plan null by
+    // construction) is still viewable: the exact envelope locks the degenerate
+    // wire contract, plan and trial expiry rendering as nulls.
+    #[Test]
+    public function when_owner_views_a_trial_expired_company_then_details_carry_no_plan(): void
+    {
+        // Given the owner of a trial-expired company
+        $company = Company::factory()->trialExpired()->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they view the company details
+        $response = $this->viewCompanyDetails($owner, $company->getKey());
+
+        // Then the details render with no plan and no trial expiry
+        $response->assertExactJson(['data' => $this->expectedCompanyDetails($company)]);
+        $response->assertJsonPath('data.plan', null);
+    }
 }
