@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies;
 
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -175,5 +176,28 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
             'auditor' => ['auditor'],
             'employee' => ['employee'],
         ];
+    }
+
+    // Happy — the exact CompanyResource contract: identity, plan/status/trial
+    // and all six settings, nothing more. assertExactJson is the B7 teeth —
+    // employee_count, legal_hold and owner_id are locked OUT of the wire shape
+    // (declared deferrals, slice-companies B7).
+    #[Test]
+    public function when_owner_views_company_details_then_complete_details_returned(): void
+    {
+        // Given the owner of a Pro company mid-trial
+        $company = Company::factory()
+            ->named('Acme Pvt Ltd')
+            ->onPlan(BillingPlan::Pro)
+            ->onTrialUntil(now()->addDays(12)->toImmutable())
+            ->withSettings()
+            ->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they view the company details
+        $response = $this->viewCompanyDetails($owner, $company->getKey());
+
+        // Then the complete details are returned — and nothing more
+        $response->assertExactJson(['data' => $this->expectedCompanyDetails($company)]);
     }
 }

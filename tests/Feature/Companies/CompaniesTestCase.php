@@ -7,6 +7,7 @@ use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use App\Companies\Entities\CompanySettings;
 use App\Foundation\RolesPermissions\Entities\Role;
 
 abstract class CompaniesTestCase extends TestCase
@@ -92,5 +93,37 @@ abstract class CompaniesTestCase extends TestCase
         $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
         $response->assertJsonPath('required_permission', $permission);
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    /**
+     * The exact UC-1-032 CompanyResource wire shape for $company — read back
+     * through the models so casts govern the expected types. B7 teeth: no
+     * employee_count / legal_hold / owner_id keys exist to be expected.
+     *
+     * @return array<string, mixed>
+     */
+    protected function expectedCompanyDetails(Company $company): array
+    {
+        $company->refresh();
+        $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
+
+        return [
+            'id' => $company->getKey(),
+            'name' => $company->name,
+            'br_number' => $company->br_number,
+            'epf_number' => $company->epf_number,
+            'country' => $company->country,
+            'plan' => $company->current_billing_plan?->value,
+            'status' => $company->status->value,
+            'trial_ends_at' => $company->trial_ends_at?->toISOString(),
+            'settings' => [
+                'timezone' => $settings->timezone,
+                'currency' => $settings->currency,
+                'locale_default' => $settings->locale_default,
+                'fiscal_year_start_month' => $settings->fiscal_year_start_month,
+                'working_days_per_week' => $settings->working_days_per_week,
+                'default_work_hours_per_day' => $settings->default_work_hours_per_day,
+            ],
+        ];
     }
 }

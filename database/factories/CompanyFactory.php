@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\User;
+use DateTimeInterface;
 use App\Companies\Entities\Company;
 use App\Companies\Enums\CompanyStatus;
 use App\Foundation\Billing\Enums\Addon;
@@ -56,6 +57,18 @@ class CompanyFactory extends Factory
     {
         return $this->state(fn (array $attributes): array => [
             'current_billing_plan' => $plan,
+        ]);
+    }
+
+    /**
+     * A company mid-trial with a pinned expiry — gives trial_ends_at a real
+     * value so its wire serialization has teeth (UC-1-032 exact contract).
+     */
+    public function onTrialUntil(DateTimeInterface $endsAt): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => CompanyStatus::Trial,
+            'trial_ends_at' => $endsAt,
         ]);
     }
 
