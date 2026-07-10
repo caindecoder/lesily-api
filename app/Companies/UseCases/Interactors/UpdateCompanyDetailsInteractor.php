@@ -1,0 +1,26 @@
+<?php
+
+namespace App\Companies\UseCases\Interactors;
+
+use App\Models\User;
+use App\Companies\Entities\Company;
+use App\Companies\Aggregates\Company as CompanyAggregate;
+use App\Companies\UseCases\Commands\UpdateCompanyCommand;
+
+/**
+ * Update a company's editable details (UC-1-033). The delivery gates run upstream
+ * (auth.company membership + permission:companies.update) and the command whitelist
+ * already refused immutable/unknown fields, so the interactor simply drives the
+ * guardless Company aggregate and returns the refreshed read model for the response.
+ */
+class UpdateCompanyDetailsInteractor
+{
+    public function execute(Company $company, User $actor, UpdateCompanyCommand $command): Company
+    {
+        CompanyAggregate::retrieve($company->getKey())
+            ->updateDetails($command, (string) $actor->getKey())
+            ->persist();
+
+        return $company->refresh();
+    }
+}

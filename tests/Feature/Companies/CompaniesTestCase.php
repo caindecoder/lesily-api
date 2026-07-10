@@ -8,7 +8,10 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanySettings;
+use App\Companies\Events\CompanyDetailsUpdated;
+use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class CompaniesTestCase extends TestCase
 {
@@ -58,6 +61,58 @@ abstract class CompaniesTestCase extends TestCase
     protected function viewCompanyDetailsAsGuest(string $companyId): TestResponse
     {
         return $this->getJson('/api/v1/companies/'.$companyId);
+    }
+
+    /**
+     * A guest (no Sanctum session) submits a company-details update by URL id.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function updateCompanyDetailsAsGuest(string $companyId, array $payload): TestResponse
+    {
+        return $this->putJson('/api/v1/companies/'.$companyId, $payload);
+    }
+
+    /**
+     * An authenticated member submits a company-details update by URL id. The PUT
+     * route is param-authoritative (R8), so no X-Company-Context header is sent.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function updateCompanyDetails(User $user, string $companyId, array $payload): TestResponse
+    {
+        Sanctum::actingAs($user);
+
+        return $this->putJson('/api/v1/companies/'.$companyId, $payload);
+    }
+
+    /**
+     * The update was refused as shape-invalid — 422 with the §S21
+     * VALIDATION_FAILED envelope and an error on $field (MembershipsTestCase
+     * mirror; the whitelist guard names the offending key).
+     */
+    protected function assertValidationFailed(TestResponse $response, string $field): void
+    {
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
+        $response->assertJsonValidationErrors($field);
+    }
+
+    /**
+     * A rejected update left the company untouched — the name still reads
+     * $expectedName, the settings still hold the country defaults, and no update
+     * event escaped the guard (factory companies carry no genesis events, so the
+     * only events that could exist are the update's). The LD / amendment-R
+     * state-unchanged discipline for sad paths.
+     */
+    protected function assertCompanyUnchanged(Company $company, string $expectedName): void
+    {
+        $company->refresh();
+        $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
+
+        $this->assertSame($expectedName, $company->name);
+        $this->assertSame('Asia/Colombo', $settings->timezone);
+        $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
     }
 
     /**
@@ -126,5 +181,86 @@ abstract class CompaniesTestCase extends TestCase
                 'default_work_hours_per_day' => $settings->default_work_hours_per_day,
             ],
         ];
+    }
+
+    /**
+     * A name-only update recorded exactly one CompanyDetailsUpdated event (the
+     * settings event stays silent — conditional emission) and the name landed on
+     * the read model. The single total event proves nothing else was recorded.
+     */
+    protected function assertOnlyDetailsEventRecorded(Company $company, string $expectedName): void
+    {
+        $company->refresh();
+
+        $this->assertSame($expectedName, $company->name);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanyDetailsUpdated::class)
+            ->whereForCompany($company->getKey())->count());
+        $this->assertSame(1, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
+    }
+
+    /**
+     * A settings-only update recorded exactly one CompanySettingsUpdated event
+     * (the details event stays silent — conditional emission) and the timezone
+     * landed on the settings read model. The single total event proves nothing
+     * else was recorded.
+     */
+    protected function assertOnlySettingsEventRecorded(Company $company, string $expectedTimezone): void
+    {
+        $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
+
+        $this->assertSame($expectedTimezone, $settings->timezone);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanySettingsUpdated::class)
+            ->whereForCompany($company->getKey())->count());
+        $this->assertSame(1, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
+    }
+
+    /**
+     * A no-op update (the current values re-submitted) still recorded both events:
+     * the aggregate is guardless — it does not diff before recording (changeRole
+     * same-role precedent). One details event, one settings event, two in total.
+     */
+    protected function assertUpdateEventsRecorded(Company $company): void
+    {
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanyDetailsUpdated::class)
+            ->whereForCompany($company->getKey())->count());
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanySettingsUpdated::class)
+            ->whereForCompany($company->getKey())->count());
+        $this->assertSame(2, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
+    }
+
+    /**
+     * Both edits landed the event-sourced way: a CompanyDetailsUpdated and a
+     * CompanySettingsUpdated stored event, each scoped to the company and stamped
+     * with the acting user + an updatedAt, carry the new read-model values
+     * (amendment R — a direct read-model write would leave these events absent and
+     * be silently reverted on a projection replay). The float hours are covered by
+     * the read-model assertDatabaseHas (JSON float equality is avoided here).
+     */
+    protected function assertCompanyUpdateWasEventSourced(Company $company, string $updatedBy): void
+    {
+        $company->refresh();
+        $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
+
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanyDetailsUpdated::class)
+            ->where('event_properties->name', $company->name)
+            ->where('event_properties->updatedBy', $updatedBy)
+            ->whereNotNull('event_properties->updatedAt')
+            ->where('company_id', $company->getKey())
+            ->count());
+
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanySettingsUpdated::class)
+            ->where('event_properties->timezone', $settings->timezone)
+            ->where('event_properties->fiscalYearStartMonth', $settings->fiscal_year_start_month)
+            ->where('event_properties->workingDaysPerWeek', $settings->working_days_per_week)
+            ->where('event_properties->updatedBy', $updatedBy)
+            ->whereNotNull('event_properties->updatedAt')
+            ->where('company_id', $company->getKey())
+            ->count());
     }
 }

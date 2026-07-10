@@ -5,6 +5,7 @@ namespace App\Companies\Projectors;
 use App\Companies\Enums\CompanyStatus;
 use App\Companies\Events\CompanyCreated;
 use App\Companies\Events\CompanyTrialExpired;
+use App\Companies\Events\CompanyDetailsUpdated;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Companies\Entities\Company as CompanyReadModel;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
@@ -43,5 +44,11 @@ class CompanyProjector extends Projector
     {
         CompanyReadModel::query()->findOrFail($event->aggregateRootUuid())
             ->update(['status' => CompanyStatus::TrialExpired]);
+    }
+
+    public function onCompanyDetailsUpdated(CompanyDetailsUpdated $event): void
+    {
+        CompanyReadModel::query()->whereKey($event->aggregateRootUuid())
+            ->update(['name' => $event->name]);
     }
 }
