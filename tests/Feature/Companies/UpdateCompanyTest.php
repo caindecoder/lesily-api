@@ -75,4 +75,39 @@ class UpdateCompanyTest extends CompaniesTestCase
             'unknown key' => [['nonsense' => 'x'], 'nonsense'],
         ];
     }
+
+    // Sad — an editable field carrying an out-of-range value is refused: the name
+    // has a length cap, the timezone must be a real IANA zone, and the fiscal
+    // month / working days / work hours sit within their domain bounds.
+    #[Test]
+    #[DataProvider('provideInvalidEditableFields')]
+    public function when_editable_field_is_invalid_then_update_rejected(array $payload, string $field): void
+    {
+        // Given the owner of a company
+        $company = Company::factory()->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they submit an out-of-range value for an editable field
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), $payload);
+
+        // Then the update is rejected with an error naming that field
+        $this->assertValidationFailed($response, $field);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function provideInvalidEditableFields(): array
+    {
+        return [
+            'name too long' => [['name' => str_repeat('a', 256)], 'name'],
+            'timezone not real' => [['timezone' => 'Mars/Phobos'], 'timezone'],
+            'fiscal month below one' => [['fiscalYearStartMonth' => 0], 'fiscalYearStartMonth'],
+            'fiscal month above twelve' => [['fiscalYearStartMonth' => 13], 'fiscalYearStartMonth'],
+            'working days below one' => [['workingDaysPerWeek' => 0], 'workingDaysPerWeek'],
+            'working days above seven' => [['workingDaysPerWeek' => 8], 'workingDaysPerWeek'],
+            'work hours below zero' => [['defaultWorkHoursPerDay' => -1], 'defaultWorkHoursPerDay'],
+            'work hours above twenty four' => [['defaultWorkHoursPerDay' => 25], 'defaultWorkHoursPerDay'],
+        ];
+    }
 }

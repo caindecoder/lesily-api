@@ -54,12 +54,16 @@ class UpdateCompanyCommand extends Data
      */
     public static function rules(ValidationContext $context): array
     {
+        // sometimes: a partial update validates only the keys it carries. required:
+        // a present key may not be null/empty (the settings columns are non-nullable
+        // and a name cannot be blanked). The domain bounds mirror the fiscal-month
+        // (1-12), week (1-7) and day-hours (0-24) ranges the settings columns model.
         return [
-            'name' => ['sometimes', 'string'],
-            'timezone' => ['sometimes', 'string'],
-            'fiscalYearStartMonth' => ['sometimes', 'integer'],
-            'workingDaysPerWeek' => ['sometimes', 'integer'],
-            'defaultWorkHoursPerDay' => ['sometimes', 'numeric'],
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'timezone' => ['sometimes', 'required', 'timezone'],
+            'fiscalYearStartMonth' => ['sometimes', 'required', 'integer', 'between:1,12'],
+            'workingDaysPerWeek' => ['sometimes', 'required', 'integer', 'between:1,7'],
+            'defaultWorkHoursPerDay' => ['sometimes', 'required', 'numeric', 'between:0,24'],
         ];
     }
 }
