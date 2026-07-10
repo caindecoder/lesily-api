@@ -211,4 +211,21 @@ class UpdateCompanyTest extends CompaniesTestCase
         $response->assertOk();
         $this->assertOnlyDetailsEventRecorded($company, 'New Co');
     }
+
+    // Edge — a settings-only update records the settings event and nothing else:
+    // the details event fires only when a name is present (conditional emission).
+    #[Test]
+    public function when_only_settings_submitted_then_only_the_settings_event_is_recorded(): void
+    {
+        // Given the owner of a company whose timezone defaults to Asia/Colombo
+        $company = Company::factory()->withSettings()->named('Steady Co')->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they submit only a new timezone
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['timezone' => 'Asia/Singapore']);
+
+        // Then only the settings event is recorded and the timezone is updated
+        $response->assertOk();
+        $this->assertOnlySettingsEventRecorded($company, 'Asia/Singapore');
+    }
 }

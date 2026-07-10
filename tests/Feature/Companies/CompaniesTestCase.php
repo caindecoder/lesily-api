@@ -9,6 +9,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanySettings;
 use App\Companies\Events\CompanyDetailsUpdated;
+use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -194,6 +195,23 @@ abstract class CompaniesTestCase extends TestCase
         $this->assertSame($expectedName, $company->name);
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', CompanyDetailsUpdated::class)
+            ->whereForCompany($company->getKey())->count());
+        $this->assertSame(1, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
+    }
+
+    /**
+     * A settings-only update recorded exactly one CompanySettingsUpdated event
+     * (the details event stays silent — conditional emission) and the timezone
+     * landed on the settings read model. The single total event proves nothing
+     * else was recorded.
+     */
+    protected function assertOnlySettingsEventRecorded(Company $company, string $expectedTimezone): void
+    {
+        $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
+
+        $this->assertSame($expectedTimezone, $settings->timezone);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanySettingsUpdated::class)
             ->whereForCompany($company->getKey())->count());
         $this->assertSame(1, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
     }

@@ -11,6 +11,7 @@ use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\Events\CompanyTrialExpired;
 use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsCreated;
+use App\Companies\Events\CompanySettingsUpdated;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use App\Companies\UseCases\Commands\UpdateCompanyCommand;
 use App\Companies\Exceptions\CompanyAlreadyExistsException;
@@ -69,7 +70,26 @@ class Company extends AggregateRoot
             ));
         }
 
+        if ($this->hasSettingsChanges($command)) {
+            $this->recordThat(new CompanySettingsUpdated(
+                timezone: $command->timezone,
+                fiscalYearStartMonth: $command->fiscalYearStartMonth,
+                workingDaysPerWeek: $command->workingDaysPerWeek,
+                defaultWorkHoursPerDay: $command->defaultWorkHoursPerDay,
+                updatedBy: $updatedBy,
+                updatedAt: CarbonImmutable::now(),
+            ));
+        }
+
         return $this;
+    }
+
+    private function hasSettingsChanges(UpdateCompanyCommand $command): bool
+    {
+        return $command->timezone !== null
+            || $command->fiscalYearStartMonth !== null
+            || $command->workingDaysPerWeek !== null
+            || $command->defaultWorkHoursPerDay !== null;
     }
 
     public function trialExpire(): static
