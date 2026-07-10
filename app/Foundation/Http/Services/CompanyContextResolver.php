@@ -21,7 +21,7 @@ class CompanyContextResolver
     {
         $companyKey = $request->route('companyId') ?? $request->header('X-Company-Context');
 
-        if ($companyKey === null || $companyKey === '') {
+        if (! is_string($companyKey) || $companyKey === '') {
             throw new CompanyAccessDeniedException;
         }
 
