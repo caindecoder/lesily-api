@@ -69,4 +69,16 @@ abstract class CompaniesTestCase extends TestCase
         $response->assertStatus(401);
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
     }
+
+    /**
+     * The requested resource does not exist — 404 with the §S21 envelope and no
+     * existence leak (AuthorizeCompanyTest mirror; module bases are independent).
+     */
+    protected function assertResourceNotFound(TestResponse $response): void
+    {
+        $response->assertNotFound();
+        $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
+        $response->assertJsonPath('message', 'The requested resource was not found.');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
 }

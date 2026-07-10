@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies;
 
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
@@ -59,5 +60,34 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
 
         // Then company access is denied
         $this->assertCompanyAccessDenied($response);
+    }
+
+    // Sad — an unknown URL company id is a plain 404 (resolver findOrFail on the
+    // param): existence is not leaked, and a valid header cannot rescue a bad URL.
+    #[Test]
+    #[DataProvider('provideUnknownCompanyIds')]
+    public function when_requested_company_is_unknown_then_resource_not_found(string $companyId): void
+    {
+        // Given a member of a real company
+        $company = Company::factory()->create();
+        $member = $this->aCompanyMember($company);
+
+        // When they request details for an unknown company id under their own context
+        $response = $this->viewCompanyDetails($member, $companyId, context: $company->getKey());
+
+        // Then the resource is not found
+        $this->assertResourceNotFound($response);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideUnknownCompanyIds(): array
+    {
+        return [
+            'nonexistent uuid' => ['0193abcd-0000-7000-8000-000000000000'],
+            'garbage string' => ['not-a-company-id'],
+            'numeric value' => ['12345'],
+        ];
     }
 }
