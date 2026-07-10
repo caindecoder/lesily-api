@@ -143,4 +143,37 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
         $response->assertOk();
         $response->assertJsonPath('data.id', $company->getKey());
     }
+
+    // Happy — every seeded role except manager holds companies.view (s117
+    // matrix/seed-authoritative): the DP locks the grant set in step with the
+    // seed (owner is exercised by the exact-contract test).
+    #[Test]
+    #[DataProvider('provideViewingRoles')]
+    public function when_role_holds_companies_view_then_company_details_returned(string $roleCode): void
+    {
+        // Given a member under a companies.view-holding role
+        $company = Company::factory()->withSettings()->create();
+        $member = $this->aCompanyMember($company, $roleCode);
+
+        // When they request their company's details
+        $response = $this->viewCompanyDetails($member, $company->getKey());
+
+        // Then the details are returned
+        $response->assertOk();
+        $response->assertJsonPath('data.id', $company->getKey());
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideViewingRoles(): array
+    {
+        return [
+            'admin' => ['admin'],
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'auditor' => ['auditor'],
+            'employee' => ['employee'],
+        ];
+    }
 }
