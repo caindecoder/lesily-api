@@ -3,7 +3,9 @@
 namespace App\Companies\Entities;
 
 use Illuminate\Database\Eloquent\Model;
+use Database\Factories\CompanySettingsFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
  * Per-tenant company settings read model (ERD-1-02 `company_settings`), seeded
@@ -11,6 +13,9 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
  */
 class CompanySettings extends Model
 {
+    /** @use HasFactory<CompanySettingsFactory> */
+    use HasFactory;
+
     use HasUuids;
 
     protected $table = 'company_settings';
@@ -31,4 +36,9 @@ class CompanySettings extends Model
         'working_days_per_week' => 'integer',
         'default_work_hours_per_day' => 'float',
     ];
+
+    protected static function newFactory(): CompanySettingsFactory
+    {
+        return CompanySettingsFactory::new();
+    }
 }

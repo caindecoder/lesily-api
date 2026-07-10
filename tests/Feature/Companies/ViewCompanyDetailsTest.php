@@ -107,4 +107,22 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
         // Then the read is refused for the missing companies.view grant
         $this->assertRoleInsufficient($response, 'companies.view');
     }
+
+    // Edge — a stale switcher context (the pre-R8 header mechanism) accompanies
+    // a param request: the URL company wins and the header is ignored.
+    #[Test]
+    public function when_company_context_disagrees_with_requested_company_then_requested_company_returned(): void
+    {
+        // Given a member of Company B only, still carrying Company A's context header
+        $companyA = Company::factory()->create();
+        $companyB = Company::factory()->withSettings()->create();
+        $member = $this->aCompanyMember($companyB);
+
+        // When they request Company B's details under Company A's stale context
+        $response = $this->viewCompanyDetails($member, $companyB->getKey(), context: $companyA->getKey());
+
+        // Then Company B's details are returned
+        $response->assertOk();
+        $response->assertJsonPath('data.id', $companyB->getKey());
+    }
 }

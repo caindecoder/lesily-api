@@ -2,6 +2,7 @@
 
 namespace App\Companies\IO\Http\Controllers;
 
+use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -11,8 +12,12 @@ use Illuminate\Http\JsonResponse;
  */
 class CompaniesController
 {
-    public function show(): JsonResponse
+    public function show(Request $request): JsonResponse
     {
-        return response()->json();
+        return response()->json([
+            'data' => [
+                'id' => $request->company()->getKey(),
+            ],
+        ]);
     }
 }
