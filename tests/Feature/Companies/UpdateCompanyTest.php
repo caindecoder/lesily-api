@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies;
 
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -265,5 +266,76 @@ class UpdateCompanyTest extends CompaniesTestCase
         // Then the request succeeds and nothing changed
         $response->assertOk();
         $this->assertCompanyUnchanged($company, 'Idle Co');
+    }
+
+    // Happy — the update is permitted for owner and admin (companies.update):
+    // both roles land a 200 with the new name (the denied side is covered above).
+    #[Test]
+    #[DataProvider('provideUpdatingRoles')]
+    public function when_authorized_role_updates_company_then_update_succeeds(string $roleCode): void
+    {
+        // Given a member under a role that holds companies.update
+        $company = Company::factory()->withSettings()->named('Before')->create();
+        $member = $this->aCompanyMember($company, $roleCode);
+
+        // When they update the company name
+        $response = $this->updateCompanyDetails($member, $company->getKey(), ['name' => 'After']);
+
+        // Then the update succeeds and the new name is returned
+        $response->assertOk();
+        $response->assertJsonPath('data.name', 'After');
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideUpdatingRoles(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+        ];
+    }
+
+    // Happy — the owner edits the name and all four settings in one request: the
+    // updated resource is returned, both read models reflect the new values, and
+    // both edits are stored the event-sourced way (amendment R — updatedBy /
+    // updatedAt / the changed fields), locking the exact wire shape (B7 teeth).
+    #[Test]
+    public function when_owner_updates_name_and_settings_then_company_is_updated(): void
+    {
+        // Given the owner of a Pro company mid-trial with the default LK settings
+        $company = Company::factory()
+            ->named('Contoso')
+            ->onPlan(BillingPlan::Pro)
+            ->onTrialUntil(now()->addDays(12)->toImmutable())
+            ->withSettings()
+            ->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they update the name and every editable setting
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), [
+            'name' => 'Contoso (Pvt) Ltd',
+            'timezone' => 'Asia/Singapore',
+            'fiscalYearStartMonth' => 4,
+            'workingDaysPerWeek' => 6,
+            'defaultWorkHoursPerDay' => 7.5,
+        ]);
+
+        // Then the updated resource is returned and both models + streams reflect it
+        $response->assertOk();
+        $response->assertExactJson(['data' => $this->expectedCompanyDetails($company)]);
+        $this->assertDatabaseHas('companies', [
+            'id' => $company->getKey(),
+            'name' => 'Contoso (Pvt) Ltd',
+        ]);
+        $this->assertDatabaseHas('company_settings', [
+            'company_id' => $company->getKey(),
+            'timezone' => 'Asia/Singapore',
+            'fiscal_year_start_month' => 4,
+            'working_days_per_week' => 6,
+            'default_work_hours_per_day' => 7.5,
+        ]);
+        $this->assertCompanyUpdateWasEventSourced($company, $owner->getKey());
     }
 }

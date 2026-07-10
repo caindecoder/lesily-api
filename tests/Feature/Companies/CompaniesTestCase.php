@@ -231,4 +231,36 @@ abstract class CompaniesTestCase extends TestCase
             ->whereForCompany($company->getKey())->count());
         $this->assertSame(2, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
     }
+
+    /**
+     * Both edits landed the event-sourced way: a CompanyDetailsUpdated and a
+     * CompanySettingsUpdated stored event, each scoped to the company and stamped
+     * with the acting user + an updatedAt, carry the new read-model values
+     * (amendment R — a direct read-model write would leave these events absent and
+     * be silently reverted on a projection replay). The float hours are covered by
+     * the read-model assertDatabaseHas (JSON float equality is avoided here).
+     */
+    protected function assertCompanyUpdateWasEventSourced(Company $company, string $updatedBy): void
+    {
+        $company->refresh();
+        $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
+
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanyDetailsUpdated::class)
+            ->where('event_properties->name', $company->name)
+            ->where('event_properties->updatedBy', $updatedBy)
+            ->whereNotNull('event_properties->updatedAt')
+            ->where('company_id', $company->getKey())
+            ->count());
+
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanySettingsUpdated::class)
+            ->where('event_properties->timezone', $settings->timezone)
+            ->where('event_properties->fiscalYearStartMonth', $settings->fiscal_year_start_month)
+            ->where('event_properties->workingDaysPerWeek', $settings->working_days_per_week)
+            ->where('event_properties->updatedBy', $updatedBy)
+            ->whereNotNull('event_properties->updatedAt')
+            ->where('company_id', $company->getKey())
+            ->count());
+    }
 }
