@@ -41,4 +41,23 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
         // Then the request is rejected as unauthenticated
         $this->assertUnauthenticated($response);
     }
+
+    // Sad — R8's teeth: the URL names a company the member does not belong to. A
+    // param-blind resolver would honor the X-Company-Context header and answer for
+    // the WRONG company; the param must be authoritative, with the membership
+    // check running against the URL company.
+    #[Test]
+    public function when_member_requests_another_companys_details_then_company_access_denied(): void
+    {
+        // Given a member of Company A holding a foreign Company B's id
+        $companyA = Company::factory()->create();
+        $companyB = Company::factory()->create();
+        $member = $this->aCompanyMember($companyA);
+
+        // When they request Company B's details under their own company context
+        $response = $this->viewCompanyDetails($member, $companyB->getKey(), context: $companyA->getKey());
+
+        // Then company access is denied
+        $this->assertCompanyAccessDenied($response);
+    }
 }

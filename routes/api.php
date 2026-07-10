@@ -170,7 +170,7 @@ Route::delete('/v1/me/default-company', [DefaultCompanyController::class, 'destr
 // (slice-companies R8). Middleware stack builds RED-first across the Task-5
 // cycles toward api-conventions §7: auth → company-scope → permission.
 Route::get('/v1/companies/{companyId}', [CompaniesController::class, 'show'])
-    ->middleware('auth:sanctum');
+    ->middleware(['auth:sanctum', 'auth.company']);
 
 // Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
 // a pending invitation is created and the invite email dispatched inline. auth:sanctum
