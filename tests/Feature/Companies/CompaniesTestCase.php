@@ -61,6 +61,16 @@ abstract class CompaniesTestCase extends TestCase
     }
 
     /**
+     * A guest (no Sanctum session) submits a company-details update by URL id.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function updateCompanyDetailsAsGuest(string $companyId, array $payload): TestResponse
+    {
+        return $this->putJson('/api/v1/companies/'.$companyId, $payload);
+    }
+
+    /**
      * The request was rejected as unauthenticated — 401 with the §S21
      * UNAUTHENTICATED envelope (AuthTestCase mirror; base-level consolidation
      * is a flagged future refactor).

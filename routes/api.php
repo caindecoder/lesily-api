@@ -174,6 +174,15 @@ Route::delete('/v1/me/default-company', [DefaultCompanyController::class, 'destr
 Route::get('/v1/companies/{companyId}', [CompaniesController::class, 'show'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:companies.view']);
 
+// Update company details (UC-1-033) — Owner/Admin edit name + settings through
+// the event-sourced Company aggregate (CompanyDetailsUpdated + CompanySettingsUpdated).
+// Same param-first resolver + company-scope gate as the view; permission:companies.update
+// is owner/admin only. Immutable fields (br/epf/country) are refused by the command
+// whitelist (422). No idempotency-key — naturally idempotent, and the sibling company/
+// membership writes omit it (s122 ruling). No throttle (tiered limits — OQ-1-098).
+Route::put('/v1/companies/{companyId}', [CompaniesController::class, 'update'])
+    ->middleware('auth:sanctum');
+
 // Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
 // a pending invitation is created and the invite email dispatched inline. auth:sanctum
 // -> auth.company -> permission:users.invite (D4 — seeded to owner/admin/hr_officer)
