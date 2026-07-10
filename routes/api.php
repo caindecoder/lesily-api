@@ -181,7 +181,7 @@ Route::get('/v1/companies/{companyId}', [CompaniesController::class, 'show'])
 // whitelist (422). No idempotency-key — naturally idempotent, and the sibling company/
 // membership writes omit it (s122 ruling). No throttle (tiered limits — OQ-1-098).
 Route::put('/v1/companies/{companyId}', [CompaniesController::class, 'update'])
-    ->middleware('auth:sanctum');
+    ->middleware(['auth:sanctum', 'auth.company']);
 
 // Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
 // a pending invitation is created and the invite email dispatched inline. auth:sanctum

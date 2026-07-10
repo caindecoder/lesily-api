@@ -128,4 +128,22 @@ class UpdateCompanyTest extends CompaniesTestCase
         $this->assertValidationFailed($response, 'name');
         $this->assertCompanyUnchanged($company, 'Contoso');
     }
+
+    // Sad — R8 teeth on the write route: the URL names a company the member does
+    // not belong to. auth.company resolves the URL company (param-first) and the
+    // membership check runs against it, so a foreign company is denied.
+    #[Test]
+    public function when_member_updates_another_companys_details_then_company_access_denied(): void
+    {
+        // Given a member of Company A holding a foreign Company B's id
+        $companyA = Company::factory()->withSettings()->create();
+        $companyB = Company::factory()->withSettings()->create();
+        $member = $this->aCompanyMember($companyA, 'owner');
+
+        // When they submit an update against Company B
+        $response = $this->updateCompanyDetails($member, $companyB->getKey(), ['name' => 'New Name']);
+
+        // Then company access is denied
+        $this->assertCompanyAccessDenied($response);
+    }
 }
