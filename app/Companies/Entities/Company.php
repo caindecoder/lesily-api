@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\RolesPermissions\Entities\Role;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -76,6 +77,17 @@ class Company extends Model
     public function addons(): HasMany
     {
         return $this->hasMany(CompanyAddon::class, 'company_id');
+    }
+
+    /**
+     * The company's settings row — created with the company at genesis
+     * (CompanySettingsProjector), one per company (unique company_id).
+     *
+     * @return HasOne<CompanySettings, $this>
+     */
+    public function settings(): HasOne
+    {
+        return $this->hasOne(CompanySettings::class, 'company_id');
     }
 
     /**

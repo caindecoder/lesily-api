@@ -3,9 +3,11 @@
 namespace Database\Factories;
 
 use App\Models\User;
+use DateTimeInterface;
 use App\Companies\Entities\Company;
 use App\Companies\Enums\CompanyStatus;
 use App\Foundation\Billing\Enums\Addon;
+use App\Companies\Entities\CompanySettings;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -59,6 +61,18 @@ class CompanyFactory extends Factory
     }
 
     /**
+     * A company mid-trial with a pinned expiry — gives trial_ends_at a real
+     * value so its wire serialization has teeth (UC-1-032 exact contract).
+     */
+    public function onTrialUntil(DateTimeInterface $endsAt): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => CompanyStatus::Trial,
+            'trial_ends_at' => $endsAt,
+        ]);
+    }
+
+    /**
      * A company that has not chosen a plan yet (e.g. on trial) — the billing gate
      * must treat the absent plan as granting no plan-tier features.
      */
@@ -73,6 +87,19 @@ class CompanyFactory extends Factory
     {
         return $this->afterCreating(function (Company $company) use ($addon): void {
             $company->addons()->create(['addon' => $addon]);
+        });
+    }
+
+    /**
+     * A company with its settings row — production's genesis invariant (every
+     * company gets one, seeded from CountryDefaults by CompanySettingsProjector).
+     * Required by any fixture whose response renders the settings sub-object
+     * (UC-1-032 CompanyResource).
+     */
+    public function withSettings(): static
+    {
+        return $this->afterCreating(function (Company $company): void {
+            CompanySettings::factory()->create(['company_id' => $company->getKey()]);
         });
     }
 

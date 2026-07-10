@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
+use App\Companies\IO\Http\Controllers\CompaniesController;
 use App\Foundation\Auth\IO\Http\Controllers\LoginController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
@@ -164,6 +165,14 @@ Route::put('/v1/me/default-company', [DefaultCompanyController::class, 'update']
     ->middleware('auth:sanctum');
 Route::delete('/v1/me/default-company', [DefaultCompanyController::class, 'destroy'])
     ->middleware('auth:sanctum');
+
+// View company details (UC-1-032) — the first route-param company endpoint:
+// the resolver reads {companyId} first, header fallback (slice-companies R8;
+// the URL is authoritative here). Repository-direct read, no event. Gate order
+// per api-conventions §7: auth → company-scope → permission (companies.view is
+// seeded to every role except manager). No throttle (tiered limits — OQ-1-098).
+Route::get('/v1/companies/{companyId}', [CompaniesController::class, 'show'])
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:companies.view']);
 
 // Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
 // a pending invitation is created and the invite email dispatched inline. auth:sanctum
