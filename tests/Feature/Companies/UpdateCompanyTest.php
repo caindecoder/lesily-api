@@ -268,6 +268,52 @@ class UpdateCompanyTest extends CompaniesTestCase
         $this->assertCompanyUnchanged($company, 'Idle Co');
     }
 
+    // Edge — a single-setting update writes only the submitted field and preserves
+    // the rest (the projector filters to non-null keys): the fiscal year moves to
+    // its upper bound while timezone, working days and work hours keep their values.
+    #[Test]
+    public function when_one_setting_is_updated_then_the_others_are_preserved(): void
+    {
+        // Given the owner of a company on the LK defaults
+        $company = Company::factory()->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they change only the fiscal year start month (to the upper bound)
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['fiscalYearStartMonth' => 12]);
+
+        // Then the fiscal month changes and every other setting is preserved
+        $response->assertOk();
+        $this->assertDatabaseHas('company_settings', [
+            'company_id' => $company->getKey(),
+            'fiscal_year_start_month' => 12,
+            'timezone' => 'Asia/Colombo',
+            'working_days_per_week' => 5,
+            'default_work_hours_per_day' => 8.0,
+        ]);
+    }
+
+    // Edge — zero is a valid work-hours value (0-24), distinct from "absent": the
+    // strict null check (not a truthy one) records the settings event and writes
+    // 0.0, rather than treating zero as no change.
+    #[Test]
+    public function when_work_hours_are_set_to_zero_then_the_update_is_recorded(): void
+    {
+        // Given the owner of a company on the LK defaults (8 work hours)
+        $company = Company::factory()->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they set the default work hours to zero
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['defaultWorkHoursPerDay' => 0]);
+
+        // Then the settings event fires (timezone preserved) and the read model reads zero
+        $response->assertOk();
+        $this->assertOnlySettingsEventRecorded($company, 'Asia/Colombo');
+        $this->assertDatabaseHas('company_settings', [
+            'company_id' => $company->getKey(),
+            'default_work_hours_per_day' => 0,
+        ]);
+    }
+
     // Happy — the update is permitted for owner and admin (companies.update):
     // both roles land a 200 with the new name (the denied side is covered above).
     #[Test]

@@ -18,7 +18,7 @@ class UpdateCompanyDetailsInteractor
     public function execute(Company $company, User $actor, UpdateCompanyCommand $command): Company
     {
         CompanyAggregate::retrieve($company->getKey())
-            ->updateDetails($command, $actor->getKey())
+            ->updateDetails($command, (string) $actor->getKey())
             ->persist();
 
         return $company->refresh();
