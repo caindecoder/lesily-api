@@ -215,4 +215,20 @@ abstract class CompaniesTestCase extends TestCase
             ->whereForCompany($company->getKey())->count());
         $this->assertSame(1, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
     }
+
+    /**
+     * A no-op update (the current values re-submitted) still recorded both events:
+     * the aggregate is guardless — it does not diff before recording (changeRole
+     * same-role precedent). One details event, one settings event, two in total.
+     */
+    protected function assertUpdateEventsRecorded(Company $company): void
+    {
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanyDetailsUpdated::class)
+            ->whereForCompany($company->getKey())->count());
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanySettingsUpdated::class)
+            ->whereForCompany($company->getKey())->count());
+        $this->assertSame(2, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
+    }
 }

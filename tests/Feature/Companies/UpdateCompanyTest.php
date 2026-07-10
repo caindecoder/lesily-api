@@ -228,4 +228,42 @@ class UpdateCompanyTest extends CompaniesTestCase
         $response->assertOk();
         $this->assertOnlySettingsEventRecorded($company, 'Asia/Singapore');
     }
+
+    // Edge — the aggregate is guardless: re-submitting the current values still
+    // records both events (no diff-check — the audit trail reflects the action,
+    // changeRole same-role precedent).
+    #[Test]
+    public function when_submitted_values_match_current_then_update_is_still_recorded(): void
+    {
+        // Given the owner of a company with the default LK settings
+        $company = Company::factory()->withSettings()->named('Same Co')->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they re-submit the current name and timezone unchanged
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), [
+            'name' => 'Same Co',
+            'timezone' => 'Asia/Colombo',
+        ]);
+
+        // Then both events are still recorded
+        $response->assertOk();
+        $this->assertUpdateEventsRecorded($company);
+    }
+
+    // Edge — an empty payload is a no-op: nothing is submitted, so no event fires
+    // and the company is untouched (Chamil's s122 ruling — 200, not a 422).
+    #[Test]
+    public function when_no_fields_submitted_then_update_is_a_no_op(): void
+    {
+        // Given the owner of a company named Idle Co
+        $company = Company::factory()->withSettings()->named('Idle Co')->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they submit an empty update
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), []);
+
+        // Then the request succeeds and nothing changed
+        $response->assertOk();
+        $this->assertCompanyUnchanged($company, 'Idle Co');
+    }
 }
