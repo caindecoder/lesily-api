@@ -110,4 +110,22 @@ class UpdateCompanyTest extends CompaniesTestCase
             'work hours above twenty four' => [['defaultWorkHoursPerDay' => 25], 'defaultWorkHoursPerDay'],
         ];
     }
+
+    // Sad — the minimal guarantee (UC-1-033): a rejected update changes nothing.
+    // A blank company name is refused and Contoso keeps its name, its settings and
+    // an empty event stream (no partial write escaped the guard).
+    #[Test]
+    public function when_editable_field_is_invalid_then_company_is_unchanged(): void
+    {
+        // Given the owner of a company named Contoso
+        $company = Company::factory()->withSettings()->named('Contoso')->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they submit a blank company name
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['name' => '']);
+
+        // Then the update is rejected and the company is untouched
+        $this->assertValidationFailed($response, 'name');
+        $this->assertCompanyUnchanged($company, 'Contoso');
+    }
 }

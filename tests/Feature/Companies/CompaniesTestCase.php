@@ -9,6 +9,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanySettings;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class CompaniesTestCase extends TestCase
 {
@@ -93,6 +94,23 @@ abstract class CompaniesTestCase extends TestCase
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
         $response->assertJsonValidationErrors($field);
+    }
+
+    /**
+     * A rejected update left the company untouched — the name still reads
+     * $expectedName, the settings still hold the country defaults, and no update
+     * event escaped the guard (factory companies carry no genesis events, so the
+     * only events that could exist are the update's). The LD / amendment-R
+     * state-unchanged discipline for sad paths.
+     */
+    protected function assertCompanyUnchanged(Company $company, string $expectedName): void
+    {
+        $company->refresh();
+        $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
+
+        $this->assertSame($expectedName, $company->name);
+        $this->assertSame('Asia/Colombo', $settings->timezone);
+        $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
     }
 
     /**
