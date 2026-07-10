@@ -162,4 +162,35 @@ class UpdateCompanyTest extends CompaniesTestCase
         // Then the resource is not found
         $this->assertResourceNotFound($response);
     }
+
+    // Sad — the update is owner/admin only (companies.update seeded to those two):
+    // every other seeded role is refused with the missing grant named.
+    #[Test]
+    #[DataProvider('provideNonUpdatingRoles')]
+    public function when_role_lacks_companies_update_then_update_forbidden(string $roleCode): void
+    {
+        // Given a member under a role without companies.update
+        $company = Company::factory()->withSettings()->create();
+        $member = $this->aCompanyMember($company, $roleCode);
+
+        // When they submit an update
+        $response = $this->updateCompanyDetails($member, $company->getKey(), ['name' => 'New Name']);
+
+        // Then the update is refused for the missing companies.update grant
+        $this->assertRoleInsufficient($response, 'companies.update');
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideNonUpdatingRoles(): array
+    {
+        return [
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'auditor' => ['auditor'],
+            'employee' => ['employee'],
+            'manager' => ['manager'],
+        ];
+    }
 }
