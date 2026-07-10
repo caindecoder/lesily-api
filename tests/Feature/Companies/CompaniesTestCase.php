@@ -81,4 +81,16 @@ abstract class CompaniesTestCase extends TestCase
         $response->assertJsonPath('message', 'The requested resource was not found.');
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
+
+    /**
+     * The member's role lacks the required permission — 403 ROLE_INSUFFICIENT
+     * naming the missing grant (TwoGateCheckTest::assertPermissionDenied mirror).
+     */
+    protected function assertRoleInsufficient(TestResponse $response, string $permission): void
+    {
+        $response->assertForbidden();
+        $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
+        $response->assertJsonPath('required_permission', $permission);
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
 }

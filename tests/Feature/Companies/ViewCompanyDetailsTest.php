@@ -90,4 +90,21 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
             'numeric value' => ['12345'],
         ];
     }
+
+    // Sad — manager is the ONLY seeded role without companies.view (s117
+    // seed-authoritative reconciliation): a manager member is refused with the
+    // missing grant named.
+    #[Test]
+    public function when_manager_requests_company_details_then_role_insufficient(): void
+    {
+        // Given a manager-role member of a company
+        $company = Company::factory()->create();
+        $manager = $this->aCompanyMember($company, 'manager');
+
+        // When they request their own company's details
+        $response = $this->viewCompanyDetails($manager, $company->getKey());
+
+        // Then the read is refused for the missing companies.view grant
+        $this->assertRoleInsufficient($response, 'companies.view');
+    }
 }

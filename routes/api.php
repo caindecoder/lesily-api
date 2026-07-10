@@ -166,11 +166,13 @@ Route::put('/v1/me/default-company', [DefaultCompanyController::class, 'update']
 Route::delete('/v1/me/default-company', [DefaultCompanyController::class, 'destroy'])
     ->middleware('auth:sanctum');
 
-// View company details (UC-1-032) — the first route-param company endpoint
-// (slice-companies R8). Middleware stack builds RED-first across the Task-5
-// cycles toward api-conventions §7: auth → company-scope → permission.
+// View company details (UC-1-032) — the first route-param company endpoint:
+// the resolver reads {companyId} first, header fallback (slice-companies R8;
+// the URL is authoritative here). Repository-direct read, no event. Gate order
+// per api-conventions §7: auth → company-scope → permission (companies.view is
+// seeded to every role except manager). No throttle (tiered limits — OQ-1-098).
 Route::get('/v1/companies/{companyId}', [CompaniesController::class, 'show'])
-    ->middleware(['auth:sanctum', 'auth.company']);
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:companies.view']);
 
 // Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
 // a pending invitation is created and the invite email dispatched inline. auth:sanctum
