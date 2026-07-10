@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
+use App\Companies\IO\Http\Controllers\CompaniesController;
 use App\Foundation\Auth\IO\Http\Controllers\LoginController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
@@ -163,6 +164,12 @@ Route::put('/v1/me/password', ChangePasswordController::class)
 Route::put('/v1/me/default-company', [DefaultCompanyController::class, 'update'])
     ->middleware('auth:sanctum');
 Route::delete('/v1/me/default-company', [DefaultCompanyController::class, 'destroy'])
+    ->middleware('auth:sanctum');
+
+// View company details (UC-1-032) — the first route-param company endpoint
+// (slice-companies R8). Middleware stack builds RED-first across the Task-5
+// cycles toward api-conventions §7: auth → company-scope → permission.
+Route::get('/v1/companies/{companyId}', [CompaniesController::class, 'show'])
     ->middleware('auth:sanctum');
 
 // Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
