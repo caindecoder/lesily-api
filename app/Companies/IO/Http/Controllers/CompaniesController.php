@@ -5,6 +5,7 @@ namespace App\Companies\IO\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Companies\IO\Http\Resources\CompanyResource;
+use App\Companies\UseCases\Commands\UpdateCompanyCommand;
 
 /**
  * The company resource — details view (UC-1-032) and update (UC-1-033).
@@ -21,6 +22,8 @@ class CompaniesController
 
     public function update(Request $request, string $companyId): JsonResponse
     {
+        UpdateCompanyCommand::fromRequest($request);
+
         return response()->json(['data' => []]);
     }
 }

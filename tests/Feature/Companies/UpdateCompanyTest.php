@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies;
 
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
@@ -40,5 +41,38 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the request is rejected as unauthenticated
         $this->assertUnauthenticated($response);
+    }
+
+    // Sad — the crux immutability guard: br_number, epf_number, country and the
+    // other non-editable columns are refused by the command whitelist before any
+    // write. Any key outside the editable set — including an unknown one — is a 422.
+    #[Test]
+    #[DataProvider('provideImmutableFields')]
+    public function when_immutable_field_submitted_then_update_rejected(array $payload, string $field): void
+    {
+        // Given the owner of a company
+        $company = Company::factory()->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they submit an update touching a non-editable field
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), $payload);
+
+        // Then the update is rejected with an error naming that field
+        $this->assertValidationFailed($response, $field);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function provideImmutableFields(): array
+    {
+        return [
+            'br_number' => [['br_number' => 'PV-99999999'], 'br_number'],
+            'epf_number' => [['epf_number' => 'EPF-9999999'], 'epf_number'],
+            'country' => [['country' => 'IN'], 'country'],
+            'current_billing_plan' => [['current_billing_plan' => 'pro'], 'current_billing_plan'],
+            'owner_id' => [['owner_id' => '0193abcd-0000-7000-8000-000000000000'], 'owner_id'],
+            'unknown key' => [['nonsense' => 'x'], 'nonsense'],
+        ];
     }
 }

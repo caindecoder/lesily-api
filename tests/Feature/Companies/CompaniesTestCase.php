@@ -71,6 +71,31 @@ abstract class CompaniesTestCase extends TestCase
     }
 
     /**
+     * An authenticated member submits a company-details update by URL id. The PUT
+     * route is param-authoritative (R8), so no X-Company-Context header is sent.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function updateCompanyDetails(User $user, string $companyId, array $payload): TestResponse
+    {
+        Sanctum::actingAs($user);
+
+        return $this->putJson('/api/v1/companies/'.$companyId, $payload);
+    }
+
+    /**
+     * The update was refused as shape-invalid — 422 with the §S21
+     * VALIDATION_FAILED envelope and an error on $field (MembershipsTestCase
+     * mirror; the whitelist guard names the offending key).
+     */
+    protected function assertValidationFailed(TestResponse $response, string $field): void
+    {
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
+        $response->assertJsonValidationErrors($field);
+    }
+
+    /**
      * The request was rejected as unauthenticated — 401 with the §S21
      * UNAUTHENTICATED envelope (AuthTestCase mirror; base-level consolidation
      * is a flagged future refactor).
