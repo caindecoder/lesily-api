@@ -146,4 +146,20 @@ class UpdateCompanyTest extends CompaniesTestCase
         // Then company access is denied
         $this->assertCompanyAccessDenied($response);
     }
+
+    // Sad — an unknown URL company id is a plain 404 (the shared resolver's
+    // findOrFail on the param): existence is not leaked, mirroring the view route.
+    #[Test]
+    public function when_requested_company_is_unknown_then_resource_not_found(): void
+    {
+        // Given a member of a real company holding an unknown company id
+        $company = Company::factory()->withSettings()->create();
+        $member = $this->aCompanyMember($company, 'owner');
+
+        // When they submit an update for an unknown company id
+        $response = $this->updateCompanyDetails($member, '0193abcd-0000-7000-8000-000000000000', ['name' => 'New Name']);
+
+        // Then the resource is not found
+        $this->assertResourceNotFound($response);
+    }
 }
