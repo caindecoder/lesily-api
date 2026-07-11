@@ -94,4 +94,28 @@ class UserFactory extends Factory
             'two_factor_confirmed_at' => now(),
         ]);
     }
+
+    /**
+     * 2FA enrolled but never confirmed — a runtime secret sits on the row while
+     * two_factor_confirmed_at stays null (confirmed_at is the enabled flag, so
+     * this user does NOT count as 2FA-enabled). For the profile derivation pins.
+     */
+    public function withUnconfirmedTwoFactor(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'two_factor_secret' => Str::random(32),
+            'two_factor_confirmed_at' => null,
+        ]);
+    }
+
+    /**
+     * A user whose last successful login is stamped — for profile assertions
+     * that need a non-null last_logged_at without driving the login seam.
+     */
+    public function lastLoggedAt(string $when): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'last_logged_at' => $when,
+        ]);
+    }
 }
