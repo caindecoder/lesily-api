@@ -21,11 +21,14 @@ class MeResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'name' => $this->name,
             'email' => $this->email,
             'email_verified' => $this->email_verified_at !== null,
+            'locale' => $this->locale,
             'two_factor_enabled' => $this->two_factor_confirmed_at !== null,
             'default_company_id' => $this->liveDefaultCompanyId(),
             'last_logged_at' => $this->last_logged_at,
+            'created_at' => $this->created_at,
         ];
     }
 }

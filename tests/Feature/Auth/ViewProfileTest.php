@@ -92,6 +92,28 @@ class ViewProfileTest extends AuthTestCase
         $this->assertProfileFieldEquals($response, 'default_company_id', null);
     }
 
+    #[Test]
+    public function when_authenticated_user_views_profile_then_full_profile_is_returned(): void
+    {
+        // Given a fully-populated user: verified email, 2FA confirmed, a live default company, a stamped last login
+        $this->seedRbacCatalog();
+        $user = User::factory()
+            ->named('Alice Perera')
+            ->locale('en')
+            ->withTwoFactor()
+            ->lastLoggedAt('2026-07-10 09:30:00')
+            ->create();
+        $company = Company::factory()->create();
+        $this->aMembershipFor($user, $company);
+        $this->setDefaultCompany($user, ['companyId' => $company->getKey()])->assertNoContent();
+
+        // When the user requests GET /api/v1/me
+        $response = $this->viewProfile($user);
+
+        // Then the response is exactly the nine-field profile envelope — nothing more (the leak-guard)
+        $this->assertExactProfileEnvelope($response, $user);
+    }
+
     protected function assertOnlyOwnProfile(TestResponse $response, User $owner, User $other): void
     {
         $response->assertOk();
@@ -113,5 +135,29 @@ class ViewProfileTest extends AuthTestCase
         $data = $response->json('data');
         $this->assertArrayHasKey($field, $data);
         $this->assertSame($expected, $data[$field]);
+    }
+
+    /**
+     * The one logical happy-path assertion (E20): the body is EXACTLY the nine-field
+     * {data} envelope built from the user's persisted row. Exactness IS the leak-guard —
+     * password, two_factor_secret, two_factor_recovery_codes and remember_token can
+     * never serialize without failing this.
+     */
+    protected function assertExactProfileEnvelope(TestResponse $response, User $user): void
+    {
+        $user->refresh();
+
+        $response->assertOk();
+        $response->assertExactJson(['data' => [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'email_verified' => true,
+            'locale' => $user->locale,
+            'two_factor_enabled' => true,
+            'default_company_id' => $user->default_company_id,
+            'last_logged_at' => $user->last_logged_at?->toJSON(),
+            'created_at' => $user->created_at?->toJSON(),
+        ]]);
     }
 }
