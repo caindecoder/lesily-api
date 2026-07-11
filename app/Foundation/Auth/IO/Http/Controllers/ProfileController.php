@@ -2,13 +2,14 @@
 
 namespace App\Foundation\Auth\IO\Http\Controllers;
 
-use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use App\Foundation\Auth\IO\Http\Resources\MeResource;
 
 class ProfileController extends Controller
 {
-    public function show(): JsonResponse
+    public function show(Request $request): MeResource
     {
-        return response()->json();
+        return new MeResource($request->user());
     }
 }
