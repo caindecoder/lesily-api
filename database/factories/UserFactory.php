@@ -96,9 +96,12 @@ class UserFactory extends Factory
     }
 
     /**
-     * 2FA enrolled but never confirmed — a runtime secret sits on the row while
-     * two_factor_confirmed_at stays null (confirmed_at is the enabled flag, so
-     * this user does NOT count as 2FA-enabled). For the profile derivation pins.
+     * A secret on the row while two_factor_confirmed_at stays null — an INTENTIONALLY
+     * SYNTHETIC state, not a real enrollment stage: production keeps the two columns in
+     * lockstep (enable stages the secret in cache only; confirm and disable each move
+     * secret + confirmed_at atomically). It exists purely to pin the derivation contract
+     * (two_factor_enabled follows confirmed_at, never secret-presence) against drift
+     * toward Fortify's stock secret-presence convention.
      */
     public function withUnconfirmedTwoFactor(): static
     {

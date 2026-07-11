@@ -50,6 +50,7 @@ class ViewProfileTest extends AuthTestCase
         $user = match ($state) {
             'unverified email' => User::factory()->unverified()->create(),
             '2fa enrolled but unconfirmed' => User::factory()->withUnconfirmedTwoFactor()->create(),
+            'sinhala locale' => User::factory()->locale('si')->create(),
             default => User::factory()->create(),
         };
 
@@ -71,6 +72,7 @@ class ViewProfileTest extends AuthTestCase
             '2FA enrolled but unconfirmed is not enabled' => ['2fa enrolled but unconfirmed', 'two_factor_enabled', false],
             'no default company yields null' => ['plain', 'default_company_id', null],
             'never logged in yields null' => ['plain', 'last_logged_at', null],
+            'non-english locale passes through untranslated' => ['sinhala locale', 'locale', 'si'],
         ];
     }
 
