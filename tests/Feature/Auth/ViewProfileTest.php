@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -71,6 +72,24 @@ class ViewProfileTest extends AuthTestCase
             'no default company yields null' => ['plain', 'default_company_id', null],
             'never logged in yields null' => ['plain', 'last_logged_at', null],
         ];
+    }
+
+    #[Test]
+    public function when_default_company_membership_was_removed_then_default_company_is_absent(): void
+    {
+        // Given a user whose default company membership was later removed
+        $this->seedRbacCatalog();
+        $user = User::factory()->create();
+        $company = Company::factory()->create();
+        $this->aMembershipFor($user, $company);
+        $this->setDefaultCompany($user, ['companyId' => $company->getKey()])->assertNoContent();
+        $this->removeMembership($company, $user);
+
+        // When the user requests GET /api/v1/me
+        $response = $this->viewProfile($user);
+
+        // Then the stale default company is not advertised
+        $this->assertProfileFieldEquals($response, 'default_company_id', null);
     }
 
     protected function assertOnlyOwnProfile(TestResponse $response, User $owner, User $other): void

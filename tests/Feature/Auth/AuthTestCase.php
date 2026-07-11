@@ -276,6 +276,17 @@ abstract class AuthTestCase extends TestCase
     {
         $this->aMembershipFor($user, $company);
 
+        $this->removeMembership($company, $user);
+    }
+
+    /**
+     * Soft-delete an EXISTING membership pivot (the removal half of
+     * aRemovedMembershipIn) — for arrangements that must act between attach and
+     * removal (e.g. set a default company while the membership is still live,
+     * UC-1-014 stale-default pin). Shared by the view-profile suite.
+     */
+    protected function removeMembership(Company $company, User $user): void
+    {
         CompanyUser::query()
             ->where('company_id', $company->getKey())
             ->where('user_id', $user->getKey())
