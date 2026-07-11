@@ -314,6 +314,27 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
+     * GET the authenticated user's own profile (UC-1-014) — no X-Company-Context,
+     * the me/ surface is account-level (listCompanies precedent). Shared by the
+     * view-profile (UC-1-014) and update-profile (UC-1-015) suites.
+     */
+    protected function viewProfile(User $actor): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/me');
+    }
+
+    /**
+     * GET /me with no token at all — the unauthenticated probe for the profile
+     * suite (UC-1-014 Sc2).
+     */
+    protected function viewProfileWithoutAuth(): TestResponse
+    {
+        return $this->getJson('/api/v1/me');
+    }
+
+    /**
      * PUT the default-company preference (UC-1-139) — payload-shaped so the
      * malformed-body variations reuse the same seam. No X-Company-Context:
      * the me/ surface is account-level (listCompanies precedent). Shared by

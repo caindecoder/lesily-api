@@ -5,6 +5,7 @@ use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Companies\IO\Http\Controllers\CompaniesController;
 use App\Foundation\Auth\IO\Http\Controllers\LoginController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutController;
+use App\Foundation\Auth\IO\Http\Controllers\ProfileController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutAllController;
 use App\Foundation\Auth\IO\Http\Controllers\MyCompaniesController;
@@ -116,6 +117,13 @@ Route::delete('/v1/auth/2fa', DisableTwoFactorController::class)
 // surface like disable + confirm — R9). 200 with the new codes shown once.
 Route::post('/v1/auth/2fa/recovery-codes', RegenerateRecoveryCodesController::class)
     ->middleware(['auth:sanctum', 'throttle:auth-tier']);
+
+// View own profile (UC-1-014) — the authenticated user's own account profile, a
+// direct principal read (no interactor, no repository — s125 /simplicity-check P1).
+// Bare auth:sanctum: a `me/` self-service read (no company context), no throttle
+// (tiered limits deferred, OQ-1-098). Read-only, no domain event.
+Route::get('/v1/me', [ProfileController::class, 'show'])
+    ->middleware('auth:sanctum');
 
 // List my companies (UC-1-034) — the authenticated user's own live company
 // memberships, the switcher-list read. Bare auth:sanctum: a `me/` self-service
