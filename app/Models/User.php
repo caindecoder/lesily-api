@@ -109,4 +109,21 @@ class User extends Authenticatable implements CanResetPassword, HasLocalePrefere
             ->orderByPivot('id')
             ->value('name'));
     }
+
+    /**
+     * The default-company preference, only while a live membership backs it (UC-1-014).
+     * users.default_company_id survives a membership removal (UC-1-024 soft-deletes the
+     * pivot without clearing the column), so readers guard at read time — the same
+     * convention as notificationCompanyName and the companies-list is_default flag.
+     */
+    public function liveDefaultCompanyId(): ?string
+    {
+        if ($this->default_company_id === null) {
+            return null;
+        }
+
+        return $this->companies()->whereKey($this->default_company_id)->exists()
+            ? $this->default_company_id
+            : null;
+    }
 }

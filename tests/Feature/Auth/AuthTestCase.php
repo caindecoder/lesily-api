@@ -276,6 +276,17 @@ abstract class AuthTestCase extends TestCase
     {
         $this->aMembershipFor($user, $company);
 
+        $this->removeMembership($company, $user);
+    }
+
+    /**
+     * Soft-delete an EXISTING membership pivot (the removal half of
+     * aRemovedMembershipIn) — for arrangements that must act between attach and
+     * removal (e.g. set a default company while the membership is still live,
+     * UC-1-014 stale-default pin). Shared by the view-profile suite.
+     */
+    protected function removeMembership(Company $company, User $user): void
+    {
         CompanyUser::query()
             ->where('company_id', $company->getKey())
             ->where('user_id', $user->getKey())
@@ -311,6 +322,27 @@ abstract class AuthTestCase extends TestCase
         Sanctum::actingAs($actor);
 
         return $this->getJson('/api/v1/me/companies');
+    }
+
+    /**
+     * GET the authenticated user's own profile (UC-1-014) — no X-Company-Context,
+     * the me/ surface is account-level (listCompanies precedent). Shared by the
+     * view-profile (UC-1-014) and update-profile (UC-1-015) suites.
+     */
+    protected function viewProfile(User $actor): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/me');
+    }
+
+    /**
+     * GET /me with no token at all — the unauthenticated probe for the profile
+     * suite (UC-1-014 Sc2).
+     */
+    protected function viewProfileWithoutAuth(): TestResponse
+    {
+        return $this->getJson('/api/v1/me');
     }
 
     /**

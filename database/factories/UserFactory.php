@@ -94,4 +94,31 @@ class UserFactory extends Factory
             'two_factor_confirmed_at' => now(),
         ]);
     }
+
+    /**
+     * A secret on the row while two_factor_confirmed_at stays null — an INTENTIONALLY
+     * SYNTHETIC state, not a real enrollment stage: production keeps the two columns in
+     * lockstep (enable stages the secret in cache only; confirm and disable each move
+     * secret + confirmed_at atomically). It exists purely to pin the derivation contract
+     * (two_factor_enabled follows confirmed_at, never secret-presence) against drift
+     * toward Fortify's stock secret-presence convention.
+     */
+    public function withUnconfirmedTwoFactor(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'two_factor_secret' => Str::random(32),
+            'two_factor_confirmed_at' => null,
+        ]);
+    }
+
+    /**
+     * A user whose last successful login is stamped — for profile assertions
+     * that need a non-null last_logged_at without driving the login seam.
+     */
+    public function lastLoggedAt(string $when): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'last_logged_at' => $when,
+        ]);
+    }
 }
