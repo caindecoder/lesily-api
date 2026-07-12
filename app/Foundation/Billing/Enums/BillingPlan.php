@@ -64,4 +64,32 @@ enum BillingPlan: string
             self::Free, self::Starter => false,
         };
     }
+
+    /**
+     * The per-user monthly price in LKR integer cents (§10 pricing / §2 money-as-
+     * integers): Free 0, Starter 350, Pro 600, Enterprise 750 — ×100.
+     */
+    public function monthlyPriceCents(): int
+    {
+        return match ($this) {
+            self::Free => 0,
+            self::Starter => 35_000,
+            self::Pro => 60_000,
+            self::Enterprise => 75_000,
+        };
+    }
+
+    /**
+     * The per-user monthly price in LKR integer cents when billed annually, or
+     * null where no annual option exists (§10: Starter is monthly-only; Free has
+     * nothing to discount): Pro 510 (15% off), Enterprise 600 (20% off) — ×100.
+     */
+    public function annualPriceCents(): ?int
+    {
+        return match ($this) {
+            self::Free, self::Starter => null,
+            self::Pro => 51_000,
+            self::Enterprise => 60_000,
+        };
+    }
 }
