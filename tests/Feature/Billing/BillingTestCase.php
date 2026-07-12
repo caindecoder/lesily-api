@@ -169,6 +169,22 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
+     * The subscription state came back — 200 with exactly the 13 designed
+     * contract keys in the {data: {...}} envelope (LD assertJsonCount
+     * shape-lock pattern).
+     */
+    protected function assertSubscriptionShapeReturned(TestResponse $response): void
+    {
+        $response->assertOk();
+        $response->assertJsonCount(13, 'data');
+        $response->assertJsonStructure(['data' => [
+            'id', 'status', 'plan', 'trial_ends_at', 'add_ons', 'cancelled_at', 'ended_source',
+            'billing_cycle', 'period_start', 'period_end', 'next_charge_at',
+            'payment_method_summary', 'past_due_status',
+        ]]);
+    }
+
+    /**
      * The roles the 2026-05-24 matrix grants billing.view (owner ✅, admin ✅,
      * auditor 👁️ read-only) — shared by every billing.view-gated read (§2.12).
      *

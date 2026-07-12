@@ -134,4 +134,22 @@ class ViewSubscriptionTest extends BillingTestCase
             'past_due_status' => null,
         ]);
     }
+
+    // Happy — every role the 2026-05-24 matrix grants billing.view (owner ✅,
+    // admin ✅ view-only, auditor 👁️ read-only — R2 s129) reads the same
+    // 13-key subscription shape.
+    #[Test]
+    #[DataProvider('provideViewingRoles')]
+    public function when_viewing_role_requests_subscription_then_billing_state_is_returned(string $roleCode): void
+    {
+        // Given a company member whose seeded role holds billing.view
+        [$company, $member] = $this->aCompanyWithMember($roleCode);
+        $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+
+        // When they request the subscription state
+        $response = $this->viewSubscriptionAs($member, $company);
+
+        // Then the full 13-key contract shape is returned
+        $this->assertSubscriptionShapeReturned($response);
+    }
 }
