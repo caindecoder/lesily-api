@@ -92,10 +92,10 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $afterSecond = $this->tableCounts();
 
         // Then every table's row count is stable across runs (idempotent — no duplicates)
-        // 10 permissions / 30 grants since users.remove joined the catalog for
-        // owner/admin (D10, UC-1-024, s113); users.revoke-invitation added the
-        // prior +1/+3 for owner/admin/hr_officer (UC-1-022 lap 3, s111).
-        $this->assertSame(['roles' => 8, 'permissions' => 10, 'role_permission' => 30], $afterFirst);
+        // 10 permissions / 29 grants since payroll_officer's billing.view came out
+        // (matrix §Module-6 ❌ — F2/D-A, slice-plans-billing T1, s130); 30 was
+        // users.remove joining for owner/admin (D10, UC-1-024, s113).
+        $this->assertSame(['roles' => 8, 'permissions' => 10, 'role_permission' => 29], $afterFirst);
         $this->assertSame($afterFirst, $afterSecond);
     }
 
@@ -169,8 +169,9 @@ class RolesPermissionsSeederTest extends FoundationTestCase
             'owner' => 10,
             'admin' => 9,
             'hr_officer' => 4,
-            // 2 since the users.view grant came out (matrix denies it — D-A, s108).
-            'payroll_officer' => 2,
+            // 1 since billing.view came out too (matrix §Module-6 ❌ — F2/D-A,
+            // slice-plans-billing T1, s130); users.view left at D-A, s108.
+            'payroll_officer' => 1,
             'auditor' => 4,
             'employee' => 1,
             'manager' => 0,

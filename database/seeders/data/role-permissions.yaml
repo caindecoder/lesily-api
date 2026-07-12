@@ -38,9 +38,11 @@ hr_officer:
 # payroll_officer: NO users.view — the matrix (§Module-3 users.view row) denies it;
 # the roster is the company-membership list, not the payroll-facing employee
 # directory (chunk-2). Seed↔matrix divergence resolved 2026-07-03 (UC-1-017 lap 3).
+# NO billing.view either — the matrix (§Module-6 billing.view row) marks payroll ❌;
+# the payroll pay-run surface is chunk-5, not the billing read family. Seed↔matrix
+# divergence resolved 2026-07-12 (slice-plans-billing T1, F2/D-A).
 payroll_officer:
   - companies.view
-  - billing.view
 
 auditor:
   - users.view

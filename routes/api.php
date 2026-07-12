@@ -8,6 +8,7 @@ use App\Foundation\Auth\IO\Http\Controllers\LogoutController;
 use App\Foundation\Auth\IO\Http\Controllers\ProfileController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutAllController;
+use App\Billing\Subscriptions\IO\Http\Controllers\PlansController;
 use App\Foundation\Auth\IO\Http\Controllers\MyCompaniesController;
 use App\Foundation\Auth\IO\Http\Controllers\ViewSessionsController;
 use App\Foundation\Auth\IO\Http\Controllers\ResetPasswordController;
@@ -243,3 +244,11 @@ Route::delete('/v1/memberships/{membershipId}', [MembershipsController::class, '
 // guessing. Every token failure collapses to 422 INVITE_INVALID (H4 session 109).
 Route::post('/v1/invitations/accept/{token}', AcceptInvitationController::class)
     ->middleware(['throttle:auth-tier']);
+
+// The plan catalog (UC-1-042 partial — the plan-picker read, slice-plans-billing T1).
+// Enum-derived static read, non-paginated {data: [...]} (MyCompaniesCollection
+// precedent); permission:billing.view per the 2026-05-24 matrix (owner/admin full,
+// auditor read-only). Repository-free — no interactor (cd-subscriptions §5, gate I1).
+// No throttle (tiered limits — OQ-1-098).
+Route::get('/v1/plans', [PlansController::class, 'index'])
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:billing.view']);
