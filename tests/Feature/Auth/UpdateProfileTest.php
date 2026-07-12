@@ -102,6 +102,7 @@ class UpdateProfileTest extends AuthTestCase
             'null locale' => [['name' => self::CURRENT_NAME, 'locale' => null], 'locale'],
             'empty locale' => [['name' => self::CURRENT_NAME, 'locale' => ''], 'locale'],
             'non-string locale' => [['name' => self::CURRENT_NAME, 'locale' => 123], 'locale'],
+            'whitespace-only name' => [['name' => '   ', 'locale' => self::CURRENT_LOCALE], 'name'],
             'empty payload' => [[], ['name', 'locale']],
         ];
     }
@@ -124,6 +125,44 @@ class UpdateProfileTest extends AuthTestCase
         $response->assertOk();
         $this->assertNoProfileEventRecorded();
         $this->assertDatabaseHas('users', $this->unchangedProfileOf($user));
+    }
+
+    #[Test]
+    public function when_only_the_name_changes_then_the_event_records_only_the_changed_field(): void
+    {
+        // Given an authenticated user with an established profile
+        $user = $this->anEstablishedUser();
+
+        // When they change only their name — to its Sinhala form — keeping the same locale
+        $response = $this->updateProfile($user, ['name' => 'ඇලිස් පෙරේරා', 'locale' => self::CURRENT_LOCALE]);
+
+        // Then the name round-trips (utf8mb4), the locale is untouched, and the audit names ONLY the changed field
+        $response->assertOk();
+        $this->assertDatabaseHas('users', ['id' => $user->id, 'name' => 'ඇලිස් පෙරේරා', 'locale' => self::CURRENT_LOCALE]);
+        $this->assertProfileUpdateWasEventSourced($user, [
+            'name' => 'ඇලිස් පෙරේරා',
+            'locale' => self::CURRENT_LOCALE,
+            'changedFields' => ['name'],
+        ]);
+    }
+
+    #[Test]
+    public function when_an_email_is_included_then_it_is_ignored_and_the_login_credential_is_untouched(): void
+    {
+        // Given an authenticated user whose email is their login credential
+        $user = $this->anEstablishedUser();
+        $originalEmail = $user->email;
+
+        // When they submit a valid update that also smuggles an email key
+        $response = $this->updateProfile($user, [
+            'name' => 'Alice Fernando',
+            'locale' => self::CURRENT_LOCALE,
+            'email' => 'attacker@evil.lk',
+        ]);
+
+        // Then the update succeeds on the schema fields only — the email column is untouched
+        $response->assertOk();
+        $this->assertDatabaseHas('users', ['id' => $user->id, 'name' => 'Alice Fernando', 'email' => $originalEmail]);
     }
 
     #[Test]
@@ -273,8 +312,9 @@ class UpdateProfileTest extends AuthTestCase
 
     /**
      * The update was refused as a 422 §S21 validation error naming the offending
-     * field(s), and the users row still carries its before-update values (the Minimal
-     * Guarantee — goes RED if any write leaks past a rejected update).
+     * field(s), the users row still carries its before-update values, and no
+     * profile-change record was produced (the full Minimal Guarantee — goes RED if
+     * any write or event leaks past a rejected update).
      *
      * @param  string|array<int, string>  $invalidFields
      * @param  array<string, mixed>  $before
@@ -288,5 +328,6 @@ class UpdateProfileTest extends AuthTestCase
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
         $response->assertJsonValidationErrors($invalidFields);
         $this->assertDatabaseHas('users', $before);
+        $this->assertNoProfileEventRecorded();
     }
 }
