@@ -58,6 +58,23 @@ class ListPlansTest extends BillingTestCase
         $this->assertUnauthenticated($response);
     }
 
+    // Sad — the company-scope gate runs ahead of the permission gate: an owner of
+    // Company A probing under Company B's context is refused as a non-member,
+    // regardless of their own role's grants.
+    #[Test]
+    public function when_actor_uses_foreign_company_context_then_company_access_denied(): void
+    {
+        // Given an owner of Company A and a foreign Company B
+        [, $owner] = $this->aCompanyWithMember('owner');
+        [$foreignCompany] = $this->aCompanyWithMember('owner');
+
+        // When they request the plan catalog under Company B's context
+        $response = $this->viewPlansAs($owner, $foreignCompany);
+
+        // Then company access is denied
+        $this->assertCompanyAccessDenied($response);
+    }
+
     /** @return array<string, array{string}> */
     public static function provideDeniedRoles(): array
     {
