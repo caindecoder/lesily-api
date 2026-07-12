@@ -25,8 +25,8 @@ class PlanCollection extends ResourceCollection
                 'code' => $plan->value,
                 'label' => $plan->label(),
                 'features' => array_map(fn (Feature $feature): string => $feature->value, $plan->features()),
-                'monthly_price_cents' => 0,
-                'annual_price_cents' => null,
+                'monthly_price_cents' => $plan->monthlyPriceCents(),
+                'annual_price_cents' => $plan->annualPriceCents(),
                 'currency' => 'LKR',
             ])
             ->all();

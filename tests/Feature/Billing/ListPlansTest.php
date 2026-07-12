@@ -3,6 +3,7 @@
 namespace Tests\Feature\Billing;
 
 use App\Companies\Entities\Company;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -107,6 +108,68 @@ class ListPlansTest extends BillingTestCase
 
         // Then the full four-tier catalog is returned
         $this->assertCatalogReturned($response);
+    }
+
+    // Happy — the exact designed contract: §10 prices as LKR integer cents
+    // (Free 0 · Starter 350 monthly-only · Pro 600|510 annual · Enterprise
+    // 750|600 annual, ×100), chunk-1 feature lists, and NO minimums key —
+    // §10 L261 min-5 is ToS-only, never advertised (R9); assertExactJson
+    // proves the omission.
+    #[Test]
+    public function when_owner_requests_plans_then_full_catalog_with_prices_returned(): void
+    {
+        // Given an owner of a company
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+
+        // When they request the plan catalog
+        $response = $this->viewPlansAs($owner, $company);
+
+        // Then the exact four-tier contract is returned
+        $this->assertFullCatalogWithPrices($response);
+    }
+
+    /**
+     * The catalog matches the designed contract exactly — nothing extra leaks
+     * (no minimums, no pagination meta), every price is the §10 figure in
+     * LKR integer cents, annual is null where no annual option exists.
+     */
+    protected function assertFullCatalogWithPrices(TestResponse $response): void
+    {
+        $response->assertOk();
+        $response->assertExactJson(['data' => [
+            [
+                'code' => 'free',
+                'label' => 'Free',
+                'features' => [],
+                'monthly_price_cents' => 0,
+                'annual_price_cents' => null,
+                'currency' => 'LKR',
+            ],
+            [
+                'code' => 'starter',
+                'label' => 'Starter',
+                'features' => ['employee_directory'],
+                'monthly_price_cents' => 35000,
+                'annual_price_cents' => null,
+                'currency' => 'LKR',
+            ],
+            [
+                'code' => 'pro',
+                'label' => 'Pro',
+                'features' => ['employee_directory', 'two_factor_auth'],
+                'monthly_price_cents' => 60000,
+                'annual_price_cents' => 51000,
+                'currency' => 'LKR',
+            ],
+            [
+                'code' => 'enterprise',
+                'label' => 'Enterprise',
+                'features' => ['employee_directory', 'two_factor_auth'],
+                'monthly_price_cents' => 75000,
+                'annual_price_cents' => 60000,
+                'currency' => 'LKR',
+            ],
+        ]]);
     }
 
     /** @return array<string, array{string}> */
