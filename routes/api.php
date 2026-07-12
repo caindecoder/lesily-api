@@ -247,8 +247,8 @@ Route::post('/v1/invitations/accept/{token}', AcceptInvitationController::class)
 
 // The plan catalog (UC-1-042 partial — the plan-picker read, slice-plans-billing T1).
 // Enum-derived static read, non-paginated {data: [...]} (MyCompaniesCollection
-// precedent); permission:billing.view per the 2026-05-24 matrix (owner/admin full,
-// auditor read-only). Repository-free — no interactor (cd-subscriptions §5, gate I1).
+// precedent); permission:billing.view per the 2026-05-24 matrix (owner full
+// [view+manage], admin/auditor read-only). Repository-free — no interactor (cd-subscriptions §5, gate I1).
 // No throttle (tiered limits — OQ-1-098).
 Route::get('/v1/plans', [PlansController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:billing.view']);

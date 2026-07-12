@@ -90,8 +90,9 @@ class ListPlansTest extends BillingTestCase
         // When they request the plan catalog
         $response = $this->viewPlansAs($owner, $company);
 
-        // Then the full four-tier catalog is returned
-        $this->assertCatalogReturned($response);
+        // Then the SAME full-priced catalog a paid company sees is returned
+        // (payload identity, not just shape — pr-test-analyzer 4a)
+        $this->assertFullCatalogWithPrices($response);
     }
 
     // Happy — every role the 2026-05-24 matrix grants billing.view (owner ✅,
