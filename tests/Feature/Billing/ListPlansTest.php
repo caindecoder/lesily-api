@@ -93,6 +93,32 @@ class ListPlansTest extends BillingTestCase
         $this->assertCatalogReturned($response);
     }
 
+    // Happy — every role the 2026-05-24 matrix grants billing.view (owner ✅,
+    // admin ✅ operational visibility, auditor 👁️ read-only) sees the catalog.
+    #[Test]
+    #[DataProvider('provideViewingRoles')]
+    public function when_role_with_billing_view_requests_plans_then_catalog_returned(string $roleCode): void
+    {
+        // Given a company member whose seeded role holds billing.view
+        [$company, $member] = $this->aCompanyWithMember($roleCode);
+
+        // When they request the plan catalog
+        $response = $this->viewPlansAs($member, $company);
+
+        // Then the full four-tier catalog is returned
+        $this->assertCatalogReturned($response);
+    }
+
+    /** @return array<string, array{string}> */
+    public static function provideViewingRoles(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+            'auditor' => ['auditor'],
+        ];
+    }
+
     /** @return array<string, array{string}> */
     public static function provideDeniedRoles(): array
     {
