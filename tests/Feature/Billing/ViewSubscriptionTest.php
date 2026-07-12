@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Billing;
 
+use Carbon\CarbonImmutable;
+use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -64,5 +66,38 @@ class ViewSubscriptionTest extends BillingTestCase
 
         // Then company access is denied
         $this->assertCompanyAccessDenied($response);
+    }
+
+    // Edge — the trial company (the endpoint's Day-31 primary consumer): plan is
+    // NULL until a plan is chosen (s066 fail-closed ruling), the countdown date is
+    // exact, and every payment-slice key is present as a documented null (B5).
+    #[Test]
+    public function when_company_is_in_trial_then_plan_is_null_with_trial_countdown(): void
+    {
+        // Given an owner of a trial company, 30 days from expiry, no plan chosen
+        $this->travelTo('2026-06-01 00:00:00');
+        $company = Company::factory()->withoutPlan()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+
+        // When they request the subscription state
+        $response = $this->viewSubscriptionAs($owner, $company);
+
+        // Then the trial state is reported with a null plan and the exact countdown
+        $this->assertExactSubscriptionContract($response, [
+            'id' => $subscription->getKey(),
+            'status' => 'trial',
+            'plan' => null,
+            'trial_ends_at' => '2026-07-01T00:00:00.000000Z',
+            'add_ons' => [],
+            'cancelled_at' => null,
+            'ended_source' => null,
+            'billing_cycle' => null,
+            'period_start' => null,
+            'period_end' => null,
+            'next_charge_at' => null,
+            'payment_method_summary' => null,
+            'past_due_status' => null,
+        ]);
     }
 }

@@ -4,11 +4,16 @@ namespace Tests\Feature\Billing;
 
 use Tests\TestCase;
 use App\Models\User;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Billing\Subscriptions\Aggregates\Subscription;
+use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
+use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 abstract class BillingTestCase extends TestCase
 {
@@ -115,6 +120,52 @@ abstract class BillingTestCase extends TestCase
         $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
         $response->assertJsonPath('required_permission', $permission);
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    /**
+     * A trial subscription projected for $company through the domain seam —
+     * the genesis event path production takes (SubscriptionProjectionTest
+     * precedent), never a direct row write.
+     */
+    protected function aTrialSubscriptionFor(Company $company, CarbonImmutable $trialEndsAt): SubscriptionReadModel
+    {
+        $subscriptionId = (string) Str::uuid();
+
+        Subscription::retrieve($subscriptionId)
+            ->startTrial(StartTrialCommand::validateAndCreate([
+                'companyId' => $company->getKey(),
+                'trialEndsAt' => $trialEndsAt,
+            ]))
+            ->persist();
+
+        return SubscriptionReadModel::findOrFail($subscriptionId);
+    }
+
+    /**
+     * A subscription whose trial ran out — started and ended through the domain
+     * seam, exactly as the trials:expire scan does (ended_source 'trial-expired',
+     * cancelled_at stamped from the travelled clock).
+     */
+    protected function anEndedTrialSubscriptionFor(Company $company, CarbonImmutable $trialEndsAt): SubscriptionReadModel
+    {
+        $subscription = $this->aTrialSubscriptionFor($company, $trialEndsAt);
+
+        Subscription::retrieve($subscription->getKey())
+            ->endTrial('trial-expired')
+            ->persist();
+
+        return $subscription->refresh();
+    }
+
+    /**
+     * The subscription state matches the designed 13-key contract exactly —
+     * payload identity against literal expectations, so nothing extra can leak
+     * and every documented-null key is proven present (B5).
+     */
+    protected function assertExactSubscriptionContract(TestResponse $response, array $expected): void
+    {
+        $response->assertOk();
+        $response->assertExactJson(['data' => $expected]);
     }
 
     /**
