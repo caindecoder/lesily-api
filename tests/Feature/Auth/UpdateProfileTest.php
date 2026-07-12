@@ -103,6 +103,26 @@ class UpdateProfileTest extends AuthTestCase
         ];
     }
 
+    // --- Edge ---
+
+    #[Test]
+    public function when_identical_values_are_submitted_then_no_event_is_recorded(): void
+    {
+        // Given an authenticated user with an established profile
+        $user = $this->anEstablishedUser();
+
+        // When they submit exactly their current name and locale
+        $response = $this->updateProfile($user, [
+            'name' => self::CURRENT_NAME,
+            'locale' => self::CURRENT_LOCALE,
+        ]);
+
+        // Then the request succeeds but records nothing — no event, no row change (the B5 guard)
+        $response->assertOk();
+        $this->assertNoProfileEventRecorded();
+        $this->assertDatabaseHas('users', $this->unchangedProfileOf($user));
+    }
+
     // --- Happy ---
 
     #[Test]
@@ -171,6 +191,20 @@ class UpdateProfileTest extends AuthTestCase
     {
         $this->assertExactProfileEnvelope($response, $user);
         $this->assertDatabaseHas('users', ['id' => $user->id, ...$expected]);
+    }
+
+    /**
+     * A no-op submit must leave the event store silent for this stream — the audit
+     * trail records applied changes only (slice-profile B5; an unconditional record
+     * would fabricate an audit row for a change that never happened).
+     */
+    protected function assertNoProfileEventRecorded(): void
+    {
+        $this->assertSame(
+            0,
+            LesilyStoredEvent::query()->where('event_class', UserProfileUpdated::class)->count(),
+            'An identical submit must record no UserProfileUpdated event.',
+        );
     }
 
     /**
