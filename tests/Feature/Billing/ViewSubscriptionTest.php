@@ -5,6 +5,7 @@ namespace Tests\Feature\Billing;
 use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -92,6 +93,39 @@ class ViewSubscriptionTest extends BillingTestCase
             'add_ons' => [],
             'cancelled_at' => null,
             'ended_source' => null,
+            'billing_cycle' => null,
+            'period_start' => null,
+            'period_end' => null,
+            'next_charge_at' => null,
+            'payment_method_summary' => null,
+            'past_due_status' => null,
+        ]);
+    }
+
+    // Edge — the post-trial Free company (§10 switch-to-Free path): the plan reads
+    // 'free' while the subscription row keeps the expired trial's cancellation
+    // record — the only state giving ended_source/cancelled_at real values as-built.
+    #[Test]
+    public function when_company_settled_on_free_after_trial_then_cancellation_is_reported(): void
+    {
+        // Given an owner of a Free-plan company whose trial expired yesterday
+        $this->travelTo('2026-06-01 00:00:00');
+        $company = Company::factory()->onPlan(BillingPlan::Free)->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        $subscription = $this->anEndedTrialSubscriptionFor($company, CarbonImmutable::now()->subDay());
+
+        // When they request the subscription state
+        $response = $this->viewSubscriptionAs($owner, $company);
+
+        // Then the Free plan is reported alongside the expired trial's cancellation
+        $this->assertExactSubscriptionContract($response, [
+            'id' => $subscription->getKey(),
+            'status' => 'cancelled',
+            'plan' => 'free',
+            'trial_ends_at' => '2026-05-31T00:00:00.000000Z',
+            'add_ons' => [],
+            'cancelled_at' => '2026-06-01T00:00:00.000000Z',
+            'ended_source' => 'trial-expired',
             'billing_cycle' => null,
             'period_start' => null,
             'period_end' => null,
