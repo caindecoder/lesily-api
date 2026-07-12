@@ -65,7 +65,7 @@ class UpdateProfileTest extends AuthTestCase
         $user = $this->anEstablishedUser();
 
         // When an otherwise-valid update is sent to PUT /api/v1/me without a token
-        $response = $this->putJson('/api/v1/me', ['name' => 'Mallory', 'locale' => 'ta']);
+        $response = $this->updateProfileWithoutAuth(['name' => 'Mallory', 'locale' => 'ta']);
 
         // Then the Sanctum guard rejects it before any work runs and the record is untouched
         $this->assertUnauthenticated($response);
@@ -80,8 +80,7 @@ class UpdateProfileTest extends AuthTestCase
         $bob = User::factory()->named('Bob Silva')->locale('ta')->create();
 
         // When Alice attempts an id-addressed profile update against Bob
-        Sanctum::actingAs($alice);
-        $response = $this->putJson("/api/v1/users/{$bob->id}/profile", ['name' => 'Hijacked', 'locale' => 'en']);
+        $response = $this->updateAnotherUsersProfile($alice, $bob, ['name' => 'Hijacked', 'locale' => 'en']);
 
         // Then no such route exists (self-only by construction) and Bob is unchanged
         $response->assertNotFound();
@@ -199,6 +198,30 @@ class UpdateProfileTest extends AuthTestCase
         Sanctum::actingAs($actor);
 
         return $this->putJson('/api/v1/me', $payload);
+    }
+
+    /**
+     * PUT /me with no token at all — the unauthenticated probe for the
+     * update-profile suite (viewProfileWithoutAuth precedent).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function updateProfileWithoutAuth(array $payload): TestResponse
+    {
+        return $this->putJson('/api/v1/me', $payload);
+    }
+
+    /**
+     * Probe the id-addressed profile path that must NOT exist (UC-1-015 Sc2) —
+     * cross-user writes are impossible by construction, not by authorization.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function updateAnotherUsersProfile(User $actor, User $target, array $payload): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->putJson("/api/v1/users/{$target->id}/profile", $payload);
     }
 
     /**
