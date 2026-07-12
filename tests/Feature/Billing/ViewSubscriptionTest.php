@@ -48,4 +48,21 @@ class ViewSubscriptionTest extends BillingTestCase
         // Then the request is refused naming the missing grant
         $this->assertRoleInsufficient($response, 'billing.view');
     }
+
+    // Sad — the company-scope gate runs ahead of the permission gate: an owner of
+    // Company A probing under Company B's context is refused as a non-member,
+    // regardless of their own role's grants (UC-1-041 tenant isolation, sad side).
+    #[Test]
+    public function when_company_context_is_foreign_then_access_is_denied(): void
+    {
+        // Given an owner of Company A and a foreign Company B
+        [, $owner] = $this->aCompanyWithMember('owner');
+        [$foreignCompany] = $this->aCompanyWithMember('owner');
+
+        // When they request the subscription state under Company B's context
+        $response = $this->viewSubscriptionAs($owner, $foreignCompany);
+
+        // Then company access is denied
+        $this->assertCompanyAccessDenied($response);
+    }
 }
