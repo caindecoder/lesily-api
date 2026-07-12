@@ -4,11 +4,15 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Auth\Events\UserProfileUpdated;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\Notifications\Enums\NotificationType;
+use App\Foundation\Notifications\Mail\SystemNotificationMail;
+use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class UpdateProfileTest extends AuthTestCase
@@ -121,6 +125,24 @@ class UpdateProfileTest extends AuthTestCase
         $response->assertOk();
         $this->assertNoProfileEventRecorded();
         $this->assertDatabaseHas('users', $this->unchangedProfileOf($user));
+    }
+
+    #[Test]
+    public function when_the_locale_changes_then_notifications_render_in_the_new_language(): void
+    {
+        // Given a user whose notification language was English
+        Mail::fake();
+        $user = $this->anEstablishedUser();
+
+        // When they switch their locale to Sinhala and a system notification then goes out
+        $this->updateProfile($user, ['name' => self::CURRENT_NAME, 'locale' => 'si'])->assertOk();
+        $user->refresh()->notify(new SystemNotification(NotificationType::GeneralAccountNotice, 'Contoso'));
+
+        // Then the mail leg renders via the NEW language (the HasLocalePreference path)
+        Mail::assertQueued(
+            SystemNotificationMail::class,
+            fn (SystemNotificationMail $mail): bool => $mail->locale === 'si',
+        );
     }
 
     // --- Happy ---
