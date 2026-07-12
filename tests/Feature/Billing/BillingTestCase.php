@@ -116,4 +116,34 @@ abstract class BillingTestCase extends TestCase
         $response->assertJsonPath('required_permission', $permission);
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
+
+    /**
+     * The roles the 2026-05-24 matrix grants billing.view (owner ✅, admin ✅,
+     * auditor 👁️ read-only) — shared by every billing.view-gated read (§2.12).
+     *
+     * @return array<string, array{string}>
+     */
+    public static function provideViewingRoles(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+            'auditor' => ['auditor'],
+        ];
+    }
+
+    /**
+     * The seeded roles the 2026-05-24 matrix denies billing.view.
+     *
+     * @return array<string, array{string}>
+     */
+    public static function provideDeniedRoles(): array
+    {
+        return [
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'employee' => ['employee'],
+            'manager' => ['manager'],
+        ];
+    }
 }

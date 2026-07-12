@@ -258,4 +258,4 @@ Route::get('/v1/plans', [PlansController::class, 'index'])
 // every company has exactly one Subscription (api-1-subscriptions §2). Pure read,
 // no interactor (cd-subscriptions §5, gate I1). No throttle (tiered — OQ-1-098).
 Route::get('/v1/subscription', [SubscriptionsController::class, 'show'])
-    ->middleware(['auth:sanctum']);
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:billing.view']);
