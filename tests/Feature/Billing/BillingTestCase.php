@@ -73,6 +73,25 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
+     * An authenticated member requests the company's subscription state under
+     * $company's context.
+     */
+    protected function viewSubscriptionAs(User $user, Company $company): TestResponse
+    {
+        Sanctum::actingAs($user);
+
+        return $this->getJson('/api/v1/subscription', ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * A guest (no token) requests the company's subscription state.
+     */
+    protected function viewSubscriptionAsGuest(): TestResponse
+    {
+        return $this->getJson('/api/v1/subscription');
+    }
+
+    /**
      * The request was rejected as unauthenticated — 401 with the §S21
      * UNAUTHENTICATED envelope. Duplicated from CompaniesTestCase/AuthTestCase
      * (module bases are independent — established precedent; base-level
