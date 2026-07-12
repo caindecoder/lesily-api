@@ -5,6 +5,7 @@ namespace Tests\Feature\Billing;
 use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\Addon;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -151,5 +152,39 @@ class ViewSubscriptionTest extends BillingTestCase
 
         // Then the full 13-key contract shape is returned
         $this->assertSubscriptionShapeReturned($response);
+    }
+
+    // Happy — the exact designed contract on a paid company: plan code, active
+    // add-on codes from company_addons, the trial row's live values, and every
+    // payment-slice key pinned to its documented null (B5) — payload identity,
+    // so no PayHere-to-be field or admin-only column can ever leak (E21).
+    #[Test]
+    public function when_owner_views_pro_company_with_addon_then_full_billing_contract_returned(): void
+    {
+        // Given an owner of a Pro company holding the Template Engine add-on, mid-trial
+        $this->travelTo('2026-06-01 00:00:00');
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->withAddon(Addon::TemplateEngine)->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(12));
+
+        // When they request the subscription state
+        $response = $this->viewSubscriptionAs($owner, $company);
+
+        // Then the exact 13-key contract is returned
+        $this->assertExactSubscriptionContract($response, [
+            'id' => $subscription->getKey(),
+            'status' => 'trial',
+            'plan' => 'pro',
+            'trial_ends_at' => '2026-06-13T00:00:00.000000Z',
+            'add_ons' => ['template_engine'],
+            'cancelled_at' => null,
+            'ended_source' => null,
+            'billing_cycle' => null,
+            'period_start' => null,
+            'period_end' => null,
+            'next_charge_at' => null,
+            'payment_method_summary' => null,
+            'past_due_status' => null,
+        ]);
     }
 }
