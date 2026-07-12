@@ -3,6 +3,7 @@
 namespace App\Billing\Subscriptions\IO\Http\Resources;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Http\Resources\Json\ResourceCollection;
@@ -12,6 +13,8 @@ use Illuminate\Http\Resources\Json\ResourceCollection;
  * non-paginated {data: [...]} envelope. Employee minimums are deliberately
  * absent: §10 min-5 is ToS-only, never advertised (R9). Custom plans are
  * per-company manual creations and never appear here.
+ *
+ * @property-read Collection<int, BillingPlan> $collection
  */
 class PlanCollection extends ResourceCollection
 {
