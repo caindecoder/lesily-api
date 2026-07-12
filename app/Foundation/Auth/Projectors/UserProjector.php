@@ -7,6 +7,7 @@ use App\Foundation\Auth\Events\User2FAEnabled;
 use App\Foundation\Auth\Events\User2FADisabled;
 use App\Foundation\Auth\Events\UserEmailVerified;
 use App\Foundation\Auth\Events\UserPasswordReset;
+use App\Foundation\Auth\Events\UserProfileUpdated;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
@@ -64,6 +65,13 @@ class UserProjector extends Projector
         UserReadModel::query()
             ->whereKey($event->userId)
             ->update(['password' => $event->passwordHash]);
+    }
+
+    public function onUserProfileUpdated(UserProfileUpdated $event): void
+    {
+        UserReadModel::query()
+            ->whereKey($event->userId)
+            ->update(['name' => $event->name, 'locale' => $event->locale]);
     }
 
     public function onUser2FAEnabled(User2FAEnabled $event): void

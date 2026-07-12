@@ -9,6 +9,7 @@ use App\Foundation\Auth\Events\User2FAEnabled;
 use App\Foundation\Auth\Events\User2FADisabled;
 use App\Foundation\Auth\Events\UserEmailVerified;
 use App\Foundation\Auth\Events\UserPasswordReset;
+use App\Foundation\Auth\Events\UserProfileUpdated;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use App\Foundation\Auth\Events\User2FARecoveryCodeUsed;
@@ -17,6 +18,7 @@ use App\Foundation\Auth\Events\User2FARecoveryCodesRegenerated;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 use App\Foundation\Auth\Exceptions\UserAlreadyRegisteredException;
+use App\Foundation\Auth\UseCases\Commands\UpdateUserProfileCommand;
 use App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand;
 
 /**
@@ -172,6 +174,27 @@ class User extends AggregateRoot
             userId: $this->uuid(),
             passwordHash: $passwordHash,
             resetAt: CarbonImmutable::now(),
+        ));
+    }
+
+    /**
+     * Guardless with no apply (mirrors changePassword): name and locale are not aggregate
+     * state (no invariant on them) — they are projected read-model columns. The interactor
+     * owns the no-op comparison against the read model (the stream cannot know the current
+     * locale: genesis events carry none — the initial 'en' is only a column default), so an
+     * identical submit never reaches this method. Event-sourced precisely because those
+     * columns are projected — a direct write would be reverted on replay.
+     *
+     * @param  list<string>  $changedFields
+     */
+    public function updateProfile(UpdateUserProfileCommand $command, array $changedFields): static
+    {
+        return $this->recordThat(new UserProfileUpdated(
+            userId: $this->uuid(),
+            name: $command->name,
+            locale: $command->locale,
+            changedFields: $changedFields,
+            updatedAt: CarbonImmutable::now(),
         ));
     }
 

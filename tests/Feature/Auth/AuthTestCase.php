@@ -346,6 +346,32 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
+     * The one logical happy-path assertion (E20): the body is EXACTLY the nine-field
+     * {data} envelope built from the user's persisted row. Exactness IS the leak-guard —
+     * password, two_factor_secret, two_factor_recovery_codes and remember_token can
+     * never serialize without failing this. Callers arrange a verified, 2FA-confirmed
+     * user (the hardcoded derivation pins). Shared by the view-profile (UC-1-014) and
+     * update-profile (UC-1-015) suites.
+     */
+    protected function assertExactProfileEnvelope(TestResponse $response, User $user): void
+    {
+        $user->refresh();
+
+        $response->assertOk();
+        $response->assertExactJson(['data' => [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'email_verified' => true,
+            'locale' => $user->locale,
+            'two_factor_enabled' => true,
+            'default_company_id' => $user->default_company_id,
+            'last_logged_at' => $user->last_logged_at?->toJSON(),
+            'created_at' => $user->created_at?->toJSON(),
+        ]]);
+    }
+
+    /**
      * PUT the default-company preference (UC-1-139) — payload-shaped so the
      * malformed-body variations reuse the same seam. No X-Company-Context:
      * the me/ surface is account-level (listCompanies precedent). Shared by
