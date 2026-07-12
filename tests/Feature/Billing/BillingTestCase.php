@@ -49,6 +49,19 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
+     * The request was rejected as unauthenticated — 401 with the §S21
+     * UNAUTHENTICATED envelope. Duplicated from CompaniesTestCase/AuthTestCase
+     * (module bases are independent — established precedent; base-level
+     * consolidation stays a flagged future refactor).
+     */
+    protected function assertUnauthenticated(TestResponse $response): void
+    {
+        $response->assertStatus(401);
+        $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    /**
      * The member's role lacks the required permission — 403 ROLE_INSUFFICIENT
      * naming the missing grant. Duplicated from CompaniesTestCase (module bases
      * are independent — established precedent).

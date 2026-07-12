@@ -43,6 +43,21 @@ class ListPlansTest extends BillingTestCase
         $this->assertRoleInsufficient($response, 'billing.view');
     }
 
+    // Sad — the catalog is auth-gated: a guest gets the standard unauthenticated
+    // refusal (the catalog is not public — declared LD divergence, spec §6).
+    #[Test]
+    public function when_request_has_no_token_then_unauthenticated(): void
+    {
+        // Given an existing company and no authenticated session
+        [$company] = $this->aCompanyWithMember('owner');
+
+        // When a guest requests the plan catalog
+        $response = $this->getJson('/api/v1/plans', ['X-Company-Context' => $company->getKey()]);
+
+        // Then the request is rejected as unauthenticated
+        $this->assertUnauthenticated($response);
+    }
+
     /** @return array<string, array{string}> */
     public static function provideDeniedRoles(): array
     {
