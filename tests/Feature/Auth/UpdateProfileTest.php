@@ -7,7 +7,9 @@ use Laravel\Sanctum\Sanctum;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Auth\Events\UserProfileUpdated;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class UpdateProfileTest extends AuthTestCase
 {
@@ -101,6 +103,30 @@ class UpdateProfileTest extends AuthTestCase
         ];
     }
 
+    // --- Happy ---
+
+    #[Test]
+    public function when_valid_name_and_locale_are_submitted_then_the_profile_is_updated(): void
+    {
+        // Given a fully-populated user (verified, 2FA-confirmed — the envelope pins) with an established profile
+        $user = User::factory()
+            ->named(self::CURRENT_NAME)
+            ->locale(self::CURRENT_LOCALE)
+            ->withTwoFactor()
+            ->create();
+
+        // When they submit a new name and notification locale
+        $response = $this->updateProfile($user, ['name' => 'Alice Fernando', 'locale' => 'si']);
+
+        // Then the profile is updated everywhere and the write was event-sourced
+        $this->assertProfileUpdatedEverywhere($response, $user, ['name' => 'Alice Fernando', 'locale' => 'si']);
+        $this->assertProfileUpdateWasEventSourced($user, [
+            'name' => 'Alice Fernando',
+            'locale' => 'si',
+            'changedFields' => ['name', 'locale'],
+        ]);
+    }
+
     /**
      * Arrange the suite's canonical user: an established profile at
      * CURRENT_NAME / CURRENT_LOCALE.
@@ -131,6 +157,39 @@ class UpdateProfileTest extends AuthTestCase
         Sanctum::actingAs($actor);
 
         return $this->putJson('/api/v1/me', $payload);
+    }
+
+    /**
+     * The update succeeded end-to-end: the response is EXACTLY the nine-field envelope
+     * built from the refreshed row (the promoted leak-guard) AND the row now carries the
+     * new values — the value pins go RED if the write never lands (the envelope alone
+     * would self-consistently echo the old row).
+     *
+     * @param  array<string, string>  $expected
+     */
+    protected function assertProfileUpdatedEverywhere(TestResponse $response, User $user, array $expected): void
+    {
+        $this->assertExactProfileEnvelope($response, $user);
+        $this->assertDatabaseHas('users', ['id' => $user->id, ...$expected]);
+    }
+
+    /**
+     * The write was event-sourced, not a direct read-model save: exactly one
+     * UserProfileUpdated was stored carrying the user id, the new name + locale and the
+     * changed-field list (the audit-trail postcondition reads off this row). Goes RED if
+     * the interactor writes users directly — the behavioural pins cannot catch that
+     * (identical read-model state), yet it would be reverted on a projection replay.
+     *
+     * @param  array<string, mixed>  $expected
+     */
+    protected function assertProfileUpdateWasEventSourced(User $user, array $expected): void
+    {
+        $stored = LesilyStoredEvent::query()->where('event_class', UserProfileUpdated::class)->sole();
+
+        $this->assertSame($user->id, $stored->event_properties['userId']);
+        $this->assertSame($expected['name'], $stored->event_properties['name']);
+        $this->assertSame($expected['locale'], $stored->event_properties['locale']);
+        $this->assertSame($expected['changedFields'], $stored->event_properties['changedFields']);
     }
 
     /**

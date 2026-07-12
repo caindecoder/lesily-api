@@ -2,10 +2,12 @@
 
 namespace App\Foundation\Auth\IO\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Foundation\Auth\IO\Http\Resources\MeResource;
 use App\Foundation\Auth\UseCases\Commands\UpdateUserProfileCommand;
+use App\Foundation\Auth\UseCases\Interactors\UpdateUserProfileInteractor;
 
 class ProfileController extends Controller
 {
@@ -14,10 +16,13 @@ class ProfileController extends Controller
         return new MeResource($request->user());
     }
 
-    public function update(Request $request): MeResource
+    public function update(Request $request, UpdateUserProfileInteractor $interactor): MeResource
     {
-        UpdateUserProfileCommand::validateAndCreate($request);
+        $command = UpdateUserProfileCommand::validateAndCreate($request);
 
-        return new MeResource($request->user());
+        /** @var User $user */
+        $user = $request->user();
+
+        return new MeResource($interactor->execute($user, $command));
     }
 }
