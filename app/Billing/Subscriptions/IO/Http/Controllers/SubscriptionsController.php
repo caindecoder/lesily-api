@@ -10,8 +10,11 @@ use App\Billing\Subscriptions\IO\Http\Resources\SubscriptionResource;
  * The company's subscription-state read (UC-1-041, slice-plans-billing T2).
  * Pure read — no interactor (cd-subscriptions §5, gate I1); the middleware
  * chain is the only guard. Singular fetch: every company has exactly one
- * Subscription, projected at genesis (api-1-subscriptions §2) — firstOrFail
- * backstops that invariant.
+ * Subscription — RegisterOwnerInteractor fires startTrial inside the same
+ * genesis transaction that creates the company, and SubscriptionProjector
+ * inserts the row (api-1-subscriptions §2). A missing row is therefore an
+ * invariant violation no production path can reach; firstOrFail backstops
+ * it with the standard 404 envelope.
  */
 class SubscriptionsController
 {
