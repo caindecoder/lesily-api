@@ -52,6 +52,20 @@ class UpdateProfileTest extends AuthTestCase
         $this->assertUpdateRejectedAndProfileUnchanged($response, $invalidFields, $this->unchangedProfileOf($user));
     }
 
+    #[Test]
+    public function when_no_token_is_provided_then_the_request_is_unauthenticated(): void
+    {
+        // Given a user exists but no authentication token is presented
+        $user = $this->anEstablishedUser();
+
+        // When an otherwise-valid update is sent to PUT /api/v1/me without a token
+        $response = $this->putJson('/api/v1/me', ['name' => 'Mallory', 'locale' => 'ta']);
+
+        // Then the Sanctum guard rejects it before any work runs and the record is untouched
+        $this->assertUnauthenticated($response);
+        $this->assertDatabaseHas('users', $this->unchangedProfileOf($user));
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string|array<int, string>}>
      */
