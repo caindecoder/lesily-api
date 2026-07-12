@@ -187,4 +187,41 @@ class ViewSubscriptionTest extends BillingTestCase
             'past_due_status' => null,
         ]);
     }
+
+    // Happy — tenant isolation (UC-1-041 Gherkin): a user owning two companies
+    // sees ONLY the context company's subscription. Company B's row is projected
+    // FIRST so an unscoped fetch would surface B — the isolation is what keeps
+    // this green. Payload identity proves nothing of B leaks.
+    #[Test]
+    public function when_user_belongs_to_multiple_companies_then_only_context_company_is_reported(): void
+    {
+        // Given a user owning trial Company A and Pro Company B (B's subscription projected first)
+        $this->travelTo('2026-06-01 00:00:00');
+        $companyB = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $this->aTrialSubscriptionFor($companyB, CarbonImmutable::now()->addDays(30));
+        $companyA = Company::factory()->withoutPlan()->create();
+        $owner = $this->aCompanyMember($companyA, 'owner');
+        $companyB->users()->attach($owner, ['role_id' => $this->seededRole('owner')->getKey()]);
+        $subscriptionA = $this->aTrialSubscriptionFor($companyA, CarbonImmutable::now()->addDays(10));
+
+        // When they request the subscription state under Company A's context
+        $response = $this->viewSubscriptionAs($owner, $companyA);
+
+        // Then only Company A's subscription state is reported
+        $this->assertExactSubscriptionContract($response, [
+            'id' => $subscriptionA->getKey(),
+            'status' => 'trial',
+            'plan' => null,
+            'trial_ends_at' => '2026-06-11T00:00:00.000000Z',
+            'add_ons' => [],
+            'cancelled_at' => null,
+            'ended_source' => null,
+            'billing_cycle' => null,
+            'period_start' => null,
+            'period_end' => null,
+            'next_charge_at' => null,
+            'payment_method_summary' => null,
+            'past_due_status' => null,
+        ]);
+    }
 }
