@@ -24,6 +24,7 @@ use App\Foundation\Auth\IO\Http\Controllers\DisableTwoFactorController;
 use App\Companies\Memberships\IO\Http\Controllers\InvitationsController;
 use App\Companies\Memberships\IO\Http\Controllers\MembershipsController;
 use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
+use App\Billing\Subscriptions\IO\Http\Controllers\SubscriptionsController;
 use App\Companies\Memberships\IO\Http\Controllers\AcceptInvitationController;
 use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
 
@@ -251,4 +252,10 @@ Route::post('/v1/invitations/accept/{token}', AcceptInvitationController::class)
 // [view+manage], admin/auditor read-only). Repository-free — no interactor (cd-subscriptions §5, gate I1).
 // No throttle (tiered limits — OQ-1-098).
 Route::get('/v1/plans', [PlansController::class, 'index'])
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:billing.view']);
+
+// The company's subscription state (UC-1-041, slice-plans-billing T2). Singular —
+// every company has exactly one Subscription (api-1-subscriptions §2). Pure read,
+// no interactor (cd-subscriptions §5, gate I1). No throttle (tiered — OQ-1-098).
+Route::get('/v1/subscription', [SubscriptionsController::class, 'show'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:billing.view']);

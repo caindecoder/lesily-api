@@ -172,25 +172,4 @@ class ListPlansTest extends BillingTestCase
             ],
         ]]);
     }
-
-    /** @return array<string, array{string}> */
-    public static function provideViewingRoles(): array
-    {
-        return [
-            'owner' => ['owner'],
-            'admin' => ['admin'],
-            'auditor' => ['auditor'],
-        ];
-    }
-
-    /** @return array<string, array{string}> */
-    public static function provideDeniedRoles(): array
-    {
-        return [
-            'hr officer' => ['hr_officer'],
-            'payroll officer' => ['payroll_officer'],
-            'employee' => ['employee'],
-            'manager' => ['manager'],
-        ];
-    }
 }
