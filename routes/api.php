@@ -125,6 +125,15 @@ Route::post('/v1/auth/2fa/recovery-codes', RegenerateRecoveryCodesController::cl
 Route::get('/v1/me', [ProfileController::class, 'show'])
     ->middleware('auth:sanctum');
 
+// Update own profile (UC-1-015) — name + notification locale, full-PUT semantics,
+// event-sourced via the built User aggregate (slice-profile B5). Bare auth:sanctum:
+// a `me/` self-service write (no company context), no throttle (tiered limits
+// deferred, OQ-1-098) and no idempotency-key mount (naturally idempotent full-PUT;
+// a retry re-converges and the no-op guard records no duplicate event — the
+// default-company precedent, s127 ruling).
+Route::put('/v1/me', [ProfileController::class, 'update'])
+    ->middleware('auth:sanctum');
+
 // List my companies (UC-1-034) — the authenticated user's own live company
 // memberships, the switcher-list read. Bare auth:sanctum: a `me/` self-service
 // read (no company context — the memberships span companies), no throttle
