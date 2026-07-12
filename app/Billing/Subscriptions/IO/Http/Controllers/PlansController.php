@@ -2,7 +2,8 @@
 
 namespace App\Billing\Subscriptions\IO\Http\Controllers;
 
-use Illuminate\Http\JsonResponse;
+use App\Foundation\Billing\Enums\BillingPlan;
+use App\Billing\Subscriptions\IO\Http\Resources\PlanCollection;
 
 /**
  * The plan catalog (UC-1-042 partial — the plan-picker read). Enum-derived
@@ -11,8 +12,8 @@ use Illuminate\Http\JsonResponse;
  */
 class PlansController
 {
-    public function index(): JsonResponse
+    public function index(): PlanCollection
     {
-        return response()->json([]);
+        return new PlanCollection(collect(BillingPlan::cases()));
     }
 }

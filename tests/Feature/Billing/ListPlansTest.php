@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Billing;
 
+use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -73,6 +74,23 @@ class ListPlansTest extends BillingTestCase
 
         // Then company access is denied
         $this->assertCompanyAccessDenied($response);
+    }
+
+    // Edge — the catalog's primary consumer is the trial company (Day-31 modal /
+    // upgrade picker): current_billing_plan is NULL during trial (s066 ruling),
+    // and the read is permission-gated only — never plan- or feature-gated.
+    #[Test]
+    public function when_member_of_trial_company_requests_plans_then_catalog_returned(): void
+    {
+        // Given an owner of a trial company (no billing plan set)
+        $company = Company::factory()->withoutPlan()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they request the plan catalog
+        $response = $this->viewPlansAs($owner, $company);
+
+        // Then the full four-tier catalog is returned
+        $this->assertCatalogReturned($response);
     }
 
     /** @return array<string, array{string}> */

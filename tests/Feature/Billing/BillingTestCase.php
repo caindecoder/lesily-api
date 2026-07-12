@@ -23,19 +23,43 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
-     * A company on a paid plan with one fresh member under a seeded role — the
-     * company_user pivot row the billing.view gate reads.
+     * A fresh user made a live member of $company under a seeded role — the
+     * company_user pivot row the billing.view gate reads. Duplicated from
+     * CompaniesTestCase (module bases are independent — established precedent).
+     */
+    protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
+    {
+        $user = User::factory()->create();
+
+        $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
+
+        return $user;
+    }
+
+    /**
+     * A company on a paid plan with one fresh member under a seeded role.
      *
      * @return array{0: Company, 1: User}
      */
     protected function aCompanyWithMember(string $roleCode): array
     {
         $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $user = User::factory()->create();
 
-        $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
+        return [$company, $this->aCompanyMember($company, $roleCode)];
+    }
 
-        return [$company, $user];
+    /**
+     * The plan catalog came back — 200 with all four standard tiers in the
+     * non-paginated {data: [...]} envelope, each row carrying the six contract
+     * keys (LD assertJsonCount shape-lock pattern).
+     */
+    protected function assertCatalogReturned(TestResponse $response): void
+    {
+        $response->assertOk();
+        $response->assertJsonCount(4, 'data');
+        $response->assertJsonStructure(['data' => ['*' => [
+            'code', 'label', 'features', 'monthly_price_cents', 'annual_price_cents', 'currency',
+        ]]]);
     }
 
     /**
