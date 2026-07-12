@@ -66,6 +66,22 @@ class UpdateProfileTest extends AuthTestCase
         $this->assertDatabaseHas('users', $this->unchangedProfileOf($user));
     }
 
+    #[Test]
+    public function when_targeting_another_users_profile_then_the_route_does_not_exist(): void
+    {
+        // Given an authenticated user Alice and another user Bob in the system
+        $alice = $this->anEstablishedUser();
+        $bob = User::factory()->named('Bob Silva')->locale('ta')->create();
+
+        // When Alice attempts an id-addressed profile update against Bob
+        Sanctum::actingAs($alice);
+        $response = $this->putJson("/api/v1/users/{$bob->id}/profile", ['name' => 'Hijacked', 'locale' => 'en']);
+
+        // Then no such route exists (self-only by construction) and Bob is unchanged
+        $response->assertNotFound();
+        $this->assertDatabaseHas('users', ['id' => $bob->id, 'name' => 'Bob Silva', 'locale' => 'ta']);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string|array<int, string>}>
      */
