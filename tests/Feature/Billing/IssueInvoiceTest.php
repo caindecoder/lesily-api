@@ -8,6 +8,8 @@ use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
+use App\Billing\Invoices\Events\InvoiceCreated;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
 use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
 
@@ -22,6 +24,8 @@ use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
  */
 class IssueInvoiceTest extends BillingTestCase
 {
+    use RefreshDatabase;
+
     #[Test]
     public function when_an_issued_invoice_is_issued_again_then_the_reissue_is_rejected(): void
     {
@@ -65,5 +69,56 @@ class IssueInvoiceTest extends BillingTestCase
             // Then the issue is rejected and no event is stored
             $this->assertNoNewInvoiceEvents($invoiceId, 0);
         }
+    }
+
+    #[Test]
+    public function when_an_invoice_is_issued_then_the_pending_invoice_and_its_line_items_are_projected(): void
+    {
+        // Given a company with a trial subscription
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoiceId = (string) Str::uuid();
+
+        // When an invoice is issued at the domain seam
+        Invoice::retrieve($invoiceId)
+            ->issue($this->issueInvoiceCommand($company, $subscription))
+            ->persist();
+
+        // Then the creation event is stored and the pending invoice with its line items is projected
+        $this->assertInvoiceEventRecorded(InvoiceCreated::class, $invoiceId, [
+            'invoiceNumber' => 'INV-2026-000001',
+            'subscriptionId' => $subscription->getKey(),
+            'companyId' => $company->getKey(),
+            'amountCents' => 60000,
+            'source' => 'subscribe',
+        ]);
+        $this->assertInvoiceRowState($invoiceId, [
+            'company_id' => $company->getKey(),
+            'subscription_id' => $subscription->getKey(),
+            'invoice_number' => 'INV-2026-000001',
+            'status' => 'pending',
+            'source' => 'subscribe',
+            'has_dispute' => false,
+            'amount_cents' => 60000,
+            'currency' => 'LKR',
+            'recipient_name' => 'ACME (Pvt) Ltd',
+            'recipient_email' => 'billing@acme.example',
+        ]);
+        $this->assertLineItemsProjected($invoiceId, [
+            [
+                'description' => 'Pro Plan — Monthly',
+                'unit_price_cents' => 75000,
+                'amount_cents' => 75000,
+                'line_type' => 'plan_subscription',
+                'sort_order' => 0,
+            ],
+            [
+                'description' => 'Proration credit — unused Starter days',
+                'unit_price_cents' => 15000,
+                'amount_cents' => -15000,
+                'line_type' => 'proration_credit',
+                'sort_order' => 1,
+            ],
+        ]);
     }
 }

@@ -10,6 +10,7 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use App\Foundation\Billing\Enums\BillingPlan;
+use App\Billing\Invoices\Entities\InvoiceLineItem;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
@@ -211,6 +212,48 @@ abstract class BillingTestCase extends TestCase
             $expectedCount,
             LesilyStoredEvent::query()->where('aggregate_uuid', $invoiceId)->count(),
         );
+    }
+
+    /**
+     * Exactly one $eventClass is stored for this invoice aggregate, matching
+     * every pinned payload property — the amendment-R mechanism proof that the
+     * write went through the event stream (MembershipsTestCase precedent).
+     */
+    protected function assertInvoiceEventRecorded(string $eventClass, string $invoiceId, array $propertyPins = []): void
+    {
+        $query = LesilyStoredEvent::query()
+            ->where('event_class', $eventClass)
+            ->where('aggregate_uuid', $invoiceId);
+
+        foreach ($propertyPins as $property => $value) {
+            $query->where("event_properties->{$property}", $value);
+        }
+
+        $this->assertSame(1, $query->count());
+    }
+
+    /**
+     * The projected invoices row carries the expected column state.
+     */
+    protected function assertInvoiceRowState(string $invoiceId, array $expected): void
+    {
+        $this->assertDatabaseHas('invoices', ['id' => $invoiceId, ...$expected]);
+    }
+
+    /**
+     * Exactly the expected line-item rows were projected for this invoice —
+     * count plus per-row column pins (immutable after creation per ERD-1-04).
+     */
+    protected function assertLineItemsProjected(string $invoiceId, array $expectedRows): void
+    {
+        $this->assertSame(
+            count($expectedRows),
+            InvoiceLineItem::query()->where('invoice_id', $invoiceId)->count(),
+        );
+
+        foreach ($expectedRows as $row) {
+            $this->assertDatabaseHas('invoice_line_items', ['invoice_id' => $invoiceId, ...$row]);
+        }
     }
 
     /**

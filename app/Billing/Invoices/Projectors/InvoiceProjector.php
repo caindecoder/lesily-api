@@ -1,0 +1,56 @@
+<?php
+
+namespace App\Billing\Invoices\Projectors;
+
+use App\Billing\Invoices\Enums\InvoiceStatus;
+use App\Billing\Invoices\Events\InvoiceCreated;
+use App\Billing\Invoices\Entities\InvoiceLineItem;
+use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
+use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
+
+/**
+ * Mirrors the Invoice aggregate's lifecycle events into the `invoices` +
+ * `invoice_line_items` read models (ERD-1-04). Line items are inserted with the
+ * parent invoice on InvoiceCreated and never touched again (immutable per the
+ * ERD deviation). Sole writer of both tables (conv-plan §2.15).
+ */
+class InvoiceProjector extends Projector
+{
+    public function onInvoiceCreated(InvoiceCreated $event): void
+    {
+        InvoiceReadModel::query()->create([
+            'id' => $event->aggregateRootUuid(),
+            'company_id' => $event->companyId,
+            'subscription_id' => $event->subscriptionId,
+            'invoice_number' => $event->invoiceNumber,
+            'status' => InvoiceStatus::Pending,
+            'source' => $event->source,
+            'amount_cents' => $event->amountCents,
+            'currency' => $event->currency,
+            'due_date' => $event->dueDate,
+            'issued_at' => $event->issuedAt,
+            'recipient_name' => $event->recipientName,
+            'recipient_email' => $event->recipientEmail,
+            'recipient_billing_address' => $event->recipientBillingAddress,
+            'created_by' => $event->createdBy,
+        ]);
+
+        foreach ($event->lineItems as $item) {
+            InvoiceLineItem::query()->create([
+                'company_id' => $event->companyId,
+                'invoice_id' => $event->aggregateRootUuid(),
+                'description' => $item['description'],
+                'quantity' => $item['quantity'],
+                'unit_price_cents' => $item['unitPriceCents'],
+                'amount_cents' => $item['amountCents'],
+                'currency' => $event->currency,
+                'line_type' => $item['lineType'],
+                'reference_id' => $item['referenceId'] ?? null,
+                'reference_type' => $item['referenceType'] ?? null,
+                'period_start' => $item['periodStart'] ?? null,
+                'period_end' => $item['periodEnd'] ?? null,
+                'sort_order' => $item['sortOrder'],
+            ]);
+        }
+    }
+}
