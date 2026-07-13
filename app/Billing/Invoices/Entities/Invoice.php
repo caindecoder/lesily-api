@@ -2,6 +2,7 @@
 
 namespace App\Billing\Invoices\Entities;
 
+use Database\Factories\InvoiceFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Billing\Invoices\Enums\InvoiceStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -66,4 +67,9 @@ class Invoice extends Model
         'refunded_at' => 'immutable_datetime',
         'recipient_billing_address' => 'array',
     ];
+
+    protected static function newFactory(): InvoiceFactory
+    {
+        return InvoiceFactory::new();
+    }
 }
