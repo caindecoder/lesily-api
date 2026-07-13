@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
+use App\Billing\Invoices\Events\InvoicePaid;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -98,6 +99,36 @@ class RecordInvoicePaymentTest extends BillingTestCase
         // Then no duplicate event is stored and the projected row is untouched
         $this->assertNoNewInvoiceEvents($invoice->getKey(), 2);
         $this->assertSame($rowBeforeReplay, $invoice->fresh()?->getAttributes());
+    }
+
+    #[Test]
+    public function when_a_pending_invoice_payment_succeeds_then_the_invoice_is_paid(): void
+    {
+        // Given a pending invoice
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+
+        // When a verified payment webhook is recorded against it
+        Invoice::retrieve($invoice->getKey())
+            ->recordPaymentSucceeded($this->recordPaymentSucceededCommand($invoice, [
+                'payHereEventId' => 'evt_t2_success',
+                'payHereTransactionId' => 'txn_t2_success',
+            ]))
+            ->persist();
+
+        // Then the paid event is stored and the projected row reflects the payment
+        $this->assertInvoiceEventRecorded(InvoicePaid::class, $invoice->getKey(), [
+            'amountCents' => 60000,
+            'payHereEventId' => 'evt_t2_success',
+            'payHereTransactionId' => 'txn_t2_success',
+            'source' => 'first-attempt',
+        ]);
+        $this->assertInvoiceRowState($invoice->getKey(), [
+            'status' => 'paid',
+            'payhere_transaction_id' => 'txn_t2_success',
+        ]);
+        $this->assertNotNull($invoice->fresh()?->paid_at);
     }
 
     /**

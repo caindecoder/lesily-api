@@ -2,6 +2,7 @@
 
 namespace App\Billing\Invoices\Projectors;
 
+use App\Billing\Invoices\Events\InvoicePaid;
 use App\Billing\Invoices\Enums\InvoiceStatus;
 use App\Billing\Invoices\Events\InvoiceCreated;
 use App\Billing\Invoices\Entities\InvoiceLineItem;
@@ -36,21 +37,39 @@ class InvoiceProjector extends Projector
         ]);
 
         foreach ($event->lineItems as $item) {
-            InvoiceLineItem::query()->create([
-                'company_id' => $event->companyId,
-                'invoice_id' => $event->aggregateRootUuid(),
-                'description' => $item['description'],
-                'quantity' => $item['quantity'],
-                'unit_price_cents' => $item['unitPriceCents'],
-                'amount_cents' => $item['amountCents'],
-                'currency' => $event->currency,
-                'line_type' => $item['lineType'],
-                'reference_id' => $item['referenceId'] ?? null,
-                'reference_type' => $item['referenceType'] ?? null,
-                'period_start' => $item['periodStart'] ?? null,
-                'period_end' => $item['periodEnd'] ?? null,
-                'sort_order' => $item['sortOrder'],
-            ]);
+            $this->insertLineItem($event, $item);
         }
+    }
+
+    public function onInvoicePaid(InvoicePaid $event): void
+    {
+        InvoiceReadModel::query()->findOrFail($event->aggregateRootUuid())
+            ->update([
+                'status' => InvoiceStatus::Paid,
+                'paid_at' => $event->paidAt,
+                'payhere_transaction_id' => $event->payHereTransactionId,
+            ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function insertLineItem(InvoiceCreated $event, array $item): void
+    {
+        InvoiceLineItem::query()->create([
+            'company_id' => $event->companyId,
+            'invoice_id' => $event->aggregateRootUuid(),
+            'description' => $item['description'],
+            'quantity' => $item['quantity'],
+            'unit_price_cents' => $item['unitPriceCents'],
+            'amount_cents' => $item['amountCents'],
+            'currency' => $event->currency,
+            'line_type' => $item['lineType'],
+            'reference_id' => $item['referenceId'] ?? null,
+            'reference_type' => $item['referenceType'] ?? null,
+            'period_start' => $item['periodStart'] ?? null,
+            'period_end' => $item['periodEnd'] ?? null,
+            'sort_order' => $item['sortOrder'],
+        ]);
     }
 }
