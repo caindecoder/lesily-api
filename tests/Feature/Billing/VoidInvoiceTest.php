@@ -2,17 +2,63 @@
 
 namespace Tests\Feature\Billing;
 
-use Tests\TestCase;
+use Carbon\CarbonImmutable;
+use App\Companies\Entities\Company;
+use PHPUnit\Framework\Attributes\Test;
+use App\Billing\Invoices\Aggregates\Invoice;
+use App\Foundation\Billing\Enums\BillingPlan;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Billing\Invoices\Exceptions\InvoiceNotVoidableException;
 
-class VoidInvoiceTest extends TestCase
+/**
+ * Voiding an unpaid invoice at the domain seam — SM-1-04 T7 (Pending → Voided)
+ * and T8 (Failed → Voided) plus the no-charge-collected guard.
+ *
+ * Domain-seam test class (conv-plan §2.14 Rule C): the Invoice aggregate ships
+ * caller-less at HTTP by declared design (slice-#10 B4 — the admin/dispute
+ * producers land with later slices), so these guards are provable only at this
+ * seam; the walks protect the future producers and replay integrity.
+ */
+class VoidInvoiceTest extends BillingTestCase
 {
-    /**
-     * A basic feature test example.
-     */
-    public function test_example(): void
-    {
-        $response = $this->get('/');
+    use RefreshDatabase;
 
-        $response->assertStatus(200);
+    #[Test, DataProvider('provideNonVoidableStates')]
+    public function when_a_paid_or_terminal_invoice_is_voided_then_the_void_is_rejected(
+        string $state,
+        int $storedEventCount,
+    ): void {
+        // Given an invoice in a state that cannot be voided
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->anInvoiceInState($state, $company, $subscription);
+
+        // When an admin voids it
+        try {
+            Invoice::retrieve($invoice->getKey())
+                ->void($this->voidInvoiceCommand($invoice))
+                ->persist();
+
+            $this->fail('Expected InvoiceNotVoidableException was not thrown.');
+        } catch (InvoiceNotVoidableException) {
+            // Then the void is rejected and no new event is stored
+            $this->assertNoNewInvoiceEvents($invoice->getKey(), $storedEventCount);
+        }
+    }
+
+    /**
+     * States that must reject a void, with the number of stored events their
+     * fixture arrangement leaves on the stream.
+     *
+     * @return array<string, array{string, int}>
+     */
+    public static function provideNonVoidableStates(): array
+    {
+        return [
+            'paid' => ['paid', 2],
+            'refunded' => ['refunded', 3],
+            'voided' => ['voided', 2],
+        ];
     }
 }

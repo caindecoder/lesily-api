@@ -13,6 +13,7 @@ use App\Billing\Invoices\Events\InvoicePaymentFailed;
 use App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand;
 use App\Billing\Invoices\Exceptions\InvoiceNotPayableException;
 use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
+use App\Billing\Invoices\Exceptions\InvoiceNotVoidableException;
 use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
 use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
 use App\Billing\Invoices\Exceptions\InvoiceNotRefundableException;
@@ -133,6 +134,10 @@ class Invoice extends AggregateRoot
 
     public function void(VoidInvoiceCommand $command): static
     {
+        if (! in_array($this->status, [InvoiceStatus::Pending, InvoiceStatus::Failed], true)) {
+            throw InvoiceNotVoidableException::forInvoice($this->uuid(), $this->status?->value ?? 'unissued');
+        }
+
         return $this->recordThat(new InvoiceVoided(
             invoiceId: $this->uuid(),
             voidedAt: CarbonImmutable::now(),

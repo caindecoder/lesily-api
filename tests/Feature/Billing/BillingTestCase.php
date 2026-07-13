@@ -305,15 +305,25 @@ abstract class BillingTestCase extends TestCase
         $invoice = $this->anIssuedInvoiceFor($company, $subscription);
 
         Invoice::retrieve($invoice->getKey())
-            ->void(VoidInvoiceCommand::validateAndCreate([
-                'invoiceId' => $invoice->getKey(),
-                'voidedBy' => User::factory()->create()->getKey(),
-                'reason' => 'Issued in error - admin correction.',
-                'source' => 'admin-correction',
-            ]))
+            ->void($this->voidInvoiceCommand($invoice))
             ->persist();
 
         return $invoice->refresh();
+    }
+
+    /**
+     * A valid admin-correction void command for $invoice, actor freshly minted.
+     * Override per test (dispute-pre-payment source, specific actors).
+     */
+    protected function voidInvoiceCommand(InvoiceReadModel $invoice, array $overrides = []): VoidInvoiceCommand
+    {
+        return VoidInvoiceCommand::validateAndCreate([
+            'invoiceId' => $invoice->getKey(),
+            'voidedBy' => User::factory()->create()->getKey(),
+            'reason' => 'Issued in error - admin correction.',
+            'source' => 'admin-correction',
+            ...$overrides,
+        ]);
     }
 
     /**
