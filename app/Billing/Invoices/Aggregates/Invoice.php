@@ -21,6 +21,9 @@ class Invoice extends AggregateRoot
 {
     protected ?InvoiceStatus $status = null;
 
+    /** @var array<int, string> */
+    protected array $seenPayHereEventIds = [];
+
     public function issue(IssueInvoiceCommand $command): static
     {
         if ($this->status !== null) {
@@ -53,6 +56,12 @@ class Invoice extends AggregateRoot
 
     public function recordPaymentSucceeded(RecordPaymentSucceededCommand $command): static
     {
+        // Webhook replay (tier-1 idempotency): a seen PayHere event id is
+        // absorbed without recording — replays produce no state changes (SM-1-04 §6).
+        if (in_array($command->payHereEventId, $this->seenPayHereEventIds, true)) {
+            return $this;
+        }
+
         if ($this->status !== InvoiceStatus::Pending) {
             throw InvoiceNotPayableException::forInvoice($this->uuid(), $this->status?->value ?? 'unissued');
         }
@@ -98,6 +107,7 @@ class Invoice extends AggregateRoot
     protected function applyInvoicePaid(InvoicePaid $event): void
     {
         $this->status = InvoiceStatus::Paid;
+        $this->seenPayHereEventIds[] = $event->payHereEventId;
     }
 
     protected function applyInvoiceRefunded(InvoiceRefunded $event): void

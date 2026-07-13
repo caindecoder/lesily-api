@@ -50,6 +50,32 @@ class RecordInvoicePaymentTest extends BillingTestCase
         }
     }
 
+    #[Test]
+    public function when_a_replayed_payment_webhook_event_is_recorded_again_then_no_duplicate_event_is_stored(): void
+    {
+        // Given an invoice paid via a specific PayHere webhook event
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+        Invoice::retrieve($invoice->getKey())
+            ->recordPaymentSucceeded($this->recordPaymentSucceededCommand($invoice, [
+                'payHereEventId' => 'evt_replay_001',
+            ]))
+            ->persist();
+        $rowBeforeReplay = $invoice->fresh()?->getAttributes();
+
+        // When PayHere redelivers the same webhook event
+        Invoice::retrieve($invoice->getKey())
+            ->recordPaymentSucceeded($this->recordPaymentSucceededCommand($invoice, [
+                'payHereEventId' => 'evt_replay_001',
+            ]))
+            ->persist();
+
+        // Then no duplicate event is stored and the projected row is untouched
+        $this->assertNoNewInvoiceEvents($invoice->getKey(), 2);
+        $this->assertSame($rowBeforeReplay, $invoice->fresh()?->getAttributes());
+    }
+
     /**
      * States that must reject a fresh payment, with the number of stored events
      * their fixture arrangement leaves on the stream (the no-op baseline).
