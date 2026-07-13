@@ -9,3 +9,10 @@ pre-commit:
       # The .bat wrapper internally calls Herd's PHP via Windows PATH.
       run: vendor/bin/pint.bat --dirty {staged_files}
       stage_fixed: true
+    test-class-naming:
+      glob: "tests/**/*Test.php"
+      # Sec 2.14 (coding-conventions-plan): behavior-named test classes only.
+      # Logic lives in scripts/check-test-class-naming.sh (shared with the CI
+      # quality job); pure-POSIX sh - immune to the Herd php.bat gotcha above
+      # AND to lefthook's {brace} templating (which mangles inline shell groups).
+      run: sh scripts/check-test-class-naming.sh {staged_files}
