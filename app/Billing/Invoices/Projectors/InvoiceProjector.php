@@ -8,6 +8,7 @@ use App\Billing\Invoices\Events\InvoiceVoided;
 use App\Billing\Invoices\Events\InvoiceCreated;
 use App\Billing\Invoices\Events\InvoiceRefunded;
 use App\Billing\Invoices\Entities\InvoiceLineItem;
+use App\Billing\Invoices\Events\InvoiceDisputeFiled;
 use App\Billing\Invoices\Events\InvoicePaymentFailed;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
@@ -77,6 +78,14 @@ class InvoiceProjector extends Projector
                 'void_reason' => $event->reason,
                 'void_source' => $event->source,
             ]);
+    }
+
+    public function onInvoiceDisputeFiled(InvoiceDisputeFiled $event): void
+    {
+        // Modifier — no state transition; dispute-resolution events clear the
+        // flag in the dispute slice (s133 F8; UC-1-120 disputed filter + UC-1-121 F7 block).
+        InvoiceReadModel::query()->findOrFail($event->aggregateRootUuid())
+            ->update(['has_dispute' => true]);
     }
 
     public function onInvoicePaymentFailed(InvoicePaymentFailed $event): void

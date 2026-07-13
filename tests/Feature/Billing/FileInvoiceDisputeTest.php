@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Billing;
 
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
@@ -9,6 +10,7 @@ use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Billing\Invoices\Events\InvoiceDisputeFiled;
 use App\Billing\Invoices\Exceptions\InvoiceDisputeNotAllowedException;
 
 /**
@@ -67,6 +69,34 @@ class FileInvoiceDisputeTest extends BillingTestCase
             // Then the filing is rejected and no new event is stored
             $this->assertNoNewInvoiceEvents($invoice->getKey(), $storedEventCount);
         }
+    }
+
+    #[Test]
+    public function when_a_dispute_is_filed_then_the_dispute_flag_is_projected_without_a_state_change(): void
+    {
+        // Given a PAID invoice and the owner disputing its charge (F7: even paid invoices dispute)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        $owner = User::factory()->create();
+
+        // When the dispute is filed
+        Invoice::retrieve($invoice->getKey())
+            ->fileDispute($this->fileInvoiceDisputeCommand($invoice, [
+                'filedBy' => $owner->getKey(),
+                'reason' => 'We were charged after cancelling the add-on.',
+            ]))
+            ->persist();
+
+        // Then the modifier event is stored and only the dispute flag changes on the row
+        $this->assertInvoiceEventRecorded(InvoiceDisputeFiled::class, $invoice->getKey(), [
+            'filedBy' => $owner->getKey(),
+            'reason' => 'We were charged after cancelling the add-on.',
+        ]);
+        $this->assertInvoiceRowState($invoice->getKey(), [
+            'status' => 'paid',
+            'has_dispute' => true,
+        ]);
     }
 
     /**
