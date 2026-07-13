@@ -17,7 +17,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  */
 class Invoice extends Model
 {
+    /** @use HasFactory<InvoiceFactory> */
     use HasFactory;
+
     use HasUuids;
 
     protected $fillable = [

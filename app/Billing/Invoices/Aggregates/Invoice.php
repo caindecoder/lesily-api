@@ -77,7 +77,7 @@ class Invoice extends AggregateRoot
         }
 
         if (! in_array($this->status, [InvoiceStatus::Pending, InvoiceStatus::Failed], true)) {
-            throw InvoiceNotPayableException::forInvoice($this->uuid(), $this->status?->value ?? 'unissued');
+            throw InvoiceNotPayableException::forInvoice($this->uuid(), $this->status->value ?? 'unissued');
         }
 
         if ($command->amountCents !== $this->amountCents) {
@@ -103,7 +103,7 @@ class Invoice extends AggregateRoot
         }
 
         if (! in_array($this->status, [InvoiceStatus::Pending, InvoiceStatus::Failed], true)) {
-            throw InvoiceNotPayableException::forInvoice($this->uuid(), $this->status?->value ?? 'unissued');
+            throw InvoiceNotPayableException::forInvoice($this->uuid(), $this->status->value ?? 'unissued');
         }
 
         return $this->recordThat(new InvoicePaymentFailed(
@@ -120,7 +120,7 @@ class Invoice extends AggregateRoot
     public function refund(RefundInvoiceCommand $command): static
     {
         if (! in_array($this->status, [InvoiceStatus::Paid, InvoiceStatus::Failed], true)) {
-            throw InvoiceNotRefundableException::forInvoice($this->uuid(), $this->status?->value ?? 'unissued');
+            throw InvoiceNotRefundableException::forInvoice($this->uuid(), $this->status->value ?? 'unissued');
         }
 
         // Chunk-1 MVP: full refunds only (SM-1-04 OQ#6 — partial refunds deferred).
@@ -141,7 +141,7 @@ class Invoice extends AggregateRoot
     public function void(VoidInvoiceCommand $command): static
     {
         if (! in_array($this->status, [InvoiceStatus::Pending, InvoiceStatus::Failed], true)) {
-            throw InvoiceNotVoidableException::forInvoice($this->uuid(), $this->status?->value ?? 'unissued');
+            throw InvoiceNotVoidableException::forInvoice($this->uuid(), $this->status->value ?? 'unissued');
         }
 
         return $this->recordThat(new InvoiceVoided(
@@ -161,7 +161,7 @@ class Invoice extends AggregateRoot
 
         // Disputes attach to pending, failed or paid invoices only (SM-1-04 §4 note).
         if (! in_array($this->status, [InvoiceStatus::Pending, InvoiceStatus::Failed, InvoiceStatus::Paid], true)) {
-            throw InvoiceDisputeNotAllowedException::forStatus($this->uuid(), $this->status?->value ?? 'unissued');
+            throw InvoiceDisputeNotAllowedException::forStatus($this->uuid(), $this->status->value ?? 'unissued');
         }
 
         return $this->recordThat(new InvoiceDisputeFiled(

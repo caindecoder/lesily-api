@@ -77,6 +77,15 @@
                 // projector arm — same spatie-discovery equivalent class (protected
                 // still projects the soft-delete stamp).
                 "App\\Companies\\Memberships\\Projectors\\MembershipProjector::onUserRemovedFromCompany",
+                // slice-#10 T3 (invoice domain foundation): the six InvoiceProjector
+                // lifecycle arms — same spatie-discovery equivalent class (protected
+                // still projects; declared at PAUSE 1, pin P5).
+                "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoiceCreated",
+                "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoicePaid",
+                "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoicePaymentFailed",
+                "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoiceRefunded",
+                "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoiceVoided",
+                "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoiceDisputeFiled",
             ],
         },
         // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only
