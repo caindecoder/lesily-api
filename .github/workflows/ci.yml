@@ -85,6 +85,26 @@ jobs:
       - name: Semgrep SAST
         uses: returntocorp/semgrep-action@v1
         with: { config: 'p/security-audit p/php' }
+      - name: Test standards gates (conv-plan sec 2.14 + 2.15)
+        run: |
+          set -e
+          git fetch origin main --depth=1 2>/dev/null || true
+          BASE="${{ github.event.pull_request.base.sha }}"
+          [ -n "$BASE" ] || BASE="HEAD~1"
+          VIOLATIONS=0
+          # sec 2.14 - artifact-named test classes need a carve-out marker
+          # (same script as the lefthook pre-commit hook)
+          CHANGED_TESTS=$(git diff --name-only "$BASE"...HEAD -- 'tests/**/*Test.php' 2>/dev/null || true)
+          if [ -n "$CHANGED_TESTS" ]; then
+            sh scripts/check-test-class-naming.sh $CHANGED_TESTS || VIOLATIONS=1
+          fi
+          # sec 2.15 - chain bans (app/ only; call-form only - comment lines excluded;
+          # database/ seeders+migrations out of scope)
+          if grep -rnE '::retrieve\(|DB::\w+\s*\(|->persist\(' app/ --include='*.php' | grep '/IO/Http/Controllers/' | grep -vE ':[0-9]+:\s*(\*|//)'; then
+            echo "sec-2.15: controller layer-skip"; VIOLATIONS=1; fi
+          if grep -rnE 'DB::transaction\s*\(' app/ --include='*.php' | grep -v 'UseCases/Interactors' | grep -vE ':[0-9]+:\s*(\*|//)'; then
+            echo "sec-2.15: DB::transaction outside interactors"; VIOLATIONS=1; fi
+          exit $VIOLATIONS
 
   mutation-test:
     needs: test
