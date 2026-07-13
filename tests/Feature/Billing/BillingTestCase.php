@@ -275,16 +275,26 @@ abstract class BillingTestCase extends TestCase
         $invoice = $this->aPaidInvoiceFor($company, $subscription);
 
         Invoice::retrieve($invoice->getKey())
-            ->refund(RefundInvoiceCommand::validateAndCreate([
-                'invoiceId' => $invoice->getKey(),
-                'refundAmountCents' => $invoice->amount_cents,
-                'payHereRefundTransactionId' => 'refund_txn_'.$invoice->getKey(),
-                'source' => 'admin-refund',
-                'reason' => 'Goodwill refund issued by platform support.',
-            ]))
+            ->refund($this->refundInvoiceCommand($invoice))
             ->persist();
 
         return $invoice->refresh();
+    }
+
+    /**
+     * A valid full-refund command for $invoice (admin-refund, PayHere ref).
+     * Override per test (T5 credit memos, amount mismatches).
+     */
+    protected function refundInvoiceCommand(InvoiceReadModel $invoice, array $overrides = []): RefundInvoiceCommand
+    {
+        return RefundInvoiceCommand::validateAndCreate([
+            'invoiceId' => $invoice->getKey(),
+            'refundAmountCents' => $invoice->amount_cents,
+            'payHereRefundTransactionId' => 'refund_txn_'.$invoice->getKey(),
+            'source' => 'admin-refund',
+            'reason' => 'Goodwill refund issued by platform support.',
+            ...$overrides,
+        ]);
     }
 
     /**

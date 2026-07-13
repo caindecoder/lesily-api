@@ -15,6 +15,7 @@ use App\Billing\Invoices\Exceptions\InvoiceNotPayableException;
 use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
 use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
 use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
+use App\Billing\Invoices\Exceptions\InvoiceNotRefundableException;
 use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand;
@@ -110,6 +111,10 @@ class Invoice extends AggregateRoot
 
     public function refund(RefundInvoiceCommand $command): static
     {
+        if (! in_array($this->status, [InvoiceStatus::Paid, InvoiceStatus::Failed], true)) {
+            throw InvoiceNotRefundableException::forInvoice($this->uuid(), $this->status?->value ?? 'unissued');
+        }
+
         return $this->recordThat(new InvoiceRefunded(
             invoiceId: $this->uuid(),
             refundedAt: CarbonImmutable::now(),
