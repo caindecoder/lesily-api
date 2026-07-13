@@ -100,6 +100,36 @@ class RecordInvoicePaymentFailureTest extends BillingTestCase
         ]);
     }
 
+    #[Test]
+    public function when_a_pending_invoice_first_payment_fails_then_the_invoice_is_failed(): void
+    {
+        // Given a pending invoice
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+
+        // When the first payment attempt fails
+        Invoice::retrieve($invoice->getKey())
+            ->recordPaymentFailed($this->recordPaymentFailedCommand($invoice, [
+                'payHereEventId' => 'evt_t3_first_failure',
+            ]))
+            ->persist();
+
+        // Then the failure event carries the invoiced amount and the row enters dunning state
+        $this->assertInvoiceEventRecorded(InvoicePaymentFailed::class, $invoice->getKey(), [
+            'payHereEventId' => 'evt_t3_first_failure',
+            'amountCents' => 60000,
+            'failureCode' => 'insufficient_funds',
+            'attemptNumber' => 1,
+        ]);
+        $this->assertInvoiceRowState($invoice->getKey(), [
+            'status' => 'failed',
+            'failure_count' => 1,
+            'last_failure_code' => 'insufficient_funds',
+        ]);
+        $this->assertNotNull($invoice->fresh()?->failed_at);
+    }
+
     /**
      * States that must reject a payment-failure record, with the number of
      * stored events their fixture arrangement leaves on the stream.
