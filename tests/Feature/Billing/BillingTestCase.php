@@ -12,7 +12,9 @@ use Illuminate\Testing\TestResponse;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Billing\Subscriptions\Aggregates\Subscription;
+use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 abstract class BillingTestCase extends TestCase
@@ -155,6 +157,60 @@ abstract class BillingTestCase extends TestCase
             ->persist();
 
         return $subscription->refresh();
+    }
+
+    /**
+     * A valid issue command against $subscription's company — two line items
+     * whose signed amounts sum to the invoice total (the proration-credit row
+     * exercises ERD-1-04's signed line-item amount). Override any top-level
+     * field per test; the fixed invoice number is safe per-test (RefreshDatabase
+     * isolates rows) — pass an override where a test needs several invoices.
+     */
+    protected function issueInvoiceCommand(Company $company, SubscriptionReadModel $subscription, array $overrides = []): IssueInvoiceCommand
+    {
+        return IssueInvoiceCommand::validateAndCreate([
+            'invoiceNumber' => 'INV-2026-000001',
+            'subscriptionId' => $subscription->getKey(),
+            'companyId' => $company->getKey(),
+            'amountCents' => 60000,
+            'currency' => 'LKR',
+            'lineItems' => [
+                [
+                    'description' => 'Pro Plan — Monthly',
+                    'quantity' => 1,
+                    'unitPriceCents' => 75000,
+                    'amountCents' => 75000,
+                    'lineType' => 'plan_subscription',
+                    'sortOrder' => 0,
+                ],
+                [
+                    'description' => 'Proration credit — unused Starter days',
+                    'quantity' => -1,
+                    'unitPriceCents' => 15000,
+                    'amountCents' => -15000,
+                    'lineType' => 'proration_credit',
+                    'sortOrder' => 1,
+                ],
+            ],
+            'dueDate' => CarbonImmutable::now()->addDays(14),
+            'source' => 'subscribe',
+            'recipientName' => 'ACME (Pvt) Ltd',
+            'recipientEmail' => 'billing@acme.example',
+            ...$overrides,
+        ]);
+    }
+
+    /**
+     * Exactly $expectedCount events are stored for this invoice aggregate —
+     * the no-op proof for guard and webhook-replay walks (LD stored-event-count
+     * precedent; MembershipsTestCase event-pin family).
+     */
+    protected function assertNoNewInvoiceEvents(string $invoiceId, int $expectedCount): void
+    {
+        $this->assertSame(
+            $expectedCount,
+            LesilyStoredEvent::query()->where('aggregate_uuid', $invoiceId)->count(),
+        );
     }
 
     /**
