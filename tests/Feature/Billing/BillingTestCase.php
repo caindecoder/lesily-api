@@ -245,16 +245,26 @@ abstract class BillingTestCase extends TestCase
         $invoice = $this->anIssuedInvoiceFor($company, $subscription);
 
         Invoice::retrieve($invoice->getKey())
-            ->recordPaymentFailed(RecordPaymentFailedCommand::validateAndCreate([
-                'invoiceId' => $invoice->getKey(),
-                'payHereEventId' => 'evt_fail_'.$invoice->getKey(),
-                'failureCode' => 'insufficient_funds',
-                'failureMessage' => 'Card has insufficient funds.',
-                'attemptNumber' => 1,
-            ]))
+            ->recordPaymentFailed($this->recordPaymentFailedCommand($invoice))
             ->persist();
 
         return $invoice->refresh();
+    }
+
+    /**
+     * A valid payment-failure webhook command for $invoice — first attempt,
+     * fresh PayHere event id. Override per test (attempt numbers, replays).
+     */
+    protected function recordPaymentFailedCommand(InvoiceReadModel $invoice, array $overrides = []): RecordPaymentFailedCommand
+    {
+        return RecordPaymentFailedCommand::validateAndCreate([
+            'invoiceId' => $invoice->getKey(),
+            'payHereEventId' => 'evt_fail_'.$invoice->getKey(),
+            'failureCode' => 'insufficient_funds',
+            'failureMessage' => 'Card has insufficient funds.',
+            'attemptNumber' => 1,
+            ...$overrides,
+        ]);
     }
 
     /**

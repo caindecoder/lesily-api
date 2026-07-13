@@ -87,6 +87,10 @@ class Invoice extends AggregateRoot
 
     public function recordPaymentFailed(RecordPaymentFailedCommand $command): static
     {
+        if (! in_array($this->status, [InvoiceStatus::Pending, InvoiceStatus::Failed], true)) {
+            throw InvoiceNotPayableException::forInvoice($this->uuid(), $this->status?->value ?? 'unissued');
+        }
+
         return $this->recordThat(new InvoicePaymentFailed(
             invoiceId: $this->uuid(),
             failedAt: CarbonImmutable::now(),
