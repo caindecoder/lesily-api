@@ -74,7 +74,10 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth 0: the test-standards gate diffs against the PR base sha;
+      # a shallow clone has no merge-base and the diff dies (false-pass class).
       - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
       - uses: shivammathur/setup-php@v2
         with: { php-version: '8.4' }
       - run: composer install --no-interaction --prefer-dist
@@ -88,13 +91,13 @@ jobs:
       - name: Test standards gates (conv-plan sec 2.14 + 2.15)
         run: |
           set -e
-          git fetch origin main --depth=1 2>/dev/null || true
           BASE="${{ github.event.pull_request.base.sha }}"
           [ -n "$BASE" ] || BASE="HEAD~1"
           VIOLATIONS=0
           # sec 2.14 - artifact-named test classes need a carve-out marker
-          # (same script as the lefthook pre-commit hook)
-          CHANGED_TESTS=$(git diff --name-only "$BASE"...HEAD -- 'tests/**/*Test.php' 2>/dev/null || true)
+          # (same script as the lefthook pre-commit hook). The diff MUST succeed -
+          # no silent fallback (a swallowed diff error false-passed this gate once).
+          CHANGED_TESTS=$(git diff --name-only "$BASE"...HEAD -- 'tests/**/*Test.php')
           if [ -n "$CHANGED_TESTS" ]; then
             sh scripts/check-test-class-naming.sh $CHANGED_TESTS || VIOLATIONS=1
           fi
