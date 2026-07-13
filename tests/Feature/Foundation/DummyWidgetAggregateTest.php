@@ -2,6 +2,4 @@
 
 namespace Tests\Feature\Foundation;
 
-class DummyWidgetAggregateTest extends FoundationTestCase
-{
-}
+class DummyWidgetAggregateTest extends FoundationTestCase {}
