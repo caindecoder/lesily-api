@@ -3,12 +3,14 @@
 namespace App\Billing\Invoices\Aggregates;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use App\Billing\Invoices\Events\InvoicePaid;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Billing\Invoices\Enums\InvoiceStatus;
 use App\Billing\Invoices\Events\InvoiceVoided;
 use App\Billing\Invoices\Events\InvoiceCreated;
 use App\Billing\Invoices\Events\InvoiceRefunded;
+use App\Billing\Invoices\Events\InvoiceDisputeFiled;
 use App\Billing\Invoices\Events\InvoicePaymentFailed;
 use App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand;
 use App\Billing\Invoices\Exceptions\InvoiceNotPayableException;
@@ -17,6 +19,8 @@ use App\Billing\Invoices\Exceptions\InvoiceNotVoidableException;
 use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
 use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
 use App\Billing\Invoices\Exceptions\InvoiceNotRefundableException;
+use App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand;
+use App\Billing\Invoices\Exceptions\InvoiceDisputeNotAllowedException;
 use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand;
 use App\Billing\Invoices\Exceptions\InvoiceRefundAmountMismatchException;
@@ -31,6 +35,8 @@ class Invoice extends AggregateRoot
     protected array $seenPayHereEventIds = [];
 
     protected int $amountCents = 0;
+
+    protected bool $hasOpenDispute = false;
 
     public function issue(IssueInvoiceCommand $command): static
     {
@@ -147,6 +153,21 @@ class Invoice extends AggregateRoot
         ));
     }
 
+    public function fileDispute(FileInvoiceDisputeCommand $command): static
+    {
+        if ($this->hasOpenDispute) {
+            throw InvoiceDisputeNotAllowedException::alreadyOpen($this->uuid());
+        }
+
+        return $this->recordThat(new InvoiceDisputeFiled(
+            invoiceId: $this->uuid(),
+            disputeId: (string) Str::uuid(),
+            filedAt: CarbonImmutable::now(),
+            reason: $command->reason,
+            filedBy: $command->filedBy,
+        ));
+    }
+
     protected function applyInvoiceCreated(InvoiceCreated $event): void
     {
         $this->status = InvoiceStatus::Pending;
@@ -173,5 +194,10 @@ class Invoice extends AggregateRoot
     protected function applyInvoiceVoided(InvoiceVoided $event): void
     {
         $this->status = InvoiceStatus::Voided;
+    }
+
+    protected function applyInvoiceDisputeFiled(InvoiceDisputeFiled $event): void
+    {
+        $this->hasOpenDispute = true;
     }
 }

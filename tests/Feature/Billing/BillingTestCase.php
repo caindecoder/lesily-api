@@ -21,6 +21,7 @@ use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
 use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
@@ -322,6 +323,34 @@ abstract class BillingTestCase extends TestCase
             'voidedBy' => User::factory()->create()->getKey(),
             'reason' => 'Issued in error - admin correction.',
             'source' => 'admin-correction',
+            ...$overrides,
+        ]);
+    }
+
+    /**
+     * A pending invoice with an open dispute filed through the domain seam.
+     */
+    protected function aDisputedInvoiceFor(Company $company, SubscriptionReadModel $subscription): InvoiceReadModel
+    {
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+
+        Invoice::retrieve($invoice->getKey())
+            ->fileDispute($this->fileInvoiceDisputeCommand($invoice))
+            ->persist();
+
+        return $invoice->refresh();
+    }
+
+    /**
+     * A valid dispute-filing command for $invoice, filed by a fresh owner-class
+     * actor. Override per test.
+     */
+    protected function fileInvoiceDisputeCommand(InvoiceReadModel $invoice, array $overrides = []): FileInvoiceDisputeCommand
+    {
+        return FileInvoiceDisputeCommand::validateAndCreate([
+            'invoiceId' => $invoice->getKey(),
+            'reason' => 'This charge does not match our agreed plan.',
+            'filedBy' => User::factory()->create()->getKey(),
             ...$overrides,
         ]);
     }
