@@ -9,6 +9,7 @@ use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Billing\Invoices\Events\InvoicePaymentFailed;
 use App\Billing\Invoices\Exceptions\InvoiceNotPayableException;
 
 /**
@@ -67,6 +68,36 @@ class RecordInvoicePaymentFailureTest extends BillingTestCase
         // Then no duplicate event is stored and the projected row is untouched
         $this->assertNoNewInvoiceEvents($invoice->getKey(), 2);
         $this->assertSame($rowBeforeReplay, $invoice->fresh()?->getAttributes());
+    }
+
+    #[Test]
+    public function when_a_retry_failure_occurs_on_a_failed_invoice_then_the_failure_is_recorded_without_a_transition(): void
+    {
+        // Given an invoice whose first payment attempt failed
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aFailedInvoiceFor($company, $subscription);
+
+        // When a Day-1 retry fails with a new webhook event and a different code
+        Invoice::retrieve($invoice->getKey())
+            ->recordPaymentFailed($this->recordPaymentFailedCommand($invoice, [
+                'payHereEventId' => 'evt_fail_retry_day1',
+                'failureCode' => 'card_expired',
+                'attemptNumber' => 2,
+            ]))
+            ->persist();
+
+        // Then the retry failure is recorded and the row updates in place, still failed
+        $this->assertInvoiceEventRecorded(InvoicePaymentFailed::class, $invoice->getKey(), [
+            'payHereEventId' => 'evt_fail_retry_day1',
+            'failureCode' => 'card_expired',
+            'attemptNumber' => 2,
+        ]);
+        $this->assertInvoiceRowState($invoice->getKey(), [
+            'status' => 'failed',
+            'failure_count' => 2,
+            'last_failure_code' => 'card_expired',
+        ]);
     }
 
     /**
