@@ -99,6 +99,28 @@ class FileInvoiceDisputeTest extends BillingTestCase
         ]);
     }
 
+    #[Test]
+    public function when_a_dispute_is_filed_on_a_failed_invoice_then_the_dispute_flag_is_projected_without_a_state_change(): void
+    {
+        // Given an invoice in dunning (UC-1-054's primary flow — disputes arrive while failed)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aFailedInvoiceFor($company, $subscription);
+
+        // When the owner disputes the failed charge
+        Invoice::retrieve($invoice->getKey())
+            ->fileDispute($this->fileInvoiceDisputeCommand($invoice))
+            ->persist();
+
+        // Then the dispute event is stored and only the flag changes — dunning state preserved
+        $this->assertInvoiceEventRecorded(InvoiceDisputeFiled::class, $invoice->getKey(), []);
+        $this->assertInvoiceRowState($invoice->getKey(), [
+            'status' => 'failed',
+            'has_dispute' => true,
+            'failure_count' => 1,
+        ]);
+    }
+
     /**
      * Terminal states that must reject a dispute filing (SM-1-04: disputes
      * attach to pending, failed or paid invoices only), with the number of

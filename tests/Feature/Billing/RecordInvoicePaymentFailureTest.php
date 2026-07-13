@@ -120,6 +120,7 @@ class RecordInvoicePaymentFailureTest extends BillingTestCase
             'payHereEventId' => 'evt_t3_first_failure',
             'amountCents' => 60000,
             'failureCode' => 'insufficient_funds',
+            'failureMessage' => 'Card has insufficient funds.',
             'attemptNumber' => 1,
         ]);
         $this->assertInvoiceRowState($invoice->getKey(), [
@@ -128,6 +129,30 @@ class RecordInvoicePaymentFailureTest extends BillingTestCase
             'last_failure_code' => 'insufficient_funds',
         ]);
         $this->assertNotNull($invoice->fresh()?->failed_at);
+    }
+
+    #[Test]
+    public function when_the_original_failure_webhook_replays_after_recovery_then_no_duplicate_event_is_stored(): void
+    {
+        // Given an invoice that failed via a specific webhook event and then recovered to paid
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aFailedInvoiceFor($company, $subscription);
+        Invoice::retrieve($invoice->getKey())
+            ->recordPaymentSucceeded($this->recordPaymentSucceededCommand($invoice, [
+                'payHereEventId' => 'evt_recovery',
+            ]))
+            ->persist();
+        $rowBeforeReplay = $invoice->fresh()?->getAttributes();
+
+        // When PayHere redelivers the ORIGINAL failure webhook against the now-paid invoice
+        Invoice::retrieve($invoice->getKey())
+            ->recordPaymentFailed($this->recordPaymentFailedCommand($invoice))
+            ->persist();
+
+        // Then the redelivery is absorbed — no error, no event, row untouched (SM-1-04 §6)
+        $this->assertNoNewInvoiceEvents($invoice->getKey(), 3);
+        $this->assertSame($rowBeforeReplay, $invoice->fresh()?->getAttributes());
     }
 
     /**

@@ -364,6 +364,7 @@ abstract class BillingTestCase extends TestCase
         return match ($state) {
             'pending' => $this->anIssuedInvoiceFor($company, $subscription),
             'paid' => $this->aPaidInvoiceFor($company, $subscription),
+            'failed' => $this->aFailedInvoiceFor($company, $subscription),
             'refunded' => $this->aRefundedInvoiceFor($company, $subscription),
             'voided' => $this->aVoidedInvoiceFor($company, $subscription),
             default => throw new InvalidArgumentException("Unknown invoice state fixture [{$state}]."),

@@ -98,6 +98,8 @@ class Invoice extends AggregateRoot
     {
         // Webhook replay (tier-1 idempotency): a seen PayHere event id is
         // absorbed without recording — replays produce no state changes (SM-1-04 §6).
+        // Order matters: absorption precedes the status guard so a redelivered
+        // failure on a since-recovered (paid) invoice stays a silent no-op.
         if (in_array($command->payHereEventId, $this->seenPayHereEventIds, true)) {
             return $this;
         }

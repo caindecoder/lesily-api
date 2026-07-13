@@ -3,6 +3,7 @@
 namespace Tests\Feature\Billing;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
@@ -11,6 +12,7 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Exceptions\InvoiceNotPayableException;
+use App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand;
 use App\Billing\Invoices\Exceptions\InvoicePaymentAmountMismatchException;
 
 /**
@@ -49,6 +51,30 @@ class RecordInvoicePaymentTest extends BillingTestCase
         } catch (InvoiceNotPayableException) {
             // Then the payment is rejected and no new event is stored
             $this->assertNoNewInvoiceEvents($invoice->getKey(), $storedEventCount);
+        }
+    }
+
+    #[Test]
+    public function when_payment_is_recorded_for_a_never_issued_invoice_then_the_payment_is_rejected(): void
+    {
+        // Given an invoice id no aggregate stream was ever issued for
+        $orphanInvoiceId = (string) Str::uuid();
+
+        // When a payment webhook targets the unknown invoice
+        try {
+            Invoice::retrieve($orphanInvoiceId)
+                ->recordPaymentSucceeded(RecordPaymentSucceededCommand::validateAndCreate([
+                    'invoiceId' => $orphanInvoiceId,
+                    'payHereEventId' => 'evt_orphan_stream_guard',
+                    'payHereTransactionId' => 'txn_orphan',
+                    'amountCents' => 60000,
+                ]))
+                ->persist();
+
+            $this->fail('Expected InvoiceNotPayableException was not thrown.');
+        } catch (InvoiceNotPayableException) {
+            // Then the payment is rejected and no orphan stream is genesised
+            $this->assertNoNewInvoiceEvents($orphanInvoiceId, 0);
         }
     }
 
