@@ -20,6 +20,10 @@ use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
  * behavioral walks; this factory exists for pure-read bulk seeding only and
  * creates no line items.
  *
+ * NOT yet wired to the entity: T4's first consumer adds `HasFactory` +
+ * `newFactory()` on the Invoice read model RED-first (the T3 wiring sat
+ * uncovered — codecov/patch 100% gate, Rule #13 root-cause removal).
+ *
  * @extends Factory<Invoice>
  */
 class InvoiceFactory extends Factory

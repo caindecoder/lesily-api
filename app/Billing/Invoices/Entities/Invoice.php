@@ -2,11 +2,9 @@
 
 namespace App\Billing\Invoices\Entities;
 
-use Database\Factories\InvoiceFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Billing\Invoices\Enums\InvoiceStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
  * Invoice read model (ERD-1-04), written exclusively by InvoiceProjector — the
@@ -17,9 +15,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  */
 class Invoice extends Model
 {
-    /** @use HasFactory<InvoiceFactory> */
-    use HasFactory;
-
     use HasUuids;
 
     protected $fillable = [
@@ -69,9 +64,4 @@ class Invoice extends Model
         'refunded_at' => 'immutable_datetime',
         'recipient_billing_address' => 'array',
     ];
-
-    protected static function newFactory(): InvoiceFactory
-    {
-        return InvoiceFactory::new();
-    }
 }
