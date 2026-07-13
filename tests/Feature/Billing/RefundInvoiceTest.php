@@ -102,6 +102,36 @@ class RefundInvoiceTest extends BillingTestCase
         $this->assertNotNull($invoice->fresh()?->refunded_at);
     }
 
+    #[Test]
+    public function when_a_failed_invoice_is_credited_then_the_invoice_is_refunded_without_a_payment_reference(): void
+    {
+        // Given an invoice whose payment failed and whose dispute was resolved in the owner's favor
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aFailedInvoiceFor($company, $subscription);
+
+        // When the full credit memo is recorded (no money ever moved — no PayHere refund)
+        Invoice::retrieve($invoice->getKey())
+            ->refund($this->refundInvoiceCommand($invoice, [
+                'payHereRefundTransactionId' => null,
+                'source' => 'dispute-resolved-in-favor',
+                'reason' => 'Dispute resolved in favor of the owner.',
+            ]))
+            ->persist();
+
+        // Then the credit is recorded as a refund with no payment reference
+        $this->assertInvoiceEventRecorded(InvoiceRefunded::class, $invoice->getKey(), [
+            'refundAmountCents' => 60000,
+            'source' => 'dispute-resolved-in-favor',
+        ]);
+        $this->assertInvoiceRowState($invoice->getKey(), [
+            'status' => 'refunded',
+            'refund_amount_cents' => 60000,
+            'payhere_refund_transaction_id' => null,
+            'refund_source' => 'dispute-resolved-in-favor',
+        ]);
+    }
+
     /**
      * States that must reject a refund, with the number of stored events their
      * fixture arrangement leaves on the stream.
