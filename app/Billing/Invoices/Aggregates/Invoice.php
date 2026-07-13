@@ -159,6 +159,11 @@ class Invoice extends AggregateRoot
             throw InvoiceDisputeNotAllowedException::alreadyOpen($this->uuid());
         }
 
+        // Disputes attach to pending, failed or paid invoices only (SM-1-04 §4 note).
+        if (! in_array($this->status, [InvoiceStatus::Pending, InvoiceStatus::Failed, InvoiceStatus::Paid], true)) {
+            throw InvoiceDisputeNotAllowedException::forStatus($this->uuid(), $this->status?->value ?? 'unissued');
+        }
+
         return $this->recordThat(new InvoiceDisputeFiled(
             invoiceId: $this->uuid(),
             disputeId: (string) Str::uuid(),

@@ -7,6 +7,7 @@ use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Exceptions\InvoiceDisputeNotAllowedException;
 
@@ -43,5 +44,43 @@ class FileInvoiceDisputeTest extends BillingTestCase
             // Then the filing is rejected and no new event is stored
             $this->assertNoNewInvoiceEvents($invoice->getKey(), 2);
         }
+    }
+
+    #[Test, DataProvider('provideNonDisputableStates')]
+    public function when_a_dispute_is_filed_on_a_terminal_invoice_then_the_filing_is_rejected(
+        string $state,
+        int $storedEventCount,
+    ): void {
+        // Given a terminally settled invoice
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->anInvoiceInState($state, $company, $subscription);
+
+        // When a dispute is filed against it
+        try {
+            Invoice::retrieve($invoice->getKey())
+                ->fileDispute($this->fileInvoiceDisputeCommand($invoice))
+                ->persist();
+
+            $this->fail('Expected InvoiceDisputeNotAllowedException was not thrown.');
+        } catch (InvoiceDisputeNotAllowedException) {
+            // Then the filing is rejected and no new event is stored
+            $this->assertNoNewInvoiceEvents($invoice->getKey(), $storedEventCount);
+        }
+    }
+
+    /**
+     * Terminal states that must reject a dispute filing (SM-1-04: disputes
+     * attach to pending, failed or paid invoices only), with the number of
+     * stored events their fixture arrangement leaves on the stream.
+     *
+     * @return array<string, array{string, int}>
+     */
+    public static function provideNonDisputableStates(): array
+    {
+        return [
+            'refunded' => ['refunded', 3],
+            'voided' => ['voided', 2],
+        ];
     }
 }
