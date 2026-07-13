@@ -10,6 +10,7 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Exceptions\InvoiceNotRefundableException;
+use App\Billing\Invoices\Exceptions\InvoiceRefundAmountMismatchException;
 
 /**
  * Refunding an invoice at the domain seam — SM-1-04 T5 (Failed → Refunded
@@ -45,6 +46,27 @@ class RefundInvoiceTest extends BillingTestCase
         } catch (InvoiceNotRefundableException) {
             // Then the refund is rejected and no new event is stored
             $this->assertNoNewInvoiceEvents($invoice->getKey(), $storedEventCount);
+        }
+    }
+
+    #[Test]
+    public function when_the_refund_amount_differs_from_the_invoice_amount_then_the_refund_is_rejected(): void
+    {
+        // Given a paid invoice
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+
+        // When a partial refund is attempted (chunk-1 is full-refund-only)
+        try {
+            Invoice::retrieve($invoice->getKey())
+                ->refund($this->refundInvoiceCommand($invoice, ['refundAmountCents' => 1000]))
+                ->persist();
+
+            $this->fail('Expected InvoiceRefundAmountMismatchException was not thrown.');
+        } catch (InvoiceRefundAmountMismatchException) {
+            // Then the refund is rejected and no new event is stored
+            $this->assertNoNewInvoiceEvents($invoice->getKey(), 2);
         }
     }
 

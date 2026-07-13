@@ -18,6 +18,7 @@ use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
 use App\Billing\Invoices\Exceptions\InvoiceNotRefundableException;
 use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand;
+use App\Billing\Invoices\Exceptions\InvoiceRefundAmountMismatchException;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand;
 use App\Billing\Invoices\Exceptions\InvoicePaymentAmountMismatchException;
 
@@ -113,6 +114,11 @@ class Invoice extends AggregateRoot
     {
         if (! in_array($this->status, [InvoiceStatus::Paid, InvoiceStatus::Failed], true)) {
             throw InvoiceNotRefundableException::forInvoice($this->uuid(), $this->status?->value ?? 'unissued');
+        }
+
+        // Chunk-1 MVP: full refunds only (SM-1-04 OQ#6 — partial refunds deferred).
+        if ($command->refundAmountCents !== $this->amountCents) {
+            throw InvoiceRefundAmountMismatchException::forInvoice($this->uuid(), $this->amountCents, $command->refundAmountCents);
         }
 
         return $this->recordThat(new InvoiceRefunded(
