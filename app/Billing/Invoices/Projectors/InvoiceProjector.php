@@ -5,6 +5,7 @@ namespace App\Billing\Invoices\Projectors;
 use App\Billing\Invoices\Events\InvoicePaid;
 use App\Billing\Invoices\Enums\InvoiceStatus;
 use App\Billing\Invoices\Events\InvoiceCreated;
+use App\Billing\Invoices\Events\InvoiceRefunded;
 use App\Billing\Invoices\Entities\InvoiceLineItem;
 use App\Billing\Invoices\Events\InvoicePaymentFailed;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
@@ -49,6 +50,19 @@ class InvoiceProjector extends Projector
                 'status' => InvoiceStatus::Paid,
                 'paid_at' => $event->paidAt,
                 'payhere_transaction_id' => $event->payHereTransactionId,
+            ]);
+    }
+
+    public function onInvoiceRefunded(InvoiceRefunded $event): void
+    {
+        InvoiceReadModel::query()->findOrFail($event->aggregateRootUuid())
+            ->update([
+                'status' => InvoiceStatus::Refunded,
+                'refunded_at' => $event->refundedAt,
+                'refund_amount_cents' => $event->refundAmountCents,
+                'payhere_refund_transaction_id' => $event->payHereRefundTransactionId,
+                'refund_source' => $event->source,
+                'refund_reason' => $event->reason,
             ]);
     }
 

@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Billing\Invoices\Events\InvoiceRefunded;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Exceptions\InvoiceNotRefundableException;
 use App\Billing\Invoices\Exceptions\InvoiceRefundAmountMismatchException;
@@ -68,6 +69,37 @@ class RefundInvoiceTest extends BillingTestCase
             // Then the refund is rejected and no new event is stored
             $this->assertNoNewInvoiceEvents($invoice->getKey(), 2);
         }
+    }
+
+    #[Test]
+    public function when_a_paid_invoice_is_refunded_then_the_invoice_is_refunded(): void
+    {
+        // Given a paid invoice
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+
+        // When platform support issues a full refund through PayHere
+        Invoice::retrieve($invoice->getKey())
+            ->refund($this->refundInvoiceCommand($invoice, [
+                'payHereRefundTransactionId' => 'refund_txn_t6',
+            ]))
+            ->persist();
+
+        // Then the refund event is stored and the row reflects the terminal refund
+        $this->assertInvoiceEventRecorded(InvoiceRefunded::class, $invoice->getKey(), [
+            'refundAmountCents' => 60000,
+            'payHereRefundTransactionId' => 'refund_txn_t6',
+            'source' => 'admin-refund',
+        ]);
+        $this->assertInvoiceRowState($invoice->getKey(), [
+            'status' => 'refunded',
+            'refund_amount_cents' => 60000,
+            'payhere_refund_transaction_id' => 'refund_txn_t6',
+            'refund_source' => 'admin-refund',
+            'refund_reason' => 'Goodwill refund issued by platform support.',
+        ]);
+        $this->assertNotNull($invoice->fresh()?->refunded_at);
     }
 
     /**
