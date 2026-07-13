@@ -10,6 +10,7 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Exceptions\InvoiceNotPayableException;
+use App\Billing\Invoices\Exceptions\InvoicePaymentAmountMismatchException;
 
 /**
  * Recording a successful payment at the domain seam — SM-1-04 T2
@@ -47,6 +48,29 @@ class RecordInvoicePaymentTest extends BillingTestCase
         } catch (InvoiceNotPayableException) {
             // Then the payment is rejected and no new event is stored
             $this->assertNoNewInvoiceEvents($invoice->getKey(), $storedEventCount);
+        }
+    }
+
+    #[Test]
+    public function when_the_recorded_payment_amount_differs_from_the_invoice_amount_then_the_payment_is_rejected(): void
+    {
+        // Given a pending invoice
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+
+        // When a payment webhook is recorded with a different amount
+        try {
+            Invoice::retrieve($invoice->getKey())
+                ->recordPaymentSucceeded($this->recordPaymentSucceededCommand($invoice, [
+                    'amountCents' => 12345,
+                ]))
+                ->persist();
+
+            $this->fail('Expected InvoicePaymentAmountMismatchException was not thrown.');
+        } catch (InvoicePaymentAmountMismatchException) {
+            // Then the payment is rejected and no new event is stored
+            $this->assertNoNewInvoiceEvents($invoice->getKey(), 1);
         }
     }
 

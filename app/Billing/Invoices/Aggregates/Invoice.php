@@ -16,6 +16,7 @@ use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
 use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
 use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand;
+use App\Billing\Invoices\Exceptions\InvoicePaymentAmountMismatchException;
 
 class Invoice extends AggregateRoot
 {
@@ -23,6 +24,8 @@ class Invoice extends AggregateRoot
 
     /** @var array<int, string> */
     protected array $seenPayHereEventIds = [];
+
+    protected int $amountCents = 0;
 
     public function issue(IssueInvoiceCommand $command): static
     {
@@ -66,6 +69,10 @@ class Invoice extends AggregateRoot
             throw InvoiceNotPayableException::forInvoice($this->uuid(), $this->status?->value ?? 'unissued');
         }
 
+        if ($command->amountCents !== $this->amountCents) {
+            throw InvoicePaymentAmountMismatchException::forInvoice($this->uuid(), $this->amountCents, $command->amountCents);
+        }
+
         return $this->recordThat(new InvoicePaid(
             invoiceId: $this->uuid(),
             paidAt: CarbonImmutable::now(),
@@ -102,6 +109,7 @@ class Invoice extends AggregateRoot
     protected function applyInvoiceCreated(InvoiceCreated $event): void
     {
         $this->status = InvoiceStatus::Pending;
+        $this->amountCents = $event->amountCents;
     }
 
     protected function applyInvoicePaid(InvoicePaid $event): void
