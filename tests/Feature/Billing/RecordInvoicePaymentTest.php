@@ -131,6 +131,34 @@ class RecordInvoicePaymentTest extends BillingTestCase
         $this->assertNotNull($invoice->fresh()?->paid_at);
     }
 
+    #[Test]
+    public function when_a_failed_invoice_payment_succeeds_then_the_invoice_recovers_to_paid(): void
+    {
+        // Given an invoice whose first payment attempt failed
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aFailedInvoiceFor($company, $subscription);
+
+        // When a retry payment webhook succeeds
+        Invoice::retrieve($invoice->getKey())
+            ->recordPaymentSucceeded($this->recordPaymentSucceededCommand($invoice, [
+                'payHereEventId' => 'evt_t4_recovery',
+                'payHereTransactionId' => 'txn_t4_recovery',
+            ]))
+            ->persist();
+
+        // Then the paid event records the recovery and the row keeps its failure history
+        $this->assertInvoiceEventRecorded(InvoicePaid::class, $invoice->getKey(), [
+            'payHereEventId' => 'evt_t4_recovery',
+            'source' => 'retry-recovery',
+        ]);
+        $this->assertInvoiceRowState($invoice->getKey(), [
+            'status' => 'paid',
+            'payhere_transaction_id' => 'txn_t4_recovery',
+            'failure_count' => 1,
+        ]);
+    }
+
     /**
      * States that must reject a fresh payment, with the number of stored events
      * their fixture arrangement leaves on the stream (the no-op baseline).

@@ -21,6 +21,7 @@ use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
 use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
@@ -231,6 +232,26 @@ abstract class BillingTestCase extends TestCase
 
         Invoice::retrieve($invoice->getKey())
             ->recordPaymentSucceeded($this->recordPaymentSucceededCommand($invoice))
+            ->persist();
+
+        return $invoice->refresh();
+    }
+
+    /**
+     * An invoice whose first payment attempt failed, through the domain seam (T3).
+     */
+    protected function aFailedInvoiceFor(Company $company, SubscriptionReadModel $subscription): InvoiceReadModel
+    {
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+
+        Invoice::retrieve($invoice->getKey())
+            ->recordPaymentFailed(RecordPaymentFailedCommand::validateAndCreate([
+                'invoiceId' => $invoice->getKey(),
+                'payHereEventId' => 'evt_fail_'.$invoice->getKey(),
+                'failureCode' => 'insufficient_funds',
+                'failureMessage' => 'Card has insufficient funds.',
+                'attemptNumber' => 1,
+            ]))
             ->persist();
 
         return $invoice->refresh();

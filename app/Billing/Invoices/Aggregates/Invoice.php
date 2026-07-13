@@ -9,12 +9,14 @@ use App\Billing\Invoices\Enums\InvoiceStatus;
 use App\Billing\Invoices\Events\InvoiceVoided;
 use App\Billing\Invoices\Events\InvoiceCreated;
 use App\Billing\Invoices\Events\InvoiceRefunded;
+use App\Billing\Invoices\Events\InvoicePaymentFailed;
 use App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand;
 use App\Billing\Invoices\Exceptions\InvoiceNotPayableException;
 use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
 use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
 use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
 use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
+use App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand;
 use App\Billing\Invoices\Exceptions\InvoicePaymentAmountMismatchException;
 
@@ -65,7 +67,7 @@ class Invoice extends AggregateRoot
             return $this;
         }
 
-        if ($this->status !== InvoiceStatus::Pending) {
+        if (! in_array($this->status, [InvoiceStatus::Pending, InvoiceStatus::Failed], true)) {
             throw InvoiceNotPayableException::forInvoice($this->uuid(), $this->status?->value ?? 'unissued');
         }
 
@@ -79,7 +81,20 @@ class Invoice extends AggregateRoot
             amountCents: $command->amountCents,
             payHereTransactionId: $command->payHereTransactionId,
             payHereEventId: $command->payHereEventId,
-            source: 'first-attempt',
+            source: $this->status === InvoiceStatus::Failed ? 'retry-recovery' : 'first-attempt',
+        ));
+    }
+
+    public function recordPaymentFailed(RecordPaymentFailedCommand $command): static
+    {
+        return $this->recordThat(new InvoicePaymentFailed(
+            invoiceId: $this->uuid(),
+            failedAt: CarbonImmutable::now(),
+            amountCents: $this->amountCents,
+            payHereEventId: $command->payHereEventId,
+            failureCode: $command->failureCode,
+            failureMessage: $command->failureMessage,
+            attemptNumber: $command->attemptNumber,
         ));
     }
 
@@ -116,6 +131,11 @@ class Invoice extends AggregateRoot
     {
         $this->status = InvoiceStatus::Paid;
         $this->seenPayHereEventIds[] = $event->payHereEventId;
+    }
+
+    protected function applyInvoicePaymentFailed(InvoicePaymentFailed $event): void
+    {
+        $this->status = InvoiceStatus::Failed;
     }
 
     protected function applyInvoiceRefunded(InvoiceRefunded $event): void

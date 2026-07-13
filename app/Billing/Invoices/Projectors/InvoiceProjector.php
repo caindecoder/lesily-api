@@ -6,6 +6,7 @@ use App\Billing\Invoices\Events\InvoicePaid;
 use App\Billing\Invoices\Enums\InvoiceStatus;
 use App\Billing\Invoices\Events\InvoiceCreated;
 use App\Billing\Invoices\Entities\InvoiceLineItem;
+use App\Billing\Invoices\Events\InvoicePaymentFailed;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
 
@@ -49,6 +50,18 @@ class InvoiceProjector extends Projector
                 'paid_at' => $event->paidAt,
                 'payhere_transaction_id' => $event->payHereTransactionId,
             ]);
+    }
+
+    public function onInvoicePaymentFailed(InvoicePaymentFailed $event): void
+    {
+        $invoice = InvoiceReadModel::query()->findOrFail($event->aggregateRootUuid());
+
+        $invoice->update([
+            'status' => InvoiceStatus::Failed,
+            'failed_at' => $event->failedAt,
+            'failure_count' => $invoice->failure_count + 1,
+            'last_failure_code' => $event->failureCode,
+        ]);
     }
 
     /**
