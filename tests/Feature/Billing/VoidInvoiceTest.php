@@ -77,6 +77,33 @@ class VoidInvoiceTest extends BillingTestCase
         $this->assertNotNull($invoice->fresh()?->voided_at);
     }
 
+    #[Test]
+    public function when_a_failed_invoice_is_voided_then_the_invoice_is_voided(): void
+    {
+        // Given an invoice in dunning whose dispute resolved before any successful retry
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aFailedInvoiceFor($company, $subscription);
+
+        // When it is voided pre-payment
+        Invoice::retrieve($invoice->getKey())
+            ->void($this->voidInvoiceCommand($invoice, [
+                'source' => 'dispute-pre-payment',
+                'reason' => 'Dispute resolved - invoice should not have been issued.',
+            ]))
+            ->persist();
+
+        // Then the void event is stored and the dunning invoice is terminally voided
+        $this->assertInvoiceEventRecorded(InvoiceVoided::class, $invoice->getKey(), [
+            'source' => 'dispute-pre-payment',
+        ]);
+        $this->assertInvoiceRowState($invoice->getKey(), [
+            'status' => 'voided',
+            'void_source' => 'dispute-pre-payment',
+            'failure_count' => 1,
+        ]);
+    }
+
     /**
      * States that must reject a void, with the number of stored events their
      * fixture arrangement leaves on the stream.
