@@ -8,6 +8,7 @@ use App\Billing\Invoices\Enums\InvoiceStatus;
 use App\Billing\Invoices\Events\InvoiceCreated;
 use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
 use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
+use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
 
 class Invoice extends AggregateRoot
 {
@@ -17,6 +18,11 @@ class Invoice extends AggregateRoot
     {
         if ($this->status !== null) {
             throw InvoiceAlreadyIssuedException::withId($this->uuid());
+        }
+
+        $lineItemsTotalCents = (int) collect($command->lineItems)->sum('amountCents');
+        if ($lineItemsTotalCents !== $command->amountCents) {
+            throw InvoiceLineItemsMismatchException::forInvoice($this->uuid(), $command->amountCents, $lineItemsTotalCents);
         }
 
         return $this->forCompany($command->companyId)

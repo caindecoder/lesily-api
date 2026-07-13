@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
+use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
 
 /**
  * Issuing an invoice at the domain seam — genesis guards + the projected
@@ -42,6 +43,27 @@ class IssueInvoiceTest extends BillingTestCase
         } catch (InvoiceAlreadyIssuedException) {
             // Then the reissue is rejected and no second creation event is stored
             $this->assertNoNewInvoiceEvents($invoiceId, 1);
+        }
+    }
+
+    #[Test]
+    public function when_line_item_amounts_do_not_sum_to_the_invoice_amount_then_the_issue_is_rejected(): void
+    {
+        // Given a company with a trial subscription
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoiceId = (string) Str::uuid();
+
+        // When an invoice is issued whose line items do not sum to its amount
+        try {
+            Invoice::retrieve($invoiceId)
+                ->issue($this->issueInvoiceCommand($company, $subscription, ['amountCents' => 99999]))
+                ->persist();
+
+            $this->fail('Expected InvoiceLineItemsMismatchException was not thrown.');
+        } catch (InvoiceLineItemsMismatchException) {
+            // Then the issue is rejected and no event is stored
+            $this->assertNoNewInvoiceEvents($invoiceId, 0);
         }
     }
 }
