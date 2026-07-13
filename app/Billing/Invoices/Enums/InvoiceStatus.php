@@ -9,4 +9,7 @@ namespace App\Billing\Invoices\Enums;
 enum InvoiceStatus: string
 {
     case Pending = 'pending';
+    case Paid = 'paid';
+    case Refunded = 'refunded';
+    case Voided = 'voided';
 }

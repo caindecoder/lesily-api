@@ -7,15 +7,21 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Billing\Invoices\Entities\InvoiceLineItem;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Billing\Subscriptions\Aggregates\Subscription;
+use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
+use App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand;
 use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
+use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 abstract class BillingTestCase extends TestCase
@@ -197,6 +203,104 @@ abstract class BillingTestCase extends TestCase
             'source' => 'subscribe',
             'recipientName' => 'ACME (Pvt) Ltd',
             'recipientEmail' => 'billing@acme.example',
+            ...$overrides,
+        ]);
+    }
+
+    /**
+     * An issued (pending) invoice projected for $company through the domain
+     * seam — the genesis path production takes, never a direct row write.
+     */
+    protected function anIssuedInvoiceFor(Company $company, SubscriptionReadModel $subscription): InvoiceReadModel
+    {
+        $invoiceId = (string) Str::uuid();
+
+        Invoice::retrieve($invoiceId)
+            ->issue($this->issueInvoiceCommand($company, $subscription))
+            ->persist();
+
+        return InvoiceReadModel::findOrFail($invoiceId);
+    }
+
+    /**
+     * An invoice paid through the domain seam (issue → payment webhook).
+     */
+    protected function aPaidInvoiceFor(Company $company, SubscriptionReadModel $subscription): InvoiceReadModel
+    {
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+
+        Invoice::retrieve($invoice->getKey())
+            ->recordPaymentSucceeded($this->recordPaymentSucceededCommand($invoice))
+            ->persist();
+
+        return $invoice->refresh();
+    }
+
+    /**
+     * A paid invoice subsequently refunded through the domain seam (T6).
+     */
+    protected function aRefundedInvoiceFor(Company $company, SubscriptionReadModel $subscription): InvoiceReadModel
+    {
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+
+        Invoice::retrieve($invoice->getKey())
+            ->refund(RefundInvoiceCommand::validateAndCreate([
+                'invoiceId' => $invoice->getKey(),
+                'refundAmountCents' => $invoice->amount_cents,
+                'payHereRefundTransactionId' => 'refund_txn_'.$invoice->getKey(),
+                'source' => 'admin-refund',
+                'reason' => 'Goodwill refund issued by platform support.',
+            ]))
+            ->persist();
+
+        return $invoice->refresh();
+    }
+
+    /**
+     * A pending invoice voided through the domain seam (T7).
+     */
+    protected function aVoidedInvoiceFor(Company $company, SubscriptionReadModel $subscription): InvoiceReadModel
+    {
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+
+        Invoice::retrieve($invoice->getKey())
+            ->void(VoidInvoiceCommand::validateAndCreate([
+                'invoiceId' => $invoice->getKey(),
+                'voidedBy' => User::factory()->create()->getKey(),
+                'reason' => 'Issued in error - admin correction.',
+                'source' => 'admin-correction',
+            ]))
+            ->persist();
+
+        return $invoice->refresh();
+    }
+
+    /**
+     * Seam-fixture dispatch for DataProvider state matrices (§2.12) — every
+     * state is arranged through real aggregate commands, never row writes.
+     */
+    protected function anInvoiceInState(string $state, Company $company, SubscriptionReadModel $subscription): InvoiceReadModel
+    {
+        return match ($state) {
+            'pending' => $this->anIssuedInvoiceFor($company, $subscription),
+            'paid' => $this->aPaidInvoiceFor($company, $subscription),
+            'refunded' => $this->aRefundedInvoiceFor($company, $subscription),
+            'voided' => $this->aVoidedInvoiceFor($company, $subscription),
+            default => throw new InvalidArgumentException("Unknown invoice state fixture [{$state}]."),
+        };
+    }
+
+    /**
+     * A valid payment-succeeded webhook command for $invoice — full amount,
+     * fresh PayHere identifiers. Override per test (e.g. replayed event ids).
+     */
+    protected function recordPaymentSucceededCommand(InvoiceReadModel $invoice, array $overrides = []): RecordPaymentSucceededCommand
+    {
+        return RecordPaymentSucceededCommand::validateAndCreate([
+            'invoiceId' => $invoice->getKey(),
+            'payHereEventId' => 'evt_'.$invoice->getKey(),
+            'payHereTransactionId' => 'txn_'.$invoice->getKey(),
+            'amountCents' => $invoice->amount_cents,
             ...$overrides,
         ]);
     }
