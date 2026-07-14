@@ -196,6 +196,34 @@ class ListInvoicesTest extends BillingTestCase
         ];
     }
 
+    #[Test]
+    public function when_filtering_by_overdue_then_only_pending_past_due_invoices_returned(): void
+    {
+        // Given a pending invoice past its due date, a pending one not yet due,
+        // and a paid one past its due date
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $overdue = $this->anIssuedInvoiceFor($company, $subscription, [
+            'invoiceNumber' => 'INV-2026-000001',
+            'dueDate' => CarbonImmutable::now()->subDays(5),
+        ]);
+        $this->anIssuedInvoiceFor($company, $subscription, [
+            'invoiceNumber' => 'INV-2026-000002',
+            'dueDate' => CarbonImmutable::now()->addDays(9),
+        ]);
+        $this->aPaidInvoiceFor($company, $subscription, [
+            'invoiceNumber' => 'INV-2026-000003',
+            'dueDate' => CarbonImmutable::now()->subDays(5),
+        ]);
+
+        // When they filter by the derived overdue view
+        $response = $this->listInvoicesAs($owner, $company, ['status' => 'overdue']);
+
+        // Then only the pending-past-due invoice comes back — overdue is derived
+        // (pending past due date), never a stored status (s129 R4)
+        $this->assertInvoiceIdsInOrder($response, [$overdue->getKey()]);
+    }
+
     /**
      * One seam-seeded invoice per stored SM-1-04 state, keyed by state — unique
      * invoice numbers per row (the shared fixture pins a fixed number).
