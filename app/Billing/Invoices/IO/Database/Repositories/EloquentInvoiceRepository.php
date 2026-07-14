@@ -24,9 +24,43 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
         return Invoice::query()
             ->where('company_id', $companyId)
             ->when($filters->status !== null, fn (Builder $query) => $this->applyStatusToken($query, (string) $filters->status))
+            ->when($filters->within !== null, fn (Builder $query) => $this->applyIssuedWithin($query, (string) $filters->within))
             ->when($filters->min_amount !== null, fn (Builder $query) => $query->where('amount_cents', '>=', $filters->min_amount))
             ->when($filters->max_amount !== null, fn (Builder $query) => $query->where('amount_cents', '<=', $filters->max_amount))
+            ->tap(fn (Builder $query) => $this->applySort($query, $filters->sort))
             ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
+    }
+
+    /**
+     * `within=from,to` filters on the issue date, both edges inclusive
+     * (api-conventions §10.1 date-range convention; validated upstream by
+     * InvoiceFilters, so the two ISO dates are guaranteed here).
+     *
+     * @param  Builder<Invoice>  $query
+     * @return Builder<Invoice>
+     */
+    private function applyIssuedWithin(Builder $query, string $within): Builder
+    {
+        [$from, $to] = explode(',', $within);
+
+        return $query
+            ->whereDate('issued_at', '>=', $from)
+            ->whereDate('issued_at', '<=', $to);
+    }
+
+    /**
+     * One whitelisted sort token → its ORDER BY (api-1-invoices §2 — `amount`
+     * maps to the amount_cents column).
+     *
+     * @param  Builder<Invoice>  $query
+     * @return Builder<Invoice>
+     */
+    private function applySort(Builder $query, ?string $sort): Builder
+    {
+        return match ($sort) {
+            'amount' => $query->orderBy('amount_cents'),
+            default => $query,
+        };
     }
 
     /**

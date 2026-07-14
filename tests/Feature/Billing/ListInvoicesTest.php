@@ -272,6 +272,48 @@ class ListInvoicesTest extends BillingTestCase
         $this->assertInvoiceIdsExactly($response, [$atFloor->getKey(), $atCeiling->getKey()]);
     }
 
+    #[Test]
+    public function when_status_and_period_filters_combined_then_matching_invoices_in_amount_order(): void
+    {
+        // Given paid invoices issued exactly on both period edges, a paid one
+        // issued before the period, and a pending one inside it
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+
+        $this->travelTo(CarbonImmutable::parse('2026-01-01 10:00:00'));
+        $fromEdge = $this->aPaidInvoiceFor($company, $subscription, [
+            'invoiceNumber' => 'INV-2026-000001',
+            'amountCents' => 50000,
+            'lineItems' => [self::planLineItem(50000)],
+        ]);
+        $this->travelTo(CarbonImmutable::parse('2026-06-30 10:00:00'));
+        $toEdge = $this->aPaidInvoiceFor($company, $subscription, [
+            'invoiceNumber' => 'INV-2026-000002',
+            'amountCents' => 70000,
+            'lineItems' => [self::planLineItem(70000)],
+        ]);
+        $this->travelTo(CarbonImmutable::parse('2025-12-31 10:00:00'));
+        $this->aPaidInvoiceFor($company, $subscription, [
+            'invoiceNumber' => 'INV-2026-000003',
+            'amountCents' => 60000,
+            'lineItems' => [self::planLineItem(60000)],
+        ]);
+        $this->travelTo(CarbonImmutable::parse('2026-02-01 10:00:00'));
+        $this->anIssuedInvoiceFor($company, $subscription, ['invoiceNumber' => 'INV-2026-000004']);
+        $this->travelBack();
+
+        // When they combine the paid status, the period, and ascending amount sort
+        $response = $this->listInvoicesAs($owner, $company, [
+            'status' => 'paid',
+            'within' => '2026-01-01,2026-06-30',
+            'sort' => 'amount',
+        ]);
+
+        // Then only paid invoices issued inside the period come back, cheapest
+        // first — both period edges included (Gherkin: filter by status + range)
+        $this->assertInvoiceIdsInOrder($response, [$fromEdge->getKey(), $toEdge->getKey()]);
+    }
+
     /**
      * A single plan line item whose amount matches the invoice total — the
      * aggregate validates SUM(lineItems) == amountCents at issue time.
