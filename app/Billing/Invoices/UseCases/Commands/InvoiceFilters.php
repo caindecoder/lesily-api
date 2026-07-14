@@ -98,7 +98,7 @@ class InvoiceFilters extends Data
             $dates = explode(',', (string) $value);
 
             if (count($dates) !== 2 || ! CarbonImmutable::hasFormat($dates[0], 'Y-m-d') || ! CarbonImmutable::hasFormat($dates[1], 'Y-m-d')) {
-                $fail('The within filter must be two ISO-8601 (YYYY-MM-DD) dates separated by a comma.');
+                $fail("The {$attribute} filter must be two ISO-8601 (YYYY-MM-DD) dates separated by a comma.");
             }
         };
     }
