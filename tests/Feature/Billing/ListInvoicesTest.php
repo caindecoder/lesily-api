@@ -412,6 +412,51 @@ class ListInvoicesTest extends BillingTestCase
         $this->assertInvoiceIdsInOrder($response, [$invoice->getKey()]);
     }
 
+    #[Test]
+    public function when_owner_lists_invoices_then_exact_contract_returned(): void
+    {
+        // Given a paid May invoice and a disputed pending June invoice
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+
+        $this->travelTo(CarbonImmutable::parse('2026-05-05 09:30:00'));
+        $paid = $this->aPaidInvoiceFor($company, $subscription, ['invoiceNumber' => 'INV-2026-000101']);
+        $this->travelTo(CarbonImmutable::parse('2026-06-06 10:15:00'));
+        $disputed = $this->aDisputedInvoiceFor($company, $subscription, ['invoiceNumber' => 'INV-2026-000102']);
+        $this->travelBack();
+
+        // When the owner requests the invoice list
+        $response = $this->listInvoicesAs($owner, $company);
+
+        // Then exactly the eight contract keys per row come back, newest issued
+        // first — literal payload identity, so nothing beyond the contract leaks
+        $this->assertExactInvoiceListContract($response, [
+            'data' => [
+                [
+                    'id' => $disputed->getKey(),
+                    'number' => 'INV-2026-000102',
+                    'issued_at' => '2026-06-06T10:15:00.000000Z',
+                    'due_at' => '2026-06-20',
+                    'status' => 'pending',
+                    'amount_cents' => 60000,
+                    'currency' => 'LKR',
+                    'has_dispute' => true,
+                ],
+                [
+                    'id' => $paid->getKey(),
+                    'number' => 'INV-2026-000101',
+                    'issued_at' => '2026-05-05T09:30:00.000000Z',
+                    'due_at' => '2026-05-19',
+                    'status' => 'paid',
+                    'amount_cents' => 60000,
+                    'currency' => 'LKR',
+                    'has_dispute' => false,
+                ],
+            ],
+            'meta' => ['pagination' => ['page' => 1, 'per_page' => 15, 'total' => 2, 'last_page' => 1]],
+        ]);
+    }
+
     /**
      * A single plan line item whose amount matches the invoice total — the
      * aggregate validates SUM(lineItems) == amountCents at issue time.

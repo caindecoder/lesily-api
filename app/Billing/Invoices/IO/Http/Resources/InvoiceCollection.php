@@ -3,6 +3,7 @@
 namespace App\Billing\Invoices\IO\Http\Resources;
 
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Http\Resources\Json\ResourceCollection;
 
 /**
@@ -13,6 +14,9 @@ use Illuminate\Http\Resources\Json\ResourceCollection;
  */
 class InvoiceCollection extends ResourceCollection
 {
+    /** @var class-string<JsonResource> */
+    public $collects = InvoiceResource::class;
+
     /**
      * @param  array<string, mixed>  $paginated
      * @param  array<string, mixed>  $default

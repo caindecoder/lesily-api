@@ -533,6 +533,19 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
+     * The invoice list matches the contract exactly — payload identity for the
+     * whole envelope (8-key rows + §8.3 meta), so nothing beyond the contract
+     * can leak (spec §6 exact-envelope leak-guard).
+     *
+     * @param  array<string, mixed>  $expectedEnvelope
+     */
+    protected function assertExactInvoiceListContract(TestResponse $response, array $expectedEnvelope): void
+    {
+        $response->assertOk();
+        $response->assertExactJson($expectedEnvelope);
+    }
+
+    /**
      * The subscription state came back — 200 with exactly the 13 designed
      * contract keys in the {data: {...}} envelope (LD assertJsonCount
      * shape-lock pattern).
