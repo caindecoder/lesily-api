@@ -130,6 +130,38 @@ class ListInvoicesTest extends BillingTestCase
     }
 
     /**
+     * @param  array<string, mixed>  $query
+     */
+    #[Test]
+    #[DataProvider('provideZeroMatchFilters')]
+    public function when_filters_match_no_invoices_then_empty_collection_returned(array $query): void
+    {
+        // Given a company whose only invoice is pending at LKR 600.00
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $this->anIssuedInvoiceFor($company, $subscription);
+
+        // When they request the list with filters no invoice satisfies
+        $response = $this->listInvoicesAs($owner, $company, $query);
+
+        // Then the empty collection comes back — a semantically-tight range is a
+        // zero-result query, not a validation error (UC-1-120 alt 4a; declared
+        // divergence from LeaveDates' reversed-range auto-swap)
+        $this->assertEmptyInvoiceCollection($response);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>}>
+     */
+    public static function provideZeroMatchFilters(): array
+    {
+        return [
+            'status matching no rows' => [['status' => 'paid']],
+            'min_amount above max_amount' => [['min_amount' => 60001, 'max_amount' => 59999]],
+        ];
+    }
+
+    /**
      * @return array<string, array{array<string, mixed>, string}>
      */
     public static function provideInvalidQueryInputs(): array
