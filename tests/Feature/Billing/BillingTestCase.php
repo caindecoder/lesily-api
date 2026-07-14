@@ -158,6 +158,23 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
+     * Exactly these invoice ids came back, any order — 200 plus row identity,
+     * for filter tests that pin membership without pinning sort.
+     *
+     * @param  array<int, string>  $invoiceIds
+     */
+    protected function assertInvoiceIdsExactly(TestResponse $response, array $invoiceIds): void
+    {
+        $response->assertOk();
+
+        $returned = $response->json('data.*.id');
+        sort($invoiceIds);
+        sort($returned);
+
+        $this->assertSame($invoiceIds, $returned);
+    }
+
+    /**
      * The request was rejected as unauthenticated — 401 with the §S21
      * UNAUTHENTICATED envelope. Duplicated from CompaniesTestCase/AuthTestCase
      * (module bases are independent — established precedent; base-level

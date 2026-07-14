@@ -243,6 +243,53 @@ class ListInvoicesTest extends BillingTestCase
         $this->assertInvoiceIdsInOrder($response, [$disputed->getKey()]);
     }
 
+    #[Test]
+    public function when_filtering_by_amount_range_then_only_invoices_within_bounds_returned(): void
+    {
+        // Given invoices at LKR 500.00, 600.00 and 700.00
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $atFloor = $this->anIssuedInvoiceFor($company, $subscription, [
+            'invoiceNumber' => 'INV-2026-000001',
+            'amountCents' => 50000,
+            'lineItems' => [self::planLineItem(50000)],
+        ]);
+        $atCeiling = $this->anIssuedInvoiceFor($company, $subscription, [
+            'invoiceNumber' => 'INV-2026-000002',
+            'amountCents' => 60000,
+            'lineItems' => [self::planLineItem(60000)],
+        ]);
+        $this->anIssuedInvoiceFor($company, $subscription, [
+            'invoiceNumber' => 'INV-2026-000003',
+            'amountCents' => 70000,
+            'lineItems' => [self::planLineItem(70000)],
+        ]);
+
+        // When they filter by the 50000–60000 cents range
+        $response = $this->listInvoicesAs($owner, $company, ['min_amount' => 50000, 'max_amount' => 60000]);
+
+        // Then both boundary invoices come back — the bounds are inclusive
+        $this->assertInvoiceIdsExactly($response, [$atFloor->getKey(), $atCeiling->getKey()]);
+    }
+
+    /**
+     * A single plan line item whose amount matches the invoice total — the
+     * aggregate validates SUM(lineItems) == amountCents at issue time.
+     *
+     * @return array<string, mixed>
+     */
+    private static function planLineItem(int $amountCents): array
+    {
+        return [
+            'description' => 'Pro Plan — Monthly',
+            'quantity' => 1,
+            'unitPriceCents' => $amountCents,
+            'amountCents' => $amountCents,
+            'lineType' => 'plan_subscription',
+            'sortOrder' => 0,
+        ];
+    }
+
     /**
      * One seam-seeded invoice per stored SM-1-04 state, keyed by state — unique
      * invoice numbers per row (the shared fixture pins a fixed number).
