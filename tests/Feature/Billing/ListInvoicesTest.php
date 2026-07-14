@@ -48,6 +48,19 @@ class ListInvoicesTest extends BillingTestCase
         $this->assertValidationRejected($response, $invalidField);
     }
 
+    #[Test]
+    public function when_no_token_presented_then_authentication_required(): void
+    {
+        // Given a company with an owner member
+        [$company] = $this->aCompanyWithMember('owner');
+
+        // When the invoice list is requested with no auth token
+        $response = $this->getJson('/api/v1/invoices', ['X-Company-Context' => $company->getKey()]);
+
+        // Then it is refused as unauthenticated (upstream Sanctum — UC-1-120 flow 1a)
+        $this->assertUnauthenticated($response);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
