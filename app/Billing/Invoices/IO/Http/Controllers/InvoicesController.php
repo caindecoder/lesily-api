@@ -3,8 +3,9 @@
 namespace App\Billing\Invoices\IO\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
 use App\Billing\Invoices\UseCases\Commands\InvoiceFilters;
+use App\Billing\Invoices\IO\Http\Resources\InvoiceCollection;
+use App\Billing\Invoices\UseCases\Repositories\InvoiceRepositoryInterface;
 
 /**
  * The tenant invoice read surface — the invoice list (UC-1-120); the receipt
@@ -14,10 +15,14 @@ use App\Billing\Invoices\UseCases\Commands\InvoiceFilters;
  */
 class InvoicesController
 {
-    public function index(Request $request): JsonResponse
-    {
-        InvoiceFilters::fromQuery($request);
+    public function __construct(private readonly InvoiceRepositoryInterface $invoices) {}
 
-        return response()->json(['data' => []]);
+    public function index(Request $request): InvoiceCollection
+    {
+        $filters = InvoiceFilters::fromQuery($request);
+
+        return new InvoiceCollection(
+            $this->invoices->listForCompany($request->company()->getKey(), $filters)
+        );
     }
 }

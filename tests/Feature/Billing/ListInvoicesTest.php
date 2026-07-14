@@ -2,7 +2,10 @@
 
 namespace Tests\Feature\Billing;
 
+use Carbon\CarbonImmutable;
+use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -89,6 +92,41 @@ class ListInvoicesTest extends BillingTestCase
         // Then the company context is denied (AuthorizeCompany membership check —
         // cross-tenant invoice ids are unreachable, UC-1-120 tenant isolation)
         $this->assertCompanyAccessDenied($response);
+    }
+
+    // --- Edge ---
+
+    #[Test]
+    #[DataProvider('provideInvoicelessCompanyKinds')]
+    public function when_company_has_no_invoices_then_empty_collection_returned(string $companyKind): void
+    {
+        // Given a company that has never been invoiced — Free, or Trial before
+        // conversion (plan NULL during trial, s066)
+        $company = match ($companyKind) {
+            'free' => Company::factory()->onPlan(BillingPlan::Free)->create(),
+            'trial' => tap(
+                Company::factory()->withoutPlan()->create(),
+                fn (Company $trialCompany) => $this->aTrialSubscriptionFor($trialCompany, CarbonImmutable::now()->addDays(20)),
+            ),
+        };
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When the owner requests the invoice list
+        $response = $this->listInvoicesAs($owner, $company);
+
+        // Then an empty collection comes back — never an error (UC-1-120 alt 6a)
+        $this->assertEmptyInvoiceCollection($response);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideInvoicelessCompanyKinds(): array
+    {
+        return [
+            'free company - no invoices ever' => ['free'],
+            'trial company - pre-conversion' => ['trial'],
+        ];
     }
 
     /**

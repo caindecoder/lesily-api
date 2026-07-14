@@ -133,6 +133,19 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
+     * The invoice list came back empty — 200 with `data: []` under the exact
+     * default §8.3 pagination meta (never a 404; UC-1-120 alt 6a / alt 4a).
+     */
+    protected function assertEmptyInvoiceCollection(TestResponse $response): void
+    {
+        $response->assertOk();
+        $response->assertExactJson([
+            'data' => [],
+            'meta' => ['pagination' => ['page' => 1, 'per_page' => 15, 'total' => 0, 'last_page' => 1]],
+        ]);
+    }
+
+    /**
      * The request was rejected as unauthenticated — 401 with the §S21
      * UNAUTHENTICATED envelope. Duplicated from CompaniesTestCase/AuthTestCase
      * (module bases are independent — established precedent; base-level
