@@ -7,6 +7,7 @@ use App\Foundation\Auth\IO\Http\Controllers\LoginController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutController;
 use App\Foundation\Auth\IO\Http\Controllers\ProfileController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
+use App\Billing\Invoices\IO\Http\Controllers\InvoicesController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutAllController;
 use App\Billing\Subscriptions\IO\Http\Controllers\PlansController;
 use App\Foundation\Auth\IO\Http\Controllers\MyCompaniesController;
@@ -258,4 +259,11 @@ Route::get('/v1/plans', [PlansController::class, 'index'])
 // every company has exactly one Subscription (api-1-subscriptions §2). Pure read,
 // no interactor (cd-subscriptions §5, gate I1). No throttle (tiered — OQ-1-098).
 Route::get('/v1/subscription', [SubscriptionsController::class, 'show'])
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:billing.view']);
+
+// The company's invoice history (UC-1-120, slice-plans-billing T4) — paginated
+// per api-conventions §9, filter whitelist per §10.1 (unknown params 422 — the
+// s134 F-a ruling covers company_id tenant-override attempts too). Pure read,
+// no interactor (cd-invoices §5, gate I1). No throttle (tiered — OQ-1-098).
+Route::get('/v1/invoices', [InvoicesController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:billing.view']);

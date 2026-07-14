@@ -2,9 +2,11 @@
 
 namespace App\Billing\Invoices\Entities;
 
+use Database\Factories\InvoiceFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Billing\Invoices\Enums\InvoiceStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
  * Invoice read model (ERD-1-04), written exclusively by InvoiceProjector — the
@@ -15,7 +17,19 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
  */
 class Invoice extends Model
 {
+    /** @use HasFactory<InvoiceFactory> */
+    use HasFactory;
+
     use HasUuids;
+
+    /**
+     * The entity lives outside the Database\Factories<->App\Models naming
+     * convention, so the factory is bound explicitly (UC-1-017 precedent).
+     */
+    protected static function newFactory(): InvoiceFactory
+    {
+        return InvoiceFactory::new();
+    }
 
     protected $fillable = [
         'id',
