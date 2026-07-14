@@ -457,6 +457,29 @@ class ListInvoicesTest extends BillingTestCase
         ]);
     }
 
+    #[Test]
+    public function when_owner_of_two_companies_lists_then_only_context_company_invoices_returned(): void
+    {
+        // Given one owner of companies A and B — B's invoice seeded FIRST so an
+        // unscoped fetch would surface it (s131 isolation idiom)
+        [$companyB, $owner] = $this->aCompanyWithMember('owner');
+        $subscriptionB = $this->aTrialSubscriptionFor($companyB, CarbonImmutable::now()->addDays(30));
+        $this->anIssuedInvoiceFor($companyB, $subscriptionB, ['invoiceNumber' => 'INV-2026-000201']);
+
+        $companyA = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $companyA->users()->attach($owner, ['role_id' => $this->seededRole('owner')->getKey()]);
+        $subscriptionA = $this->aTrialSubscriptionFor($companyA, CarbonImmutable::now()->addDays(30));
+        $first = $this->anIssuedInvoiceFor($companyA, $subscriptionA, ['invoiceNumber' => 'INV-2026-000202']);
+        $second = $this->aPaidInvoiceFor($companyA, $subscriptionA, ['invoiceNumber' => 'INV-2026-000203']);
+
+        // When they request company A's invoice list
+        $response = $this->listInvoicesAs($owner, $companyA);
+
+        // Then exactly A's two invoices come back — row identity proves B's
+        // invoice is never enumerated (UC-1-120 minimal guarantee)
+        $this->assertInvoiceIdsExactly($response, [$first->getKey(), $second->getKey()]);
+    }
+
     /**
      * A single plan line item whose amount matches the invoice total — the
      * aggregate validates SUM(lineItems) == amountCents at issue time.
