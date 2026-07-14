@@ -3,6 +3,7 @@
 namespace Tests\Feature\Billing;
 
 use Carbon\CarbonImmutable;
+use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
@@ -110,6 +111,7 @@ class ListInvoicesTest extends BillingTestCase
                 Company::factory()->withoutPlan()->create(),
                 fn (Company $trialCompany) => $this->aTrialSubscriptionFor($trialCompany, CarbonImmutable::now()->addDays(20)),
             ),
+            default => throw new InvalidArgumentException("Unknown invoiceless company kind [{$companyKind}]."),
         };
         $owner = $this->aCompanyMember($company, 'owner');
 
