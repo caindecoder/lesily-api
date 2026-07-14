@@ -77,7 +77,9 @@ class InvoiceFilters extends Data
     {
         return [
             'status' => ['sometimes', 'string', Rule::in(self::STATUS_TOKENS)],
-            'within' => ['sometimes', 'string', self::isoDateRangeRule()],
+            // bail: the closure must never run on a non-string (an array
+            // within[] would fatal on the string cast before the 422).
+            'within' => ['sometimes', 'bail', 'string', self::isoDateRangeRule()],
             'min_amount' => ['sometimes', 'integer', 'min:0'],
             'max_amount' => ['sometimes', 'integer', 'min:0'],
             'sort' => ['sometimes', 'string', Rule::in(self::SORTABLE_FIELDS)],

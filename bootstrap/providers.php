@@ -7,9 +7,9 @@ use App\Billing\Subscriptions\BillingSubscriptionsServiceProvider;
 use App\Companies\Memberships\CompaniesMembershipsServiceProvider;
 
 return [
+    AppServiceProvider::class,
     BillingInvoicesServiceProvider::class,
     BillingSubscriptionsServiceProvider::class,
     CompaniesMembershipsServiceProvider::class,
-    AppServiceProvider::class,
     TelescopeServiceProvider::class,
 ];

@@ -217,6 +217,11 @@ class ListInvoicesTest extends BillingTestCase
             'invoiceNumber' => 'INV-2026-000003',
             'dueDate' => CarbonImmutable::now()->subDays(5),
         ]);
+        // Day-boundary pin: due TODAY is not yet overdue (strictly past due date).
+        $this->anIssuedInvoiceFor($company, $subscription, [
+            'invoiceNumber' => 'INV-2026-000004',
+            'dueDate' => CarbonImmutable::today(),
+        ]);
 
         // When they filter by the derived overdue view
         $response = $this->listInvoicesAs($owner, $company, ['status' => 'overdue']);
@@ -378,6 +383,46 @@ class ListInvoicesTest extends BillingTestCase
         $this->travelBack();
 
         return $seeds;
+    }
+
+    #[Test]
+    public function when_issue_dates_tie_then_rows_return_in_stable_order(): void
+    {
+        // Given three invoices issued at the same instant
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $this->travelTo(CarbonImmutable::parse('2026-04-04 12:00:00'));
+        $invoiceIds = [];
+        foreach ([1, 2, 3] as $sequence) {
+            $invoiceIds[] = $this->anIssuedInvoiceFor($company, $subscription, [
+                'invoiceNumber' => sprintf('INV-2026-%06d', $sequence),
+            ])->getKey();
+        }
+        $this->travelBack();
+
+        // When the list is requested at the default sort
+        $response = $this->listInvoicesAs($owner, $company);
+
+        // Then equal sort keys fall back to ascending id — page order can never
+        // shuffle between requests of a paginated list (stable tie-break)
+        sort($invoiceIds);
+        $this->assertInvoiceIdsInOrder($response, $invoiceIds);
+    }
+
+    #[Test]
+    public function when_page_size_raised_to_maximum_then_single_page_serves_all(): void
+    {
+        // Given twenty invoices — one through the event seam, nineteen bulk
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $this->anIssuedInvoiceFor($company, $subscription);
+        InvoiceReadModel::factory()->count(19)->forCompany($company)->create();
+
+        // When they request per_page=100 — the whitelist ceiling
+        $response = $this->listInvoicesAs($owner, $company, ['per_page' => 100]);
+
+        // Then one page serves all twenty rows under the raised size
+        $this->assertInvoicePage($response, 20, ['page' => 1, 'per_page' => 100, 'total' => 20, 'last_page' => 1]);
     }
 
     #[Test]
@@ -550,11 +595,15 @@ class ListInvoicesTest extends BillingTestCase
      */
     private function oneInvoicePerStoredState(Company $company, SubscriptionReadModel $subscription): array
     {
-        $invoices = [];
+        // The pending seed deliberately carries an open dispute: a stored-status
+        // filter must ignore the has_dispute modifier (SM-1-04 §4 orthogonality).
+        $invoices = ['pending' => $this->aDisputedInvoiceFor($company, $subscription, [
+            'invoiceNumber' => 'INV-2026-000001',
+        ])];
 
-        foreach (['pending', 'paid', 'failed', 'refunded', 'voided'] as $index => $state) {
+        foreach (['paid', 'failed', 'refunded', 'voided'] as $index => $state) {
             $invoices[$state] = $this->anInvoiceInState($state, $company, $subscription, [
-                'invoiceNumber' => sprintf('INV-2026-%06d', $index + 1),
+                'invoiceNumber' => sprintf('INV-2026-%06d', $index + 2),
             ]);
         }
 
@@ -575,8 +624,13 @@ class ListInvoicesTest extends BillingTestCase
             'within missing second date' => [['within' => '2026-01-01'], 'within'],
             'non-integer min_amount' => [['min_amount' => 'abc'], 'min_amount'],
             'per_page over max' => [['per_page' => 101], 'per_page'],
+            'per_page below minimum' => [['per_page' => 0], 'per_page'],
+            'page below minimum' => [['page' => 0], 'page'],
             'unknown filter key' => [['foo' => 'bar'], 'foo'],
             'tenant override attempt rejected' => [['company_id' => 'ACME'], 'company_id'],
+            'multi-value status list' => [['status' => 'paid,pending'], 'status'],
+            'empty status value' => [['status' => ''], 'status'],
+            'within given as an array' => [['within' => ['2026-01-01', '2026-06-30']], 'within'],
         ];
     }
 }
