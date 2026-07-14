@@ -395,6 +395,23 @@ class ListInvoicesTest extends BillingTestCase
         $this->assertInvoicePage($response, 5, ['page' => 2, 'per_page' => 15, 'total' => 20, 'last_page' => 2]);
     }
 
+    #[Test]
+    #[DataProvider('provideViewingRoles')]
+    public function when_role_may_view_billing_then_invoice_list_returned(string $roleCode): void
+    {
+        // Given a member whose role carries billing.view and one company invoice
+        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+
+        // When they request the invoice list
+        $response = $this->listInvoicesAs($actor, $company);
+
+        // Then the company's invoice comes back — owner full, admin view-only
+        // (s129 F3), auditor read-only (2026-05-24 matrix `billing.view` row)
+        $this->assertInvoiceIdsInOrder($response, [$invoice->getKey()]);
+    }
+
     /**
      * A single plan line item whose amount matches the invoice total — the
      * aggregate validates SUM(lineItems) == amountCents at issue time.
