@@ -108,6 +108,31 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
+     * An authenticated member requests the company's invoice list under
+     * $company's context, with optional whitelisted query params (UC-1-120).
+     */
+    protected function listInvoicesAs(User $user, Company $company, array $query = []): TestResponse
+    {
+        Sanctum::actingAs($user);
+
+        $queryString = $query === [] ? '' : '?'.http_build_query($query);
+
+        return $this->getJson('/api/v1/invoices'.$queryString, ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * The query input was refused as invalid on $field — 422 VALIDATION_FAILED
+     * with a field-level error (§S21). Duplicated from MembershipsTestCase
+     * (module bases are independent — established precedent).
+     */
+    protected function assertValidationRejected(TestResponse $response, string $field): void
+    {
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
+        $response->assertJsonValidationErrors($field);
+    }
+
+    /**
      * The request was rejected as unauthenticated — 401 with the §S21
      * UNAUTHENTICATED envelope. Duplicated from CompaniesTestCase/AuthTestCase
      * (module bases are independent — established precedent; base-level

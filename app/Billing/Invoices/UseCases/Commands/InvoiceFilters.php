@@ -1,0 +1,103 @@
+<?php
+
+namespace App\Billing\Invoices\UseCases\Commands;
+
+use Closure;
+use Carbon\CarbonImmutable;
+use Illuminate\Http\Request;
+use Spatie\LaravelData\Data;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use Spatie\LaravelData\Support\Validation\ValidationContext;
+
+/**
+ * The invoice-list query input (UC-1-120): whitelisted filter/sort/pagination
+ * params per api-conventions §9 + §10. Shape-only validation; unknown query keys
+ * are refused (the per-endpoint whitelist rule — §10.1, s134 F-a ruling: a
+ * company_id tenant-override attempt 422s like any unknown key) because Data
+ * would silently ignore them. MembershipFilters precedent.
+ */
+class InvoiceFilters extends Data
+{
+    /**
+     * The query keys this endpoint accepts (api-conventions §10.1 whitelist).
+     *
+     * @var list<string>
+     */
+    private const array QUERY_KEY_WHITELIST = ['status', 'within', 'min_amount', 'max_amount', 'sort', 'page', 'per_page'];
+
+    /**
+     * The status tokens this endpoint accepts — SM-1-04's five stored states
+     * plus the two derived views (overdue = pending past due_date; disputed =
+     * has_dispute), re-pinned s129 R4.
+     *
+     * @var list<string>
+     */
+    private const array STATUS_TOKENS = ['pending', 'paid', 'failed', 'refunded', 'voided', 'overdue', 'disputed'];
+
+    /**
+     * The sort tokens this endpoint accepts (api-1-invoices §2; `amount` maps to
+     * the amount_cents column at the query layer). Default: -issued_at.
+     *
+     * @var list<string>
+     */
+    private const array SORTABLE_FIELDS = ['-issued_at', 'issued_at', 'amount', '-amount'];
+
+    public ?string $status = null;
+
+    public ?string $within = null;
+
+    public ?int $min_amount = null;
+
+    public ?int $max_amount = null;
+
+    public ?string $sort = null;
+
+    public ?int $page = null;
+
+    public ?int $per_page = null;
+
+    public static function fromQuery(Request $request): static
+    {
+        $unknownKeys = array_diff(array_keys($request->query()), self::QUERY_KEY_WHITELIST);
+
+        if ($unknownKeys !== []) {
+            throw ValidationException::withMessages(
+                array_fill_keys($unknownKeys, 'This filter is not supported.')
+            );
+        }
+
+        return static::validateAndCreate($request->query());
+    }
+
+    /**
+     * @return array<string, array<int, mixed>>
+     */
+    public static function rules(ValidationContext $context): array
+    {
+        return [
+            'status' => ['sometimes', 'string', Rule::in(self::STATUS_TOKENS)],
+            'within' => ['sometimes', 'string', self::isoDateRangeRule()],
+            'min_amount' => ['sometimes', 'integer', 'min:0'],
+            'max_amount' => ['sometimes', 'integer', 'min:0'],
+            'sort' => ['sometimes', 'string', Rule::in(self::SORTABLE_FIELDS)],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+        ];
+    }
+
+    /**
+     * `within=from,to` — exactly two comma-separated ISO-8601 (Y-m-d) dates
+     * (api-conventions §10.1 date-range convention; UC-1-120 error flow 4c).
+     */
+    private static function isoDateRangeRule(): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail): void {
+            $dates = explode(',', (string) $value);
+
+            if (count($dates) !== 2 || ! CarbonImmutable::hasFormat($dates[0], 'Y-m-d') || ! CarbonImmutable::hasFormat($dates[1], 'Y-m-d')) {
+                $fail('The within filter must be two ISO-8601 (YYYY-MM-DD) dates separated by a comma.');
+            }
+        };
+    }
+}
