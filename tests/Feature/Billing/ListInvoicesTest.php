@@ -224,6 +224,25 @@ class ListInvoicesTest extends BillingTestCase
         $this->assertInvoiceIdsInOrder($response, [$overdue->getKey()]);
     }
 
+    #[Test]
+    public function when_filtering_by_disputed_then_only_open_dispute_invoices_returned(): void
+    {
+        // Given a pending invoice under an open dispute beside an undisputed
+        // pending one and an undisputed paid one
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $disputed = $this->aDisputedInvoiceFor($company, $subscription, ['invoiceNumber' => 'INV-2026-000001']);
+        $this->anIssuedInvoiceFor($company, $subscription, ['invoiceNumber' => 'INV-2026-000002']);
+        $this->aPaidInvoiceFor($company, $subscription, ['invoiceNumber' => 'INV-2026-000003']);
+
+        // When they filter by the derived disputed view
+        $response = $this->listInvoicesAs($owner, $company, ['status' => 'disputed']);
+
+        // Then only the open-dispute invoice comes back — disputed is the
+        // has_dispute modifier, not a stored status (SM-1-04 §4; s129 R4 / F8)
+        $this->assertInvoiceIdsInOrder($response, [$disputed->getKey()]);
+    }
+
     /**
      * One seam-seeded invoice per stored SM-1-04 state, keyed by state — unique
      * invoice numbers per row (the shared fixture pins a fixed number).

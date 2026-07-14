@@ -43,6 +43,7 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
             'overdue' => $query
                 ->where('status', InvoiceStatus::Pending)
                 ->whereDate('due_date', '<', CarbonImmutable::today()),
+            'disputed' => $query->where('has_dispute', true),
             default => $query->where('status', $status),
         };
     }
