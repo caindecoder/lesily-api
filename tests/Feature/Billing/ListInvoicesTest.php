@@ -61,6 +61,21 @@ class ListInvoicesTest extends BillingTestCase
         $this->assertUnauthenticated($response);
     }
 
+    #[Test]
+    #[DataProvider('provideDeniedRoles')]
+    public function when_role_lacks_billing_view_then_role_insufficient_response(string $roleCode): void
+    {
+        // Given a member whose role does not carry billing.view (2026-05-24 matrix)
+        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+
+        // When they request the invoice list
+        $response = $this->listInvoicesAs($actor, $company);
+
+        // Then the list is denied for the missing permission — no invoice fields
+        // in the body (UC-1-120 error flow 3a)
+        $this->assertRoleInsufficient($response, 'billing.view');
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
