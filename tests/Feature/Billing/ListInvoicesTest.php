@@ -315,6 +315,70 @@ class ListInvoicesTest extends BillingTestCase
     }
 
     /**
+     * @param  array<int, string>  $expectedSeedOrder
+     */
+    #[Test]
+    #[DataProvider('provideSortOrders')]
+    public function when_sort_parameter_given_then_rows_ordered_accordingly(?string $sort, array $expectedSeedOrder): void
+    {
+        // Given three invoices with distinct issue dates and amounts
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $seeds = $this->threeInvoicesVaryingDateAndAmount($company, $subscription);
+
+        // When they request the list under that sort token
+        $response = $this->listInvoicesAs($owner, $company, $sort === null ? [] : ['sort' => $sort]);
+
+        // Then the rows come back in the token's order — newest issued first
+        // when no sort is given (the api-1-invoices §2 default)
+        $this->assertInvoiceIdsInOrder($response, array_map(
+            fn (string $seedKey) => $seeds[$seedKey]->getKey(),
+            $expectedSeedOrder,
+        ));
+    }
+
+    /**
+     * @return array<string, array{?string, array<int, string>}>
+     */
+    public static function provideSortOrders(): array
+    {
+        return [
+            'absent - newest issued first' => [null, ['march-60000', 'february-50000', 'january-70000']],
+            'issued_at - oldest first' => ['issued_at', ['january-70000', 'february-50000', 'march-60000']],
+            'amount - cheapest first' => ['amount', ['february-50000', 'march-60000', 'january-70000']],
+            '-amount - dearest first' => ['-amount', ['january-70000', 'march-60000', 'february-50000']],
+        ];
+    }
+
+    /**
+     * Three pending invoices whose issue months and amounts deliberately
+     * disagree, so every sort token produces a distinct order.
+     *
+     * @return array<string, InvoiceReadModel>
+     */
+    private function threeInvoicesVaryingDateAndAmount(Company $company, SubscriptionReadModel $subscription): array
+    {
+        $rows = [
+            'january-70000' => ['2026-01-10 09:00:00', 70000, 'INV-2026-000001'],
+            'february-50000' => ['2026-02-10 09:00:00', 50000, 'INV-2026-000002'],
+            'march-60000' => ['2026-03-10 09:00:00', 60000, 'INV-2026-000003'],
+        ];
+
+        $seeds = [];
+        foreach ($rows as $seedKey => [$issuedAt, $amountCents, $invoiceNumber]) {
+            $this->travelTo(CarbonImmutable::parse($issuedAt));
+            $seeds[$seedKey] = $this->anIssuedInvoiceFor($company, $subscription, [
+                'invoiceNumber' => $invoiceNumber,
+                'amountCents' => $amountCents,
+                'lineItems' => [self::planLineItem($amountCents)],
+            ]);
+        }
+        $this->travelBack();
+
+        return $seeds;
+    }
+
+    /**
      * A single plan line item whose amount matches the invoice total — the
      * aggregate validates SUM(lineItems) == amountCents at issue time.
      *

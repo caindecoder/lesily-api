@@ -57,10 +57,17 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
      */
     private function applySort(Builder $query, ?string $sort): Builder
     {
-        return match ($sort) {
+        $ordered = match ($sort) {
+            'issued_at' => $query->orderBy('issued_at'),
             'amount' => $query->orderBy('amount_cents'),
-            default => $query,
+            '-amount' => $query->orderByDesc('amount_cents'),
+            // `-issued_at` explicit, and the documented default when absent.
+            default => $query->orderByDesc('issued_at'),
         };
+
+        // Stable tie-breaker: equal sort keys must not shuffle rows between
+        // page requests of a paginated list (memberships precedent).
+        return $ordered->orderBy('id');
     }
 
     /**
