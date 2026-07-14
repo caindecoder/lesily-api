@@ -76,6 +76,21 @@ class ListInvoicesTest extends BillingTestCase
         $this->assertRoleInsufficient($response, 'billing.view');
     }
 
+    #[Test]
+    public function when_company_context_is_foreign_then_company_access_denied(): void
+    {
+        // Given a member of one company and a second company they never joined
+        [, $outsider] = $this->aCompanyWithMember('owner');
+        [$companyB] = $this->aCompanyWithMember('owner');
+
+        // When they request the second company's invoice list
+        $response = $this->listInvoicesAs($outsider, $companyB);
+
+        // Then the company context is denied (AuthorizeCompany membership check —
+        // cross-tenant invoice ids are unreachable, UC-1-120 tenant isolation)
+        $this->assertCompanyAccessDenied($response);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
