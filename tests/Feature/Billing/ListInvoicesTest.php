@@ -378,6 +378,23 @@ class ListInvoicesTest extends BillingTestCase
         return $seeds;
     }
 
+    #[Test]
+    public function when_second_page_requested_then_remaining_invoices_with_pagination_meta(): void
+    {
+        // Given twenty invoices — one through the event seam, nineteen bulk
+        // factory rows (the factory exists for pure-read bulk seeding only; B4)
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $this->anIssuedInvoiceFor($company, $subscription);
+        InvoiceReadModel::factory()->count(19)->forCompany($company)->create();
+
+        // When they request the second page at the default page size
+        $response = $this->listInvoicesAs($owner, $company, ['page' => 2]);
+
+        // Then the remaining five rows ride the exact §8.3 meta
+        $this->assertInvoicePage($response, 5, ['page' => 2, 'per_page' => 15, 'total' => 20, 'last_page' => 2]);
+    }
+
     /**
      * A single plan line item whose amount matches the invoice total — the
      * aggregate validates SUM(lineItems) == amountCents at issue time.

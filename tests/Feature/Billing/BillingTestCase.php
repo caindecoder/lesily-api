@@ -158,6 +158,19 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
+     * The invoice page came back as expected — 200, exactly $rowCount rows,
+     * and the exact §8.3 pagination meta (key order included).
+     *
+     * @param  array<string, int>  $meta
+     */
+    protected function assertInvoicePage(TestResponse $response, int $rowCount, array $meta): void
+    {
+        $response->assertOk();
+        $response->assertJsonCount($rowCount, 'data');
+        $this->assertSame($meta, $response->json('meta.pagination'));
+    }
+
+    /**
      * Exactly these invoice ids came back, any order — 200 plus row identity,
      * for filter tests that pin membership without pinning sort.
      *
