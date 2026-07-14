@@ -480,6 +480,48 @@ class ListInvoicesTest extends BillingTestCase
         $this->assertInvoiceIdsExactly($response, [$first->getKey(), $second->getKey()]);
     }
 
+    #[Test]
+    public function when_factory_state_used_then_row_matches_projector_output(): void
+    {
+        // Given the same paid state arranged both ways — through the event seam
+        // (the production path) and through the bulk factory
+        [$company] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $seamPaid = $this->aPaidInvoiceFor($company, $subscription);
+        $factoryPaid = InvoiceReadModel::factory()->paid()->forCompany($company)->create();
+
+        // When the drift-sensitive shape of each row is read back
+        // Then the factory's shape matches the projector's output for the
+        // reference state — the two row-truth sources cannot silently drift
+        // (the InvoiceFactory docblock contract: each state stamps exactly the
+        // columns its projector arm writes)
+        $this->assertSame(
+            $this->projectedRowShape($seamPaid),
+            $this->projectedRowShape($factoryPaid),
+        );
+    }
+
+    /**
+     * The drift-sensitive shape of an invoices row: every column's filled/null
+     * state plus the status discriminator by value — identity, tenant, and
+     * clock columns excluded (they legitimately differ per row).
+     *
+     * @return array<string, bool|string>
+     */
+    private function projectedRowShape(InvoiceReadModel $invoice): array
+    {
+        $attributes = $invoice->refresh()->getAttributes();
+
+        $shape = collect($attributes)
+            ->except(['id', 'company_id', 'subscription_id', 'invoice_number', 'created_at', 'updated_at'])
+            ->map(fn (mixed $value): bool => $value !== null)
+            ->all();
+        $shape['status'] = $attributes['status'];
+        ksort($shape);
+
+        return $shape;
+    }
+
     /**
      * A single plan line item whose amount matches the invoice total — the
      * aggregate validates SUM(lineItems) == amountCents at issue time.
