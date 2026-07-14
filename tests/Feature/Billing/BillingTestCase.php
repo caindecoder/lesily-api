@@ -146,6 +146,18 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
+     * Exactly these invoice ids came back, in exactly this order — 200 plus
+     * ordered row identity, so nothing extra, missing, or shuffled can pass.
+     *
+     * @param  array<int, string>  $invoiceIds
+     */
+    protected function assertInvoiceIdsInOrder(TestResponse $response, array $invoiceIds): void
+    {
+        $response->assertOk();
+        $this->assertSame($invoiceIds, $response->json('data.*.id'));
+    }
+
+    /**
      * The request was rejected as unauthenticated — 401 with the §S21
      * UNAUTHENTICATED envelope. Duplicated from CompaniesTestCase/AuthTestCase
      * (module bases are independent — established precedent; base-level
@@ -251,12 +263,12 @@ abstract class BillingTestCase extends TestCase
      * An issued (pending) invoice projected for $company through the domain
      * seam — the genesis path production takes, never a direct row write.
      */
-    protected function anIssuedInvoiceFor(Company $company, SubscriptionReadModel $subscription): InvoiceReadModel
+    protected function anIssuedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
         $invoiceId = (string) Str::uuid();
 
         Invoice::retrieve($invoiceId)
-            ->issue($this->issueInvoiceCommand($company, $subscription))
+            ->issue($this->issueInvoiceCommand($company, $subscription, $overrides))
             ->persist();
 
         return InvoiceReadModel::findOrFail($invoiceId);
@@ -265,9 +277,9 @@ abstract class BillingTestCase extends TestCase
     /**
      * An invoice paid through the domain seam (issue → payment webhook).
      */
-    protected function aPaidInvoiceFor(Company $company, SubscriptionReadModel $subscription): InvoiceReadModel
+    protected function aPaidInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
 
         Invoice::retrieve($invoice->getKey())
             ->recordPaymentSucceeded($this->recordPaymentSucceededCommand($invoice))
@@ -279,9 +291,9 @@ abstract class BillingTestCase extends TestCase
     /**
      * An invoice whose first payment attempt failed, through the domain seam (T3).
      */
-    protected function aFailedInvoiceFor(Company $company, SubscriptionReadModel $subscription): InvoiceReadModel
+    protected function aFailedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
 
         Invoice::retrieve($invoice->getKey())
             ->recordPaymentFailed($this->recordPaymentFailedCommand($invoice))
@@ -309,9 +321,9 @@ abstract class BillingTestCase extends TestCase
     /**
      * A paid invoice subsequently refunded through the domain seam (T6).
      */
-    protected function aRefundedInvoiceFor(Company $company, SubscriptionReadModel $subscription): InvoiceReadModel
+    protected function aRefundedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
-        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        $invoice = $this->aPaidInvoiceFor($company, $subscription, $overrides);
 
         Invoice::retrieve($invoice->getKey())
             ->refund($this->refundInvoiceCommand($invoice))
@@ -339,9 +351,9 @@ abstract class BillingTestCase extends TestCase
     /**
      * A pending invoice voided through the domain seam (T7).
      */
-    protected function aVoidedInvoiceFor(Company $company, SubscriptionReadModel $subscription): InvoiceReadModel
+    protected function aVoidedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
 
         Invoice::retrieve($invoice->getKey())
             ->void($this->voidInvoiceCommand($invoice))
@@ -368,9 +380,9 @@ abstract class BillingTestCase extends TestCase
     /**
      * A pending invoice with an open dispute filed through the domain seam.
      */
-    protected function aDisputedInvoiceFor(Company $company, SubscriptionReadModel $subscription): InvoiceReadModel
+    protected function aDisputedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
 
         Invoice::retrieve($invoice->getKey())
             ->fileDispute($this->fileInvoiceDisputeCommand($invoice))
@@ -397,14 +409,14 @@ abstract class BillingTestCase extends TestCase
      * Seam-fixture dispatch for DataProvider state matrices (§2.12) — every
      * state is arranged through real aggregate commands, never row writes.
      */
-    protected function anInvoiceInState(string $state, Company $company, SubscriptionReadModel $subscription): InvoiceReadModel
+    protected function anInvoiceInState(string $state, Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
         return match ($state) {
-            'pending' => $this->anIssuedInvoiceFor($company, $subscription),
-            'paid' => $this->aPaidInvoiceFor($company, $subscription),
-            'failed' => $this->aFailedInvoiceFor($company, $subscription),
-            'refunded' => $this->aRefundedInvoiceFor($company, $subscription),
-            'voided' => $this->aVoidedInvoiceFor($company, $subscription),
+            'pending' => $this->anIssuedInvoiceFor($company, $subscription, $overrides),
+            'paid' => $this->aPaidInvoiceFor($company, $subscription, $overrides),
+            'failed' => $this->aFailedInvoiceFor($company, $subscription, $overrides),
+            'refunded' => $this->aRefundedInvoiceFor($company, $subscription, $overrides),
+            'voided' => $this->aVoidedInvoiceFor($company, $subscription, $overrides),
             default => throw new InvalidArgumentException("Unknown invoice state fixture [{$state}]."),
         };
     }

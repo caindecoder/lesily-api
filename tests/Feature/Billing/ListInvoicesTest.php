@@ -8,6 +8,8 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
+use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 /**
  * The tenant invoice list (UC-1-120, slice-plans-billing T4): GET /api/v1/invoices —
@@ -159,6 +161,58 @@ class ListInvoicesTest extends BillingTestCase
             'status matching no rows' => [['status' => 'paid']],
             'min_amount above max_amount' => [['min_amount' => 60001, 'max_amount' => 59999]],
         ];
+    }
+
+    // --- Happy ---
+
+    #[Test]
+    #[DataProvider('provideStoredStatuses')]
+    public function when_filtering_by_stored_status_then_only_matching_invoices_returned(string $status): void
+    {
+        // Given a company holding one invoice in every stored SM-1-04 state
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoicesByState = $this->oneInvoicePerStoredState($company, $subscription);
+
+        // When they filter the list by that stored status
+        $response = $this->listInvoicesAs($owner, $company, ['status' => $status]);
+
+        // Then exactly the matching invoice comes back (E28 — the full
+        // filter-value × invoice-state table, one row per provider case)
+        $this->assertInvoiceIdsInOrder($response, [$invoicesByState[$status]->getKey()]);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideStoredStatuses(): array
+    {
+        return [
+            'pending' => ['pending'],
+            'paid' => ['paid'],
+            'failed' => ['failed'],
+            'refunded' => ['refunded'],
+            'voided' => ['voided'],
+        ];
+    }
+
+    /**
+     * One seam-seeded invoice per stored SM-1-04 state, keyed by state — unique
+     * invoice numbers per row (the shared fixture pins a fixed number).
+     *
+     * @return array<string, InvoiceReadModel>
+     */
+    private function oneInvoicePerStoredState(Company $company, SubscriptionReadModel $subscription): array
+    {
+        $invoices = [];
+
+        foreach (['pending', 'paid', 'failed', 'refunded', 'voided'] as $index => $state) {
+            $invoices[$state] = $this->anInvoiceInState($state, $company, $subscription, [
+                'invoiceNumber' => sprintf('INV-2026-%06d', $index + 1),
+            ]);
+        }
+
+        return $invoices;
     }
 
     /**
