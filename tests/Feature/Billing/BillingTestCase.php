@@ -469,6 +469,21 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
+     * A PAID invoice with an open dispute filed through the domain seam — the
+     * F7 receipt-block state (the aggregate permits disputes on Paid, T3).
+     */
+    protected function aPaidDisputedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
+    {
+        $invoice = $this->aPaidInvoiceFor($company, $subscription, $overrides);
+
+        Invoice::retrieve($invoice->getKey())
+            ->fileDispute($this->fileInvoiceDisputeCommand($invoice))
+            ->persist();
+
+        return $invoice->refresh();
+    }
+
+    /**
      * Seam-fixture dispatch for DataProvider state matrices (§2.12) — every
      * state is arranged through real aggregate commands, never row writes.
      */

@@ -53,6 +53,23 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         );
     }
 
+    #[Test]
+    public function when_paid_invoice_has_open_dispute_then_receipt_blocked_response(): void
+    {
+        // Given an owner whose PAID invoice carries an open dispute
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidDisputedInvoiceFor($company, $subscription);
+
+        // When they download its receipt
+        $response = $this->downloadReceiptAs($owner, $company, $invoice->getKey());
+
+        // Then the receipt is blocked while the dispute is open — even though
+        // the stored status is paid (UC-1-121 alt 5b, s129 F7; the block clears
+        // when dispute-resolution lands with the dispute slice, UC-1-054)
+        $this->assertReceiptStateGuardRejected($response, 'Receipt is unavailable while a dispute is open.');
+    }
+
     /**
      * @return array<string, array{0: string}>
      */

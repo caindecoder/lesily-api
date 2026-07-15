@@ -38,6 +38,10 @@ class InvoicesController
             throw ReceiptNotAvailableException::notPaid($invoice->status);
         }
 
+        if ($invoice->has_dispute) {
+            throw ReceiptNotAvailableException::openDispute();
+        }
+
         throw new RuntimeException('Not implemented');
     }
 }

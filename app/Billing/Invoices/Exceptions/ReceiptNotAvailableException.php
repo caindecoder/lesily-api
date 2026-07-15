@@ -21,4 +21,9 @@ class ReceiptNotAvailableException extends DomainException
     {
         return new self('Receipt is only available for paid invoices.', $status->value);
     }
+
+    public static function openDispute(): self
+    {
+        return new self('Receipt is unavailable while a dispute is open.');
+    }
 }
