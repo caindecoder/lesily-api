@@ -3,6 +3,7 @@
 namespace Tests\Feature\Billing;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -121,6 +122,19 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         // Then the company context is denied (AuthorizeCompany membership check —
         // UC-1-121 tenant isolation, first gate)
         $this->assertCompanyAccessDenied($response);
+    }
+
+    #[Test]
+    public function when_invoice_is_unknown_then_not_found_response(): void
+    {
+        // Given an owner whose company holds no such invoice
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+
+        // When they download a receipt for a random invoice id
+        $response = $this->downloadReceiptAs($owner, $company, (string) Str::uuid());
+
+        // Then it is refused as not found (UC-1-121 error flow 4a)
+        $this->assertInvoiceNotFound($response);
     }
 
     /**

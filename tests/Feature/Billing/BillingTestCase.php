@@ -154,6 +154,20 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
+     * The receipt lookup was refused as not found — 404 RESOURCE_NOT_FOUND with
+     * the §S21 envelope and a JSON (never PDF) body. One shared helper for the
+     * unknown-id AND cross-tenant walks so the two responses cannot drift apart
+     * (UC-1-121 4a no-existence-leak parity).
+     */
+    protected function assertInvoiceNotFound(TestResponse $response): void
+    {
+        $response->assertNotFound();
+        $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
+        $response->assertJsonPath('message', 'The requested resource was not found.');
+        $response->assertHeader('Content-Type', 'application/json');
+    }
+
+    /**
      * The query input was refused as invalid on $field — 422 VALIDATION_FAILED
      * with a field-level error (§S21). Duplicated from MembershipsTestCase
      * (module bases are independent — established precedent).

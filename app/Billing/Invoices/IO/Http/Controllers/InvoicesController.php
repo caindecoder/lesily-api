@@ -6,6 +6,7 @@ use RuntimeException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use App\Billing\Invoices\Enums\InvoiceStatus;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Billing\Invoices\UseCases\Commands\InvoiceFilters;
 use App\Billing\Invoices\IO\Http\Resources\InvoiceCollection;
 use App\Billing\Invoices\Exceptions\ReceiptNotAvailableException;
@@ -33,6 +34,12 @@ class InvoicesController
     public function receipt(Request $request, string $invoiceId): Response
     {
         $invoice = $this->invoices->findForCompany($request->company()->getKey(), $invoiceId);
+
+        // Unknown id and cross-tenant id surface identically (UC-1-121 4a
+        // no-existence-leak) — findForCompany is tenant-scoped, so both are null here.
+        if ($invoice === null) {
+            throw new ModelNotFoundException;
+        }
 
         if ($invoice->status !== InvoiceStatus::Paid) {
             throw ReceiptNotAvailableException::notPaid($invoice->status);
