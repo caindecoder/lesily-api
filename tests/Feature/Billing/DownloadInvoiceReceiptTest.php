@@ -5,6 +5,7 @@ namespace Tests\Feature\Billing;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -212,6 +213,25 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         // a separate credit-note artifact, never a receipt deletion (UC-1-121
         // scenario 5; SM-1-04 T6 keeps paid_at)
         $this->assertPdfReceiptResponse($response, $invoice->invoice_number);
+    }
+
+    #[Test]
+    public function when_receipt_downloaded_again_then_rerendered_on_demand(): void
+    {
+        // Given an owner whose paid invoice's receipt was downloaded before
+        Storage::fake();
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        $this->downloadReceiptAs($owner, $company, $invoice->getKey());
+
+        // When they download it again
+        $response = $this->downloadReceiptAs($owner, $company, $invoice->getKey());
+
+        // Then the PDF is re-rendered on demand — no cached artifact read or
+        // written anywhere, no download counter kept (UC-1-121 alt 7a; R3)
+        $this->assertPdfReceiptResponse($response, $invoice->invoice_number);
+        $this->assertNoArtifactPersisted();
     }
 
     /**

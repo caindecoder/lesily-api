@@ -11,6 +11,7 @@ use Laravel\Sanctum\Sanctum;
 use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Exceptions;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
@@ -536,6 +537,16 @@ abstract class BillingTestCase extends TestCase
         Exceptions::assertReported(
             fn (CorruptReceiptSnapshotException $e): bool => str_contains($e->getMessage(), $invoiceId)
         );
+    }
+
+    /**
+     * Nothing was persisted to app storage by the render — the receipt is a
+     * transient projection, regenerated per request (R3; ERD-1-04 OQ#7
+     * Confirmed). Requires Storage::fake() in the test's arrange.
+     */
+    protected function assertNoArtifactPersisted(): void
+    {
+        $this->assertSame([], Storage::disk()->allFiles());
     }
 
     /**
