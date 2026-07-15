@@ -4,12 +4,14 @@ namespace Tests\Feature\Billing;
 
 use Tests\TestCase;
 use App\Models\User;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Exceptions;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Billing\Invoices\Entities\InvoiceLineItem;
@@ -20,6 +22,7 @@ use App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand;
 use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
 use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
+use App\Billing\Invoices\Exceptions\CorruptReceiptSnapshotException;
 use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand;
@@ -500,6 +503,39 @@ abstract class BillingTestCase extends TestCase
                 throw new ReceiptRenderingFailedException('Chromium renderer unreachable (test stub).');
             }
         });
+    }
+
+    /**
+     * A renderer stub that must never run — bound for the corrupt-snapshot walk
+     * (7c validates BEFORE the port is called). If validation is missing, the
+     * request reports THIS RuntimeException instead of the corrupt-snapshot
+     * exception, and the assertReported pin below fails the test.
+     */
+    protected function bindMustNotRenderGuard(): void
+    {
+        $this->app->instance(ReceiptPdfRendererInterface::class, new class implements ReceiptPdfRendererInterface
+        {
+            public function render(InvoiceReadModel $invoice): string
+            {
+                throw new RuntimeException('The renderer must not be invoked for a corrupt snapshot (UC-1-121 7c).');
+            }
+        });
+    }
+
+    /**
+     * The corrupt snapshot failed safely — generic 500 §S21 envelope (no
+     * internal details), JSON not PDF, and the corrupt-snapshot exception
+     * reported carrying the invoice id for ops triage (UC-1-121 7c; s135 F-e).
+     */
+    protected function assertCorruptSnapshotRejected(TestResponse $response, string $invoiceId): void
+    {
+        $response->assertStatus(500);
+        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
+        $response->assertHeader('Content-Type', 'application/json');
+        $this->assertStringStartsNotWith('%PDF', (string) $response->getContent());
+        Exceptions::assertReported(
+            fn (CorruptReceiptSnapshotException $e): bool => str_contains($e->getMessage(), $invoiceId)
+        );
     }
 
     /**

@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Billing\Invoices\UseCases\Commands\InvoiceFilters;
 use App\Billing\Invoices\IO\Http\Resources\InvoiceCollection;
 use App\Billing\Invoices\Exceptions\ReceiptNotAvailableException;
+use App\Billing\Invoices\Exceptions\CorruptReceiptSnapshotException;
 use App\Billing\Invoices\UseCases\Renderers\ReceiptPdfRendererInterface;
 use App\Billing\Invoices\UseCases\Repositories\InvoiceRepositoryInterface;
 
@@ -51,6 +52,13 @@ class InvoicesController
 
         if ($invoice->has_dispute) {
             throw ReceiptNotAvailableException::openDispute();
+        }
+
+        // Snapshot integrity gate BEFORE the renderer: a receipt-eligible row
+        // missing its paid timestamp is a data bug, not a rendering outage —
+        // generic 500, reported with the invoice id (UC-1-121 7c; s135 F-e).
+        if ($invoice->paid_at === null) {
+            throw CorruptReceiptSnapshotException::missingPaidTimestamp($invoice->getKey());
         }
 
         $this->receiptRenderer->render($invoice);

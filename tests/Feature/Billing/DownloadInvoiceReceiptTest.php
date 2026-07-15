@@ -5,8 +5,10 @@ namespace Tests\Feature\Billing;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
 
 /**
  * The paid-invoice PDF receipt (UC-1-121, slice-plans-billing T5):
@@ -171,6 +173,26 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         // Then the failure is a JSON service-unavailable envelope with a retry
         // hint — never a truncated PDF stream (UC-1-121 7b; s135 F-d)
         $this->assertReceiptGenerationUnavailable($response);
+    }
+
+    #[Test]
+    public function when_paid_invoice_snapshot_is_corrupt_then_generic_failure_reported(): void
+    {
+        // Given a paid invoice whose snapshot lost its paid timestamp — integrity
+        // drift only a bug could cause (factory row: the domain seam structurally
+        // cannot produce corrupt state)
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $invoice = InvoiceReadModel::factory()->forCompany($company)->paid()->create(['paid_at' => null]);
+        $this->bindMustNotRenderGuard();
+        Exceptions::fake();
+
+        // When they download the receipt
+        $response = $this->downloadReceiptAs($owner, $company, $invoice->getKey());
+
+        // Then the failure is the generic 500 envelope, validated BEFORE the
+        // renderer is invoked, and reported with the invoice id for ops triage
+        // (UC-1-121 error flow 7c; s135 F-e)
+        $this->assertCorruptSnapshotRejected($response, $invoice->getKey());
     }
 
     /**
