@@ -539,6 +539,22 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
+     * The receipt downloaded as a complete PDF — 200 application/pdf with the
+     * exact attachment filename, %PDF magic bytes, and a non-empty stream
+     * (UC-1-121 main flow step 7; LD ICS getContent byte-assert idiom).
+     */
+    protected function assertPdfReceiptResponse(TestResponse $response, string $invoiceNumber): void
+    {
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'application/pdf');
+        $response->assertHeader('Content-Disposition', 'attachment; filename="receipt-'.$invoiceNumber.'.pdf"');
+
+        $content = (string) $response->getContent();
+        $this->assertStringStartsWith('%PDF', $content);
+        $this->assertGreaterThan(4, strlen($content));
+    }
+
+    /**
      * The receipt failed service-side — 503 RECEIPT_GENERATION_UNAVAILABLE
      * §S21 envelope with Retry-After: 30 and a JSON (never truncated-PDF)
      * body (UC-1-121 7b; s135 F-d).

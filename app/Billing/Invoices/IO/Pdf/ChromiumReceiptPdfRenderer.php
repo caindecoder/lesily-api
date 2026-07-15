@@ -2,6 +2,9 @@
 
 namespace App\Billing\Invoices\IO\Pdf;
 
+use Throwable;
+use Spatie\LaravelPdf\Facades\Pdf;
+use Spatie\LaravelPdf\Enums\Format;
 use App\Billing\Invoices\Entities\Invoice;
 use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
 use App\Billing\Invoices\UseCases\Renderers\ReceiptPdfRendererInterface;
@@ -16,6 +19,14 @@ class ChromiumReceiptPdfRenderer implements ReceiptPdfRendererInterface
 {
     public function render(Invoice $invoice): string
     {
-        throw new ReceiptRenderingFailedException('Chromium renderer not yet wired — the happy-path lap implements it.');
+        try {
+            $base64 = Pdf::view('receipts.invoice', ['invoice' => $invoice->loadMissing('lineItems')])
+                ->format(Format::A4)
+                ->base64();
+
+            return base64_decode($base64);
+        } catch (Throwable $e) {
+            throw new ReceiptRenderingFailedException('Receipt PDF rendering failed.', previous: $e);
+        }
     }
 }

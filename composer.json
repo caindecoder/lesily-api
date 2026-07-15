@@ -15,8 +15,10 @@
         "pragmarx/google2fa": "^9.0",
         "railsware/mailtrap-php": "^3.11",
         "sentry/sentry-laravel": "^4.25",
+        "spatie/browsershot": "^5.4",
         "spatie/laravel-data": "^4.23",
         "spatie/laravel-event-sourcing": "^7.15",
+        "spatie/laravel-pdf": "^2.12",
         "symfony/http-client": "^8.0"
     },
     "require-dev": {

@@ -2,7 +2,6 @@
 
 namespace App\Billing\Invoices\IO\Http\Controllers;
 
-use RuntimeException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use App\Billing\Invoices\Enums\InvoiceStatus;
@@ -46,7 +45,7 @@ class InvoicesController
             throw new ModelNotFoundException;
         }
 
-        if ($invoice->status !== InvoiceStatus::Paid) {
+        if (! in_array($invoice->status, [InvoiceStatus::Paid, InvoiceStatus::Refunded], true)) {
             throw ReceiptNotAvailableException::notPaid($invoice->status);
         }
 
@@ -61,8 +60,13 @@ class InvoicesController
             throw CorruptReceiptSnapshotException::missingPaidTimestamp($invoice->getKey());
         }
 
-        $this->receiptRenderer->render($invoice);
+        $pdf = $this->receiptRenderer->render($invoice);
 
-        throw new RuntimeException('Not implemented');
+        // Manual binary headers per the LD ICS-feed idiom — regenerated on
+        // demand, nothing persisted (R3; api-1-invoices §4.5).
+        return response($pdf, Response::HTTP_OK, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="receipt-'.$invoice->invoice_number.'.pdf"',
+        ]);
     }
 }

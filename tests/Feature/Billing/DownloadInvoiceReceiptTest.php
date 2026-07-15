@@ -195,6 +195,25 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         $this->assertCorruptSnapshotRejected($response, $invoice->getKey());
     }
 
+    // --- Edge ---
+
+    #[Test]
+    public function when_invoice_is_refunded_then_original_receipt_still_available(): void
+    {
+        // Given an owner whose invoice was paid and later refunded
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aRefundedInvoiceFor($company, $subscription);
+
+        // When they download the receipt
+        $response = $this->downloadReceiptAs($owner, $company, $invoice->getKey());
+
+        // Then the ORIGINAL payment receipt still downloads — the refund produces
+        // a separate credit-note artifact, never a receipt deletion (UC-1-121
+        // scenario 5; SM-1-04 T6 keeps paid_at)
+        $this->assertPdfReceiptResponse($response, $invoice->invoice_number);
+    }
+
     /**
      * @return array<string, array{0: string}>
      */
