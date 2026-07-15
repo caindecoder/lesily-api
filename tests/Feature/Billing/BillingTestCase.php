@@ -20,9 +20,11 @@ use App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand;
 use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
 use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
+use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand;
+use App\Billing\Invoices\UseCases\Renderers\ReceiptPdfRendererInterface;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
@@ -481,6 +483,38 @@ abstract class BillingTestCase extends TestCase
             'filedBy' => User::factory()->create()->getKey(),
             ...$overrides,
         ]);
+    }
+
+    /**
+     * A hand-written throwing renderer stub bound for THIS test only (E23 —
+     * stub across the boundary; every other walk uses the real renderer). The
+     * app-owned exception is what the Chromium adapter itself raises on any
+     * render-time failure, so the 503 contract is library-agnostic.
+     */
+    protected function bindThrowingReceiptRenderer(): void
+    {
+        $this->app->instance(ReceiptPdfRendererInterface::class, new class implements ReceiptPdfRendererInterface
+        {
+            public function render(InvoiceReadModel $invoice): string
+            {
+                throw new ReceiptRenderingFailedException('Chromium renderer unreachable (test stub).');
+            }
+        });
+    }
+
+    /**
+     * The receipt failed service-side — 503 RECEIPT_GENERATION_UNAVAILABLE
+     * §S21 envelope with Retry-After: 30 and a JSON (never truncated-PDF)
+     * body (UC-1-121 7b; s135 F-d).
+     */
+    protected function assertReceiptGenerationUnavailable(TestResponse $response): void
+    {
+        $response->assertStatus(503);
+        $response->assertJsonPath('error_code', 'RECEIPT_GENERATION_UNAVAILABLE');
+        $response->assertJsonPath('message', 'Receipt generation is temporarily unavailable. Please try again shortly.');
+        $response->assertHeader('Retry-After', '30');
+        $response->assertHeader('Content-Type', 'application/json');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
     /**

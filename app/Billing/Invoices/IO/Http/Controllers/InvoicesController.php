@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Billing\Invoices\UseCases\Commands\InvoiceFilters;
 use App\Billing\Invoices\IO\Http\Resources\InvoiceCollection;
 use App\Billing\Invoices\Exceptions\ReceiptNotAvailableException;
+use App\Billing\Invoices\UseCases\Renderers\ReceiptPdfRendererInterface;
 use App\Billing\Invoices\UseCases\Repositories\InvoiceRepositoryInterface;
 
 /**
@@ -20,7 +21,10 @@ use App\Billing\Invoices\UseCases\Repositories\InvoiceRepositoryInterface;
  */
 class InvoicesController
 {
-    public function __construct(private readonly InvoiceRepositoryInterface $invoices) {}
+    public function __construct(
+        private readonly InvoiceRepositoryInterface $invoices,
+        private readonly ReceiptPdfRendererInterface $receiptRenderer,
+    ) {}
 
     public function index(Request $request): InvoiceCollection
     {
@@ -48,6 +52,8 @@ class InvoicesController
         if ($invoice->has_dispute) {
             throw ReceiptNotAvailableException::openDispute();
         }
+
+        $this->receiptRenderer->render($invoice);
 
         throw new RuntimeException('Not implemented');
     }

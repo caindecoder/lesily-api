@@ -156,6 +156,23 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         $this->assertInvoiceNotFound($response);
     }
 
+    #[Test]
+    public function when_renderer_fails_then_receipt_generation_unavailable_response(): void
+    {
+        // Given an owner with a paid invoice and a renderer that cannot render
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        $this->bindThrowingReceiptRenderer();
+
+        // When they download the receipt
+        $response = $this->downloadReceiptAs($owner, $company, $invoice->getKey());
+
+        // Then the failure is a JSON service-unavailable envelope with a retry
+        // hint — never a truncated PDF stream (UC-1-121 7b; s135 F-d)
+        $this->assertReceiptGenerationUnavailable($response);
+    }
+
     /**
      * @return array<string, array{0: string}>
      */

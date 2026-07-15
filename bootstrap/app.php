@@ -34,6 +34,7 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
+use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
 use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
 use App\Companies\Memberships\Exceptions\SelfRemovalBlockedException;
@@ -248,6 +249,15 @@ return Application::configure(basePath: dirname(__DIR__))
             $e->getMessage(),
             $e->currentStatus === null ? [] : ['current_status' => $e->currentStatus],
         ));
+
+        // The PDF renderer failed mid-request — a JSON 503 with a retry hint,
+        // NEVER a truncated application/pdf stream (UC-1-121 7b; s135 F-d). The
+        // internal cause stays out of the response; the generic message is the
+        // client contract.
+        $exceptions->render(fn (ReceiptRenderingFailedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::ReceiptGenerationUnavailable,
+            'Receipt generation is temporarily unavailable. Please try again shortly.',
+        )->withHeaders(['Retry-After' => '30']));
 
         $exceptions->render(fn (ModelNotFoundException $e) => EnvelopeBuilder::build(
             ApiErrorCode::ResourceNotFound,
