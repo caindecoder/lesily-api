@@ -137,6 +137,25 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         $this->assertInvoiceNotFound($response);
     }
 
+    #[Test]
+    public function when_invoice_belongs_to_another_company_then_not_found_response(): void
+    {
+        // Given another company's PAID invoice seeded FIRST (deterministic scope
+        // proof — s131 precedent), and an owner of a different company
+        [$companyB] = $this->aCompanyWithMember('owner');
+        $subscriptionB = $this->aTrialSubscriptionFor($companyB, CarbonImmutable::now()->addDays(30));
+        $foreignInvoice = $this->aPaidInvoiceFor($companyB, $subscriptionB);
+        [$companyA, $owner] = $this->aCompanyWithMember('owner');
+
+        // When they probe the foreign invoice id under their OWN company context
+        $response = $this->downloadReceiptAs($owner, $companyA, $foreignInvoice->getKey());
+
+        // Then it is refused as not found — indistinguishable from a genuinely
+        // missing id, zero PDF bytes (UC-1-121 4a no-existence-leak; the shared
+        // helper keeps this response and the unknown-id response from drifting)
+        $this->assertInvoiceNotFound($response);
+    }
+
     /**
      * @return array<string, array{0: string}>
      */

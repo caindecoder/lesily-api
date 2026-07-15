@@ -165,6 +165,7 @@ abstract class BillingTestCase extends TestCase
         $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
         $response->assertJsonPath('message', 'The requested resource was not found.');
         $response->assertHeader('Content-Type', 'application/json');
+        $this->assertStringStartsNotWith('%PDF', (string) $response->getContent());
     }
 
     /**
