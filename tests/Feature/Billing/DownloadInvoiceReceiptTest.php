@@ -70,6 +70,24 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         $this->assertReceiptStateGuardRejected($response, 'Receipt is unavailable while a dispute is open.');
     }
 
+    #[Test]
+    public function when_unauthenticated_then_request_rejected(): void
+    {
+        // Given a company holding a paid invoice
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+
+        // When its receipt is requested with no auth token
+        $response = $this->getJson("/api/v1/invoices/{$invoice->getKey()}/receipt", [
+            'X-Company-Context' => $company->getKey(),
+        ]);
+
+        // Then it is refused as unauthenticated — UC-1-121's main flow is never
+        // entered (upstream Sanctum, error flow 1a)
+        $this->assertUnauthenticated($response);
+    }
+
     /**
      * @return array<string, array{0: string}>
      */
