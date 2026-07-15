@@ -256,6 +256,25 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         $this->assertNoNewInvoiceEvents($invoice->getKey(), 2);
     }
 
+    #[Test]
+    public function when_owner_downloads_receipt_for_paid_invoice_then_pdf_returned(): void
+    {
+        // Given an owner whose company holds the default paid invoice
+        Storage::fake();
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+
+        // When they download the receipt
+        $response = $this->downloadReceiptAs($owner, $company, $invoice->getKey());
+
+        // Then a complete PDF downloads under the literal contract filename —
+        // receipt-{invoice_number}.pdf — and nothing is persisted anywhere
+        // (UC-1-121 main flow step 7; R3 regenerate-on-demand)
+        $this->assertPdfReceiptResponse($response, 'INV-2026-000001');
+        $this->assertNoArtifactPersisted();
+    }
+
     /**
      * @return array<string, array{0: string}>
      */
