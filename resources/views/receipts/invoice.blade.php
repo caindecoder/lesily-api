@@ -45,7 +45,7 @@
             @foreach ($invoice->lineItems as $item)
                 <tr>
                     <td>{{ $item->description }}</td>
-                    <td class="num">{{ $item->quantity + 0 }}</td>
+                    <td class="num">{{ number_format($item->quantity, 2) }}</td>
                     <td class="num">{{ number_format($item->unit_price_cents / 100, 2) }}</td>
                     <td class="num">{{ number_format($item->amount_cents / 100, 2) }}</td>
                 </tr>
