@@ -234,6 +234,28 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         $this->assertNoArtifactPersisted();
     }
 
+    // --- Happy ---
+
+    #[Test]
+    #[DataProvider('provideViewingRoles')]
+    public function when_viewing_role_downloads_receipt_then_pdf_returned(string $roleCode): void
+    {
+        // Given a member whose role carries billing.view (owner / admin / auditor
+        // per the 2026-05-24 matrix; s129 F3 role surface) and a paid invoice
+        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+
+        // When they download the receipt
+        $response = $this->downloadReceiptAs($actor, $company, $invoice->getKey());
+
+        // Then the PDF downloads and the read leaves no domain trace — the
+        // paid stream still holds exactly its issue + payment events
+        // (UC-1-121 minimal guarantee: no Reactor fires, no state mutates)
+        $this->assertPdfReceiptResponse($response, $invoice->invoice_number);
+        $this->assertNoNewInvoiceEvents($invoice->getKey(), 2);
+    }
+
     /**
      * @return array<string, array{0: string}>
      */
