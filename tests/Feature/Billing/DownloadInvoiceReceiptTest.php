@@ -106,6 +106,23 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         $this->assertRoleInsufficient($response, 'billing.view');
     }
 
+    #[Test]
+    public function when_company_context_is_foreign_then_company_access_denied(): void
+    {
+        // Given a member of one company and a second company they never joined
+        [, $outsider] = $this->aCompanyWithMember('owner');
+        [$companyB] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($companyB, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($companyB, $subscription);
+
+        // When they request that company's receipt under its context
+        $response = $this->downloadReceiptAs($outsider, $companyB, $invoice->getKey());
+
+        // Then the company context is denied (AuthorizeCompany membership check —
+        // UC-1-121 tenant isolation, first gate)
+        $this->assertCompanyAccessDenied($response);
+    }
+
     /**
      * @return array<string, array{0: string}>
      */
