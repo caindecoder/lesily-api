@@ -121,6 +121,39 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
+     * An authenticated member downloads $invoiceId's receipt under $company's
+     * context (UC-1-121). Plain get() — the happy body is a binary PDF stream,
+     * not JSON; error paths still render §S21 envelopes.
+     */
+    protected function downloadReceiptAs(User $user, Company $company, string $invoiceId): TestResponse
+    {
+        Sanctum::actingAs($user);
+
+        return $this->get("/api/v1/invoices/{$invoiceId}/receipt", [
+            'X-Company-Context' => $company->getKey(),
+            'Accept' => 'application/json',
+        ]);
+    }
+
+    /**
+     * The receipt was refused by the state guard — 409 STATE_GUARD_VIOLATION
+     * with the exact refusal message and a JSON (never PDF) body; non-paid
+     * refusals echo the stored status as current_status (UC-1-121 5a/5b,
+     * s135 F-c).
+     */
+    protected function assertReceiptStateGuardRejected(TestResponse $response, string $message, ?string $currentStatus = null): void
+    {
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
+        $response->assertJsonPath('message', $message);
+        $response->assertHeader('Content-Type', 'application/json');
+
+        if ($currentStatus !== null) {
+            $response->assertJsonPath('current_status', $currentStatus);
+        }
+    }
+
+    /**
      * The query input was refused as invalid on $field — 422 VALIDATION_FAILED
      * with a field-level error (§S21). Duplicated from MembershipsTestCase
      * (module bases are independent — established precedent).

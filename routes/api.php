@@ -267,3 +267,10 @@ Route::get('/v1/subscription', [SubscriptionsController::class, 'show'])
 // no interactor (cd-invoices §5, gate I1). No throttle (tiered — OQ-1-098).
 Route::get('/v1/invoices', [InvoicesController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:billing.view']);
+
+// A paid invoice's PDF receipt (UC-1-121, slice-plans-billing T5) — regenerated
+// on demand, never stored (R3); status ∈ {paid, refunded} AND no open dispute
+// (s129 F7); the ONE binary-response endpoint in chunk-1 (api-1-invoices §4.5).
+// Pure read, no interactor (cd-invoices §5, gate I1). No throttle (OQ-1-098).
+Route::get('/v1/invoices/{invoiceId}/receipt', [InvoicesController::class, 'receipt'])
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:billing.view']);

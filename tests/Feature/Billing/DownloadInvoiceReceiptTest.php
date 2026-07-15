@@ -1,0 +1,67 @@
+<?php
+
+namespace Tests\Feature\Billing;
+
+use Carbon\CarbonImmutable;
+use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+/**
+ * The paid-invoice PDF receipt (UC-1-121, slice-plans-billing T5):
+ * GET /api/v1/invoices/{id}/receipt — regenerated on demand, never stored
+ * (R3); status ∈ {paid, refunded} AND no open dispute (F7); 404 no-leak
+ * cross-tenant; 503 JSON-never-truncated on renderer failure. Read bucket
+ * (conv-plan §2.15): controller → repository → renderer port; the aggregate
+ * is never touched — state fixtures arrive through the BillingTestCase
+ * event seam (B4).
+ */
+class DownloadInvoiceReceiptTest extends BillingTestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Error-path fidelity: prod/CI render with debug off (amendment M).
+        config(['app.debug' => false]);
+
+        $this->seedRbacCatalog();
+    }
+
+    // --- Sad ---
+
+    #[Test]
+    #[DataProvider('provideNonPaidStatuses')]
+    public function when_invoice_is_not_paid_then_receipt_unavailable_response(string $status): void
+    {
+        // Given an owner of a company holding an invoice that was never paid
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->anInvoiceInState($status, $company, $subscription);
+
+        // When they download its receipt
+        $response = $this->downloadReceiptAs($owner, $company, $invoice->getKey());
+
+        // Then the receipt is refused for the non-paid state — 409 naming the
+        // stored status, JSON body, no PDF bytes (UC-1-121 alt 5a; s135 F-c)
+        $this->assertReceiptStateGuardRejected(
+            $response,
+            'Receipt is only available for paid invoices.',
+            $status,
+        );
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function provideNonPaidStatuses(): array
+    {
+        return [
+            'pending invoice' => ['pending'],
+            'failed invoice' => ['failed'],
+            'voided invoice' => ['voided'],
+        ];
+    }
+}

@@ -31,6 +31,14 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
             ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
     }
 
+    public function findForCompany(string $companyId, string $invoiceId): ?Invoice
+    {
+        return Invoice::query()
+            ->where('company_id', $companyId)
+            ->whereKey($invoiceId)
+            ->first();
+    }
+
     /**
      * `within=from,to` filters on the issue date, both edges inclusive
      * (api-conventions §10.1 date-range convention; validated upstream by

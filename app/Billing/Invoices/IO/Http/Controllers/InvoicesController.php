@@ -2,9 +2,13 @@
 
 namespace App\Billing\Invoices\IO\Http\Controllers;
 
+use RuntimeException;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use App\Billing\Invoices\Enums\InvoiceStatus;
 use App\Billing\Invoices\UseCases\Commands\InvoiceFilters;
 use App\Billing\Invoices\IO\Http\Resources\InvoiceCollection;
+use App\Billing\Invoices\Exceptions\ReceiptNotAvailableException;
 use App\Billing\Invoices\UseCases\Repositories\InvoiceRepositoryInterface;
 
 /**
@@ -24,5 +28,16 @@ class InvoicesController
         return new InvoiceCollection(
             $this->invoices->listForCompany($request->company()->getKey(), $filters)
         );
+    }
+
+    public function receipt(Request $request, string $invoiceId): Response
+    {
+        $invoice = $this->invoices->findForCompany($request->company()->getKey(), $invoiceId);
+
+        if ($invoice->status !== InvoiceStatus::Paid) {
+            throw ReceiptNotAvailableException::notPaid($invoice->status);
+        }
+
+        throw new RuntimeException('Not implemented');
     }
 }

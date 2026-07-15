@@ -18,4 +18,11 @@ interface InvoiceRepositoryInterface
      * @return LengthAwarePaginator<int, Invoice>
      */
     public function listForCompany(string $companyId, InvoiceFilters $filters): LengthAwarePaginator;
+
+    /**
+     * One invoice by id, tenant-scoped — null when the id is unknown OR belongs
+     * to another company, so the caller cannot tell the two apart (UC-1-121 4a
+     * no-existence-leak; the designed unscoped findById rides T7's admin read).
+     */
+    public function findForCompany(string $companyId, string $invoiceId): ?Invoice;
 }

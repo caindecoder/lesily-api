@@ -26,6 +26,7 @@ use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use App\Companies\Memberships\Exceptions\AlreadyMemberException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
+use App\Billing\Invoices\Exceptions\ReceiptNotAvailableException;
 use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -238,6 +239,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (AlreadyMemberException $e) => EnvelopeBuilder::build(
             ApiErrorCode::AlreadyMember,
             $e->getMessage(),
+        ));
+
+        // The receipt state guard refused the download — non-paid status (echoed
+        // as current_status) or an open dispute (UC-1-121 5a/5b; s135 F-c).
+        $exceptions->render(fn (ReceiptNotAvailableException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+            $e->currentStatus === null ? [] : ['current_status' => $e->currentStatus],
         ));
 
         $exceptions->render(fn (ModelNotFoundException $e) => EnvelopeBuilder::build(
