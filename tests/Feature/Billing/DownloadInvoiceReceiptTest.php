@@ -88,6 +88,24 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         $this->assertUnauthenticated($response);
     }
 
+    #[Test]
+    #[DataProvider('provideDeniedRoles')]
+    public function when_role_lacks_billing_view_then_role_insufficient_response(string $roleCode): void
+    {
+        // Given a member whose role does not carry billing.view (2026-05-24 matrix)
+        // and a paid invoice in their company
+        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+
+        // When they download its receipt
+        $response = $this->downloadReceiptAs($actor, $company, $invoice->getKey());
+
+        // Then the download is denied for the missing permission — no PDF bytes,
+        // no invoice fields in the body (UC-1-121 error flow 3a)
+        $this->assertRoleInsufficient($response, 'billing.view');
+    }
+
     /**
      * @return array<string, array{0: string}>
      */
