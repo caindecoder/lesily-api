@@ -119,6 +119,22 @@ Route::post('idempotent-throwing', function () {
     throw new RuntimeException('boom');
 })->middleware(['auth:sanctum', 'idempotency-key:required']);
 
+// Platform-admin gate probe (slice-plans-billing T6). The /api/v1/admin/*
+// family's chain per cd-foundation-http §3 — auth:sanctum then platform.admin,
+// deliberately NO auth.company (the family is cross-tenant by design). Callers
+// off the allowlist must receive the byte-identical generic 404 (UC-1-122 2a
+// no-info-leak posture).
+Route::get('platform-admin-probe', fn () => response()->json(['ok' => true]))
+    ->middleware(['auth:sanctum', 'platform.admin']);
+
+// Bare-gate probe (T6 review finding): platform.admin WITHOUT upstream
+// auth:sanctum, so a null-user request reaches the middleware itself. Binds
+// the gate's own fail-closed arms — the blank default-env allowlist must
+// never match a guest's blank key — independent of chain order (defense in
+// depth for any future mis-mounted admin route).
+Route::get('platform-admin-bare-probe', fn () => response()->json(['ok' => true]))
+    ->middleware(['platform.admin']);
+
 // Unmapped-HttpException probes (OQ-1-112). Any Symfony HttpException without a
 // dedicated render handler must preserve its status code (not collapse to 500
 // when APP_DEBUG=false) AND its status-mandated headers via the
