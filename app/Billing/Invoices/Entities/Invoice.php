@@ -2,11 +2,13 @@
 
 namespace App\Billing\Invoices\Entities;
 
+use App\Companies\Entities\Company;
 use Database\Factories\InvoiceFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Billing\Invoices\Enums\InvoiceStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
@@ -38,6 +40,17 @@ class Invoice extends Model
     public function lineItems(): HasMany
     {
         return $this->hasMany(InvoiceLineItem::class)->orderBy('sort_order');
+    }
+
+    /**
+     * The owning tenant — the admin read (UC-1-122) presents its summary
+     * alongside the invoice.
+     *
+     * @return BelongsTo<Company, $this>
+     */
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
     }
 
     protected $fillable = [

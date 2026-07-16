@@ -152,6 +152,100 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         ];
     }
 
+    // Happy — the full admin contract, locked byte-for-byte (exact-envelope
+    // leak-guard, spec §6): every designed key emitted; composites null until
+    // their producing slices; tenant_soft_deleted constant false (F-a) and
+    // legal_hold null (OQ-1-135) — the s137 F-c contract pin (Gherkin sc.1,
+    // contract half).
+    #[Test]
+    public function when_a_platform_admin_reviews_a_tenant_invoice_then_the_full_admin_contract_is_returned(): void
+    {
+        // Given an allowlisted admin and a Pro tenant's paid invoice with two line items
+        $admin = User::factory()->create();
+        $this->allowlist([$admin->getKey()]);
+        [$company] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        [$planLine, $creditLine] = $invoice->lineItems()->get()->all();
+
+        // When the admin reviews the invoice
+        $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey());
+
+        // Then the full admin envelope is returned exactly
+        $response->assertOk();
+        $response->assertExactJson(['data' => [
+            'id' => $invoice->getKey(),
+            'number' => 'INV-2026-000001',
+            'issued_at' => $invoice->issued_at->toJSON(),
+            'due_at' => $invoice->due_date->toDateString(),
+            'status' => 'paid',
+            'amount_cents' => 60000,
+            'currency' => 'LKR',
+            'has_dispute' => false,
+            'source' => 'subscribe',
+            'paid_at' => $invoice->paid_at->toJSON(),
+            'payhere_transaction_id' => 'txn_'.$invoice->getKey(),
+            'failed_at' => null,
+            'failure_count' => 0,
+            'last_failure_code' => null,
+            'next_retry_at' => null,
+            'voided_at' => null,
+            'voided_by' => null,
+            'void_reason' => null,
+            'void_source' => null,
+            'refunded_at' => null,
+            'refund_amount_cents' => null,
+            'payhere_refund_transaction_id' => null,
+            'refund_reason' => null,
+            'refund_source' => null,
+            'recipient_name' => 'ACME (Pvt) Ltd',
+            'recipient_email' => 'billing@acme.example',
+            'recipient_billing_address' => null,
+            'line_items' => [
+                [
+                    'id' => $planLine->getKey(),
+                    'description' => 'Pro Plan — Monthly',
+                    'quantity' => '1.00',
+                    'unit_price_cents' => 75000,
+                    'amount_cents' => 75000,
+                    'currency' => 'LKR',
+                    'line_type' => 'plan_subscription',
+                    'reference_id' => null,
+                    'reference_type' => null,
+                    'period_start' => null,
+                    'period_end' => null,
+                    'sort_order' => 0,
+                ],
+                [
+                    'id' => $creditLine->getKey(),
+                    'description' => 'Proration credit — unused Starter days',
+                    'quantity' => '-1.00',
+                    'unit_price_cents' => 15000,
+                    'amount_cents' => -15000,
+                    'currency' => 'LKR',
+                    'line_type' => 'proration_credit',
+                    'reference_id' => null,
+                    'reference_type' => null,
+                    'period_start' => null,
+                    'period_end' => null,
+                    'sort_order' => 1,
+                ],
+            ],
+            'payment_attempts' => null,
+            'dispute_timeline' => null,
+            'audit_trail_summary' => null,
+            'tenant_soft_deleted' => false,
+            'legal_hold' => null,
+            'company' => [
+                'name' => $company->name,
+                'br_number' => $company->br_number,
+                'epf_number' => $company->epf_number,
+                'plan' => 'pro',
+                'status' => 'trial',
+            ],
+        ]]);
+    }
+
     /**
      * The six tenant-side roles of UC-1-122's Denied list (the gate's own
      * manager + unallowlisted-platform_super_admin pins live in
