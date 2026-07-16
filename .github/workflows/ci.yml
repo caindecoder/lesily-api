@@ -75,6 +75,12 @@ jobs:
           key: puppeteer-${{ hashFiles('package-lock.json') }}
       - name: Install Node deps (puppeteer — Browsershot receipt rendering, UC-1-121)
         run: npm ci
+      # Round-5 fix: npm ci installs the puppeteer PACKAGE but the browser
+      # binaries' postinstall download is nondeterministic on runners — the
+      # suite failed with "Could not find chrome-headless-shell". Explicit,
+      # idempotent install into ~/.cache/puppeteer (cache-step-backed).
+      - name: Install puppeteer browsers (chrome + headless shell)
+        run: npx puppeteer browsers install chrome chrome-headless-shell
       - run: php artisan key:generate
       - run: php artisan migrate --force
       - name: Run tests with coverage
@@ -155,6 +161,12 @@ jobs:
           key: puppeteer-${{ hashFiles('package-lock.json') }}
       - name: Install Node deps (puppeteer — Browsershot receipt rendering, UC-1-121)
         run: npm ci
+      # Round-5 fix: npm ci installs the puppeteer PACKAGE but the browser
+      # binaries' postinstall download is nondeterministic on runners — the
+      # suite failed with "Could not find chrome-headless-shell". Explicit,
+      # idempotent install into ~/.cache/puppeteer (cache-step-backed).
+      - name: Install puppeteer browsers (chrome + headless shell)
+        run: npx puppeteer browsers install chrome chrome-headless-shell
       - run: cp .env.github .env
       - run: php artisan key:generate
       - run: php artisan migrate --force
@@ -213,6 +225,12 @@ jobs:
           key: puppeteer-${{ hashFiles('package-lock.json') }}
       - name: Install Node deps (puppeteer — Browsershot receipt rendering, UC-1-121)
         run: npm ci
+      # Round-5 fix: npm ci installs the puppeteer PACKAGE but the browser
+      # binaries' postinstall download is nondeterministic on runners — the
+      # suite failed with "Could not find chrome-headless-shell". Explicit,
+      # idempotent install into ~/.cache/puppeteer (cache-step-backed).
+      - name: Install puppeteer browsers (chrome + headless shell)
+        run: npx puppeteer browsers install chrome chrome-headless-shell
       - run: cp .env.github .env
       - run: php artisan key:generate
       - run: php artisan migrate --force
