@@ -63,9 +63,11 @@ jobs:
       - run: composer install --no-interaction --prefer-dist
       # puppeteer@25 requires Node >=22.12 — pin it rather than trusting the
       # runner default (code-reviewer I1, s135); caches cut the per-job
-      # Chromium re-download (M3).
+      # Chromium re-download (M3). Node 24 (LTS) bundles npm 11, matching the
+      # npm major that wrote package-lock.json — npm 10 rejects the lock's
+      # optional @emnapi/* entries with EUSAGE (CI rounds 1-2, s135).
       - uses: actions/setup-node@v4
-        with: { node-version: '22', cache: 'npm' }
+        with: { node-version: '24', cache: 'npm' }
       - name: Cache puppeteer browsers
         uses: actions/cache@v6
         with:
@@ -141,9 +143,11 @@ jobs:
       - run: composer install --no-interaction --prefer-dist
       # puppeteer@25 requires Node >=22.12 — pin it rather than trusting the
       # runner default (code-reviewer I1, s135); caches cut the per-job
-      # Chromium re-download (M3).
+      # Chromium re-download (M3). Node 24 (LTS) bundles npm 11, matching the
+      # npm major that wrote package-lock.json — npm 10 rejects the lock's
+      # optional @emnapi/* entries with EUSAGE (CI rounds 1-2, s135).
       - uses: actions/setup-node@v4
-        with: { node-version: '22', cache: 'npm' }
+        with: { node-version: '24', cache: 'npm' }
       - name: Cache puppeteer browsers
         uses: actions/cache@v6
         with:
@@ -197,9 +201,11 @@ jobs:
       - run: composer install --no-interaction --prefer-dist
       # puppeteer@25 requires Node >=22.12 — pin it rather than trusting the
       # runner default (code-reviewer I1, s135); caches cut the per-job
-      # Chromium re-download (M3).
+      # Chromium re-download (M3). Node 24 (LTS) bundles npm 11, matching the
+      # npm major that wrote package-lock.json — npm 10 rejects the lock's
+      # optional @emnapi/* entries with EUSAGE (CI rounds 1-2, s135).
       - uses: actions/setup-node@v4
-        with: { node-version: '22', cache: 'npm' }
+        with: { node-version: '24', cache: 'npm' }
       - name: Cache puppeteer browsers
         uses: actions/cache@v6
         with:
