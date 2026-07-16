@@ -63,6 +63,39 @@ class EnsurePlatformAdminTest extends PlatformAdminTestCase
         $this->assertUnauthenticated($response);
     }
 
+    // Sad — a missing or blank PLATFORM_ADMIN_IDS must deny EVERYONE (fail
+    // closed): nobody is a platform admin until the env explicitly says so
+    // (LD empty-allowlist precedent). Born-green vs the lap-1 deny-all stub;
+    // teeth proven by the lap-5 pass-all revert-check.
+    #[Test]
+    #[DataProvider('provideEmptyAllowlists')]
+    public function when_allowlist_is_empty_then_authenticated_user_is_denied(array $allowlist): void
+    {
+        // Given an authenticated user and an empty allowlist
+        $user = User::factory()->create();
+        $this->allowlist($allowlist);
+
+        // When they probe the platform-admin surface
+        $response = $this->probeAdminSurfaceAs($user);
+
+        // Then the response is the generic resource-not-found envelope (fail closed)
+        $this->assertResourceNotFoundNoLeak($response);
+    }
+
+    /**
+     * The two empty shapes the middleware can meet: the REAL absent-env shape
+     * (explode(',', '') === ['']) and an explicitly empty array.
+     *
+     * @return array<string, array{array<int, string>}>
+     */
+    public static function provideEmptyAllowlists(): array
+    {
+        return [
+            'absent env (explode yields [""])' => [['']],
+            'explicit empty list' => [[]],
+        ];
+    }
+
     /**
      * Every seeded role the gate must turn away — the 7 tenant roles plus the
      * platform_super_admin role-without-allowlist row (allowlist membership,
