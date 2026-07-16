@@ -101,7 +101,7 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
         $entry = AuditEntry::factory()->withMetadata($metadata)->create();
 
         // When it is read back from the table
-        $fresh = AuditEntry::query()->findOrFail($entry->getKey());
+        $fresh = $entry->refresh();
 
         // Then both declared casts hydrate the stored values
         $this->assertSame($metadata, $fresh->metadata);
