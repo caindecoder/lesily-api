@@ -48,6 +48,21 @@ class EnsurePlatformAdminTest extends PlatformAdminTestCase
         $this->assertResourceNotFoundNoLeak($response);
     }
 
+    // Sad — with no token the request never reaches the gate: auth:sanctum
+    // rejects it upstream with the standard 401 (UC-1-122 2b). Born-green pin;
+    // teeth proven by the lap-2 revert-check (drop auth:sanctum from the probe
+    // chain -> the guest reaches the gate and gets 404, so this REDs).
+    #[Test]
+    public function when_no_token_is_presented_then_unauthenticated(): void
+    {
+        // Given no authenticated session
+        // When a guest probes the platform-admin surface
+        $response = $this->probeAdminSurfaceAs(null);
+
+        // Then the request is rejected as unauthenticated
+        $this->assertUnauthenticated($response);
+    }
+
     /**
      * Every seeded role the gate must turn away — the 7 tenant roles plus the
      * platform_super_admin role-without-allowlist row (allowlist membership,
