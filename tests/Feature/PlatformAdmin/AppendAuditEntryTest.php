@@ -62,4 +62,22 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
             'stored_event_id' => null,
         ]);
     }
+
+    // Edge — stored_event_id is a SOFT FK (ERD-1-11 §5: application-layer
+    // reference, deliberately no DB constraint): a row pointing at a
+    // stored_events id that does not exist still inserts. REDs if anyone
+    // "tightens" the column into a hard FK, which would break tooling-written
+    // rows and the typing boundary the ERD rules out.
+    #[Test]
+    public function when_appending_an_entry_with_an_unmatched_stored_event_id_then_insert_succeeds(): void
+    {
+        // Given an entry referencing a stored event that does not exist
+        $entry = AuditEntry::factory()->fromStoredEvent(999999)->create();
+
+        // Then the row persists carrying the unmatched reference
+        $this->assertDatabaseHas('audit_trail', [
+            'id' => $entry->getKey(),
+            'stored_event_id' => 999999,
+        ]);
+    }
 }
