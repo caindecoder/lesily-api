@@ -30,9 +30,11 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
     #[Test]
     public function when_appending_an_entry_missing_a_required_field_then_insert_is_rejected(): void
     {
-        // Given an otherwise-valid entry with no action
+        // Given an otherwise-valid entry with no action (setAttribute pushes
+        // null past the string property type on purpose — the DB constraint
+        // is the thing under test)
         $entry = AuditEntry::factory()->make();
-        $entry->action = null;
+        $entry->setAttribute('action', null);
 
         // When it is appended
         try {
