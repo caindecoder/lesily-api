@@ -149,20 +149,26 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     private function assertStateFieldsRendered(TestResponse $response, string $state): void
     {
         match ($state) {
-            'voided' => [
-                $response->assertJsonPath('data.void_reason', 'Issued in error - admin correction.'),
-                $response->assertJsonPath('data.void_source', 'admin-correction'),
-                $this->assertNotNull($response->json('data.voided_at')),
-                $this->assertNotNull($response->json('data.voided_by')),
-            ],
-            'failed' => [
-                $response->assertJsonPath('data.failure_count', 1),
-                $response->assertJsonPath('data.last_failure_code', 'insufficient_funds'),
-                $this->assertNotNull($response->json('data.failed_at')),
-            ],
+            'voided' => $this->assertVoidFieldsRendered($response),
+            'failed' => $this->assertFailureFieldsRendered($response),
             'disputed' => $response->assertJsonPath('data.has_dispute', true),
             default => throw new InvalidArgumentException("Unknown state [{$state}]."),
         };
+    }
+
+    private function assertVoidFieldsRendered(TestResponse $response): void
+    {
+        $response->assertJsonPath('data.void_reason', 'Issued in error - admin correction.');
+        $response->assertJsonPath('data.void_source', 'admin-correction');
+        $this->assertNotNull($response->json('data.voided_at'));
+        $this->assertNotNull($response->json('data.voided_by'));
+    }
+
+    private function assertFailureFieldsRendered(TestResponse $response): void
+    {
+        $response->assertJsonPath('data.failure_count', 1);
+        $response->assertJsonPath('data.last_failure_code', 'insufficient_funds');
+        $this->assertNotNull($response->json('data.failed_at'));
     }
 
     // Edge — a tenant with no plan renders company.plan as null: the resource's
