@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\PlatformAdmin;
 
+use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Database\QueryException;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -79,5 +80,37 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
             'id' => $entry->getKey(),
             'stored_event_id' => 999999,
         ]);
+    }
+
+    // Happy — the factory's tenant-scoped direct-write row (the UC-1-122
+    // shape) persists exactly as the append-only design demands: created_at
+    // stamped, severity falling to the DB default (the factory omits it), and
+    // no mutation columns in the table at all. Teeth: the lap-9 revert-check
+    // switched the migration to timestamps() and this REDded on updated_at.
+    #[Test]
+    public function when_appending_a_tenant_scoped_entry_then_row_persists_append_only(): void
+    {
+        // Given a tenant-scoped admin-review entry
+        $entry = AuditEntry::factory()->create();
+
+        // Then the row persists append-only with the DB-default severity
+        $this->assertAppendOnlyPersistence($entry);
+    }
+
+    /**
+     * The row persisted append-only — created_at stamped, severity defaulted
+     * to 'info' by the DATABASE (the factory omits the column, so the default
+     * is the live path), and the table carries neither updated_at nor
+     * deleted_at (the ERD-1-11 append-only deviation).
+     */
+    protected function assertAppendOnlyPersistence(AuditEntry $entry): void
+    {
+        $this->assertDatabaseHas('audit_trail', [
+            'id' => $entry->getKey(),
+            'severity' => 'info',
+        ]);
+        $this->assertNotNull($entry->fresh()?->created_at);
+        $this->assertFalse(Schema::hasColumn('audit_trail', 'updated_at'));
+        $this->assertFalse(Schema::hasColumn('audit_trail', 'deleted_at'));
     }
 }
