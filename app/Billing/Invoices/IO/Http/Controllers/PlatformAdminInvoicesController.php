@@ -2,6 +2,9 @@
 
 namespace App\Billing\Invoices\IO\Http\Controllers;
 
+use App\Models\User;
+use Illuminate\Http\Request;
+use App\Billing\Invoices\UseCases\Values\AdminRequestContext;
 use App\Billing\Invoices\IO\Http\Resources\InvoiceAdminResource;
 use App\Billing\Invoices\UseCases\Interactors\ReviewInvoiceAsAdminInteractor;
 
@@ -14,8 +17,13 @@ use App\Billing\Invoices\UseCases\Interactors\ReviewInvoiceAsAdminInteractor;
  */
 class PlatformAdminInvoicesController
 {
-    public function show(string $invoiceId, ReviewInvoiceAsAdminInteractor $interactor): InvoiceAdminResource
+    public function show(string $invoiceId, Request $request, ReviewInvoiceAsAdminInteractor $interactor): InvoiceAdminResource
     {
-        return new InvoiceAdminResource($interactor->execute($invoiceId));
+        /** @var User $admin */
+        $admin = $request->user();
+
+        return new InvoiceAdminResource(
+            $interactor->execute($invoiceId, $admin, AdminRequestContext::fromRequest($request))
+        );
     }
 }

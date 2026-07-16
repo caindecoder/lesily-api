@@ -13,6 +13,7 @@ use Illuminate\Testing\TestResponse;
 use Illuminate\Database\QueryException;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
@@ -302,6 +303,38 @@ abstract class PlatformAdminTestCase extends TestCase
     protected function assertNoAuditRecorded(): void
     {
         $this->assertDatabaseCount('audit_trail', 0);
+    }
+
+    /**
+     * Exactly ONE audit row records the admin read, in the cd-audit-trail
+     * Direct-write shape (stored_event_id NULL — a read emits no domain event,
+     * B3; severity rides the DB default 'info'), with the request-context
+     * columns populated (ip / user agent / correlation id / recorded_at).
+     */
+    protected function assertAdminReviewAuditRecorded(InvoiceReadModel $invoice, User $admin): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'event_class' => 'AdminInvoiceReviewed',
+            'subject_type' => 'invoice',
+            'subject_id' => $invoice->getKey(),
+            'subject_label' => $invoice->invoice_number,
+            'action' => 'admin_reviewed',
+            'description' => "Platform admin reviewed invoice {$invoice->invoice_number}.",
+            'company_id' => $invoice->company_id,
+            'actor_user_id' => $admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $admin->name,
+            'stored_event_id' => null,
+            'metadata' => null,
+            'severity' => 'info',
+        ]);
+
+        $entry = AuditEntry::query()->sole();
+        $this->assertNotNull($entry->ip_address);
+        $this->assertNotNull($entry->user_agent);
+        $this->assertNotNull($entry->request_id);
+        $this->assertNotNull($entry->recorded_at);
     }
 
     /**

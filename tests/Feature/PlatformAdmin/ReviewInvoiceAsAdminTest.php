@@ -246,6 +246,28 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         ]]);
     }
 
+    // Happy — the read is recorded: ONE append-only audit_trail row in the
+    // cd-audit-trail Direct-write shape, written by the interactor AFTER the
+    // find succeeds (Gherkin sc.1, audit half; B3 — plain insert, no domain
+    // event on a read).
+    #[Test]
+    public function when_a_platform_admin_reviews_a_tenant_invoice_then_the_read_is_recorded_in_the_audit_trail(): void
+    {
+        // Given an allowlisted admin and a tenant's paid invoice
+        $admin = User::factory()->create();
+        $this->allowlist([$admin->getKey()]);
+        [$company] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+
+        // When the admin reviews the invoice
+        $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey());
+
+        // Then exactly one audit row records who read what, and when
+        $response->assertOk();
+        $this->assertAdminReviewAuditRecorded($invoice, $admin);
+    }
+
     /**
      * The six tenant-side roles of UC-1-122's Denied list (the gate's own
      * manager + unallowlisted-platform_super_admin pins live in
