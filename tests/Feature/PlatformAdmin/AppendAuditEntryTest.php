@@ -42,4 +42,24 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
             $this->assertNotNullViolationOn($e, 'action');
         }
     }
+
+    // Edge — a platform-level system row holds all three nullable scopes at
+    // once: no tenant (company_id NULL — platform events, ERD-1-11 §3), no
+    // human actor (system-driven), and no source domain event (the direct-
+    // write case T7 rides). Teeth: REDs if any of the trio is ever tightened
+    // to NOT NULL.
+    #[Test]
+    public function when_appending_a_platform_level_system_entry_then_nullable_scopes_hold(): void
+    {
+        // Given a platform-level, system-driven entry outside the event flow
+        $entry = AuditEntry::factory()->platformLevel()->system()->create();
+
+        // Then the row persists with the full nullable trio
+        $this->assertDatabaseHas('audit_trail', [
+            'id' => $entry->getKey(),
+            'company_id' => null,
+            'actor_user_id' => null,
+            'stored_event_id' => null,
+        ]);
+    }
 }
