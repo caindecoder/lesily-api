@@ -96,6 +96,40 @@ class EnsurePlatformAdminTest extends PlatformAdminTestCase
         ];
     }
 
+    // Edge — a hand-edited env value arrives with padding, trailing commas, or
+    // blank segments (the raw explode shapes config/platform.php hands over);
+    // the gate normalizes at the use-site (LD trim/filter idiom) so a genuine
+    // member still passes.
+    #[Test]
+    #[DataProvider('provideMalformedAllowlists')]
+    public function when_allowlist_entries_carry_whitespace_or_trailing_commas_then_member_still_passes(callable $shape): void
+    {
+        // Given an allowlisted user whose env entry is padded or comma-mangled
+        $user = User::factory()->create();
+        $this->allowlist($shape($user->getKey()));
+
+        // When they probe the platform-admin surface
+        $response = $this->probeAdminSurfaceAs($user);
+
+        // Then the gate passes them through
+        $this->assertProbePassed($response);
+    }
+
+    /**
+     * Raw post-explode shapes a hand-edited PLATFORM_ADMIN_IDS produces —
+     * each shaper receives the member id at runtime (DP rows are static).
+     *
+     * @return array<string, array{callable(string): array<int, string>}>
+     */
+    public static function provideMalformedAllowlists(): array
+    {
+        return [
+            'padded entry' => [fn (string $id): array => [" {$id} "]],
+            'trailing comma yields a blank segment' => [fn (string $id): array => [$id, '']],
+            'mid-list padding among other entries' => [fn (string $id): array => ['other-uuid', " {$id} ", '']],
+        ];
+    }
+
     /**
      * Every seeded role the gate must turn away — the 7 tenant roles plus the
      * platform_super_admin role-without-allowlist row (allowlist membership,

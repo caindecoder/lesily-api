@@ -22,6 +22,24 @@ class EnsurePlatformAdmin
 {
     public function handle(Request $request, Closure $next): Response
     {
-        throw new NotFoundHttpException;
+        if (! $this->isAllowlisted($request)) {
+            throw new NotFoundHttpException;
+        }
+
+        return $next($request);
+    }
+
+    /**
+     * Strict membership over the normalized allowlist. config/platform.php
+     * hands over the raw env explode; normalization lives here at the
+     * use-site (LD trim/filter idiom) so padded entries match and blank
+     * segments — including the absent-env [''] shape — fail closed.
+     */
+    private function isAllowlisted(Request $request): bool
+    {
+        return collect((array) config('platform.admin_user_ids', []))
+            ->map(fn ($id): string => trim((string) $id))
+            ->filter()
+            ->containsStrict((string) $request->user()?->getKey());
     }
 }
