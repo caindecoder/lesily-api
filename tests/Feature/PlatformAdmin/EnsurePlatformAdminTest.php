@@ -130,6 +130,38 @@ class EnsurePlatformAdminTest extends PlatformAdminTestCase
         ];
     }
 
+    // Happy — an allowlisted user passes through to the admin surface, whether
+    // theirs is the only entry or one among several (the multi-entry row kills
+    // any first-element-only membership shortcut).
+    #[Test]
+    #[DataProvider('provideAllowlistShapes')]
+    public function when_allowlisted_user_probes_admin_surface_then_request_passes(callable $shape): void
+    {
+        // Given a user whose id is on the allowlist
+        $user = User::factory()->create();
+        $this->allowlist($shape($user->getKey()));
+
+        // When they probe the platform-admin surface
+        $response = $this->probeAdminSurfaceAs($user);
+
+        // Then the gate passes them through
+        $this->assertProbePassed($response);
+    }
+
+    /**
+     * Clean allowlist shapes — the caller as sole entry, and mid-list among
+     * other admins.
+     *
+     * @return array<string, array{callable(string): array<int, string>}>
+     */
+    public static function provideAllowlistShapes(): array
+    {
+        return [
+            'sole entry' => [fn (string $id): array => [$id]],
+            'mid-list among other entries' => [fn (string $id): array => ['first-admin-uuid', $id, 'third-admin-uuid']],
+        ];
+    }
+
     /**
      * Every seeded role the gate must turn away — the 7 tenant roles plus the
      * platform_super_admin role-without-allowlist row (allowlist membership,
