@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Billing;
 
-use Mockery;
 use RuntimeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
@@ -231,9 +230,13 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         [$company, $owner] = $this->aCompanyWithMember('owner');
         $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
         $invoice = $this->aPaidInvoiceFor($company, $subscription);
-        $emptyRender = Mockery::mock(PdfBuilder::class);
-        $emptyRender->shouldReceive('format')->andReturnSelf();
-        $emptyRender->shouldReceive('base64')->andReturn('');
+        $emptyRender = new class extends PdfBuilder
+        {
+            public function base64(): string
+            {
+                return '';
+            }
+        };
         Pdf::shouldReceive('view')->andReturn($emptyRender);
 
         // When they download the receipt
