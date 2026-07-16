@@ -75,6 +75,24 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
     }
 
     #[Test]
+    public function when_refunded_invoice_has_open_dispute_then_receipt_blocked_response(): void
+    {
+        // Given an owner whose disputed invoice was refunded while the dispute
+        // stayed open (reachable: refund() runs from Paid regardless of dispute)
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aRefundedDisputedInvoiceFor($company, $subscription);
+
+        // When they download its receipt
+        $response = $this->downloadReceiptAs($owner, $company, $invoice->getKey());
+
+        // Then the dispute block holds for refunded exactly as for paid — a
+        // guard narrowed to Paid-only would leak this receipt (UC-1-121 5b;
+        // s129 F7 "any stored status"; test-analyzer MINOR-5)
+        $this->assertReceiptStateGuardRejected($response, 'Receipt is unavailable while a dispute is open.');
+    }
+
+    #[Test]
     public function when_unauthenticated_then_request_rejected(): void
     {
         // Given a company holding a paid invoice
@@ -108,6 +126,7 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         // Then the download is denied for the missing permission — no PDF bytes,
         // no invoice fields in the body (UC-1-121 error flow 3a)
         $this->assertRoleInsufficient($response, 'billing.view');
+        $this->assertStringStartsNotWith('%PDF', (string) $response->getContent());
     }
 
     #[Test]

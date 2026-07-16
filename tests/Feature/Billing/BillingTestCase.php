@@ -156,6 +156,11 @@ abstract class BillingTestCase extends TestCase
 
         if ($currentStatus !== null) {
             $response->assertJsonPath('current_status', $currentStatus);
+        } else {
+            // The dispute refusal carries NO current_status key — pins the
+            // null arm of the bootstrap render ternary, which Infection and
+            // coverage cannot see (test-analyzer IMPORTANT-1, s135).
+            $response->assertJsonMissingPath('current_status');
         }
     }
 
@@ -578,6 +583,7 @@ abstract class BillingTestCase extends TestCase
         $response->assertHeader('Retry-After', '30');
         $response->assertHeader('Content-Type', 'application/json');
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+        $this->assertStringStartsNotWith('%PDF', (string) $response->getContent());
     }
 
     /**
@@ -590,6 +596,22 @@ abstract class BillingTestCase extends TestCase
 
         Invoice::retrieve($invoice->getKey())
             ->fileDispute($this->fileInvoiceDisputeCommand($invoice))
+            ->persist();
+
+        return $invoice->refresh();
+    }
+
+    /**
+     * A disputed invoice subsequently REFUNDED through the domain seam — the
+     * aggregate permits refund() from Paid regardless of the open dispute, so
+     * refunded + has_dispute is a reachable state (test-analyzer MINOR-5).
+     */
+    protected function aRefundedDisputedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
+    {
+        $invoice = $this->aPaidDisputedInvoiceFor($company, $subscription, $overrides);
+
+        Invoice::retrieve($invoice->getKey())
+            ->refund($this->refundInvoiceCommand($invoice))
             ->persist();
 
         return $invoice->refresh();
