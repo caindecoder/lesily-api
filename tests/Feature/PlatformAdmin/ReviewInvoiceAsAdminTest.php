@@ -92,6 +92,28 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $this->assertNoAuditRecorded();
     }
 
+    // Edge — cross-tenant is the point: an allowlisted admin who is ALSO a
+    // member of some tenant reads ANOTHER company's invoice; no auth.company
+    // in the chain, no company scope on the lookup (UC-1-122 Tenant Isolation
+    // — "intentionally cross-tenant").
+    #[Test]
+    public function when_the_admin_also_belongs_to_a_tenant_then_another_companys_invoice_is_still_readable(): void
+    {
+        // Given an allowlisted admin who is an Owner of company X, and a paid invoice belonging to company Y
+        [, $admin] = $this->aCompanyWithMember('owner');
+        $this->allowlist([$admin->getKey()]);
+        [$companyY] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($companyY, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($companyY, $subscription);
+
+        // When the admin reads company Y's invoice via the admin endpoint
+        $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey());
+
+        // Then the cross-tenant invoice is returned
+        $response->assertOk();
+        $response->assertJsonPath('data.id', $invoice->getKey());
+    }
+
     /**
      * The six tenant-side roles of UC-1-122's Denied list (the gate's own
      * manager + unallowlisted-platform_super_admin pins live in

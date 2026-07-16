@@ -2,7 +2,8 @@
 
 namespace App\Billing\Invoices\IO\Http\Controllers;
 
-use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Billing\Invoices\IO\Http\Resources\InvoiceAdminResource;
+use App\Billing\Invoices\UseCases\Interactors\ReviewInvoiceAsAdminInteractor;
 
 /**
  * The platform-admin cross-tenant invoice read (UC-1-122) — behind
@@ -13,8 +14,8 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
  */
 class PlatformAdminInvoicesController
 {
-    public function show(string $invoiceId): never
+    public function show(string $invoiceId, ReviewInvoiceAsAdminInteractor $interactor): InvoiceAdminResource
     {
-        throw new ModelNotFoundException;
+        return new InvoiceAdminResource($interactor->execute($invoiceId));
     }
 }

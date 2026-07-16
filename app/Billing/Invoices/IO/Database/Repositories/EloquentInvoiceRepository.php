@@ -39,6 +39,13 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
             ->first();
     }
 
+    public function findById(string $invoiceId): ?Invoice
+    {
+        return Invoice::query()
+            ->whereKey($invoiceId)
+            ->first();
+    }
+
     /**
      * `within=from,to` filters on the issue date, both edges inclusive
      * (api-conventions §10.1 date-range convention; validated upstream by
