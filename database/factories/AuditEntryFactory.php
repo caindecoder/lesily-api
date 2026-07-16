@@ -80,4 +80,15 @@ class AuditEntryFactory extends Factory
     {
         return $this->state(['stored_event_id' => $storedEventId]);
     }
+
+    /**
+     * A row carrying structured metadata (ERD-1-11 §3 — event-class-specific
+     * JSON shapes; the array cast is the contract under test at T6).
+     *
+     * @param  array<string, mixed>  $metadata
+     */
+    public function withMetadata(array $metadata): static
+    {
+        return $this->state(['metadata' => $metadata]);
+    }
 }

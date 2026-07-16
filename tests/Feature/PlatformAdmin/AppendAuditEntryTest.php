@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\PlatformAdmin;
 
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Database\QueryException;
@@ -82,6 +83,26 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
             'id' => $entry->getKey(),
             'stored_event_id' => 999999,
         ]);
+    }
+
+    // Edge — the two declared casts are live behavior, not decoration
+    // (independent-review findings TA-3.2/4.2): structured metadata written
+    // as an array reads back as the same array (JSON round-trip), and
+    // recorded_at hydrates as a datetime. Teeth: the lap-11 revert-check
+    // removed the casts and this REDded.
+    #[Test]
+    public function when_an_entry_carries_metadata_then_casts_round_trip(): void
+    {
+        // Given an entry carrying an event-class-specific metadata shape
+        $metadata = ['reason' => 'dispute triage', 'evidence_ref' => 'TICKET-4821'];
+        $entry = AuditEntry::factory()->withMetadata($metadata)->create();
+
+        // When it is read back from the table
+        $fresh = AuditEntry::query()->findOrFail($entry->getKey());
+
+        // Then both declared casts hydrate the stored values
+        $this->assertSame($metadata, $fresh->metadata);
+        $this->assertInstanceOf(CarbonInterface::class, $fresh->recorded_at);
     }
 
     // Happy — the factory's tenant-scoped direct-write row (the UC-1-122
