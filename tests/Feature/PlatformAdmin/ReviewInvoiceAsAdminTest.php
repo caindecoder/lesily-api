@@ -5,6 +5,9 @@ namespace Tests\Feature\PlatformAdmin;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
+use App\Companies\Entities\Company;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -132,9 +135,56 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         // When the admin reviews that invoice
         $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey());
 
-        // Then the invoice is returned with its stored status
+        // Then the invoice is returned with its stored status and that state's fields on the wire
         $response->assertOk();
         $response->assertJsonPath('data.status', $expectedStatus);
+        $this->assertStateFieldsRendered($response, $state);
+    }
+
+    /**
+     * The state-conditional admin-view fields actually carry the state's
+     * values on the wire (agent-triage TA-1 — executed-but-unasserted
+     * renderings are Infection-invisible: property reads mint no mutants).
+     */
+    private function assertStateFieldsRendered(TestResponse $response, string $state): void
+    {
+        match ($state) {
+            'voided' => [
+                $response->assertJsonPath('data.void_reason', 'Issued in error - admin correction.'),
+                $response->assertJsonPath('data.void_source', 'admin-correction'),
+                $this->assertNotNull($response->json('data.voided_at')),
+                $this->assertNotNull($response->json('data.voided_by')),
+            ],
+            'failed' => [
+                $response->assertJsonPath('data.failure_count', 1),
+                $response->assertJsonPath('data.last_failure_code', 'insufficient_funds'),
+                $this->assertNotNull($response->json('data.failed_at')),
+            ],
+            'disputed' => $response->assertJsonPath('data.has_dispute', true),
+            default => throw new InvalidArgumentException("Unknown state [{$state}]."),
+        };
+    }
+
+    // Edge — a tenant with no plan renders company.plan as null: the resource's
+    // null-safe is load-bearing (plan is NULL during trial per the s066 pin,
+    // and null-plan rows are exactly the gone/compliance tenants this endpoint
+    // exists to review — agent-triage TA-2).
+    #[Test]
+    public function when_the_tenant_has_no_plan_then_the_company_summary_renders_it_as_null(): void
+    {
+        // Given an allowlisted admin and a paid invoice belonging to a company with no plan
+        $admin = User::factory()->create();
+        $this->allowlist([$admin->getKey()]);
+        $company = Company::factory()->withoutPlan()->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+
+        // When the admin reviews that invoice
+        $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey());
+
+        // Then the company summary carries a null plan (not a 500, not a missing key)
+        $response->assertOk();
+        $response->assertJsonPath('data.company.plan', null);
     }
 
     /**
@@ -298,7 +348,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
 
         // Then exactly one audit row records who read what, and when
         $response->assertOk();
-        $this->assertAdminReviewAuditRecorded($invoice, $admin);
+        $this->assertAdminReviewAuditRecorded($invoice, $admin, $response);
     }
 
     /**

@@ -309,9 +309,11 @@ abstract class PlatformAdminTestCase extends TestCase
      * Exactly ONE audit row records the admin read, in the cd-audit-trail
      * Direct-write shape (stored_event_id NULL — a read emits no domain event,
      * B3; severity rides the DB default 'info'), with the request-context
-     * columns populated (ip / user agent / correlation id / recorded_at).
+     * columns IDENTITY-pinned (agent-triage MINOR-3: presence-only asserts
+     * couldn't catch an ip↔user_agent swap): ip = the test client's loopback,
+     * request_id = the very Correlation-Id the response carries.
      */
-    protected function assertAdminReviewAuditRecorded(InvoiceReadModel $invoice, User $admin): void
+    protected function assertAdminReviewAuditRecorded(InvoiceReadModel $invoice, User $admin, TestResponse $response): void
     {
         $this->assertDatabaseCount('audit_trail', 1);
         $this->assertDatabaseHas('audit_trail', [
@@ -328,14 +330,14 @@ abstract class PlatformAdminTestCase extends TestCase
             'stored_event_id' => null,
             'metadata' => null,
             'severity' => 'info',
+            'ip_address' => '127.0.0.1',
         ]);
 
         // recorded_at needs no assert: the column is NOT NULL, so the row
         // matched above could not exist without it.
         $entry = AuditEntry::query()->sole();
-        $this->assertNotNull($entry->ip_address);
+        $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
         $this->assertNotNull($entry->user_agent);
-        $this->assertNotNull($entry->request_id);
     }
 
     /**
