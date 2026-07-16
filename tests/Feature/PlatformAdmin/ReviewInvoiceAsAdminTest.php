@@ -53,6 +53,25 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $this->assertNoAuditRecorded();
     }
 
+    // Sad — no Sanctum token: rejected upstream by auth:sanctum as 401
+    // UNAUTHENTICATED; UC-1-122's main flow is never entered and no read is
+    // recorded (Gherkin sc.6, error-flow 2b).
+    #[Test]
+    public function when_no_token_is_presented_then_the_request_is_rejected_as_unauthenticated(): void
+    {
+        // Given a paid invoice exists and nobody is authenticated
+        [$company] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+
+        // When the admin invoice endpoint is called as a guest
+        $response = $this->reviewInvoiceAsAdmin(null, $invoice->getKey());
+
+        // Then the request is rejected as unauthenticated and no read is recorded
+        $this->assertUnauthenticated($response);
+        $this->assertNoAuditRecorded();
+    }
+
     /**
      * The six tenant-side roles of UC-1-122's Denied list (the gate's own
      * manager + unallowlisted-platform_super_admin pins live in
