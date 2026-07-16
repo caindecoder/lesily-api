@@ -98,13 +98,18 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * The insert was rejected by the NOT NULL constraint on $column — the
-     * SPECIFIC integrity violation (SQLSTATE 23000 naming the column), so a
-     * missing table (42S02) or any other query failure cannot satisfy the
-     * assertion.
+     * SPECIFIC integrity violation (SQLSTATE 23000) named in the DRIVER
+     * message (errorInfo[2]), not the rendered query: the exception message
+     * embeds the full insert column list, so matching it would false-pass
+     * for a violation on any other column (review finding CR-M-1). A missing
+     * table (42S02) cannot satisfy the assertion either.
      */
     protected function assertNotNullViolationOn(QueryException $e, string $column): void
     {
         $this->assertSame('23000', (string) $e->getCode());
-        $this->assertStringContainsString($column, $e->getMessage());
+        $this->assertStringContainsString(
+            "Column '{$column}' cannot be null",
+            (string) ($e->errorInfo[2] ?? ''),
+        );
     }
 }

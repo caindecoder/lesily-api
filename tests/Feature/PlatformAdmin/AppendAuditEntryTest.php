@@ -25,9 +25,12 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
     use RefreshDatabase;
 
     // Sad — the schema rejects an entry missing a required field: action is
-    // NOT NULL per ERD-1-11 §3. The assertion pins the SPECIFIC violation
-    // (SQLSTATE 23000 naming the column) so a missing TABLE (42S02) cannot
-    // false-pass this test.
+    // NOT NULL per ERD-1-11 §3 and stands as the REPRESENTATIVE pin for the
+    // schema's required set (event_class/subject_type/subject_id share the
+    // same constraint class — TA-4.3). The assertion pins the SPECIFIC
+    // violation (SQLSTATE 23000 + the driver message naming the column) so
+    // neither a missing TABLE (42S02) nor a violation on a different column
+    // can false-pass this test.
     #[Test]
     public function when_appending_an_entry_missing_a_required_field_then_insert_is_rejected(): void
     {
