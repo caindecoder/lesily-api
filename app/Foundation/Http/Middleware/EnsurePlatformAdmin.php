@@ -39,7 +39,7 @@ class EnsurePlatformAdmin
     {
         return collect((array) config('platform.admin_user_ids', []))
             ->map(fn ($id): string => trim((string) $id))
-            ->filter()
+            ->reject(fn (string $id): bool => $id === '')
             ->containsStrict((string) $request->user()?->getKey());
     }
 }

@@ -130,6 +130,25 @@ class EnsurePlatformAdminTest extends PlatformAdminTestCase
         ];
     }
 
+    // Sad — a guest reaching the gate ITSELF (the bare probe mounts
+    // platform.admin without upstream auth) under the blank default-env
+    // allowlist is denied: the gate's blank-entry filter must never let the
+    // guest's blank key match the blank allowlist entry (fail closed —
+    // independent-review finding TA-3.1; teeth proven by the lap-10
+    // revert-check: deleting the filter arm REDs this at 200).
+    #[Test]
+    public function when_guest_reaches_the_gate_without_upstream_auth_then_denied(): void
+    {
+        // Given the blank default-env allowlist and no authenticated session
+        $this->allowlist(['']);
+
+        // When a guest probes the bare-mounted gate
+        $response = $this->getJson('/api/_test/platform-admin-bare-probe');
+
+        // Then the gate itself denies with the generic no-leak envelope
+        $this->assertResourceNotFoundNoLeak($response);
+    }
+
     // Happy — an allowlisted user passes through to the admin surface, whether
     // theirs is the only entry or one among several (the multi-entry row kills
     // any first-element-only membership shortcut).

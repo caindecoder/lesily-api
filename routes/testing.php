@@ -127,6 +127,14 @@ Route::post('idempotent-throwing', function () {
 Route::get('platform-admin-probe', fn () => response()->json(['ok' => true]))
     ->middleware(['auth:sanctum', 'platform.admin']);
 
+// Bare-gate probe (T6 review finding): platform.admin WITHOUT upstream
+// auth:sanctum, so a null-user request reaches the middleware itself. Binds
+// the gate's own fail-closed arms — the blank default-env allowlist must
+// never match a guest's blank key — independent of chain order (defense in
+// depth for any future mis-mounted admin route).
+Route::get('platform-admin-bare-probe', fn () => response()->json(['ok' => true]))
+    ->middleware(['platform.admin']);
+
 // Unmapped-HttpException probes (OQ-1-112). Any Symfony HttpException without a
 // dedicated render handler must preserve its status code (not collapse to 500
 // when APP_DEBUG=false) AND its status-mandated headers via the
