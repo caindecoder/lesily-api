@@ -7,6 +7,7 @@ use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Database\QueryException;
 use App\Foundation\RolesPermissions\Entities\Role;
 
 abstract class PlatformAdminTestCase extends TestCase
@@ -93,5 +94,17 @@ abstract class PlatformAdminTestCase extends TestCase
     {
         $response->assertOk();
         $response->assertExactJson(['ok' => true]);
+    }
+
+    /**
+     * The insert was rejected by the NOT NULL constraint on $column — the
+     * SPECIFIC integrity violation (SQLSTATE 23000 naming the column), so a
+     * missing table (42S02) or any other query failure cannot satisfy the
+     * assertion.
+     */
+    protected function assertNotNullViolationOn(QueryException $e, string $column): void
+    {
+        $this->assertSame('23000', (string) $e->getCode());
+        $this->assertStringContainsString($column, $e->getMessage());
     }
 }
