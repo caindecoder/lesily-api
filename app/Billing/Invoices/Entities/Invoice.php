@@ -6,6 +6,7 @@ use Database\Factories\InvoiceFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Billing\Invoices\Enums\InvoiceStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
@@ -29,6 +30,14 @@ class Invoice extends Model
     protected static function newFactory(): InvoiceFactory
     {
         return InvoiceFactory::new();
+    }
+
+    /**
+     * @return HasMany<InvoiceLineItem, $this>
+     */
+    public function lineItems(): HasMany
+    {
+        return $this->hasMany(InvoiceLineItem::class)->orderBy('sort_order');
     }
 
     protected $fillable = [

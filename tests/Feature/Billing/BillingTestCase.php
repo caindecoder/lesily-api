@@ -4,12 +4,15 @@ namespace Tests\Feature\Billing;
 
 use Tests\TestCase;
 use App\Models\User;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Exceptions;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Billing\Invoices\Entities\InvoiceLineItem;
@@ -20,9 +23,12 @@ use App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand;
 use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
 use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
+use App\Billing\Invoices\Exceptions\CorruptReceiptSnapshotException;
+use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand;
+use App\Billing\Invoices\UseCases\Renderers\ReceiptPdfRendererInterface;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
@@ -118,6 +124,59 @@ abstract class BillingTestCase extends TestCase
         $queryString = $query === [] ? '' : '?'.http_build_query($query);
 
         return $this->getJson('/api/v1/invoices'.$queryString, ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * An authenticated member downloads $invoiceId's receipt under $company's
+     * context (UC-1-121). Plain get() — the happy body is a binary PDF stream,
+     * not JSON; error paths still render §S21 envelopes.
+     */
+    protected function downloadReceiptAs(User $user, Company $company, string $invoiceId): TestResponse
+    {
+        Sanctum::actingAs($user);
+
+        return $this->get("/api/v1/invoices/{$invoiceId}/receipt", [
+            'X-Company-Context' => $company->getKey(),
+            'Accept' => 'application/json',
+        ]);
+    }
+
+    /**
+     * The receipt was refused by the state guard — 409 STATE_GUARD_VIOLATION
+     * with the exact refusal message and a JSON (never PDF) body; non-paid
+     * refusals echo the stored status as current_status (UC-1-121 5a/5b,
+     * s135 F-c).
+     */
+    protected function assertReceiptStateGuardRejected(TestResponse $response, string $message, ?string $currentStatus = null): void
+    {
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
+        $response->assertJsonPath('message', $message);
+        $response->assertHeader('Content-Type', 'application/json');
+
+        if ($currentStatus !== null) {
+            $response->assertJsonPath('current_status', $currentStatus);
+        } else {
+            // The dispute refusal carries NO current_status key — pins the
+            // null arm of the bootstrap render ternary, which Infection and
+            // coverage cannot see (test-analyzer IMPORTANT-1, s135).
+            $response->assertJsonMissingPath('current_status');
+        }
+    }
+
+    /**
+     * The receipt lookup was refused as not found — 404 RESOURCE_NOT_FOUND with
+     * the §S21 envelope and a JSON (never PDF) body. One shared helper for the
+     * unknown-id AND cross-tenant walks so the two responses cannot drift apart
+     * (UC-1-121 4a no-existence-leak parity).
+     */
+    protected function assertInvoiceNotFound(TestResponse $response): void
+    {
+        $response->assertNotFound();
+        $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
+        $response->assertJsonPath('message', 'The requested resource was not found.');
+        $response->assertHeader('Content-Type', 'application/json');
+        $this->assertStringStartsNotWith('%PDF', (string) $response->getContent());
     }
 
     /**
@@ -433,6 +492,129 @@ abstract class BillingTestCase extends TestCase
             'filedBy' => User::factory()->create()->getKey(),
             ...$overrides,
         ]);
+    }
+
+    /**
+     * A hand-written throwing renderer stub bound for THIS test only (E23 —
+     * stub across the boundary; every other walk uses the real renderer). The
+     * app-owned exception is what the Chromium adapter itself raises on any
+     * render-time failure, so the 503 contract is library-agnostic.
+     */
+    protected function bindThrowingReceiptRenderer(): void
+    {
+        $this->app->instance(ReceiptPdfRendererInterface::class, new class implements ReceiptPdfRendererInterface
+        {
+            public function render(InvoiceReadModel $invoice): string
+            {
+                throw new ReceiptRenderingFailedException('Chromium renderer unreachable (test stub).');
+            }
+        });
+    }
+
+    /**
+     * A renderer stub that must never run — bound for the corrupt-snapshot walk
+     * (7c validates BEFORE the port is called). If validation is missing, the
+     * request reports THIS RuntimeException instead of the corrupt-snapshot
+     * exception, and the assertReported pin below fails the test.
+     */
+    protected function bindMustNotRenderGuard(): void
+    {
+        $this->app->instance(ReceiptPdfRendererInterface::class, new class implements ReceiptPdfRendererInterface
+        {
+            public function render(InvoiceReadModel $invoice): string
+            {
+                throw new RuntimeException('The renderer must not be invoked for a corrupt snapshot (UC-1-121 7c).');
+            }
+        });
+    }
+
+    /**
+     * The corrupt snapshot failed safely — generic 500 §S21 envelope (no
+     * internal details), JSON not PDF, and the corrupt-snapshot exception
+     * reported carrying the invoice id for ops triage (UC-1-121 7c; s135 F-e).
+     */
+    protected function assertCorruptSnapshotRejected(TestResponse $response, string $invoiceId): void
+    {
+        $response->assertStatus(500);
+        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
+        $response->assertHeader('Content-Type', 'application/json');
+        $this->assertStringStartsNotWith('%PDF', (string) $response->getContent());
+        Exceptions::assertReported(
+            fn (CorruptReceiptSnapshotException $e): bool => str_contains($e->getMessage(), $invoiceId)
+        );
+    }
+
+    /**
+     * Nothing was persisted to app storage by the render — the receipt is a
+     * transient projection, regenerated per request (R3; ERD-1-04 OQ#7
+     * Confirmed). Requires Storage::fake() in the test's arrange.
+     */
+    protected function assertNoArtifactPersisted(): void
+    {
+        $this->assertSame([], Storage::disk()->allFiles());
+    }
+
+    /**
+     * The receipt downloaded as a complete PDF — 200 application/pdf with the
+     * exact attachment filename, %PDF magic bytes, and a non-empty stream
+     * (UC-1-121 main flow step 7; LD ICS getContent byte-assert idiom).
+     */
+    protected function assertPdfReceiptResponse(TestResponse $response, string $invoiceNumber): void
+    {
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'application/pdf');
+        $response->assertHeader('Content-Disposition', 'attachment; filename="receipt-'.$invoiceNumber.'.pdf"');
+
+        $content = (string) $response->getContent();
+        $this->assertStringStartsWith('%PDF', $content);
+        $this->assertGreaterThan(4, strlen($content));
+    }
+
+    /**
+     * The receipt failed service-side — 503 RECEIPT_GENERATION_UNAVAILABLE
+     * §S21 envelope with Retry-After: 30 and a JSON (never truncated-PDF)
+     * body (UC-1-121 7b; s135 F-d).
+     */
+    protected function assertReceiptGenerationUnavailable(TestResponse $response): void
+    {
+        $response->assertStatus(503);
+        $response->assertJsonPath('error_code', 'RECEIPT_GENERATION_UNAVAILABLE');
+        $response->assertJsonPath('message', 'Receipt generation is temporarily unavailable. Please try again shortly.');
+        $response->assertHeader('Retry-After', '30');
+        $response->assertHeader('Content-Type', 'application/json');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+        $this->assertStringStartsNotWith('%PDF', (string) $response->getContent());
+    }
+
+    /**
+     * A PAID invoice with an open dispute filed through the domain seam — the
+     * F7 receipt-block state (the aggregate permits disputes on Paid, T3).
+     */
+    protected function aPaidDisputedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
+    {
+        $invoice = $this->aPaidInvoiceFor($company, $subscription, $overrides);
+
+        Invoice::retrieve($invoice->getKey())
+            ->fileDispute($this->fileInvoiceDisputeCommand($invoice))
+            ->persist();
+
+        return $invoice->refresh();
+    }
+
+    /**
+     * A disputed invoice subsequently REFUNDED through the domain seam — the
+     * aggregate permits refund() from Paid regardless of the open dispute, so
+     * refunded + has_dispute is a reachable state (test-analyzer MINOR-5).
+     */
+    protected function aRefundedDisputedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
+    {
+        $invoice = $this->aPaidDisputedInvoiceFor($company, $subscription, $overrides);
+
+        Invoice::retrieve($invoice->getKey())
+            ->refund($this->refundInvoiceCommand($invoice))
+            ->persist();
+
+        return $invoice->refresh();
     }
 
     /**

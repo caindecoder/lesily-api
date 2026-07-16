@@ -26,6 +26,7 @@ use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use App\Companies\Memberships\Exceptions\AlreadyMemberException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
+use App\Billing\Invoices\Exceptions\ReceiptNotAvailableException;
 use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -33,6 +34,7 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
+use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
 use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
 use App\Companies\Memberships\Exceptions\SelfRemovalBlockedException;
@@ -239,6 +241,23 @@ return Application::configure(basePath: dirname(__DIR__))
             ApiErrorCode::AlreadyMember,
             $e->getMessage(),
         ));
+
+        // The receipt state guard refused the download — non-paid status (echoed
+        // as current_status) or an open dispute (UC-1-121 5a/5b; s135 F-c).
+        $exceptions->render(fn (ReceiptNotAvailableException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+            $e->currentStatus === null ? [] : ['current_status' => $e->currentStatus],
+        ));
+
+        // The PDF renderer failed mid-request — a JSON 503 with a retry hint,
+        // NEVER a truncated application/pdf stream (UC-1-121 7b; s135 F-d). The
+        // internal cause stays out of the response; the generic message is the
+        // client contract.
+        $exceptions->render(fn (ReceiptRenderingFailedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::ReceiptGenerationUnavailable,
+            'Receipt generation is temporarily unavailable. Please try again shortly.',
+        )->withHeaders(['Retry-After' => '30']));
 
         $exceptions->render(fn (ModelNotFoundException $e) => EnvelopeBuilder::build(
             ApiErrorCode::ResourceNotFound,

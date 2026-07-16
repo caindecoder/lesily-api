@@ -61,6 +61,30 @@ jobs:
           coverage: xdebug
       - run: cp .env.github .env
       - run: composer install --no-interaction --prefer-dist
+      # puppeteer@25 requires Node >=22.12 — pin it rather than trusting the
+      # runner default (code-reviewer I1, s135); caches cut the per-job
+      # Chromium re-download (M3). Node 24 (LTS) bundles npm 11, matching the
+      # npm major that wrote package-lock.json — npm 10 rejects the lock's
+      # optional @emnapi/* entries with EUSAGE (CI rounds 1-2, s135).
+      - uses: actions/setup-node@v6
+        with: { node-version: '24', cache: 'npm' }
+      - name: Cache puppeteer browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ hashFiles('package-lock.json') }}
+      - name: Install Node deps (puppeteer — Browsershot receipt rendering, UC-1-121)
+        run: npm ci
+      # Round-5 fix: npm ci installs the puppeteer PACKAGE but the browser
+      # binaries' postinstall download is nondeterministic on runners — the
+      # suite failed with "Could not find chrome-headless-shell". Explicit,
+      # idempotent install into ~/.cache/puppeteer (cache-step-backed).
+      # One browser per invocation — the CLI silently drops extra browser args
+      # (round-6 log: chrome installed, chrome-headless-shell never did).
+      - name: Install puppeteer browsers (chrome + headless shell)
+        run: |
+          npx puppeteer browsers install chrome
+          npx puppeteer browsers install chrome-headless-shell
       - run: php artisan key:generate
       - run: php artisan migrate --force
       - name: Run tests with coverage
@@ -127,6 +151,30 @@ jobs:
           php-version: '8.4'
           coverage: xdebug
       - run: composer install --no-interaction --prefer-dist
+      # puppeteer@25 requires Node >=22.12 — pin it rather than trusting the
+      # runner default (code-reviewer I1, s135); caches cut the per-job
+      # Chromium re-download (M3). Node 24 (LTS) bundles npm 11, matching the
+      # npm major that wrote package-lock.json — npm 10 rejects the lock's
+      # optional @emnapi/* entries with EUSAGE (CI rounds 1-2, s135).
+      - uses: actions/setup-node@v6
+        with: { node-version: '24', cache: 'npm' }
+      - name: Cache puppeteer browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ hashFiles('package-lock.json') }}
+      - name: Install Node deps (puppeteer — Browsershot receipt rendering, UC-1-121)
+        run: npm ci
+      # Round-5 fix: npm ci installs the puppeteer PACKAGE but the browser
+      # binaries' postinstall download is nondeterministic on runners — the
+      # suite failed with "Could not find chrome-headless-shell". Explicit,
+      # idempotent install into ~/.cache/puppeteer (cache-step-backed).
+      # One browser per invocation — the CLI silently drops extra browser args
+      # (round-6 log: chrome installed, chrome-headless-shell never did).
+      - name: Install puppeteer browsers (chrome + headless shell)
+        run: |
+          npx puppeteer browsers install chrome
+          npx puppeteer browsers install chrome-headless-shell
       - run: cp .env.github .env
       - run: php artisan key:generate
       - run: php artisan migrate --force
@@ -171,6 +219,30 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with: { php-version: '8.4', coverage: xdebug }
       - run: composer install --no-interaction --prefer-dist
+      # puppeteer@25 requires Node >=22.12 — pin it rather than trusting the
+      # runner default (code-reviewer I1, s135); caches cut the per-job
+      # Chromium re-download (M3). Node 24 (LTS) bundles npm 11, matching the
+      # npm major that wrote package-lock.json — npm 10 rejects the lock's
+      # optional @emnapi/* entries with EUSAGE (CI rounds 1-2, s135).
+      - uses: actions/setup-node@v6
+        with: { node-version: '24', cache: 'npm' }
+      - name: Cache puppeteer browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ hashFiles('package-lock.json') }}
+      - name: Install Node deps (puppeteer — Browsershot receipt rendering, UC-1-121)
+        run: npm ci
+      # Round-5 fix: npm ci installs the puppeteer PACKAGE but the browser
+      # binaries' postinstall download is nondeterministic on runners — the
+      # suite failed with "Could not find chrome-headless-shell". Explicit,
+      # idempotent install into ~/.cache/puppeteer (cache-step-backed).
+      # One browser per invocation — the CLI silently drops extra browser args
+      # (round-6 log: chrome installed, chrome-headless-shell never did).
+      - name: Install puppeteer browsers (chrome + headless shell)
+        run: |
+          npx puppeteer browsers install chrome
+          npx puppeteer browsers install chrome-headless-shell
       - run: cp .env.github .env
       - run: php artisan key:generate
       - run: php artisan migrate --force
