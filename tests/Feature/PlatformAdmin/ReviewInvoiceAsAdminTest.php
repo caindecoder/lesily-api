@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\PlatformAdmin;
 
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
@@ -69,6 +70,25 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
 
         // Then the request is rejected as unauthenticated and no read is recorded
         $this->assertUnauthenticated($response);
+        $this->assertNoAuditRecorded();
+    }
+
+    // Sad — an allowlisted admin asks for an id that exists nowhere: the
+    // generic 404, and NO audit row — the read did not happen (Gherkin sc.7,
+    // error-flow 3a; the insert-throws-AFTER-find ordering gets its revert-
+    // check at the audit lap).
+    #[Test]
+    public function when_the_invoice_id_is_unknown_then_not_found_is_returned_and_no_read_is_recorded(): void
+    {
+        // Given an allowlisted platform admin and no invoice anywhere
+        $admin = User::factory()->create();
+        $this->allowlist([$admin->getKey()]);
+
+        // When the admin asks for a random unknown invoice id
+        $response = $this->reviewInvoiceAsAdmin($admin, (string) Str::uuid());
+
+        // Then the response is the generic not-found and no read is recorded
+        $this->assertResourceNotFoundNoLeak($response);
         $this->assertNoAuditRecorded();
     }
 
