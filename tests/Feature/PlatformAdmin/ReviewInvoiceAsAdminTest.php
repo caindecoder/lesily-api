@@ -7,6 +7,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
@@ -246,6 +247,36 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
                 'status' => 'trial',
             ],
         ]]);
+    }
+
+    // Edge — oversized request-context values (a long AV/enterprise User-Agent,
+    // a client-minted Correlation-Id) must not break a valid admin read: the
+    // audit write bounds both to their column width (MySQL strict mode turns an
+    // over-length insert into SQLSTATE 22001 — the s137 I-1 review finding;
+    // only allowlisted admins ever reach this write, so bounded fidelity wins
+    // over schema churn per Chamil's ruling).
+    #[Test]
+    public function when_the_request_context_values_are_oversized_then_the_read_still_succeeds(): void
+    {
+        // Given an allowlisted admin whose client sends oversized UA and correlation headers
+        $admin = User::factory()->create();
+        $this->allowlist([$admin->getKey()]);
+        [$company] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+
+        // When the admin reviews the invoice with 300-char header values
+        $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey(), [
+            'User-Agent' => str_repeat('a', 300),
+            'Correlation-Id' => str_repeat('b', 300),
+        ]);
+
+        // Then the read succeeds and the audit row stores bounded values
+        $response->assertOk();
+        $this->assertDatabaseCount('audit_trail', 1);
+        $entry = AuditEntry::query()->sole();
+        $this->assertLessThanOrEqual(255, strlen((string) $entry->user_agent));
+        $this->assertLessThanOrEqual(255, strlen((string) $entry->request_id));
     }
 
     // Happy — the read is recorded: ONE append-only audit_trail row in the

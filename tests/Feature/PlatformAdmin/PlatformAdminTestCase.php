@@ -287,13 +287,13 @@ abstract class PlatformAdminTestCase extends TestCase
      * /api/v1/admin/* family is cross-tenant by design, with no auth.company
      * in its chain (cd-foundation-http §3).
      */
-    protected function reviewInvoiceAsAdmin(?User $caller, string $invoiceId): TestResponse
+    protected function reviewInvoiceAsAdmin(?User $caller, string $invoiceId, array $headers = []): TestResponse
     {
         if ($caller !== null) {
             Sanctum::actingAs($caller);
         }
 
-        return $this->getJson("/api/v1/admin/invoices/{$invoiceId}");
+        return $this->getJson("/api/v1/admin/invoices/{$invoiceId}", $headers);
     }
 
     /**

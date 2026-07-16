@@ -3,6 +3,7 @@
 namespace App\Billing\Invoices\UseCases\Interactors;
 
 use App\Models\User;
+use Illuminate\Support\Str;
 use App\Billing\Invoices\Entities\Invoice;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -58,10 +59,19 @@ class ReviewInvoiceAsAdminInteractor
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => $admin->name,
             'ip_address' => $context->ip,
-            'user_agent' => $context->userAgent,
-            'request_id' => $context->requestId,
+            // Client-controlled header values bounded to the varchar(255)
+            // columns — MySQL strict mode 22001s an over-length insert, 500ing
+            // a valid admin read otherwise (s137 I-1; bounded-fidelity ruling:
+            // only allowlisted admins reach this write).
+            'user_agent' => $this->bounded($context->userAgent),
+            'request_id' => $this->bounded($context->requestId),
             'metadata' => null,
             'recorded_at' => now(),
         ]);
+    }
+
+    private function bounded(?string $value): ?string
+    {
+        return $value === null ? null : Str::limit($value, 255, '');
     }
 }
