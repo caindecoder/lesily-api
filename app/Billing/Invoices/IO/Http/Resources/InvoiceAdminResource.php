@@ -22,6 +22,7 @@ class InvoiceAdminResource extends JsonResource
     {
         return [
             'id' => $this->resource->id,
+            'status' => $this->resource->status,
         ];
     }
 }

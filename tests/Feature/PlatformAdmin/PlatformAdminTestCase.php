@@ -7,6 +7,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Database\QueryException;
@@ -15,8 +16,11 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
+use App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand;
 use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
+use App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand;
+use App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
@@ -199,6 +203,81 @@ abstract class PlatformAdminTestCase extends TestCase
             'amountCents' => $invoice->amount_cents,
             ...$overrides,
         ]);
+    }
+
+    /**
+     * A pending invoice voided through the domain seam. Duplicated from
+     * BillingTestCase (module bases are independent).
+     */
+    protected function aVoidedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
+    {
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
+
+        Invoice::retrieve($invoice->getKey())
+            ->void(VoidInvoiceCommand::validateAndCreate([
+                'invoiceId' => $invoice->getKey(),
+                'voidedBy' => User::factory()->create()->getKey(),
+                'reason' => 'Issued in error - admin correction.',
+                'source' => 'admin-correction',
+            ]))
+            ->persist();
+
+        return $invoice->refresh();
+    }
+
+    /**
+     * An invoice whose first payment attempt failed, through the domain seam.
+     * Duplicated from BillingTestCase (module bases are independent).
+     */
+    protected function aFailedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
+    {
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
+
+        Invoice::retrieve($invoice->getKey())
+            ->recordPaymentFailed(RecordPaymentFailedCommand::validateAndCreate([
+                'invoiceId' => $invoice->getKey(),
+                'payHereEventId' => 'evt_fail_'.$invoice->getKey(),
+                'failureCode' => 'insufficient_funds',
+                'failureMessage' => 'Card has insufficient funds.',
+                'attemptNumber' => 1,
+            ]))
+            ->persist();
+
+        return $invoice->refresh();
+    }
+
+    /**
+     * A pending invoice with an open dispute filed through the domain seam.
+     * Duplicated from BillingTestCase (module bases are independent).
+     */
+    protected function aDisputedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
+    {
+        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
+
+        Invoice::retrieve($invoice->getKey())
+            ->fileDispute(FileInvoiceDisputeCommand::validateAndCreate([
+                'invoiceId' => $invoice->getKey(),
+                'reason' => 'This charge does not match our agreed plan.',
+                'filedBy' => User::factory()->create()->getKey(),
+            ]))
+            ->persist();
+
+        return $invoice->refresh();
+    }
+
+    /**
+     * Seam-fixture dispatch for DataProvider state matrices (§2.12) — the
+     * T7-scoped subset of BillingTestCase's dispatcher (module bases are
+     * independent); every state is arranged through real aggregate commands.
+     */
+    protected function anInvoiceInState(string $state, Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
+    {
+        return match ($state) {
+            'voided' => $this->aVoidedInvoiceFor($company, $subscription, $overrides),
+            'failed' => $this->aFailedInvoiceFor($company, $subscription, $overrides),
+            'disputed' => $this->aDisputedInvoiceFor($company, $subscription, $overrides),
+            default => throw new InvalidArgumentException("Unknown invoice state fixture [{$state}]."),
+        };
     }
 
     /**

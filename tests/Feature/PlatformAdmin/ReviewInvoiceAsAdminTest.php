@@ -114,6 +114,44 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $response->assertJsonPath('data.id', $invoice->getKey());
     }
 
+    // Edge — the admin read is status-agnostic (UC-1-122 precondition: "any
+    // company, any status"): non-paid invoices the tenant receipt endpoint
+    // would 409 stay fully readable on the admin surface.
+    #[Test]
+    #[DataProvider('provideNonPaidStates')]
+    public function when_the_invoice_is_not_paid_then_the_admin_can_still_review_it(string $state, string $expectedStatus): void
+    {
+        // Given an allowlisted admin and a tenant invoice in a non-paid state
+        $admin = User::factory()->create();
+        $this->allowlist([$admin->getKey()]);
+        [$company] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->anInvoiceInState($state, $company, $subscription);
+
+        // When the admin reviews that invoice
+        $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey());
+
+        // Then the invoice is returned with its stored status
+        $response->assertOk();
+        $response->assertJsonPath('data.status', $expectedStatus);
+    }
+
+    /**
+     * The three non-paid arrangements: two terminal-ish stored states plus the
+     * open-dispute modifier on a still-pending invoice (stored status stays
+     * `pending` — has_dispute is orthogonal, the s134 modifier-orthogonality pin).
+     *
+     * @return array<string, array{string, string}>
+     */
+    public static function provideNonPaidStates(): array
+    {
+        return [
+            'voided' => ['voided', 'voided'],
+            'failed' => ['failed', 'failed'],
+            'disputed (pending + open dispute)' => ['disputed', 'pending'],
+        ];
+    }
+
     /**
      * The six tenant-side roles of UC-1-122's Denied list (the gate's own
      * manager + unallowlisted-platform_super_admin pins live in
