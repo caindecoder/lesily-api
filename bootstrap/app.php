@@ -11,6 +11,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use App\Foundation\Http\Middleware\AuthorizeCompany;
 use App\Foundation\Http\Middleware\EnsurePermission;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
+use App\Foundation\Http\Middleware\EnsurePlatformAdmin;
 use App\Foundation\Http\Middleware\EnsureIdempotencyKey;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Exceptions\UnsupportedCountryException;
@@ -69,6 +70,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'feature' => EnsureFeatureAvailable::class,
             'permission' => EnsurePermission::class,
             'idempotency-key' => EnsureIdempotencyKey::class,
+            'platform.admin' => EnsurePlatformAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
