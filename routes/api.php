@@ -26,6 +26,7 @@ use App\Companies\Memberships\IO\Http\Controllers\InvitationsController;
 use App\Companies\Memberships\IO\Http\Controllers\MembershipsController;
 use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
 use App\Billing\Subscriptions\IO\Http\Controllers\SubscriptionsController;
+use App\Billing\Invoices\IO\Http\Controllers\PlatformAdminInvoicesController;
 use App\Companies\Memberships\IO\Http\Controllers\AcceptInvitationController;
 use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
 
@@ -274,3 +275,12 @@ Route::get('/v1/invoices', [InvoicesController::class, 'index'])
 // Pure read, no interactor (cd-invoices §5, gate I1). No throttle (OQ-1-098).
 Route::get('/v1/invoices/{invoiceId}/receipt', [InvoicesController::class, 'receipt'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:billing.view']);
+
+// A platform admin's cross-tenant invoice review (UC-1-122, slice-plans-billing
+// T7) — the FIRST real /api/v1/admin/* route: auth:sanctum + platform.admin
+// (B2 INTERIM allowlist; 404 no-info-leak, never 403), deliberately NO
+// auth.company (cross-tenant by design). Thin interactor — the audit write is
+// persistence (s129 R8/E07): ONE audit_trail row on 200, none on 404.
+// No throttle (tiered — OQ-1-098).
+Route::get('/v1/admin/invoices/{invoiceId}', [PlatformAdminInvoicesController::class, 'show'])
+    ->middleware(['auth:sanctum', 'platform.admin']);
