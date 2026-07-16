@@ -25,4 +25,11 @@ interface InvoiceRepositoryInterface
      * no-existence-leak; the designed unscoped findById rides T7's admin read).
      */
     public function findForCompany(string $companyId, string $invoiceId): ?Invoice;
+
+    /**
+     * One invoice by id across ALL tenants — deliberately unscoped: the
+     * platform-admin read (UC-1-122) is cross-tenant by design, gated by
+     * platform.admin upstream. Null when the id is unknown anywhere.
+     */
+    public function findById(string $invoiceId): ?Invoice;
 }
