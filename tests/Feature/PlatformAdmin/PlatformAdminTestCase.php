@@ -330,11 +330,12 @@ abstract class PlatformAdminTestCase extends TestCase
             'severity' => 'info',
         ]);
 
+        // recorded_at needs no assert: the column is NOT NULL, so the row
+        // matched above could not exist without it.
         $entry = AuditEntry::query()->sole();
         $this->assertNotNull($entry->ip_address);
         $this->assertNotNull($entry->user_agent);
         $this->assertNotNull($entry->request_id);
-        $this->assertNotNull($entry->recorded_at);
     }
 
     /**

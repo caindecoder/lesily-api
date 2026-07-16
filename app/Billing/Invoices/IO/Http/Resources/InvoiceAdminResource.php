@@ -92,8 +92,8 @@ class InvoiceAdminResource extends JsonResource
 
     /**
      * The owning-company summary (name, BR/EPF, plan, status — UC-1-122 Main
-     * Flow step 4). Plan/status null-safe: as-built lifecycle writes only the
-     * trial states, and plan is NULL during trial (s066 pin).
+     * Flow step 4). Plan null-safe (NULL during trial — the s066 pin); status
+     * is schema NOT NULL (default 'trial').
      *
      * @return array<string, mixed>
      */
@@ -106,7 +106,7 @@ class InvoiceAdminResource extends JsonResource
             'br_number' => $company->br_number,
             'epf_number' => $company->epf_number,
             'plan' => $company->current_billing_plan?->value,
-            'status' => $company->status?->value,
+            'status' => $company->status->value,
         ];
     }
 }

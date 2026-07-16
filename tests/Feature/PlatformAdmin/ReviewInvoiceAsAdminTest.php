@@ -167,6 +167,8 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
         $invoice = $this->aPaidInvoiceFor($company, $subscription);
         [$planLine, $creditLine] = $invoice->lineItems()->get()->all();
+        $paidAt = $invoice->paid_at;
+        $this->assertNotNull($paidAt);
 
         // When the admin reviews the invoice
         $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey());
@@ -183,7 +185,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
             'currency' => 'LKR',
             'has_dispute' => false,
             'source' => 'subscribe',
-            'paid_at' => $invoice->paid_at->toJSON(),
+            'paid_at' => $paidAt->toJSON(),
             'payhere_transaction_id' => 'txn_'.$invoice->getKey(),
             'failed_at' => null,
             'failure_count' => 0,

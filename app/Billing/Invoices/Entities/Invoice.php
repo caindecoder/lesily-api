@@ -17,6 +17,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * Aggregates\Invoice). No SoftDeletes: status is the source of truth for a gone
  * invoice (voided/refunded are terminal); rows are never physically deleted
  * (Companies Act 10-yr retention, anonymized on Company hard-delete per R-038).
+ *
+ * @property-read Company $company company_id is NOT NULL + restrictOnDelete —
+ *                the owning tenant always exists
  */
 class Invoice extends Model
 {
