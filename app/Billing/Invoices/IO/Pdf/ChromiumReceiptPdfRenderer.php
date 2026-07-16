@@ -23,10 +23,19 @@ class ChromiumReceiptPdfRenderer implements ReceiptPdfRendererInterface
             $base64 = Pdf::view('receipts.invoice', ['invoice' => $invoice->loadMissing('lineItems')])
                 ->format(Format::A4)
                 ->base64();
-
-            return base64_decode($base64);
         } catch (Throwable $e) {
+            // Throwable (not Exception) is deliberate: even a programming
+            // \Error inside the engine must surface as the JSON 503, never a
+            // truncated stream; the cause stays chained + reported for ops.
             throw new ReceiptRenderingFailedException('Receipt PDF rendering failed.', previous: $e);
         }
+
+        $bytes = base64_decode($base64);
+
+        if (! str_starts_with($bytes, '%PDF')) {
+            throw new ReceiptRenderingFailedException('Rendering produced an incomplete PDF document.');
+        }
+
+        return $bytes;
     }
 }

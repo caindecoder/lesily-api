@@ -118,4 +118,15 @@ class InvoiceFactory extends Factory
     {
         return $this->state(['has_dispute' => true]);
     }
+
+    /**
+     * An intentionally CORRUPT paid row — receipt-eligible but missing its
+     * paid timestamp. Integrity drift only a bug could produce: the domain
+     * seam always stamps paid_at, so this state exists solely to exercise the
+     * UC-1-121 7c pre-render snapshot gate (s135 F-e).
+     */
+    public function corruptMissingPaidTimestamp(): static
+    {
+        return $this->paid()->state(['paid_at' => null]);
+    }
 }

@@ -61,6 +61,16 @@ jobs:
           coverage: xdebug
       - run: cp .env.github .env
       - run: composer install --no-interaction --prefer-dist
+      # puppeteer@25 requires Node >=22.12 — pin it rather than trusting the
+      # runner default (code-reviewer I1, s135); caches cut the per-job
+      # Chromium re-download (M3).
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: 'npm' }
+      - name: Cache puppeteer browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ hashFiles('package-lock.json') }}
       - name: Install Node deps (puppeteer — Browsershot receipt rendering, UC-1-121)
         run: npm ci
       - run: php artisan key:generate
@@ -129,6 +139,16 @@ jobs:
           php-version: '8.4'
           coverage: xdebug
       - run: composer install --no-interaction --prefer-dist
+      # puppeteer@25 requires Node >=22.12 — pin it rather than trusting the
+      # runner default (code-reviewer I1, s135); caches cut the per-job
+      # Chromium re-download (M3).
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: 'npm' }
+      - name: Cache puppeteer browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ hashFiles('package-lock.json') }}
       - name: Install Node deps (puppeteer — Browsershot receipt rendering, UC-1-121)
         run: npm ci
       - run: cp .env.github .env
@@ -175,6 +195,16 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with: { php-version: '8.4', coverage: xdebug }
       - run: composer install --no-interaction --prefer-dist
+      # puppeteer@25 requires Node >=22.12 — pin it rather than trusting the
+      # runner default (code-reviewer I1, s135); caches cut the per-job
+      # Chromium re-download (M3).
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: 'npm' }
+      - name: Cache puppeteer browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ hashFiles('package-lock.json') }}
       - name: Install Node deps (puppeteer — Browsershot receipt rendering, UC-1-121)
         run: npm ci
       - run: cp .env.github .env

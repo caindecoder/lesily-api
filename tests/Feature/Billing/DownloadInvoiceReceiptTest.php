@@ -2,14 +2,19 @@
 
 namespace Tests\Feature\Billing;
 
+use Mockery;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
+use Spatie\LaravelPdf\PdfBuilder;
+use Spatie\LaravelPdf\Facades\Pdf;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
+use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
 
 /**
  * The paid-invoice PDF receipt (UC-1-121, slice-plans-billing T5):
@@ -196,13 +201,58 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
     }
 
     #[Test]
+    public function when_rendering_engine_fails_then_receipt_generation_unavailable_response(): void
+    {
+        // Given an owner with a paid invoice and a PDF engine that throws inside
+        // the REAL adapter (the facade IS the library boundary — E23; no stub)
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        Pdf::shouldReceive('view')->once()->andThrow(new RuntimeException('Chromium process died'));
+        Exceptions::fake();
+
+        // When they download the receipt
+        $response = $this->downloadReceiptAs($owner, $company, $invoice->getKey());
+
+        // Then the adapter translates the engine failure into the app-owned 503
+        // with the original cause chained for ops and never leaked to the client
+        // (code-reviewer C1 — pins the firewall's translation contract)
+        $this->assertReceiptGenerationUnavailable($response);
+        Exceptions::assertReported(
+            fn (ReceiptRenderingFailedException $e): bool => $e->getPrevious() instanceof RuntimeException
+        );
+    }
+
+    #[Test]
+    public function when_rendering_engine_returns_no_document_then_receipt_generation_unavailable_response(): void
+    {
+        // Given an owner with a paid invoice and a PDF engine that yields an
+        // empty render instead of throwing (library-misbehavior edge)
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        $emptyRender = Mockery::mock(PdfBuilder::class);
+        $emptyRender->shouldReceive('format')->andReturnSelf();
+        $emptyRender->shouldReceive('base64')->andReturn('');
+        Pdf::shouldReceive('view')->andReturn($emptyRender);
+
+        // When they download the receipt
+        $response = $this->downloadReceiptAs($owner, $company, $invoice->getKey());
+
+        // Then the incomplete document is refused as unavailable — a client
+        // must never receive a 200 with an empty/garbage "PDF" (code-reviewer
+        // M4 defense-in-depth on the JSON-never-truncated contract)
+        $this->assertReceiptGenerationUnavailable($response);
+    }
+
+    #[Test]
     public function when_paid_invoice_snapshot_is_corrupt_then_generic_failure_reported(): void
     {
         // Given a paid invoice whose snapshot lost its paid timestamp — integrity
-        // drift only a bug could cause (factory row: the domain seam structurally
-        // cannot produce corrupt state)
+        // drift only a bug could cause (factory state: the domain seam
+        // structurally cannot produce corrupt rows)
         [$company, $owner] = $this->aCompanyWithMember('owner');
-        $invoice = InvoiceReadModel::factory()->forCompany($company)->paid()->create(['paid_at' => null]);
+        $invoice = InvoiceReadModel::factory()->forCompany($company)->corruptMissingPaidTimestamp()->create();
         $this->bindMustNotRenderGuard();
         Exceptions::fake();
 
