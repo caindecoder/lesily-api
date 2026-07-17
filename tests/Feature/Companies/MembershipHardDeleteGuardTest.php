@@ -11,7 +11,11 @@ use Illuminate\Database\QueryException;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
-class CompanyMembershipTest extends CompaniesTestCase
+/**
+ * @testclass-carveout: infra-primitive — DB FK RESTRICT + pivot-UUID schema pins;
+ * no application seam issues hard deletes, and `database/` sits outside Infection.
+ */
+class MembershipHardDeleteGuardTest extends CompaniesTestCase
 {
     use RefreshDatabase;
 
