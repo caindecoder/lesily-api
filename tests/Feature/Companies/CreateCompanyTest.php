@@ -3,14 +3,20 @@
 namespace Tests\Feature\Companies;
 
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Aggregates\Company;
+use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Events\CompanyCreated;
 use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Companies\Events\CompanySettingsCreated;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Companies\Entities\Company as CompanyReadModel;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use App\Companies\Exceptions\CompanyAlreadyExistsException;
+use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -116,5 +122,94 @@ class CreateCompanyTest extends CompaniesTestCase
             'country' => 'LK',
             'ownerUserId' => '019eb10c-0000-7000-8000-000000000000',
         ];
+    }
+
+    // Happy — genesis: creating a company opens a 30-day trial scoped to its own
+    // tenant, carrying the full registration payload (UC-1-031, slice C3/C4),
+    // seeding the settings from the country defaults (CD-1-02), projecting the
+    // trial row with the owner linked (OQ-1-105), and minting the owner's
+    // membership pivot UUID (ERD-1-01, R-042) — one behavioral walk, write side
+    // and read side together (conv-plan sec 2.14 Rule A).
+    #[Test]
+    public function when_a_company_is_created_then_the_genesis_is_stored_and_projected_in_its_own_company_scope_opening_a_30_day_trial(): void
+    {
+        // Given a fixed point in time, a new company id, and an owner-signup command
+        $this->travelTo('2026-06-01 00:00:00');
+        $companyId = (string) Str::uuid();
+        $command = $this->buildCreateCompanyCommand($companyId);
+
+        // When the company is created and persisted (the projectors run synchronously)
+        Company::retrieve($companyId)->create($command)->persist();
+
+        // Then the write side stores exactly the two genesis events, scoped to the
+        // company, opening the 30-day trial and mirroring the command...
+        $this->assertSame(2, LesilyStoredEvent::query()->whereForCompany($companyId)->count());
+
+        $created = LesilyStoredEvent::query()->whereForCompany($companyId)
+            ->where('event_class', CompanyCreated::class)->sole();
+        $settings = LesilyStoredEvent::query()->whereForCompany($companyId)
+            ->where('event_class', CompanySettingsCreated::class)->sole();
+
+        $this->assertCompanyCreatedEventOpensTrial($created, '2026-07-01T00:00:00+00:00');
+        $this->assertEventPayloadMatchesCommand($created, $command);
+        $this->assertSettingsSeededFromCountryDefaults($settings);
+
+        // ...and the read side projects the same genesis: the trial row with the
+        // owner linked, plus the owner's membership pivot keyed by a UUID
+        $row = CompanyReadModel::findOrFail($companyId);
+
+        $this->assertCompanyOnTrial($row, 'Contoso', '2026-07-01 00:00:00');
+        $this->assertRegistrationProjected($row, $command);
+        $this->assertOwnerMembershipPivotIsUuid($companyId, $command->ownerUserId);
+    }
+
+    protected function assertCompanyCreatedEventOpensTrial(EloquentStoredEvent $event, string $expectedTrialEndsAt): void
+    {
+        $this->assertSame(CompanyCreated::class, $event->event_class);
+        $this->assertSame($expectedTrialEndsAt, $event->event_properties['trialEndsAt']);
+    }
+
+    protected function assertEventPayloadMatchesCommand(EloquentStoredEvent $event, CreateCompanyCommand $command): void
+    {
+        $this->assertSame($command->name, $event->event_properties['name']);
+        $this->assertSame($command->brNumber, $event->event_properties['brNumber']);
+        $this->assertSame($command->epfNumber, $event->event_properties['epfNumber']);
+        $this->assertSame($command->country, $event->event_properties['country']);
+        $this->assertSame($command->ownerUserId, $event->event_properties['ownerUserId']);
+    }
+
+    protected function assertSettingsSeededFromCountryDefaults(EloquentStoredEvent $event): void
+    {
+        $this->assertSame(CompanySettingsCreated::class, $event->event_class);
+        $this->assertSame('LKR', $event->event_properties['currency']);
+        $this->assertSame('Asia/Colombo', $event->event_properties['timezone']);
+        $this->assertSame('en', $event->event_properties['localeDefault']);
+    }
+
+    protected function assertCompanyOnTrial(CompanyReadModel $row, string $name, string $trialEndsAt): void
+    {
+        $this->assertSame($name, $row->name);
+        $this->assertSame(CompanyStatus::Trial, $row->status);
+        $this->assertNull($row->current_billing_plan);
+        $this->assertSame($trialEndsAt, $row->trial_ends_at?->toDateTimeString());
+    }
+
+    protected function assertRegistrationProjected(CompanyReadModel $row, CreateCompanyCommand $command): void
+    {
+        $this->assertSame($command->brNumber, $row->br_number);
+        $this->assertSame($command->epfNumber, $row->epf_number);
+        $this->assertSame($command->country, $row->country);
+        $this->assertSame($command->ownerUserId, $row->owner_id);
+    }
+
+    protected function assertOwnerMembershipPivotIsUuid(string $companyId, string $ownerUserId): void
+    {
+        $membershipId = DB::table('company_user')
+            ->where('company_id', $companyId)
+            ->where('user_id', $ownerUserId)
+            ->value('id');
+
+        $this->assertIsString($membershipId);
+        $this->assertTrue(Str::isUuid($membershipId), 'company_user.id must be a char(36) UUID (ERD-1-01, R-042)');
     }
 }
