@@ -10,6 +10,7 @@ use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use App\Companies\Events\CompanyTrialExpired;
+use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Companies\CreatesTrialCompanies;
@@ -19,8 +20,14 @@ use App\Companies\Entities\Company as CompanyReadModel;
 use App\Billing\Subscriptions\Events\SubscriptionTrialEnded;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Billing\Subscriptions\UseCases\Commands\ApplyTrialExpirationCommand;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
+use App\Billing\Subscriptions\UseCases\Interactors\ApplyTrialExpirationInteractor;
 
+/**
+ * @testclass-carveout: console-command — the artifact IS the behavior (the trials:expire
+ * scheduled scan; conv-plan §2.14 Rule B).
+ */
 class ExpireTrialsCommandTest extends BillingTestCase
 {
     use CreatesTrialCompanies;
@@ -69,6 +76,59 @@ class ExpireTrialsCommandTest extends BillingTestCase
         // Then nothing is re-expired — zero reported and each expiry event recorded exactly once
         $this->runExpireTrials()->expectsOutputToContain('0 trial(s) expired.')->assertSuccessful();
         $this->assertExpiredExactlyOnce($companyId);
+    }
+
+    // Sad/guard (UC-1-049 Sc5 guard) — the aggregate no-op arms, driven through the
+    // interactor DIRECTLY: the scan's repository filter (status='trial') excludes a
+    // cancelled subscription upstream, so these arms are console-unreachable — they exist
+    // for future callers and replay integrity (Subscription::endTrial / Company::trialExpire
+    // early returns). Relocated from TrialExpiryTest (retrofit B3).
+    #[Test]
+    public function when_an_already_expired_trial_is_expired_again_then_nothing_changes(): void
+    {
+        // Given a company and subscription whose trial has already been expired once
+        $companyId = (string) Str::uuid();
+        $subscriptionId = (string) Str::uuid();
+        $this->givenTrialEndingAt($companyId, $subscriptionId, CarbonImmutable::now()->addDays(30));
+        app(ApplyTrialExpirationInteractor::class)->execute(
+            ApplyTrialExpirationCommand::validateAndCreate(['companyId' => $companyId, 'subscriptionId' => $subscriptionId]),
+        );
+
+        // When the trial-expiry interactor runs again for them
+        app(ApplyTrialExpirationInteractor::class)->execute(
+            ApplyTrialExpirationCommand::validateAndCreate(['companyId' => $companyId, 'subscriptionId' => $subscriptionId]),
+        );
+
+        // Then nothing changes — each expiry event was recorded exactly once
+        $this->assertExpiredExactlyOnce($companyId);
+    }
+
+    // Sad (use-case boundary) — the expiry command validates its identifiers. Relocated from
+    // ApplyTrialExpirationCommandTest (retrofit B3): the scan reads real uuids per row, so
+    // invalid input is unreachable from the console — the rules guard future callers.
+    // expectException form per conv-plan sec 2.2 Rule 9: the throw IS the last observable
+    // (validateAndCreate never constructs; there is no post-throw state).
+    #[Test]
+    #[DataProvider('provideNonUuidIdentifiers')]
+    public function when_an_expiry_command_has_a_non_uuid_identifier_then_it_is_rejected(string $companyId, string $subscriptionId): void
+    {
+        $this->expectException(ValidationException::class);
+
+        ApplyTrialExpirationCommand::validateAndCreate([
+            'companyId' => $companyId,
+            'subscriptionId' => $subscriptionId,
+        ]);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function provideNonUuidIdentifiers(): array
+    {
+        return [
+            'non-uuid company id' => ['not-a-uuid', '22222222-2222-4222-8222-222222222222'],
+            'non-uuid subscription id' => ['11111111-1111-4111-8111-111111111111', 'not-a-uuid'],
+        ];
     }
 
     // Edge/selection (UC-1-049 Sc1 selection) — a company is expired only when its trial

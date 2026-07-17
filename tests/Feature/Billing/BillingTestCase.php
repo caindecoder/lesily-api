@@ -274,8 +274,8 @@ abstract class BillingTestCase extends TestCase
 
     /**
      * A trial subscription projected for $company through the domain seam —
-     * the genesis event path production takes (SubscriptionProjectionTest
-     * precedent), never a direct row write.
+     * the genesis event path production takes (StartTrialTest precedent),
+     * never a direct row write.
      */
     protected function aTrialSubscriptionFor(Company $company, CarbonImmutable $trialEndsAt): SubscriptionReadModel
     {
