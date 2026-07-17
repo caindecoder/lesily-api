@@ -182,7 +182,7 @@ The Laravel Boost block above is auto-generated and covers Laravel/PHPUnit frame
 
 **Key rules (locked session 054 — 2026-05-28):**
 
-- **§2.2 Rules 1-8** — Test conventions: Sad → Edge → Happy ordering; grouped assertion helpers (2-5 aspects, max 3 params); shared test data via `setUp()`; no HTTP status codes in test names (Rule 6 + grep enforcement); one scenario per test method (Rule 7); no transport identifiers in test names (Rule 8).
+- **§2.2 Rules 1-9** — Test conventions: Sad → Edge → Happy ordering; grouped assertion helpers (2-5 aspects, max 3 params); shared test data via `setUp()`; no HTTP status codes in test names (Rule 6 + grep enforcement); one scenario per test method (Rule 7); no transport identifiers in test names (Rule 8); exception-test idiom — `expectException` ONLY when the throw is the scenario's last observable, try/`fail()`/catch + post-throw state asserts otherwise (Rule 9, locked s138).
 - **§2.8** — Style baselines: LeaveDates primary, subscription-platform parity.
 - **§2.9** — `php artisan make:*` mandatory for ALL framework class scaffolding (pass `--no-interaction`).
 - **§2.10** — Abstract base TestCase per chunk module (`FoundationTestCase`, `EmployeeTestCase`, etc.) at `tests/Feature/{Module}/{Module}TestCase.php`.
