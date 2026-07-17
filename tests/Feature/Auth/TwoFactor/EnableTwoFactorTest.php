@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth\TwoFactor;
 
 use App\Models\User;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
@@ -17,6 +18,7 @@ use App\Foundation\Auth\Events\User2FAEnabled;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
+use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class EnableTwoFactorTest extends AuthTestCase
@@ -88,6 +90,21 @@ class EnableTwoFactorTest extends AuthTestCase
         $response->assertStatus(409);
         $response->assertJsonPath('error_code', 'TWO_FACTOR_ALREADY_ENABLED');
         $this->assertNull(Cache::get("2fa-setup:{$user->id}"), 'A rejected re-enrollment must stage no pending secret.');
+    }
+
+    // Sad — 2FA confirm is idempotent on the aggregate: re-confirming records no second marker.
+    #[Test]
+    public function when_two_factor_is_already_confirmed_then_re_confirming_records_no_further_change(): void
+    {
+        // Given a user who has already confirmed 2FA
+        $userId = (string) Str::uuid();
+        UserAggregate::retrieve($userId)->confirmTwoFactor()->persist();
+
+        // When 2FA is confirmed again
+        UserAggregate::retrieve($userId)->confirmTwoFactor()->persist();
+
+        // Then only one enable marker was ever recorded
+        $this->assertSame(1, LesilyStoredEvent::query()->where('event_class', User2FAEnabled::class)->count());
     }
 
     #[Test]

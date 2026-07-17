@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use RuntimeException;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -191,6 +192,33 @@ class RegisterOwnerSadPathTest extends AuthTestCase
         $response->assertStatus(500);
         $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
         $this->assertNoNewAccounts($usersBefore, $companiesBefore);
+    }
+
+    // Edge (translation seam) — a unique violation on a constraint outside the
+    // registration field set (email / BR / EPF) must NOT be disguised as a
+    // registration conflict. This exercises the REAL guard's unmapped arm — the
+    // 500 walk above stubs the translation, so it proves only the caller's re-raise.
+    #[Test]
+    public function when_a_unique_violation_is_on_an_unmapped_constraint_then_no_registration_conflict_is_translated(): void
+    {
+        // Given a unique violation on some constraint the guard does not map
+        $violation = $this->uniqueViolationOnIndex('some_other_unique');
+
+        // When the guard is asked to translate it into a registration conflict
+        $conflict = (new RegistrationUniquenessGuard)->conflictFor($violation);
+
+        // Then there is no conflict to raise — the caller re-throws the original error
+        $this->assertNull($conflict);
+    }
+
+    protected function uniqueViolationOnIndex(string $index): UniqueConstraintViolationException
+    {
+        return (new UniqueConstraintViolationException(
+            'mysql',
+            'insert into `companies` (`x`) values (?)',
+            ['x'],
+            new RuntimeException("Duplicate entry 'x' for key '{$index}'"),
+        ))->setIndex($index);
     }
 
     // Edge (atomic rollback) — an unsupported country passes shape validation but
