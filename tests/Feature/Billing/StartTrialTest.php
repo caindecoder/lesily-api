@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
+use App\Billing\Subscriptions\Events\SubscriptionTrialStarted;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
@@ -54,6 +55,24 @@ class StartTrialTest extends BillingTestCase
         }
     }
 
+    // Happy — genesis: starting a trial stores the trial-started event scoped to the
+    // owning company AND projects the trial subscription row, in one walk.
+    #[Test]
+    public function when_a_trial_is_started_then_the_genesis_is_stored_in_the_owning_company_scope_and_projected(): void
+    {
+        // Given a fixed point in time and a new subscription id for a company (setUp)
+
+        // When the trial is started and persisted
+        $this->startTrial();
+
+        // Then exactly one event is stored in the owning company scope, and the row is projected
+        $event = LesilyStoredEvent::query()->whereForCompany($this->companyId)->sole();
+        $row = SubscriptionReadModel::findOrFail($this->subscriptionId);
+
+        $this->assertTrialStartedEventRecorded($event);
+        $this->assertTrialSubscriptionProjected($row);
+    }
+
     protected function startTrial(): void
     {
         $command = StartTrialCommand::validateAndCreate([
@@ -68,5 +87,19 @@ class StartTrialTest extends BillingTestCase
     {
         $this->assertSame(1, LesilyStoredEvent::query()->whereForCompany($this->companyId)->count());
         $this->assertSame(SubscriptionStatus::Trial, SubscriptionReadModel::findOrFail($this->subscriptionId)->status);
+    }
+
+    protected function assertTrialStartedEventRecorded(LesilyStoredEvent $event): void
+    {
+        $this->assertSame(SubscriptionTrialStarted::class, $event->event_class);
+        $this->assertSame($this->companyId, $event->event_properties['companyId']);
+        $this->assertSame('2026-07-01T00:00:00+00:00', $event->event_properties['trialEndsAt']);
+    }
+
+    protected function assertTrialSubscriptionProjected(SubscriptionReadModel $row): void
+    {
+        $this->assertSame($this->companyId, $row->company_id);
+        $this->assertSame(SubscriptionStatus::Trial, $row->status);
+        $this->assertSame('2026-07-01 00:00:00', $row->trial_ends_at?->toDateTimeString());
     }
 }
