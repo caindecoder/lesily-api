@@ -84,6 +84,23 @@ class DisableTwoFactorTest extends AuthTestCase
         $this->assertSame(2, $user->tokens()->count(), 'A refused disable must revoke no sessions.');
     }
 
+    // Sad — disabling resets the enrollment flag, so a later re-enable is recorded rather
+    // than swallowed by confirmTwoFactor's already-enabled guard (proves applyUser2FADisabled).
+    #[Test]
+    public function when_two_factor_is_re_enabled_after_being_disabled_then_a_new_enable_marker_is_recorded(): void
+    {
+        // Given a user who enabled then disabled 2FA
+        $userId = (string) Str::uuid();
+        UserAggregate::retrieve($userId)->confirmTwoFactor()->persist();
+        UserAggregate::retrieve($userId)->disableTwoFactor()->persist();
+
+        // When they enable 2FA again
+        UserAggregate::retrieve($userId)->confirmTwoFactor()->persist();
+
+        // Then a second enable marker is recorded — the disable reset the flag
+        $this->assertSame(2, LesilyStoredEvent::query()->where('event_class', User2FAEnabled::class)->count());
+    }
+
     #[Test]
     public function when_the_correct_password_is_submitted_then_two_factor_is_disabled(): void
     {
@@ -131,23 +148,6 @@ class DisableTwoFactorTest extends AuthTestCase
 
         // Then the disable succeeds, the other device no longer authenticates, and the current session survives
         $this->assertOtherSessionsRevoked($response, $current->plainTextToken, $other->plainTextToken);
-    }
-
-    // Sad — disabling resets the enrollment flag, so a later re-enable is recorded rather
-    // than swallowed by confirmTwoFactor's already-enabled guard (proves applyUser2FADisabled).
-    #[Test]
-    public function when_two_factor_is_re_enabled_after_being_disabled_then_a_new_enable_marker_is_recorded(): void
-    {
-        // Given a user who enabled then disabled 2FA
-        $userId = (string) Str::uuid();
-        UserAggregate::retrieve($userId)->confirmTwoFactor()->persist();
-        UserAggregate::retrieve($userId)->disableTwoFactor()->persist();
-
-        // When they enable 2FA again
-        UserAggregate::retrieve($userId)->confirmTwoFactor()->persist();
-
-        // Then a second enable marker is recorded — the disable reset the flag
-        $this->assertSame(2, LesilyStoredEvent::query()->where('event_class', User2FAEnabled::class)->count());
     }
 
     #[Test]
