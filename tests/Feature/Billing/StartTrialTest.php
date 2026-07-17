@@ -9,6 +9,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
 use App\Billing\Subscriptions\Events\SubscriptionTrialStarted;
+use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
@@ -89,7 +90,7 @@ class StartTrialTest extends BillingTestCase
         $this->assertSame(SubscriptionStatus::Trial, SubscriptionReadModel::findOrFail($this->subscriptionId)->status);
     }
 
-    protected function assertTrialStartedEventRecorded(LesilyStoredEvent $event): void
+    protected function assertTrialStartedEventRecorded(EloquentStoredEvent $event): void
     {
         $this->assertSame(SubscriptionTrialStarted::class, $event->event_class);
         $this->assertSame($this->companyId, $event->event_properties['companyId']);
