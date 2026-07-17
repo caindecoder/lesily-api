@@ -5,6 +5,8 @@ namespace Tests\Feature\Companies;
 use Illuminate\Support\Str;
 use App\Companies\Aggregates\Company;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Validation\ValidationException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
@@ -66,5 +68,53 @@ class CreateCompanyTest extends CompaniesTestCase
         return CreateCompanyCommand::validateAndCreate(
             ['country' => $country] + $this->buildCreateCompanyCommand($companyId)->toArray()
         );
+    }
+
+    // Sad — the command rejects shape-invalid input at the ::validateAndCreate
+    // seam. The max:255 bounds are the poison-event guard (an over-long value
+    // would record a CompanyCreated whose projection can never succeed); the
+    // required-field rows live at the registration HTTP seam
+    // (RegisterOwnerSadPathTest), and BR/EPF uniqueness is its 409 guard.
+    #[Test]
+    #[DataProvider('provideInvalidRegistrationInput')]
+    public function when_a_create_company_command_is_built_with_invalid_input_then_it_is_rejected(
+        string $field,
+        string $value,
+    ): void {
+        // Given a valid payload with one field invalidated
+        $input = array_merge(self::validInput(), [$field => $value]);
+
+        // When the command is built / Then validation rejects it
+        $this->expectException(ValidationException::class);
+
+        CreateCompanyCommand::validateAndCreate($input);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function provideInvalidRegistrationInput(): array
+    {
+        return [
+            'name longer than its column' => ['name', str_repeat('a', 256)],
+            'brNumber longer than its column' => ['brNumber', str_repeat('b', 256)],
+            'epfNumber longer than its column' => ['epfNumber', str_repeat('e', 256)],
+            'country longer than 2 chars' => ['country', 'LKA'],
+            'ownerUserId not a uuid' => ['ownerUserId', 'not-a-uuid'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected static function validInput(): array
+    {
+        return [
+            'name' => 'Contoso',
+            'brNumber' => 'PV-12345678',
+            'epfNumber' => 'A-1234567',
+            'country' => 'LK',
+            'ownerUserId' => '019eb10c-0000-7000-8000-000000000000',
+        ];
     }
 }
