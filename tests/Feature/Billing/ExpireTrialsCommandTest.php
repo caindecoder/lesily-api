@@ -10,6 +10,7 @@ use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use App\Companies\Events\CompanyTrialExpired;
+use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Companies\CreatesTrialCompanies;
@@ -100,6 +101,34 @@ class ExpireTrialsCommandTest extends BillingTestCase
 
         // Then nothing changes — each expiry event was recorded exactly once
         $this->assertExpiredExactlyOnce($companyId);
+    }
+
+    // Sad (use-case boundary) — the expiry command validates its identifiers. Relocated from
+    // ApplyTrialExpirationCommandTest (retrofit B3): the scan reads real uuids per row, so
+    // invalid input is unreachable from the console — the rules guard future callers.
+    // expectException form per conv-plan sec 2.2 Rule 9: the throw IS the last observable
+    // (validateAndCreate never constructs; there is no post-throw state).
+    #[Test]
+    #[DataProvider('provideNonUuidIdentifiers')]
+    public function when_an_expiry_command_has_a_non_uuid_identifier_then_it_is_rejected(string $companyId, string $subscriptionId): void
+    {
+        $this->expectException(ValidationException::class);
+
+        ApplyTrialExpirationCommand::validateAndCreate([
+            'companyId' => $companyId,
+            'subscriptionId' => $subscriptionId,
+        ]);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function provideNonUuidIdentifiers(): array
+    {
+        return [
+            'non-uuid company id' => ['not-a-uuid', '22222222-2222-4222-8222-222222222222'],
+            'non-uuid subscription id' => ['11111111-1111-4111-8111-111111111111', 'not-a-uuid'],
+        ];
     }
 
     // Edge/selection (UC-1-049 Sc1 selection) — a company is expired only when its trial
