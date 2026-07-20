@@ -27,10 +27,10 @@ class Google2faTotpVerifierTest extends TestCase
         $secret = $verifier->generateSecret();
 
         // When a structurally-impossible code is checked
-        $result = $verifier->verify($secret, 'not-a-totp-code');
+        $verified = $verifier->verify($secret, 'not-a-totp-code');
 
         // Then it does not verify
-        $this->assertFalse($result);
+        $this->assertFalse($verified);
     }
 
     #[Test]
