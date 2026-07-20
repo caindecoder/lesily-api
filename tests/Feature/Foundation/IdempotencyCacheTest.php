@@ -5,6 +5,11 @@ namespace Tests\Feature\Foundation;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Http\Services\IdempotencyCache;
 
+/**
+ * @testclass-carveout: infra-primitive — crash-recovery TTL expiry is
+ * unreachable via HTTP (a request cannot crash mid-flight in-process;
+ * OQ-1-114 R2 precedent).
+ */
 class IdempotencyCacheTest extends FoundationTestCase
 {
     #[Test]

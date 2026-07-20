@@ -10,6 +10,11 @@ use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\RolesPermissions\Services\PermissionEvaluator;
 
+/**
+ * @testclass-carveout: infra-primitive — the R7 soft-delete gate is
+ * HTTP-unreachable (auth.company denies a removed member upstream), so this
+ * seam is the only exercise of the evaluator's pivot filter.
+ */
 class PermissionEvaluatorTest extends FoundationTestCase
 {
     use RefreshDatabase;

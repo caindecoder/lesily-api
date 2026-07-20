@@ -7,7 +7,12 @@ use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 
-class CacheLoginChallengeStoreTest extends TestCase
+/**
+ * @testclass-carveout: infra-primitive — cache-seam TTL/attempt mechanics of the
+ * 2FA challenge port, provable only with time-travel at the store seam; no HTTP
+ * walk can pin expiry/decrement timing deterministically.
+ */
+class LoginChallengeStoreTest extends TestCase
 {
     #[Test]
     public function when_a_challenge_has_expired_then_it_no_longer_resolves(): void
