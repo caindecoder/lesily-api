@@ -119,6 +119,22 @@ class RegisterOwnerTest extends AuthTestCase
         ];
     }
 
+    // Sad — a registration whose client IP can't be resolved (no REMOTE_ADDR) is rejected
+    // with a clean 422, NOT a 500: the controller casts $request->ip() to string, so a null
+    // IP becomes '' and fails the consent record's `required` ip rule (a validation error).
+    // Without the cast a null reaches the interactor's `string $clientIp` and TypeErrors -> 500.
+    #[Test]
+    public function when_the_client_ip_is_undeterminable_then_registration_is_rejected_as_invalid(): void
+    {
+        // Given a guest whose request carries no resolvable client IP
+        // When they register
+        $response = $this->withServerVariables(['REMOTE_ADDR' => null])
+            ->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
+
+        // Then it is rejected as a validation error (a clean 4xx), not a server crash
+        $this->assertValidationRejected($response, 'ip');
+    }
+
     // Edge (race backstop) — two concurrent signups can both pass the pre-tx
     // check-then-act guard; the second to persist hits the DB UNIQUE constraint.
     // That backstop must surface the same field-specific 409, never a 500.
@@ -224,6 +240,42 @@ class RegisterOwnerTest extends AuthTestCase
         $response->assertStatus(422);
     }
 
+    // Edge — register is UA-derived (no deviceName on the register contract, per design):
+    // a client-supplied deviceName smuggled into the body is ignored in favour of the
+    // User-Agent, so the signup seam can't be used to set an arbitrary token name.
+    #[Test]
+    public function when_an_owner_registers_with_a_supplied_device_name_then_it_is_ignored_in_favour_of_the_user_agent(): void
+    {
+        // Given a guest registering from a device, also smuggling a deviceName into the body
+        // When they register
+        $this->withHeader('User-Agent', 'Mozilla/5.0 (TestAgent)')
+            ->postJson('/api/v1/auth/register', [
+                ...$this->validRegistrationPayload(),
+                'deviceName' => 'Smuggled Device',
+            ])->assertCreated();
+
+        // Then the supplied name is ignored — the token is named for the User-Agent
+        $owner = User::query()->where('email', 'nimal@contoso.lk')->sole();
+        $this->assertTokenNamed($owner, 'Mozilla/5.0 (TestAgent)');
+    }
+
+    // Edge — registration mints the owner's first session, so the device name + "last
+    // seen" stamp apply here too (register has no deviceName field — UA-derived).
+    #[Test]
+    public function when_an_owner_registers_then_the_token_is_named_for_the_device_and_last_logged_at_is_stamped(): void
+    {
+        // Given a guest registering from a device (the clock is frozen in setUp)
+        // When they register
+        $this->withHeader('User-Agent', 'Mozilla/5.0 (TestAgent)')
+            ->postJson('/api/v1/auth/register', $this->validRegistrationPayload())
+            ->assertCreated();
+
+        // Then the owner's session token is named for the device and last_logged_at is stamped
+        $owner = User::query()->where('email', 'nimal@contoso.lk')->sole();
+        $this->assertTokenNamed($owner, 'Mozilla/5.0 (TestAgent)');
+        $this->assertLastLoggedAtStamped($owner);
+    }
+
     // Happy — the walking skeleton: one POST stands up the whole owner account.
     #[Test]
     public function when_a_valid_owner_registers_then_the_company_starts_its_trial_with_the_owner_enrolled(): void
@@ -258,58 +310,6 @@ class RegisterOwnerTest extends AuthTestCase
         // Then it authenticates the owner and binds their company
         $response->assertOk();
         $response->assertJsonPath('company_id', $companyId);
-    }
-
-    // Edge — registration mints the owner's first session, so the device name + "last
-    // seen" stamp apply here too (register has no deviceName field — UA-derived).
-    #[Test]
-    public function when_an_owner_registers_then_the_token_is_named_for_the_device_and_last_logged_at_is_stamped(): void
-    {
-        // Given a guest registering from a device (the clock is frozen in setUp)
-        // When they register
-        $this->withHeader('User-Agent', 'Mozilla/5.0 (TestAgent)')
-            ->postJson('/api/v1/auth/register', $this->validRegistrationPayload())
-            ->assertCreated();
-
-        // Then the owner's session token is named for the device and last_logged_at is stamped
-        $owner = User::query()->where('email', 'nimal@contoso.lk')->sole();
-        $this->assertTokenNamed($owner, 'Mozilla/5.0 (TestAgent)');
-        $this->assertLastLoggedAtStamped($owner);
-    }
-
-    // Edge — register is UA-derived (no deviceName on the register contract, per design):
-    // a client-supplied deviceName smuggled into the body is ignored in favour of the
-    // User-Agent, so the signup seam can't be used to set an arbitrary token name.
-    #[Test]
-    public function when_an_owner_registers_with_a_supplied_device_name_then_it_is_ignored_in_favour_of_the_user_agent(): void
-    {
-        // Given a guest registering from a device, also smuggling a deviceName into the body
-        // When they register
-        $this->withHeader('User-Agent', 'Mozilla/5.0 (TestAgent)')
-            ->postJson('/api/v1/auth/register', [
-                ...$this->validRegistrationPayload(),
-                'deviceName' => 'Smuggled Device',
-            ])->assertCreated();
-
-        // Then the supplied name is ignored — the token is named for the User-Agent
-        $owner = User::query()->where('email', 'nimal@contoso.lk')->sole();
-        $this->assertTokenNamed($owner, 'Mozilla/5.0 (TestAgent)');
-    }
-
-    // Edge — a registration whose client IP can't be resolved (no REMOTE_ADDR) is rejected
-    // with a clean 422, NOT a 500: the controller casts $request->ip() to string, so a null
-    // IP becomes '' and fails the consent record's `required` ip rule (a validation error).
-    // Without the cast a null reaches the interactor's `string $clientIp` and TypeErrors -> 500.
-    #[Test]
-    public function when_the_client_ip_is_undeterminable_then_registration_is_rejected_as_invalid(): void
-    {
-        // Given a guest whose request carries no resolvable client IP
-        // When they register
-        $response = $this->withServerVariables(['REMOTE_ADDR' => null])
-            ->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
-
-        // Then it is rejected as a validation error (a clean 4xx), not a server crash
-        $this->assertValidationRejected($response, 'ip');
     }
 
     protected function assertRegistrationSucceeded(TestResponse $response): void
