@@ -14,6 +14,12 @@ use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
  * (an unmappable violation must never be disguised as a registration conflict) and
  * is provable only at this seam.
  *
+ * No `RefreshDatabase` by design, not by omission: `conflictFor` is a pure
+ * index→exception map that touches no database. Any test added here that DOES
+ * need persistence must bring the trait with it — without it, it would read
+ * whatever a sibling left behind and could pass or fail nondeterministically
+ * under ParaTest.
+ *
  * Provenance: relocated from RegisterOwnerSadPathTest at the s142 partition
  * consolidation. RegisterOwnerTest's unmapped-violation walk STUBS conflictFor, so
  * it proves only the caller's re-raise — the real default arm is executed here and
