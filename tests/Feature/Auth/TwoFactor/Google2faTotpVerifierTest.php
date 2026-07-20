@@ -16,6 +16,20 @@ use App\Foundation\Auth\Totp\Google2faTotpVerifier;
 class Google2faTotpVerifierTest extends TestCase
 {
     #[Test]
+    public function when_a_structurally_impossible_code_is_submitted_then_it_does_not_verify(): void
+    {
+        // Given the real verifier and a freshly generated secret
+        $verifier = new Google2faTotpVerifier(new Google2FA);
+        $secret = $verifier->generateSecret();
+
+        // When a structurally-impossible code is checked
+        $result = $verifier->verify($secret, 'not-a-totp-code');
+
+        // Then it does not verify
+        $this->assertFalse($result);
+    }
+
+    #[Test]
     public function when_the_current_authenticator_code_is_submitted_then_it_verifies(): void
     {
         // Given the real verifier and a freshly generated secret
@@ -26,9 +40,8 @@ class Google2faTotpVerifierTest extends TestCase
         // When the authenticator's current code is checked
         $currentCode = $google2fa->getCurrentOtp($secret);
 
-        // Then it verifies, and a structurally-impossible code does not
+        // Then it verifies
         $this->assertTrue($verifier->verify($secret, $currentCode));
-        $this->assertFalse($verifier->verify($secret, 'not-a-totp-code'));
     }
 
     #[Test]
