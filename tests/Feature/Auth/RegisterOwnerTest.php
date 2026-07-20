@@ -10,6 +10,7 @@ use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
 use App\Consent\Events\ConsentRecorded;
 use Illuminate\Support\Facades\Notification;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -17,6 +18,12 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 class RegisterOwnerTest extends AuthTestCase
 {
     use RefreshDatabase;
+
+    private const EXISTING_EMAIL = 'existing@contoso.lk';
+
+    private const EXISTING_BR = 'PV-99999999';
+
+    private const EXISTING_EPF = 'A-9999999';
 
     protected function setUp(): void
     {
@@ -30,6 +37,82 @@ class RegisterOwnerTest extends AuthTestCase
         // UC-1-136 catalog; production runs the seeder at deploy.
         $this->seedRbacCatalog();
         $this->travelTo('2026-06-08 00:00:00');
+    }
+
+    // Sad (validation) — a malformed payload is rejected before any aggregate runs.
+    #[Test]
+    #[DataProvider('invalidPayloadProvider')]
+    public function when_the_registration_payload_is_invalid_then_it_is_rejected(array $override, string $invalidField): void
+    {
+        // Given an otherwise-valid signup with one invalid field
+        $payload = [...$this->validRegistrationPayload(), ...$override];
+
+        // When the guest submits it
+        $response = $this->postJson('/api/v1/auth/register', $payload);
+
+        // Then registration is rejected and the offending field is reported
+        $this->assertValidationRejected($response, $invalidField);
+    }
+
+    /**
+     * Each row blanks or corrupts one field of an otherwise-valid payload. The
+     * weak-password + unaccepted-ToS rows are #05's new rules; the empty-field
+     * rows pin the SHAPE rules — ConvertEmptyStringsToNull maps '' to null, which
+     * the `string` rule then rejects.
+     *
+     * NOTE (verified s142): these rows do NOT guard `required`. Dropping it — the
+     * explicit rule AND the one Spatie infers from the non-nullable property — left
+     * every row green; only adding `nullable` REDs them. The unguarded required-arm
+     * is OQ-1-138, deferred.
+     *
+     * @return array<string, array{0: array<string, mixed>, 1: string}>
+     */
+    public static function invalidPayloadProvider(): array
+    {
+        return [
+            'weak password' => [['password' => 'short'], 'password'],
+            'terms not accepted' => [['acceptedTos' => false], 'acceptedTos'],
+            'missing name' => [['name' => ''], 'name'],
+            'missing email' => [['email' => ''], 'email'],
+            'missing company name' => [['companyName' => ''], 'companyName'],
+            'missing BR number' => [['brNumber' => ''], 'brNumber'],
+            'missing EPF number' => [['epfNumber' => ''], 'epfNumber'],
+            'missing country' => [['country' => ''], 'country'],
+            'missing emergency contact name' => [['emergencyContactName' => ''], 'emergencyContactName'],
+            'missing emergency contact phone' => [['emergencyContactPhone' => ''], 'emergencyContactPhone'],
+        ];
+    }
+
+    // Sad (conflict) — a globally-unique identifier already in use is rejected
+    // with 409 (well-formed but conflicts with current state — api-conventions §6),
+    // and nothing new is persisted.
+    #[Test]
+    #[DataProvider('duplicateFieldProvider')]
+    public function when_a_registration_field_is_already_registered_then_it_conflicts(array $override, string $expectedCode): void
+    {
+        // Given an account already holds these identifiers
+        $this->givenAnExistingOwnerAccount();
+        $usersBefore = User::query()->count();
+        $companiesBefore = Company::query()->count();
+
+        // When a guest registers colliding on one of them
+        $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), ...$override]);
+
+        // Then the registration conflicts and creates nothing new
+        $this->assertConflict($response, $expectedCode);
+        $this->assertNoNewAccounts($usersBefore, $companiesBefore);
+    }
+
+    /**
+     * @return array<string, array{0: array<string, mixed>, 1: string}>
+     */
+    public static function duplicateFieldProvider(): array
+    {
+        return [
+            'email' => [['email' => self::EXISTING_EMAIL], 'EMAIL_REGISTERED'],
+            'business registration number' => [['brNumber' => self::EXISTING_BR], 'BR_NUMBER_REGISTERED'],
+            'employer provident fund number' => [['epfNumber' => self::EXISTING_EPF], 'EPF_NUMBER_REGISTERED'],
+        ];
     }
 
     // Happy — the walking skeleton: one POST stands up the whole owner account.
@@ -208,5 +291,27 @@ class RegisterOwnerTest extends AuthTestCase
             'emergency_contact_phone' => '+94771234567',
             'emergency_contact_relationship' => 'spouse',
         ]);
+    }
+
+    protected function givenAnExistingOwnerAccount(): void
+    {
+        User::factory()->withEmail(self::EXISTING_EMAIL)->create();
+        Company::factory()->registeredAs(self::EXISTING_BR, self::EXISTING_EPF)->create();
+    }
+
+    protected function assertConflict(TestResponse $response, string $expectedCode): void
+    {
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', $expectedCode);
+        $response->assertJsonPath('errors', []);
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+        $this->assertNotEmpty($response->json('correlation_id'));
+    }
+
+    protected function assertNoNewAccounts(int $usersBefore, int $companiesBefore): void
+    {
+        $this->assertSame($usersBefore, User::query()->count(), 'No user may be created on a conflict.');
+        $this->assertSame($companiesBefore, Company::query()->count(), 'No company may be created on a conflict.');
+        $this->assertDatabaseCount('stored_events', 0);
     }
 }
