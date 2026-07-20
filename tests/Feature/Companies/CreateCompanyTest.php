@@ -80,7 +80,7 @@ class CreateCompanyTest extends CompaniesTestCase
     // seam. The max:255 bounds are the poison-event guard (an over-long value
     // would record a CompanyCreated whose projection can never succeed); the
     // required-field rows live at the registration HTTP seam
-    // (RegisterOwnerSadPathTest), and BR/EPF uniqueness is its 409 guard.
+    // (RegisterOwnerTest), and BR/EPF uniqueness is its 409 guard.
     #[Test]
     #[DataProvider('provideInvalidRegistrationInput')]
     public function when_a_create_company_command_is_built_with_invalid_input_then_it_is_rejected(

@@ -91,8 +91,8 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
-     * The canonical happy owner-signup body, shared by the register happy-path
-     * and sad-path suites (§2.10). Individual tests override single fields.
+     * The canonical happy owner-signup body, shared across the owner-signup suites
+     * (§2.10). Individual tests override single fields.
      *
      * @return array<string, mixed>
      */
