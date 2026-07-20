@@ -12,6 +12,10 @@ use App\Foundation\Auth\Totp\Google2faTotpVerifier;
  * the TotpVerifier boundary, so this is the only place the actual delegation +
  * verifyKey()/getQRCodeUrl() mapping runs — an inverted comparison or wrong argument
  * order would otherwise go uncaught).
+ *
+ * @testclass-carveout: adapter — certification of the real pragmarx/google2fa
+ * delegation; every feature walk stubs the TotpVerifier boundary
+ * (AuthTestCase::fakeTotpVerifier), so this is the only place it runs (§2.14 Rule B).
  */
 class Google2faTotpVerifierTest extends TestCase
 {

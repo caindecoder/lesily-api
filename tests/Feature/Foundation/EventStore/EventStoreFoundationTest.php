@@ -11,6 +11,11 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use Tests\Feature\Foundation\EventStore\Fixtures\FixtureThingHappened;
 use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEventCollection;
 
+/**
+ * @testclass-carveout: infra-primitive — the tenant-scoping event-store
+ * foundation proven via fixture aggregate; no single production UC seam
+ * exercises the scoping primitive in isolation.
+ */
 class EventStoreFoundationTest extends FoundationTestCase
 {
     use RefreshDatabase;

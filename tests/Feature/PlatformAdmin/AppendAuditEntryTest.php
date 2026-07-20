@@ -16,9 +16,10 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
  * by convention — no update/delete paths are built (spec §6; the enforcement
  * scenario belongs to the UC-1-066 slice).
  *
- * @testclass-carveout: infra-primitive — no HTTP seam exists until T7 wires
- * the first production writer; these pins prove the schema/model/factory
- * primitive the T7 behavior walk will stand on.
+ * @testclass-carveout: infra-primitive — the HTTP-side write is covered by
+ * ReviewInvoiceAsAdminTest (T7, PR #105, via
+ * ReviewInvoiceAsAdminInteractor::recordAdminReview); these pins prove the
+ * append-only schema/model/factory primitive beneath that walk.
  */
 class AppendAuditEntryTest extends PlatformAdminTestCase
 {
