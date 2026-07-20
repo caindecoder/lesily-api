@@ -14,6 +14,13 @@ use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
  * (an unmappable violation must never be disguised as a registration conflict) and
  * is provable only at this seam.
  *
+ * Named for the SEAM (the whole `conflictFor` map), not for the single arm asserted
+ * here — Rule B names behavior at the seam, cf. the compliant `AuthorizeCompanyTest`
+ * / `EnsureIdempotencyKeyTest`. The three mapped arms are currently proven through
+ * HTTP in RegisterOwnerTest's race-backstop walk (which stubs only `ensureUnique`,
+ * so the real map still runs); if a second caller ever needs them at the domain
+ * seam, they belong in this class.
+ *
  * No `RefreshDatabase` by design, not by omission: `conflictFor` is a pure
  * index→exception map that touches no database. Any test added here that DOES
  * need persistence must bring the trait with it — without it, it would read
