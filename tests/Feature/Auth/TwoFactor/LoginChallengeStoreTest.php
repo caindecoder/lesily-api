@@ -7,7 +7,7 @@ use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 
-class CacheLoginChallengeStoreTest extends TestCase
+class LoginChallengeStoreTest extends TestCase
 {
     #[Test]
     public function when_a_challenge_has_expired_then_it_no_longer_resolves(): void
