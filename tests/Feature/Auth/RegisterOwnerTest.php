@@ -60,14 +60,15 @@ class RegisterOwnerTest extends AuthTestCase
 
     /**
      * Each row blanks or corrupts one field of an otherwise-valid payload. The
-     * weak-password + unaccepted-ToS rows are #05's new rules; the empty-field
-     * rows pin the SHAPE rules — ConvertEmptyStringsToNull maps '' to null, which
-     * the `string` rule then rejects.
+     * weak-password + unaccepted-ToS rows are #05's new rules.
      *
-     * NOTE (verified s142): these rows do NOT guard `required`. Dropping it — the
-     * explicit rule AND the one Spatie infers from the non-nullable property — left
-     * every row green; only adding `nullable` REDs them. The unguarded required-arm
-     * is OQ-1-138, deferred.
+     * NOTE (verified s142, full matrix): the empty-field rows guard NEITHER
+     * `required` NOR `string` individually — they detect only the removal of the
+     * PAIR. `ConvertEmptyStringsToNull` maps '' to null and both rules reject null
+     * independently, so dropping either alone leaves every row green; only dropping
+     * both REDs them. `rules()` fully OVERRIDES Spatie's type-inferred rules per
+     * field, so the non-nullable property is no back-stop either. The individually
+     * unguarded arms are OQ-1-138, deferred.
      *
      * @return array<string, array{0: array<string, mixed>, 1: string}>
      */

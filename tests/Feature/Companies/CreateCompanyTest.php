@@ -81,6 +81,10 @@ class CreateCompanyTest extends CompaniesTestCase
     // would record a CompanyCreated whose projection can never succeed); the
     // required-field rows live at the registration HTTP seam
     // (RegisterOwnerTest), and BR/EPF uniqueness is its 409 guard.
+    // CAVEAT (s142) — those HTTP rows are SHAPE guards only: they detect the removal
+    // of the whole required+string PAIR, not either rule alone (OQ-1-138). So the
+    // requiredness contract for companyName / brNumber / epfNumber is not
+    // individually guarded at either seam. Do not read this line as coverage.
     #[Test]
     #[DataProvider('provideInvalidRegistrationInput')]
     public function when_a_create_company_command_is_built_with_invalid_input_then_it_is_rejected(
