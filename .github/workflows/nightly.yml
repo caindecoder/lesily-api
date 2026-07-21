@@ -38,14 +38,41 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
-        with: { php-version: '8.4', coverage: xdebug }
+        # pcov: recommended Infection initial-coverage driver — 2-5x faster than
+        # Xdebug, no kill-verdict accuracy loss (verdicts come from test re-runs,
+        # not the driver). R-053 finding 3.4.
+        with: { php-version: '8.4', coverage: pcov }
       - run: composer install --no-interaction --prefer-dist
+      # puppeteer block mirrors ci.yml test job (s135 5-layer onboarding): the
+      # suite includes Browsershot receipt tests (UC-1-121) — without these steps
+      # Infection's initial run fails. The old report-only `|| true` masked exactly
+      # that failure nightly since s135 while the job reported success (R-053, s144).
+      - uses: actions/setup-node@v6
+        with: { node-version: '24', cache: 'npm' }
+      - name: Cache puppeteer browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ hashFiles('package-lock.json') }}
+      - name: Install Node deps (puppeteer — Browsershot receipt rendering, UC-1-121)
+        run: npm ci
+      - name: Install puppeteer browsers (chrome + headless shell)
+        run: |
+          npx puppeteer browsers install chrome
+          npx puppeteer browsers install chrome-headless-shell
       - run: cp .env.github .env
       - run: php artisan key:generate
       - run: php artisan migrate --force
-      - name: Full mutation report (report-only, no gate)
-        run: vendor/bin/infection --threads=4 || true
+      - name: Full mutation run (gated — minMsi/minCoveredMsi from infection.json5)
+        # The nightly full run is the latent-escape detector for diff-scoped PR runs
+        # (/tdd-red amendment Q; R-053 finding 3.2) — it MUST fail loudly, never
+        # `|| true` (Rule #13: that masked a total failure while reporting green).
+        run: vendor/bin/infection --threads=4
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: infection-report
-          path: infection.html
+          path: |
+            infection.html
+            infection.log
+            infection-summary.log

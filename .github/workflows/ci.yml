@@ -88,11 +88,17 @@ jobs:
       - run: php artisan key:generate
       - run: php artisan migrate --force
       - name: Run tests with coverage
-        run: php artisan test -p --coverage --coverage-clover=coverage.xml --log-junit=junit.xml
+        run: php artisan test -p --coverage --coverage-clover=coverage.xml --coverage-crap4j=crap4j.xml --log-junit=junit.xml
       - uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+      - name: CRAP radar (report-only — R-053 verdict, radar not gate)
+        run: php scripts/crap-radar.php crap4j.xml 30
+      - uses: actions/upload-artifact@v7
+        with:
+          name: crap4j-report
+          path: crap4j.xml
 
   quality:
     needs: setup
@@ -147,9 +153,12 @@ jobs:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: shivammathur/setup-php@v2
+        # pcov: recommended Infection initial-coverage driver — 2-5x faster than
+        # Xdebug, no kill-verdict accuracy loss (verdicts come from test re-runs,
+        # not the driver; amendment H keeps CI authoritative). R-053 finding 3.4.
         with:
           php-version: '8.4'
-          coverage: xdebug
+          coverage: pcov
       - run: composer install --no-interaction --prefer-dist
       # puppeteer@25 requires Node >=22.12 — pin it rather than trusting the
       # runner default (code-reviewer I1, s135); caches cut the per-job
@@ -178,17 +187,21 @@ jobs:
       - run: cp .env.github .env
       - run: php artisan key:generate
       - run: php artisan migrate --force
-      - name: Infection (changed files only)
-        # Short-circuit when no app/ PHP files changed (e.g., yml-only PR): empty
-        # --filter causes Infection to exit 1 even with passing tests. Master-action #99.
-        # Also short-circuit when the test suite is empty: Infection's initial PHPUnit
-        # run exits 1 with "No tests executed!" on an empty suite, which Infection treats
-        # as failure. Edge case hit during chunk-1 Phase 1 redo (session 055): all
-        # 5 Tier-1 UC tests reverted simultaneously, leaving tests/Feature/ empty
-        # before redo TDD-RED restarts. Excludes abstract *TestCase.php bases per
-        # coding-conventions-plan.md §2.10 (FoundationTestCase, etc.) from the test count.
+      - name: Infection (changed lines only)
+        # Native line-level diff scope (R-053 finding 3.1): --git-diff-lines mutates
+        # ONLY added/modified lines — strictly narrower than the old hand-rolled file
+        # filter; the nightly full run (nightly.yml) is the latent-escape safety net
+        # for everything outside the diff (/tdd-red amendment Q). --logger-github
+        # annotates escaped mutants inline in the PR diff.
+        # NOTE: --map-source-class-to-test deliberately NOT used — our behavior-named
+        # test classes (conv-plan §2.14) don't follow the Foo→FooTest mapping it
+        # assumes, so it would silently drop coverage in the initial run.
+        # Guards kept: no changed app/ files → skip (empty scope exits 1 even with
+        # passing tests; master-action #99); empty suite → skip (initial PHPUnit run
+        # exits 1 with "No tests executed!" — session 055 edge; excludes abstract
+        # *TestCase.php bases per conv-plan §2.10 from the count).
         run: |
-          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'app/*.php' | tr '\n' ',')
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'app/*.php')
           if [ -z "$CHANGED" ]; then
             echo "No PHP files changed under app/ — skipping Infection."
             exit 0
@@ -198,7 +211,7 @@ jobs:
             echo "No *Test.php files (excluding abstract *TestCase.php bases) found in tests/ — skipping Infection."
             exit 0
           fi
-          vendor/bin/infection --filter="$CHANGED" --threads=4 --min-msi=80 --min-covered-msi=85
+          vendor/bin/infection --git-diff-lines --git-diff-base=origin/${{ github.base_ref }} --logger-github --threads=4 --min-msi=80 --min-covered-msi=85
 
   sonarcloud:
     needs: test
