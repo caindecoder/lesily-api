@@ -197,5 +197,5 @@ The Laravel Boost block above is auto-generated and covers Laravel/PHPUnit frame
 
 **Reference-codebase precedence:** LeaveDates primary, subscription-platform secondary. When they conflict, LeaveDates wins by default. Use `/reference-scan {uc-id} {concern-keywords}` skill to scope-grep both for analog patterns before TDD-RED. See parent's `.claude/memory/feedback_leavedates-primary.md` for the precedence rule + 3 locked divergences from LeaveDates.
 
-**Playbook:** `Documentation/06-design/chunk-1/_process/tdd-red-playbook.md` (parent directory). §3 procedure with PAUSE 1 + PAUSE 2; §4 Explore prompt template; §10 amendment triggers (now 12 — added Trigger #12 for CI-symptom suppression).
+**Playbook:** SUPERSEDED — graduated to the chunk-agnostic `/tdd-red` skill in s056 (`.claude/skills/tdd-red/SKILL.md`, HRMS parent repo; amendments now tracked there). The old `Documentation/06-design/chunk-1/_process/tdd-red-playbook.md` is a frozen historical record (s143 pointer fix).
 
