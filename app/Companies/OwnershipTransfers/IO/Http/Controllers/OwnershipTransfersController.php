@@ -33,4 +33,9 @@ class OwnershipTransfersController
 
         return (new OwnershipTransferRequestResource($transfer))->response($request)->setStatusCode(201);
     }
+
+    public function index(Request $request): JsonResponse
+    {
+        return response()->json(['data' => []]);
+    }
 }

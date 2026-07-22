@@ -160,6 +160,15 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     }
 
     /**
+     * GET the transfer history (list) with no session at all — the
+     * unauthenticated sad path.
+     */
+    protected function getTransferHistoryAsGuest(): TestResponse
+    {
+        return $this->getJson('/api/v1/ownership-transfers');
+    }
+
+    /**
      * Assert a request was refused with the §S21 envelope for $code (status +
      * error_code). Mirrors MembershipsTestCase's helper (§2.10).
      */
