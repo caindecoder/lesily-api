@@ -3,11 +3,13 @@
 namespace Tests\Feature\Companies\OwnershipTransfers;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 
 /**
  * UC-1-126 — View Ownership Transfer History (slice #11 Task 2): the company's
@@ -209,5 +211,67 @@ class ViewOwnershipTransferHistoryTest extends OwnershipTransfersTestCase
             'admin' => ['admin'],
             'auditor' => ['auditor'],
         ];
+    }
+
+    // --- Happy ---
+
+    #[Test]
+    public function when_the_owner_lists_history_then_rows_are_newest_first_with_the_exact_owner_shape(): void
+    {
+        // Given three requests to a known target on distinct days
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $target = User::factory()->create(['name' => 'Alex Turner', 'email' => 'alex.turner@contoso.test']);
+        $oldest = $this->aTransferRequestedAt($company, $target, CarbonImmutable::parse('2026-05-01 09:00'));
+        $middle = $this->aTransferRequestedAt($company, $target, CarbonImmutable::parse('2026-05-03 09:00'));
+        $newest = $this->aTransferRequestedAt($company, $target, CarbonImmutable::parse('2026-05-05 09:00'));
+
+        // When the owner lists the history
+        $response = $this->getTransferHistory($owner, $company);
+
+        // Then rows are newest-first and the row is exactly the owner-facing shape
+        $response->assertOk();
+        $this->assertHistoryOrder($response, [$newest->id, $middle->id, $oldest->id]);
+        $this->assertExactOwnerRowShape($response->json('data.0'), $owner);
+    }
+
+    /**
+     * The list row carries EXACTLY the owner-facing fields (leak-guard): no
+     * verification artefacts, no raw user ids / admin attribution, and the
+     * target email is masked.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function assertExactOwnerRowShape(array $row, User $owner): void
+    {
+        $this->assertSame([
+            'id', 'company_id', 'status', 'request_channel', 'reason', 'requested_at',
+            'verified_at', 'executed_at', 'rejected_at', 'cancelled_at', 'expired_at',
+            'expires_at', 'cancellation_reason', 'expiry_source', 'terminating_actor',
+            'next_action', 'expected_completion_at', 'support_channel',
+            'target_user', 'requested_by',
+        ], array_keys($row));
+        $this->assertSame(['name' => 'Alex Turner', 'email_masked' => 'a***@contoso.test'], $row['target_user']);
+        $this->assertSame(['name' => $owner->name], $row['requested_by']);
+        $this->assertSame('Awaiting platform admin identity verification', $row['next_action']);
+    }
+
+    #[Test]
+    public function when_the_history_spans_multiple_pages_then_pagination_reflects_the_requested_page(): void
+    {
+        // Given more transfers than the 15-row default page holds
+        [$company, $owner] = $this->aCompanyWithOwner();
+        OwnershipTransferRequest::factory()->count(20)->requested()->create([
+            'company_id' => $company->getKey(),
+            'current_owner_user_id' => $company->owner_id,
+            'target_user_id' => User::factory()->create()->getKey(),
+        ]);
+
+        // When the owner requests the second page
+        $response = $this->getTransferHistory($owner, $company, ['page' => 2]);
+
+        // Then the meta reflects page 2 and only the 5-row remainder is returned
+        $response->assertOk();
+        $this->assertPaginationMeta($response, ['page' => 2, 'per_page' => 15, 'total' => 20, 'last_page' => 2]);
+        $this->assertCount(5, $response->json('data'));
     }
 }

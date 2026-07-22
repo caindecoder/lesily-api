@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies\OwnershipTransfers;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
@@ -206,6 +207,21 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
             'company_id' => $company->getKey(),
             'current_owner_user_id' => $company->owner_id,
             'target_user_id' => $target->getKey(),
+        ]);
+    }
+
+    /**
+     * A `requested` transfer for $company targeting $target, anchored at a
+     * specific $requestedAt (drives newest-first ordering assertions).
+     */
+    protected function aTransferRequestedAt(Company $company, User $target, CarbonImmutable $requestedAt): OwnershipTransferRequest
+    {
+        return OwnershipTransferRequest::factory()->requested()->create([
+            'company_id' => $company->getKey(),
+            'current_owner_user_id' => $company->owner_id,
+            'target_user_id' => $target->getKey(),
+            'requested_at' => $requestedAt,
+            'next_state_transition_at' => $requestedAt->addDays(30),
         ]);
     }
 
