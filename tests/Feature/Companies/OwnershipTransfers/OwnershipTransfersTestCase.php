@@ -63,6 +63,20 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     }
 
     /**
+     * A well-formed request body targeting $target (channel `app`).
+     *
+     * @return array<string, string>
+     */
+    protected function transferBodyFor(User $target): array
+    {
+        return [
+            'targetUserId' => (string) $target->getKey(),
+            'reason' => 'Retiring from the business',
+            'requestChannel' => 'app',
+        ];
+    }
+
+    /**
      * POST the transfer request as $actor (null = unauthenticated) in
      * $company's context. A fresh Idempotency-Key is minted unless the caller
      * pins one (replay tests) or drops it (the required-mount sad path).

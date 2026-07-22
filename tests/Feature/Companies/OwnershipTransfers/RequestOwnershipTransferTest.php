@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Companies\OwnershipTransfers;
 
+use App\Models\User;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -68,6 +69,20 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
 
         // Then it is refused as shape-invalid on the offending field
         $this->assertValidationRejected($response, $invalidField);
+    }
+
+    #[Test]
+    public function when_the_target_user_is_not_a_member_of_the_company_then_the_request_is_rejected(): void
+    {
+        // Given a company owner and a user who is not a member of the company
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $outsider = User::factory()->create();
+
+        // When the owner requests a transfer to the outsider
+        $response = $this->postTransferRequest($owner, $company, $this->transferBodyFor($outsider));
+
+        // Then it is refused as an invalid target
+        $this->assertValidationRejected($response, 'targetUserId');
     }
 
     /**
