@@ -8,9 +8,10 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
 /**
  * Genesis payload for the OwnershipTransferRequest aggregate (UC-1-028, SM-1-05
  * T1). ONE command for HTTP shape + aggregate boundary (CD-1-05 §2): the
- * interactor injects the auth-resolved companyId/currentOwnerUserId alongside
- * the three client fields — nothing is minted in between, so the invite-style
- * two-command split is not needed (Task-1 design D-a).
+ * controller assembles the three client fields with the auth-resolved
+ * companyId/currentOwnerUserId and validates at the delivery boundary
+ * (RevokeInvitationCommand precedent) — nothing is minted in between, so the
+ * invite-style two-command split is not needed (Task-1 design D-a).
  */
 class RequestOwnershipTransferCommand extends Data
 {

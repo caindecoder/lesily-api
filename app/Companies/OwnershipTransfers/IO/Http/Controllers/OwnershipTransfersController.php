@@ -5,6 +5,7 @@ namespace App\Companies\OwnershipTransfers\IO\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestResource;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\RequestOwnershipTransferInteractor;
 
@@ -20,11 +21,15 @@ class OwnershipTransfersController
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
-        $transfer = $interactor->execute(
-            $request->company(),
-            $actor,
-            $request->only(['targetUserId', 'reason', 'requestChannel']),
-        );
+        // Client fields + auth context validated at the delivery boundary
+        // (RevokeInvitationCommand / ChangeMembershipRoleCommand precedent).
+        $command = RequestOwnershipTransferCommand::validateAndCreate([
+            ...$request->only(['targetUserId', 'reason', 'requestChannel']),
+            'companyId' => $request->company()->getKey(),
+            'currentOwnerUserId' => $actor->getKey(),
+        ]);
+
+        $transfer = $interactor->execute($request->company(), $command);
 
         return (new OwnershipTransferRequestResource($transfer))->response($request)->setStatusCode(201);
     }

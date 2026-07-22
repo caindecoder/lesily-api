@@ -2,7 +2,6 @@
 
 namespace App\Companies\OwnershipTransfers\UseCases\Interactors;
 
-use App\Models\User;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
@@ -15,9 +14,10 @@ use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequ
 use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
- * Request an ownership transfer (UC-1-028, SM-1-05 T1): validate the command,
- * guard the target's eligibility, and record OwnershipTransferRequested for
- * the platform-support verification queue.
+ * Request an ownership transfer (UC-1-028, SM-1-05 T1): guard the target's
+ * eligibility and record OwnershipTransferRequested for the platform-support
+ * verification queue. The command arrives validated from the delivery boundary
+ * (controller-side validateAndCreate — the standing pattern).
  */
 class RequestOwnershipTransferInteractor
 {
@@ -25,17 +25,8 @@ class RequestOwnershipTransferInteractor
         private readonly OwnershipTransferRequestRepositoryInterface $transfers,
     ) {}
 
-    /**
-     * @param  array<string, mixed>  $input
-     */
-    public function execute(Company $company, User $actor, array $input): OwnershipTransferRequest
+    public function execute(Company $company, RequestOwnershipTransferCommand $command): OwnershipTransferRequest
     {
-        $command = RequestOwnershipTransferCommand::validateAndCreate([
-            ...$input,
-            'companyId' => $company->getKey(),
-            'currentOwnerUserId' => $actor->getKey(),
-        ]);
-
         $this->guardTargetIsNotSelf($command);
         $membership = $this->guardTargetIsMember($company, $command->targetUserId);
         $this->guardTargetHasEmergencyContact($membership);
