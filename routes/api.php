@@ -253,7 +253,7 @@ Route::post('/v1/invitations/accept/{token}', AcceptInvitationController::class)
 // 2026-05-24 matrix Module 8 (`ownership-transfer.request`); the request is
 // support-verified (UC-1-113) before any privilege change (UC-1-093).
 Route::post('/v1/ownership-transfers', [OwnershipTransfersController::class, 'store'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:ownership-transfer.request']);
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:ownership-transfer.request', 'idempotency-key:required']);
 
 // The plan catalog (UC-1-042 partial — the plan-picker read, slice-plans-billing T1).
 // Enum-derived static read, non-paginated {data: [...]} (MyCompaniesCollection

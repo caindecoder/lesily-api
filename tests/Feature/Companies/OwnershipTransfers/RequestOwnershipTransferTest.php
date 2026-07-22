@@ -133,6 +133,21 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
         $this->assertRefusedWith($response, ApiErrorCode::StateGuardViolation);
     }
 
+    #[Test]
+    public function when_the_request_omits_the_idempotency_key_then_it_is_rejected(): void
+    {
+        // Given a company owner with an eligible target
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $target = $this->aMemberWithRole($company, 'admin');
+        $this->withEmergencyContact($company, $target);
+
+        // When the request is posted without an Idempotency-Key
+        $response = $this->postTransferRequest($owner, $company, $this->transferBodyFor($target), withKey: false);
+
+        // Then it is refused — the mutation mounts the required idempotency contract
+        $this->assertRefusedWith($response, ApiErrorCode::IdempotencyKeyRequired);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
