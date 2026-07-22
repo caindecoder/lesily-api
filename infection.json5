@@ -86,6 +86,12 @@
                 "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoiceRefunded",
                 "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoiceVoided",
                 "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoiceDisputeFiled",
+                // slice-#11 Task 1 / UC-1-028 (2026-07-22): the T1 projector arm +
+                // the two T1 reactors — same spatie-discovery equivalent class
+                // (protected still projects / notifies / audits).
+                "App\\Companies\\OwnershipTransfers\\Projectors\\OwnershipTransferProjector::onOwnershipTransferRequested",
+                "App\\Companies\\OwnershipTransfers\\Reactors\\SupportQueueNotificationReactor::onOwnershipTransferRequested",
+                "App\\Companies\\OwnershipTransfers\\Reactors\\OwnershipTransferAuditReactor::onOwnershipTransferRequested",
             ],
         },
         // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only
