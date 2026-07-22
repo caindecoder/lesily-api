@@ -47,4 +47,21 @@ class OwnershipTransferRequestFactory extends Factory
             'status' => OwnershipTransferStatus::Requested,
         ]);
     }
+
+    /**
+     * An identity-verified request awaiting execution (SM-1-05 `Verified` —
+     * still open, still counted by the one-open-per-company invariant).
+     */
+    public function verified(): static
+    {
+        $verifiedAt = now()->subHours(2);
+
+        return $this->state(fn (): array => [
+            'status' => OwnershipTransferStatus::Verified,
+            'verified_at' => $verifiedAt,
+            'verified_by' => User::factory(),
+            'verification_notes' => 'Email confirmation + ID document verified.',
+            'next_state_transition_at' => $verifiedAt->copy()->addDays(14),
+        ]);
+    }
 }

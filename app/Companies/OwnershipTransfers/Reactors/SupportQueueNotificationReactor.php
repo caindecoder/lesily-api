@@ -23,7 +23,11 @@ class SupportQueueNotificationReactor extends Reactor
     {
         $company = Company::query()->findOrFail($event->companyId);
 
-        $adminIds = array_filter(array_map('trim', config('platform.admin_user_ids', [])));
+        // Same normalization idiom as EnsurePlatformAdmin (the allowlist's one
+        // other consumer): cast, trim, reject blanks — padding fails closed.
+        $adminIds = collect((array) config('platform.admin_user_ids', []))
+            ->map(fn ($id): string => trim((string) $id))
+            ->reject(fn (string $id): bool => $id === '');
 
         User::query()
             ->whereIn('id', $adminIds)
