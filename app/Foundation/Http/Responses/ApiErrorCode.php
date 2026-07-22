@@ -38,6 +38,7 @@ enum ApiErrorCode: string
     case IdempotencyKeyProcessing = 'IDEMPOTENCY_KEY_PROCESSING';
     case StateGuardViolation = 'STATE_GUARD_VIOLATION';
     case ReceiptGenerationUnavailable = 'RECEIPT_GENERATION_UNAVAILABLE';
+    case EmergencyContactRequired = 'EMERGENCY_CONTACT_REQUIRED';
     case HttpError = 'HTTP_ERROR';
     case InternalError = 'INTERNAL_ERROR';
 
@@ -78,6 +79,7 @@ enum ApiErrorCode: string
             self::IdempotencyKeyProcessing => 409,
             self::StateGuardViolation => 409,
             self::ReceiptGenerationUnavailable => 503,
+            self::EmergencyContactRequired => 422,
             // Generic fallback for an unmapped HttpException. Production always
             // preserves the exception's real status via buildWithStatus(); this 500
             // is only the default required for match() exhaustiveness.

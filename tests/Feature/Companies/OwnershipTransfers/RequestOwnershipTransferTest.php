@@ -98,6 +98,20 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
         $this->assertValidationRejected($response, 'targetUserId');
     }
 
+    #[Test]
+    public function when_the_target_lacks_an_emergency_contact_then_the_request_is_rejected(): void
+    {
+        // Given a company owner and a member who has never set an emergency contact
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $target = $this->aMemberWithRole($company, 'admin');
+
+        // When the owner requests a transfer to that member
+        $response = $this->postTransferRequest($owner, $company, $this->transferBodyFor($target));
+
+        // Then it is refused until the target sets their emergency contact (§S10b mandate)
+        $this->assertRefusedWith($response, ApiErrorCode::EmergencyContactRequired);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */

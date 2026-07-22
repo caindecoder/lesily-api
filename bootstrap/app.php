@@ -48,6 +48,7 @@ use App\Companies\Memberships\Exceptions\OwnerTransferRequiredException;
 use App\Companies\Memberships\Exceptions\SelfRoleChangeBlockedException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
+use App\Companies\OwnershipTransfers\Exceptions\EmergencyContactRequiredException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -241,6 +242,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // An invite targeted an email that is already an active member (UC-1-018 3e).
         $exceptions->render(fn (AlreadyMemberException $e) => EnvelopeBuilder::build(
             ApiErrorCode::AlreadyMember,
+            $e->getMessage(),
+        ));
+
+        // An ownership-transfer target has never set an emergency contact —
+        // §S10b makes it mandatory for the incoming owner (UC-1-028 T1 guard).
+        $exceptions->render(fn (EmergencyContactRequiredException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::EmergencyContactRequired,
             $e->getMessage(),
         ));
 
