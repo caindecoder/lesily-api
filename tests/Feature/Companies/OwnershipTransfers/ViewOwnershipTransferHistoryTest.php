@@ -88,4 +88,23 @@ class ViewOwnershipTransferHistoryTest extends OwnershipTransfersTestCase
             'non-whitelisted sort' => [['sort' => 'name'], 'sort'],
         ];
     }
+
+    // --- Edge ---
+
+    #[Test]
+    public function when_the_history_is_empty_then_the_envelope_has_empty_data_and_a_zero_total(): void
+    {
+        // Given a company owner with no transfer records
+        [$company, $owner] = $this->aCompanyWithOwner();
+
+        // When they request the history
+        $response = $this->getTransferHistory($owner, $company);
+
+        // Then the list is an empty data array with a zero-total pagination envelope
+        $response->assertOk();
+        $response->assertExactJson([
+            'data' => [],
+            'meta' => ['pagination' => ['page' => 1, 'per_page' => 15, 'total' => 0, 'last_page' => 1]],
+        ]);
+    }
 }

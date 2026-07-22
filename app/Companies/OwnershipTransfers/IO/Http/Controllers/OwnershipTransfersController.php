@@ -8,15 +8,21 @@ use Illuminate\Http\JsonResponse;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferFilters;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestResource;
+use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestCollection;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\RequestOwnershipTransferInteractor;
+use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
 
 /**
- * The company's ownership-transfer resource — request (UC-1-028, SM-1-05 T1).
- * Later slice-#11 tasks add the reads (UC-1-125/126) and withdraw
- * (UC-1-114/115) actions.
+ * The company's ownership-transfer resource — request (UC-1-028, SM-1-05 T1) +
+ * the tenant reads (UC-1-126 history / UC-1-125 status). Withdraw (UC-1-114/115)
+ * lands in a later slice-#11 task.
  */
 class OwnershipTransfersController
 {
+    public function __construct(
+        private readonly OwnershipTransferRequestRepositoryInterface $transfers,
+    ) {}
+
     public function store(Request $request, RequestOwnershipTransferInteractor $interactor): JsonResponse
     {
         /** @var User $actor — guaranteed by auth:sanctum */
@@ -35,10 +41,12 @@ class OwnershipTransfersController
         return (new OwnershipTransferRequestResource($transfer))->response($request)->setStatusCode(201);
     }
 
-    public function index(Request $request): JsonResponse
+    public function index(Request $request): OwnershipTransferRequestCollection
     {
-        OwnershipTransferFilters::fromQuery($request);
+        $filters = OwnershipTransferFilters::fromQuery($request);
 
-        return response()->json(['data' => []]);
+        return new OwnershipTransferRequestCollection(
+            $this->transfers->paginateForCompany((string) $request->company()->getKey(), $filters),
+        );
     }
 }
