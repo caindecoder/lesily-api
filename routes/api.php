@@ -259,7 +259,7 @@ Route::post('/v1/ownership-transfers', [OwnershipTransfersController::class, 'st
 // Auditor per the 2026-05-24 matrix Module 8 (`view-history` / `view-status`),
 // company-scoped; a cross-tenant id is existence-hidden (404).
 Route::get('/v1/ownership-transfers', [OwnershipTransfersController::class, 'index'])
-    ->middleware(['auth:sanctum', 'auth.company']);
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:ownership-transfer.view-history']);
 
 // The plan catalog (UC-1-042 partial — the plan-picker read, slice-plans-billing T1).
 // Enum-derived static read, non-paginated {data: [...]} (MyCompaniesCollection

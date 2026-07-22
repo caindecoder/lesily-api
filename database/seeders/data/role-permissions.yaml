@@ -19,6 +19,10 @@ owner:
   - audit.view
   # Owner-only per the matrix §Module-8 (UC-1-028 — every other tenant role ❌).
   - ownership-transfer.request
+  # Transfer reads (UC-1-125/126) — owner + admin + auditor per the matrix
+  # §Module-8 view rows (hr/payroll/employee/manager ❌).
+  - ownership-transfer.view-status
+  - ownership-transfer.view-history
 
 admin:
   - users.invite
@@ -30,6 +34,8 @@ admin:
   - companies.update
   - billing.view
   - audit.view
+  - ownership-transfer.view-status
+  - ownership-transfer.view-history
 
 hr_officer:
   - users.invite
@@ -51,6 +57,8 @@ auditor:
   - companies.view
   - billing.view
   - audit.view
+  - ownership-transfer.view-status
+  - ownership-transfer.view-history
 
 employee:
   - companies.view

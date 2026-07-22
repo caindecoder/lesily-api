@@ -160,6 +160,20 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     }
 
     /**
+     * GET the transfer history (list) as $actor in $company's context, with an
+     * optional whitelisted query (`state`/`sort`/`page`/`per_page`).
+     *
+     * @param  array<string, mixed>  $query
+     */
+    protected function getTransferHistory(User $actor, Company $company, array $query = []): TestResponse
+    {
+        Sanctum::actingAs($actor);
+        $url = '/api/v1/ownership-transfers'.($query === [] ? '' : '?'.http_build_query($query));
+
+        return $this->getJson($url, ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
      * GET the transfer history (list) with no session at all — the
      * unauthenticated sad path.
      */
