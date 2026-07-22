@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Companies\OwnershipTransfers;
 
+use App\Models\User;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 
 /**
  * UC-1-126 — View Ownership Transfer History (slice #11 Task 2): the company's
@@ -106,5 +108,106 @@ class ViewOwnershipTransferHistoryTest extends OwnershipTransfersTestCase
             'data' => [],
             'meta' => ['pagination' => ['page' => 1, 'per_page' => 15, 'total' => 0, 'last_page' => 1]],
         ]);
+    }
+
+    #[Test]
+    public function when_another_company_has_transfers_then_only_context_company_rows_are_listed(): void
+    {
+        // Given the owner's company has one transfer and a different company has another
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $ours = $this->aTransferInState($company, User::factory()->create(), OwnershipTransferStatus::Requested);
+        [$otherCompany] = $this->aCompanyWithOwner();
+        $this->aTransferInState($otherCompany, User::factory()->create(), OwnershipTransferStatus::Requested);
+
+        // When the owner lists their company's history
+        $response = $this->getTransferHistory($owner, $company);
+
+        // Then only their own company's row is present (tenant isolation)
+        $response->assertOk();
+        $this->assertHistoryOrder($response, [$ours->id]);
+    }
+
+    #[Test]
+    public function when_the_history_includes_terminal_states_then_terminal_rows_remain_readable(): void
+    {
+        // Given a company whose history is entirely terminal transfers
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $target = User::factory()->create();
+        foreach ([
+            OwnershipTransferStatus::Executed,
+            OwnershipTransferStatus::Rejected,
+            OwnershipTransferStatus::Cancelled,
+            OwnershipTransferStatus::Expired,
+        ] as $state) {
+            $this->aTransferInState($company, $target, $state);
+        }
+
+        // When the owner lists the history unfiltered
+        $response = $this->getTransferHistory($owner, $company);
+
+        // Then all four terminal rows are readable — a withdrawn/rejected/expired
+        // request stays in history (the D2 rationale for PATCH-not-DELETE)
+        $response->assertOk();
+        $this->assertCount(4, $response->json('data'));
+    }
+
+    #[Test]
+    #[DataProvider('provideStateFilters')]
+    public function when_filtered_by_state_then_only_matching_rows_return(OwnershipTransferStatus $state): void
+    {
+        // Given a company with one transfer in the target state and one in another
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $target = User::factory()->create();
+        $match = $this->aTransferInState($company, $target, $state);
+        $other = $state === OwnershipTransferStatus::Verified
+            ? OwnershipTransferStatus::Expired
+            : OwnershipTransferStatus::Verified;
+        $this->aTransferInState($company, $target, $other);
+
+        // When the owner filters by the target state
+        $response = $this->getTransferHistory($owner, $company, ['state' => $state->value]);
+
+        // Then only the matching row is returned
+        $response->assertOk();
+        $this->assertHistoryOrder($response, [$match->id]);
+    }
+
+    /**
+     * @return array<string, array{OwnershipTransferStatus}>
+     */
+    public static function provideStateFilters(): array
+    {
+        return [
+            'verified' => [OwnershipTransferStatus::Verified],
+            'expired' => [OwnershipTransferStatus::Expired],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('providePermittedNonOwnerRoles')]
+    public function when_a_permitted_non_owner_role_views_then_the_history_is_visible(string $roleCode): void
+    {
+        // Given a company with one transfer and a member holding a matrix-permitted view role
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $row = $this->aTransferInState($company, User::factory()->create(), OwnershipTransferStatus::Requested);
+        $viewer = $this->aMemberWithRole($company, $roleCode);
+
+        // When they list the history
+        $response = $this->getTransferHistory($viewer, $company);
+
+        // Then it is visible — admin + auditor are the ✅/👁️ rows in matrix Module 8
+        $response->assertOk();
+        $this->assertHistoryOrder($response, [$row->id]);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function providePermittedNonOwnerRoles(): array
+    {
+        return [
+            'admin' => ['admin'],
+            'auditor' => ['auditor'],
+        ];
     }
 }

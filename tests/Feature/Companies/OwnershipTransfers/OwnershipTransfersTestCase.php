@@ -12,6 +12,8 @@ use Tests\Feature\Companies\CompaniesTestCase;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
+use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 
 /**
  * Shared fixtures for the ownership-transfer feature tests (§2.10). Callers
@@ -180,6 +182,51 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     protected function getTransferHistoryAsGuest(): TestResponse
     {
         return $this->getJson('/api/v1/ownership-transfers');
+    }
+
+    /**
+     * A persisted transfer row for $company targeting $target in $state (the
+     * company's factory owner is the initiator). The write endpoints that
+     * PRODUCE the terminal states land in later slice tasks; a read fixture
+     * arranges the projection directly.
+     */
+    protected function aTransferInState(Company $company, User $target, OwnershipTransferStatus $state): OwnershipTransferRequest
+    {
+        $factory = OwnershipTransferRequest::factory();
+        $factory = match ($state) {
+            OwnershipTransferStatus::Requested => $factory->requested(),
+            OwnershipTransferStatus::Verified => $factory->verified(),
+            OwnershipTransferStatus::Executed => $factory->executed(),
+            OwnershipTransferStatus::Rejected => $factory->rejected(),
+            OwnershipTransferStatus::Cancelled => $factory->cancelled(),
+            OwnershipTransferStatus::Expired => $factory->expired(),
+        };
+
+        return $factory->create([
+            'company_id' => $company->getKey(),
+            'current_owner_user_id' => $company->owner_id,
+            'target_user_id' => $target->getKey(),
+        ]);
+    }
+
+    /**
+     * The list envelope's `meta.pagination` block equals $expected exactly.
+     *
+     * @param  array<string, int>  $expected
+     */
+    protected function assertPaginationMeta(TestResponse $response, array $expected): void
+    {
+        $this->assertSame($expected, $response->json('meta.pagination'));
+    }
+
+    /**
+     * The list `data` rows appear in exactly $idsInOrder (order-sensitive).
+     *
+     * @param  list<string>  $idsInOrder
+     */
+    protected function assertHistoryOrder(TestResponse $response, array $idsInOrder): void
+    {
+        $this->assertSame($idsInOrder, $response->collect('data')->pluck('id')->all());
     }
 
     /**
