@@ -200,6 +200,13 @@ jobs:
         # passing tests; master-action #99); empty suite → skip (initial PHPUnit run
         # exits 1 with "No tests executed!" — session 055 edge; excludes abstract
         # *TestCase.php bases per conv-plan §2.10 from the count).
+        # Third vacuous-run guard: --ignore-msi-with-no-mutations (PR #113 edge —
+        # a diff of PHPDoc + cast DELETIONS generated 0 mutants, and Infection
+        # reports an empty mutation set as MSI 0%, tripping --min-msi vacuously).
+        # The 80/85 gates still enforce whenever ≥1 mutant exists, and Infection
+        # errors/aborts still fail. Deliberately CLI-only, NOT infection.json5 —
+        # the nightly full run must NEVER inherit it: 0 mutants across all of
+        # app/ is the s135 catastrophic-abort signal and must stay loud.
         run: |
           CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'app/*.php')
           if [ -z "$CHANGED" ]; then
@@ -211,7 +218,7 @@ jobs:
             echo "No *Test.php files (excluding abstract *TestCase.php bases) found in tests/ — skipping Infection."
             exit 0
           fi
-          vendor/bin/infection --git-diff-lines --git-diff-base=origin/${{ github.base_ref }} --logger-github --threads=4 --min-msi=80 --min-covered-msi=85
+          vendor/bin/infection --git-diff-lines --git-diff-base=origin/${{ github.base_ref }} --logger-github --threads=4 --min-msi=80 --min-covered-msi=85 --ignore-msi-with-no-mutations
 
   sonarcloud:
     needs: test
