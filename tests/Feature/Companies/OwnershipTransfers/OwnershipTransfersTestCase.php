@@ -108,35 +108,55 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
         ];
     }
 
+    private ?string $pinnedIdempotencyKey = null;
+
     /**
-     * POST the transfer request as $actor (null = unauthenticated) in
-     * $company's context. A fresh Idempotency-Key is minted unless the caller
-     * pins one (replay tests) or drops it (the required-mount sad path).
+     * Pin the Idempotency-Key the next postTransferRequest() sends — replay
+     * tests pin one key across two posts; unpinned posts mint a fresh key.
+     */
+    protected function pinIdempotencyKey(string $key): void
+    {
+        $this->pinnedIdempotencyKey = $key;
+    }
+
+    /**
+     * POST the transfer request as $actor in $company's context, with the
+     * pinned Idempotency-Key or a freshly minted one.
      *
      * @param  array<string, mixed>  $body
      */
-    protected function postTransferRequest(
-        ?User $actor,
-        ?Company $company,
-        array $body = [],
-        bool $withKey = true,
-        ?string $key = null,
-    ): TestResponse {
-        if ($actor !== null) {
-            Sanctum::actingAs($actor);
-        }
+    protected function postTransferRequest(User $actor, Company $company, array $body = []): TestResponse
+    {
+        Sanctum::actingAs($actor);
 
-        $headers = [];
+        return $this->postJson('/api/v1/ownership-transfers', $body, [
+            'X-Company-Context' => $company->getKey(),
+            'Idempotency-Key' => $this->pinnedIdempotencyKey ?? fake()->uuid(),
+        ]);
+    }
 
-        if ($company !== null) {
-            $headers['X-Company-Context'] = $company->getKey();
-        }
+    /**
+     * POST with no session at all — the unauthenticated sad path.
+     */
+    protected function postTransferRequestAsGuest(): TestResponse
+    {
+        return $this->postJson('/api/v1/ownership-transfers', [], [
+            'Idempotency-Key' => fake()->uuid(),
+        ]);
+    }
 
-        if ($withKey) {
-            $headers['Idempotency-Key'] = $key ?? fake()->uuid();
-        }
+    /**
+     * POST without an Idempotency-Key — the required-mount sad path.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function postTransferRequestWithoutKey(User $actor, Company $company, array $body): TestResponse
+    {
+        Sanctum::actingAs($actor);
 
-        return $this->postJson('/api/v1/ownership-transfers', $body, $headers);
+        return $this->postJson('/api/v1/ownership-transfers', $body, [
+            'X-Company-Context' => $company->getKey(),
+        ]);
     }
 
     /**

@@ -34,7 +34,7 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
         // Given no authenticated session
 
         // When an ownership-transfer request is posted
-        $response = $this->postTransferRequest(actor: null, company: null);
+        $response = $this->postTransferRequestAsGuest();
 
         // Then it is refused as unauthenticated
         $this->assertRefusedWith($response, ApiErrorCode::Unauthenticated);
@@ -153,7 +153,7 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
         $this->withEmergencyContact($company, $target);
 
         // When the request is posted without an Idempotency-Key
-        $response = $this->postTransferRequest($owner, $company, $this->transferBodyFor($target), withKey: false);
+        $response = $this->postTransferRequestWithoutKey($owner, $company, $this->transferBodyFor($target));
 
         // Then it is refused — the mutation mounts the required idempotency contract
         $this->assertRefusedWith($response, ApiErrorCode::IdempotencyKeyRequired);
@@ -218,12 +218,12 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
         [$company, $owner] = $this->aCompanyWithOwner();
         $target = $this->aMemberWithRole($company, 'admin');
         $this->withEmergencyContact($company, $target);
-        $key = (string) Str::uuid7();
-        $first = $this->postTransferRequest($owner, $company, $this->transferBodyFor($target), key: $key);
+        $this->pinIdempotencyKey((string) Str::uuid7());
+        $first = $this->postTransferRequest($owner, $company, $this->transferBodyFor($target));
         $first->assertCreated();
 
         // When the identical request is retried with the same Idempotency-Key
-        $replay = $this->postTransferRequest($owner, $company, $this->transferBodyFor($target), key: $key);
+        $replay = $this->postTransferRequest($owner, $company, $this->transferBodyFor($target));
 
         // Then the original outcome is replayed without a second side effect
         $replay->assertCreated();
@@ -297,6 +297,7 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
         $this->assertSame($owner->getKey(), $row->current_owner_user_id);
         $this->assertSame($target->getKey(), $row->target_user_id);
         $this->assertSame(OwnershipTransferStatus::Requested, $row->status);
+        $this->assertNotNull($row->next_state_transition_at);
         $this->assertTrue($row->next_state_transition_at->equalTo($row->requested_at->addDays(30)));
     }
 

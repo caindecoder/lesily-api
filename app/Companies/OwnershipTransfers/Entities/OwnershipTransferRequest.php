@@ -40,6 +40,9 @@ class OwnershipTransferRequest extends Model
         'next_state_transition_at' => 'immutable_datetime',
     ];
 
+    /**
+     * @return BelongsTo<Company, $this>
+     */
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
