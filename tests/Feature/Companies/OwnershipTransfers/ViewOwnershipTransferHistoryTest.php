@@ -4,12 +4,15 @@ namespace Tests\Feature\Companies\OwnershipTransfers;
 
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferFilters;
+use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
 
 /**
  * UC-1-126 — View Ownership Transfer History (slice #11 Task 2): the company's
@@ -64,6 +67,9 @@ class ViewOwnershipTransferHistoryTest extends OwnershipTransfersTestCase
         ];
     }
 
+    /**
+     * @param  array<string, mixed>  $query
+     */
     #[Test]
     #[DataProvider('provideInvalidQueryInputs')]
     public function when_the_query_input_is_invalid_then_it_is_rejected(array $query, string $invalidField): void
@@ -85,8 +91,11 @@ class ViewOwnershipTransferHistoryTest extends OwnershipTransfersTestCase
     {
         return [
             'unknown filter key' => [['foo' => 'bar'], 'foo'],
+            'old status param name' => [['status' => 'completed'], 'status'],
             'non-canonical state' => [['state' => 'completed'], 'state'],
             'per_page over the ceiling' => [['per_page' => 101], 'per_page'],
+            'per_page below one' => [['per_page' => 0], 'per_page'],
+            'non-integer per_page' => [['per_page' => 'abc'], 'per_page'],
             'page below one' => [['page' => 0], 'page'],
             'non-integer page' => [['page' => 'abc'], 'page'],
             'non-whitelisted sort' => [['sort' => 'name'], 'sort'],
@@ -273,5 +282,72 @@ class ViewOwnershipTransferHistoryTest extends OwnershipTransfersTestCase
         $response->assertOk();
         $this->assertPaginationMeta($response, ['page' => 2, 'per_page' => 15, 'total' => 20, 'last_page' => 2]);
         $this->assertCount(5, $response->json('data'));
+    }
+
+    #[Test]
+    public function when_sorted_ascending_then_rows_are_oldest_first(): void
+    {
+        // Given three requests on distinct days
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $target = User::factory()->create();
+        $oldest = $this->aTransferRequestedAt($company, $target, CarbonImmutable::parse('2026-05-01 09:00'));
+        $middle = $this->aTransferRequestedAt($company, $target, CarbonImmutable::parse('2026-05-03 09:00'));
+        $newest = $this->aTransferRequestedAt($company, $target, CarbonImmutable::parse('2026-05-05 09:00'));
+
+        // When the owner sorts ascending
+        $response = $this->getTransferHistory($owner, $company, ['sort' => 'requested_at']);
+
+        // Then rows are oldest-first (the inverse of the newest-first default)
+        $response->assertOk();
+        $this->assertHistoryOrder($response, [$oldest->id, $middle->id, $newest->id]);
+    }
+
+    #[Test]
+    public function when_a_page_size_is_requested_then_it_is_honored(): void
+    {
+        // Given five transfers
+        [$company, $owner] = $this->aCompanyWithOwner();
+        OwnershipTransferRequest::factory()->count(5)->requested()->create([
+            'company_id' => $company->getKey(),
+            'current_owner_user_id' => $company->owner_id,
+            'target_user_id' => User::factory()->create()->getKey(),
+        ]);
+
+        // When the owner requests a page size of two
+        $response = $this->getTransferHistory($owner, $company, ['per_page' => 2]);
+
+        // Then exactly two rows return and the meta echoes the requested size
+        $response->assertOk();
+        $this->assertCount(2, $response->json('data'));
+        $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 2, 'total' => 5, 'last_page' => 3]);
+    }
+
+    #[Test]
+    public function when_the_history_is_paginated_then_the_user_relations_are_eager_loaded(): void
+    {
+        // Given a page of transfers larger than a bounded query count
+        [$company] = $this->aCompanyWithOwner();
+        $rows = 8;
+        OwnershipTransferRequest::factory()->count($rows)->requested()->create([
+            'company_id' => $company->getKey(),
+            'current_owner_user_id' => $company->owner_id,
+            'target_user_id' => User::factory()->create()->getKey(),
+        ]);
+
+        // When the repository paginates and every row's user relations are read
+        DB::enableQueryLog();
+        $page = app(OwnershipTransferRequestRepositoryInterface::class)
+            ->paginateForCompany((string) $company->getKey(), OwnershipTransferFilters::validateAndCreate([]));
+        $relations = collect($page->items())
+            ->flatMap(fn (OwnershipTransferRequest $transfer) => [$transfer->targetUser, $transfer->currentOwner]);
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        // Then both relations resolved for every row, in fewer queries than there
+        // are rows — the target + requester were eager-loaded, not fetched per row
+        // (questionnaire §21 N+1 mandate). Lazy loading would fire ~2 per row and
+        // exceed the row count.
+        $this->assertCount($rows * 2, $relations->filter());
+        $this->assertLessThan($rows, $queryCount);
     }
 }

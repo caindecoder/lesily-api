@@ -152,7 +152,7 @@ class ViewOwnershipTransferStatusTest extends OwnershipTransfersTestCase
 
     #[Test]
     #[DataProvider('provideTerminalStates')]
-    public function when_the_transfer_is_terminal_then_the_status_remains_readable(OwnershipTransferStatus $state, string $terminatingActor): void
+    public function when_the_transfer_is_terminal_then_the_status_remains_readable(OwnershipTransferStatus $state, string $terminatingActor, string $nextAction): void
     {
         // Given a terminal transfer
         [$company, $owner] = $this->aCompanyWithOwner();
@@ -161,24 +161,43 @@ class ViewOwnershipTransferStatusTest extends OwnershipTransfersTestCase
         // When the owner views the status
         $response = $this->getTransferStatus($owner, $company, $transfer->id);
 
-        // Then it is readable, names the terminating actor, and has a cleared timer
+        // Then it is readable, names the terminating actor + next action, and its
+        // timer is cleared
         $response->assertOk();
         $response->assertJsonPath('data.status', $state->value);
         $response->assertJsonPath('data.terminating_actor', $terminatingActor);
+        $response->assertJsonPath('data.next_action', $nextAction);
         $response->assertJsonPath('data.expires_at', null);
     }
 
     /**
-     * @return array<string, array{OwnershipTransferStatus, string}>
+     * @return array<string, array{OwnershipTransferStatus, string, string}>
      */
     public static function provideTerminalStates(): array
     {
         return [
-            'executed' => [OwnershipTransferStatus::Executed, 'platform_admin'],
-            'rejected' => [OwnershipTransferStatus::Rejected, 'platform_admin'],
-            'cancelled' => [OwnershipTransferStatus::Cancelled, 'owner'],
-            'expired' => [OwnershipTransferStatus::Expired, 'system_timer'],
+            'executed' => [OwnershipTransferStatus::Executed, 'platform_admin', 'Transfer complete'],
+            'rejected' => [OwnershipTransferStatus::Rejected, 'platform_admin', 'Transfer request was rejected'],
+            'cancelled' => [OwnershipTransferStatus::Cancelled, 'owner', 'Transfer request was withdrawn'],
+            'expired' => [OwnershipTransferStatus::Expired, 'system_timer', 'Transfer request expired'],
         ];
+    }
+
+    #[Test]
+    public function when_the_transfer_is_no_longer_awaiting_verification_then_the_queue_hints_are_absent(): void
+    {
+        // Given a verified transfer (past the requested queue stage)
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aTransferInState($company, User::factory()->create(), OwnershipTransferStatus::Verified);
+
+        // When the owner views the status
+        $response = $this->getTransferStatus($owner, $company, $transfer->id);
+
+        // Then the queue-wait hint and the support channel are suppressed — they
+        // belong only to the requested (awaiting-verification) stage
+        $response->assertOk();
+        $response->assertJsonPath('data.expected_completion_at', null);
+        $response->assertJsonPath('data.support_channel', null);
     }
 
     // --- Happy ---
@@ -214,6 +233,7 @@ class ViewOwnershipTransferStatusTest extends OwnershipTransfersTestCase
             'target_user', 'requested_by',
         ], array_keys($response->json('data')));
         $response->assertJsonPath('data.target_user', ['name' => 'Alex Turner', 'email_masked' => 'a***@contoso.test']);
+        $response->assertJsonPath('data.terminating_actor', null);
         $response->assertJsonPath('data.support_channel.email', 'support@lesily.com');
         $response->assertJsonPath('data.expected_completion_at', CarbonImmutable::parse('2026-05-01 09:00')->addWeekdays(5)->toJSON());
     }

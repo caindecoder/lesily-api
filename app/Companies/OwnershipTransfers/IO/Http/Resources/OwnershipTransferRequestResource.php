@@ -79,11 +79,14 @@ class OwnershipTransferRequestResource extends JsonResource
     }
 
     /**
-     * The default SLA hint while the transfer is open (OQ #4); null once terminal.
+     * The default SLA hint for the queue wait — surfaced ONLY while the request
+     * awaits verification (OQ #4). Once verified the owner tracks the execute
+     * window via expires_at, and terminal transfers have no pending completion,
+     * so both return null (a `requested_at + N`-day date would read as stale).
      */
     private function expectedCompletionAt(): ?CarbonImmutable
     {
-        if (! $this->resource->status->isOpen()) {
+        if ($this->resource->status !== OwnershipTransferStatus::Requested) {
             return null;
         }
 
