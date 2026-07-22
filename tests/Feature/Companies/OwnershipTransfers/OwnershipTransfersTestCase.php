@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies\OwnershipTransfers;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
@@ -12,6 +13,8 @@ use Tests\Feature\Companies\CompaniesTestCase;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
+use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 
 /**
  * Shared fixtures for the ownership-transfer feature tests (§2.10). Callers
@@ -157,6 +160,109 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
         return $this->postJson('/api/v1/ownership-transfers', $body, [
             'X-Company-Context' => $company->getKey(),
         ]);
+    }
+
+    /**
+     * GET the transfer history (list) as $actor in $company's context, with an
+     * optional whitelisted query (`state`/`sort`/`page`/`per_page`).
+     *
+     * @param  array<string, mixed>  $query
+     */
+    protected function getTransferHistory(User $actor, Company $company, array $query = []): TestResponse
+    {
+        Sanctum::actingAs($actor);
+        $url = '/api/v1/ownership-transfers'.($query === [] ? '' : '?'.http_build_query($query));
+
+        return $this->getJson($url, ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * GET the transfer history (list) with no session at all — the
+     * unauthenticated sad path.
+     */
+    protected function getTransferHistoryAsGuest(): TestResponse
+    {
+        return $this->getJson('/api/v1/ownership-transfers');
+    }
+
+    /**
+     * GET a single transfer's status (detail) as $actor in $company's context.
+     */
+    protected function getTransferStatus(User $actor, Company $company, string $requestId): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson("/api/v1/ownership-transfers/{$requestId}", [
+            'X-Company-Context' => $company->getKey(),
+        ]);
+    }
+
+    /**
+     * GET a single transfer's status with no session — the unauthenticated path.
+     */
+    protected function getTransferStatusAsGuest(string $requestId): TestResponse
+    {
+        return $this->getJson("/api/v1/ownership-transfers/{$requestId}");
+    }
+
+    /**
+     * A persisted transfer row for $company targeting $target in $state (the
+     * company's factory owner is the initiator). The write endpoints that
+     * PRODUCE the terminal states land in later slice tasks; a read fixture
+     * arranges the projection directly.
+     */
+    protected function aTransferInState(Company $company, User $target, OwnershipTransferStatus $state): OwnershipTransferRequest
+    {
+        $factory = OwnershipTransferRequest::factory();
+        $factory = match ($state) {
+            OwnershipTransferStatus::Requested => $factory->requested(),
+            OwnershipTransferStatus::Verified => $factory->verified(),
+            OwnershipTransferStatus::Executed => $factory->executed(),
+            OwnershipTransferStatus::Rejected => $factory->rejected(),
+            OwnershipTransferStatus::Cancelled => $factory->cancelled(),
+            OwnershipTransferStatus::Expired => $factory->expired(),
+        };
+
+        return $factory->create([
+            'company_id' => $company->getKey(),
+            'current_owner_user_id' => $company->owner_id,
+            'target_user_id' => $target->getKey(),
+        ]);
+    }
+
+    /**
+     * A `requested` transfer for $company targeting $target, anchored at a
+     * specific $requestedAt (drives newest-first ordering assertions).
+     */
+    protected function aTransferRequestedAt(Company $company, User $target, CarbonImmutable $requestedAt): OwnershipTransferRequest
+    {
+        return OwnershipTransferRequest::factory()->requested()->create([
+            'company_id' => $company->getKey(),
+            'current_owner_user_id' => $company->owner_id,
+            'target_user_id' => $target->getKey(),
+            'requested_at' => $requestedAt,
+            'next_state_transition_at' => $requestedAt->addDays(30),
+        ]);
+    }
+
+    /**
+     * The list envelope's `meta.pagination` block equals $expected exactly.
+     *
+     * @param  array<string, int>  $expected
+     */
+    protected function assertPaginationMeta(TestResponse $response, array $expected): void
+    {
+        $this->assertSame($expected, $response->json('meta.pagination'));
+    }
+
+    /**
+     * The list `data` rows appear in exactly $idsInOrder (order-sensitive).
+     *
+     * @param  list<string>  $idsInOrder
+     */
+    protected function assertHistoryOrder(TestResponse $response, array $idsInOrder): void
+    {
+        $this->assertSame($idsInOrder, $response->collect('data')->pluck('id')->all());
     }
 
     /**

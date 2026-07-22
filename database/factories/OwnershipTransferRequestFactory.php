@@ -64,4 +64,70 @@ class OwnershipTransferRequestFactory extends Factory
             'next_state_transition_at' => $verifiedAt->copy()->addDays(14),
         ]);
     }
+
+    /**
+     * A completed transfer (SM-1-05 `Executed`, terminal — timer cleared, the
+     * forensic old/new-owner pair recorded). The exact execute-write semantics
+     * land at Task 8; these are read-fixture defaults.
+     */
+    public function executed(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => OwnershipTransferStatus::Executed,
+            'verified_at' => now()->subHours(3),
+            'verified_by' => User::factory(),
+            'executed_at' => now()->subHour(),
+            'executed_by' => User::factory(),
+            'old_owner_user_id' => $attributes['current_owner_user_id'],
+            'new_owner_user_id' => $attributes['target_user_id'],
+            'next_state_transition_at' => null,
+        ]);
+    }
+
+    /**
+     * A support-rejected transfer (SM-1-05 `Rejected`, terminal). Reject-write
+     * semantics land at Task 5; these are read-fixture defaults.
+     */
+    public function rejected(): static
+    {
+        return $this->state(fn (): array => [
+            'status' => OwnershipTransferStatus::Rejected,
+            'rejected_at' => now()->subHour(),
+            'rejected_by' => User::factory(),
+            'rejection_reason' => 'Identity documents did not match the records.',
+            'rejection_source' => 'pre_verification',
+            'next_state_transition_at' => null,
+        ]);
+    }
+
+    /**
+     * An owner-withdrawn transfer (SM-1-05 `Cancelled`, terminal). Withdraw-write
+     * semantics land at Task 6; these are read-fixture defaults.
+     */
+    public function cancelled(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => OwnershipTransferStatus::Cancelled,
+            'cancelled_at' => now()->subHour(),
+            'cancelled_by' => $attributes['current_owner_user_id'],
+            'cancellation_source' => 'pre_verification',
+            'cancellation_reason' => 'Owner changed their mind about the transfer.',
+            'next_state_transition_at' => null,
+        ]);
+    }
+
+    /**
+     * A lapsed transfer (SM-1-05 `Expired`, terminal). Expiry-write semantics
+     * land at Task 7; these are read-fixture defaults.
+     */
+    public function expired(): static
+    {
+        return $this->state(fn (): array => [
+            'status' => OwnershipTransferStatus::Expired,
+            'expired_at' => now()->subHour(),
+            'expiry_source' => 'requested',
+            'expired_after_days' => 30,
+            'next_state_transition_at' => null,
+        ]);
+    }
 }
