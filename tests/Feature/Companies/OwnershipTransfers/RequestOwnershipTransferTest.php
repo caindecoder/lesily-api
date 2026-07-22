@@ -5,9 +5,14 @@ namespace Tests\Feature\Companies\OwnershipTransfers;
 use App\Models\User;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\Notifications\Notifications\SystemNotification;
+use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
@@ -158,11 +163,15 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
     public function when_a_transfer_is_re_requested_on_the_same_stream_then_the_second_request_is_rejected(): void
     {
         // Given a transfer request already recorded on a stream (Tier-2 seam —
-        // the aggregate's own genesis guard, below the HTTP Tier-1 repo read)
+        // the aggregate's own genesis guard, below the HTTP Tier-1 repo read).
+        // Real rows: the projector reacts to the persist, so the projection's
+        // FK chain must hold even at the seam.
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $target = $this->aMemberWithRole($company, 'admin');
         $command = RequestOwnershipTransferCommand::validateAndCreate([
-            'companyId' => (string) Str::uuid7(),
-            'currentOwnerUserId' => (string) Str::uuid7(),
-            'targetUserId' => (string) Str::uuid7(),
+            'companyId' => $company->getKey(),
+            'currentOwnerUserId' => $owner->getKey(),
+            'targetUserId' => $target->getKey(),
             'reason' => 'Retiring from the business',
             'requestChannel' => 'app',
         ]);
@@ -200,5 +209,83 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
                 'requestChannel',
             ],
         ];
+    }
+
+    #[Test]
+    public function when_the_owner_requests_a_transfer_to_an_eligible_member_then_the_request_is_created(): void
+    {
+        // Given a company owner, an eligible member (emergency contact set),
+        // and a platform support admin on the allowlist
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $target = $this->aMemberWithRole($company, 'admin');
+        $this->withEmergencyContact($company, $target);
+        $supportAdmin = $this->aPlatformSupportAdmin();
+
+        // When the owner requests the transfer
+        $response = $this->postTransferRequest($owner, $company, $this->transferBodyFor($target));
+
+        // Then the request is created, the genesis event is recorded, the
+        // projection row + 30-day timer are written, and the T1 side effects fire
+        $requestId = $this->assertTransferCreated($response, $company);
+        $this->assertRequestedEventRecorded($company, $owner, $target);
+        $this->assertProjectionAndTimer($requestId, $company, $owner, $target);
+        $this->assertRequestSideEffects($supportAdmin, $requestId, $owner);
+    }
+
+    /**
+     * 201 with the owner-facing snake_case envelope; returns the new id.
+     */
+    private function assertTransferCreated(TestResponse $response, Company $company): string
+    {
+        $response->assertCreated();
+        $response->assertJsonPath('data.status', 'requested');
+        $response->assertJsonPath('data.company_id', $company->getKey());
+        $response->assertJsonPath('data.request_channel', 'app');
+
+        return $response->json('data.id');
+    }
+
+    /**
+     * The genesis OwnershipTransferRequested is on the company-scoped stream
+     * with the actor + target in its payload (amendment R — the event, not a
+     * direct row write, is the mechanism).
+     */
+    private function assertRequestedEventRecorded(Company $company, User $owner, User $target): void
+    {
+        $stored = LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferRequested::class)
+            ->whereForCompany($company->getKey())
+            ->sole();
+
+        $this->assertSame($owner->getKey(), $stored->event_properties['currentOwnerUserId']);
+        $this->assertSame($target->getKey(), $stored->event_properties['targetUserId']);
+    }
+
+    /**
+     * The projection row mirrors the event and carries the 30-day
+     * next_state_transition_at anchor (SM-1-05 T1 / OQ-1-006).
+     */
+    private function assertProjectionAndTimer(string $requestId, Company $company, User $owner, User $target): void
+    {
+        $row = OwnershipTransferRequest::query()->findOrFail($requestId);
+
+        $this->assertSame($company->getKey(), $row->company_id);
+        $this->assertSame($owner->getKey(), $row->current_owner_user_id);
+        $this->assertSame($target->getKey(), $row->target_user_id);
+        $this->assertSame(OwnershipTransferStatus::Requested, $row->status);
+        $this->assertTrue($row->next_state_transition_at->equalTo($row->requested_at->addDays(30)));
+    }
+
+    /**
+     * The two T1 side effects: the support-queue notification to the platform
+     * admin and the append-only audit_trail row attributing the owner.
+     */
+    private function assertRequestSideEffects(User $supportAdmin, string $requestId, User $owner): void
+    {
+        Notification::assertSentTo($supportAdmin, SystemNotification::class);
+
+        $entry = AuditEntry::query()->where('subject_id', $requestId)->sole();
+        $this->assertSame('transfer_requested', $entry->action);
+        $this->assertSame($owner->getKey(), $entry->actor_user_id);
     }
 }

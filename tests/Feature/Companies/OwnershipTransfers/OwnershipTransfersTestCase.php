@@ -64,6 +64,19 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     }
 
     /**
+     * A platform support admin — a user on the `platform.admin_user_ids`
+     * allowlist (the interim s136 binding the support-queue notification
+     * resolves recipients from).
+     */
+    protected function aPlatformSupportAdmin(): User
+    {
+        $admin = User::factory()->create();
+        config(['platform.admin_user_ids' => [$admin->getKey()]]);
+
+        return $admin;
+    }
+
+    /**
      * Stamp $member's pivot with emergency-contact data (§S10b shape). The
      * production write path for non-owner members is not built yet (UC-1-029
      * wizard rides T4) — direct pivot data is the sanctioned arrangement (F6).

@@ -3,14 +3,16 @@
 namespace App\Companies\OwnershipTransfers\UseCases\Interactors;
 
 use App\Models\User;
-use RuntimeException;
+use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Validation\ValidationException;
+use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Exceptions\EmergencyContactRequiredException;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
+use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
  * Request an ownership transfer (UC-1-028, SM-1-05 T1): validate the command,
@@ -26,7 +28,7 @@ class RequestOwnershipTransferInteractor
     /**
      * @param  array<string, mixed>  $input
      */
-    public function execute(Company $company, User $actor, array $input): never
+    public function execute(Company $company, User $actor, array $input): OwnershipTransferRequest
     {
         $command = RequestOwnershipTransferCommand::validateAndCreate([
             ...$input,
@@ -39,7 +41,13 @@ class RequestOwnershipTransferInteractor
         $this->guardTargetHasEmergencyContact($membership);
         $this->guardNoOpenTransfer($company);
 
-        throw new RuntimeException('Not implemented');
+        $requestId = (string) Str::uuid7();
+
+        OwnershipTransferRequestAggregate::retrieve($requestId)
+            ->request($command)
+            ->persist();
+
+        return OwnershipTransferRequest::query()->findOrFail($requestId);
     }
 
     /**
