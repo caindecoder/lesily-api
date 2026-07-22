@@ -81,6 +81,9 @@ class EnsureIdempotencyKey
             throw new IdempotencyKeyConflictException;
         }
 
+        // The cache seam returns array<string, mixed>; a completed entry is
+        // `state` plus the snapshot() shape, so narrow it here for replay().
+        /** @var array{request_hash: string, status: int, body: string, content_type: string} $entry */
         return $this->replay($entry);
     }
 
@@ -101,7 +104,7 @@ class EnsureIdempotencyKey
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array{request_hash: string, status: int, body: string, content_type: string}
      */
     private function snapshot(Response $response, string $requestHash): array
     {
@@ -114,12 +117,12 @@ class EnsureIdempotencyKey
     }
 
     /**
-     * @param  array<string, mixed>  $cached
+     * @param  array{request_hash: string, status: int, body: string, content_type: string}  $cached
      */
     private function replay(array $cached): Response
     {
-        return response((string) $cached['body'], (int) $cached['status'])
-            ->header('Content-Type', (string) $cached['content_type'])
+        return response($cached['body'], $cached['status'])
+            ->header('Content-Type', $cached['content_type'])
             ->header('Idempotency-Replayed', 'true');
     }
 }
