@@ -2,9 +2,10 @@
 
 namespace App\Companies\OwnershipTransfers\IO\Http\Controllers;
 
-use RuntimeException;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use App\Companies\OwnershipTransfers\UseCases\Interactors\RequestOwnershipTransferInteractor;
 
 /**
  * The company's ownership-transfer resource — request (UC-1-028, SM-1-05 T1).
@@ -13,8 +14,15 @@ use Illuminate\Http\JsonResponse;
  */
 class OwnershipTransfersController
 {
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, RequestOwnershipTransferInteractor $interactor): JsonResponse
     {
-        throw new RuntimeException('Not implemented');
+        /** @var User $actor — guaranteed by auth:sanctum */
+        $actor = $request->user();
+
+        $interactor->execute(
+            $request->company(),
+            $actor,
+            $request->only(['targetUserId', 'reason', 'requestChannel']),
+        );
     }
 }

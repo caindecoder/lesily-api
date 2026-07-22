@@ -55,4 +55,39 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
             'auditor' => ['auditor'],
         ];
     }
+
+    #[Test]
+    #[DataProvider('provideInvalidRequestInputs')]
+    public function when_the_request_input_is_invalid_then_the_request_is_rejected(array $body, string $invalidField): void
+    {
+        // Given a company owner
+        [$company, $owner] = $this->aCompanyWithOwner();
+
+        // When they post a transfer request with invalid input
+        $response = $this->postTransferRequest($owner, $company, $body);
+
+        // Then it is refused as shape-invalid on the offending field
+        $this->assertValidationRejected($response, $invalidField);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function provideInvalidRequestInputs(): array
+    {
+        return [
+            'missing target' => [
+                ['reason' => 'Retiring from the business', 'requestChannel' => 'app'],
+                'targetUserId',
+            ],
+            'missing reason' => [
+                ['targetUserId' => '0193abcd-9999-7000-8000-000000000001', 'requestChannel' => 'app'],
+                'reason',
+            ],
+            'invalid channel' => [
+                ['targetUserId' => '0193abcd-9999-7000-8000-000000000001', 'reason' => 'Retiring', 'requestChannel' => 'email'],
+                'requestChannel',
+            ],
+        ];
+    }
 }

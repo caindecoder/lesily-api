@@ -102,4 +102,15 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
         $response->assertStatus($code->status());
         $response->assertJsonPath('error_code', $code->value);
     }
+
+    /**
+     * The request was refused as shape-invalid — the validation envelope
+     * (error_code VALIDATION_FAILED) with an error on $field.
+     */
+    protected function assertValidationRejected(TestResponse $response, string $field): void
+    {
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
+        $response->assertJsonValidationErrors($field);
+    }
 }
