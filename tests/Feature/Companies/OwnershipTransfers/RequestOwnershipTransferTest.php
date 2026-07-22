@@ -7,6 +7,7 @@ use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 
 /**
  * UC-1-028 — Request Ownership Transfer (slice #11 Task 1, SM-1-05 T1): the
@@ -110,6 +111,26 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
 
         // Then it is refused until the target sets their emergency contact (§S10b mandate)
         $this->assertRefusedWith($response, ApiErrorCode::EmergencyContactRequired);
+    }
+
+    #[Test]
+    public function when_an_open_transfer_request_already_exists_then_a_second_request_is_rejected(): void
+    {
+        // Given a company with an open (requested) transfer already on file
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $target = $this->aMemberWithRole($company, 'admin');
+        $this->withEmergencyContact($company, $target);
+        OwnershipTransferRequest::factory()->requested()->create([
+            'company_id' => $company->getKey(),
+            'current_owner_user_id' => $owner->getKey(),
+            'target_user_id' => $target->getKey(),
+        ]);
+
+        // When the owner posts another transfer request
+        $response = $this->postTransferRequest($owner, $company, $this->transferBodyFor($target));
+
+        // Then it is refused — one transfer at a time per company
+        $this->assertRefusedWith($response, ApiErrorCode::StateGuardViolation);
     }
 
     /**

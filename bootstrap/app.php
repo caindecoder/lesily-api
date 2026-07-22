@@ -49,6 +49,7 @@ use App\Companies\Memberships\Exceptions\SelfRoleChangeBlockedException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 use App\Companies\OwnershipTransfers\Exceptions\EmergencyContactRequiredException;
+use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -249,6 +250,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // §S10b makes it mandatory for the incoming owner (UC-1-028 T1 guard).
         $exceptions->render(fn (EmergencyContactRequiredException $e) => EnvelopeBuilder::build(
             ApiErrorCode::EmergencyContactRequired,
+            $e->getMessage(),
+        ));
+
+        // A second transfer request while one is still open — one transfer at
+        // a time per company (UC-1-028 T1 guard; ERD-1-05 §5 invariant).
+        $exceptions->render(fn (OpenOwnershipTransferExistsException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));
 

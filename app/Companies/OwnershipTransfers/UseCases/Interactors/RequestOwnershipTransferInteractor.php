@@ -8,7 +8,9 @@ use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Validation\ValidationException;
 use App\Companies\OwnershipTransfers\Exceptions\EmergencyContactRequiredException;
+use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
 
 /**
  * Request an ownership transfer (UC-1-028, SM-1-05 T1): validate the command,
@@ -17,6 +19,10 @@ use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferC
  */
 class RequestOwnershipTransferInteractor
 {
+    public function __construct(
+        private readonly OwnershipTransferRequestRepositoryInterface $transfers,
+    ) {}
+
     /**
      * @param  array<string, mixed>  $input
      */
@@ -31,8 +37,21 @@ class RequestOwnershipTransferInteractor
         $this->guardTargetIsNotSelf($command);
         $membership = $this->guardTargetIsMember($company, $command->targetUserId);
         $this->guardTargetHasEmergencyContact($membership);
+        $this->guardNoOpenTransfer($company);
 
         throw new RuntimeException('Not implemented');
+    }
+
+    /**
+     * Tier-1 of the one-open-per-company invariant (api-1-ownership-transfer
+     * §2): the sync projection read at submit time. The aggregate's genesis
+     * re-fire guard is the Tier-2 backstop on its own stream.
+     */
+    private function guardNoOpenTransfer(Company $company): void
+    {
+        if ($this->transfers->findOpenByCompany($company->getKey()) !== null) {
+            throw new OpenOwnershipTransferExistsException;
+        }
     }
 
     /**

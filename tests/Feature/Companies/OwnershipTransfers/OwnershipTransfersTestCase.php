@@ -6,6 +6,7 @@ use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Notification;
 use Tests\Feature\Companies\CompaniesTestCase;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -60,6 +61,24 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
         $this->attachMember($company, $member, $this->seededRole($roleCode));
 
         return $member;
+    }
+
+    /**
+     * Stamp $member's pivot with emergency-contact data (§S10b shape). The
+     * production write path for non-owner members is not built yet (UC-1-029
+     * wizard rides T4) — direct pivot data is the sanctioned arrangement (F6).
+     */
+    protected function withEmergencyContact(Company $company, User $member): void
+    {
+        CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $member->getKey())
+            ->update([
+                'emergency_contact_name' => 'Nadia Perera',
+                'emergency_contact_email' => 'nadia.perera@example.com',
+                'emergency_contact_phone' => '+94771234567',
+                'emergency_contact_relationship' => 'spouse',
+            ]);
     }
 
     /**
