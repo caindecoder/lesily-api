@@ -59,4 +59,33 @@ class ViewOwnershipTransferHistoryTest extends OwnershipTransfersTestCase
             'manager' => ['manager'],
         ];
     }
+
+    #[Test]
+    #[DataProvider('provideInvalidQueryInputs')]
+    public function when_the_query_input_is_invalid_then_it_is_rejected(array $query, string $invalidField): void
+    {
+        // Given a company owner (granted view-history)
+        [$company, $owner] = $this->aCompanyWithOwner();
+
+        // When they request the history with an unsupported query parameter
+        $response = $this->getTransferHistory($owner, $company, $query);
+
+        // Then it is refused as shape-invalid on the offending field
+        $this->assertValidationRejected($response, $invalidField);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function provideInvalidQueryInputs(): array
+    {
+        return [
+            'unknown filter key' => [['foo' => 'bar'], 'foo'],
+            'non-canonical state' => [['state' => 'completed'], 'state'],
+            'per_page over the ceiling' => [['per_page' => 101], 'per_page'],
+            'page below one' => [['page' => 0], 'page'],
+            'non-integer page' => [['page' => 'abc'], 'page'],
+            'non-whitelisted sort' => [['sort' => 'name'], 'sort'],
+        ];
+    }
 }
