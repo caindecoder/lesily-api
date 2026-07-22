@@ -3,11 +3,17 @@
 namespace Tests\Feature\Companies\OwnershipTransfers;
 
 use App\Models\User;
+use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
+use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
+use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
  * UC-1-028 — Request Ownership Transfer (slice #11 Task 1, SM-1-05 T1): the
@@ -146,6 +152,33 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
 
         // Then it is refused — the mutation mounts the required idempotency contract
         $this->assertRefusedWith($response, ApiErrorCode::IdempotencyKeyRequired);
+    }
+
+    #[Test]
+    public function when_a_transfer_is_re_requested_on_the_same_stream_then_the_second_request_is_rejected(): void
+    {
+        // Given a transfer request already recorded on a stream (Tier-2 seam —
+        // the aggregate's own genesis guard, below the HTTP Tier-1 repo read)
+        $command = RequestOwnershipTransferCommand::validateAndCreate([
+            'companyId' => (string) Str::uuid7(),
+            'currentOwnerUserId' => (string) Str::uuid7(),
+            'targetUserId' => (string) Str::uuid7(),
+            'reason' => 'Retiring from the business',
+            'requestChannel' => 'app',
+        ]);
+        $requestId = (string) Str::uuid7();
+        OwnershipTransferRequestAggregate::retrieve($requestId)->request($command)->persist();
+
+        // When the genesis fires again on the same stream
+        try {
+            OwnershipTransferRequestAggregate::retrieve($requestId)->request($command);
+            $this->fail('Expected the genesis re-fire to be rejected.');
+        } catch (OpenOwnershipTransferExistsException) {
+            // Then only the original event remains on the stream
+            $this->assertSame(1, LesilyStoredEvent::query()
+                ->where('event_class', OwnershipTransferRequested::class)
+                ->count());
+        }
     }
 
     /**
