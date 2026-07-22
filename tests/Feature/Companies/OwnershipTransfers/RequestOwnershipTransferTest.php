@@ -212,6 +212,30 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     #[Test]
+    public function when_the_same_request_is_retried_with_the_same_idempotency_key_then_the_original_outcome_is_replayed(): void
+    {
+        // Given a successfully submitted transfer request
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $target = $this->aMemberWithRole($company, 'admin');
+        $this->withEmergencyContact($company, $target);
+        $key = (string) Str::uuid7();
+        $first = $this->postTransferRequest($owner, $company, $this->transferBodyFor($target), key: $key);
+        $first->assertCreated();
+
+        // When the identical request is retried with the same Idempotency-Key
+        $replay = $this->postTransferRequest($owner, $company, $this->transferBodyFor($target), key: $key);
+
+        // Then the original outcome is replayed without a second side effect
+        $replay->assertCreated();
+        $replay->assertHeader('Idempotency-Replayed', 'true');
+        $this->assertSame($first->json('data.id'), $replay->json('data.id'));
+        $this->assertSame(1, OwnershipTransferRequest::query()->count());
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferRequested::class)
+            ->count());
+    }
+
+    #[Test]
     public function when_the_owner_requests_a_transfer_to_an_eligible_member_then_the_request_is_created(): void
     {
         // Given a company owner, an eligible member (emergency contact set),
