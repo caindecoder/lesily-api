@@ -52,6 +52,17 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     }
 
     /**
+     * A fresh user attached to $company under the SEEDED $roleCode.
+     */
+    protected function aMemberWithRole(Company $company, string $roleCode): User
+    {
+        $member = User::factory()->create();
+        $this->attachMember($company, $member, $this->seededRole($roleCode));
+
+        return $member;
+    }
+
+    /**
      * POST the transfer request as $actor (null = unauthenticated) in
      * $company's context. A fresh Idempotency-Key is minted unless the caller
      * pins one (replay tests) or drops it (the required-mount sad path).
