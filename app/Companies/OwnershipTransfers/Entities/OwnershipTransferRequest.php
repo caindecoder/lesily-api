@@ -2,10 +2,8 @@
 
 namespace App\Companies\OwnershipTransfers\Entities;
 
-use App\Companies\Entities\Company;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Database\Factories\OwnershipTransferRequestFactory;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
@@ -39,14 +37,6 @@ class OwnershipTransferRequest extends Model
         'expired_at' => 'immutable_datetime',
         'next_state_transition_at' => 'immutable_datetime',
     ];
-
-    /**
-     * @return BelongsTo<Company, $this>
-     */
-    public function company(): BelongsTo
-    {
-        return $this->belongsTo(Company::class);
-    }
 
     protected static function newFactory(): OwnershipTransferRequestFactory
     {
