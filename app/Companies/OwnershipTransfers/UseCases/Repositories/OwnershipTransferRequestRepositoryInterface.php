@@ -21,9 +21,15 @@ interface OwnershipTransferRequestRepositoryInterface
 
     /**
      * The company's transfer history (UC-1-126) — all states, newest-first,
-     * filtered + paginated per $filters, eager-loaded via the custom builder.
+     * filtered + paginated per $filters, eager-loaded via the query scope.
      *
      * @return LengthAwarePaginator<int, OwnershipTransferRequest>
      */
     public function paginateForCompany(string $companyId, OwnershipTransferFilters $filters): LengthAwarePaginator;
+
+    /**
+     * A single transfer scoped to the company (UC-1-125) — null when it does not
+     * exist OR belongs to another company (existence-hidden 404, not 403).
+     */
+    public function findByIdForCompany(string $companyId, string $requestId): ?OwnershipTransferRequest;
 }

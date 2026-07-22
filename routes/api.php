@@ -261,6 +261,9 @@ Route::post('/v1/ownership-transfers', [OwnershipTransfersController::class, 'st
 Route::get('/v1/ownership-transfers', [OwnershipTransfersController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:ownership-transfer.view-history']);
 
+Route::get('/v1/ownership-transfers/{requestId}', [OwnershipTransfersController::class, 'show'])
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:ownership-transfer.view-status']);
+
 // The plan catalog (UC-1-042 partial — the plan-picker read, slice-plans-billing T1).
 // Enum-derived static read, non-paginated {data: [...]} (MyCompaniesCollection
 // precedent); permission:billing.view per the 2026-05-24 matrix (owner full

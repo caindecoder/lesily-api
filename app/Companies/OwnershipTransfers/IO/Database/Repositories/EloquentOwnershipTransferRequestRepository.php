@@ -44,4 +44,12 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
                 page: $filters->page ?? 1,
             );
     }
+
+    public function findByIdForCompany(string $companyId, string $requestId): ?OwnershipTransferRequest
+    {
+        return OwnershipTransferRequest::query()
+            ->forCompany($companyId)
+            ->whereKey($requestId)
+            ->first();
+    }
 }

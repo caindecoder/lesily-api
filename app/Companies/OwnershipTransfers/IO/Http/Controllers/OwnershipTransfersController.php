@@ -49,4 +49,12 @@ class OwnershipTransfersController
             $this->transfers->paginateForCompany((string) $request->company()->getKey(), $filters),
         );
     }
+
+    public function show(Request $request, string $requestId): OwnershipTransferRequestResource
+    {
+        $transfer = $this->transfers->findByIdForCompany((string) $request->company()->getKey(), $requestId)
+            ?? abort(404);
+
+        return new OwnershipTransferRequestResource($transfer);
+    }
 }

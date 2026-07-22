@@ -186,6 +186,26 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     }
 
     /**
+     * GET a single transfer's status (detail) as $actor in $company's context.
+     */
+    protected function getTransferStatus(User $actor, Company $company, string $requestId): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson("/api/v1/ownership-transfers/{$requestId}", [
+            'X-Company-Context' => $company->getKey(),
+        ]);
+    }
+
+    /**
+     * GET a single transfer's status with no session — the unauthenticated path.
+     */
+    protected function getTransferStatusAsGuest(string $requestId): TestResponse
+    {
+        return $this->getJson("/api/v1/ownership-transfers/{$requestId}");
+    }
+
+    /**
      * A persisted transfer row for $company targeting $target in $state (the
      * company's factory owner is the initiator). The write endpoints that
      * PRODUCE the terminal states land in later slice tasks; a read fixture
