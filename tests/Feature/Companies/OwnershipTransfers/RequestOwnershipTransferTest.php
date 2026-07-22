@@ -85,6 +85,19 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
         $this->assertValidationRejected($response, 'targetUserId');
     }
 
+    #[Test]
+    public function when_the_owner_targets_themselves_then_the_request_is_rejected(): void
+    {
+        // Given a company owner
+        [$company, $owner] = $this->aCompanyWithOwner();
+
+        // When they request a transfer to themselves
+        $response = $this->postTransferRequest($owner, $company, $this->transferBodyFor($owner));
+
+        // Then it is refused as an invalid target
+        $this->assertValidationRejected($response, 'targetUserId');
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */

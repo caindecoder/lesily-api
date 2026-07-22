@@ -26,9 +26,24 @@ class RequestOwnershipTransferInteractor
             'currentOwnerUserId' => $actor->getKey(),
         ]);
 
+        $this->guardTargetIsNotSelf($command);
         $this->guardTargetIsMember($company, $command->targetUserId);
 
         throw new RuntimeException('Not implemented');
+    }
+
+    /**
+     * The owner cannot transfer to themselves (api-1-ownership-transfer §7
+     * OQ #5 — the target must differ from the current owner). Checked before
+     * the membership read: no query needed to refuse it.
+     */
+    private function guardTargetIsNotSelf(RequestOwnershipTransferCommand $command): void
+    {
+        if ($command->targetUserId === $command->currentOwnerUserId) {
+            throw ValidationException::withMessages([
+                'targetUserId' => 'The target user must be different from the current owner.',
+            ]);
+        }
     }
 
     /**
