@@ -79,7 +79,9 @@ class ReviewOwnershipTransferQueueInteractor
                     $filters->toArray(),
                     static fn (mixed $value): bool => $value !== null,
                 ),
-                'result_count' => $page->count(),
+                // items(), not count(): count() lives on the concrete paginator,
+                // not the contract this method is typed against (Larastan L8).
+                'result_count' => count($page->items()),
                 'page' => $page->currentPage(),
             ],
             'recorded_at' => now(),
