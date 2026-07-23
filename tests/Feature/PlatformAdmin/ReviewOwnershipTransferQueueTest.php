@@ -4,9 +4,13 @@ namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferAdminFilters;
+use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
 
 /**
  * UC-1-127 — Review Ownership Transfer Queue (slice #11 Task 3): the platform
@@ -188,6 +192,36 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         // Then only that tenant's transfer is listed
         $response->assertOk();
         $this->assertQueueOrder($response, [$mine->getKey()]);
+    }
+
+    // Edge — the §21 N+1 mandate has teeth on the admin queue too: the page
+    // resolves both user relations for every row without a per-row query.
+    #[Test]
+    public function when_the_queue_is_paginated_then_the_user_relations_are_eager_loaded(): void
+    {
+        // Given a page of transfers larger than a bounded query count
+        [$company] = $this->aCompanyWithMember('owner');
+        $rows = 8;
+        OwnershipTransferRequest::factory()->count($rows)->requested()->create([
+            'company_id' => $company->getKey(),
+            'current_owner_user_id' => $company->owner_id,
+            'target_user_id' => User::factory()->create()->getKey(),
+        ]);
+
+        // When the repository paginates and every row's user relations are read
+        DB::enableQueryLog();
+        $page = app(OwnershipTransferRequestRepositoryInterface::class)
+            ->paginateForAdminQueue(OwnershipTransferAdminFilters::validateAndCreate([]));
+        $relations = collect($page->items())
+            ->flatMap(fn (OwnershipTransferRequest $transfer) => [$transfer->targetUser, $transfer->currentOwner]);
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        // Then both relations resolved for every row, in fewer queries than there
+        // are rows — eager-loaded, not fetched per row. Lazy loading would fire
+        // ~2 per row and exceed the row count.
+        $this->assertCount($rows * 2, $relations->filter());
+        $this->assertLessThan($rows, $queryCount);
     }
 
     /**

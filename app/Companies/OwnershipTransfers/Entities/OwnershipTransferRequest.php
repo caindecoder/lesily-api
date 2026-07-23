@@ -87,6 +87,18 @@ class OwnershipTransferRequest extends Model
     }
 
     /**
+     * The admin read's eager loads — the §21 N+1 guard for the cross-tenant
+     * queue. Kept separate from scopeForCompany's baked-in loads because the
+     * admin surface must not depend on the tenant read path (E66 §4).
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeWithAdminRelations(Builder $query): void
+    {
+        $query->with(['targetUser', 'currentOwner']);
+    }
+
+    /**
      * The admin queue's optional single-tenant drill-down (UC-1-127 alt-flow
      * 4e). Distinct from scopeForCompany: this is a FILTER on a deliberately
      * cross-tenant read, not tenant scoping, and it eager-loads nothing.

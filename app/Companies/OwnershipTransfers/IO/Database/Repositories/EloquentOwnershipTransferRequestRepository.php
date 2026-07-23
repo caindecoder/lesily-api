@@ -63,6 +63,7 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
         // No company predicate: cross-tenant is the defining property of this
         // read (UC-1-127 Tenant Isolation — "intentionally cross-tenant").
         return OwnershipTransferRequest::query()
+            ->withAdminRelations()
             ->when(
                 $filters->state === null,
                 fn (Builder $query) => $query->openStates(),
