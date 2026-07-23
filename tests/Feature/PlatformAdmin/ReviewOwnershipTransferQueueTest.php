@@ -256,6 +256,56 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         ]);
     }
 
+    // Happy — a backlog spans pages and the envelope reports the requested one.
+    #[Test]
+    public function when_the_queue_spans_multiple_pages_then_pagination_reflects_the_requested_page(): void
+    {
+        // Given more open transfers than the 15-row default page holds
+        $admin = $this->anAllowlistedAdmin();
+        [$company] = $this->aCompanyWithMember('owner');
+        OwnershipTransferRequest::factory()->count(20)->requested()->create([
+            'company_id' => $company->getKey(),
+            'current_owner_user_id' => $company->owner_id,
+            'target_user_id' => User::factory()->create()->getKey(),
+        ]);
+
+        // When the admin requests the second page
+        $response = $this->getAdminQueue($admin, ['page' => 2]);
+
+        // Then the meta reflects page 2 and only the 5-row remainder is returned
+        $response->assertOk();
+        $this->assertSame(
+            ['page' => 2, 'per_page' => 15, 'total' => 20, 'last_page' => 2],
+            $response->json('meta.pagination'),
+        );
+        $this->assertCount(5, $response->json('data'));
+    }
+
+    // Happy — the read is recorded with its query context: one platform-level
+    // row carrying the filters actually applied, the row count, and the page
+    // (UC-1-127 step 8 — one entry per page, never one per row).
+    #[Test]
+    public function when_the_admin_opens_the_queue_then_the_read_is_recorded_as_a_platform_level_audit_entry(): void
+    {
+        // Given two open transfers, one of them verified
+        $admin = $this->anAllowlistedAdmin();
+        [$company] = $this->aCompanyWithMember('owner');
+        $target = User::factory()->create();
+        $this->aTransferInState($company, $target, OwnershipTransferStatus::Verified);
+        $this->aTransferInState($company, $target, OwnershipTransferStatus::Requested);
+
+        // When the admin filters the queue to the verified bucket
+        $response = $this->getAdminQueue($admin, ['state' => 'verified']);
+
+        // Then one platform-level row records the filters, the count and the page
+        $response->assertOk();
+        $this->assertQueueReadAudited($response, [
+            'filters' => ['state' => 'verified'],
+            'result_count' => 1,
+            'page' => 1,
+        ]);
+    }
+
     /**
      * @return array<string, array{OwnershipTransferStatus}>
      */
