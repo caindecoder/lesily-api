@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Billing\Invoices\UseCases\Values;
+namespace App\Foundation\Http\Values;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Context;
@@ -11,6 +11,11 @@ use Illuminate\Support\Facades\Context;
  * server-derived value object — NOT a Command (nothing here is user input to
  * validate). Parameter object per the F-d ruling (s137): keeps the interactor
  * signature at three parameters.
+ *
+ * Foundation-level because every /api/v1/admin/* surface records the same
+ * transport facts — it carries no Billing semantics (relocated from
+ * App\Billing\Invoices\UseCases\Values s148 D3: the Companies module must not
+ * import Billing to reach it — E66 §7 dependency direction).
  */
 readonly class AdminRequestContext
 {

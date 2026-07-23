@@ -6,8 +6,8 @@ use App\Models\User;
 use Illuminate\Support\Str;
 use App\Billing\Invoices\Entities\Invoice;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\Http\Values\AdminRequestContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use App\Billing\Invoices\UseCases\Values\AdminRequestContext;
 use App\Billing\Invoices\UseCases\Repositories\InvoiceRepositoryInterface;
 
 /**
