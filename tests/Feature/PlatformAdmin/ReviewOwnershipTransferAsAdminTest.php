@@ -116,6 +116,90 @@ class ReviewOwnershipTransferAsAdminTest extends OwnershipTransferAdminTestCase
         $response->assertJsonPath('data.status', $state->value);
     }
 
+    // --- Happy ---
+
+    // Happy — the full forensic contract, locked byte-for-byte: every designed
+    // key present, the verifier material and raw ids the owner resource
+    // withholds on the wire, the target email unmasked, and the not-yet-built
+    // transition columns (T4/T5/T8) rendering null — the shape Tasks 4, 5 and 8
+    // will return on their own 200s.
+    #[Test]
+    public function when_a_platform_admin_reads_a_transfer_then_the_full_admin_contract_is_returned(): void
+    {
+        // Given an allowlisted admin and a verified transfer with a known target
+        $admin = $this->anAllowlistedAdmin();
+        [$company] = $this->aCompanyWithMember('owner');
+        $target = User::factory()->create(['name' => 'Alex Turner', 'email' => 'alex.turner@contoso.test']);
+        $transfer = $this->aTransferInState($company, $target, OwnershipTransferStatus::Verified);
+        $owner = User::query()->findOrFail($company->owner_id);
+
+        // When the admin reads it
+        $response = $this->getAdminTransfer($admin, $transfer->getKey());
+
+        // Then the full admin envelope is returned exactly
+        $response->assertOk();
+        $response->assertExactJson(['data' => [
+            'id' => $transfer->getKey(),
+            'company_id' => $company->getKey(),
+            'company' => [
+                'id' => $company->getKey(),
+                'name' => $company->name,
+                'br_number' => $company->br_number,
+                'epf_number' => $company->epf_number,
+                // Literals, matching the ReviewInvoiceAsAdminTest precedent: the
+                // in-memory factory model holds the raw strings, so reading them
+                // back through the enum accessor here would assert null while the
+                // resource renders the cast value.
+                'plan' => 'pro',
+                'status' => 'trial',
+            ],
+            'status' => 'verified',
+            'request_channel' => 'app',
+            'reason' => $transfer->reason,
+            'requested_at' => $transfer->requested_at->toJSON(),
+            'requested_by' => ['id' => $owner->getKey(), 'name' => $owner->name, 'email' => $owner->email],
+            'target_user' => ['id' => $target->getKey(), 'name' => 'Alex Turner', 'email' => 'alex.turner@contoso.test'],
+            'verified_at' => $transfer->verified_at?->toJSON(),
+            'verified_by' => $transfer->verified_by,
+            'verification_notes' => 'Email confirmation + ID document verified.',
+            'verification_artefacts' => null,
+            'executed_at' => null,
+            'executed_by' => null,
+            'old_owner_user_id' => null,
+            'new_owner_user_id' => null,
+            'rejected_at' => null,
+            'rejected_by' => null,
+            'rejection_reason' => null,
+            'rejection_source' => null,
+            'cancelled_at' => null,
+            'cancelled_by' => null,
+            'cancellation_source' => null,
+            'cancellation_reason' => null,
+            'expired_at' => null,
+            'expiry_source' => null,
+            'expired_after_days' => null,
+            'next_state_transition_at' => $transfer->next_state_transition_at?->toJSON(),
+        ]]);
+    }
+
+    // Happy — the read is recorded: ONE audit row naming a real entity subject
+    // and a real tenant, in contrast with the queue's subject-less row (F3).
+    #[Test]
+    public function when_a_platform_admin_reads_a_transfer_then_the_read_is_recorded_in_the_audit_trail(): void
+    {
+        // Given an allowlisted admin and a tenant's transfer
+        $admin = $this->anAllowlistedAdmin();
+        [$company] = $this->aCompanyWithMember('owner');
+        $transfer = $this->aTransferInState($company, User::factory()->create(), OwnershipTransferStatus::Requested);
+
+        // When the admin reads it
+        $response = $this->getAdminTransfer($admin, $transfer->getKey());
+
+        // Then exactly one audit row records who read what, and when
+        $response->assertOk();
+        $this->assertTransferReadAudited($transfer, $admin, $response);
+    }
+
     /**
      * @return array<string, array{OwnershipTransferStatus}>
      */
