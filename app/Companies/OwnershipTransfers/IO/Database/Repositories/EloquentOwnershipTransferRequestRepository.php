@@ -68,6 +68,7 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
                 fn (Builder $query) => $query->openStates(),
                 fn (Builder $query) => $query->withState($filters->state),
             )
+            ->forCompanyId($filters->company_id)
             ->paginate(
                 perPage: $filters->per_page ?? self::DEFAULT_PER_PAGE,
                 page: $filters->page ?? 1,

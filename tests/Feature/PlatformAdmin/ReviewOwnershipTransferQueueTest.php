@@ -146,6 +146,63 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         $this->assertEqualsCanonicalizing($open, $response->collect('data')->pluck('id')->all());
     }
 
+    // Edge — terminal states are excluded from the default set but remain
+    // readable on request, which is what makes the queue usable for audit
+    // lookback (UC-1-127 alt-flow 4d).
+    #[Test]
+    #[DataProvider('provideTerminalStates')]
+    public function when_a_terminal_state_is_requested_then_those_rows_are_returned_for_lookback(OwnershipTransferStatus $state): void
+    {
+        // Given a company holding one transfer in the terminal state under test and one still open
+        $admin = $this->anAllowlistedAdmin();
+        [$company] = $this->aCompanyWithMember('owner');
+        $target = User::factory()->create();
+        $terminal = $this->aTransferInState($company, $target, $state);
+        $this->aTransferInState($company, $target, OwnershipTransferStatus::Requested);
+
+        // When the admin asks for that terminal state explicitly
+        $response = $this->getAdminQueue($admin, ['state' => $state->value]);
+
+        // Then only the terminal row is returned
+        $response->assertOk();
+        $this->assertQueueOrder($response, [$terminal->getKey()]);
+    }
+
+    // Edge — the single-tenant drill-down an admin uses while working a support
+    // ticket: ?company_id= narrows the cross-tenant queue to one tenant
+    // (UC-1-127 alt-flow 4e). It is a FILTER, not a scope - the read stays
+    // cross-tenant by default.
+    #[Test]
+    public function when_a_company_filter_is_applied_then_only_that_tenants_transfers_are_listed(): void
+    {
+        // Given two companies each holding an open transfer
+        $admin = $this->anAllowlistedAdmin();
+        [$wanted] = $this->aCompanyWithMember('owner');
+        [$other] = $this->aCompanyWithMember('owner');
+        $mine = $this->aTransferInState($wanted, User::factory()->create(), OwnershipTransferStatus::Requested);
+        $this->aTransferInState($other, User::factory()->create(), OwnershipTransferStatus::Requested);
+
+        // When the admin drills into one tenant
+        $response = $this->getAdminQueue($admin, ['company_id' => $wanted->getKey()]);
+
+        // Then only that tenant's transfer is listed
+        $response->assertOk();
+        $this->assertQueueOrder($response, [$mine->getKey()]);
+    }
+
+    /**
+     * @return array<string, array{OwnershipTransferStatus}>
+     */
+    public static function provideTerminalStates(): array
+    {
+        return [
+            'executed' => [OwnershipTransferStatus::Executed],
+            'rejected' => [OwnershipTransferStatus::Rejected],
+            'cancelled' => [OwnershipTransferStatus::Cancelled],
+            'expired' => [OwnershipTransferStatus::Expired],
+        ];
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
