@@ -5,6 +5,7 @@ namespace App\Companies\OwnershipTransfers\UseCases\Repositories;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferFilters;
+use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferAdminFilters;
 
 /**
  * Read seam for the transfer-request projection (CD-1-05 §3). Task-1 scope:
@@ -32,4 +33,20 @@ interface OwnershipTransferRequestRepositoryInterface
      * exist OR belongs to another company (existence-hidden 404, not 403).
      */
     public function findByIdForCompany(string $companyId, string $requestId): ?OwnershipTransferRequest;
+
+    /**
+     * The platform-admin triage queue (UC-1-127) — deliberately UNSCOPED by
+     * company: the /api/v1/admin/* family is cross-tenant by design.
+     *
+     * @return LengthAwarePaginator<int, OwnershipTransferRequest>
+     */
+    public function paginateForAdminQueue(OwnershipTransferAdminFilters $filters): LengthAwarePaginator;
+
+    /**
+     * A single transfer resolved WITHOUT a company predicate (UC-1-127 detail) —
+     * the platform-admin counterpart to findByIdForCompany. Named for the
+     * boundary it crosses: a bare `findById` beside `findByIdForCompany` reads
+     * as the innocent default when it is in fact the cross-tenant one.
+     */
+    public function findByIdAcrossTenants(string $requestId): ?OwnershipTransferRequest;
 }

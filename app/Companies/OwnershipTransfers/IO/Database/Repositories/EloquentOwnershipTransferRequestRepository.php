@@ -2,10 +2,12 @@
 
 namespace App\Companies\OwnershipTransfers\IO\Database\Repositories;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferFilters;
+use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferAdminFilters;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
 
 class EloquentOwnershipTransferRequestRepository implements OwnershipTransferRequestRepositoryInterface
@@ -51,5 +53,44 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
             ->forCompany($companyId)
             ->whereKey($requestId)
             ->first();
+    }
+
+    public function findByIdAcrossTenants(string $requestId): ?OwnershipTransferRequest
+    {
+        // No company predicate — cross-tenant by design (UC-1-127).
+        return OwnershipTransferRequest::query()
+            ->withAdminRelations()
+            ->whereKey($requestId)
+            ->first();
+    }
+
+    /**
+     * @return LengthAwarePaginator<int, OwnershipTransferRequest>
+     */
+    public function paginateForAdminQueue(OwnershipTransferAdminFilters $filters): LengthAwarePaginator
+    {
+        // No company predicate: cross-tenant is the defining property of this
+        // read (UC-1-127 Tenant Isolation — "intentionally cross-tenant").
+        return OwnershipTransferRequest::query()
+            ->withAdminRelations()
+            ->when(
+                $filters->state === null,
+                fn (Builder $query) => $query->openStates(),
+                fn (Builder $query) => $query->withState($filters->state),
+            )
+            // Inlined rather than a scope: a `forCompanyId(?string)` that silently
+            // matches EVERY tenant on null sat one noun away from `forCompany()`,
+            // the mandatory tenant-isolation scope — and the permissive one read
+            // as the stricter. A future forCompanyId($request->company()?->getKey())
+            // on a tenant path would have compiled, passed L8, and leaked.
+            ->when(
+                $filters->company_id !== null,
+                fn (Builder $query) => $query->where('company_id', $filters->company_id),
+            )
+            ->byDeadlineFirst()
+            ->paginate(
+                perPage: $filters->per_page ?? self::DEFAULT_PER_PAGE,
+                page: $filters->page ?? 1,
+            );
     }
 }

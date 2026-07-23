@@ -27,8 +27,10 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
 
     // Sad — the schema rejects an entry missing a required field: action is
     // NOT NULL per ERD-1-11 §3 and stands as the REPRESENTATIVE pin for the
-    // schema's required set (event_class/subject_type/subject_id share the
-    // same constraint class — TA-4.3). The assertion pins the SPECIFIC
+    // schema's required set (event_class/subject_type share the same
+    // constraint class — TA-4.3). subject_id was in that set until s148, when
+    // UC-1-127's cross-tenant queue read - a query access-event with no entity
+    // subject - made it nullable. The assertion pins the SPECIFIC
     // violation (SQLSTATE 23000 + the driver message naming the column) so
     // neither a missing TABLE (42S02) nor a violation on a different column
     // can false-pass this test.
@@ -51,23 +53,26 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
         }
     }
 
-    // Edge — a platform-level system row holds all three nullable scopes at
+    // Edge — a platform-level system row holds all four nullable scopes at
     // once: no tenant (company_id NULL — platform events, ERD-1-11 §3), no
-    // human actor (system-driven), and no source domain event (the direct-
-    // write case T7 rides). Teeth: REDs if any of the trio is ever tightened
-    // to NOT NULL.
+    // human actor (system-driven), no source domain event (the direct-write
+    // case T7 rides), and since s148 no entity subject either (a cross-tenant
+    // QUERY access-event names none — UC-1-127 F3). Teeth: REDs if any of the
+    // quartet is ever tightened to NOT NULL.
     #[Test]
     public function when_appending_a_platform_level_system_entry_then_nullable_scopes_hold(): void
     {
         // Given a platform-level, system-driven entry outside the event flow
         $entry = AuditEntry::factory()->platformLevel()->system()->create();
+        $entry->forceFill(['subject_id' => null])->save();
 
-        // Then the row persists with the full nullable trio
+        // Then the row persists with the full nullable quartet
         $this->assertDatabaseHas('audit_trail', [
             'id' => $entry->getKey(),
             'company_id' => null,
             'actor_user_id' => null,
             'stored_event_id' => null,
+            'subject_id' => null,
         ]);
     }
 
