@@ -52,4 +52,43 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertNoAuditRecorded();
     }
+
+    // Sad — the query whitelist refuses anything it does not model, and the read
+    // never happens, so nothing is recorded (UC-1-127 error-flows 4h/4i).
+    /**
+     * @param  array<string, mixed>  $query
+     */
+    #[Test]
+    #[DataProvider('provideInvalidQueryInputs')]
+    public function when_the_query_input_is_invalid_then_it_is_rejected(array $query, string $invalidField): void
+    {
+        // Given an allowlisted platform admin
+        $admin = $this->anAllowlistedAdmin();
+
+        // When they call the queue with an unsupported query parameter
+        $response = $this->getAdminQueue($admin, $query);
+
+        // Then it is refused as shape-invalid on the offending field and no read is recorded
+        $this->assertValidationRejected($response, $invalidField);
+        $this->assertNoAuditRecorded();
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function provideInvalidQueryInputs(): array
+    {
+        return [
+            'unknown filter key' => [['foo' => 'bar'], 'foo'],
+            'old status param name' => [['status' => 'requested'], 'status'],
+            // ?sort= is deliberately unsupported on the admin queue: ordering is
+            // hard-coded soonest-deadline-first (F1), the LD-idiomatic shape.
+            'sort is not a queue parameter' => [['sort' => 'requested_at'], 'sort'],
+            'non-canonical state' => [['state' => 'completed'], 'state'],
+            'company filter is not a uuid' => [['company_id' => 'not-a-uuid'], 'company_id'],
+            'per_page over the ceiling' => [['per_page' => 101], 'per_page'],
+            'per_page below one' => [['per_page' => 0], 'per_page'],
+            'page below one' => [['page' => 0], 'page'],
+        ];
+    }
 }

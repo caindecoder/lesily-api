@@ -34,6 +34,30 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
     }
 
     /**
+     * A fresh user who IS on the platform-admin allowlist — the only caller the
+     * /api/v1/admin/* family lets through (F7: the interim config allowlist, not
+     * a seeded permission).
+     */
+    protected function anAllowlistedAdmin(): User
+    {
+        $admin = User::factory()->create();
+        $this->allowlist([$admin->getKey()]);
+
+        return $admin;
+    }
+
+    /**
+     * The request was refused as shape-invalid — the §S21 validation envelope
+     * with an error on $field.
+     */
+    protected function assertValidationRejected(TestResponse $response, string $field): void
+    {
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
+        $response->assertJsonValidationErrors($field);
+    }
+
+    /**
      * A persisted transfer row for $company targeting $target in $state (the
      * company's factory owner is the initiator). The endpoints that PRODUCE the
      * non-requested states land in later slice tasks; a read fixture arranges
