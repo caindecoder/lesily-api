@@ -30,6 +30,7 @@ use App\Billing\Invoices\IO\Http\Controllers\PlatformAdminInvoicesController;
 use App\Companies\Memberships\IO\Http\Controllers\AcceptInvitationController;
 use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
 use App\Companies\OwnershipTransfers\IO\Http\Controllers\OwnershipTransfersController;
+use App\Companies\OwnershipTransfers\IO\Http\Controllers\PlatformAdminOwnershipTransfersController;
 
 // Health is operational tooling and opts out of the platform cross-cutting
 // middleware (no Correlation-Id) — UC-1-118 / cd-foundation-http §4.2.
@@ -299,4 +300,12 @@ Route::get('/v1/invoices/{invoiceId}/receipt', [InvoicesController::class, 'rece
 // persistence (s129 R8/E07): ONE audit_trail row on 200, none on 404.
 // No throttle (tiered — OQ-1-098).
 Route::get('/v1/admin/invoices/{invoiceId}', [PlatformAdminInvoicesController::class, 'show'])
+    ->middleware(['auth:sanctum', 'platform.admin']);
+
+// The platform admin's cross-tenant ownership-transfer triage queue (UC-1-127,
+// slice #11 Task 3) — same admin chain as the invoice review above, no
+// auth.company, no permission: gate (the admin family carries no company
+// context, and matrix line 185 keeps admin reads on the allowlist rather than a
+// seeded permission). Ordered soonest-deadline-first, open states by default.
+Route::get('/v1/admin/ownership-transfers', [PlatformAdminOwnershipTransfersController::class, 'index'])
     ->middleware(['auth:sanctum', 'platform.admin']);
