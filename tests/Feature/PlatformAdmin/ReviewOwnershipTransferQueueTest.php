@@ -73,6 +73,28 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         $this->assertNoAuditRecorded();
     }
 
+    // --- Edge ---
+
+    // Edge — a quiet queue still records the access: the read happened, even
+    // though it returned nothing (UC-1-127 alt-flow 4f).
+    #[Test]
+    public function when_no_transfers_are_open_then_the_queue_is_empty_and_the_read_is_still_recorded(): void
+    {
+        // Given an allowlisted platform admin and no transfers anywhere
+        $admin = $this->anAllowlistedAdmin();
+
+        // When they open the queue
+        $response = $this->getAdminQueue($admin);
+
+        // Then the envelope is empty with a zero total, and the read is still recorded
+        $response->assertOk();
+        $response->assertExactJson([
+            'data' => [],
+            'meta' => ['pagination' => ['page' => 1, 'per_page' => 15, 'total' => 0, 'last_page' => 1]],
+        ]);
+        $this->assertQueueReadAudited($response, ['filters' => [], 'result_count' => 0, 'page' => 1]);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */

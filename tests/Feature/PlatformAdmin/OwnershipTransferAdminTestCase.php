@@ -6,6 +6,7 @@ use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
@@ -55,6 +56,39 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
         $response->assertJsonValidationErrors($field);
+    }
+
+    /**
+     * Exactly ONE platform-level audit row records the queue read (F3): a
+     * cross-tenant query has no single entity subject and spans companies, so
+     * subject_id and company_id are both NULL — the cd-audit-trail
+     * platformLevelOnly() category — with the query context in metadata.
+     *
+     * @param  array<string, mixed>  $expectedMetadata
+     */
+    protected function assertQueueReadAudited(TestResponse $response, array $expectedMetadata): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'event_class' => 'AdminOwnershipTransferQueueViewed',
+            'subject_type' => 'ownership_transfer_queue',
+            'subject_id' => null,
+            'company_id' => null,
+            'action' => 'admin_queue_viewed',
+            'actor_role_code' => 'platform_super_admin',
+            'stored_event_id' => null,
+            'severity' => 'info',
+            'ip_address' => '127.0.0.1',
+        ]);
+
+        $entry = AuditEntry::query()->sole();
+        // assertEquals, not assertSame: MySQL normalizes JSON object key order
+        // (by key length, then bytewise) on storage, so a round-tripped metadata
+        // array comes back reordered. The contract is the key/value content —
+        // assertEquals still requires exactly these keys with exactly these
+        // values, it just does not assert MySQL's internal ordering.
+        $this->assertEquals($expectedMetadata, $entry->metadata);
+        $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
     }
 
     /**

@@ -2,9 +2,12 @@
 
 namespace App\Companies\OwnershipTransfers\IO\Http\Controllers;
 
-use RuntimeException;
+use App\Models\User;
 use Illuminate\Http\Request;
+use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferAdminFilters;
+use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestAdminCollection;
+use App\Companies\OwnershipTransfers\UseCases\Interactors\ReviewOwnershipTransferQueueInteractor;
 
 /**
  * The platform-admin cross-tenant ownership-transfer reads (UC-1-127) — behind
@@ -16,10 +19,17 @@ use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferAdminFil
  */
 class PlatformAdminOwnershipTransfersController
 {
-    public function index(Request $request): never
+    public function index(Request $request, ReviewOwnershipTransferQueueInteractor $interactor): OwnershipTransferRequestAdminCollection
     {
-        OwnershipTransferAdminFilters::fromQuery($request);
+        /** @var User $admin — guaranteed by auth:sanctum */
+        $admin = $request->user();
 
-        throw new RuntimeException('Not implemented');
+        return new OwnershipTransferRequestAdminCollection(
+            $interactor->execute(
+                OwnershipTransferAdminFilters::fromQuery($request),
+                $admin,
+                AdminRequestContext::fromRequest($request),
+            )
+        );
     }
 }

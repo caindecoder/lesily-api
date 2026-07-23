@@ -6,6 +6,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferFilters;
+use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferAdminFilters;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
 
 class EloquentOwnershipTransferRequestRepository implements OwnershipTransferRequestRepositoryInterface
@@ -51,5 +52,19 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
             ->forCompany($companyId)
             ->whereKey($requestId)
             ->first();
+    }
+
+    /**
+     * @return LengthAwarePaginator<int, OwnershipTransferRequest>
+     */
+    public function paginateForAdminQueue(OwnershipTransferAdminFilters $filters): LengthAwarePaginator
+    {
+        // No company predicate: cross-tenant is the defining property of this
+        // read (UC-1-127 Tenant Isolation — "intentionally cross-tenant").
+        return OwnershipTransferRequest::query()
+            ->paginate(
+                perPage: $filters->per_page ?? self::DEFAULT_PER_PAGE,
+                page: $filters->page ?? 1,
+            );
     }
 }
