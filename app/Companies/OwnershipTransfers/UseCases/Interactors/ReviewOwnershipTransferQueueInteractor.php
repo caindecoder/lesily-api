@@ -37,9 +37,30 @@ class ReviewOwnershipTransferQueueInteractor
     {
         $page = $this->transfers->paginateForAdminQueue($filters);
 
-        $this->recordQueueRead($filters, $page, $admin, $context);
+        $this->recordQueueRead($this->queryContext($filters, $page), $admin, $context);
 
         return $page;
+    }
+
+    /**
+     * What the admin actually asked for and what came back — the query context
+     * the audit row carries in place of an entity subject.
+     *
+     * @param  LengthAwarePaginator<int, OwnershipTransferRequest>  $page
+     * @return array{filters: array<string, mixed>, result_count: int, page: int}
+     */
+    private function queryContext(OwnershipTransferAdminFilters $filters, LengthAwarePaginator $page): array
+    {
+        return [
+            'filters' => array_filter(
+                $filters->toArray(),
+                static fn (mixed $value): bool => $value !== null,
+            ),
+            // items(), not count(): count() lives on the concrete paginator, not
+            // the contract this method is typed against (Larastan L8).
+            'result_count' => count($page->items()),
+            'page' => $page->currentPage(),
+        ];
     }
 
     /**
@@ -48,14 +69,10 @@ class ReviewOwnershipTransferQueueInteractor
      * cross-tenant query names no single entity and belongs to no single
      * tenant (F3). The query context rides metadata instead.
      *
-     * @param  LengthAwarePaginator<int, OwnershipTransferRequest>  $page
+     * @param  array{filters: array<string, mixed>, result_count: int, page: int}  $queryContext
      */
-    private function recordQueueRead(
-        OwnershipTransferAdminFilters $filters,
-        LengthAwarePaginator $page,
-        User $admin,
-        AdminRequestContext $context,
-    ): void {
+    private function recordQueueRead(array $queryContext, User $admin, AdminRequestContext $context): void
+    {
         AuditEntry::query()->create([
             'company_id' => null,
             'stored_event_id' => null,
@@ -64,7 +81,7 @@ class ReviewOwnershipTransferQueueInteractor
             'subject_id' => null,
             'subject_label' => 'Ownership transfer queue',
             'action' => 'admin_queue_viewed',
-            'description' => "Platform admin viewed the ownership transfer queue ({$page->total()} matching).",
+            'description' => "Platform admin viewed page {$queryContext['page']} of the ownership transfer queue ({$queryContext['result_count']} shown).",
             'actor_user_id' => $admin->getKey(),
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => $admin->name,
@@ -74,16 +91,7 @@ class ReviewOwnershipTransferQueueInteractor
             // s137 I-1 bounded-fidelity ruling).
             'user_agent' => $this->bounded($context->userAgent),
             'request_id' => $this->bounded($context->requestId),
-            'metadata' => [
-                'filters' => array_filter(
-                    $filters->toArray(),
-                    static fn (mixed $value): bool => $value !== null,
-                ),
-                // items(), not count(): count() lives on the concrete paginator,
-                // not the contract this method is typed against (Larastan L8).
-                'result_count' => count($page->items()),
-                'page' => $page->currentPage(),
-            ],
+            'metadata' => $queryContext,
             'recorded_at' => now(),
         ]);
     }
