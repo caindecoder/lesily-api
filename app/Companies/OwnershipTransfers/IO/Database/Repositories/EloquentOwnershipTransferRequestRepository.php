@@ -2,6 +2,7 @@
 
 namespace App\Companies\OwnershipTransfers\IO\Database\Repositories;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
@@ -62,6 +63,11 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
         // No company predicate: cross-tenant is the defining property of this
         // read (UC-1-127 Tenant Isolation — "intentionally cross-tenant").
         return OwnershipTransferRequest::query()
+            ->when(
+                $filters->state === null,
+                fn (Builder $query) => $query->openStates(),
+                fn (Builder $query) => $query->withState($filters->state),
+            )
             ->paginate(
                 perPage: $filters->per_page ?? self::DEFAULT_PER_PAGE,
                 page: $filters->page ?? 1,

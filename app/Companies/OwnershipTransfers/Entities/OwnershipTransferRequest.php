@@ -87,6 +87,21 @@ class OwnershipTransferRequest extends Model
     }
 
     /**
+     * The platform-admin queue's default set (UC-1-127 F5): the two OPEN states
+     * only, so terminal history never buries actionable work. Derives from the
+     * enum's own predicate — one source of truth for "which states are open".
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeOpenStates(Builder $query): void
+    {
+        $query->whereIn('status', array_filter(
+            OwnershipTransferStatus::cases(),
+            fn (OwnershipTransferStatus $status): bool => $status->isOpen(),
+        ));
+    }
+
+    /**
      * Newest-first by default (`-requested_at`); ascending when the caller passed
      * `?sort=requested_at`. Stable id tie-break for deterministic pagination.
      *

@@ -120,6 +120,32 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         );
     }
 
+    // Edge — the queue is a WORK queue: with no ?state= it shows only the two
+    // open states, so terminal history never buries actionable items (F5). The
+    // terminals stay reachable by asking for them explicitly (alt-flow 4d).
+    #[Test]
+    public function when_the_state_filter_is_omitted_then_only_open_transfers_are_listed(): void
+    {
+        // Given one company holding a transfer in every one of the six states
+        $admin = $this->anAllowlistedAdmin();
+        [$company] = $this->aCompanyWithMember('owner');
+        $target = User::factory()->create();
+        $open = [];
+        foreach (OwnershipTransferStatus::cases() as $state) {
+            $transfer = $this->aTransferInState($company, $target, $state);
+            if ($state->isOpen()) {
+                $open[] = $transfer->getKey();
+            }
+        }
+
+        // When the admin opens the queue with no state filter
+        $response = $this->getAdminQueue($admin);
+
+        // Then only the open (requested + verified) rows are listed
+        $response->assertOk();
+        $this->assertEqualsCanonicalizing($open, $response->collect('data')->pluck('id')->all());
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
