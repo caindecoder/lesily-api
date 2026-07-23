@@ -4,8 +4,11 @@ namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
+use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 
 /**
  * Shared fixtures for the ownership-transfer PLATFORM-ADMIN reads (UC-1-127,
@@ -28,6 +31,32 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
         // Error-path render parity (amendment M): APP_DEBUG=true masks the prod
         // render path, so rejections must render their mapped envelopes.
         config(['app.debug' => false]);
+    }
+
+    /**
+     * A persisted transfer row for $company targeting $target in $state (the
+     * company's factory owner is the initiator). The endpoints that PRODUCE the
+     * non-requested states land in later slice tasks; a read fixture arranges
+     * the projection directly. Duplicated from OwnershipTransfersTestCase —
+     * module bases are independent (established precedent).
+     */
+    protected function aTransferInState(Company $company, User $target, OwnershipTransferStatus $state): OwnershipTransferRequest
+    {
+        $factory = OwnershipTransferRequest::factory();
+        $factory = match ($state) {
+            OwnershipTransferStatus::Requested => $factory->requested(),
+            OwnershipTransferStatus::Verified => $factory->verified(),
+            OwnershipTransferStatus::Executed => $factory->executed(),
+            OwnershipTransferStatus::Rejected => $factory->rejected(),
+            OwnershipTransferStatus::Cancelled => $factory->cancelled(),
+            OwnershipTransferStatus::Expired => $factory->expired(),
+        };
+
+        return $factory->create([
+            'company_id' => $company->getKey(),
+            'current_owner_user_id' => $company->owner_id,
+            'target_user_id' => $target->getKey(),
+        ]);
     }
 
     /**
