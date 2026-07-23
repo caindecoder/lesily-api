@@ -3,6 +3,7 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -74,6 +75,50 @@ class ReviewOwnershipTransferAsAdminTest extends OwnershipTransferAdminTestCase
         // Then the response is the generic not-found and no read is recorded
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertNoAuditRecorded();
+    }
+
+    // Sad — a malformed path segment is refused the same way as any unknown id.
+    // The route carries no whereUuid constraint, so this guards the no-leak
+    // posture against a future column-type or driver change turning a bad
+    // segment into a 500 that leaks a driver message.
+    #[Test]
+    public function when_the_path_segment_is_malformed_then_not_found_is_returned_and_no_read_is_recorded(): void
+    {
+        // Given an allowlisted platform admin
+        $admin = $this->anAllowlistedAdmin();
+
+        // When they ask for an id that is not even a uuid
+        $response = $this->getAdminTransfer($admin, 'not-a-uuid');
+
+        // Then the response is the generic not-found and no read is recorded
+        $this->assertResourceNotFoundNoLeak($response);
+        $this->assertNoAuditRecorded();
+    }
+
+    // Sad — the no-leak claim stated as BYTE-IDENTITY rather than as two separate
+    // structural checks: a denied caller and an unknown id must be
+    // indistinguishable. assertJsonStructure is a subset check and would tolerate
+    // an extra key (a reason, a required_role, a debug hint) appearing on one
+    // path but not the other; comparing the two bodies directly cannot.
+    #[Test]
+    public function when_a_caller_is_denied_then_the_body_is_identical_to_an_unknown_id(): void
+    {
+        // Given a real transfer, a tenant member who may not see it, and an admin
+        [$company, $member] = $this->aCompanyWithMember('owner');
+        $transfer = $this->aTransferInState($company, User::factory()->create(), OwnershipTransferStatus::Requested);
+        $admin = User::factory()->create();
+
+        // When the denied member asks for the real id, and an allowlisted admin asks for an unknown one
+        $this->allowlist([(string) Str::uuid()]);
+        $denied = $this->getAdminTransfer($member, $transfer->getKey());
+        $this->allowlist([$admin->getKey()]);
+        $unknown = $this->getAdminTransfer($admin, (string) Str::uuid());
+
+        // Then the two bodies are identical once the per-request correlation id is set aside
+        $this->assertSame(
+            Arr::except($denied->json(), 'correlation_id'),
+            Arr::except($unknown->json(), 'correlation_id'),
+        );
     }
 
     // --- Edge ---
@@ -198,18 +243,5 @@ class ReviewOwnershipTransferAsAdminTest extends OwnershipTransferAdminTestCase
         // Then exactly one audit row records who read what, and when
         $response->assertOk();
         $this->assertTransferReadAudited($transfer, $admin, $response);
-    }
-
-    /**
-     * @return array<string, array{OwnershipTransferStatus}>
-     */
-    public static function provideTerminalStates(): array
-    {
-        return [
-            'executed' => [OwnershipTransferStatus::Executed],
-            'rejected' => [OwnershipTransferStatus::Rejected],
-            'cancelled' => [OwnershipTransferStatus::Cancelled],
-            'expired' => [OwnershipTransferStatus::Expired],
-        ];
     }
 }

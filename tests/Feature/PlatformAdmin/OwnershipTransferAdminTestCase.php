@@ -36,6 +36,23 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
     }
 
     /**
+     * The four terminal SM-1-05 states, shared by both admin read classes (the
+     * same reasoning that lifted provideTenantRoles to PlatformAdminTestCase —
+     * a matrix with a second consumer belongs on the base, not duplicated).
+     *
+     * @return array<string, array{OwnershipTransferStatus}>
+     */
+    public static function provideTerminalStates(): array
+    {
+        return [
+            'executed' => [OwnershipTransferStatus::Executed],
+            'rejected' => [OwnershipTransferStatus::Rejected],
+            'cancelled' => [OwnershipTransferStatus::Cancelled],
+            'expired' => [OwnershipTransferStatus::Expired],
+        ];
+    }
+
+    /**
      * A fresh user who IS on the platform-admin allowlist — the only caller the
      * /api/v1/admin/* family lets through (F7: the interim config allowlist, not
      * a seeded permission).
@@ -80,7 +97,7 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
      *
      * @param  array<string, mixed>  $expectedMetadata
      */
-    protected function assertQueueReadAudited(TestResponse $response, array $expectedMetadata): void
+    protected function assertQueueReadAudited(TestResponse $response, User $admin, array $expectedMetadata): void
     {
         $this->assertDatabaseCount('audit_trail', 1);
         $this->assertDatabaseHas('audit_trail', [
@@ -88,7 +105,15 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
             'subject_type' => 'ownership_transfer_queue',
             'subject_id' => null,
             'company_id' => null,
+            'subject_label' => 'Ownership transfer queue',
             'action' => 'admin_queue_viewed',
+            // The ACTOR is the whole point of this row: it is the only record of
+            // who ran an unscoped query across every tenant's pipeline, which is
+            // the transparency-of-access the UC exists to produce. actor_user_id
+            // is nullable, so without these two a regression that drops the
+            // actor keeps CI green and destroys exactly the evidence.
+            'actor_user_id' => $admin->getKey(),
+            'actor_label' => $admin->name,
             'actor_role_code' => 'platform_super_admin',
             'stored_event_id' => null,
             'severity' => 'info',
@@ -158,6 +183,8 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
             'subject_type' => 'ownership_transfer_request',
             'subject_id' => $transfer->getKey(),
             'company_id' => $transfer->company_id,
+            'subject_label' => 'Ownership transfer request',
+            'description' => 'Platform admin reviewed an ownership transfer request.',
             'action' => 'admin_reviewed',
             'actor_user_id' => $admin->getKey(),
             'actor_role_code' => 'platform_super_admin',
@@ -169,6 +196,10 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
 
         $entry = AuditEntry::query()->sole();
         $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
+        // metadata is the free-form column, and it is the one place a
+        // cross-tenant query context could end up inside a row stamped with a
+        // single tenant's company_id — which that tenant can read via UC-1-066.
+        $this->assertNull($entry->metadata);
     }
 
     /**
@@ -195,8 +226,9 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
      * auth.company (cd-foundation-http §3).
      *
      * @param  array<string, mixed>  $query
+     * @param  array<string, string>  $headers
      */
-    protected function getAdminQueue(?User $caller, array $query = []): TestResponse
+    protected function getAdminQueue(?User $caller, array $query = [], array $headers = []): TestResponse
     {
         if ($caller !== null) {
             Sanctum::actingAs($caller);
@@ -204,6 +236,6 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
 
         $url = '/api/v1/admin/ownership-transfers'.($query === [] ? '' : '?'.http_build_query($query));
 
-        return $this->getJson($url);
+        return $this->getJson($url, $headers);
     }
 }

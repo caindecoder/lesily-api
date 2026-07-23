@@ -132,20 +132,6 @@ class OwnershipTransferRequest extends Model
     }
 
     /**
-     * The admin queue's optional single-tenant drill-down (UC-1-127 alt-flow
-     * 4e). Distinct from scopeForCompany: this is a FILTER on a deliberately
-     * cross-tenant read, not tenant scoping, and it eager-loads nothing.
-     *
-     * @param  Builder<self>  $query
-     */
-    public function scopeForCompanyId(Builder $query, ?string $companyId): void
-    {
-        if ($companyId !== null) {
-            $query->where('company_id', $companyId);
-        }
-    }
-
-    /**
      * The platform-admin queue's default set (UC-1-127 F5): the two OPEN states
      * only, so terminal history never buries actionable work. Derives from the
      * enum's own predicate — one source of truth for "which states are open".

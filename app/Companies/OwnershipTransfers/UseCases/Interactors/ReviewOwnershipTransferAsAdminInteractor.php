@@ -3,7 +3,6 @@
 namespace App\Companies\OwnershipTransfers\UseCases\Interactors;
 
 use App\Models\User;
-use Illuminate\Support\Str;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\Http\Values\AdminRequestContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -29,7 +28,7 @@ class ReviewOwnershipTransferAsAdminInteractor
 
     public function execute(string $requestId, User $admin, AdminRequestContext $context): OwnershipTransferRequest
     {
-        $transfer = $this->transfers->findById($requestId);
+        $transfer = $this->transfers->findByIdAcrossTenants($requestId);
 
         if ($transfer === null) {
             throw new ModelNotFoundException;
@@ -55,15 +54,10 @@ class ReviewOwnershipTransferAsAdminInteractor
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => $admin->name,
             'ip_address' => $context->ip,
-            'user_agent' => $this->bounded($context->userAgent),
-            'request_id' => $this->bounded($context->requestId),
+            'user_agent' => $context->boundedUserAgent(),
+            'request_id' => $context->boundedRequestId(),
             'metadata' => null,
             'recorded_at' => now(),
         ]);
-    }
-
-    private function bounded(?string $value): ?string
-    {
-        return $value === null ? null : Str::limit($value, 255, '');
     }
 }

@@ -3,7 +3,6 @@
 namespace App\Companies\OwnershipTransfers\UseCases\Interactors;
 
 use App\Models\User;
-use Illuminate\Support\Str;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\Http\Values\AdminRequestContext;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -89,15 +88,10 @@ class ReviewOwnershipTransferQueueInteractor
             // Client-controlled header values bounded to their varchar(255)
             // columns — MySQL strict mode 22001s an over-length insert (the
             // s137 I-1 bounded-fidelity ruling).
-            'user_agent' => $this->bounded($context->userAgent),
-            'request_id' => $this->bounded($context->requestId),
+            'user_agent' => $context->boundedUserAgent(),
+            'request_id' => $context->boundedRequestId(),
             'metadata' => $queryContext,
             'recorded_at' => now(),
         ]);
-    }
-
-    private function bounded(?string $value): ?string
-    {
-        return $value === null ? null : Str::limit($value, 255, '');
     }
 }

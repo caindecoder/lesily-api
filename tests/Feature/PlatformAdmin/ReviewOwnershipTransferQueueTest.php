@@ -6,8 +6,10 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
+use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferAdminFilters;
@@ -97,7 +99,7 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
             'data' => [],
             'meta' => ['pagination' => ['page' => 1, 'per_page' => 15, 'total' => 0, 'last_page' => 1]],
         ]);
-        $this->assertQueueReadAudited($response, ['filters' => [], 'result_count' => 0, 'page' => 1]);
+        $this->assertQueueReadAudited($response, $admin, ['filters' => [], 'result_count' => 0, 'page' => 1]);
     }
 
     // Edge — cross-tenant is the whole point: transfers belonging to companies
@@ -173,6 +175,31 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         $this->assertQueueOrder($response, [$terminal->getKey()]);
     }
 
+    // Edge — terminal rows all carry a NULL deadline, so their ordering falls
+    // through to the id tie-break. Pinned with three rows because a one-row
+    // assertion cannot see ordering at all, and because "it happens to come out
+    // oldest-first" is currently an accident of UUIDv7 being time-ordered rather
+    // than a stated contract.
+    #[Test]
+    public function when_several_terminal_rows_are_requested_then_the_id_tie_break_orders_them(): void
+    {
+        // Given three rejected transfers for one company
+        $admin = $this->anAllowlistedAdmin();
+        [$company] = $this->aCompanyWithMember('owner');
+        $target = User::factory()->create();
+        $rejected = collect(range(1, 3))
+            ->map(fn (): string => $this->aTransferInState($company, $target, OwnershipTransferStatus::Rejected)->getKey())
+            ->all();
+
+        // When the admin asks for the rejected bucket
+        $response = $this->getAdminQueue($admin, ['state' => 'rejected']);
+
+        // Then all three come back in ascending id order
+        $response->assertOk();
+        $expected = collect($rejected)->sort()->values()->all();
+        $this->assertQueueOrder($response, array_values($expected));
+    }
+
     // Edge — the single-tenant drill-down an admin uses while working a support
     // ticket: ?company_id= narrows the cross-tenant queue to one tenant
     // (UC-1-127 alt-flow 4e). It is a FILTER, not a scope - the read stays
@@ -187,10 +214,17 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         $mine = $this->aTransferInState($wanted, User::factory()->create(), OwnershipTransferStatus::Requested);
         $this->aTransferInState($other, User::factory()->create(), OwnershipTransferStatus::Requested);
 
+        // ...and that tenant also has a terminal transfer in its history
+        $this->aTransferInState($wanted, User::factory()->create(), OwnershipTransferStatus::Executed);
+
         // When the admin drills into one tenant
         $response = $this->getAdminQueue($admin, ['company_id' => $wanted->getKey()]);
 
-        // Then only that tenant's transfer is listed
+        // Then only that tenant's OPEN transfer is listed. Recorded divergence:
+        // UC alt-flow 4e says the drill-down shows "all states", but company_id
+        // composes with the open-states default (F5) rather than overriding it,
+        // so terminal history needs an explicit ?state=. Deliberate — pinned here
+        // so it is a decision rather than an accident.
         $response->assertOk();
         $this->assertQueueOrder($response, [$mine->getKey()]);
     }
@@ -214,14 +248,21 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         $page = app(OwnershipTransferRequestRepositoryInterface::class)
             ->paginateForAdminQueue(OwnershipTransferAdminFilters::validateAndCreate([]));
         $relations = collect($page->items())
-            ->flatMap(fn (OwnershipTransferRequest $transfer) => [$transfer->targetUser, $transfer->currentOwner]);
+            ->flatMap(fn (OwnershipTransferRequest $transfer) => [
+                $transfer->targetUser,
+                $transfer->currentOwner,
+                // company too: the admin resource reads it for the tenant summary,
+                // so dropping it from the eager-load degrades silently to N extra
+                // queries on the one page that is by definition cross-tenant.
+                $transfer->company,
+            ]);
         $queryCount = count(DB::getQueryLog());
         DB::disableQueryLog();
 
-        // Then both relations resolved for every row, in fewer queries than there
-        // are rows — eager-loaded, not fetched per row. Lazy loading would fire
-        // ~2 per row and exceed the row count.
-        $this->assertCount($rows * 2, $relations->filter());
+        // Then all three relations resolved for every row, in fewer queries than
+        // there are rows — eager-loaded, not fetched per row. Lazy loading would
+        // fire ~3 per row and exceed the row count.
+        $this->assertCount($rows * 3, $relations->filter());
         $this->assertLessThan($rows, $queryCount);
     }
 
@@ -240,9 +281,12 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         $admin = $this->anAllowlistedAdmin();
         [$companyA] = $this->aCompanyWithMember('owner');
         [$companyB] = $this->aCompanyWithMember('owner');
+        // An ALREADY-OVERDUE row leads: sc.1's headline was "overdue items ranked
+        // first", which a pure ascending deadline subsumes (a past deadline sorts
+        // smallest) — but only if a past deadline is actually exercised.
+        $overdue = $this->aTransferDueAt($companyA, OwnershipTransferStatus::Requested, CarbonImmutable::now()->subDays(3));
         $dueIn5Days = $this->aTransferDueAt($companyA, OwnershipTransferStatus::Requested, CarbonImmutable::now()->addDays(5));
         $dueIn2Days = $this->aTransferDueAt($companyB, OwnershipTransferStatus::Verified, CarbonImmutable::now()->addDays(2));
-        $dueIn20Days = $this->aTransferDueAt($companyA, OwnershipTransferStatus::Requested, CarbonImmutable::now()->addDays(20));
 
         // When the admin opens the queue
         $response = $this->getAdminQueue($admin);
@@ -250,9 +294,9 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         // Then the most time-pressed transfer leads, regardless of state or age
         $response->assertOk();
         $this->assertQueueOrder($response, [
+            $overdue->getKey(),
             $dueIn2Days->getKey(),
             $dueIn5Days->getKey(),
-            $dueIn20Days->getKey(),
         ]);
     }
 
@@ -272,13 +316,118 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         // When the admin requests the second page
         $response = $this->getAdminQueue($admin, ['page' => 2]);
 
-        // Then the meta reflects page 2 and only the 5-row remainder is returned
+        // Then the meta reflects page 2, only the 5-row remainder is returned, and
+        // the audit row records the page actually served. result_count is 5 while
+        // total is 20 — the one arrangement in the suite where the two differ, so
+        // it is what stops result_count silently becoming total().
         $response->assertOk();
         $this->assertSame(
             ['page' => 2, 'per_page' => 15, 'total' => 20, 'last_page' => 2],
             $response->json('meta.pagination'),
         );
         $this->assertCount(5, $response->json('data'));
+        $this->assertQueueReadAudited($response, $admin, [
+            'filters' => ['page' => 2],
+            'result_count' => 5,
+            'page' => 2,
+        ]);
+    }
+
+    // Happy — a requested page size is honoured end to end and lands on the
+    // audit row; without this the endpoint could ignore ?per_page= entirely and
+    // only the rejection cases would notice.
+    #[Test]
+    public function when_a_page_size_is_requested_then_it_is_honored(): void
+    {
+        // Given five open transfers
+        $admin = $this->anAllowlistedAdmin();
+        [$company] = $this->aCompanyWithMember('owner');
+        OwnershipTransferRequest::factory()->count(5)->requested()->create([
+            'company_id' => $company->getKey(),
+            'current_owner_user_id' => $company->owner_id,
+            'target_user_id' => User::factory()->create()->getKey(),
+        ]);
+
+        // When the admin asks for a page size of two
+        $response = $this->getAdminQueue($admin, ['per_page' => 2]);
+
+        // Then exactly two rows return, the meta echoes the size, and it is audited
+        $response->assertOk();
+        $this->assertCount(2, $response->json('data'));
+        $this->assertSame(
+            ['page' => 1, 'per_page' => 2, 'total' => 5, 'last_page' => 3],
+            $response->json('meta.pagination'),
+        );
+        $this->assertQueueReadAudited($response, $admin, [
+            'filters' => ['per_page' => 2],
+            'result_count' => 2,
+            'page' => 1,
+        ]);
+    }
+
+    // Edge — oversized client-controlled headers must not break a valid read.
+    // MySQL strict mode turns an over-length insert into SQLSTATE 22001, which
+    // the bootstrap catch-all renders as a 500 AFTER the read already succeeded,
+    // with no audit row written (the s137 I-1 ruling).
+    #[Test]
+    public function when_the_request_context_values_are_oversized_then_the_read_still_succeeds(): void
+    {
+        // Given an allowlisted admin whose client sends 300-char UA and correlation headers
+        $admin = $this->anAllowlistedAdmin();
+
+        // When the admin opens the queue
+        $response = $this->getAdminQueue($admin, [], [
+            'User-Agent' => str_repeat('a', 300),
+            'Correlation-Id' => str_repeat('b', 300),
+        ]);
+
+        // Then the read succeeds and the audit row stores bounded values
+        $response->assertOk();
+        $this->assertDatabaseCount('audit_trail', 1);
+        $entry = AuditEntry::query()->sole();
+        $this->assertLessThanOrEqual(255, strlen((string) $entry->user_agent));
+        $this->assertLessThanOrEqual(255, strlen((string) $entry->request_id));
+    }
+
+    // Edge — an open transfer with no deadline sorts LAST, not first. MySQL puts
+    // NULL first on ASC, so without the NULLS-LAST clause a timer-less row would
+    // head the queue ahead of genuinely urgent work.
+    #[Test]
+    public function when_an_open_transfer_has_no_deadline_then_it_sorts_after_the_timed_ones(): void
+    {
+        // Given one transfer due in five days and one open transfer with no timer
+        $admin = $this->anAllowlistedAdmin();
+        [$companyA] = $this->aCompanyWithMember('owner');
+        [$companyB] = $this->aCompanyWithMember('owner');
+        $timed = $this->aTransferDueAt($companyA, OwnershipTransferStatus::Requested, CarbonImmutable::now()->addDays(5));
+        $untimed = $this->aTransferInState($companyB, User::factory()->create(), OwnershipTransferStatus::Verified);
+        $untimed->forceFill(['next_state_transition_at' => null])->save();
+
+        // When the admin opens the queue
+        $response = $this->getAdminQueue($admin);
+
+        // Then the timed row leads and the timer-less one trails
+        $response->assertOk();
+        $this->assertQueueOrder($response, [$timed->getKey(), $untimed->getKey()]);
+    }
+
+    // Edge — a tenant with no plan renders company.plan as null: the resource's
+    // null-safe is load-bearing, because a trial-expired tenant carries a NULL
+    // plan and is exactly the kind of company an admin triages a transfer for.
+    #[Test]
+    public function when_the_tenant_has_no_plan_then_the_company_summary_renders_it_as_null(): void
+    {
+        // Given a transfer belonging to a company with no plan
+        $admin = $this->anAllowlistedAdmin();
+        $company = Company::factory()->withoutPlan()->create();
+        $this->aTransferInState($company, User::factory()->create(), OwnershipTransferStatus::Requested);
+
+        // When the admin opens the queue
+        $response = $this->getAdminQueue($admin);
+
+        // Then the company summary carries a null plan (not a 500, not a missing key)
+        $response->assertOk();
+        $response->assertJsonPath('data.0.company.plan', null);
     }
 
     // Happy — the read is recorded with its query context: one platform-level
@@ -299,7 +448,7 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
 
         // Then one platform-level row records the filters, the count and the page
         $response->assertOk();
-        $this->assertQueueReadAudited($response, [
+        $this->assertQueueReadAudited($response, $admin, [
             'filters' => ['state' => 'verified'],
             'result_count' => 1,
             'page' => 1,
@@ -343,19 +492,6 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
     }
 
     /**
-     * @return array<string, array{OwnershipTransferStatus}>
-     */
-    public static function provideTerminalStates(): array
-    {
-        return [
-            'executed' => [OwnershipTransferStatus::Executed],
-            'rejected' => [OwnershipTransferStatus::Rejected],
-            'cancelled' => [OwnershipTransferStatus::Cancelled],
-            'expired' => [OwnershipTransferStatus::Expired],
-        ];
-    }
-
-    /**
      * @return array<string, array{array<string, mixed>, string}>
      */
     public static function provideInvalidQueryInputs(): array
@@ -367,6 +503,15 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
             // hard-coded soonest-deadline-first (F1), the LD-idiomatic shape.
             'sort is not a queue parameter' => [['sort' => 'requested_at'], 'sort'],
             'non-canonical state' => [['state' => 'completed'], 'state'],
+            // The overdue filter was cut as YAGNI (F2). Pinned so a future
+            // contributor cannot add it to the whitelist without implementing
+            // it and end up with a silently-ignored filter.
+            'overdue filter was cut' => [['overdue' => 'true'], 'overdue'],
+            // The UC body's own vocabulary predates the canonical enum re-pin;
+            // these are the first two values a client written against the UC
+            // text would send, and both are correctly refused.
+            'UC-text state alias' => [['state' => 'pending-verification'], 'state'],
+            'all is not a state' => [['state' => 'all'], 'state'],
             'company filter is not a uuid' => [['company_id' => 'not-a-uuid'], 'company_id'],
             'per_page over the ceiling' => [['per_page' => 101], 'per_page'],
             'per_page below one' => [['per_page' => 0], 'per_page'],

@@ -44,7 +44,9 @@ interface OwnershipTransferRequestRepositoryInterface
 
     /**
      * A single transfer resolved WITHOUT a company predicate (UC-1-127 detail) —
-     * the platform-admin counterpart to findByIdForCompany.
+     * the platform-admin counterpart to findByIdForCompany. Named for the
+     * boundary it crosses: a bare `findById` beside `findByIdForCompany` reads
+     * as the innocent default when it is in fact the cross-tenant one.
      */
-    public function findById(string $requestId): ?OwnershipTransferRequest;
+    public function findByIdAcrossTenants(string $requestId): ?OwnershipTransferRequest;
 }
