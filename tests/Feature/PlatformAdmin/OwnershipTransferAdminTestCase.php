@@ -132,6 +132,46 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
     }
 
     /**
+     * GET a single transfer on the admin surface as $caller, or as a guest when
+     * null. No X-Company-Context, same as the queue.
+     */
+    protected function getAdminTransfer(?User $caller, string $requestId): TestResponse
+    {
+        if ($caller !== null) {
+            Sanctum::actingAs($caller);
+        }
+
+        return $this->getJson("/api/v1/admin/ownership-transfers/{$requestId}");
+    }
+
+    /**
+     * Exactly ONE audit row records the admin's detail read, in the UC-1-122
+     * shape: this read DOES name an entity subject and DOES belong to a tenant,
+     * so subject_id and company_id are both populated — the contrast with the
+     * queue row that F3 turns on.
+     */
+    protected function assertTransferReadAudited(OwnershipTransferRequest $transfer, User $admin, TestResponse $response): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'event_class' => 'AdminOwnershipTransferReviewed',
+            'subject_type' => 'ownership_transfer_request',
+            'subject_id' => $transfer->getKey(),
+            'company_id' => $transfer->company_id,
+            'action' => 'admin_reviewed',
+            'actor_user_id' => $admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $admin->name,
+            'stored_event_id' => null,
+            'severity' => 'info',
+            'ip_address' => '127.0.0.1',
+        ]);
+
+        $entry = AuditEntry::query()->sole();
+        $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
+    }
+
+    /**
      * A transfer for $company in $state whose SLA timer falls at $deadline —
      * the fixture the deadline-first ordering assertion turns on. A named
      * helper carrying the column override is the sanctioned shape (§2.13 bans

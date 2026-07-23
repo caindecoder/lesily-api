@@ -41,4 +41,10 @@ interface OwnershipTransferRequestRepositoryInterface
      * @return LengthAwarePaginator<int, OwnershipTransferRequest>
      */
     public function paginateForAdminQueue(OwnershipTransferAdminFilters $filters): LengthAwarePaginator;
+
+    /**
+     * A single transfer resolved WITHOUT a company predicate (UC-1-127 detail) —
+     * the platform-admin counterpart to findByIdForCompany.
+     */
+    public function findById(string $requestId): ?OwnershipTransferRequest;
 }

@@ -309,3 +309,9 @@ Route::get('/v1/admin/invoices/{invoiceId}', [PlatformAdminInvoicesController::c
 // seeded permission). Ordered soonest-deadline-first, open states by default.
 Route::get('/v1/admin/ownership-transfers', [PlatformAdminOwnershipTransfersController::class, 'index'])
     ->middleware(['auth:sanctum', 'platform.admin']);
+
+// The admin's single-transfer detail — the forensic view UC-1-128 / UC-1-113 /
+// UC-1-093 act from. Unscoped find; an unknown id and a denied caller are
+// byte-identical 404s.
+Route::get('/v1/admin/ownership-transfers/{requestId}', [PlatformAdminOwnershipTransfersController::class, 'show'])
+    ->middleware(['auth:sanctum', 'platform.admin']);

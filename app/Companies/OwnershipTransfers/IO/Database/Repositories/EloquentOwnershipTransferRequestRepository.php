@@ -55,6 +55,15 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
             ->first();
     }
 
+    public function findById(string $requestId): ?OwnershipTransferRequest
+    {
+        // No company predicate — cross-tenant by design (UC-1-127).
+        return OwnershipTransferRequest::query()
+            ->withAdminRelations()
+            ->whereKey($requestId)
+            ->first();
+    }
+
     /**
      * @return LengthAwarePaginator<int, OwnershipTransferRequest>
      */

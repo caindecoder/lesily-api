@@ -6,8 +6,10 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferAdminFilters;
+use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestAdminResource;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestAdminCollection;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\ReviewOwnershipTransferQueueInteractor;
+use App\Companies\OwnershipTransfers\UseCases\Interactors\ReviewOwnershipTransferAsAdminInteractor;
 
 /**
  * The platform-admin cross-tenant ownership-transfer reads (UC-1-127) — behind
@@ -30,6 +32,16 @@ class PlatformAdminOwnershipTransfersController
                 $admin,
                 AdminRequestContext::fromRequest($request),
             )
+        );
+    }
+
+    public function show(string $requestId, Request $request, ReviewOwnershipTransferAsAdminInteractor $interactor): OwnershipTransferRequestAdminResource
+    {
+        /** @var User $admin — guaranteed by auth:sanctum */
+        $admin = $request->user();
+
+        return new OwnershipTransferRequestAdminResource(
+            $interactor->execute($requestId, $admin, AdminRequestContext::fromRequest($request))
         );
     }
 }
