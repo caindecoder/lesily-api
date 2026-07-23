@@ -59,6 +59,19 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
     }
 
     /**
+     * The queue's `data` rows appear in exactly $idsInOrder (order-sensitive —
+     * assertSame, deliberately not assertEqualsCanonicalizing, because ordering
+     * IS the assertion here; LD draws the same distinction in
+     * ListTrialCompaniesTest).
+     *
+     * @param  list<string>  $idsInOrder
+     */
+    protected function assertQueueOrder(TestResponse $response, array $idsInOrder): void
+    {
+        $this->assertSame($idsInOrder, $response->collect('data')->pluck('id')->all());
+    }
+
+    /**
      * Exactly ONE platform-level audit row records the queue read (F3): a
      * cross-tenant query has no single entity subject and spans companies, so
      * subject_id and company_id are both NULL — the cd-audit-trail

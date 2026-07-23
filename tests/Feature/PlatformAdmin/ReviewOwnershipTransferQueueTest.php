@@ -95,6 +95,31 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         $this->assertQueueReadAudited($response, ['filters' => [], 'result_count' => 0, 'page' => 1]);
     }
 
+    // Edge — cross-tenant is the whole point: transfers belonging to companies
+    // the admin has no membership in are all visible on one page, because the
+    // queue query carries no company predicate (UC-1-127 Tenant Isolation).
+    #[Test]
+    public function when_transfers_exist_across_tenants_then_every_company_is_visible(): void
+    {
+        // Given two unrelated companies each holding an open transfer
+        $admin = $this->anAllowlistedAdmin();
+        [$companyA] = $this->aCompanyWithMember('owner');
+        [$companyB] = $this->aCompanyWithMember('owner');
+        $inA = $this->aTransferInState($companyA, User::factory()->create(), OwnershipTransferStatus::Requested);
+        $inB = $this->aTransferInState($companyB, User::factory()->create(), OwnershipTransferStatus::Requested);
+
+        // When the admin opens the queue
+        $response = $this->getAdminQueue($admin);
+
+        // Then both tenants' transfers are on the page — canonicalizing, because
+        // this test owns VISIBILITY; ordering is #10's assertion
+        $response->assertOk();
+        $this->assertEqualsCanonicalizing(
+            [$inA->getKey(), $inB->getKey()],
+            $response->collect('data')->pluck('id')->all(),
+        );
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
