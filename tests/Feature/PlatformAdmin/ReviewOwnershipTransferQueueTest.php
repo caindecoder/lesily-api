@@ -3,6 +3,7 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
@@ -222,6 +223,37 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         // ~2 per row and exceed the row count.
         $this->assertCount($rows * 2, $relations->filter());
         $this->assertLessThan($rows, $queryCount);
+    }
+
+    // --- Happy ---
+
+    // Happy — the queue is ranked by urgency, not by age (F1): rows come back
+    // soonest-SLA-deadline first. The fixture deliberately MIXES state buckets,
+    // because within one bucket a deadline is just requested_at plus a constant
+    // and pure FIFO would pass too. Here the verified row - youngest by
+    // requested_at, but on the 14-day timer - must outrank both older requested
+    // rows on the 30-day timer.
+    #[Test]
+    public function when_the_admin_opens_the_queue_then_rows_are_ordered_by_soonest_deadline_first(): void
+    {
+        // Given three open transfers across two tenants with staggered deadlines
+        $admin = $this->anAllowlistedAdmin();
+        [$companyA] = $this->aCompanyWithMember('owner');
+        [$companyB] = $this->aCompanyWithMember('owner');
+        $dueIn5Days = $this->aTransferDueAt($companyA, OwnershipTransferStatus::Requested, CarbonImmutable::now()->addDays(5));
+        $dueIn2Days = $this->aTransferDueAt($companyB, OwnershipTransferStatus::Verified, CarbonImmutable::now()->addDays(2));
+        $dueIn20Days = $this->aTransferDueAt($companyA, OwnershipTransferStatus::Requested, CarbonImmutable::now()->addDays(20));
+
+        // When the admin opens the queue
+        $response = $this->getAdminQueue($admin);
+
+        // Then the most time-pressed transfer leads, regardless of state or age
+        $response->assertOk();
+        $this->assertQueueOrder($response, [
+            $dueIn2Days->getKey(),
+            $dueIn5Days->getKey(),
+            $dueIn20Days->getKey(),
+        ]);
     }
 
     /**

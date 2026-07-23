@@ -3,6 +3,7 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
@@ -128,6 +129,24 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
             'current_owner_user_id' => $company->owner_id,
             'target_user_id' => $target->getKey(),
         ]);
+    }
+
+    /**
+     * A transfer for $company in $state whose SLA timer falls at $deadline —
+     * the fixture the deadline-first ordering assertion turns on. A named
+     * helper carrying the column override is the sanctioned shape (§2.13 bans
+     * inline overrides in test bodies, not fixtures; aTransferRequestedAt is
+     * the Task-2 precedent).
+     */
+    protected function aTransferDueAt(
+        Company $company,
+        OwnershipTransferStatus $state,
+        CarbonImmutable $deadline,
+    ): OwnershipTransferRequest {
+        $transfer = $this->aTransferInState($company, User::factory()->create(), $state);
+        $transfer->forceFill(['next_state_transition_at' => $deadline])->save();
+
+        return $transfer;
     }
 
     /**

@@ -87,6 +87,26 @@ class OwnershipTransferRequest extends Model
     }
 
     /**
+     * The admin queue's ranking (UC-1-127 F1): soonest SLA deadline first, so
+     * the most time-pressed transfer leads regardless of state or age. Within
+     * one state this equals oldest-first FIFO (a deadline is requested_at plus
+     * a fixed window); across states it correctly floats a verified transfer on
+     * the 14-day timer above an older requested one on the 30-day timer.
+     *
+     * Terminal rows carry no deadline, so NULLs are pushed LAST — MySQL sorts
+     * NULL first on ASC, which would otherwise put dead history on top when a
+     * terminal state is requested explicitly. Stable id tie-break.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeByDeadlineFirst(Builder $query): void
+    {
+        $query->orderByRaw('next_state_transition_at IS NULL')
+            ->orderBy('next_state_transition_at')
+            ->orderBy('id');
+    }
+
+    /**
      * The admin read's eager loads — the §21 N+1 guard for the cross-tenant
      * queue. Kept separate from scopeForCompany's baked-in loads because the
      * admin surface must not depend on the tenant read path (E66 §4).
