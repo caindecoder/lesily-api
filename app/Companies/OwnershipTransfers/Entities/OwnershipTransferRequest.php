@@ -3,6 +3,7 @@
 namespace App\Companies\OwnershipTransfers\Entities;
 
 use App\Models\User;
+use App\Companies\Entities\Company;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -64,6 +65,18 @@ class OwnershipTransferRequest extends Model
     }
 
     /**
+     * The owning tenant — consumed by the platform-admin resource's company
+     * summary (UC-1-127 step 7), which is why it exists again after being cut
+     * as unconsumed at PR #115.
+     *
+     * @return BelongsTo<Company, $this>
+     */
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    /**
      * Tenant scope + built-in eager load — the N+1 guard (questionnaire §21)
      * baked into the read path so a list never fires a per-row user query.
      *
@@ -115,7 +128,7 @@ class OwnershipTransferRequest extends Model
      */
     public function scopeWithAdminRelations(Builder $query): void
     {
-        $query->with(['targetUser', 'currentOwner']);
+        $query->with(['targetUser', 'currentOwner', 'company']);
     }
 
     /**

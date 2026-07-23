@@ -306,6 +306,42 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
         ]);
     }
 
+    // Happy — the forensic admin row: every designed key present, the target's
+    // email UNMASKED (the owner resource masks it), and the verifier material
+    // the owner resource withholds actually on the wire.
+    #[Test]
+    public function when_the_admin_opens_the_queue_then_each_row_carries_exactly_the_admin_shape(): void
+    {
+        // Given a verified transfer with a known target
+        $admin = $this->anAllowlistedAdmin();
+        [$company] = $this->aCompanyWithMember('owner');
+        $target = User::factory()->create(['name' => 'Alex Turner', 'email' => 'alex.turner@contoso.test']);
+        $this->aTransferInState($company, $target, OwnershipTransferStatus::Verified);
+
+        // When the admin opens the queue
+        $response = $this->getAdminQueue($admin);
+
+        // Then the row is exactly the admin shape, with nothing masked
+        $response->assertOk();
+        $row = $response->json('data.0');
+        $this->assertSame([
+            'id', 'company_id', 'company', 'status', 'request_channel', 'reason',
+            'requested_at', 'requested_by', 'target_user',
+            'verified_at', 'verified_by', 'verification_notes', 'verification_artefacts',
+            'executed_at', 'executed_by', 'old_owner_user_id', 'new_owner_user_id',
+            'rejected_at', 'rejected_by', 'rejection_reason', 'rejection_source',
+            'cancelled_at', 'cancelled_by', 'cancellation_source', 'cancellation_reason',
+            'expired_at', 'expiry_source', 'expired_after_days',
+            'next_state_transition_at',
+        ], array_keys($row));
+        $this->assertSame(
+            ['id' => $target->getKey(), 'name' => 'Alex Turner', 'email' => 'alex.turner@contoso.test'],
+            $row['target_user'],
+        );
+        $this->assertSame('Email confirmation + ID document verified.', $row['verification_notes']);
+        $this->assertSame($company->name, $row['company']['name']);
+    }
+
     /**
      * @return array<string, array{OwnershipTransferStatus}>
      */
