@@ -3,6 +3,7 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
@@ -133,7 +134,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         );
 
         // Then it is refused and the original verification is untouched
-        $this->assertStateGuardRefused($response);
+        $this->assertStateGuardRefused($response, 'Only a transfer awaiting verification can be verified.');
         $this->assertOriginalVerificationIntact($original);
     }
 
@@ -147,11 +148,19 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
      * guard and produce an identical response with no legal-hold guard present
      * at all. Only genuine Requested history makes this test fail when the
      * guard is removed.
+     *
+     * The unheld bystander company is arranged FIRST for a second reason: it is
+     * what makes the guard's `whereKey` observable. Without it there is one
+     * company in the fixture, so an unscoped read returns the held one anyway
+     * and the scope could be deleted with the suite still green — the combined
+     * revert-check proved exactly that gap and this line closes it.
      */
     #[Test]
     public function when_the_company_is_under_legal_hold_then_the_transfer_is_not_verified(): void
     {
-        // Given a verifiable transfer whose company is under a regulatory hold
+        // Given an unheld company that predates it, then a verifiable transfer
+        // whose own company is under a regulatory hold
+        $this->aBystanderTransferAtAnotherCompany();
         $this->arrangeVerifiableTransfer();
         $this->placeCompanyUnderLegalHold();
 
@@ -159,7 +168,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $response = $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
 
         // Then it is refused and no verification is recorded
-        $this->assertStateGuardRefused($response);
+        $this->assertStateGuardRefused($response, 'This company is under a legal hold; ownership changes are frozen until it is lifted.');
         $this->assertNoVerificationRecorded();
     }
 
@@ -184,6 +193,10 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->assertSame(0, LesilyStoredEvent::query()
             ->where('event_class', OwnershipTransferIdentityVerified::class)
             ->count());
+        // Exactly the T1 genesis row — the refusal logged nothing (UC error flow
+        // 6d: no audit entry). The sad-path trio asserts a zero baseline; here
+        // the legitimate baseline is one.
+        $this->assertDatabaseCount('audit_trail', 1);
 
         $row = $this->currentTransfer();
 
@@ -280,6 +293,99 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $response->assertJsonPath('data.verification_artefacts', $artefacts);
     }
 
+    /**
+     * The verifier is whoever the token says, never whoever the body claims.
+     * `verifiedBy` is the single field this whole use case exists to produce —
+     * every stakeholder clause about defending a transfer against a later
+     * fraud claim rests on it being auth-derived — yet the only thing enforcing
+     * that is an `only()` whitelist and the spread ordering in the controller,
+     * neither of which any other test touches. A refactor to `$request->all()`
+     * would let one admin attribute a verification to a colleague.
+     */
+    #[Test]
+    public function when_the_body_names_a_different_verifier_then_the_authenticated_admin_is_recorded(): void
+    {
+        // Given a verifiable transfer and a colleague to impersonate
+        $this->arrangeVerifiableTransfer();
+        $colleague = User::factory()->create();
+
+        // When the admin submits a body claiming the colleague verified it
+        $this->verifyTransfer(
+            $this->admin,
+            $this->transfer->getKey(),
+            $this->verificationBody(['verifiedBy' => $colleague->getKey()]),
+        );
+
+        // Then every record of the verifier names the authenticated admin
+        $this->assertVerifierIsAlways($this->admin);
+    }
+
+    /**
+     * The projector and the legal-hold guard must each address ONE row. Both are
+     * fluent `whereKey(...)` calls, and Infection generates no method-call
+     * removal on a builder chain — so with a single company and a single
+     * transfer in the fixture, dropping either scope leaves the suite green
+     * while, in production, one admin's verification would flip every transfer
+     * on the platform (or one company's hold would freeze every tenant).
+     *
+     * A second, unrelated tenant is therefore part of the arrangement, not an
+     * afterthought: it is the only thing that makes the scopes observable.
+     */
+    #[Test]
+    public function when_a_transfer_is_verified_then_no_other_tenants_transfer_is_touched(): void
+    {
+        // Given a verifiable transfer and an untouched transfer at another company
+        $this->arrangeVerifiableTransfer();
+        $bystander = $this->aBystanderTransferAtAnotherCompany();
+
+        // When the admin verifies the first
+        $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+
+        // Then the other tenant's transfer is exactly as it was
+        $this->assertTransferUntouched($bystander);
+    }
+
+    /**
+     * A hold belongs to ONE company. Without an unheld bystander the guard's
+     * scope is unobservable — an unscoped read would find the held row and
+     * refuse every tenant's verification identically.
+     */
+    #[Test]
+    public function when_another_company_is_under_legal_hold_then_this_transfer_still_verifies(): void
+    {
+        // Given a verifiable transfer and a DIFFERENT company under a hold
+        $this->arrangeVerifiableTransfer();
+        $this->aBystanderTransferAtAnotherCompany()->company()->update(['legal_hold' => true]);
+
+        // When the admin verifies the unheld company's transfer
+        $response = $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+
+        // Then it succeeds — the hold applied to its own tenant only
+        $this->assertVerificationAccepted($response);
+    }
+
+    /**
+     * verified_at is the T9 SLA anchor AND the legally-significant midpoint
+     * timestamp of the chain of custody, but every existing assertion on it is
+     * either non-null or RELATIVE — the deadline derives from the same instant,
+     * so both sides move together. Shifting the aggregate's clock by five years
+     * would leave the whole class green. Freezing time is what pins it.
+     */
+    #[Test]
+    public function when_a_transfer_is_verified_then_the_record_is_stamped_with_the_server_clock(): void
+    {
+        // Given a verifiable transfer and a frozen clock
+        $this->arrangeVerifiableTransfer();
+        $frozen = CarbonImmutable::parse('2026-07-24 09:15:00');
+        $this->travelTo($frozen);
+
+        // When the admin verifies it
+        $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+
+        // Then both the stamp and the deadline sit at absolute instants
+        $this->assertStampedAt($frozen);
+    }
+
     // Happy — the T2 walk: the record is captured, the transfer moves to
     // Verified, and the projection mirrors it.
     #[Test]
@@ -360,6 +466,75 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * A transfer belonging to an entirely different tenant, left alone. Its only
+     * job is to be a second row, which is what makes the projector's and the
+     * guard's `whereKey(...)` scopes observable at all.
+     */
+    private function aBystanderTransferAtAnotherCompany(): OwnershipTransferRequest
+    {
+        [$otherCompany] = $this->aCompanyWithMember('owner');
+
+        return $this->aTransferInState($otherCompany, User::factory()->create(), OwnershipTransferStatus::Requested);
+    }
+
+    /**
+     * Every surface that records who vouched for the identity names $expected —
+     * the event payload (the durable evidence), the projection (what the admin
+     * console reads) and the audit row (the access log). A forged body value
+     * would have to defeat all three.
+     */
+    private function assertVerifierIsAlways(User $expected): void
+    {
+        $stored = LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferIdentityVerified::class)
+            ->sole();
+
+        $this->assertSame($expected->getKey(), $stored->event_properties['verifiedBy']);
+        $this->assertSame($expected->getKey(), $this->currentTransfer()->verified_by);
+        $this->assertSame($expected->getKey(), AuditEntry::query()
+            ->where('event_class', 'OwnershipTransferIdentityVerified')
+            ->sole()
+            ->actor_user_id);
+    }
+
+    /**
+     * The bystander is byte-for-byte as it was: still awaiting verification,
+     * never stamped, and still on its own original deadline.
+     */
+    private function assertTransferUntouched(OwnershipTransferRequest $bystander): void
+    {
+        $row = OwnershipTransferRequest::query()->whereKey($bystander->getKey())->firstOrFail();
+
+        $this->assertSame(OwnershipTransferStatus::Requested, $row->status);
+        $this->assertNull($row->verified_at);
+        $this->assertNull($row->verified_by);
+        $this->assertNull($row->verification_notes);
+
+        $deadline = $row->next_state_transition_at;
+        $originalDeadline = $bystander->next_state_transition_at;
+        $this->assertNotNull($deadline);
+        $this->assertNotNull($originalDeadline);
+        $this->assertTrue($deadline->equalTo($originalDeadline));
+    }
+
+    /**
+     * Both the stamp and the derived deadline sit at ABSOLUTE instants. The
+     * existing deadline helper is relative — it derives both sides from the same
+     * recorded value — so only a frozen clock can catch a wrong time source.
+     */
+    private function assertStampedAt(CarbonImmutable $frozen): void
+    {
+        $row = $this->currentTransfer();
+        $verifiedAt = $row->verified_at;
+        $deadline = $row->next_state_transition_at;
+
+        $this->assertNotNull($verifiedAt);
+        $this->assertNotNull($deadline);
+        $this->assertTrue($verifiedAt->equalTo($frozen), "Expected verified_at at {$frozen}, got {$verifiedAt}.");
+        $this->assertTrue($deadline->equalTo($frozen->addDays(14)), "Expected the deadline at {$frozen->addDays(14)}, got {$deadline}.");
+    }
+
+    /**
      * The transfer as it stands in the database RIGHT NOW, as a distinct
      * instance every call. Deliberately not `$this->transfer->refresh()`, which
      * mutates the shared property in place: the already-verified test captures a
@@ -375,11 +550,20 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
     /**
      * The transition was refused by a state guard — the shared 409 family the
      * §8.4 registry reserves for illegal state-machine moves.
+     *
+     * The MESSAGE is asserted, not just the code, and that is the whole point:
+     * both refusals in this class render the identical envelope, so without a
+     * discriminator, throwing the wrong exception from the legal-hold guard
+     * would stay green — and the CompanyUnderLegalHoldException render arm in
+     * bootstrap/app.php would become dead code in the one file Infection cannot
+     * see and coverage does not track. This survives substitution, not merely
+     * deletion.
      */
-    private function assertStateGuardRefused(TestResponse $response): void
+    private function assertStateGuardRefused(TestResponse $response, string $expectedMessage): void
     {
         $response->assertStatus(409);
         $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
+        $response->assertJsonPath('message', $expectedMessage);
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
@@ -394,6 +578,10 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', OwnershipTransferIdentityVerified::class)
             ->count());
+        // T1 genesis + the ONE accepted verification. A third row would mean the
+        // refused attempt was logged as though it had happened — Gherkin sc.5's
+        // "the original audit entry remains untouched".
+        $this->assertDatabaseCount('audit_trail', 2);
 
         $row = $this->currentTransfer();
         $verifiedAt = $row->verified_at;
@@ -513,6 +701,15 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
             'artefact type outside the locked set' => [self::verificationBodyWithArtefact(self::anArtefact(['type' => 'signed_affidavit'])), 'verificationArtefacts.0.type'],
             'artefact reference absent' => [self::verificationBodyWithArtefact(self::anArtefactWithout('reference')), 'verificationArtefacts.0.reference'],
             'artefact capturedAt not a date' => [self::verificationBodyWithArtefact(self::anArtefact(['capturedAt' => 'last Tuesday'])), 'verificationArtefacts.0.capturedAt'],
+            // The metadata-only contract is a DPO commitment, not a shape
+            // preference: artefacts persist VERBATIM into stored_events, so an
+            // unpoliced extra key is a route for document bytes to land in the
+            // immutable event store, which the UC and the event docblock both
+            // forbid (OQ-1-045 / D4).
+            'artefact smuggling an extra key' => [
+                self::verificationBodyWithArtefact(self::anArtefact(['scan' => 'JVBERi0xLjcKJc-base64-document-bytes'])),
+                'verificationArtefacts.0',
+            ],
         ];
     }
 

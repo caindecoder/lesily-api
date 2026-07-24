@@ -2,6 +2,7 @@
 
 namespace App\Companies\OwnershipTransfers\UseCases\Commands;
 
+use Closure;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
@@ -37,11 +38,38 @@ class VerifyOwnershipTransferIdentityCommand extends Data
         // its reason — the column is text, the bound is the contract's.
         return [
             'verificationNotes' => ['required', 'string', 'max:1000'],
-            'verificationArtefacts' => ['required', 'array', 'min:1'],
+            // Bounded like every neighbour: artefacts land in stored_events,
+            // which is append-only, so an unbounded array is an unbounded and
+            // UNREMEDIABLE write. 20 is far above the handful a real
+            // verification cites and far below anything abusive.
+            'verificationArtefacts' => ['required', 'array', 'min:1', 'max:20'],
+            // Metadata ONLY — the artefact object is closed. Artefacts persist
+            // verbatim into stored_events, so an unpoliced extra key is a route
+            // for document bytes to reach the immutable event store, which the
+            // DPO contract forbids (OQ-1-045 / D4: references and capture times,
+            // never the documents). Laravel has no built-in "no unknown keys"
+            // rule for a nested object, so the closure IS the enforcement.
+            'verificationArtefacts.*' => ['array', self::rejectUnknownArtefactKeys()],
             'verificationArtefacts.*.type' => ['required', Rule::in(VerificationArtefactType::values())],
             'verificationArtefacts.*.reference' => ['required', 'string', 'max:255'],
             'verificationArtefacts.*.capturedAt' => ['required', 'date'],
             'verifiedBy' => ['required', 'uuid'],
         ];
+    }
+
+    /**
+     * Refuses any artefact key outside the ERD-1-05 triple.
+     */
+    private static function rejectUnknownArtefactKeys(): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail): void {
+            if (! is_array($value)) {
+                return;
+            }
+
+            if (array_diff(array_keys($value), ['type', 'reference', 'capturedAt']) !== []) {
+                $fail('Each verification artefact may carry only a type, a reference and a capturedAt.');
+            }
+        };
     }
 }

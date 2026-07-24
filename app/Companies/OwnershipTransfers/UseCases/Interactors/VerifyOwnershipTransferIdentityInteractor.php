@@ -47,14 +47,17 @@ class VerifyOwnershipTransferIdentityInteractor
     /**
      * §S10b: a hold freezes ownership changes, not merely the expiry timers
      * (slice-#11 D3). Runs BEFORE the aggregate is retrieved so a held transfer
-     * never records a T2 event — and reads the flag as a scalar rather than
-     * hydrating the whole Company, since a guard needs one boolean.
+     * never records a T2 event, and addresses THIS transfer's company by key —
+     * an unscoped read would let one tenant's hold freeze every tenant.
      */
     private function guardCompanyIsNotUnderLegalHold(OwnershipTransferRequest $transfer): void
     {
-        $isHeld = Company::query()->whereKey($transfer->company_id)->value('legal_hold');
+        // firstOrFail, not value(): a missing company would make value() return
+        // null and the guard FAIL OPEN, silently unfreezing every held tenant the
+        // day Company gains SoftDeletes.
+        $company = Company::query()->whereKey($transfer->company_id)->firstOrFail();
 
-        if ((bool) $isHeld) {
+        if ($company->legal_hold) {
             throw new CompanyUnderLegalHoldException;
         }
     }
