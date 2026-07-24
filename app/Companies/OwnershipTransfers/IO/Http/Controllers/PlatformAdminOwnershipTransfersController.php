@@ -44,4 +44,9 @@ class PlatformAdminOwnershipTransfersController
             $interactor->execute($requestId, $admin, AdminRequestContext::fromRequest($request))
         );
     }
+
+    public function verify(string $requestId, Request $request): OwnershipTransferRequestAdminResource
+    {
+        throw new \RuntimeException('Not implemented');
+    }
 }

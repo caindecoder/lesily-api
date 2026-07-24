@@ -7,6 +7,7 @@ use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Notification;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
@@ -33,6 +34,9 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
         // Error-path render parity (amendment M): APP_DEBUG=true masks the prod
         // render path, so rejections must render their mapped envelopes.
         config(['app.debug' => false]);
+        // The admin surfaces were read-only until the verify transition (Task 4),
+        // which is the first one here to fire a notification reactor.
+        Notification::fake();
     }
 
     /**
@@ -218,6 +222,22 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
         $transfer->forceFill(['next_state_transition_at' => $deadline])->save();
 
         return $transfer;
+    }
+
+    /**
+     * PATCH the verify transition as $caller, or as a guest when null. Same
+     * no-X-Company-Context shape as the admin reads; Tasks 5/8 sit their
+     * reject/execute action helpers beside this one.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function verifyTransfer(?User $caller, string $requestId, array $body = []): TestResponse
+    {
+        if ($caller !== null) {
+            Sanctum::actingAs($caller);
+        }
+
+        return $this->patchJson("/api/v1/admin/ownership-transfers/{$requestId}/verify", $body);
     }
 
     /**
