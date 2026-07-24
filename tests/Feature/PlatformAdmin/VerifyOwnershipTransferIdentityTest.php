@@ -3,6 +3,7 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
@@ -58,6 +59,43 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         // Then the surface denies it without acknowledging the transfer exists
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertTransferStillAwaitsVerification($transfer->getKey());
+    }
+
+    /**
+     * An id no transfer carries is refused with the same envelope a denied
+     * caller gets. A VALID body is sent deliberately: it isolates the existence
+     * check from input validation, so this test cannot pass for the wrong reason
+     * once the Command's rules land.
+     */
+    #[Test]
+    public function when_the_transfer_does_not_exist_then_it_is_not_found(): void
+    {
+        // Given an allowlisted admin and an id that belongs to no transfer
+        $admin = $this->anAllowlistedAdmin();
+
+        // When they attempt to verify it
+        $response = $this->verifyTransfer($admin, (string) Str::uuid7(), $this->verificationBody());
+
+        // Then the surface refuses it indistinguishably from a denied caller
+        $this->assertResourceNotFoundNoLeak($response);
+    }
+
+    /**
+     * The canonical valid verification payload — camelCase in, per
+     * api-conventions §8.1. Overrides let a single row of a DataProvider break
+     * exactly one field.
+     *
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private function verificationBody(array $overrides = []): array
+    {
+        return array_merge([
+            'verificationNotes' => 'National ID matched the applicant; board resolution authorises the transfer.',
+            'verificationArtefacts' => [
+                ['type' => 'id_document', 'reference' => 'SUP-4821/nic-scan', 'capturedAt' => '2026-07-24T09:15:00+00:00'],
+            ],
+        ], $overrides);
     }
 
     /**

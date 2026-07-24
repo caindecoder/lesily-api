@@ -10,6 +10,7 @@ use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestA
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestAdminCollection;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\ReviewOwnershipTransferQueueInteractor;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\ReviewOwnershipTransferAsAdminInteractor;
+use App\Companies\OwnershipTransfers\UseCases\Interactors\VerifyOwnershipTransferIdentityInteractor;
 
 /**
  * The platform-admin cross-tenant ownership-transfer reads (UC-1-127) — behind
@@ -45,8 +46,8 @@ class PlatformAdminOwnershipTransfersController
         );
     }
 
-    public function verify(string $requestId, Request $request): OwnershipTransferRequestAdminResource
+    public function verify(string $requestId, VerifyOwnershipTransferIdentityInteractor $interactor): OwnershipTransferRequestAdminResource
     {
-        throw new \RuntimeException('Not implemented');
+        return new OwnershipTransferRequestAdminResource($interactor->execute($requestId));
     }
 }
