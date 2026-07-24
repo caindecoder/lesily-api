@@ -4,11 +4,16 @@ namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use App\Companies\Entities\Company;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
+use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
  * SM-1-05 T2 — a platform admin confirms the requester's identity and moves the
@@ -100,6 +105,133 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         // Then it is refused on that field and nothing is recorded
         $this->assertValidationRejected($response, $invalidField);
         $this->assertTransferStillAwaitsVerification($transfer->getKey());
+    }
+
+    // Happy — the T2 walk: the record is captured, the transfer moves to
+    // Verified, and the projection mirrors it.
+    #[Test]
+    public function when_a_platform_admin_verifies_a_requested_transfer_then_the_identity_is_verified(): void
+    {
+        // Given a transfer awaiting verification and the admin reviewing it
+        $this->arrangeVerifiableTransfer();
+
+        // When the admin submits the verification record
+        $response = $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+
+        // Then the transfer is verified and the record is projected verbatim
+        $this->assertVerificationAccepted($response);
+        $this->assertIdentityVerifiedEventRecorded();
+        $this->assertProjectionMirrorsVerification();
+        $this->assertDeadlineMovedToTheVerifiedWindow(14);
+    }
+
+    private Company $company;
+
+    private User $admin;
+
+    private OwnershipTransferRequest $transfer;
+
+    /**
+     * Shared happy-path fixtures as properties (§2.2 Rule 4). The transfer is
+     * arranged through the REAL T1 chain, not the factory: the factory writes
+     * only the projection, so an aggregate retrieved against it would replay an
+     * empty stream and the from-Requested guard would fire — the test would then
+     * pass for entirely the wrong reason.
+     */
+    private function arrangeVerifiableTransfer(): void
+    {
+        [$this->company, $owner] = $this->aCompanyWithMember('owner');
+        $this->admin = $this->anAllowlistedAdmin();
+        $this->transfer = $this->aRequestedTransferStream($owner, User::factory()->create());
+    }
+
+    /**
+     * A transfer whose stream genuinely carries the T1 genesis (and whose
+     * projection the T1 projector therefore wrote), so T2 replays real history.
+     */
+    private function aRequestedTransferStream(User $owner, User $target): OwnershipTransferRequest
+    {
+        $requestId = (string) Str::uuid7();
+
+        OwnershipTransferRequestAggregate::retrieve($requestId)
+            ->request(RequestOwnershipTransferCommand::validateAndCreate([
+                'companyId' => $this->company->getKey(),
+                'currentOwnerUserId' => $owner->getKey(),
+                'targetUserId' => $target->getKey(),
+                'reason' => 'Founder is stepping down and handing the company to the operations lead.',
+                'requestChannel' => 'app',
+            ]))
+            ->persist();
+
+        return OwnershipTransferRequest::query()->findOrFail($requestId);
+    }
+
+    /**
+     * 200 with the admin envelope reporting the new state.
+     */
+    private function assertVerificationAccepted(TestResponse $response): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data.id', $this->transfer->getKey());
+        $response->assertJsonPath('data.status', 'verified');
+        $response->assertJsonPath('data.verified_by', $this->admin->getKey());
+    }
+
+    /**
+     * Amendment R — the EVENT is the mechanism, not a direct row write. The two
+     * are indistinguishable from the read model alone (both leave identical
+     * columns), so without this the transition could be reduced to an update()
+     * and silently lose its history on a projection replay. Teeth proven by
+     * revert-check: swapping the interactor for a direct write keeps every other
+     * assertion green and REDs only this one.
+     *
+     * The payload carries the legal-defensibility trio verbatim, which is why
+     * verifiedBy/notes/artefacts are asserted on the STORED event rather than
+     * only on the projection.
+     */
+    private function assertIdentityVerifiedEventRecorded(): void
+    {
+        $stored = LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferIdentityVerified::class)
+            ->whereForCompany($this->company->getKey())
+            ->sole();
+
+        $this->assertSame($this->transfer->getKey(), $stored->event_properties['requestId']);
+        $this->assertSame($this->admin->getKey(), $stored->event_properties['verifiedBy']);
+        $this->assertSame(self::verificationBody()['verificationNotes'], $stored->event_properties['verificationNotes']);
+        $this->assertSame([self::anArtefact()], $stored->event_properties['verificationArtefacts']);
+    }
+
+    /**
+     * The SLA clock switches windows at T2: the 30-day requested-stage anchor is
+     * replaced by verified_at + the configured verified-stage window (OQ-1-006).
+     * Asserted against the CONFIGURED number so a hardcoded 14 cannot satisfy it
+     * — the reconfiguration test drives that from the other side.
+     */
+    private function assertDeadlineMovedToTheVerifiedWindow(int $expectedDays): void
+    {
+        $row = $this->transfer->fresh();
+
+        $this->assertNotNull($row->verified_at);
+        $this->assertTrue(
+            $row->next_state_transition_at->equalTo($row->verified_at->addDays($expectedDays)),
+            "Expected the deadline at verified_at + {$expectedDays}d, got {$row->next_state_transition_at}.",
+        );
+    }
+
+    /**
+     * The read model carries the full verification record — state, actor,
+     * timestamp, and both captured fields verbatim.
+     */
+    private function assertProjectionMirrorsVerification(): void
+    {
+        $row = $this->transfer->fresh();
+
+        $this->assertSame(OwnershipTransferStatus::Verified, $row->status);
+        $this->assertSame($this->admin->getKey(), $row->verified_by);
+        $this->assertNotNull($row->verified_at);
+        $this->assertSame($this->verificationBody()['verificationNotes'], $row->verification_notes);
+        $this->assertSame([self::anArtefact()], $row->verification_artefacts);
     }
 
     /**

@@ -23,6 +23,9 @@ class VerifyOwnershipTransferIdentityCommand extends Data
     /** @var list<array{type: string, reference: string, capturedAt: string}> */
     public array $verificationArtefacts;
 
+    /** Auth-resolved at the boundary, not client-supplied. */
+    public string $verifiedBy;
+
     /**
      * @return array<string, array<int, mixed>>
      */
@@ -38,6 +41,7 @@ class VerifyOwnershipTransferIdentityCommand extends Data
             'verificationArtefacts.*.type' => ['required', Rule::in(VerificationArtefactType::values())],
             'verificationArtefacts.*.reference' => ['required', 'string', 'max:255'],
             'verificationArtefacts.*.capturedAt' => ['required', 'date'],
+            'verifiedBy' => ['required', 'uuid'],
         ];
     }
 }

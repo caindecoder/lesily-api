@@ -49,8 +49,16 @@ class PlatformAdminOwnershipTransfersController
 
     public function verify(string $requestId, Request $request, VerifyOwnershipTransferIdentityInteractor $interactor): OwnershipTransferRequestAdminResource
     {
-        VerifyOwnershipTransferIdentityCommand::validateAndCreate($request);
+        /** @var User $admin — guaranteed by auth:sanctum */
+        $admin = $request->user();
 
-        return new OwnershipTransferRequestAdminResource($interactor->execute($requestId));
+        // Client fields + auth context validated at the delivery boundary
+        // (the OwnershipTransfersController@store precedent).
+        $command = VerifyOwnershipTransferIdentityCommand::validateAndCreate([
+            ...$request->only(['verificationNotes', 'verificationArtefacts']),
+            'verifiedBy' => $admin->getKey(),
+        ]);
+
+        return new OwnershipTransferRequestAdminResource($interactor->execute($requestId, $command));
     }
 }

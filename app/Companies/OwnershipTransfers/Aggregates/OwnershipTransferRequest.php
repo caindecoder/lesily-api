@@ -6,8 +6,11 @@ use Carbon\CarbonImmutable;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotVerifiableException;
+use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferIdentityCommand;
 
 /**
  * The transfer-request lifecycle stream (SM-1-05): one aggregate per request,
@@ -47,5 +50,34 @@ class OwnershipTransferRequest extends AggregateRoot
     public function applyOwnershipTransferRequested(OwnershipTransferRequested $event): void
     {
         $this->status = OwnershipTransferStatus::Requested;
+    }
+
+    /**
+     * SM-1-05 T2. The ONE invariant this aggregate can see on its own stream:
+     * only a Requested transfer can be verified, so a re-verify and every
+     * terminal-state attempt are refused here (E28 — enumerate the transitions,
+     * refuse the rest). The parent company's legal hold is NOT checked here: it
+     * belongs to another aggregate and this one never reads the database, so the
+     * interactor guards it (LD ApproveLeaveAction holds its cross-entity guard
+     * the same way).
+     */
+    public function verifyIdentity(VerifyOwnershipTransferIdentityCommand $command): static
+    {
+        if ($this->status !== OwnershipTransferStatus::Requested) {
+            throw new OwnershipTransferNotVerifiableException;
+        }
+
+        return $this->recordThat(new OwnershipTransferIdentityVerified(
+            requestId: $this->uuid(),
+            verifiedBy: $command->verifiedBy,
+            verificationNotes: $command->verificationNotes,
+            verificationArtefacts: $command->verificationArtefacts,
+            verifiedAt: CarbonImmutable::now(),
+        ));
+    }
+
+    public function applyOwnershipTransferIdentityVerified(OwnershipTransferIdentityVerified $event): void
+    {
+        $this->status = OwnershipTransferStatus::Verified;
     }
 }

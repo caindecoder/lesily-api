@@ -4,7 +4,9 @@ namespace App\Companies\OwnershipTransfers\UseCases\Interactors;
 
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferIdentityCommand;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
+use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
  * SM-1-05 T2 (UC-1-113) — the platform admin confirms the requester's identity
@@ -21,7 +23,7 @@ class VerifyOwnershipTransferIdentityInteractor
 {
     public function __construct(private readonly OwnershipTransferRequestRepositoryInterface $transfers) {}
 
-    public function execute(string $requestId): OwnershipTransferRequest
+    public function execute(string $requestId, VerifyOwnershipTransferIdentityCommand $command): OwnershipTransferRequest
     {
         $transfer = $this->transfers->findByIdAcrossTenants($requestId);
 
@@ -29,6 +31,10 @@ class VerifyOwnershipTransferIdentityInteractor
             throw new ModelNotFoundException;
         }
 
-        return $transfer;
+        OwnershipTransferRequestAggregate::retrieve($requestId)
+            ->verifyIdentity($command)
+            ->persist();
+
+        return $transfer->fresh();
     }
 }
