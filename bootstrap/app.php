@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
+use App\Companies\Exceptions\CompanyUnderLegalHoldException;
 use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use App\Foundation\Auth\Exceptions\InvalidResetLinkException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
@@ -264,6 +265,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // T2 attempted from a state that cannot reach Verified — already
         // verified, or terminal (UC-1-113 6a; SM-1-05 §4 gives T2 one source).
         $exceptions->render(fn (OwnershipTransferNotVerifiableException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // A regulatory hold freezes ownership changes, not merely the expiry
+        // timers (§S10b; slice-#11 D3 / UC-1-113 6d).
+        $exceptions->render(fn (CompanyUnderLegalHoldException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));

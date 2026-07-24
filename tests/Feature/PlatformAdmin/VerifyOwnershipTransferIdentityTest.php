@@ -134,6 +134,61 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->assertOriginalVerificationIntact($original);
     }
 
+    /**
+     * A regulatory hold freezes ownership changes, not merely the expiry timers
+     * (slice-#11 D3): verification is refused while it stands.
+     *
+     * The transfer is arranged as a REAL requested stream, deliberately. Both
+     * this refusal and the state guard render the same 409 code, so a
+     * factory-arranged row — replaying an empty stream — would trip the state
+     * guard and produce an identical response with no legal-hold guard present
+     * at all. Only genuine Requested history makes this test fail when the
+     * guard is removed.
+     */
+    #[Test]
+    public function when_the_company_is_under_legal_hold_then_the_transfer_is_not_verified(): void
+    {
+        // Given a verifiable transfer whose company is under a regulatory hold
+        $this->arrangeVerifiableTransfer();
+        $this->placeCompanyUnderLegalHold();
+
+        // When an allowlisted admin attempts to verify it
+        $response = $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+
+        // Then it is refused and no verification is recorded
+        $this->assertStateGuardRefused($response);
+        $this->assertNoVerificationRecorded();
+    }
+
+    /**
+     * The regulatory freeze on the arranged company. A named fixture helper
+     * carrying the column write is the sanctioned shape — §2.13 bans inline
+     * overrides in test BODIES, not in fixtures (the aTransferDueAt precedent).
+     */
+    private function placeCompanyUnderLegalHold(): void
+    {
+        $this->company->forceFill(['legal_hold' => true])->save();
+    }
+
+    /**
+     * The refusal left the stream carrying only its T1 genesis and the row still
+     * awaiting verification — the legal-hold analogue of the
+     * assertTransferStillAwaitsVerification trio, for streams that legitimately
+     * already hold one event.
+     */
+    private function assertNoVerificationRecorded(): void
+    {
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferIdentityVerified::class)
+            ->count());
+
+        $row = $this->transfer->fresh();
+
+        $this->assertSame(OwnershipTransferStatus::Requested, $row->status);
+        $this->assertNull($row->verified_at);
+        $this->assertNull($row->verified_by);
+    }
+
     // Happy — the T2 walk: the record is captured, the transfer moves to
     // Verified, and the projection mirrors it.
     #[Test]
