@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferAdminFilters;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestAdminResource;
+use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferIdentityCommand;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestAdminCollection;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\ReviewOwnershipTransferQueueInteractor;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\ReviewOwnershipTransferAsAdminInteractor;
@@ -46,8 +47,10 @@ class PlatformAdminOwnershipTransfersController
         );
     }
 
-    public function verify(string $requestId, VerifyOwnershipTransferIdentityInteractor $interactor): OwnershipTransferRequestAdminResource
+    public function verify(string $requestId, Request $request, VerifyOwnershipTransferIdentityInteractor $interactor): OwnershipTransferRequestAdminResource
     {
+        VerifyOwnershipTransferIdentityCommand::validateAndCreate($request);
+
         return new OwnershipTransferRequestAdminResource($interactor->execute($requestId));
     }
 }

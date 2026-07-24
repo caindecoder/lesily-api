@@ -81,21 +81,105 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * Every shape the verification record must refuse. Notes and artefacts are
+     * both mandatory AT WRITE TIME (UC-1-113 minimal guarantee: no partial
+     * verification record can reach stored_events), and each artefact must carry
+     * the full ERD-1-05 triple with a `type` from the locked 7-value set.
+     */
+    #[Test]
+    #[DataProvider('provideInvalidVerificationInputs')]
+    public function when_the_verification_input_is_invalid_then_it_is_rejected(array $body, string $invalidField): void
+    {
+        // Given a transfer awaiting verification
+        [$company] = $this->aCompanyWithMember('owner');
+        $transfer = $this->aTransferInState($company, User::factory()->create(), OwnershipTransferStatus::Requested);
+
+        // When an allowlisted admin submits a malformed verification
+        $response = $this->verifyTransfer($this->anAllowlistedAdmin(), $transfer->getKey(), $body);
+
+        // Then it is refused on that field and nothing is recorded
+        $this->assertValidationRejected($response, $invalidField);
+        $this->assertTransferStillAwaitsVerification($transfer->getKey());
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function provideInvalidVerificationInputs(): array
+    {
+        return [
+            'notes absent' => [self::verificationBodyWithout('verificationNotes'), 'verificationNotes'],
+            'notes empty' => [self::verificationBody(['verificationNotes' => '']), 'verificationNotes'],
+            'notes whitespace only' => [self::verificationBody(['verificationNotes' => '   ']), 'verificationNotes'],
+            'notes beyond the bound' => [self::verificationBody(['verificationNotes' => str_repeat('a', 1001)]), 'verificationNotes'],
+            'artefacts absent' => [self::verificationBodyWithout('verificationArtefacts'), 'verificationArtefacts'],
+            'artefacts empty' => [self::verificationBody(['verificationArtefacts' => []]), 'verificationArtefacts'],
+            'artefacts not a list' => [self::verificationBody(['verificationArtefacts' => 'SUP-4821']), 'verificationArtefacts'],
+            'artefact type absent' => [self::verificationBodyWithArtefact(self::anArtefactWithout('type')), 'verificationArtefacts.0.type'],
+            'artefact type outside the locked set' => [self::verificationBodyWithArtefact(self::anArtefact(['type' => 'signed_affidavit'])), 'verificationArtefacts.0.type'],
+            'artefact reference absent' => [self::verificationBodyWithArtefact(self::anArtefactWithout('reference')), 'verificationArtefacts.0.reference'],
+            'artefact capturedAt not a date' => [self::verificationBodyWithArtefact(self::anArtefact(['capturedAt' => 'last Tuesday'])), 'verificationArtefacts.0.capturedAt'],
+        ];
+    }
+
+    /**
      * The canonical valid verification payload — camelCase in, per
-     * api-conventions §8.1. Overrides let a single row of a DataProvider break
-     * exactly one field.
+     * api-conventions §8.1. Static so the DataProvider can break exactly one
+     * field of it per row.
      *
      * @param  array<string, mixed>  $overrides
      * @return array<string, mixed>
      */
-    private function verificationBody(array $overrides = []): array
+    private static function verificationBody(array $overrides = []): array
     {
         return array_merge([
             'verificationNotes' => 'National ID matched the applicant; board resolution authorises the transfer.',
-            'verificationArtefacts' => [
-                ['type' => 'id_document', 'reference' => 'SUP-4821/nic-scan', 'capturedAt' => '2026-07-24T09:15:00+00:00'],
-            ],
+            'verificationArtefacts' => [self::anArtefact()],
         ], $overrides);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function verificationBodyWithout(string $key): array
+    {
+        $body = self::verificationBody();
+        unset($body[$key]);
+
+        return $body;
+    }
+
+    /**
+     * @param  array<string, mixed>  $artefact
+     * @return array<string, mixed>
+     */
+    private static function verificationBodyWithArtefact(array $artefact): array
+    {
+        return self::verificationBody(['verificationArtefacts' => [$artefact]]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private static function anArtefact(array $overrides = []): array
+    {
+        return array_merge([
+            'type' => 'id_document',
+            'reference' => 'SUP-4821/nic-scan',
+            'capturedAt' => '2026-07-24T09:15:00+00:00',
+        ], $overrides);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function anArtefactWithout(string $key): array
+    {
+        $artefact = self::anArtefact();
+        unset($artefact[$key]);
+
+        return $artefact;
     }
 
     /**
