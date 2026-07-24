@@ -3,6 +3,7 @@
 namespace App\Companies\OwnershipTransfers\Reactors;
 
 use App\Models\User;
+use App\Companies\Entities\Company;
 use App\Foundation\Notifications\Enums\NotificationType;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
 use App\Foundation\Notifications\Notifications\SystemNotification;
@@ -27,7 +28,8 @@ class PlatformAdminQueueReactor extends Reactor
 {
     public function onOwnershipTransferIdentityVerified(OwnershipTransferIdentityVerified $event): void
     {
-        $transfer = OwnershipTransferRequest::query()->with('company')->findOrFail($event->requestId);
+        $transfer = OwnershipTransferRequest::query()->findOrFail($event->requestId);
+        $company = Company::query()->findOrFail($transfer->company_id);
 
         $adminIds = collect((array) config('platform.admin_user_ids', []))
             ->map(fn ($id): string => trim((string) $id))
@@ -37,7 +39,7 @@ class PlatformAdminQueueReactor extends Reactor
             ->whereIn('id', $adminIds)
             ->get()
             ->each(fn (User $admin) => $admin->notify(
-                new SystemNotification(NotificationType::GeneralAccountNotice, $transfer->company?->name),
+                new SystemNotification(NotificationType::GeneralAccountNotice, $company->name),
             ));
     }
 }

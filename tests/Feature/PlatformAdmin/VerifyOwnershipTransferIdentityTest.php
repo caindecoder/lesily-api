@@ -123,7 +123,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         // Given a transfer this admin has already verified
         $this->arrangeVerifiableTransfer();
         $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
-        $original = $this->transfer->fresh();
+        $original = $this->currentTransfer();
 
         // When a second verification is attempted against it
         $response = $this->verifyTransfer(
@@ -185,7 +185,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
             ->where('event_class', OwnershipTransferIdentityVerified::class)
             ->count());
 
-        $row = $this->transfer->fresh();
+        $row = $this->currentTransfer();
 
         $this->assertSame(OwnershipTransferStatus::Requested, $row->status);
         $this->assertNull($row->verified_at);
@@ -247,7 +247,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
      */
     private static function oneArtefactOfEveryType(): array
     {
-        return array_values(array_map(
+        return array_map(
             fn (string $type): array => self::anArtefact([
                 'type' => $type,
                 'reference' => "SUP-4821/{$type}",
@@ -261,7 +261,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
                 'court_order',
                 'other',
             ],
-        ));
+        );
     }
 
     /**
@@ -276,7 +276,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
             ->sole();
 
         $this->assertSame($artefacts, $stored->event_properties['verificationArtefacts']);
-        $this->assertSame($artefacts, $this->transfer->fresh()->verification_artefacts);
+        $this->assertSame($artefacts, $this->currentTransfer()->verification_artefacts);
         $response->assertJsonPath('data.verification_artefacts', $artefacts);
     }
 
@@ -360,6 +360,19 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * The transfer as it stands in the database RIGHT NOW, as a distinct
+     * instance every call. Deliberately not `$this->transfer->refresh()`, which
+     * mutates the shared property in place: the already-verified test captures a
+     * BEFORE snapshot and compares it to the AFTER state, and refresh() would
+     * hand it the same object twice, quietly turning that comparison into a
+     * tautology. findOrFail also types non-null, which fresh() does not.
+     */
+    private function currentTransfer(): OwnershipTransferRequest
+    {
+        return OwnershipTransferRequest::query()->whereKey($this->transfer->getKey())->firstOrFail();
+    }
+
+    /**
      * The transition was refused by a state guard — the shared 409 family the
      * §8.4 registry reserves for illegal state-machine moves.
      */
@@ -382,11 +395,15 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
             ->where('event_class', OwnershipTransferIdentityVerified::class)
             ->count());
 
-        $row = $this->transfer->fresh();
+        $row = $this->currentTransfer();
+        $verifiedAt = $row->verified_at;
+        $originalVerifiedAt = $original->verified_at;
 
         $this->assertSame($original->verified_by, $row->verified_by);
         $this->assertSame($original->verification_notes, $row->verification_notes);
-        $this->assertTrue($row->verified_at->equalTo($original->verified_at));
+        $this->assertNotNull($verifiedAt);
+        $this->assertNotNull($originalVerifiedAt);
+        $this->assertTrue($verifiedAt->equalTo($originalVerifiedAt));
     }
 
     /**
@@ -422,12 +439,15 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
      */
     private function assertDeadlineMovedToTheVerifiedWindow(int $expectedDays): void
     {
-        $row = $this->transfer->fresh();
+        $row = $this->currentTransfer();
+        $verifiedAt = $row->verified_at;
+        $deadline = $row->next_state_transition_at;
 
-        $this->assertNotNull($row->verified_at);
+        $this->assertNotNull($verifiedAt);
+        $this->assertNotNull($deadline);
         $this->assertTrue(
-            $row->next_state_transition_at->equalTo($row->verified_at->addDays($expectedDays)),
-            "Expected the deadline at verified_at + {$expectedDays}d, got {$row->next_state_transition_at}.",
+            $deadline->equalTo($verifiedAt->addDays($expectedDays)),
+            "Expected the deadline at verified_at + {$expectedDays}d, got {$deadline}.",
         );
     }
 
@@ -467,7 +487,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
      */
     private function assertProjectionMirrorsVerification(): void
     {
-        $row = $this->transfer->fresh();
+        $row = $this->currentTransfer();
 
         $this->assertSame(OwnershipTransferStatus::Verified, $row->status);
         $this->assertSame($this->admin->getKey(), $row->verified_by);

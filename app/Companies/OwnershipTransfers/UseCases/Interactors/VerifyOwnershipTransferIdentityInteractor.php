@@ -39,7 +39,9 @@ class VerifyOwnershipTransferIdentityInteractor
             ->verifyIdentity($command)
             ->persist();
 
-        return $transfer->fresh();
+        // refresh(), not fresh(): it re-reads the projector's writes into THIS
+        // instance and is typed non-null, where fresh() hands back a nullable.
+        return $transfer->refresh();
     }
 
     /**
