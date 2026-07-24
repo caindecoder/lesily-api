@@ -737,6 +737,17 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
                 self::verificationBody(['verificationArtefacts' => array_fill(0, 21, self::anArtefact())]),
                 'verificationArtefacts',
             ],
+            // A SCALAR element, not a scalar array: the parent passes `array`,
+            // so the per-element rules do run — and Laravel does not bail per
+            // attribute, so the closure is reached with a non-array. Without its
+            // is_array guard, array_keys() would TypeError into a 500 instead of
+            // a 422. (The 'artefacts not a list' row above fails the PARENT rule
+            // and so never reaches this path — which is why it left the guard
+            // uncovered.)
+            'artefact is not an object' => [
+                self::verificationBody(['verificationArtefacts' => ['SUP-4821/nic-scan']]),
+                'verificationArtefacts.0',
+            ],
             'artefact smuggling an extra key' => [
                 self::verificationBodyWithArtefact(self::anArtefact(['scan' => 'JVBERi0xLjcKJc-base64-document-bytes'])),
                 'verificationArtefacts.0',
