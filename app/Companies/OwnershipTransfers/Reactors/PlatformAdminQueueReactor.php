@@ -4,6 +4,7 @@ namespace App\Companies\OwnershipTransfers\Reactors;
 
 use App\Models\User;
 use App\Companies\Entities\Company;
+use App\Foundation\Http\Values\PlatformAdminAllowlist;
 use App\Foundation\Notifications\Enums\NotificationType;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
 use App\Foundation\Notifications\Notifications\SystemNotification;
@@ -31,9 +32,7 @@ class PlatformAdminQueueReactor extends Reactor
         $transfer = OwnershipTransferRequest::query()->findOrFail($event->requestId);
         $company = Company::query()->findOrFail($transfer->company_id);
 
-        $adminIds = collect((array) config('platform.admin_user_ids', []))
-            ->map(fn ($id): string => trim((string) $id))
-            ->reject(fn (string $id): bool => $id === '');
+        $adminIds = PlatformAdminAllowlist::userIds();
 
         User::query()
             ->whereIn('id', $adminIds)

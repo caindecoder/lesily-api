@@ -11,6 +11,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -410,6 +411,8 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
 
     private User $admin;
 
+    private User $secondAdmin;
+
     private OwnershipTransferRequest $transfer;
 
     /**
@@ -422,7 +425,13 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
     private function arrangeVerifiableTransfer(): void
     {
         [$this->company, $owner] = $this->aCompanyWithMember('owner');
+        // TWO admins on the allowlist, not one. With a single recipient the
+        // reactor's ->get()->each(...) fan-out degrades to ->first()?->notify()
+        // undetected, and in production only one of several admins would ever
+        // learn a transfer is ready to execute.
         $this->admin = $this->anAllowlistedAdmin();
+        $this->secondAdmin = User::factory()->create();
+        $this->allowlist([$this->admin->getKey(), $this->secondAdmin->getKey()]);
         $this->transfer = $this->aRequestedTransferStream($owner, User::factory()->create());
 
         // Discard the arrangement's own T1 side effects. The genesis fires
@@ -648,7 +657,14 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
      */
     private function assertExecutionQueueAlerted(): void
     {
-        Notification::assertSentTo($this->admin, SystemNotification::class);
+        $carriesTheTenant = fn (SystemNotification $notification): bool => $notification->type === NotificationType::GeneralAccountNotice
+            && $notification->companyName === $this->company->name;
+
+        // EVERY allowlisted admin, not just the first, and each carrying the
+        // tenant it concerns — without the payload check the whole company
+        // lookup in the reactor is content-dead and could return an empty name.
+        Notification::assertSentTo($this->admin, SystemNotification::class, $carriesTheTenant);
+        Notification::assertSentTo($this->secondAdmin, SystemNotification::class, $carriesTheTenant);
         Notification::assertNotSentTo([$this->transfer->currentOwner, $this->transfer->targetUser], SystemNotification::class);
     }
 
@@ -666,7 +682,15 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->assertSame($this->company->getKey(), $entry->company_id);
         $this->assertSame('transfer_identity_verified', $entry->action);
         $this->assertSame($this->admin->getKey(), $entry->actor_user_id);
+        $this->assertSame($this->admin->name, $entry->actor_label);
+        $this->assertSame('ownership_transfer_request', $entry->subject_type);
         $this->assertNotNull($entry->stored_event_id);
+        // Deliberately null: audit_trail rows are TENANT-readable via UC-1-066,
+        // and the verifier's verbatim notes are platform-side forensic prose
+        // about a person's identity documents. They live on the event, reachable
+        // from here through stored_event_id (s149 ruling; the s148 queue-row
+        // metadata pin is the precedent).
+        $this->assertNull($entry->metadata);
     }
 
     /**
@@ -706,6 +730,13 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
             // unpoliced extra key is a route for document bytes to land in the
             // immutable event store, which the UC and the event docblock both
             // forbid (OQ-1-045 / D4).
+            // The array needs a ceiling for the same reason the object needs
+            // closing: it lands in an append-only store, so an unbounded write
+            // is an unremediable one.
+            'artefacts beyond the bound' => [
+                self::verificationBody(['verificationArtefacts' => array_fill(0, 21, self::anArtefact())]),
+                'verificationArtefacts',
+            ],
             'artefact smuggling an extra key' => [
                 self::verificationBodyWithArtefact(self::anArtefact(['scan' => 'JVBERi0xLjcKJc-base64-document-bytes'])),
                 'verificationArtefacts.0',
