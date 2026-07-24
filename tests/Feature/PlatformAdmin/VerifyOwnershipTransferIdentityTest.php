@@ -7,7 +7,10 @@ use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
@@ -189,6 +192,94 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->assertNull($row->verified_by);
     }
 
+    /**
+     * The verified-stage window is configuration, not a literal. This exists
+     * because the sibling T1 assertion pins a hardcoded 30, so a hardcoded 14
+     * here would satisfy every other test in the class — and Infection does not
+     * mutate a config default into a literal, so nothing else would catch it
+     * (the s148 "MSI 100% ≠ assertion teeth" finding). Teeth proven by
+     * revert-check: hardcoding the projector's 14 REDs this test alone.
+     */
+    #[Test]
+    public function when_the_verified_window_is_reconfigured_then_the_new_deadline_is_applied(): void
+    {
+        // Given a verifiable transfer and a shortened verified-stage window
+        $this->arrangeVerifiableTransfer();
+        config(['ownership-transfers.verified_ttl_days' => 7]);
+
+        // When the admin verifies it
+        $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+
+        // Then the deadline follows the configured window
+        $this->assertDeadlineMovedToTheVerifiedWindow(7);
+    }
+
+    /**
+     * Every accepted artefact kind survives the round trip through the JSON
+     * column byte-for-byte — the metadata-only contract (OQ-1-045 / D4).
+     *
+     * The seven type strings are spelled as LITERALS here, never derived from
+     * VerificationArtefactType: deriving them would make the test move with the
+     * enum, so dropping a case would silently narrow the accepted set on both
+     * sides and stay green. Literals make this the regression pin for the locked
+     * vocabulary.
+     */
+    #[Test]
+    public function when_multiple_artefacts_are_submitted_then_every_reference_is_persisted_verbatim(): void
+    {
+        // Given a verifiable transfer and one artefact of every accepted kind
+        $this->arrangeVerifiableTransfer();
+        $artefacts = self::oneArtefactOfEveryType();
+
+        // When the admin submits them all in a single verification
+        $response = $this->verifyTransfer(
+            $this->admin,
+            $this->transfer->getKey(),
+            $this->verificationBody(['verificationArtefacts' => $artefacts]),
+        );
+
+        // Then all seven are accepted and stored verbatim, event and projection alike
+        $this->assertArtefactsPersistedVerbatim($response, $artefacts);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function oneArtefactOfEveryType(): array
+    {
+        return array_values(array_map(
+            fn (string $type): array => self::anArtefact([
+                'type' => $type,
+                'reference' => "SUP-4821/{$type}",
+            ]),
+            [
+                'email_confirmation',
+                'id_document',
+                'video_call',
+                'death_certificate',
+                'poa',
+                'court_order',
+                'other',
+            ],
+        ));
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $artefacts
+     */
+    private function assertArtefactsPersistedVerbatim(TestResponse $response, array $artefacts): void
+    {
+        $response->assertOk();
+
+        $stored = LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferIdentityVerified::class)
+            ->sole();
+
+        $this->assertSame($artefacts, $stored->event_properties['verificationArtefacts']);
+        $this->assertSame($artefacts, $this->transfer->fresh()->verification_artefacts);
+        $response->assertJsonPath('data.verification_artefacts', $artefacts);
+    }
+
     // Happy — the T2 walk: the record is captured, the transfer moves to
     // Verified, and the projection mirrors it.
     #[Test]
@@ -205,6 +296,8 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->assertIdentityVerifiedEventRecorded();
         $this->assertProjectionMirrorsVerification();
         $this->assertDeadlineMovedToTheVerifiedWindow(14);
+        $this->assertExecutionQueueAlerted();
+        $this->assertVerificationAudited();
     }
 
     private Company $company;
@@ -225,6 +318,13 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         [$this->company, $owner] = $this->aCompanyWithMember('owner');
         $this->admin = $this->anAllowlistedAdmin();
         $this->transfer = $this->aRequestedTransferStream($owner, User::factory()->create());
+
+        // Discard the arrangement's own T1 side effects. The genesis fires
+        // SupportQueueNotificationReactor at the SAME allowlisted admin with the
+        // SAME SystemNotification class, so without this reset a T2 reactor
+        // assertion would pass on the T1 notification alone — green with no
+        // queue reactor in the codebase at all.
+        Notification::fake();
     }
 
     /**
@@ -329,6 +429,36 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
             $row->next_state_transition_at->equalTo($row->verified_at->addDays($expectedDays)),
             "Expected the deadline at verified_at + {$expectedDays}d, got {$row->next_state_transition_at}.",
         );
+    }
+
+    /**
+     * T2's operational signal: the platform-admin queue learns an
+     * execution-ready transfer is waiting (SM-1-05 §7 — PlatformAdminQueueReactor
+     * is T2's reactor, NOT a requester notification, which is T3/T5/T8/T9's).
+     * The tenant side must NOT be told: verification is a platform-side step and
+     * the owner's view of it is UC-1-125, not a push.
+     */
+    private function assertExecutionQueueAlerted(): void
+    {
+        Notification::assertSentTo($this->admin, SystemNotification::class);
+        Notification::assertNotSentTo([$this->transfer->currentOwner, $this->transfer->targetUser], SystemNotification::class);
+    }
+
+    /**
+     * The append-only audit row for the transition, linked to the stored event.
+     * The ACTOR is the point of this row — it is the record of which platform
+     * admin vouched for the identity, which is the evidence a disputed transfer
+     * turns on.
+     */
+    private function assertVerificationAudited(): void
+    {
+        $entry = AuditEntry::query()->where('event_class', 'OwnershipTransferIdentityVerified')->sole();
+
+        $this->assertSame($this->transfer->getKey(), $entry->subject_id);
+        $this->assertSame($this->company->getKey(), $entry->company_id);
+        $this->assertSame('transfer_identity_verified', $entry->action);
+        $this->assertSame($this->admin->getKey(), $entry->actor_user_id);
+        $this->assertNotNull($entry->stored_event_id);
     }
 
     /**
