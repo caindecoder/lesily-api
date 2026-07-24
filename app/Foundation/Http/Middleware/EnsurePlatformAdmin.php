@@ -5,6 +5,7 @@ namespace App\Foundation\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use App\Foundation\Http\Values\PlatformAdminAllowlist;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -37,9 +38,6 @@ class EnsurePlatformAdmin
      */
     private function isAllowlisted(Request $request): bool
     {
-        return collect((array) config('platform.admin_user_ids', []))
-            ->map(fn ($id): string => trim((string) $id))
-            ->reject(fn (string $id): bool => $id === '')
-            ->containsStrict((string) $request->user()?->getKey());
+        return PlatformAdminAllowlist::contains($request->user()?->getKey());
     }
 }

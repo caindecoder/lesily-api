@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
+use App\Companies\Exceptions\CompanyUnderLegalHoldException;
 use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use App\Foundation\Auth\Exceptions\InvalidResetLinkException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
@@ -50,6 +51,7 @@ use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 use App\Companies\OwnershipTransfers\Exceptions\EmergencyContactRequiredException;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
+use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotVerifiableException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -256,6 +258,20 @@ return Application::configure(basePath: dirname(__DIR__))
         // A second transfer request while one is still open — one transfer at
         // a time per company (UC-1-028 T1 guard; ERD-1-05 §5 invariant).
         $exceptions->render(fn (OpenOwnershipTransferExistsException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // T2 attempted from a state that cannot reach Verified — already
+        // verified, or terminal (UC-1-113 6a; SM-1-05 §4 gives T2 one source).
+        $exceptions->render(fn (OwnershipTransferNotVerifiableException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // A regulatory hold freezes ownership changes, not merely the expiry
+        // timers (§S10b; slice-#11 D3 / UC-1-113 6d).
+        $exceptions->render(fn (CompanyUnderLegalHoldException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));
