@@ -107,6 +107,33 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->assertTransferStillAwaitsVerification($transfer->getKey());
     }
 
+    /**
+     * T2's only source state is Requested (SM-1-05 §4), so a second verification
+     * is refused and the first record stands. The arrangement drives a REAL first
+     * verification rather than a factory row: the aggregate replays its stream,
+     * not the projection, so a factory-arranged `verified` row would refuse for
+     * the wrong reason (empty stream) and prove nothing about this transition.
+     */
+    #[Test]
+    public function when_the_transfer_is_already_verified_then_it_is_not_verified_again(): void
+    {
+        // Given a transfer this admin has already verified
+        $this->arrangeVerifiableTransfer();
+        $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+        $original = $this->transfer->fresh();
+
+        // When a second verification is attempted against it
+        $response = $this->verifyTransfer(
+            $this->admin,
+            $this->transfer->getKey(),
+            $this->verificationBody(['verificationNotes' => 'Second reviewer took another look at the same documents.']),
+        );
+
+        // Then it is refused and the original verification is untouched
+        $this->assertStateGuardRefused($response);
+        $this->assertOriginalVerificationIntact($original);
+    }
+
     // Happy — the T2 walk: the record is captured, the transfer moves to
     // Verified, and the projection mirrors it.
     #[Test]
@@ -175,6 +202,36 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $response->assertJsonPath('data.id', $this->transfer->getKey());
         $response->assertJsonPath('data.status', 'verified');
         $response->assertJsonPath('data.verified_by', $this->admin->getKey());
+    }
+
+    /**
+     * The transition was refused by a state guard — the shared 409 family the
+     * §8.4 registry reserves for illegal state-machine moves.
+     */
+    private function assertStateGuardRefused(TestResponse $response): void
+    {
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    /**
+     * The refused second attempt changed nothing: the stream still carries
+     * exactly ONE verification event, and the projected record still names the
+     * first verifier, time and notes. Without the event-count aspect a guard
+     * that recorded a duplicate but left the columns alone would pass.
+     */
+    private function assertOriginalVerificationIntact(OwnershipTransferRequest $original): void
+    {
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferIdentityVerified::class)
+            ->count());
+
+        $row = $this->transfer->fresh();
+
+        $this->assertSame($original->verified_by, $row->verified_by);
+        $this->assertSame($original->verification_notes, $row->verification_notes);
+        $this->assertTrue($row->verified_at->equalTo($original->verified_at));
     }
 
     /**

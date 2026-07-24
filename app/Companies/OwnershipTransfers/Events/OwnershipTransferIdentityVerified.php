@@ -16,13 +16,18 @@ use Spatie\EventSourcing\StoredEvents\ShouldBeStored;
  *
  * CarbonInterface — spatie denormalizes replayed timestamps to mutable Carbon
  * (trial-lifecycle #37 lesson).
- *
- * @phpstan-type ArtefactMetadata array{type: string, reference: string, capturedAt: string}
  */
 class OwnershipTransferIdentityVerified extends ShouldBeStored
 {
     /**
-     * @param  list<ArtefactMetadata>  $verificationArtefacts
+     * The artefact shape is spelled INLINE, never behind a @phpstan-type alias:
+     * spatie deserializes replayed events through Symfony's serializer, which
+     * reads this docblock and resolves a named alias as a CLASS — a
+     * `ArtefactMetadata[]` that does not exist — so the event writes fine and
+     * then explodes on the first replay. Caught by the second-verify test, the
+     * only one that retrieves a stream already carrying this event.
+     *
+     * @param  list<array{type: string, reference: string, capturedAt: string}>  $verificationArtefacts
      */
     public function __construct(
         public string $requestId,
