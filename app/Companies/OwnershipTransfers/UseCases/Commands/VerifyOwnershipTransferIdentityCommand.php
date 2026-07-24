@@ -2,11 +2,11 @@
 
 namespace App\Companies\OwnershipTransfers\UseCases\Commands;
 
-use Closure;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 use App\Companies\OwnershipTransfers\Enums\VerificationArtefactType;
+use App\Companies\OwnershipTransfers\UseCases\Rules\ArtefactCarriesOnlyMetadata;
 
 /**
  * The T2 verification record (UC-1-113, SM-1-05). Both fields are mandatory at
@@ -49,27 +49,11 @@ class VerifyOwnershipTransferIdentityCommand extends Data
             // DPO contract forbids (OQ-1-045 / D4: references and capture times,
             // never the documents). Laravel has no built-in "no unknown keys"
             // rule for a nested object, so the closure IS the enforcement.
-            'verificationArtefacts.*' => ['array', self::rejectUnknownArtefactKeys()],
+            'verificationArtefacts.*' => ['array', new ArtefactCarriesOnlyMetadata],
             'verificationArtefacts.*.type' => ['required', Rule::in(VerificationArtefactType::values())],
             'verificationArtefacts.*.reference' => ['required', 'string', 'max:255'],
             'verificationArtefacts.*.capturedAt' => ['required', 'date'],
             'verifiedBy' => ['required', 'uuid'],
         ];
-    }
-
-    /**
-     * Refuses any artefact key outside the ERD-1-05 triple.
-     */
-    private static function rejectUnknownArtefactKeys(): Closure
-    {
-        return function (string $attribute, mixed $value, Closure $fail): void {
-            if (! is_array($value)) {
-                return;
-            }
-
-            if (array_diff(array_keys($value), ['type', 'reference', 'capturedAt']) !== []) {
-                $fail('Each verification artefact may carry only a type, a reference and a capturedAt.');
-            }
-        };
     }
 }

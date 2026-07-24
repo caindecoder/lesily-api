@@ -2,8 +2,6 @@
 
 namespace App\Foundation\Http\Values;
 
-use Illuminate\Support\Collection;
-
 /**
  * The one reading of `config('platform.admin_user_ids')`.
  *
@@ -26,21 +24,21 @@ use Illuminate\Support\Collection;
 final class PlatformAdminAllowlist
 {
     /**
-     * @return Collection<int, string>
+     * @return list<string>
      */
-    public static function userIds(): Collection
+    public static function userIds(): array
     {
-        /** @var Collection<int, string> $ids */
-        $ids = collect((array) config('platform.admin_user_ids', []))
-            ->map(fn ($id): string => trim((string) $id))
-            ->reject(fn (string $id): bool => $id === '')
-            ->values();
-
-        return $ids;
+        return array_values(array_filter(
+            array_map(
+                fn ($id): string => trim((string) $id),
+                (array) config('platform.admin_user_ids', []),
+            ),
+            fn (string $id): bool => $id !== '',
+        ));
     }
 
     public static function contains(?string $userId): bool
     {
-        return self::userIds()->containsStrict((string) $userId);
+        return in_array((string) $userId, self::userIds(), true);
     }
 }
