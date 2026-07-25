@@ -81,6 +81,66 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * Every shape the rejection record must refuse. Both fields are mandatory AT
+     * WRITE TIME (UC-1-128 minimal guarantee: no rejection reaches stored_events
+     * without attributable actor, verbatim prose AND a code), and the code must
+     * name one of the four locked reasons.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    #[Test]
+    #[DataProvider('provideInvalidRejectionInputs')]
+    public function when_the_rejection_input_is_invalid_then_it_is_refused(array $body, string $invalidField): void
+    {
+        // Given a transfer awaiting review
+        [$company] = $this->aCompanyWithMember('owner');
+        $transfer = $this->aTransferInState($company, User::factory()->create(), OwnershipTransferStatus::Requested);
+
+        // When an allowlisted admin submits a malformed rejection
+        $response = $this->rejectTransfer($this->anAllowlistedAdmin(), $transfer->getKey(), $body);
+
+        // Then it is refused on that field and nothing is recorded
+        $this->assertValidationRejected($response, $invalidField);
+        $this->assertTransferStillOpen($transfer->getKey(), OwnershipTransferStatus::Requested);
+    }
+
+    /**
+     * The four code literals are spelled out rather than derived from
+     * RejectionReasonCode::values(): deriving them would make this provider move
+     * WITH the enum, so dropping a case would silently narrow the accepted set on
+     * both sides and stay green. Literals make this the regression pin for the
+     * locked vocabulary (the s149 artefact-enum lesson).
+     *
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function provideInvalidRejectionInputs(): array
+    {
+        return [
+            'reason absent' => [self::rejectionBodyWithout('reason'), 'reason'],
+            'reason empty' => [self::rejectionBody(['reason' => '']), 'reason'],
+            'reason whitespace only' => [self::rejectionBody(['reason' => '   ']), 'reason'],
+            'reason beyond the bound' => [self::rejectionBody(['reason' => str_repeat('a', 1001)]), 'reason'],
+            'reason code absent' => [self::rejectionBodyWithout('rejectionReasonCode'), 'rejectionReasonCode'],
+            'reason code empty' => [self::rejectionBody(['rejectionReasonCode' => '']), 'rejectionReasonCode'],
+            'reason code outside the locked four' => [
+                self::rejectionBody(['rejectionReasonCode' => 'admin_discretion']),
+                'rejectionReasonCode',
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function rejectionBodyWithout(string $key): array
+    {
+        $body = self::rejectionBody();
+        unset($body[$key]);
+
+        return $body;
+    }
+
+    /**
      * The canonical valid rejection payload — camelCase in, per api-conventions
      * §8.1. Static so a DataProvider can break exactly one field of it per row.
      *
