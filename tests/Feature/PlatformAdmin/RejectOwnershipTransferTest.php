@@ -4,6 +4,7 @@ namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
@@ -34,6 +35,44 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // Then the request is refused and the transfer is untouched
         $this->assertUnauthenticated($response);
         $this->assertTransferStillOpen($transfer->getKey(), OwnershipTransferStatus::Requested);
+    }
+
+    /**
+     * The tenant roles the admin family must turn away with the SAME 404 an
+     * unknown id produces. Born green — the platform.admin gate landed with the
+     * route in lap 1 — so its teeth were proven by revert-check (drop the
+     * middleware, watch all six rows RED, restore) rather than by a watched RED.
+     */
+    #[Test]
+    #[DataProvider('provideTenantRoles')]
+    public function when_the_caller_is_not_a_platform_admin_then_the_transfer_is_not_found(string $roleCode): void
+    {
+        // Given a transfer awaiting review and a tenant member of its company
+        [$company] = $this->aCompanyWithMember('owner');
+        $transfer = $this->aTransferInState($company, User::factory()->create(), OwnershipTransferStatus::Requested);
+        $caller = $this->aCompanyMember($company, $roleCode);
+
+        // When that tenant role attempts to reject it
+        $response = $this->rejectTransfer($caller, $transfer->getKey(), $this->rejectionBody());
+
+        // Then the surface denies it without acknowledging the transfer exists
+        $this->assertResourceNotFoundNoLeak($response);
+        $this->assertTransferStillOpen($transfer->getKey(), OwnershipTransferStatus::Requested);
+    }
+
+    /**
+     * The canonical valid rejection payload — camelCase in, per api-conventions
+     * §8.1. Static so a DataProvider can break exactly one field of it per row.
+     *
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private static function rejectionBody(array $overrides = []): array
+    {
+        return array_merge([
+            'reason' => 'Identity document expired and no follow-up received within 7 days.',
+            'rejectionReasonCode' => 'identity_failed',
+        ], $overrides);
     }
 
     /**
