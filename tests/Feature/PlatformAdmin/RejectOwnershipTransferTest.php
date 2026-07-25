@@ -3,7 +3,9 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -139,6 +141,173 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertNotNull($rejectedAt);
         $this->assertNotNull($originalRejectedAt);
         $this->assertTrue($rejectedAt->equalTo($originalRejectedAt));
+    }
+
+    /**
+     * The rejector is whoever the token says, never whoever the body claims.
+     * `rejectedBy` is the field this whole use case exists to produce — every
+     * stakeholder clause about defending a rejection against a later "it was
+     * arbitrary" claim rests on it being auth-derived — yet the only thing
+     * enforcing that is an `only()` whitelist and the spread ordering in the
+     * controller, which no other test touches. A refactor to `$request->all()`
+     * would let one admin attribute a rejection to a colleague.
+     */
+    #[Test]
+    public function when_the_body_names_a_different_rejector_then_the_authenticated_admin_is_recorded(): void
+    {
+        // Given a rejectable transfer and a colleague to impersonate
+        $this->arrangeRejectableTransfer();
+        $colleague = User::factory()->create();
+
+        // When the admin submits a body claiming the colleague rejected it
+        $this->rejectTransfer($this->admin, $this->transfer->getKey(), self::rejectionBody([
+            'rejectedBy' => $colleague->getKey(),
+        ]));
+
+        // Then every record of the rejector names the authenticated admin
+        $this->assertRejectorIsAlways($this->admin);
+    }
+
+    /**
+     * Every surface recording WHO ended the transfer names $expected — the event
+     * payload (the durable evidence), the projection (what the admin console
+     * reads) and the audit row (the access log). A forged body value would have to
+     * defeat all three.
+     */
+    private function assertRejectorIsAlways(User $expected): void
+    {
+        $stored = LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferRejected::class)
+            ->sole();
+
+        $this->assertSame($expected->getKey(), $stored->event_properties['rejectedBy']);
+        $this->assertSame($expected->getKey(), $this->currentTransfer($this->transfer)->rejected_by);
+        $this->assertSame($expected->getKey(), AuditEntry::query()
+            ->where('event_class', 'OwnershipTransferRejected')
+            ->sole()
+            ->actor_user_id);
+    }
+
+    /**
+     * The projector must address ONE row. It is a fluent `whereKey(...)` call, and
+     * Infection generates no method-call removal on a builder chain — so with a
+     * single transfer in the fixture, dropping the scope leaves the suite green
+     * while in production one admin's rejection would terminate every transfer on
+     * the platform.
+     *
+     * A second, unrelated tenant is therefore part of the arrangement, not an
+     * afterthought: it is the only thing that makes the scope observable (s149 C6).
+     */
+    #[Test]
+    public function when_a_transfer_is_rejected_then_no_other_tenants_transfer_is_touched(): void
+    {
+        // Given a rejectable transfer and an untouched transfer at another company
+        $this->arrangeRejectableTransfer();
+        $bystander = $this->aBystanderTransferAtAnotherCompany();
+
+        // When the admin rejects the first
+        $this->rejectTransfer($this->admin, $this->transfer->getKey(), self::rejectionBody());
+
+        // Then the other tenant's transfer is exactly as it was
+        $this->assertBystanderUntouched($bystander);
+    }
+
+    private function assertBystanderUntouched(OwnershipTransferRequest $bystander): void
+    {
+        $row = $this->currentTransfer($bystander);
+
+        $this->assertSame(OwnershipTransferStatus::Requested, $row->status);
+        $this->assertNull($row->rejected_at);
+        $this->assertNull($row->rejected_by);
+        $this->assertNotNull($row->next_state_transition_at);
+    }
+
+    /**
+     * Ruling H4 — a legal hold does NOT bar rejection, the deliberate asymmetry
+     * with verify. §S10b's hold freezes ownership CHANGES, and a rejection changes
+     * no ownership and touches no pivot row; blocking it would strand held tenants
+     * with permanently un-closable requests, since the expiry scan skips them too.
+     *
+     * This test is what makes that ruling durable rather than an omission somebody
+     * later "fixes" by copying verify's interactor guard across.
+     */
+    #[Test]
+    public function when_the_company_is_under_legal_hold_then_the_transfer_is_still_rejected(): void
+    {
+        // Given a rejectable transfer whose company is under a regulatory hold
+        $this->arrangeRejectableTransfer();
+        $this->placeCompanyUnderLegalHold($this->company);
+
+        // When an allowlisted admin rejects it
+        $response = $this->rejectTransfer($this->admin, $this->transfer->getKey(), self::rejectionBody());
+
+        // Then the rejection succeeds — a hold freezes ownership, not closure
+        $this->assertRejectionAccepted($response, 'pre-verification');
+    }
+
+    /**
+     * The current owner keeps the company, and the designated new owner keeps
+     * their pre-transfer role. This is the UC's Minimal Guarantee headline —
+     * "roles on company_user are NEVER mutated by this UC" — and it is a
+     * regression guard aimed squarely at Task 8, which WILL make this endpoint's
+     * sibling mutate exactly these rows.
+     *
+     * Arranged from the Verified window deliberately: that is the state where a
+     * pivot swap is otherwise one admin click away.
+     */
+    #[Test]
+    public function when_a_transfer_is_rejected_then_the_ownership_records_are_left_untouched(): void
+    {
+        // Given a verified transfer and the ownership records as they stand
+        [$this->company, $this->owner] = $this->aCompanyWithMember('owner');
+        $this->admin = $this->anAllowlistedAdmin();
+        $this->transfer = $this->aVerifiedTransferStream($this->company, $this->owner, $this->admin);
+        $rolesBefore = $this->currentPivotRoles();
+
+        // When the admin rejects it at execution review
+        $this->rejectTransfer($this->admin, $this->transfer->getKey(), self::rejectionBody());
+
+        // Then ownership and both pivot roles are exactly as they were
+        $this->assertSame($this->company->owner_id, $this->company->fresh()?->owner_id);
+        $this->assertSame($rolesBefore, $this->currentPivotRoles());
+    }
+
+    /**
+     * Every (user_id => role_id) pair on this company's roster, as it stands now.
+     * Comparing the whole map rather than one row means a swap between two members
+     * cannot cancel itself out into a passing assertion.
+     *
+     * @return array<string, string>
+     */
+    private function currentPivotRoles(): array
+    {
+        return DB::table('company_user')
+            ->where('company_id', $this->company->getKey())
+            ->pluck('role_id', 'user_id')
+            ->all();
+    }
+
+    /**
+     * rejected_at is the legally-significant moment of the decision, but every
+     * other assertion on it is merely non-null. Shifting the aggregate's clock by
+     * five years would leave the whole class green; freezing time is what pins it
+     * to an absolute instant (the s149 verified_at precedent).
+     */
+    #[Test]
+    public function when_a_transfer_is_rejected_then_the_record_is_stamped_with_the_server_clock(): void
+    {
+        // Given a rejectable transfer and a frozen clock
+        $this->arrangeRejectableTransfer();
+        $frozen = CarbonImmutable::parse('2026-07-25 14:05:00');
+        $this->travelTo($frozen);
+
+        // When the admin rejects it
+        $this->rejectTransfer($this->admin, $this->transfer->getKey(), self::rejectionBody());
+
+        // Then the stamp sits at that absolute instant
+        $rejectedAt = $this->currentTransfer($this->transfer)->rejected_at;
+        $this->assertNotNull($rejectedAt);
+        $this->assertTrue($rejectedAt->equalTo($frozen), "Expected rejected_at at {$frozen}, got {$rejectedAt}.");
     }
 
     // Happy — the T3 walk: a Requested transfer is ended before verification.
