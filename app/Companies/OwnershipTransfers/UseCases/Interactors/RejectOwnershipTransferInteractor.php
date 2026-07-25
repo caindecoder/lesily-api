@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
+use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
  * SM-1-05 T3 + T5 (UC-1-128) — the platform admin ends the transfer with a
@@ -30,6 +31,12 @@ class RejectOwnershipTransferInteractor
             throw new ModelNotFoundException;
         }
 
-        return $transfer;
+        OwnershipTransferRequestAggregate::retrieve($requestId)
+            ->reject($command)
+            ->persist();
+
+        // refresh(), not fresh(): it re-reads the projector's writes into THIS
+        // instance and is typed non-null, where fresh() hands back a nullable.
+        return $transfer->refresh();
     }
 }

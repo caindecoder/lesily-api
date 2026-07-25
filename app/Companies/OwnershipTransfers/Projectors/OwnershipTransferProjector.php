@@ -5,6 +5,7 @@ namespace App\Companies\OwnershipTransfers\Projectors;
 use Carbon\CarbonImmutable;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
@@ -59,6 +60,23 @@ class OwnershipTransferProjector extends Projector
                 (int) config('ownership-transfers.verified_ttl_days', 14),
             ),
             'updated_by' => $event->verifiedBy,
+        ]);
+    }
+
+    /**
+     * SM-1-05 T3 + T5. Terminal, so the rejection record and the SLA-timer clear
+     * land in the SAME update — this projector remains the table's sole writer
+     * (ruling G3), and a terminal row carries no next deadline by definition.
+     */
+    public function onOwnershipTransferRejected(OwnershipTransferRejected $event): void
+    {
+        OwnershipTransferRequest::query()->whereKey($event->requestId)->update([
+            'status' => OwnershipTransferStatus::Rejected,
+            'rejected_at' => CarbonImmutable::instance($event->rejectedAt),
+            'rejected_by' => $event->rejectedBy,
+            'rejection_reason' => $event->rejectionReason,
+            'rejection_source' => $event->source,
+            'updated_by' => $event->rejectedBy,
         ]);
     }
 }

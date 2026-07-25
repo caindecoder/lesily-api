@@ -4,6 +4,8 @@ namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use App\Companies\Entities\Company;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
@@ -78,6 +80,58 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
 
         // Then the surface refuses it indistinguishably from a denied caller
         $this->assertResourceNotFoundNoLeak($response);
+    }
+
+    // Happy — the T3 walk: a Requested transfer is ended before verification.
+    #[Test]
+    public function when_a_platform_admin_rejects_a_requested_transfer_then_it_is_rejected_before_verification(): void
+    {
+        // Given a transfer awaiting review and the admin reviewing it
+        $this->arrangeRejectableTransfer();
+
+        // When the admin submits the rejection record
+        $response = $this->rejectTransfer($this->admin, $this->transfer->getKey(), self::rejectionBody());
+
+        // Then the transfer is terminally rejected before verification
+        $this->assertRejectionAccepted($response, 'pre-verification');
+    }
+
+    private Company $company;
+
+    private User $admin;
+
+    private User $owner;
+
+    private OwnershipTransferRequest $transfer;
+
+    /**
+     * Shared happy-path fixtures as properties (§2.2 Rule 4). The transfer is
+     * arranged through the REAL T1 chain, never the factory: the factory writes
+     * only the projection, so an aggregate retrieved against it would replay an
+     * empty stream and the state guard would fire — the test would then pass for
+     * entirely the wrong reason (s149 C1).
+     */
+    private function arrangeRejectableTransfer(): void
+    {
+        [$this->company, $this->owner] = $this->aCompanyWithMember('owner');
+        $this->admin = $this->anAllowlistedAdmin();
+        $this->transfer = $this->aRequestedTransferStream(
+            $this->company,
+            $this->owner,
+            User::factory()->create(),
+        );
+    }
+
+    /**
+     * 200 with the admin envelope reporting the terminal state and which window
+     * ended it.
+     */
+    private function assertRejectionAccepted(TestResponse $response, string $expectedSource): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data.id', $this->transfer->getKey());
+        $response->assertJsonPath('data.status', 'rejected');
+        $response->assertJsonPath('data.rejection_source', $expectedSource);
     }
 
     /**

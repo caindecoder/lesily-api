@@ -5,9 +5,11 @@ namespace App\Companies\OwnershipTransfers\Aggregates;
 use Carbon\CarbonImmutable;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
+use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotVerifiableException;
 use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferIdentityCommand;
@@ -79,5 +81,39 @@ class OwnershipTransferRequest extends AggregateRoot
     public function applyOwnershipTransferIdentityVerified(OwnershipTransferIdentityVerified $event): void
     {
         $this->status = OwnershipTransferStatus::Verified;
+    }
+
+    /**
+     * SM-1-05 T3 + T5. One method, two windows: the pre-transition state decides
+     * the `source` discriminator, so the caller never has to know which window it
+     * is in (the shared-endpoint shape the API doc locks).
+     *
+     * No legal-hold check here or in the interactor: §S10b's hold freezes
+     * ownership CHANGES, and a rejection changes none (s151 ruling H4) — the
+     * deliberate asymmetry with verifyIdentity() above.
+     */
+    public function reject(RejectOwnershipTransferCommand $command): static
+    {
+        return $this->recordThat(new OwnershipTransferRejected(
+            requestId: $this->uuid(),
+            rejectedBy: $command->rejectedBy,
+            rejectionReason: $command->reason,
+            rejectionReasonCode: $command->rejectionReasonCode,
+            source: $this->rejectionSource(),
+            rejectedAt: CarbonImmutable::now(),
+        ));
+    }
+
+    private function rejectionSource(): string
+    {
+        return match ($this->status) {
+            OwnershipTransferStatus::Requested => 'pre-verification',
+            OwnershipTransferStatus::Verified => 'execution-time',
+        };
+    }
+
+    public function applyOwnershipTransferRejected(OwnershipTransferRejected $event): void
+    {
+        $this->status = OwnershipTransferStatus::Rejected;
     }
 }
