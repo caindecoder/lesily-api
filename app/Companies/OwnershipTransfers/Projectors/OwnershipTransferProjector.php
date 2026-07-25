@@ -10,10 +10,12 @@ use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 
 /**
- * Sole writer of ownership_transfer_requests (ERD-1-05). The T1 insert carries
- * the 30-day next_state_transition_at anchor in the same write — no
- * update-after-insert ordering dependency; the designed TimerProjector joins
- * when its first reset/clear behavior lands (verify task, UC-1-113).
+ * Sole writer of ownership_transfer_requests (ERD-1-05), including the whole
+ * next_state_transition_at lifecycle: the T1 insert carries the 30-day anchor in
+ * the same write, T2 resets it to the 14-day window in the same update as the
+ * verification columns, and each terminal transition clears it alongside its own
+ * columns. The separately designed OwnershipTransferTimerProjector is therefore
+ * SUPERSEDED and never built (s149 ruling G3) — one writer per table.
  */
 class OwnershipTransferProjector extends Projector
 {
