@@ -161,6 +161,49 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * The T5 walk: the same rejection from the OTHER window, after identity was
+     * verified but before execution. Structurally identical to T3 except for the
+     * discriminator (UC-1-128 sc.2), which is exactly why both windows share one
+     * endpoint, one Command and one aggregate method.
+     */
+    #[Test]
+    public function when_a_platform_admin_rejects_a_verified_transfer_then_it_is_rejected_at_execution_time(): void
+    {
+        // Given a transfer whose identity this admin already verified
+        [$this->company, $this->owner] = $this->aCompanyWithMember('owner');
+        $this->admin = $this->anAllowlistedAdmin();
+        $this->transfer = $this->aVerifiedTransferStream($this->company, $this->owner, $this->admin);
+        Notification::fake();
+
+        // When the admin rejects it at execution review
+        $response = $this->rejectTransfer($this->admin, $this->transfer->getKey(), self::rejectionBody([
+            'reason' => 'Target user left the company after verification - transfer no longer valid.',
+            'rejectionReasonCode' => 'target_ineligible',
+        ]));
+
+        // Then it is terminally rejected at execution time, verification intact
+        $this->assertRejectionAccepted($response, 'execution-time');
+        $this->assertVerificationRecordPreserved();
+    }
+
+    /**
+     * The prior T2 evidence survives the rejection untouched. This is the half of
+     * UC-1-113's own sc.6 that IS reachable here: the verifier's identity and
+     * notes are the chain-of-custody a disputed transfer turns on, and a terminal
+     * transition must not erase them (SM-1-05 §6 audit-immutability; the T7
+     * asymmetry note makes the same promise for withdrawal).
+     */
+    private function assertVerificationRecordPreserved(): void
+    {
+        $row = $this->currentTransfer($this->transfer);
+
+        $this->assertSame($this->admin->getKey(), $row->verified_by);
+        $this->assertNotNull($row->verified_at);
+        $this->assertNotNull($row->verification_notes);
+        $this->assertNotNull($row->verification_artefacts);
+    }
+
+    /**
      * The append-only audit row for the transition, linked to its stored event.
      * The ACTOR is the point: this is the record of WHICH platform admin ended a
      * tenant's transfer, which is the evidence a "the rejection was arbitrary"

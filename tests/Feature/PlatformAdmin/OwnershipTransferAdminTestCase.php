@@ -15,6 +15,7 @@ use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferIdentityCommand;
 use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
@@ -269,6 +270,35 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
             ->persist();
 
         return OwnershipTransferRequest::query()->findOrFail($requestId);
+    }
+
+    /**
+     * A transfer whose stream carries a REAL T1 → T2 history: requested, then
+     * identity-verified by $verifier through the aggregate. The only way to reach
+     * the `Verified` window genuinely — the T5 rejection and the T7 withdrawal
+     * both replay this history rather than trusting a projected row (s149 C1).
+     *
+     * The target user is created inside rather than taken as a fourth parameter:
+     * callers exercising the verified window care who verified it, not who it was
+     * for, and §2.2 caps helpers at three parameters.
+     */
+    protected function aVerifiedTransferStream(Company $company, User $owner, User $verifier): OwnershipTransferRequest
+    {
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+
+        OwnershipTransferRequestAggregate::retrieve($transfer->getKey())
+            ->verifyIdentity(VerifyOwnershipTransferIdentityCommand::validateAndCreate([
+                'verificationNotes' => 'National ID matched the applicant; board resolution on file.',
+                'verificationArtefacts' => [[
+                    'type' => 'id_document',
+                    'reference' => 'SUP-4821/nic-scan',
+                    'capturedAt' => '2026-07-24T09:15:00+00:00',
+                ]],
+                'verifiedBy' => $verifier->getKey(),
+            ]))
+            ->persist();
+
+        return $transfer->refresh();
     }
 
     /**
