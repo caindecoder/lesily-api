@@ -5,6 +5,7 @@ namespace App\Companies\OwnershipTransfers\Reactors;
 use App\Models\User;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
@@ -59,6 +60,36 @@ class OwnershipTransferAuditReactor extends Reactor
             'actor_user_id' => $event->verifiedBy,
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => User::query()->whereKey($event->verifiedBy)->value('name'),
+            'recorded_at' => now(),
+        ]);
+    }
+
+    /**
+     * T3/T5. The actor is the point of this row — it records WHICH platform admin
+     * ended a tenant's transfer, which is the evidence a later "the rejection was
+     * arbitrary" claim turns on (UC-1-128 stakeholders: Lesily Legal). The tenant
+     * is read off the projection, since the event carries only the request id.
+     *
+     * metadata stays NULL per the s149 ruling: audit_trail rows are TENANT-readable
+     * via UC-1-066, and the durable forensic record is the event itself, reachable
+     * from here through stored_event_id.
+     */
+    public function onOwnershipTransferRejected(OwnershipTransferRejected $event): void
+    {
+        $transfer = OwnershipTransferRequest::query()->findOrFail($event->requestId);
+
+        AuditEntry::query()->create([
+            'company_id' => $transfer->company_id,
+            'stored_event_id' => $event->storedEventId(),
+            'event_class' => 'OwnershipTransferRejected',
+            'subject_type' => 'ownership_transfer_request',
+            'subject_id' => $event->requestId,
+            'subject_label' => 'Ownership transfer request',
+            'action' => 'transfer_rejected',
+            'description' => 'Platform admin rejected the ownership transfer; the current owner retains ownership.',
+            'actor_user_id' => $event->rejectedBy,
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => User::query()->whereKey($event->rejectedBy)->value('name'),
             'recorded_at' => now(),
         ]);
     }

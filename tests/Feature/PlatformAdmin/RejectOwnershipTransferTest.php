@@ -9,6 +9,7 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
@@ -101,6 +102,32 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertProjectionMirrorsRejection('pre-verification');
         $this->assertSlaTimerCleared();
         $this->assertRequesterNotifiedWithTheReason();
+        $this->assertRejectionAudited();
+    }
+
+    /**
+     * The append-only audit row for the transition, linked to its stored event.
+     * The ACTOR is the point: this is the record of WHICH platform admin ended a
+     * tenant's transfer, which is the evidence a "the rejection was arbitrary"
+     * claim turns on (UC-1-128 stakeholders — Lesily Legal).
+     *
+     * metadata stays NULL, following the s149 ruling: audit_trail rows are
+     * TENANT-readable via UC-1-066, and while the reason here is prose the owner
+     * already receives verbatim, the durable forensic record is the event, which
+     * this row reaches through stored_event_id.
+     */
+    private function assertRejectionAudited(): void
+    {
+        $entry = AuditEntry::query()->where('event_class', 'OwnershipTransferRejected')->sole();
+
+        $this->assertSame($this->transfer->getKey(), $entry->subject_id);
+        $this->assertSame($this->company->getKey(), $entry->company_id);
+        $this->assertSame('ownership_transfer_request', $entry->subject_type);
+        $this->assertSame('transfer_rejected', $entry->action);
+        $this->assertSame($this->admin->getKey(), $entry->actor_user_id);
+        $this->assertSame($this->admin->name, $entry->actor_label);
+        $this->assertNotNull($entry->stored_event_id);
+        $this->assertNull($entry->metadata);
     }
 
     /**
