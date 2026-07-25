@@ -3,6 +3,7 @@
 namespace App\Companies\OwnershipTransfers\IO\Http\Controllers;
 
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Http\Request;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferAdminFilters;
@@ -60,5 +61,10 @@ class PlatformAdminOwnershipTransfersController
         ]);
 
         return new OwnershipTransferRequestAdminResource($interactor->execute($requestId, $command));
+    }
+
+    public function reject(string $requestId, Request $request): OwnershipTransferRequestAdminResource
+    {
+        throw new RuntimeException('Not implemented');
     }
 }

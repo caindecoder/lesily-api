@@ -241,6 +241,22 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
     }
 
     /**
+     * PATCH the reject transition as $caller, or as a guest when null. Same
+     * no-X-Company-Context shape as its verify sibling; Task 8 sits
+     * executeTransfer() beside the pair.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function rejectTransfer(?User $caller, string $requestId, array $body = []): TestResponse
+    {
+        if ($caller !== null) {
+            Sanctum::actingAs($caller);
+        }
+
+        return $this->patchJson("/api/v1/admin/ownership-transfers/{$requestId}/reject", $body);
+    }
+
+    /**
      * GET the cross-tenant admin queue as $caller, or as a guest when null.
      * Deliberately NO X-Company-Context — the /api/v1/admin/* family carries no
      * auth.company (cd-foundation-http §3).
