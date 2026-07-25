@@ -3,6 +3,7 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
@@ -58,6 +59,25 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // Then the surface denies it without acknowledging the transfer exists
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertTransferStillOpen($transfer->getKey(), OwnershipTransferStatus::Requested);
+    }
+
+    /**
+     * An id no transfer carries is refused with the same envelope a denied
+     * caller gets. A VALID body is sent deliberately: it isolates the existence
+     * check from input validation, so this test cannot pass for the wrong reason
+     * once the Command's rules land.
+     */
+    #[Test]
+    public function when_the_transfer_does_not_exist_then_it_is_not_found(): void
+    {
+        // Given an allowlisted admin and an id that belongs to no transfer
+        $admin = $this->anAllowlistedAdmin();
+
+        // When they attempt to reject it
+        $response = $this->rejectTransfer($admin, (string) Str::uuid7(), $this->rejectionBody());
+
+        // Then the surface refuses it indistinguishably from a denied caller
+        $this->assertResourceNotFoundNoLeak($response);
     }
 
     /**
