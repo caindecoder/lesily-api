@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\Notifications\Channels\QueuedMailChannel;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
@@ -311,6 +312,48 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $rejectedAt = $this->currentTransfer($this->transfer)->rejected_at;
         $this->assertNotNull($rejectedAt);
         $this->assertTrue($rejectedAt->equalTo($frozen), "Expected rejected_at at {$frozen}, got {$rejectedAt}.");
+    }
+
+    /**
+     * The rejection's durability guarantee, pinned at the one place we own it.
+     *
+     * UC-1-128 sc.10 promises that a notification-delivery failure never rolls back
+     * the rejection. Two facts make that true, and only the second is ours: the
+     * event is persisted before any reactor runs (spatie's ordering, already implied
+     * by every happy-path assertion here), and the email leg is DEFERRED to the
+     * queue instead of sent inline, so a dead transport cannot reach the request at
+     * all.
+     *
+     * That second fact is a channel choice, and swapping QueuedMailChannel for
+     * Laravel's synchronous `mail` channel would silently undo it — in production,
+     * where the queue is the database driver, a rejection would then 500 after the
+     * event was already committed and the admin would be told their successful
+     * rejection failed. Nothing else in the suite would notice.
+     *
+     * Deliberately NOT written as "make the transport throw and assert the rejection
+     * stands": tests run on the `sync` queue (phpunit.xml), where `queue()` sends
+     * inline, so such a test would assert a 500 that production cannot produce —
+     * pinning the test environment's artefact rather than our behaviour.
+     */
+    #[Test]
+    public function when_the_requester_is_notified_then_the_email_leg_is_deferred_to_the_queue(): void
+    {
+        // Given a rejection notification
+        $notification = new OwnershipTransferRejectedNotification(
+            $this->aTransferInState(
+                $this->aCompanyWithMember('owner')[0],
+                User::factory()->create(),
+                OwnershipTransferStatus::Requested,
+            ),
+            User::factory()->create(),
+            'Identity unverified.',
+        );
+
+        // When its delivery channels are resolved
+        $channels = $notification->via(User::factory()->create());
+
+        // Then the in-app record is immediate and the email is queued behind it
+        $this->assertSame(['database', QueuedMailChannel::class], $channels);
     }
 
     /**
