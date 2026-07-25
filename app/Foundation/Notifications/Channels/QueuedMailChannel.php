@@ -18,7 +18,7 @@ class QueuedMailChannel
 {
     public function send(object $notifiable, Notification $notification): void
     {
-        /** @var SendsQueuedMail $notification */
+        /** @var Notification&SendsQueuedMail $notification */
         /** @var User $notifiable */
         Mail::to($notifiable)->queue($notification->toMail($notifiable));
     }
