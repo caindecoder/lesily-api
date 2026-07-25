@@ -77,6 +77,7 @@ class OwnershipTransferProjector extends Projector
             'rejection_reason' => $event->rejectionReason,
             'rejection_reason_code' => $event->rejectionReasonCode,
             'rejection_source' => $event->source,
+            'next_state_transition_at' => null,
             'updated_by' => $event->rejectedBy,
         ]);
     }

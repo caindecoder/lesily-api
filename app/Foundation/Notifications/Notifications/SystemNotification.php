@@ -4,8 +4,10 @@ namespace App\Foundation\Notifications\Notifications;
 
 use App\Models\User;
 use Illuminate\Bus\Queueable;
+use Illuminate\Mail\Mailable;
 use Illuminate\Notifications\Notification;
 use App\Foundation\Notifications\Enums\NotificationType;
+use App\Foundation\Notifications\Contracts\SendsQueuedMail;
 use App\Foundation\Notifications\Channels\QueuedMailChannel;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\Notifications\Entities\NotificationPreference;
@@ -18,7 +20,7 @@ use App\Foundation\Notifications\Entities\NotificationPreference;
  * the email leg is a queued Mailable (SystemNotificationMail) that retries
  * independently, so email failure never blocks the in-app record.
  */
-class SystemNotification extends Notification
+class SystemNotification extends Notification implements SendsQueuedMail
 {
     use Queueable;
 
@@ -48,7 +50,7 @@ class SystemNotification extends Notification
     /**
      * @param  User  $notifiable
      */
-    public function toMail(object $notifiable): SystemNotificationMail
+    public function toMail(object $notifiable): Mailable
     {
         return (new SystemNotificationMail($this->type, $this->companyName))
             ->locale($notifiable->preferredLocale());

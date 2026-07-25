@@ -7,11 +7,13 @@ use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferRejectedNotification;
 
 /**
  * SM-1-05 T3 + T5 — a platform admin ends an in-flight transfer with a reasoned
@@ -97,6 +99,50 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertRejectionAccepted($response, 'pre-verification');
         $this->assertRejectedEventRecorded('pre-verification');
         $this->assertProjectionMirrorsRejection('pre-verification');
+        $this->assertSlaTimerCleared();
+        $this->assertRequesterNotifiedWithTheReason();
+    }
+
+    /**
+     * T3/T5's operational signal: the REQUESTER learns their transfer was ended
+     * and why (SM-1-05 §7 — RequesterNotificationReactor is T3/T5's reactor).
+     *
+     * The reason is asserted ON the notification, not merely that one was sent.
+     * That is the whole content question OQ-1-144 recorded: the generic
+     * SystemNotification carries only (type, companyName), so a notification could
+     * be "sent" while telling the owner nothing about which transfer ended or why.
+     *
+     * The target user is asserted NOT notified: rejection happens before any role
+     * change, so they were never affected and have no standing to be told (UC
+     * stakeholders — the designated owner "has not yet been affected").
+     */
+    private function assertRequesterNotifiedWithTheReason(): void
+    {
+        Notification::assertSentTo(
+            $this->owner,
+            OwnershipTransferRejectedNotification::class,
+            fn (OwnershipTransferRejectedNotification $notification): bool => $notification->reason === self::rejectionBody()['reason']
+                && $notification->transfer->getKey() === $this->transfer->getKey(),
+        );
+
+        Notification::assertNotSentTo(
+            [$this->transfer->targetUser, $this->admin],
+            OwnershipTransferRejectedNotification::class,
+        );
+    }
+
+    /**
+     * A terminal row carries no next deadline, so the daily expiry scan can never
+     * pick it up again (SM-1-05 §5 — terminal states end the stream).
+     *
+     * The BEFORE value is asserted too, deliberately: without it a projector that
+     * had never set a deadline in the first place would satisfy "it is null now"
+     * and this would prove nothing about the clear.
+     */
+    private function assertSlaTimerCleared(): void
+    {
+        $this->assertNotNull($this->transfer->next_state_transition_at);
+        $this->assertNull($this->currentTransfer($this->transfer)->next_state_transition_at);
     }
 
     private Company $company;
@@ -123,6 +169,11 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
             $this->owner,
             User::factory()->create(),
         );
+
+        // Discard the arrangement's own T1 side effects. The genesis fires
+        // SupportQueueNotificationReactor, so without this reset a notification
+        // assertion could pass on the T1 notification alone.
+        Notification::fake();
     }
 
     /**

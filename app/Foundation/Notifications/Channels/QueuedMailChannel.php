@@ -5,7 +5,7 @@ namespace App\Foundation\Notifications\Channels;
 use App\Models\User;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Notifications\Notification;
-use App\Foundation\Notifications\Notifications\SystemNotification;
+use App\Foundation\Notifications\Contracts\SendsQueuedMail;
 
 /**
  * Notification channel that queues the notification's Mailable instead of sending
@@ -18,7 +18,7 @@ class QueuedMailChannel
 {
     public function send(object $notifiable, Notification $notification): void
     {
-        /** @var SystemNotification $notification */
+        /** @var SendsQueuedMail $notification */
         /** @var User $notifiable */
         Mail::to($notifiable)->queue($notification->toMail($notifiable));
     }
