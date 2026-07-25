@@ -40,6 +40,16 @@ abstract class OwnershipTransferNotification extends Notification implements Sen
         public User $actor,
     ) {}
 
+    /**
+     * The tenant the notice concerns. Read through the transfer's relation rather
+     * than passed in, so no subclass can render a notice about one company while
+     * naming another.
+     */
+    protected function companyName(): string
+    {
+        return (string) $this->transfer->company?->name;
+    }
+
     abstract protected function title(): string;
 
     abstract protected function body(): string;

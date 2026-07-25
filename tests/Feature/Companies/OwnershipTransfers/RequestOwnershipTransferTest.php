@@ -12,13 +12,13 @@ use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferRequestedNotification;
 use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
@@ -408,11 +408,24 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
     /**
      * The support-queue notification reaches ONLY the allowlisted admin —
      * neither party learns of the queue entry before support verification.
+     *
+     * Retrofitted at s151 (ruling H3) from the generic SystemNotification onto the
+     * discriminated OwnershipTransferRequestedNotification. The BODY is asserted,
+     * not just the class: T1 and T2 previously emitted byte-identical
+     * SystemNotifications, so a recipient could not tell "entered the queue" from
+     * "ready to execute", nor WHICH transfer either concerned (OQ-1-144). Asserting
+     * the rendered content is what makes those two distinguishable by test rather
+     * than by hope.
      */
     private function assertSupportQueueNotified(): void
     {
-        Notification::assertSentTo($this->supportAdmin, SystemNotification::class);
-        Notification::assertNotSentTo([$this->owner, $this->target], SystemNotification::class);
+        Notification::assertSentTo(
+            $this->supportAdmin,
+            OwnershipTransferRequestedNotification::class,
+            fn (OwnershipTransferRequestedNotification $notification): bool => $notification->transfer->company_id === $this->company->getKey()
+                && str_contains($notification->toArray($this->supportAdmin)['body'], 'awaiting identity verification'),
+        );
+        Notification::assertNotSentTo([$this->owner, $this->target], OwnershipTransferRequestedNotification::class);
     }
 
     /**

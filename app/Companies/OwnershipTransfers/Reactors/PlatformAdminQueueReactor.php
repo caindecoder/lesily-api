@@ -3,13 +3,11 @@
 namespace App\Companies\OwnershipTransfers\Reactors;
 
 use App\Models\User;
-use App\Companies\Entities\Company;
 use App\Foundation\Http\Values\PlatformAdminAllowlist;
-use App\Foundation\Notifications\Enums\NotificationType;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
-use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferVerifiedNotification;
 
 /**
  * Tells the platform-admin queue that a verified transfer is now waiting on
@@ -30,15 +28,13 @@ class PlatformAdminQueueReactor extends Reactor
     public function onOwnershipTransferIdentityVerified(OwnershipTransferIdentityVerified $event): void
     {
         $transfer = OwnershipTransferRequest::query()->findOrFail($event->requestId);
-        $company = Company::query()->findOrFail($transfer->company_id);
-
-        $adminIds = PlatformAdminAllowlist::userIds();
+        $verifier = User::query()->findOrFail($event->verifiedBy);
 
         User::query()
-            ->whereIn('id', $adminIds)
+            ->whereIn('id', PlatformAdminAllowlist::userIds())
             ->get()
             ->each(fn (User $admin) => $admin->notify(
-                new SystemNotification(NotificationType::GeneralAccountNotice, $company->name),
+                new OwnershipTransferVerifiedNotification($transfer, $verifier),
             ));
     }
 }

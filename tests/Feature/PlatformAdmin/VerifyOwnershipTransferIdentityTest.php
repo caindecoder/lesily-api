@@ -11,12 +11,11 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use App\Foundation\Notifications\Enums\NotificationType;
-use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferVerifiedNotification;
 
 /**
  * SM-1-05 T2 — a platform admin confirms the requester's identity and moves the
@@ -135,6 +134,51 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         // Then it is refused and the original verification is untouched
         $this->assertStateGuardRefused($response, 'Only a transfer awaiting verification can be verified.');
         $this->assertOriginalVerificationIntact($original);
+    }
+
+    /**
+     * The s149 **C2 deferral, now payable** (plan ledger D-a). Test #6 was dropped
+     * from Task 4 because the four terminal states were unreachable then, and a
+     * factory-arranged terminal row would have refused for the empty-stream reason
+     * — making the test's name a lie about what it proved. Task 5 builds reject, so
+     * `Rejected` is now genuinely reachable through a real T1 → T3 stream, and this
+     * row of UC-1-113's transition table can finally be asserted honestly.
+     *
+     * `Cancelled` / `Expired` / `Executed` remain owed by Tasks 6/7/8 on the same
+     * terms — each pays its own row when it makes its own state reachable.
+     */
+    #[Test]
+    public function when_the_transfer_is_already_rejected_then_it_is_not_verified(): void
+    {
+        // Given a transfer a platform admin has already rejected
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aRejectedTransferStream($company, $owner, $admin);
+
+        // When an allowlisted admin attempts to verify it
+        $response = $this->verifyTransfer($admin, $transfer->getKey(), $this->verificationBody());
+
+        // Then it is refused and the terminal state stands
+        $this->assertStateGuardRefused($response, 'Only a transfer awaiting verification can be verified.');
+        $this->assertNeverVerified($transfer);
+    }
+
+    /**
+     * No verification was recorded and the row stayed terminal. The stream
+     * legitimately carries its T1 genesis and T3 rejection, so the baseline here is
+     * "zero verification events", not "zero events".
+     */
+    private function assertNeverVerified(OwnershipTransferRequest $transfer): void
+    {
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferIdentityVerified::class)
+            ->count());
+
+        $row = $this->currentTransfer($transfer);
+
+        $this->assertSame(OwnershipTransferStatus::Rejected, $row->status);
+        $this->assertNull($row->verified_at);
+        $this->assertNull($row->verified_by);
     }
 
     /**
@@ -579,15 +623,19 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
      */
     private function assertExecutionQueueAlerted(): void
     {
-        $carriesTheTenant = fn (SystemNotification $notification): bool => $notification->type === NotificationType::GeneralAccountNotice
-            && $notification->companyName === $this->company->name;
+        // Retrofitted at s151 (ruling H3): the discriminated notification, and its
+        // BODY asserted. T2 previously emitted a SystemNotification byte-identical
+        // to T1's, so neither the stage nor the transfer was recoverable by the
+        // recipient (OQ-1-144). "ready to execute" is the distinction.
+        $namesTheReadyTransfer = fn (OwnershipTransferVerifiedNotification $notification): bool => $notification->transfer->getKey() === $this->transfer->getKey()
+            && str_contains($notification->toArray($this->admin)['body'], 'ready to execute');
 
-        // EVERY allowlisted admin, not just the first, and each carrying the
-        // tenant it concerns — without the payload check the whole company
-        // lookup in the reactor is content-dead and could return an empty name.
-        Notification::assertSentTo($this->admin, SystemNotification::class, $carriesTheTenant);
-        Notification::assertSentTo($this->secondAdmin, SystemNotification::class, $carriesTheTenant);
-        Notification::assertNotSentTo([$this->transfer->currentOwner, $this->transfer->targetUser], SystemNotification::class);
+        // EVERY allowlisted admin, not just the first — without both rows the
+        // reactor's ->get()->each(...) fan-out could degrade to ->first()?->notify()
+        // undetected, and only one of several admins would ever learn.
+        Notification::assertSentTo($this->admin, OwnershipTransferVerifiedNotification::class, $namesTheReadyTransfer);
+        Notification::assertSentTo($this->secondAdmin, OwnershipTransferVerifiedNotification::class, $namesTheReadyTransfer);
+        Notification::assertNotSentTo([$this->transfer->currentOwner, $this->transfer->targetUser], OwnershipTransferVerifiedNotification::class);
     }
 
     /**

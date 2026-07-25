@@ -3,12 +3,11 @@
 namespace App\Companies\OwnershipTransfers\Reactors;
 
 use App\Models\User;
-use App\Companies\Entities\Company;
 use App\Foundation\Http\Values\PlatformAdminAllowlist;
-use App\Foundation\Notifications\Enums\NotificationType;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
-use App\Foundation\Notifications\Notifications\SystemNotification;
+use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferRequestedNotification;
 
 /**
  * Alerts the platform support team that a transfer request entered the
@@ -22,15 +21,14 @@ class SupportQueueNotificationReactor extends Reactor
 {
     public function onOwnershipTransferRequested(OwnershipTransferRequested $event): void
     {
-        $company = Company::query()->findOrFail($event->companyId);
-
-        $adminIds = PlatformAdminAllowlist::userIds();
+        $transfer = OwnershipTransferRequest::query()->findOrFail($event->requestId);
+        $requester = User::query()->findOrFail($event->currentOwnerUserId);
 
         User::query()
-            ->whereIn('id', $adminIds)
+            ->whereIn('id', PlatformAdminAllowlist::userIds())
             ->get()
             ->each(fn (User $admin) => $admin->notify(
-                new SystemNotification(NotificationType::GeneralAccountNotice, $company->name),
+                new OwnershipTransferRequestedNotification($transfer, $requester),
             ));
     }
 }
