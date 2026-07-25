@@ -4,6 +4,7 @@ namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
@@ -12,6 +13,8 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
  * Shared fixtures for the ownership-transfer PLATFORM-ADMIN reads (UC-1-127,
@@ -238,6 +241,88 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
         }
 
         return $this->patchJson("/api/v1/admin/ownership-transfers/{$requestId}/verify", $body);
+    }
+
+    /**
+     * A transfer whose stream genuinely carries the T1 genesis (and whose
+     * projection the T1 projector therefore wrote), so a later transition
+     * replays real history.
+     *
+     * This is NOT interchangeable with aTransferInState(): the factory writes the
+     * PROJECTION only, so an aggregate retrieved against a factory row replays an
+     * EMPTY stream and every state guard fires for the wrong reason — the test
+     * would then pass while proving nothing about the transition (s149 C1).
+     */
+    protected function aRequestedTransferStream(Company $company, User $owner, User $target): OwnershipTransferRequest
+    {
+        $requestId = (string) Str::uuid7();
+
+        OwnershipTransferRequestAggregate::retrieve($requestId)
+            ->request(RequestOwnershipTransferCommand::validateAndCreate([
+                'companyId' => $company->getKey(),
+                'currentOwnerUserId' => $owner->getKey(),
+                'targetUserId' => $target->getKey(),
+                'reason' => 'Founder is stepping down and handing the company to the operations lead.',
+                'requestChannel' => 'app',
+            ]))
+            ->persist();
+
+        return OwnershipTransferRequest::query()->findOrFail($requestId);
+    }
+
+    /**
+     * $transfer as it stands in the database RIGHT NOW, as a distinct instance
+     * every call. Deliberately not `$transfer->refresh()`, which mutates the
+     * caller's instance in place: a test that captures a BEFORE snapshot and
+     * compares it to the AFTER state would be handed the same object twice,
+     * quietly turning that comparison into a tautology. findOrFail also types
+     * non-null, which fresh() does not.
+     */
+    protected function currentTransfer(OwnershipTransferRequest $transfer): OwnershipTransferRequest
+    {
+        return OwnershipTransferRequest::query()->whereKey($transfer->getKey())->firstOrFail();
+    }
+
+    /**
+     * Put $company under a regulatory hold. A named fixture helper carrying the
+     * column write is the sanctioned shape — §2.13 bans inline overrides in test
+     * BODIES, not in fixtures (the aTransferDueAt precedent).
+     */
+    protected function placeCompanyUnderLegalHold(Company $company): void
+    {
+        $company->forceFill(['legal_hold' => true])->save();
+    }
+
+    /**
+     * A transfer belonging to an entirely different tenant, left alone. Its only
+     * job is to be a second row, which is what makes a projector's or a guard's
+     * `whereKey(...)` scope observable at all — with one row in the fixture an
+     * unscoped read returns the right one by insertion order (s149 C6).
+     */
+    protected function aBystanderTransferAtAnotherCompany(): OwnershipTransferRequest
+    {
+        [$otherCompany] = $this->aCompanyWithMember('owner');
+
+        return $this->aTransferInState($otherCompany, User::factory()->create(), OwnershipTransferStatus::Requested);
+    }
+
+    /**
+     * The transition was refused by a state guard — the shared 409 family the
+     * §8.4 registry reserves for illegal state-machine moves.
+     *
+     * The MESSAGE is asserted, not just the code, and that is the point: several
+     * refusals render the identical envelope, so without a discriminator throwing
+     * the wrong exception would stay green and the unused render arm in
+     * bootstrap/app.php would become dead code in the one file Infection cannot
+     * see and coverage does not track. This survives substitution, not merely
+     * deletion.
+     */
+    protected function assertStateGuardRefused(TestResponse $response, string $expectedMessage): void
+    {
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
+        $response->assertJsonPath('message', $expectedMessage);
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
     /**
