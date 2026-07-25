@@ -75,6 +75,7 @@ class OwnershipTransferProjector extends Projector
             'rejected_at' => CarbonImmutable::instance($event->rejectedAt),
             'rejected_by' => $event->rejectedBy,
             'rejection_reason' => $event->rejectionReason,
+            'rejection_reason_code' => $event->rejectionReasonCode,
             'rejection_source' => $event->source,
             'updated_by' => $event->rejectedBy,
         ]);

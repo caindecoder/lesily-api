@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 
 /**
@@ -94,6 +95,8 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
 
         // Then the transfer is terminally rejected before verification
         $this->assertRejectionAccepted($response, 'pre-verification');
+        $this->assertRejectedEventRecorded('pre-verification');
+        $this->assertProjectionMirrorsRejection('pre-verification');
     }
 
     private Company $company;
@@ -132,6 +135,54 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $response->assertJsonPath('data.id', $this->transfer->getKey());
         $response->assertJsonPath('data.status', 'rejected');
         $response->assertJsonPath('data.rejection_source', $expectedSource);
+    }
+
+    /**
+     * Amendment R — the EVENT is the mechanism, not a direct row write. The two
+     * are indistinguishable from the read model alone (both leave identical
+     * columns), so without this the transition could be reduced to an update()
+     * and would silently lose its history on a projection replay, which is the
+     * exact bug event-sourcing exists to prevent. Teeth proven by revert-check:
+     * swapping the interactor for a direct write keeps every other assertion in
+     * this class green and REDs only this one.
+     *
+     * The payload carries the legal-defensibility set verbatim — actor, prose,
+     * code and window — which is why they are asserted on the STORED event and
+     * not only on the projection.
+     */
+    private function assertRejectedEventRecorded(string $expectedSource): void
+    {
+        $stored = LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferRejected::class)
+            ->whereForCompany($this->company->getKey())
+            ->sole();
+
+        $this->assertSame($this->transfer->getKey(), $stored->event_properties['requestId']);
+        $this->assertSame($this->admin->getKey(), $stored->event_properties['rejectedBy']);
+        $this->assertSame(self::rejectionBody()['reason'], $stored->event_properties['rejectionReason']);
+        $this->assertSame('identity_failed', $stored->event_properties['rejectionReasonCode']);
+        $this->assertSame($expectedSource, $stored->event_properties['source']);
+    }
+
+    /**
+     * The read model carries the whole rejection record: terminal state, actor,
+     * stamp, verbatim prose, the machine-readable code and the window.
+     *
+     * rejection_reason_code is the s151-H1 column. Before that ruling the Command
+     * validated the code and nothing stored it, so this assertion is the thing
+     * that makes the UC's "rejection_reason_code persisted" postcondition true
+     * rather than aspirational.
+     */
+    private function assertProjectionMirrorsRejection(string $expectedSource): void
+    {
+        $row = $this->currentTransfer($this->transfer);
+
+        $this->assertSame(OwnershipTransferStatus::Rejected, $row->status);
+        $this->assertSame($this->admin->getKey(), $row->rejected_by);
+        $this->assertNotNull($row->rejected_at);
+        $this->assertSame(self::rejectionBody()['reason'], $row->rejection_reason);
+        $this->assertSame('identity_failed', $row->rejection_reason_code);
+        $this->assertSame($expectedSource, $row->rejection_source);
     }
 
     /**

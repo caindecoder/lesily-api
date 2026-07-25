@@ -478,7 +478,7 @@ class ReviewOwnershipTransferQueueTest extends OwnershipTransferAdminTestCase
             'requested_at', 'requested_by', 'target_user',
             'verified_at', 'verified_by', 'verification_notes', 'verification_artefacts',
             'executed_at', 'executed_by', 'old_owner_user_id', 'new_owner_user_id',
-            'rejected_at', 'rejected_by', 'rejection_reason', 'rejection_source',
+            'rejected_at', 'rejected_by', 'rejection_reason', 'rejection_reason_code', 'rejection_source',
             'cancelled_at', 'cancelled_by', 'cancellation_source', 'cancellation_reason',
             'expired_at', 'expiry_source', 'expired_after_days',
             'next_state_transition_at',
