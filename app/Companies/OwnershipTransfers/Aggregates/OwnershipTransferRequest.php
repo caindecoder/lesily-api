@@ -11,6 +11,7 @@ use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotRejectableException;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotVerifiableException;
 use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferIdentityCommand;
 
@@ -94,22 +95,25 @@ class OwnershipTransferRequest extends AggregateRoot
      */
     public function reject(RejectOwnershipTransferCommand $command): static
     {
+        // The transition table IS the guard (E28 §5 — enumerate the transitions,
+        // refuse the rest). Deriving `source` and refusing an illegal state are
+        // the same question asked once: only the two OPEN states are rejectable,
+        // and each names its own window. A separate `if` before this would have
+        // to repeat the same state knowledge and could drift from it.
+        $source = match ($this->status) {
+            OwnershipTransferStatus::Requested => 'pre-verification',
+            OwnershipTransferStatus::Verified => 'execution-time',
+            default => throw new OwnershipTransferNotRejectableException,
+        };
+
         return $this->recordThat(new OwnershipTransferRejected(
             requestId: $this->uuid(),
             rejectedBy: $command->rejectedBy,
             rejectionReason: $command->reason,
             rejectionReasonCode: $command->rejectionReasonCode,
-            source: $this->rejectionSource(),
+            source: $source,
             rejectedAt: CarbonImmutable::now(),
         ));
-    }
-
-    private function rejectionSource(): string
-    {
-        return match ($this->status) {
-            OwnershipTransferStatus::Requested => 'pre-verification',
-            OwnershipTransferStatus::Verified => 'execution-time',
-        };
     }
 
     public function applyOwnershipTransferRejected(OwnershipTransferRejected $event): void

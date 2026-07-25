@@ -86,6 +86,61 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertResourceNotFoundNoLeak($response);
     }
 
+    /**
+     * Rejection is terminal, so a second one is refused and the first record
+     * stands. Task 5 owns exactly this row of the transition table and no other
+     * terminal row: `Rejected` is the ONE terminal state this task makes
+     * reachable, and it is reached through a real first rejection. The
+     * `Cancelled` / `Expired` / `Executed` rows belong to Tasks 6/7/8, whose
+     * events do not exist yet (s149 C2 + s151 G1).
+     */
+    #[Test]
+    public function when_the_transfer_is_already_rejected_then_it_is_not_rejected_again(): void
+    {
+        // Given a transfer this admin has already rejected
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aRejectedTransferStream($company, $owner, $admin);
+        $original = $this->currentTransfer($transfer);
+
+        // When a second rejection is attempted against it
+        $response = $this->rejectTransfer($admin, $transfer->getKey(), self::rejectionBody([
+            'reason' => 'A second reviewer reached the same conclusion.',
+            'rejectionReasonCode' => 'policy_violation',
+        ]));
+
+        // Then it is refused and the original rejection is untouched
+        $this->assertStateGuardRefused($response, 'Only an open transfer can be rejected.');
+        $this->assertOriginalRejectionIntact($original);
+    }
+
+    /**
+     * The refused second attempt changed nothing: the stream still carries exactly
+     * ONE rejection event, and the projected record still names the first
+     * rejector, reason, code and time. Without the event-count aspect a guard that
+     * recorded a duplicate event but left the columns alone would pass.
+     */
+    private function assertOriginalRejectionIntact(OwnershipTransferRequest $original): void
+    {
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferRejected::class)
+            ->count());
+        // T1 genesis + the ONE accepted rejection. A third row would mean the
+        // refused attempt was logged as though it had happened.
+        $this->assertDatabaseCount('audit_trail', 2);
+
+        $row = $this->currentTransfer($original);
+        $rejectedAt = $row->rejected_at;
+        $originalRejectedAt = $original->rejected_at;
+
+        $this->assertSame($original->rejected_by, $row->rejected_by);
+        $this->assertSame($original->rejection_reason, $row->rejection_reason);
+        $this->assertSame($original->rejection_reason_code, $row->rejection_reason_code);
+        $this->assertNotNull($rejectedAt);
+        $this->assertNotNull($originalRejectedAt);
+        $this->assertTrue($rejectedAt->equalTo($originalRejectedAt));
+    }
+
     // Happy — the T3 walk: a Requested transfer is ended before verification.
     #[Test]
     public function when_a_platform_admin_rejects_a_requested_transfer_then_it_is_rejected_before_verification(): void

@@ -13,6 +13,7 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
@@ -268,6 +269,28 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
             ->persist();
 
         return OwnershipTransferRequest::query()->findOrFail($requestId);
+    }
+
+    /**
+     * A transfer whose stream carries a REAL T1 → T3 history: requested, then
+     * rejected by $admin through the aggregate. The only way to arrange a genuine
+     * terminal state — a factory row replays an empty stream and every guard then
+     * refuses for the wrong reason (s149 C1; LD's DeclineLeave::getRejectedLeave
+     * arranges its already-declined fixture the same way).
+     */
+    protected function aRejectedTransferStream(Company $company, User $owner, User $admin): OwnershipTransferRequest
+    {
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+
+        OwnershipTransferRequestAggregate::retrieve($transfer->getKey())
+            ->reject(RejectOwnershipTransferCommand::validateAndCreate([
+                'reason' => 'Identity documents could not be matched to the applicant.',
+                'rejectionReasonCode' => 'identity_failed',
+                'rejectedBy' => $admin->getKey(),
+            ]))
+            ->persist();
+
+        return $transfer->refresh();
     }
 
     /**
