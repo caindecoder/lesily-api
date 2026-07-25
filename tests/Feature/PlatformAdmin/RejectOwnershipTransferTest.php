@@ -3,12 +3,14 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -16,6 +18,7 @@ use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\IO\Mails\OwnershipTransferNotificationMail;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferRejectedNotification;
 
 /**
@@ -308,6 +311,47 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $rejectedAt = $this->currentTransfer($this->transfer)->rejected_at;
         $this->assertNotNull($rejectedAt);
         $this->assertTrue($rejectedAt->equalTo($frozen), "Expected rejected_at at {$frozen}, got {$rejectedAt}.");
+    }
+
+    /**
+     * The email leg's last resort. Once the three retries are spent the failure is
+     * REPORTED for ops and swallowed for the user, who already has the in-app
+     * record — so a dead mail transport never becomes a silent loss.
+     *
+     * Amendment T: this needs its own direct test because `Mail::fake()` and
+     * `Queue::fake()` both short-circuit the failure path entirely, so `failed()`
+     * is invisible to every local gate; codecov/patch is what flags it, after the
+     * push. `Exceptions::fake()` + calling the hook directly is the
+     * ReceiveEmailNotificationTest precedent.
+     *
+     * It lives in this class rather than its own: the Mailable exists solely to
+     * carry this notification, so its failure behaviour is part of "rejecting
+     * notifies the requester" and a separate class would hold one test (§2.14 —
+     * a different seam justifies a split, a single method does not).
+     */
+    #[Test]
+    public function when_the_rejection_email_exhausts_its_retries_then_the_failure_is_reported(): void
+    {
+        // Given a rejection email and a reporting spy
+        Exceptions::fake();
+        $mail = new OwnershipTransferNotificationMail('Ownership transfer rejected', 'Reason: identity unverified.');
+        $transportFailure = new RuntimeException('SMTP connection refused.');
+
+        // When its retries are exhausted
+        $mail->failed($transportFailure);
+
+        // Then the cause is reported for ops, and the retry policy is the agreed one
+        $this->assertMailFailureReported($mail, $transportFailure);
+    }
+
+    private function assertMailFailureReported(OwnershipTransferNotificationMail $mail, RuntimeException $cause): void
+    {
+        Exceptions::assertReported(fn (RuntimeException $reported): bool => $reported === $cause);
+
+        // Pinned as literals: the retry policy is a contract with ops (OQ-1-063),
+        // and Infection generates no mutant for an untested property default.
+        $this->assertSame(3, $mail->tries);
+        $this->assertSame([1, 5, 15], $mail->backoff);
     }
 
     // Happy — the T3 walk: a Requested transfer is ended before verification.
