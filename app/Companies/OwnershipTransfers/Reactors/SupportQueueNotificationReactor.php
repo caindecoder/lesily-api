@@ -22,13 +22,12 @@ class SupportQueueNotificationReactor extends Reactor
     public function onOwnershipTransferRequested(OwnershipTransferRequested $event): void
     {
         $transfer = OwnershipTransferRequest::query()->findOrFail($event->requestId);
-        $requester = User::query()->findOrFail($event->currentOwnerUserId);
 
         User::query()
             ->whereIn('id', PlatformAdminAllowlist::userIds())
             ->get()
             ->each(fn (User $admin) => $admin->notify(
-                new OwnershipTransferRequestedNotification($transfer, $requester),
+                new OwnershipTransferRequestedNotification($transfer),
             ));
     }
 }

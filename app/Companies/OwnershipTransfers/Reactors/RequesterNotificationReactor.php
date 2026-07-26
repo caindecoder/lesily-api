@@ -28,11 +28,9 @@ class RequesterNotificationReactor extends Reactor
     {
         $transfer = OwnershipTransferRequest::query()->findOrFail($event->requestId);
         $requester = User::query()->findOrFail($transfer->current_owner_user_id);
-        $actor = User::query()->findOrFail($event->rejectedBy);
 
         $requester->notify(new OwnershipTransferRejectedNotification(
             $transfer,
-            $actor,
             $event->rejectionReason,
         ));
     }

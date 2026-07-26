@@ -2,7 +2,6 @@
 
 namespace App\Companies\OwnershipTransfers\IO\Notifications;
 
-use App\Models\User;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest as TransferReadModel;
 
 /**
@@ -18,10 +17,9 @@ class OwnershipTransferRejectedNotification extends OwnershipTransferNotificatio
 {
     public function __construct(
         TransferReadModel $transfer,
-        User $actor,
         public string $reason,
     ) {
-        parent::__construct($transfer, $actor);
+        parent::__construct($transfer);
     }
 
     protected function title(): string

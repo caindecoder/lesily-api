@@ -23,9 +23,17 @@ use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest as Transf
  * had nowhere to carry a transfer id.
  *
  * The shape is LeaveDates' (Rule #15 — LD primary): its LeaveNotification base
- * holds the domain object plus the actor and each subclass supplies getTitle() /
- * getBody() / getMailable(), and LeaveWasRejectedReactor passes the entity in
- * directly. LD has no generic system-notification class at all.
+ * holds the domain object and each subclass supplies getTitle() / getBody() /
+ * getMailable(), and LeaveWasRejectedReactor passes the entity in directly. LD
+ * has no generic system-notification class at all.
+ *
+ * LD's base ALSO carries the acting user, and this one deliberately does not
+ * (yet): no title or body in this module names an actor, so carrying one would
+ * have been dead state on a base four more transitions inherit — and it cost a
+ * User lookup in each of the three reactors to populate something nothing read
+ * (cut at the s152 review, the same call PR #114 made on the unconsumed
+ * company() relation). The first transition whose copy genuinely names "rejected
+ * by X" adds it back RED-first, where a test can hold it.
  *
  * Runs synchronously so the in-app (database) record lands immediately; the email
  * leg is a queued Mailable retrying independently, so an email failure never
@@ -37,7 +45,6 @@ abstract class OwnershipTransferNotification extends Notification implements Sen
 
     public function __construct(
         public TransferReadModel $transfer,
-        public User $actor,
     ) {}
 
     /**

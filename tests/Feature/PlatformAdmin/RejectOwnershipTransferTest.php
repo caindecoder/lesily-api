@@ -345,7 +345,6 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
                 User::factory()->create(),
                 OwnershipTransferStatus::Requested,
             ),
-            User::factory()->create(),
             'Identity unverified.',
         );
 

@@ -28,13 +28,12 @@ class PlatformAdminQueueReactor extends Reactor
     public function onOwnershipTransferIdentityVerified(OwnershipTransferIdentityVerified $event): void
     {
         $transfer = OwnershipTransferRequest::query()->findOrFail($event->requestId);
-        $verifier = User::query()->findOrFail($event->verifiedBy);
 
         User::query()
             ->whereIn('id', PlatformAdminAllowlist::userIds())
             ->get()
             ->each(fn (User $admin) => $admin->notify(
-                new OwnershipTransferVerifiedNotification($transfer, $verifier),
+                new OwnershipTransferVerifiedNotification($transfer),
             ));
     }
 }
