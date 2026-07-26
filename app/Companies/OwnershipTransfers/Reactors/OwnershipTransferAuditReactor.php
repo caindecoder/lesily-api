@@ -19,6 +19,15 @@ use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
  */
 class OwnershipTransferAuditReactor extends Reactor
 {
+    /**
+     * The human-readable subject every row in this table shares — one aggregate,
+     * so one label, whichever transition wrote the row. Extracted at the s153
+     * SonarCloud round (php:S1192, the s118 UC-1-034 precedent): three literals
+     * that must agree are three chances to disagree, and a tenant reads this
+     * string back through UC-1-066. Tasks 6/7/8 add three more writers here.
+     */
+    private const SUBJECT_LABEL = 'Ownership transfer request';
+
     public function onOwnershipTransferRequested(OwnershipTransferRequested $event): void
     {
         AuditEntry::query()->create([
@@ -27,7 +36,7 @@ class OwnershipTransferAuditReactor extends Reactor
             'event_class' => 'OwnershipTransferRequested',
             'subject_type' => 'ownership_transfer_request',
             'subject_id' => $event->requestId,
-            'subject_label' => 'Ownership transfer request',
+            'subject_label' => self::SUBJECT_LABEL,
             'action' => 'transfer_requested',
             'description' => 'Owner requested an ownership transfer (support verification pending).',
             'actor_user_id' => $event->currentOwnerUserId,
@@ -54,7 +63,7 @@ class OwnershipTransferAuditReactor extends Reactor
             'event_class' => 'OwnershipTransferIdentityVerified',
             'subject_type' => 'ownership_transfer_request',
             'subject_id' => $event->requestId,
-            'subject_label' => 'Ownership transfer request',
+            'subject_label' => self::SUBJECT_LABEL,
             'action' => 'transfer_identity_verified',
             'description' => 'Platform admin verified the requester identity; the transfer is ready to execute.',
             'actor_user_id' => $event->verifiedBy,
@@ -84,7 +93,7 @@ class OwnershipTransferAuditReactor extends Reactor
             'event_class' => 'OwnershipTransferRejected',
             'subject_type' => 'ownership_transfer_request',
             'subject_id' => $event->requestId,
-            'subject_label' => 'Ownership transfer request',
+            'subject_label' => self::SUBJECT_LABEL,
             'action' => 'transfer_rejected',
             'description' => 'Platform admin rejected the ownership transfer; the current owner retains ownership.',
             'actor_user_id' => $event->rejectedBy,
