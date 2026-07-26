@@ -212,9 +212,18 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * `rejectedBy` is the field this whole use case exists to produce — every
      * stakeholder clause about defending a rejection against a later "it was
      * arbitrary" claim rests on it being auth-derived — yet the only thing
-     * enforcing that is an `only()` whitelist and the spread ordering in the
-     * controller, which no other test touches. A refactor to `$request->all()`
-     * would let one admin attribute a rejection to a colleague.
+     * enforcing that is the spread ORDERING in the controller, which no other
+     * test touches: moving the auth-resolved `rejectedBy` ahead of the spread,
+     * or dropping that line, lets the body's value win.
+     *
+     * Corrected s152. This docblock previously named `$request->all()` as the
+     * mutation it catches. That is FALSE — `'rejectedBy' => $admin->getKey()`
+     * sits after the spread, and PHP's later-duplicate-key-wins rule means the
+     * auth value overrides the body whether the spread is `only()` or `all()`,
+     * so that mutation survives. The test has real teeth, just not those. In a
+     * class whose whole method is teeth-by-revert-check, a recorded hypothesis
+     * that does not hold is worse than none: the next reader tries it, watches
+     * it survive, and correctly concludes the test is dead from a false premise.
      */
     #[Test]
     public function when_the_body_names_a_different_rejector_then_the_authenticated_admin_is_recorded(): void
@@ -337,9 +346,14 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $rolesBefore = $this->currentPivotRoles();
 
         // When the admin rejects it at execution review
-        $this->rejectTransfer($this->admin, $this->transfer->getKey(), self::rejectionBody());
+        $response = $this->rejectTransfer($this->admin, $this->transfer->getKey(), self::rejectionBody());
 
-        // Then ownership and both pivot roles are exactly as they were
+        // Then the rejection happened AND ownership is exactly as it was
+        // (the response is asserted deliberately: without it a reject that began
+        // 409ing from the Verified window would satisfy both untouched-checks
+        // trivially, and this is the Minimal Guarantee headline plus the
+        // regression guard aimed squarely at Task 8's pivot swap)
+        $this->assertRejectionAccepted($response, 'execution-time');
         $this->assertSame($this->company->owner_id, $this->company->fresh()?->owner_id);
         $this->assertSame($rolesBefore, $this->currentPivotRoles());
     }
@@ -552,7 +566,7 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $response = $this->rejectTransfer($this->admin, $this->transfer->getKey(), $submitted);
 
         // Then it is terminally rejected at execution time, verification intact
-        $this->assertRejectionAccepted($response, 'execution-time');
+        $this->assertRejectionAccepted($response, 'execution-time', 'target_ineligible');
         $this->assertRejectedEventRecorded('execution-time', $submitted);
         $this->assertRejectionAudited();
         $this->assertVerificationRecordPreserved();
@@ -707,12 +721,23 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * 200 with the admin envelope reporting the terminal state and which window
      * ended it.
      */
-    private function assertRejectionAccepted(TestResponse $response, string $expectedSource): void
-    {
+    private function assertRejectionAccepted(
+        TestResponse $response,
+        string $expectedSource,
+        string $expectedCode = 'identity_failed',
+    ): void {
         $response->assertOk();
         $response->assertJsonPath('data.id', $this->transfer->getKey());
         $response->assertJsonPath('data.status', 'rejected');
         $response->assertJsonPath('data.rejection_source', $expectedSource);
+        // The last unpinned link in the H1 chain (enum → event field → migration →
+        // column → projector write → Resource key). The column and the event
+        // payload were both asserted; the WIRE was not, so rewriting the Resource
+        // key to rejection_reason, another terminal column, or null left the whole
+        // suite green. Infection generates no mutant for a property-fetch swap,
+        // and the two exact-shape pins only cover key REMOVAL — so removal was
+        // covered and substitution was not, which is the false-confidence shape.
+        $response->assertJsonPath('data.rejection_reason_code', $expectedCode);
     }
 
     /**

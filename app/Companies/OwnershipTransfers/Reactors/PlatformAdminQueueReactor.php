@@ -20,8 +20,9 @@ use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferVerifiedN
  * reactors, so the row is committed and current by the time we look.
  *
  * Recipients resolve from the interim `platform.admin_user_ids` allowlist (the
- * SupportQueueNotificationReactor idiom), and the notification is the native
- * SystemNotification per OQ-1-104.
+ * SupportQueueNotificationReactor idiom), and the notification is
+ * OwnershipTransferVerifiedNotification — corrected s152; the H3 retrofit
+ * swapped the body and left this line still naming SystemNotification.
  */
 class PlatformAdminQueueReactor extends Reactor
 {
