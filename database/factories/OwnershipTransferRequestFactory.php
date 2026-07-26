@@ -95,7 +95,22 @@ class OwnershipTransferRequestFactory extends Factory
             'rejected_at' => now()->subHour(),
             'rejected_by' => User::factory(),
             'rejection_reason' => 'Identity documents did not match the records.',
-            'rejection_source' => 'pre_verification',
+            // Hyphenated per ERD-1-05 §3, which names this literal specifically:
+            // production writes 'pre-verification' from the aggregate, so the
+            // underscore spelling here described a value no code path can produce
+            // (pre-flight S2, deferred to "the projector lap" — that lap shipped
+            // and this did not; caught at the s152 review).
+            //
+            // All THREE *_source literals in this file were corrected together,
+            // superseding S2's "Tasks 6/7 own their halves" split. E68 §3 says
+            // Boy-Scout THE FILE and audit the rest by volatility — deferring a
+            // one-character fix sixteen lines down, inside a state() block already
+            // being edited, is the one place that rule does not license. These are
+            // read fixtures three merged test classes consume NOW, so leaving them
+            // invites an assertion that bakes in a value production cannot emit,
+            // which is precisely the defect being fixed one state up.
+            'rejection_source' => 'pre-verification',
+            'rejection_reason_code' => 'identity_failed',
             'next_state_transition_at' => null,
         ]);
     }
@@ -110,7 +125,7 @@ class OwnershipTransferRequestFactory extends Factory
             'status' => OwnershipTransferStatus::Cancelled,
             'cancelled_at' => now()->subHour(),
             'cancelled_by' => $attributes['current_owner_user_id'],
-            'cancellation_source' => 'pre_verification',
+            'cancellation_source' => 'pre-verification',
             'cancellation_reason' => 'Owner changed their mind about the transfer.',
             'next_state_transition_at' => null,
         ]);
@@ -125,7 +140,7 @@ class OwnershipTransferRequestFactory extends Factory
         return $this->state(fn (): array => [
             'status' => OwnershipTransferStatus::Expired,
             'expired_at' => now()->subHour(),
-            'expiry_source' => 'requested',
+            'expiry_source' => 'requested-stage',
             'expired_after_days' => 30,
             'next_state_transition_at' => null,
         ]);

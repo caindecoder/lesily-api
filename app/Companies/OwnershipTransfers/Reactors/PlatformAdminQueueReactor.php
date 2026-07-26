@@ -3,13 +3,11 @@
 namespace App\Companies\OwnershipTransfers\Reactors;
 
 use App\Models\User;
-use App\Companies\Entities\Company;
 use App\Foundation\Http\Values\PlatformAdminAllowlist;
-use App\Foundation\Notifications\Enums\NotificationType;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
-use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferVerifiedNotification;
 
 /**
  * Tells the platform-admin queue that a verified transfer is now waiting on
@@ -22,23 +20,21 @@ use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
  * reactors, so the row is committed and current by the time we look.
  *
  * Recipients resolve from the interim `platform.admin_user_ids` allowlist (the
- * SupportQueueNotificationReactor idiom), and the notification is the native
- * SystemNotification per OQ-1-104.
+ * SupportQueueNotificationReactor idiom), and the notification is
+ * OwnershipTransferVerifiedNotification — corrected s152; the H3 retrofit
+ * swapped the body and left this line still naming SystemNotification.
  */
 class PlatformAdminQueueReactor extends Reactor
 {
     public function onOwnershipTransferIdentityVerified(OwnershipTransferIdentityVerified $event): void
     {
         $transfer = OwnershipTransferRequest::query()->findOrFail($event->requestId);
-        $company = Company::query()->findOrFail($transfer->company_id);
-
-        $adminIds = PlatformAdminAllowlist::userIds();
 
         User::query()
-            ->whereIn('id', $adminIds)
+            ->whereIn('id', PlatformAdminAllowlist::userIds())
             ->get()
             ->each(fn (User $admin) => $admin->notify(
-                new SystemNotification(NotificationType::GeneralAccountNotice, $company->name),
+                new OwnershipTransferVerifiedNotification($transfer),
             ));
     }
 }

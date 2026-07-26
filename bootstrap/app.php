@@ -51,6 +51,7 @@ use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 use App\Companies\OwnershipTransfers\Exceptions\EmergencyContactRequiredException;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
+use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotRejectableException;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotVerifiableException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -265,6 +266,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // T2 attempted from a state that cannot reach Verified — already
         // verified, or terminal (UC-1-113 6a; SM-1-05 §4 gives T2 one source).
         $exceptions->render(fn (OwnershipTransferNotVerifiableException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // T3/T5 attempted from a state that cannot reach Rejected — already
+        // ended, whether rejected, cancelled, expired or executed (UC-1-128 6c;
+        // SM-1-05 §4 makes only the two OPEN states rejectable).
+        $exceptions->render(fn (OwnershipTransferNotRejectableException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));

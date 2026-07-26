@@ -11,14 +11,11 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use App\Foundation\Notifications\Enums\NotificationType;
-use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
-use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
-use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferVerifiedNotification;
 
 /**
  * SM-1-05 T2 — a platform admin confirms the requester's identity and moves the
@@ -125,7 +122,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         // Given a transfer this admin has already verified
         $this->arrangeVerifiableTransfer();
         $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
-        $original = $this->currentTransfer();
+        $original = $this->currentTransfer($this->transfer);
 
         // When a second verification is attempted against it
         $response = $this->verifyTransfer(
@@ -137,6 +134,51 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         // Then it is refused and the original verification is untouched
         $this->assertStateGuardRefused($response, 'Only a transfer awaiting verification can be verified.');
         $this->assertOriginalVerificationIntact($original);
+    }
+
+    /**
+     * The s149 **C2 deferral, now payable** (plan ledger D-a). Test #6 was dropped
+     * from Task 4 because the four terminal states were unreachable then, and a
+     * factory-arranged terminal row would have refused for the empty-stream reason
+     * — making the test's name a lie about what it proved. Task 5 builds reject, so
+     * `Rejected` is now genuinely reachable through a real T1 → T3 stream, and this
+     * row of UC-1-113's transition table can finally be asserted honestly.
+     *
+     * `Cancelled` / `Expired` / `Executed` remain owed by Tasks 6/7/8 on the same
+     * terms — each pays its own row when it makes its own state reachable.
+     */
+    #[Test]
+    public function when_the_transfer_is_already_rejected_then_it_is_not_verified(): void
+    {
+        // Given a transfer a platform admin has already rejected
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aRejectedTransferStream($company, $owner, $admin);
+
+        // When an allowlisted admin attempts to verify it
+        $response = $this->verifyTransfer($admin, $transfer->getKey(), $this->verificationBody());
+
+        // Then it is refused and the terminal state stands
+        $this->assertStateGuardRefused($response, 'Only a transfer awaiting verification can be verified.');
+        $this->assertNeverVerified($transfer);
+    }
+
+    /**
+     * No verification was recorded and the row stayed terminal. The stream
+     * legitimately carries its T1 genesis and T3 rejection, so the baseline here is
+     * "zero verification events", not "zero events".
+     */
+    private function assertNeverVerified(OwnershipTransferRequest $transfer): void
+    {
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferIdentityVerified::class)
+            ->count());
+
+        $row = $this->currentTransfer($transfer);
+
+        $this->assertSame(OwnershipTransferStatus::Rejected, $row->status);
+        $this->assertNull($row->verified_at);
+        $this->assertNull($row->verified_by);
     }
 
     /**
@@ -163,7 +205,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         // whose own company is under a regulatory hold
         $this->aBystanderTransferAtAnotherCompany();
         $this->arrangeVerifiableTransfer();
-        $this->placeCompanyUnderLegalHold();
+        $this->placeCompanyUnderLegalHold($this->company);
 
         // When an allowlisted admin attempts to verify it
         $response = $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
@@ -171,16 +213,6 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         // Then it is refused and no verification is recorded
         $this->assertStateGuardRefused($response, 'This company is under a legal hold; ownership changes are frozen until it is lifted.');
         $this->assertNoVerificationRecorded();
-    }
-
-    /**
-     * The regulatory freeze on the arranged company. A named fixture helper
-     * carrying the column write is the sanctioned shape — §2.13 bans inline
-     * overrides in test BODIES, not in fixtures (the aTransferDueAt precedent).
-     */
-    private function placeCompanyUnderLegalHold(): void
-    {
-        $this->company->forceFill(['legal_hold' => true])->save();
     }
 
     /**
@@ -199,7 +231,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         // the legitimate baseline is one.
         $this->assertDatabaseCount('audit_trail', 1);
 
-        $row = $this->currentTransfer();
+        $row = $this->currentTransfer($this->transfer);
 
         $this->assertSame(OwnershipTransferStatus::Requested, $row->status);
         $this->assertNull($row->verified_at);
@@ -290,7 +322,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
             ->sole();
 
         $this->assertSame($artefacts, $stored->event_properties['verificationArtefacts']);
-        $this->assertSame($artefacts, $this->currentTransfer()->verification_artefacts);
+        $this->assertSame($artefacts, $this->currentTransfer($this->transfer)->verification_artefacts);
         $response->assertJsonPath('data.verification_artefacts', $artefacts);
     }
 
@@ -432,7 +464,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->admin = $this->anAllowlistedAdmin();
         $this->secondAdmin = User::factory()->create();
         $this->allowlist([$this->admin->getKey(), $this->secondAdmin->getKey()]);
-        $this->transfer = $this->aRequestedTransferStream($owner, User::factory()->create());
+        $this->transfer = $this->aRequestedTransferStream($this->company, $owner, User::factory()->create());
 
         // Discard the arrangement's own T1 side effects. The genesis fires
         // SupportQueueNotificationReactor at the SAME allowlisted admin with the
@@ -440,27 +472,6 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         // assertion would pass on the T1 notification alone — green with no
         // queue reactor in the codebase at all.
         Notification::fake();
-    }
-
-    /**
-     * A transfer whose stream genuinely carries the T1 genesis (and whose
-     * projection the T1 projector therefore wrote), so T2 replays real history.
-     */
-    private function aRequestedTransferStream(User $owner, User $target): OwnershipTransferRequest
-    {
-        $requestId = (string) Str::uuid7();
-
-        OwnershipTransferRequestAggregate::retrieve($requestId)
-            ->request(RequestOwnershipTransferCommand::validateAndCreate([
-                'companyId' => $this->company->getKey(),
-                'currentOwnerUserId' => $owner->getKey(),
-                'targetUserId' => $target->getKey(),
-                'reason' => 'Founder is stepping down and handing the company to the operations lead.',
-                'requestChannel' => 'app',
-            ]))
-            ->persist();
-
-        return OwnershipTransferRequest::query()->findOrFail($requestId);
     }
 
     /**
@@ -472,18 +483,6 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $response->assertJsonPath('data.id', $this->transfer->getKey());
         $response->assertJsonPath('data.status', 'verified');
         $response->assertJsonPath('data.verified_by', $this->admin->getKey());
-    }
-
-    /**
-     * A transfer belonging to an entirely different tenant, left alone. Its only
-     * job is to be a second row, which is what makes the projector's and the
-     * guard's `whereKey(...)` scopes observable at all.
-     */
-    private function aBystanderTransferAtAnotherCompany(): OwnershipTransferRequest
-    {
-        [$otherCompany] = $this->aCompanyWithMember('owner');
-
-        return $this->aTransferInState($otherCompany, User::factory()->create(), OwnershipTransferStatus::Requested);
     }
 
     /**
@@ -499,7 +498,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
             ->sole();
 
         $this->assertSame($expected->getKey(), $stored->event_properties['verifiedBy']);
-        $this->assertSame($expected->getKey(), $this->currentTransfer()->verified_by);
+        $this->assertSame($expected->getKey(), $this->currentTransfer($this->transfer)->verified_by);
         $this->assertSame($expected->getKey(), AuditEntry::query()
             ->where('event_class', 'OwnershipTransferIdentityVerified')
             ->sole()
@@ -533,7 +532,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
      */
     private function assertStampedAt(CarbonImmutable $frozen): void
     {
-        $row = $this->currentTransfer();
+        $row = $this->currentTransfer($this->transfer);
         $verifiedAt = $row->verified_at;
         $deadline = $row->next_state_transition_at;
 
@@ -541,39 +540,6 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->assertNotNull($deadline);
         $this->assertTrue($verifiedAt->equalTo($frozen), "Expected verified_at at {$frozen}, got {$verifiedAt}.");
         $this->assertTrue($deadline->equalTo($frozen->addDays(14)), "Expected the deadline at {$frozen->addDays(14)}, got {$deadline}.");
-    }
-
-    /**
-     * The transfer as it stands in the database RIGHT NOW, as a distinct
-     * instance every call. Deliberately not `$this->transfer->refresh()`, which
-     * mutates the shared property in place: the already-verified test captures a
-     * BEFORE snapshot and compares it to the AFTER state, and refresh() would
-     * hand it the same object twice, quietly turning that comparison into a
-     * tautology. findOrFail also types non-null, which fresh() does not.
-     */
-    private function currentTransfer(): OwnershipTransferRequest
-    {
-        return OwnershipTransferRequest::query()->whereKey($this->transfer->getKey())->firstOrFail();
-    }
-
-    /**
-     * The transition was refused by a state guard — the shared 409 family the
-     * §8.4 registry reserves for illegal state-machine moves.
-     *
-     * The MESSAGE is asserted, not just the code, and that is the whole point:
-     * both refusals in this class render the identical envelope, so without a
-     * discriminator, throwing the wrong exception from the legal-hold guard
-     * would stay green — and the CompanyUnderLegalHoldException render arm in
-     * bootstrap/app.php would become dead code in the one file Infection cannot
-     * see and coverage does not track. This survives substitution, not merely
-     * deletion.
-     */
-    private function assertStateGuardRefused(TestResponse $response, string $expectedMessage): void
-    {
-        $response->assertStatus(409);
-        $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
-        $response->assertJsonPath('message', $expectedMessage);
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
     /**
@@ -592,7 +558,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         // "the original audit entry remains untouched".
         $this->assertDatabaseCount('audit_trail', 2);
 
-        $row = $this->currentTransfer();
+        $row = $this->currentTransfer($this->transfer);
         $verifiedAt = $row->verified_at;
         $originalVerifiedAt = $original->verified_at;
 
@@ -636,7 +602,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
      */
     private function assertDeadlineMovedToTheVerifiedWindow(int $expectedDays): void
     {
-        $row = $this->currentTransfer();
+        $row = $this->currentTransfer($this->transfer);
         $verifiedAt = $row->verified_at;
         $deadline = $row->next_state_transition_at;
 
@@ -657,15 +623,26 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
      */
     private function assertExecutionQueueAlerted(): void
     {
-        $carriesTheTenant = fn (SystemNotification $notification): bool => $notification->type === NotificationType::GeneralAccountNotice
-            && $notification->companyName === $this->company->name;
+        // Retrofitted at s151 (ruling H3): the discriminated notification, and its
+        // BODY asserted. T2 previously emitted a SystemNotification byte-identical
+        // to T1's, so neither the stage nor the transfer was recoverable by the
+        // recipient (OQ-1-144). "ready to execute" is the distinction.
+        // The TENANT NAME is asserted as well as the stage (restored s152). `main`
+        // pinned `$notification->companyName === $this->company->name`; the H3
+        // retrofit replaced that with a static-substring check, which a
+        // companyName() returning '' or the wrong tenant passes. companyName() is
+        // the only rendering method this slice added, so without this nothing in
+        // the suite binds its output at all.
+        $namesTheReadyTransfer = fn (OwnershipTransferVerifiedNotification $notification): bool => $notification->transfer->getKey() === $this->transfer->getKey()
+            && str_contains($notification->toArray($this->admin)['body'], 'ready to execute')
+            && str_contains($notification->toArray($this->admin)['body'], $this->company->name);
 
-        // EVERY allowlisted admin, not just the first, and each carrying the
-        // tenant it concerns — without the payload check the whole company
-        // lookup in the reactor is content-dead and could return an empty name.
-        Notification::assertSentTo($this->admin, SystemNotification::class, $carriesTheTenant);
-        Notification::assertSentTo($this->secondAdmin, SystemNotification::class, $carriesTheTenant);
-        Notification::assertNotSentTo([$this->transfer->currentOwner, $this->transfer->targetUser], SystemNotification::class);
+        // EVERY allowlisted admin, not just the first — without both rows the
+        // reactor's ->get()->each(...) fan-out could degrade to ->first()?->notify()
+        // undetected, and only one of several admins would ever learn.
+        Notification::assertSentTo($this->admin, OwnershipTransferVerifiedNotification::class, $namesTheReadyTransfer);
+        Notification::assertSentTo($this->secondAdmin, OwnershipTransferVerifiedNotification::class, $namesTheReadyTransfer);
+        Notification::assertNotSentTo([$this->transfer->currentOwner, $this->transfer->targetUser], OwnershipTransferVerifiedNotification::class);
     }
 
     /**
@@ -699,7 +676,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
      */
     private function assertProjectionMirrorsVerification(): void
     {
-        $row = $this->currentTransfer();
+        $row = $this->currentTransfer($this->transfer);
 
         $this->assertSame(OwnershipTransferStatus::Verified, $row->status);
         $this->assertSame($this->admin->getKey(), $row->verified_by);

@@ -55,6 +55,33 @@ class InvitationMailRenderTest extends MembershipsTestCase
         $mail->assertHasSubject('You have been invited to join Contoso on Lesily');
     }
 
+    /**
+     * The inviting company's name is tenant-chosen and lands in a markdown view,
+     * so CommonMark would read it as MARKUP — turning an invitation into a
+     * Lesily-branded email carrying a link the tenant picked, next to the genuine
+     * accept button, for a recipient who by definition does not yet know what a
+     * real Lesily invitation looks like.
+     *
+     * Held by the global `Markdown::withSecuredEncoding()` in AppServiceProvider
+     * (proven by revert-check: drop that line and this REDs). Pinned HERE as well
+     * as on the ownership-transfer path because this view was already live before
+     * that call existed — a global default with one consumer's test behind it is
+     * one refactor away from being silently dropped for the others.
+     */
+    #[Test]
+    public function when_the_inviting_company_name_carries_markdown_then_the_email_renders_it_as_text(): void
+    {
+        // Given an invitation from a company that has named itself a link
+        $mail = $this->anInvitationMail('Acme [Claim your account](https://not-lesily.example)');
+
+        // When the invitation is rendered
+        $rendered = $mail->render();
+
+        // Then the tenant's markup is inert beside the real accept button
+        $this->assertStringNotContainsString('href="https://not-lesily.example"', $rendered);
+        $this->assertStringContainsString($mail->plaintextToken, $rendered);
+    }
+
     #[Test]
     public function when_the_invite_email_delivery_fails_then_the_failure_is_logged_without_alerting_the_inviter(): void
     {
@@ -72,10 +99,10 @@ class InvitationMailRenderTest extends MembershipsTestCase
         $this->assertSame([1, 5, 15], $mail->backoff);
     }
 
-    private function anInvitationMail(): InvitationMail
+    private function anInvitationMail(string $companyName = 'Contoso'): InvitationMail
     {
         return new InvitationMail(
-            companyName: 'Contoso',
+            companyName: $companyName,
             email: 'invitee@contoso.lk',
             plaintextToken: Str::random(40),
             expiresAt: CarbonImmutable::now()->addDays(7),

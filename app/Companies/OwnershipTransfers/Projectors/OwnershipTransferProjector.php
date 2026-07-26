@@ -5,15 +5,18 @@ namespace App\Companies\OwnershipTransfers\Projectors;
 use Carbon\CarbonImmutable;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 
 /**
- * Sole writer of ownership_transfer_requests (ERD-1-05). The T1 insert carries
- * the 30-day next_state_transition_at anchor in the same write — no
- * update-after-insert ordering dependency; the designed TimerProjector joins
- * when its first reset/clear behavior lands (verify task, UC-1-113).
+ * Sole writer of ownership_transfer_requests (ERD-1-05), including the whole
+ * next_state_transition_at lifecycle: the T1 insert carries the 30-day anchor in
+ * the same write, T2 resets it to the 14-day window in the same update as the
+ * verification columns, and each terminal transition clears it alongside its own
+ * columns. The separately designed OwnershipTransferTimerProjector is therefore
+ * SUPERSEDED and never built (s149 ruling G3) — one writer per table.
  */
 class OwnershipTransferProjector extends Projector
 {
@@ -57,6 +60,25 @@ class OwnershipTransferProjector extends Projector
                 (int) config('ownership-transfers.verified_ttl_days', 14),
             ),
             'updated_by' => $event->verifiedBy,
+        ]);
+    }
+
+    /**
+     * SM-1-05 T3 + T5. Terminal, so the rejection record and the SLA-timer clear
+     * land in the SAME update — this projector remains the table's sole writer
+     * (ruling G3), and a terminal row carries no next deadline by definition.
+     */
+    public function onOwnershipTransferRejected(OwnershipTransferRejected $event): void
+    {
+        OwnershipTransferRequest::query()->whereKey($event->requestId)->update([
+            'status' => OwnershipTransferStatus::Rejected,
+            'rejected_at' => CarbonImmutable::instance($event->rejectedAt),
+            'rejected_by' => $event->rejectedBy,
+            'rejection_reason' => $event->rejectionReason,
+            'rejection_reason_code' => $event->rejectionReasonCode,
+            'rejection_source' => $event->source,
+            'next_state_transition_at' => null,
+            'updated_by' => $event->rejectedBy,
         ]);
     }
 }
