@@ -219,11 +219,19 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
     private function assertBystanderUntouched(OwnershipTransferRequest $bystander): void
     {
         $row = $this->currentTransfer($bystander);
+        $deadline = $row->next_state_transition_at;
+        $originalDeadline = $bystander->next_state_transition_at;
 
         $this->assertSame(OwnershipTransferStatus::Requested, $row->status);
         $this->assertNull($row->rejected_at);
         $this->assertNull($row->rejected_by);
-        $this->assertNotNull($row->next_state_transition_at);
+        // Unchanged, not merely non-null (tightened at the s152 review to match
+        // the verify sibling): the terminal clear writes NULL here, so a
+        // non-null check catches an unscoped clear — but not an unscoped write
+        // that set some other deadline on the bystander.
+        $this->assertNotNull($deadline);
+        $this->assertNotNull($originalDeadline);
+        $this->assertTrue($deadline->equalTo($originalDeadline));
     }
 
     /**
@@ -468,6 +476,16 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * TENANT-readable via UC-1-066, and while the reason here is prose the owner
      * already receives verbatim, the durable forensic record is the event, which
      * this row reaches through stored_event_id.
+     *
+     * actor_role_code / subject_label / description were added at the s152 review.
+     * All three are bare string literals in the reactor, so Infection generates no
+     * mutant for them and nothing else in the suite bound them — actor_role_code
+     * least excusably, since it is part of what a tenant reads back through
+     * UC-1-066. The aspect count rises 8 → 11, widening the §2.2 Rule 5-extended
+     * exception this helper already declared; it is still ONE logical assertion
+     * ("the append-only row is correct") over ONE row, which is the composed-assert
+     * shape E20 §7 sanctions. The identical gap in the merged
+     * assertVerificationAudited is logged for Task 9 rather than swept here (E68 §3).
      */
     private function assertRejectionAudited(): void
     {
@@ -476,8 +494,14 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertSame($this->transfer->getKey(), $entry->subject_id);
         $this->assertSame($this->company->getKey(), $entry->company_id);
         $this->assertSame('ownership_transfer_request', $entry->subject_type);
+        $this->assertSame('Ownership transfer request', $entry->subject_label);
         $this->assertSame('transfer_rejected', $entry->action);
+        $this->assertSame(
+            'Platform admin rejected the ownership transfer; the current owner retains ownership.',
+            $entry->description,
+        );
         $this->assertSame($this->admin->getKey(), $entry->actor_user_id);
+        $this->assertSame('platform_super_admin', $entry->actor_role_code);
         $this->assertSame($this->admin->name, $entry->actor_label);
         $this->assertNotNull($entry->stored_event_id);
         $this->assertNull($entry->metadata);
@@ -492,6 +516,13 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * SystemNotification carries only (type, companyName), so a notification could
      * be "sent" while telling the owner nothing about which transfer ended or why.
      *
+     * The RENDERED BODY is asserted too, not just the constructor field (added at
+     * the s152 review). The owner reads the body, not the property: with only the
+     * field pinned, a body() that stopped interpolating the reason would ship
+     * green while silently breaking the UC's headline promise that the rejection
+     * reason reaches the requester VERBATIM. The T1 and T2 retrofits already
+     * assert their bodies; this one did not, which made the set asymmetric.
+     *
      * The target user is asserted NOT notified: rejection happens before any role
      * change, so they were never affected and have no standing to be told (UC
      * stakeholders — the designated owner "has not yet been affected").
@@ -502,7 +533,8 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
             $this->owner,
             OwnershipTransferRejectedNotification::class,
             fn (OwnershipTransferRejectedNotification $notification): bool => $notification->reason === self::rejectionBody()['reason']
-                && $notification->transfer->getKey() === $this->transfer->getKey(),
+                && $notification->transfer->getKey() === $this->transfer->getKey()
+                && str_contains($notification->toArray($this->owner)['body'], self::rejectionBody()['reason']),
         );
 
         Notification::assertNotSentTo(

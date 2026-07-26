@@ -51,6 +51,15 @@ abstract class OwnershipTransferNotification extends Notification implements Sen
      * The tenant the notice concerns. Read through the transfer's relation rather
      * than passed in, so no subclass can render a notice about one company while
      * naming another.
+     *
+     * The null-safe cast yields '' if the relation were ever absent, which reads
+     * as a silent failure and was raised as such at the s152 review. Left as-is
+     * deliberately: company_id is NOT NULL behind a RESTRICT FK, so the branch is
+     * unreachable, and a guard for it would be untestable production code that
+     * then fails the 100%-patch-coverage gate — exactly the uncovered-unreachable
+     * line codecov rejected at s149. Declared rather than built, per that
+     * precedent. Revisit if Company ever gains SoftDeletes, which is the change
+     * that would make it reachable.
      */
     protected function companyName(): string
     {

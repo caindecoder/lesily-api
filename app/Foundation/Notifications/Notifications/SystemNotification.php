@@ -4,7 +4,6 @@ namespace App\Foundation\Notifications\Notifications;
 
 use App\Models\User;
 use Illuminate\Bus\Queueable;
-use Illuminate\Mail\Mailable;
 use Illuminate\Notifications\Notification;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Contracts\SendsQueuedMail;
@@ -50,7 +49,7 @@ class SystemNotification extends Notification implements SendsQueuedMail
     /**
      * @param  User  $notifiable
      */
-    public function toMail(object $notifiable): Mailable
+    public function toMail(object $notifiable): SystemNotificationMail
     {
         return (new SystemNotificationMail($this->type, $this->companyName))
             ->locale($notifiable->preferredLocale());
