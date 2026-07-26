@@ -70,12 +70,31 @@ abstract class OwnershipTransferNotification extends Notification implements Sen
     abstract protected function body(): string;
 
     /**
-     * Lifecycle notices are never opt-out-able the way a marketing notice is, but
-     * they are not security-critical either, so they follow the same two channels
-     * SystemNotification uses. Preference handling is deliberately NOT duplicated
-     * here — when a transfer-notification preference is actually demanded it
-     * belongs in one place for every notification type (OQ-1-104's funnel
-     * question), not copied per module.
+     * The same two channels SystemNotification uses — but UNCONDITIONALLY, and
+     * that is a behaviour CHANGE to two already-merged UCs, not a greenfield
+     * choice (recorded properly at s153; the earlier wording here read as new
+     * code declining to add preferences).
+     *
+     * `SystemNotification::via()` omits the mail channel for a recipient who has
+     * opted out of a non-critical type, and `GeneralAccountNotice` is
+     * non-critical — so the T1 and T2 reactors retrofitted onto this base at H3
+     * LOST a gate they previously passed through. Nothing regressed in practice,
+     * verified rather than assumed: `NotificationPreference` has exactly one
+     * reader (that `via()`) and no writer anywhere outside a factory, so no user
+     * can hold a preference row today.
+     *
+     * The forward problem is the real one: these notifications carry no
+     * `NotificationType`, so when the preference UC lands there is no key any
+     * user could set to suppress ownership-transfer mail — un-suppressible by
+     * construction rather than by decision. Also the one place this module parts
+     * company with LeaveDates on a pattern LD has (Rule #15): LD's
+     * `RequestNotification::via()` delegates to
+     * `$notifiable->getNotificationChannels()`, gating only `mail` while
+     * database/broadcast/push always land.
+     *
+     * Deliberately still not fixed here — preference handling belongs in ONE
+     * place for every type (OQ-1-104's funnel question), not copied per module.
+     * Carried there with this note.
      *
      * @return array<int, string>
      */

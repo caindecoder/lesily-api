@@ -42,8 +42,7 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
     public function when_the_rejection_is_unauthenticated_then_it_is_refused(): void
     {
         // Given a transfer awaiting review
-        [$company] = $this->aCompanyWithMember('owner');
-        $transfer = $this->aTransferInState($company, User::factory()->create(), OwnershipTransferStatus::Requested);
+        [, $transfer] = $this->aTransferWithNoStream();
 
         // When a guest attempts to reject it
         $response = $this->rejectTransfer(null, $transfer->getKey());
@@ -64,12 +63,11 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
     public function when_the_caller_is_not_a_platform_admin_then_the_transfer_is_not_found(string $roleCode): void
     {
         // Given a transfer awaiting review and a tenant member of its company
-        [$company] = $this->aCompanyWithMember('owner');
-        $transfer = $this->aTransferInState($company, User::factory()->create(), OwnershipTransferStatus::Requested);
+        [$company, $transfer] = $this->aTransferWithNoStream();
         $caller = $this->aCompanyMember($company, $roleCode);
 
         // When that tenant role attempts to reject it
-        $response = $this->rejectTransfer($caller, $transfer->getKey(), $this->rejectionBody());
+        $response = $this->rejectTransfer($caller, $transfer->getKey(), self::rejectionBody());
 
         // Then the surface denies it without acknowledging the transfer exists
         $this->assertResourceNotFoundNoLeak($response);
@@ -89,7 +87,7 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $admin = $this->anAllowlistedAdmin();
 
         // When they attempt to reject it
-        $response = $this->rejectTransfer($admin, (string) Str::uuid7(), $this->rejectionBody());
+        $response = $this->rejectTransfer($admin, (string) Str::uuid7(), self::rejectionBody());
 
         // Then the surface refuses it indistinguishably from a denied caller
         $this->assertResourceNotFoundNoLeak($response);
@@ -108,8 +106,7 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
     public function when_the_rejection_input_is_invalid_then_it_is_refused(array $body, string $invalidField): void
     {
         // Given a transfer awaiting review
-        [$company] = $this->aCompanyWithMember('owner');
-        $transfer = $this->aTransferInState($company, User::factory()->create(), OwnershipTransferStatus::Requested);
+        [, $transfer] = $this->aTransferWithNoStream();
 
         // When an allowlisted admin submits a malformed rejection
         $response = $this->rejectTransfer($this->anAllowlistedAdmin(), $transfer->getKey(), $body);
@@ -153,6 +150,33 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         unset($body[$key]);
 
         return $body;
+    }
+
+    /**
+     * A transfer whose ROW exists but whose STREAM does not — `aTransferInState`
+     * writes the projection only.
+     *
+     * That is precisely what the three refusal tests need, and precisely what
+     * they must NOT be given a real stream for: their shared oracle
+     * `assertTransferStillOpen` asserts ZERO stored events, so "nothing was
+     * recorded" is only readable against an empty baseline. Every genuine builder
+     * (`aRequestedTransferStream` and its siblings) seeds a genesis event first
+     * and would turn that assertion into a count no reader could interpret.
+     *
+     * Named at s153. The two lines were duplicated verbatim three times, which
+     * reads as incidental repetition when it is in fact the load-bearing
+     * distinction from `arrangeRejectableTransfer()` directly below.
+     *
+     * @return array{Company, OwnershipTransferRequest}
+     */
+    private function aTransferWithNoStream(): array
+    {
+        [$company] = $this->aCompanyWithMember('owner');
+
+        return [
+            $company,
+            $this->aTransferInState($company, User::factory()->create(), OwnershipTransferStatus::Requested),
+        ];
     }
 
     /**
@@ -229,19 +253,31 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * The rejector is whoever the token says, never whoever the body claims.
      * `rejectedBy` is the field this whole use case exists to produce — every
      * stakeholder clause about defending a rejection against a later "it was
-     * arbitrary" claim rests on it being auth-derived — yet the only thing
-     * enforcing that is the spread ORDERING in the controller, which no other
-     * test touches: moving the auth-resolved `rejectedBy` ahead of the spread,
-     * or dropping that line, lets the body's value win.
+     * arbitrary" claim rests on it being auth-derived.
      *
-     * Corrected s152. This docblock previously named `$request->all()` as the
-     * mutation it catches. That is FALSE — `'rejectedBy' => $admin->getKey()`
-     * sits after the spread, and PHP's later-duplicate-key-wins rule means the
-     * auth value overrides the body whether the spread is `only()` or `all()`,
-     * so that mutation survives. The test has real teeth, just not those. In a
-     * class whose whole method is teeth-by-revert-check, a recorded hypothesis
-     * that does not hold is worse than none: the next reader tries it, watches
-     * it survive, and correctly concludes the test is dead from a false premise.
+     * WHAT THIS TEST UNIQUELY CATCHES (measured s153, all four variants run):
+     *
+     *   only() + explicit after   (as built) -> AUTH
+     *   only() + explicit BEFORE             -> AUTH   (still green)
+     *   all()  + explicit after              -> AUTH   (still green)
+     *   all()  + explicit BEFORE             -> FORGED (this test REDs)
+     *
+     * So the teeth are the COMBINATION — the `only()` allow-list AND the key
+     * order — plus the direct substitution `'rejectedBy' => $request->input(...)`.
+     * Neither half alone flips the value: `only()` strips the body's `rejectedBy`
+     * before the array exists, so ordering cannot matter while it stands; and
+     * later-duplicate-key-wins covers the order while `all()` is in play.
+     * Dropping the line entirely is caught, but by every other test in the class
+     * — they all omit `rejectedBy`, so the Command's `required` rule 422s first.
+     *
+     * TWICE-CORRECTED, which is the point worth keeping. s152 retracted an
+     * `$request->all()` hypothesis as false and replaced it with a spread-ORDERING
+     * hypothesis that is *also* false: under `only()`, hoisting the explicit key
+     * changes nothing. Both readings were plausible and both were wrong, in a
+     * class whose whole method is teeth-by-revert-check — where a recorded
+     * hypothesis that does not hold is worse than none, because the next reader
+     * tries it, watches it survive, and correctly concludes the test is dead from
+     * a false premise. Hence the table above: measured, not reasoned.
      */
     #[Test]
     public function when_the_body_names_a_different_rejector_then_the_authenticated_admin_is_recorded(): void
@@ -415,14 +451,26 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
-     * The rejection's durability guarantee, pinned at the one place we own it.
+     * The TRANSPORT half of the rejection's durability story — not the whole of
+     * sc.10, which this test does not establish (corrected s153).
      *
      * UC-1-128 sc.10 promises that a notification-delivery failure never rolls back
-     * the rejection. Two facts make that true, and only the second is ours: the
-     * event is persisted before any reactor runs (spatie's ordering, already implied
-     * by every happy-path assertion here), and the email leg is DEFERRED to the
-     * queue instead of sent inline, so a dead transport cannot reach the request at
-     * all.
+     * the rejection. What is genuinely proven below is narrower: the email leg is
+     * DEFERRED to the queue rather than sent inline, so a dead SMTP transport
+     * cannot reach the request at all.
+     *
+     * What is NOT proven, and what the previous wording ("pinned at the one place
+     * we own it") wrongly implied was covered: `config/event-sourcing.php` sets
+     * `catch_exceptions` to false and no env file overrides it, so a THROWING
+     * REACTOR propagates out of `persist()`. Three DB writes still sit in the
+     * request path — the `database` channel's `notifications` insert, the
+     * `jobs` insert behind `Mail::to()->queue()`, and the audit reactor's
+     * `audit_trail` insert. If any of those fails the event and projection are
+     * already committed, the admin gets a 5xx, and their retry meets the 409 state
+     * guard: a contradictory pair from which they cannot tell whether their own
+     * action landed. `Notification::fake()` plus the `sync` queue means nothing in
+     * this suite can observe it. That gap is project-wide (every notification
+     * reactor in the repo shares it) and is routed to the backlog, not fixed here.
      *
      * That second fact is a channel choice, and swapping QueuedMailChannel for
      * Laravel's synchronous `mail` channel would silently undo it — in production,
