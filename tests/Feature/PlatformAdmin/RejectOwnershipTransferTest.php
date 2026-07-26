@@ -8,12 +8,15 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Notifications\ChannelManager;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use Illuminate\Notifications\DatabaseNotification;
 use App\Foundation\Notifications\Channels\QueuedMailChannel;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -195,13 +198,20 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // refused attempt was logged as though it had happened.
         $this->assertDatabaseCount('audit_trail', 2);
 
-        $row = $this->currentTransfer($original);
-        $rejectedAt = $row->rejected_at;
+        // Collapsed to one column map at s152 (§2.2 Rule 5); the timestamp stays
+        // a model comparison because equalTo() is the assertion, not string
+        // equality, and the two assertNotNull calls are PHPStan narrowing rather
+        // than domain aspects.
+        $this->assertDatabaseHas('ownership_transfer_requests', [
+            'id' => $original->getKey(),
+            'rejected_by' => $original->rejected_by,
+            'rejection_reason' => $original->rejection_reason,
+            'rejection_reason_code' => $original->rejection_reason_code,
+        ]);
+
+        $rejectedAt = $this->currentTransfer($original)->rejected_at;
         $originalRejectedAt = $original->rejected_at;
 
-        $this->assertSame($original->rejected_by, $row->rejected_by);
-        $this->assertSame($original->rejection_reason, $row->rejection_reason);
-        $this->assertSame($original->rejection_reason_code, $row->rejection_reason_code);
         $this->assertNotNull($rejectedAt);
         $this->assertNotNull($originalRejectedAt);
         $this->assertTrue($rejectedAt->equalTo($originalRejectedAt));
@@ -491,8 +501,8 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * Building the Mailable off a real notification is the
      * `ReceiveEmailNotificationTest:70` shape, and one Act exercises `title()`,
      * `body()`, `toMail()`, `envelope()`, `content()` and the Blade view together.
-     * A second test routing through `Mail::fake()` + `notify()` would add nothing
-     * but a fight with the base's notification fake.
+     * It proves the Mailable RENDERS; the sibling below proves anything ever
+     * BUILDS one in the real flow.
      */
     #[Test]
     public function when_the_rejection_email_is_built_then_it_carries_the_notice_and_the_reason(): void
@@ -522,6 +532,127 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // asserting the property alone would leave the template unexecuted
         // (SystemNotificationMailRenderTest precedent).
         $this->assertStringContainsString('Identity documents could not be matched to the applicant.', $mail->render());
+        // replyTo is a named-argument array literal, so Infection generates
+        // nothing for it — and it is what makes an owner's reply to a rejection
+        // reach a human rather than a no-reply void.
+        $this->assertNotSame([], $mail->envelope()->replyTo);
+    }
+
+    /**
+     * The in-app leg actually LANDING, and the email actually being queued to the
+     * right mailbox — the half the render test above cannot reach.
+     *
+     * Every other notification assertion in this module runs under the base's
+     * `Notification::fake()`, which means the `database` channel never executes,
+     * no `notifications` row is written anywhere in the ownership-transfer suite,
+     * and `QueuedMailChannel::send()` is never invoked for this family at all —
+     * so the `SendsQueuedMail` contract extracted for exactly this path had its
+     * consumer side unexercised. Restoring the real dispatcher for one test is
+     * what makes `via()`'s two channels observable rather than merely asserted as
+     * an array literal.
+     *
+     * The payload keys matter individually: `ownership_transfer_request_id` is the
+     * deep-link the base class docblock names as the thing the generic
+     * SystemNotification "had nowhere to carry" — the defect OQ-1-144 recorded and
+     * the stated reason this hierarchy exists — and `title` is what the user reads
+     * in their notification list. Both were droppable with the suite green.
+     */
+    #[Test]
+    public function when_a_transfer_is_rejected_then_the_in_app_record_lands_and_the_email_is_queued(): void
+    {
+        // Given a rejectable transfer, with the REAL notification dispatcher back
+        $this->arrangeRejectableTransfer();
+        Notification::swap(new ChannelManager($this->app));
+        Mail::fake();
+
+        // When the admin rejects it
+        $this->rejectTransfer($this->admin, $this->transfer->getKey(), self::rejectionBody());
+
+        // Then the requester has an in-app record and a queued email
+        $this->assertRequesterHasInAppRecordAndQueuedEmail();
+    }
+
+    private function assertRequesterHasInAppRecordAndQueuedEmail(): void
+    {
+        $record = DatabaseNotification::query()
+            ->where('type', OwnershipTransferRejectedNotification::class)
+            ->sole();
+        /** @var array<string, string> $payload */
+        $payload = $record->data;
+
+        $this->assertSame($this->owner->getKey(), $record->notifiable_id);
+        $this->assertSame($this->transfer->getKey(), $payload['ownership_transfer_request_id']);
+        $this->assertSame('Ownership transfer rejected', $payload['title']);
+        Mail::assertQueued(
+            OwnershipTransferNotificationMail::class,
+            fn (OwnershipTransferNotificationMail $mail): bool => $mail->hasTo($this->owner->email),
+        );
+    }
+
+    /**
+     * The ACCEPT side of the input contract — the half the refusal provider
+     * cannot express, and the half both escaped-mutation reports landed on.
+     *
+     * The four reason codes: `provideInvalidRejectionInputs` pins that everything
+     * OUTSIDE the locked set is refused, but nothing exercised the set itself, so
+     * deleting `case Other` from the enum narrowed `Rule::in` to three values —
+     * making `other` start returning 422 in production for a code the UC
+     * preconditions AND error flow 3b both name — with the whole suite green.
+     * Infection has no enum-case-removal mutator, so the gate could not see it
+     * either.
+     *
+     * The 1000-character reason: `max:1000` is a string literal, so Infection
+     * generates nothing for it, and the only existing row sits ABOVE the bound at
+     * 1001. Tightening the rule to anything between the happy path's 66 characters
+     * and 1000 therefore survived the entire suite while silently truncating
+     * legitimate rejection prose. This pays deferral **D-f** from the s149 ledger,
+     * which named this exact gap and assigned it to "any later task touching the
+     * Command".
+     *
+     * @param  array<string, mixed>  $body
+     */
+    #[Test]
+    #[DataProvider('provideAcceptedRejectionInputs')]
+    public function when_the_rejection_input_sits_at_the_edge_of_the_contract_then_it_is_accepted(array $body): void
+    {
+        // Given a transfer awaiting review
+        $this->arrangeRejectableTransfer();
+
+        // When the admin submits an edge-of-contract rejection
+        $response = $this->rejectTransfer($this->admin, $this->transfer->getKey(), $body);
+
+        // Then it is accepted and both fields persist verbatim
+        $this->assertRejectionPersistedVerbatim($response, $body);
+    }
+
+    /**
+     * @param  array<string, mixed>  $body
+     */
+    private function assertRejectionPersistedVerbatim(TestResponse $response, array $body): void
+    {
+        $response->assertOk();
+        $this->assertDatabaseHas('ownership_transfer_requests', [
+            'id' => $this->transfer->getKey(),
+            'rejection_reason' => $body['reason'],
+            'rejection_reason_code' => $body['rejectionReasonCode'],
+        ]);
+    }
+
+    /**
+     * Every value the contract must ACCEPT: each of the four locked codes, and a
+     * reason sitting exactly on the max:1000 bound.
+     *
+     * @return array<string, array{array<string, mixed>}>
+     */
+    public static function provideAcceptedRejectionInputs(): array
+    {
+        return [
+            'code identity_failed' => [self::rejectionBody(['rejectionReasonCode' => 'identity_failed'])],
+            'code target_ineligible' => [self::rejectionBody(['rejectionReasonCode' => 'target_ineligible'])],
+            'code policy_violation' => [self::rejectionBody(['rejectionReasonCode' => 'policy_violation'])],
+            'code other' => [self::rejectionBody(['rejectionReasonCode' => 'other'])],
+            'reason exactly at the bound' => [self::rejectionBody(['reason' => str_repeat('a', 1000)])],
+        ];
     }
 
     // Happy — the T3 walk: a Requested transfer is ended before verification.
@@ -628,6 +759,18 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
             'actor_user_id' => $this->admin->getKey(),
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => $this->admin->name,
+            // The request-context columns, pinned in BOTH directions (s152). The
+            // helper already reasons that metadata is where cross-tenant context
+            // could leak into a tenant-readable row; request_id / ip_address /
+            // user_agent carry exactly the same exposure and nothing held them.
+            // An event-sourced write has no HTTP request behind it, so all three
+            // are NULL here — deliberately unlike the sibling READ rows, which
+            // pin them to real values. severity is 'info' from the column default,
+            // not from the reactor.
+            'request_id' => null,
+            'ip_address' => null,
+            'user_agent' => null,
+            'severity' => 'info',
         ]);
 
         $entry = AuditEntry::query()->where('event_class', 'OwnershipTransferRejected')->sole();
@@ -663,7 +806,16 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
             OwnershipTransferRejectedNotification::class,
             fn (OwnershipTransferRejectedNotification $notification): bool => $notification->reason === self::rejectionBody()['reason']
                 && $notification->transfer->getKey() === $this->transfer->getKey()
-                && str_contains($notification->toArray($this->owner)['body'], self::rejectionBody()['reason']),
+                && str_contains($notification->toArray($this->owner)['body'], self::rejectionBody()['reason'])
+                // The COMPANY is named too (s152). Both sibling notifications
+                // interpolate companyName(), and this is the only one of the three
+                // delivered to a tenant — who may own several companies, and whose
+                // email leg carries no id at all (only title + bodyText), unlike
+                // the in-app leg's deep-link. Without the name, an owner of two
+                // companies gets "your transfer was not approved" and cannot tell
+                // which. That is the OQ-1-144 defect reproduced on the email
+                // channel, which is exactly what this hierarchy exists to prevent.
+                && str_contains($notification->toArray($this->owner)['body'], $this->company->name),
         );
 
         Notification::assertNotSentTo(
@@ -786,14 +938,23 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
      */
     private function assertProjectionMirrorsRejection(string $expectedSource): void
     {
-        $row = $this->currentTransfer($this->transfer);
+        // One assertDatabaseHas rather than six assertSame calls (s152) — the same
+        // collapse assertRejectionAudited took, for the same §2.2 Rule 5 reason.
+        // updated_by joins it here: grep showed the column was unasserted across
+        // the ENTIRE test suite, and unlike the string literals around it,
+        // ArrayItemRemoval IS in Infection's @default, so it was a live escaped
+        // mutant rather than a theoretical gap.
+        $this->assertDatabaseHas('ownership_transfer_requests', [
+            'id' => $this->transfer->getKey(),
+            'status' => OwnershipTransferStatus::Rejected->value,
+            'rejected_by' => $this->admin->getKey(),
+            'rejection_reason' => self::rejectionBody()['reason'],
+            'rejection_reason_code' => 'identity_failed',
+            'rejection_source' => $expectedSource,
+            'updated_by' => $this->admin->getKey(),
+        ]);
 
-        $this->assertSame(OwnershipTransferStatus::Rejected, $row->status);
-        $this->assertSame($this->admin->getKey(), $row->rejected_by);
-        $this->assertNotNull($row->rejected_at);
-        $this->assertSame(self::rejectionBody()['reason'], $row->rejection_reason);
-        $this->assertSame('identity_failed', $row->rejection_reason_code);
-        $this->assertSame($expectedSource, $row->rejection_source);
+        $this->assertNotNull($this->currentTransfer($this->transfer)->rejected_at);
     }
 
     /**
@@ -822,6 +983,11 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
     {
         $this->assertSame(0, LesilyStoredEvent::query()->count());
         $this->assertNoAuditRecorded();
+        // sc.3's fourth line — "no requester notification is sent". Unreachable
+        // today (no event means no reactor), so this is completeness rather than
+        // risk; it becomes load-bearing the moment anything notifies ahead of the
+        // aggregate write.
+        Notification::assertNothingSent();
         $this->assertSame(
             $expected,
             OwnershipTransferRequest::query()->findOrFail($requestId)->status,
