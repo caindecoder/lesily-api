@@ -539,6 +539,41 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * Tenant-authored text reaches this email, and it must render as TEXT.
+     *
+     * The body interpolates the company name, which a tenant owner sets to any
+     * 255-char string — `UpdateCompanyCommand` bounds the length, never the
+     * charset — and the Mailable renders it through CommonMark. Laravel escapes
+     * `[` only while `Markdown::withSecuredEncoding()` is in force
+     * (`Markdown.php:87`); the default is OFF, and `allow_unsafe_links` refuses
+     * `javascript:` but not `https:`.
+     *
+     * So without that call a tenant chooses the anchor text and the destination
+     * of a live link inside a genuine Lesily email. For the T1/T2 siblings on
+     * this same base that email goes to the platform-admin allowlist, in the
+     * exact workflow where an admin is expected to click through and act — the
+     * recipients holding cross-tenant authority. The rendered reason travels the
+     * other way, from admin prose to a tenant inbox, through the same renderer.
+     */
+    #[Test]
+    public function when_the_company_name_carries_markdown_then_the_email_renders_it_as_text(): void
+    {
+        // Given a transfer whose company has named itself a link to another host
+        [$company] = $this->aCompanyWithMember('owner');
+        $company->forceFill(['name' => 'Acme [Verify identity now](https://not-lesily.example)'])->save();
+        $notification = new OwnershipTransferRejectedNotification(
+            $this->aTransferInState($company, User::factory()->create(), OwnershipTransferStatus::Requested),
+            'Identity documents could not be matched to the applicant.',
+        );
+
+        // When the email leg is rendered
+        $rendered = $notification->toMail(User::factory()->create())->render();
+
+        // Then the tenant's markup is inert — no anchor to that host exists
+        $this->assertStringNotContainsString('href="https://not-lesily.example"', $rendered);
+    }
+
+    /**
      * The in-app leg actually LANDING, and the email actually being queued to the
      * right mailbox — the half the render test above cannot reach.
      *
