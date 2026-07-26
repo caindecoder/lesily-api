@@ -422,8 +422,13 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
         Notification::assertSentTo(
             $this->supportAdmin,
             OwnershipTransferRequestedNotification::class,
+            // The tenant NAME as well as the stage (restored s152 — see the T2
+            // sibling): a rendered body is the only place companyName() is
+            // observable, and a static-substring check alone would pass on an
+            // empty or wrong company name.
             fn (OwnershipTransferRequestedNotification $notification): bool => $notification->transfer->company_id === $this->company->getKey()
-                && str_contains($notification->toArray($this->supportAdmin)['body'], 'awaiting identity verification'),
+                && str_contains($notification->toArray($this->supportAdmin)['body'], 'awaiting identity verification')
+                && str_contains($notification->toArray($this->supportAdmin)['body'], $this->company->name),
         );
         Notification::assertNotSentTo([$this->owner, $this->target], OwnershipTransferRequestedNotification::class);
     }

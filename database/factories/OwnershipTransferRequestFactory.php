@@ -95,7 +95,14 @@ class OwnershipTransferRequestFactory extends Factory
             'rejected_at' => now()->subHour(),
             'rejected_by' => User::factory(),
             'rejection_reason' => 'Identity documents did not match the records.',
-            'rejection_source' => 'pre_verification',
+            // Hyphenated per ERD-1-05 §3, which names this literal specifically:
+            // production writes 'pre-verification' from the aggregate, so the
+            // underscore spelling here described a value no code path can produce
+            // (pre-flight S2, deferred to "the projector lap" — that lap shipped
+            // and this did not; caught at the s152 review). cancellation_source
+            // below is Task 6's half, deliberately untouched (E68 §3).
+            'rejection_source' => 'pre-verification',
+            'rejection_reason_code' => 'identity_failed',
             'next_state_transition_at' => null,
         ]);
     }

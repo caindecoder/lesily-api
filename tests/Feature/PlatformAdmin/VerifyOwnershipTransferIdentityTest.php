@@ -627,8 +627,15 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         // BODY asserted. T2 previously emitted a SystemNotification byte-identical
         // to T1's, so neither the stage nor the transfer was recoverable by the
         // recipient (OQ-1-144). "ready to execute" is the distinction.
+        // The TENANT NAME is asserted as well as the stage (restored s152). `main`
+        // pinned `$notification->companyName === $this->company->name`; the H3
+        // retrofit replaced that with a static-substring check, which a
+        // companyName() returning '' or the wrong tenant passes. companyName() is
+        // the only rendering method this slice added, so without this nothing in
+        // the suite binds its output at all.
         $namesTheReadyTransfer = fn (OwnershipTransferVerifiedNotification $notification): bool => $notification->transfer->getKey() === $this->transfer->getKey()
-            && str_contains($notification->toArray($this->admin)['body'], 'ready to execute');
+            && str_contains($notification->toArray($this->admin)['body'], 'ready to execute')
+            && str_contains($notification->toArray($this->admin)['body'], $this->company->name);
 
         // EVERY allowlisted admin, not just the first — without both rows the
         // reactor's ->get()->each(...) fan-out could degrade to ->first()?->notify()

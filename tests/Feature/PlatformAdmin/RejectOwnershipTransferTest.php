@@ -404,6 +404,52 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertSame([1, 5, 15], $mail->backoff);
     }
 
+    /**
+     * The email leg's CONTENT — which no test reached until the s152 review.
+     *
+     * Both ownership-transfer test bases call `Notification::fake()` in setUp(),
+     * so QueuedMailChannel never runs and `toMail()` was never invoked anywhere in
+     * the suite. That left the subject line, the markdown view binding and the
+     * whole Mailable body unexecuted while still counting as new code — which the
+     * 100%-patch-coverage gate would have rejected on push, the same way it
+     * rejected the unreachable `is_array` guard at s149.
+     *
+     * Building the Mailable off a real notification is the
+     * `ReceiveEmailNotificationTest:70` shape, and one Act exercises `title()`,
+     * `body()`, `toMail()`, `envelope()`, `content()` and the Blade view together.
+     * A second test routing through `Mail::fake()` + `notify()` would add nothing
+     * but a fight with the base's notification fake.
+     */
+    #[Test]
+    public function when_the_rejection_email_is_built_then_it_carries_the_notice_and_the_reason(): void
+    {
+        // Given a rejection notification carrying a reason
+        $notification = new OwnershipTransferRejectedNotification(
+            $this->aTransferInState(
+                $this->aCompanyWithMember('owner')[0],
+                User::factory()->create(),
+                OwnershipTransferStatus::Requested,
+            ),
+            'Identity documents could not be matched to the applicant.',
+        );
+
+        // When the email leg is built for the requester
+        $mail = $notification->toMail(User::factory()->create());
+
+        // Then it carries the notice subject and renders the reason verbatim
+        $this->assertRejectionEmailCarriesTheReason($mail);
+    }
+
+    private function assertRejectionEmailCarriesTheReason(OwnershipTransferNotificationMail $mail): void
+    {
+        $this->assertSame('Ownership transfer rejected', $mail->envelope()->subject);
+        $this->assertStringContainsString('Identity documents could not be matched to the applicant.', $mail->bodyText);
+        // render() is what proves the Blade view resolves and binds $bodyText —
+        // asserting the property alone would leave the template unexecuted
+        // (SystemNotificationMailRenderTest precedent).
+        $this->assertStringContainsString('Identity documents could not be matched to the applicant.', $mail->render());
+    }
+
     // Happy — the T3 walk: a Requested transfer is ended before verification.
     #[Test]
     public function when_a_platform_admin_rejects_a_requested_transfer_then_it_is_rejected_before_verification(): void
@@ -416,7 +462,7 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
 
         // Then the transfer is terminally rejected before verification
         $this->assertRejectionAccepted($response, 'pre-verification');
-        $this->assertRejectedEventRecorded('pre-verification');
+        $this->assertRejectedEventRecorded('pre-verification', self::rejectionBody());
         $this->assertProjectionMirrorsRejection('pre-verification');
         $this->assertSlaTimerCleared();
         $this->assertRequesterNotifiedWithTheReason();
@@ -439,13 +485,16 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         Notification::fake();
 
         // When the admin rejects it at execution review
-        $response = $this->rejectTransfer($this->admin, $this->transfer->getKey(), self::rejectionBody([
+        $submitted = self::rejectionBody([
             'reason' => 'Target user left the company after verification - transfer no longer valid.',
             'rejectionReasonCode' => 'target_ineligible',
-        ]));
+        ]);
+        $response = $this->rejectTransfer($this->admin, $this->transfer->getKey(), $submitted);
 
         // Then it is terminally rejected at execution time, verification intact
         $this->assertRejectionAccepted($response, 'execution-time');
+        $this->assertRejectedEventRecorded('execution-time', $submitted);
+        $this->assertRejectionAudited();
         $this->assertVerificationRecordPreserved();
     }
 
@@ -481,28 +530,34 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * All three are bare string literals in the reactor, so Infection generates no
      * mutant for them and nothing else in the suite bound them — actor_role_code
      * least excusably, since it is part of what a tenant reads back through
-     * UC-1-066. The aspect count rises 8 → 11, widening the §2.2 Rule 5-extended
-     * exception this helper already declared; it is still ONE logical assertion
-     * ("the append-only row is correct") over ONE row, which is the composed-assert
-     * shape E20 §7 sanctions. The identical gap in the merged
-     * assertVerificationAudited is logged for Task 9 rather than swept here (E68 §3).
+     * UC-1-066.
+     *
+     * Those three arrived first as three more assertSame calls, taking this helper
+     * from 8 aspects to 11 and widening a §2.2 Rule 5 exception that had been
+     * granted at 8. Pass 2 caught that and it is now written the way the base
+     * class already writes an audit-row pin (assertTransferReadAudited): ONE
+     * assertDatabaseHas carrying the whole row, plus the two null-shape checks a
+     * column map cannot express. Same coverage, 3 aspects, no exception needed.
+     * The identical gap in the merged assertVerificationAudited is logged for
+     * Task 9 rather than swept here (E68 §3).
      */
     private function assertRejectionAudited(): void
     {
+        $this->assertDatabaseHas('audit_trail', [
+            'event_class' => 'OwnershipTransferRejected',
+            'subject_type' => 'ownership_transfer_request',
+            'subject_id' => $this->transfer->getKey(),
+            'subject_label' => 'Ownership transfer request',
+            'company_id' => $this->company->getKey(),
+            'action' => 'transfer_rejected',
+            'description' => 'Platform admin rejected the ownership transfer; the current owner retains ownership.',
+            'actor_user_id' => $this->admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $this->admin->name,
+        ]);
+
         $entry = AuditEntry::query()->where('event_class', 'OwnershipTransferRejected')->sole();
 
-        $this->assertSame($this->transfer->getKey(), $entry->subject_id);
-        $this->assertSame($this->company->getKey(), $entry->company_id);
-        $this->assertSame('ownership_transfer_request', $entry->subject_type);
-        $this->assertSame('Ownership transfer request', $entry->subject_label);
-        $this->assertSame('transfer_rejected', $entry->action);
-        $this->assertSame(
-            'Platform admin rejected the ownership transfer; the current owner retains ownership.',
-            $entry->description,
-        );
-        $this->assertSame($this->admin->getKey(), $entry->actor_user_id);
-        $this->assertSame('platform_super_admin', $entry->actor_role_code);
-        $this->assertSame($this->admin->name, $entry->actor_label);
         $this->assertNotNull($entry->stored_event_id);
         $this->assertNull($entry->metadata);
     }
@@ -612,8 +667,16 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * The payload carries the legal-defensibility set verbatim — actor, prose,
      * code and window — which is why they are asserted on the STORED event and
      * not only on the projection.
+     *
+     * $submitted is the body that was actually posted, so both windows can assert
+     * their own reason and code. It was a single-call-site helper reading the
+     * default body until s152, when the T5 walk gained its own event assertion
+     * (it had been asserting only the response envelope) and needed a second
+     * vocabulary.
+     *
+     * @param  array<string, mixed>  $submitted
      */
-    private function assertRejectedEventRecorded(string $expectedSource): void
+    private function assertRejectedEventRecorded(string $expectedSource, array $submitted): void
     {
         $stored = LesilyStoredEvent::query()
             ->where('event_class', OwnershipTransferRejected::class)
@@ -622,8 +685,8 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
 
         $this->assertSame($this->transfer->getKey(), $stored->event_properties['requestId']);
         $this->assertSame($this->admin->getKey(), $stored->event_properties['rejectedBy']);
-        $this->assertSame(self::rejectionBody()['reason'], $stored->event_properties['rejectionReason']);
-        $this->assertSame('identity_failed', $stored->event_properties['rejectionReasonCode']);
+        $this->assertSame($submitted['reason'], $stored->event_properties['rejectionReason']);
+        $this->assertSame($submitted['rejectionReasonCode'], $stored->event_properties['rejectionReasonCode']);
         $this->assertSame($expectedSource, $stored->event_properties['source']);
     }
 

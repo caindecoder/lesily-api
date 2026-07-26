@@ -4,7 +4,6 @@ namespace App\Companies\OwnershipTransfers\IO\Notifications;
 
 use App\Models\User;
 use Illuminate\Bus\Queueable;
-use Illuminate\Mail\Mailable;
 use Illuminate\Notifications\Notification;
 use App\Foundation\Notifications\Contracts\SendsQueuedMail;
 use App\Foundation\Notifications\Channels\QueuedMailChannel;
@@ -85,7 +84,7 @@ abstract class OwnershipTransferNotification extends Notification implements Sen
         return ['database', QueuedMailChannel::class];
     }
 
-    public function toMail(object $notifiable): Mailable
+    public function toMail(object $notifiable): OwnershipTransferNotificationMail
     {
         /** @var User $notifiable */
         return (new OwnershipTransferNotificationMail($this->title(), $this->body()))
