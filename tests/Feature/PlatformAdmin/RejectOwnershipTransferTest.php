@@ -204,9 +204,17 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // than domain aspects.
         $this->assertDatabaseHas('ownership_transfer_requests', [
             'id' => $original->getKey(),
+            // status and rejection_source joined the map at s153: the refused
+            // second attempt submitted a DIFFERENT reason code, so a partial
+            // write that let any of the rejection columns through would be the
+            // realistic failure here — and rejection_source is the one column a
+            // T5-shaped second attempt could flip while every other value still
+            // matched. Both ride the existing map, so the aspect count is unchanged.
+            'status' => OwnershipTransferStatus::Rejected->value,
             'rejected_by' => $original->rejected_by,
             'rejection_reason' => $original->rejection_reason,
             'rejection_reason_code' => $original->rejection_reason_code,
+            'rejection_source' => $original->rejection_source,
         ]);
 
         $rejectedAt = $this->currentTransfer($original)->rejected_at;
@@ -518,13 +526,14 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         );
 
         // When the email leg is built for the requester
-        $mail = $notification->toMail(User::factory()->create());
+        $requester = User::factory()->create();
+        $mail = $notification->toMail($requester);
 
         // Then it carries the notice subject and renders the reason verbatim
-        $this->assertRejectionEmailCarriesTheReason($mail);
+        $this->assertRejectionEmailCarriesTheReason($mail, $requester->preferredLocale());
     }
 
-    private function assertRejectionEmailCarriesTheReason(OwnershipTransferNotificationMail $mail): void
+    private function assertRejectionEmailCarriesTheReason(OwnershipTransferNotificationMail $mail, string $expectedLocale): void
     {
         $this->assertSame('Ownership transfer rejected', $mail->envelope()->subject);
         $this->assertStringContainsString('Identity documents could not be matched to the applicant.', $mail->bodyText);
@@ -535,7 +544,20 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // replyTo is a named-argument array literal, so Infection generates
         // nothing for it — and it is what makes an owner's reply to a rejection
         // reach a human rather than a no-reply void.
-        $this->assertNotSame([], $mail->envelope()->replyTo);
+        //
+        // Asserted by ADDRESS, not by non-emptiness (corrected s153).
+        // Envelope::normalizeAddresses() maps only strings into Address objects
+        // and passes anything else through untouched, so a mutation to a config
+        // key that resolves NULL yields [null] — which is !== [] and sailed
+        // through the old assertion. It admitted precisely the no-reply void the
+        // comment above says it prevents, and a swap to any other valid address
+        // survived too.
+        $this->assertTrue($mail->envelope()->hasReplyTo(config('mail.from.address')));
+        // The recipient's locale rides onto the Mailable — the UC-1-087
+        // per-recipient locale mechanism. toMail()'s ->locale() call was the one
+        // thing this branch added that nothing in the suite observed: dropping it
+        // left every other assertion here green (added s153).
+        $this->assertSame($expectedLocale, $mail->locale);
     }
 
     /**
@@ -703,7 +725,7 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // Then the transfer is terminally rejected before verification
         $this->assertRejectionAccepted($response, 'pre-verification');
         $this->assertRejectedEventRecorded('pre-verification', self::rejectionBody());
-        $this->assertProjectionMirrorsRejection('pre-verification');
+        $this->assertProjectionMirrorsRejection('pre-verification', self::rejectionBody());
         $this->assertSlaTimerCleared();
         $this->assertRequesterNotifiedWithTheReason();
         $this->assertRejectionAudited();
@@ -734,6 +756,14 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // Then it is terminally rejected at execution time, verification intact
         $this->assertRejectionAccepted($response, 'execution-time', 'target_ineligible');
         $this->assertRejectedEventRecorded('execution-time', $submitted);
+        $this->assertProjectionMirrorsRejection('execution-time', $submitted);
+        // The T5 window is the ONE place the cleared deadline is T2's 14-day T9
+        // timer rather than T1's 30-day T8 timer, and UC-1-128's postcondition
+        // requires the clear from both windows. Added s153: the walk had been
+        // relying on the projector line being shared with T3, which is code
+        // structure standing in for asserted behaviour — and Tasks 6/7 add two
+        // more terminal clears to that same shared line.
+        $this->assertSlaTimerCleared();
         $this->assertRejectionAudited();
         $this->assertVerificationRecordPreserved();
     }
@@ -970,8 +1000,15 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * validated the code and nothing stored it, so this assertion is the thing
      * that makes the UC's "rejection_reason_code persisted" postcondition true
      * rather than aspirational.
+     *
+     * $submitted arrived at s153 so the T5 walk can call this at all: it had been
+     * reading the default body, which pinned T3's vocabulary and therefore could
+     * not serve the other window. Both walks now assert the projection, closing an
+     * asymmetry Tasks 6/7 would otherwise have copied.
+     *
+     * @param  array<string, mixed>  $submitted
      */
-    private function assertProjectionMirrorsRejection(string $expectedSource): void
+    private function assertProjectionMirrorsRejection(string $expectedSource, array $submitted): void
     {
         // One assertDatabaseHas rather than six assertSame calls (s152) — the same
         // collapse assertRejectionAudited took, for the same §2.2 Rule 5 reason.
@@ -983,8 +1020,8 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
             'id' => $this->transfer->getKey(),
             'status' => OwnershipTransferStatus::Rejected->value,
             'rejected_by' => $this->admin->getKey(),
-            'rejection_reason' => self::rejectionBody()['reason'],
-            'rejection_reason_code' => 'identity_failed',
+            'rejection_reason' => $submitted['reason'],
+            'rejection_reason_code' => $submitted['rejectionReasonCode'],
             'rejection_source' => $expectedSource,
             'updated_by' => $this->admin->getKey(),
         ]);
