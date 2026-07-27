@@ -14,6 +14,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
@@ -478,10 +479,19 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
      *   B          `only(['reason'])`, auth FIRST  → AUTH id recorded
      *   C          widened `only()`,   auth FIRST  → IMPOSTOR id recorded
      *
-     * So the teeth are the COMBINATION — the `only()` allow-list AND the key
-     * order — exactly as the reject twin concluded at s153. Neither one alone
-     * forges the actor: with `only(['reason'])` the spread can never contain
-     * `cancelledBy`, so reordering has nothing to override with.
+     * Those four describe what the CONTROLLER assembles. Run through the real
+     * stack, variant C does not forge anything either: it 403s. The interactor's
+     * requester guard (J2) compares `cancelledBy` against the transfer's
+     * recorded `current_owner_user_id`, so a body-supplied impostor is refused
+     * before the aggregate ever sees it — measured, by applying variant C AND a
+     * projector that derives the column from `current_owner_user_id`, and
+     * watching the request come back 403 NotTheTransferRequesterException.
+     *
+     * So the actor is defended TWICE and independently: the `only()` allow-list
+     * at the boundary, and the identity guard in the interactor. This row
+     * asserts the outcome both defences exist to produce. Removing the allow-list
+     * alone cannot RED it — the guard catches it — which is worth knowing before
+     * anyone "simplifies" either one on the assumption the other is redundant.
      */
     #[Test]
     public function when_the_body_names_a_different_canceller_then_the_authenticated_owner_is_recorded(): void
@@ -497,9 +507,37 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
             'cancelledBy' => (string) $impostor->getKey(),
         ]);
 
-        // Then the authenticated owner is what gets recorded
+        // Then the authenticated owner is what gets recorded, in the event as
+        // well as the projection
         $response->assertOk();
         $this->assertSame($owner->getKey(), $this->currentTransfer($transfer)->cancelled_by);
+        $this->assertSame($owner->getKey(), $this->recordedCancellationActor());
+    }
+
+    /**
+     * The `cancelledBy` carried by the stored EVENT, not the projected column.
+     *
+     * Stated as COMPLETENESS, not as teeth — deliberately, because it was
+     * measured rather than assumed. The projector copies the event, so the two
+     * move together; and the two-part mutation that might have decoupled them
+     * (widen the controller allow-list, make the projector derive the column
+     * from `current_owner_user_id`) never gets that far, because the J2 guard
+     * refuses the request 403 first. No reachable mutation REDs this assertion
+     * alone today.
+     *
+     * It is kept because the event is the durable half: a wrong projection is a
+     * data fix, a wrong `stored_events` payload is permanent, and this assertion
+     * starts holding real weight the day the J2 guard moves or a projector stops
+     * mirroring. Recorded honestly rather than dressed up as a revert-check —
+     * the s151 E2 class is a row that reads as evidence and pins nothing.
+     */
+    private function recordedCancellationActor(): string
+    {
+        $stored = LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferCancelled::class)
+            ->sole();
+
+        return $stored->event_properties['cancelledBy'];
     }
 
     /**
