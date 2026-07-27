@@ -126,6 +126,31 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     /**
+     * The only shape a withdrawal can get wrong. `reason` is optional and
+     * `cancelledBy` is auth-resolved, so there is no required-field matrix here —
+     * a DataProvider would pad the row count without adding evidence, which is
+     * precisely what s152 found when it re-checked reject's seven-row provider
+     * and could only give two of them teeth.
+     */
+    #[Test]
+    public function when_the_withdrawal_reason_exceeds_the_bound_then_it_is_refused(): void
+    {
+        // Given an open transfer this owner raised
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $target = $this->aMemberWithRole($company, 'employee');
+        $transfer = $this->aTransferInState($company, $target, OwnershipTransferStatus::Requested);
+
+        // When they withdraw it with prose one character past the contract
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => str_repeat('a', 1001),
+        ]);
+
+        // Then the boundary refuses it and the transfer stands
+        $this->assertValidationRejected($response, 'reason');
+        $this->assertTransferStillOpen((string) $transfer->getKey(), OwnershipTransferStatus::Requested);
+    }
+
+    /**
      * An open transfer at $company whose recorded requester is a third user.
      * A named fixture helper carrying the column override is the sanctioned
      * shape — §2.13 bans inline overrides in test BODIES, not in fixtures

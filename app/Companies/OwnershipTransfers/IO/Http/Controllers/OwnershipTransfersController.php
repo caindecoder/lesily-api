@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferFilters;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestResource;
+use App\Companies\OwnershipTransfers\UseCases\Commands\WithdrawOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestCollection;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\RequestOwnershipTransferInteractor;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\WithdrawOwnershipTransferInteractor;
@@ -66,6 +67,10 @@ class OwnershipTransfersController
     ): OwnershipTransferRequestResource {
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
+
+        // Client fields validated at the delivery boundary; the actor is
+        // server-sourced and never trusted from the body (the reject precedent).
+        WithdrawOwnershipTransferCommand::validateAndCreate($request->only(['reason']));
 
         $transfer = $interactor->execute(
             (string) $request->company()->getKey(),
