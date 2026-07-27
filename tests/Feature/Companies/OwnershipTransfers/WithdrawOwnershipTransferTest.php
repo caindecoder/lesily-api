@@ -172,6 +172,44 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     /**
+     * The degenerate case for an aggregate command: the transition fired twice.
+     * Arranged through a REAL prior T6, so the guard refuses because the state
+     * genuinely IS terminal — a factory row would replay an empty stream and
+     * refuse for an unrelated reason (s149 C1).
+     */
+    #[Test]
+    public function when_the_transfer_is_already_withdrawn_then_it_is_not_withdrawn_again(): void
+    {
+        // Given a transfer its requester has already withdrawn
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aCancelledTransferStream($company, $owner);
+        $original = $this->currentTransfer($transfer);
+
+        // When they withdraw it a second time
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then the state guard refuses and the first withdrawal is untouched
+        $this->assertStateGuardRefused($response, 'Only an open transfer can be withdrawn.');
+        $this->assertOriginalWithdrawalIntact($original);
+    }
+
+    /**
+     * The first withdrawal's record survives the second attempt byte for byte —
+     * a refusal that quietly overwrote the original reason or actor would still
+     * return 409 and pass a status-only assertion.
+     */
+    private function assertOriginalWithdrawalIntact(OwnershipTransferRequest $original): void
+    {
+        $current = $this->currentTransfer($original);
+        $this->assertSame($original->cancellation_reason, $current->cancellation_reason);
+        $this->assertSame($original->cancelled_by, $current->cancelled_by);
+        $this->assertEquals($original->cancelled_at, $current->cancelled_at);
+        $this->assertDatabaseCount('stored_events', 2);
+    }
+
+    /**
      * SM-1-05 T6 (UC-1-114) — the pre-verification window, end to end.
      *
      * Arranged through a REAL T1 stream: the aggregate must replay genuine

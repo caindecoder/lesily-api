@@ -327,6 +327,23 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     }
 
     /**
+     * The transition was refused by a state guard — the shared 409 family the
+     * §8.4 registry reserves for illegal state-machine moves.
+     *
+     * The MESSAGE is asserted, not just the code, and that is the point: several
+     * refusals render the identical envelope, so without a discriminator throwing
+     * the wrong exception would stay green and the unused render arm in
+     * bootstrap/app.php would become dead code in the one file neither Infection
+     * nor coverage can see. This survives substitution, not merely deletion.
+     */
+    protected function assertStateGuardRefused(TestResponse $response, string $expectedMessage): void
+    {
+        $this->assertRefusedWith($response, ApiErrorCode::StateGuardViolation);
+        $response->assertJsonPath('message', $expectedMessage);
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    /**
      * The request was refused as shape-invalid — the validation envelope
      * (error_code VALIDATION_FAILED) with an error on $field.
      */

@@ -8,6 +8,7 @@ use App\Companies\Entities\Company;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\UseCases\Commands\WithdrawOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferIdentityCommand;
 use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
@@ -95,6 +96,30 @@ trait ArrangesOwnershipTransferStreams
                 'reason' => 'Identity documents could not be matched to the applicant.',
                 'rejectionReasonCode' => 'identity_failed',
                 'rejectedBy' => $admin->getKey(),
+            ]))
+            ->persist();
+
+        return $transfer->refresh();
+    }
+
+    /**
+     * A transfer whose stream carries a REAL T1 → T6 history: requested, then
+     * withdrawn by its own requester through the aggregate.
+     *
+     * This is what makes `Cancelled` reachable at all, and it is why the
+     * verify-from-Cancelled and reject-from-Cancelled rows were deferred out of
+     * s149 and s151 to this task: until `withdraw()` existed, the only way to
+     * arrange the state was a factory row, whose empty stream makes every guard
+     * refuse for the wrong reason and the test's name a lie (s149 C1/C2).
+     */
+    protected function aCancelledTransferStream(Company $company, User $owner): OwnershipTransferRequest
+    {
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+
+        OwnershipTransferRequestAggregate::retrieve($transfer->getKey())
+            ->withdraw(WithdrawOwnershipTransferCommand::validateAndCreate([
+                'reason' => 'Withdrawn while the request was still awaiting verification.',
+                'cancelledBy' => $owner->getKey(),
             ]))
             ->persist();
 

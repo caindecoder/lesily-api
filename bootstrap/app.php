@@ -54,6 +54,7 @@ use App\Companies\OwnershipTransfers\Exceptions\EmergencyContactRequiredExceptio
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotRejectableException;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotVerifiableException;
+use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotWithdrawableException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -275,6 +276,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // ended, whether rejected, cancelled, expired or executed (UC-1-128 6c;
         // SM-1-05 §4 makes only the two OPEN states rejectable).
         $exceptions->render(fn (OwnershipTransferNotRejectableException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // T6/T7 attempted from a state that cannot reach Cancelled — already
+        // ended, whether cancelled, rejected, expired or executed (UC-1-114 4b /
+        // UC-1-115 4b-4c; SM-1-05 §4 makes only the two OPEN states withdrawable).
+        $exceptions->render(fn (OwnershipTransferNotWithdrawableException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));
