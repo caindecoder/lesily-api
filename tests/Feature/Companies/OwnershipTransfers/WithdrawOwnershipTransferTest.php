@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies\OwnershipTransfers;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
@@ -304,6 +305,163 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
         // Then the post-verification window is recorded, verification intact
         $this->assertWithdrawalRecorded($response, $owner, TransitionSource::PostVerification);
         $this->assertVerificationRecordPreserved($verifier);
+    }
+
+    /**
+     * The projector's `whereKey` scope, made observable. With a single row in
+     * the fixture an unscoped update hits the right one by accident and the
+     * assertion proves nothing — s149 C6, and the reason a bystander exists at a
+     * second company here.
+     */
+    #[Test]
+    public function when_a_transfer_is_withdrawn_then_no_other_tenants_transfer_is_touched(): void
+    {
+        // Given this company's transfer and an untouched one elsewhere
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+        $bystander = $this->aBystanderTransferAtAnotherCompany();
+
+        // When this one is withdrawn
+        $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then the other tenant's transfer is exactly as it was
+        $this->assertTransferStillOpen((string) $bystander->getKey(), OwnershipTransferStatus::Requested);
+    }
+
+    /**
+     * H4 parity with reject, and the deliberate asymmetry with verify.
+     *
+     * §S10b's legal hold freezes ownership CHANGES; a withdrawal changes no
+     * ownership and touches no pivot row, so it must still succeed. Blocking it
+     * would strand held tenants with permanently un-closable requests, since the
+     * expiry scan skips them too (slice D3). Verify refuses under hold (s149 B1);
+     * withdraw deliberately does not.
+     */
+    #[Test]
+    public function when_the_company_is_under_legal_hold_then_the_transfer_is_still_withdrawn(): void
+    {
+        // Given an open transfer at a company under regulatory hold
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+        $this->placeCompanyUnderLegalHold($company);
+
+        // When the requester withdraws it
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then the hold does not stand in the way
+        $this->assertWithdrawalRecorded($response, $owner, TransitionSource::PreVerification);
+    }
+
+    /**
+     * `cancelled_at` comes from the server clock, not the client and not the
+     * row's own timestamps. Travelling to a fixed instant is the only way to
+     * tell a real stamp from `now()` evaluated twice.
+     */
+    #[Test]
+    public function when_a_transfer_is_withdrawn_then_the_record_is_stamped_with_the_server_clock(): void
+    {
+        // Given an open transfer and a clock pinned to a known instant
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+        $instant = CarbonImmutable::parse('2026-08-01 09:30:00');
+        $this->travelTo($instant);
+
+        // When it is withdrawn
+        $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then the stamp is that instant, to the second
+        $this->assertSame(
+            $instant->toDateTimeString(),
+            $this->currentTransfer($transfer)->cancelled_at?->toDateTimeString(),
+        );
+    }
+
+    /**
+     * The actor is auth-resolved and the body cannot override it.
+     *
+     * What REDs this test was MEASURED, not reasoned — the reject twin carried a
+     * hypothesis that was wrong twice running (s152 replaced a false `all()`
+     * claim with an ORDERING claim that was also false). Both variants were run:
+     *
+     *   A. body key admitted via `only([...,'cancelledBy'])`, auth assigned
+     *      LAST  → PASSES. Later-key-wins, so admitting the key is harmless.
+     *   B. auth assigned first, body spread AFTER it        → REDs.
+     *
+     * So this row binds the ORDER, not the key list. Widening `only()` alone
+     * would not be caught here, and that is worth knowing rather than assuming.
+     */
+    #[Test]
+    public function when_the_body_names_a_different_canceller_then_the_authenticated_owner_is_recorded(): void
+    {
+        // Given an open transfer and an impostor id in the body
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+        $impostor = User::factory()->create();
+
+        // When the withdrawal claims someone else performed it
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+            'cancelledBy' => (string) $impostor->getKey(),
+        ]);
+
+        // Then the authenticated owner is what gets recorded
+        $response->assertOk();
+        $this->assertSame($owner->getKey(), $this->currentTransfer($transfer)->cancelled_by);
+    }
+
+    /**
+     * `reason` is optional, and this is the row that says so. Its refusal twin
+     * pins the bound from OUTSIDE; between them the contract is closed at both
+     * ends, which is the D-f lesson from the s149 ledger — a bound pinned only
+     * from one side lets the opposite change ship silently.
+     */
+    #[Test]
+    public function when_the_withdrawal_omits_a_reason_then_it_is_accepted(): void
+    {
+        // Given an open transfer
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+
+        // When it is withdrawn with no reason at all
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey());
+
+        // Then it succeeds and the column records the absence honestly
+        $response->assertOk();
+        $this->assertDatabaseHas('ownership_transfer_requests', [
+            'id' => $transfer->getKey(),
+            'status' => OwnershipTransferStatus::Cancelled->value,
+            'cancellation_reason' => null,
+        ]);
+    }
+
+    /**
+     * The 1000-character bound from the INSIDE. `max:1000` is a string literal,
+     * so Infection generates no mutant for it — without an accept row sitting
+     * exactly on the bound, a tightened rule would ship green (the D-f finding,
+     * paid on the reject twin at s152).
+     */
+    #[Test]
+    public function when_the_withdrawal_reason_sits_at_the_edge_of_the_contract_then_it_is_accepted(): void
+    {
+        // Given an open transfer
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+        $reason = str_repeat('a', 1000);
+
+        // When it is withdrawn with prose exactly on the bound
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => $reason,
+        ]);
+
+        // Then it is accepted and stored verbatim, not truncated
+        $response->assertOk();
+        $this->assertSame($reason, $this->currentTransfer($transfer)->cancellation_reason);
     }
 
     /**
