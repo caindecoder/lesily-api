@@ -23,6 +23,9 @@ owner:
   # §Module-8 view rows (hr/payroll/employee/manager ❌).
   - ownership-transfer.view-status
   - ownership-transfer.view-history
+  # Owner-only per the matrix §Module-8 (UC-1-114 + UC-1-115 — the requester's
+  # own authority; the designated target explicitly cannot withdraw).
+  - ownership-transfer.withdraw
 
 admin:
   - users.invite

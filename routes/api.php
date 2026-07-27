@@ -268,8 +268,12 @@ Route::get('/v1/ownership-transfers/{requestId}', [OwnershipTransfersController:
 // SM-1-05 T6 + T7 (UC-1-114 pre-verification / UC-1-115 post-verification) — the
 // original requester withdraws their own transfer; the aggregate branches on
 // state to pick the window. PATCH sub-path per api-conventions 4.3.
+// Owner-only via the seeded `ownership-transfer.withdraw` (matrix Module 8, one
+// permission for both windows — J1). No idempotency-key mount (J5): conventions
+// §13.2 requires one for ownership-transfer-execute only, and the state guard
+// already refuses a duplicate click with 409.
 Route::patch('/v1/ownership-transfers/{requestId}/withdraw', [OwnershipTransfersController::class, 'withdraw'])
-    ->middleware(['auth:sanctum']);
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:ownership-transfer.withdraw']);
 
 // The plan catalog (UC-1-042 partial — the plan-picker read, slice-plans-billing T1).
 // Enum-derived static read, non-paginated {data: [...]} (MyCompaniesCollection

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies\OwnershipTransfers;
 
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 
@@ -32,5 +33,62 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
 
         // Then the request never reaches the use case
         $this->assertRefusedWith($response, ApiErrorCode::Unauthenticated);
+    }
+
+    /**
+     * The UC's whole "Denied Roles" line in one row. The designated TARGET user
+     * is refused here too: they hold an ordinary member role, and only `owner`
+     * carries `ownership-transfer.withdraw` (matrix Module 8 after the J1
+     * collapse). Withdrawal is the requester's authority, never the target's.
+     */
+    #[Test]
+    #[DataProvider('provideRolesWithoutWithdrawPermission')]
+    public function when_the_caller_lacks_the_withdraw_permission_then_the_transfer_is_not_withdrawn(string $roleCode): void
+    {
+        // Given an open transfer and a member holding some other role
+        [$company] = $this->aCompanyWithOwner();
+        $target = $this->aMemberWithRole($company, 'employee');
+        $transfer = $this->aTransferInState($company, $target, OwnershipTransferStatus::Requested);
+        $caller = $this->aMemberWithRole($company, $roleCode);
+
+        // When that member tries to withdraw it
+        $response = $this->withdrawTransfer([$company, $caller], (string) $transfer->getKey());
+
+        // Then the permission gate refuses and the transfer is untouched
+        $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
+        $this->assertTransferStillOpen((string) $transfer->getKey(), OwnershipTransferStatus::Requested);
+    }
+
+    /**
+     * Every seeded company role except `owner`.
+     *
+     * @return array<string, array{string}>
+     */
+    public static function provideRolesWithoutWithdrawPermission(): array
+    {
+        return [
+            'admin' => ['admin'],
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'employee' => ['employee'],
+            'auditor' => ['auditor'],
+            'manager' => ['manager'],
+        ];
+    }
+
+    /**
+     * The transfer is still in $expected, and no terminal columns were written —
+     * a refusal that leaves the row alone is the assertion, not merely the
+     * status code.
+     */
+    private function assertTransferStillOpen(string $requestId, OwnershipTransferStatus $expected): void
+    {
+        $this->assertDatabaseHas('ownership_transfer_requests', [
+            'id' => $requestId,
+            'status' => $expected->value,
+            'cancelled_at' => null,
+            'cancelled_by' => null,
+            'cancellation_source' => null,
+        ]);
     }
 }
