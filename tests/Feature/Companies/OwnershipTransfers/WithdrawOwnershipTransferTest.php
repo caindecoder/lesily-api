@@ -2,11 +2,14 @@
 
 namespace Tests\Feature\Companies\OwnershipTransfers;
 
+use App\Models\User;
 use Illuminate\Support\Str;
+use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 
 /**
  * SM-1-05 T6 + T7 (UC-1-114 pre-verification, UC-1-115 post-verification) — the
@@ -91,6 +94,50 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
         // Then it is refused as absent, and the foreign row is untouched
         $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
         $this->assertTransferStillOpen((string) $foreign->getKey(), OwnershipTransferStatus::Requested);
+    }
+
+    /**
+     * Holding the permission is not the same as being the requester (ruling J2).
+     * The guard sits in the interactor and reads the PROJECTION before
+     * `retrieve()`, so a factory row exercises it honestly — this is the one row
+     * in the class that needs no real stream, because no stream is ever replayed
+     * on this path.
+     *
+     * The arrangement is a state production cannot currently emit: an open
+     * transfer's `current_owner_user_id` is always the company's owner, since
+     * only the owner may request one and `users.change-role` refuses to mint a
+     * second owner. The guard is defence for the day that stops being true —
+     * self-service transfer (OQ-1-D18) is the named candidate — and it is a
+     * WATCHED RED here, not a born-green pin.
+     */
+    #[Test]
+    public function when_the_caller_is_not_the_original_requester_then_the_withdrawal_is_refused(): void
+    {
+        // Given an open transfer this owner did not raise
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aTransferRaisedBySomeoneElse($company);
+
+        // When the owner tries to withdraw it
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey());
+
+        // Then identity, not role, is what refuses them
+        $this->assertRefusedWith($response, ApiErrorCode::TransferRequesterMismatch);
+        $this->assertTransferStillOpen((string) $transfer->getKey(), OwnershipTransferStatus::Requested);
+    }
+
+    /**
+     * An open transfer at $company whose recorded requester is a third user.
+     * A named fixture helper carrying the column override is the sanctioned
+     * shape — §2.13 bans inline overrides in test BODIES, not in fixtures
+     * (the `aTransferDueAt` precedent).
+     */
+    private function aTransferRaisedBySomeoneElse(Company $company): OwnershipTransferRequest
+    {
+        return OwnershipTransferRequest::factory()->requested()->create([
+            'company_id' => $company->getKey(),
+            'current_owner_user_id' => User::factory()->create()->getKey(),
+            'target_user_id' => User::factory()->create()->getKey(),
+        ]);
     }
 
     /**

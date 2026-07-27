@@ -64,7 +64,14 @@ class OwnershipTransfersController
         string $requestId,
         WithdrawOwnershipTransferInteractor $interactor,
     ): OwnershipTransferRequestResource {
-        $transfer = $interactor->execute((string) $request->company()->getKey(), $requestId);
+        /** @var User $actor — guaranteed by auth:sanctum */
+        $actor = $request->user();
+
+        $transfer = $interactor->execute(
+            (string) $request->company()->getKey(),
+            $requestId,
+            (string) $actor->getKey(),
+        );
 
         return new OwnershipTransferRequestResource($transfer);
     }
