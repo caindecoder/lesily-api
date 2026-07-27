@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -303,6 +304,62 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
         // Then the post-verification window is recorded, verification intact
         $this->assertWithdrawalRecorded($response, $owner, TransitionSource::PostVerification);
         $this->assertVerificationRecordPreserved($verifier);
+    }
+
+    /**
+     * The Minimal Guarantee of BOTH UCs, stated identically in each: roles on
+     * `company_user` are NEVER mutated by this path, and neither is
+     * `companies.owner_id`. The pivot swap is exclusive to UC-1-093 (T4).
+     *
+     * The target is attached as a REAL member, and that is load-bearing rather
+     * than decorative. Written first against `aVerifiedTransferStream`, this test
+     * was TOOTHLESS: that helper creates its target with `User::factory()` and
+     * never attaches it to `company_user`, so a revert-check that swapped the
+     * target's pivot role matched zero rows and the assertion stayed green. It is
+     * deferral E-b from the s153 ledger, met a task earlier than expected.
+     * Production could not produce that fixture either — UC-1-028 requires the
+     * target to be a company member.
+     */
+    #[Test]
+    public function when_a_transfer_is_withdrawn_then_the_ownership_records_are_left_untouched(): void
+    {
+        // Given an open transfer whose target really is a member of the company
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $target = $this->aMemberWithRole($company, 'employee');
+        $transfer = $this->aRequestedTransferStream($company, $owner, $target);
+        $rolesBefore = $this->currentPivotRoles($company);
+
+        // When the requester withdraws it
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then the transfer ended and nobody's ownership moved
+        $response->assertOk();
+        $this->assertOwnershipRecordsUntouched($company, $rolesBefore);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function currentPivotRoles(Company $company): array
+    {
+        return CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->pluck('role_id', 'user_id')
+            ->all();
+    }
+
+    /**
+     * @param  array<string, string>  $rolesBefore
+     */
+    private function assertOwnershipRecordsUntouched(Company $company, array $rolesBefore): void
+    {
+        $this->assertSame($rolesBefore, $this->currentPivotRoles($company));
+        $this->assertSame(
+            $company->owner_id,
+            Company::query()->whereKey($company->getKey())->value('owner_id'),
+        );
     }
 
     /**
