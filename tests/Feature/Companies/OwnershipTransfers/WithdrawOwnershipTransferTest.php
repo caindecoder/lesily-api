@@ -660,6 +660,34 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     /**
+     * The OTHER half of ruling J4, and a separate row rather than a provider
+     * because only this window has a verification that had to happen first.
+     *
+     * It exists because a revert-check proved the T6 row did not hold J4 up on
+     * its own: filtering the reactor to `pre-verification` silenced
+     * post-verification withdrawals entirely and all 91 rows stayed green. This
+     * is the costlier window to lose — an admin has already spent verification
+     * effort on the transfer being withdrawn. Same shape as the s153 finding on
+     * the reject twin, where only one of two windows had ever been asserted.
+     */
+    #[Test]
+    public function when_a_verified_transfer_is_withdrawn_then_the_support_queue_is_notified(): void
+    {
+        // Given a verified transfer and an allowlisted support admin
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $supportAdmin = $this->aPlatformSupportAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, User::factory()->create());
+
+        // When the requester withdraws it after verification
+        $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then support is told in this window too
+        $this->assertSupportQueueNotifiedOfWithdrawal($supportAdmin, $company, $owner);
+    }
+
+    /**
      * Named recipients, not merely "a notification was sent". The body is
      * rendered so `companyName()` is actually observed — a static-substring
      * check alone passes on an empty or wrong tenant name, which is the
@@ -671,6 +699,7 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
             $supportAdmin,
             OwnershipTransferWithdrawnNotification::class,
             fn (OwnershipTransferWithdrawnNotification $notification): bool => $notification->transfer->company_id === $company->getKey()
+                && $notification->toArray($supportAdmin)['title'] === 'Ownership transfer withdrawn'
                 && str_contains($notification->toArray($supportAdmin)['body'], 'withdrawn')
                 && str_contains($notification->toArray($supportAdmin)['body'], $company->name),
         );
