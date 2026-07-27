@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Companies\OwnershipTransfers;
 
+use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -57,6 +58,19 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
         // Then the permission gate refuses and the transfer is untouched
         $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
         $this->assertTransferStillOpen((string) $transfer->getKey(), OwnershipTransferStatus::Requested);
+    }
+
+    #[Test]
+    public function when_the_transfer_does_not_exist_then_it_is_not_found(): void
+    {
+        // Given an owner with no transfer under the requested id
+        [$company, $owner] = $this->aCompanyWithOwner();
+
+        // When they withdraw an id that names nothing
+        $response = $this->withdrawTransfer([$company, $owner], (string) Str::uuid7());
+
+        // Then the absence is reported as a plain not-found
+        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
     }
 
     /**

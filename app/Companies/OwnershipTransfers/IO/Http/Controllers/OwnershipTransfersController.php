@@ -10,6 +10,7 @@ use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferC
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestResource;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestCollection;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\RequestOwnershipTransferInteractor;
+use App\Companies\OwnershipTransfers\UseCases\Interactors\WithdrawOwnershipTransferInteractor;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
 
 /**
@@ -58,8 +59,13 @@ class OwnershipTransfersController
         return new OwnershipTransferRequestResource($transfer);
     }
 
-    public function withdraw(Request $request, string $requestId): OwnershipTransferRequestResource
-    {
-        throw new \RuntimeException('Not implemented');
+    public function withdraw(
+        Request $request,
+        string $requestId,
+        WithdrawOwnershipTransferInteractor $interactor,
+    ): OwnershipTransferRequestResource {
+        $transfer = $interactor->execute((string) $request->company()->getKey(), $requestId);
+
+        return new OwnershipTransferRequestResource($transfer);
     }
 }
