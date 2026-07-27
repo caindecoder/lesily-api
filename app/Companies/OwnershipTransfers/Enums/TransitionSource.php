@@ -5,7 +5,13 @@ namespace App\Companies\OwnershipTransfers\Enums;
 /**
  * WHICH window a paired SM-1-05 transition ended in. Three events share one
  * discriminator idiom — Cancelled (T6/T7), Rejected (T3/T5) and Expired (T8/T9)
- * — and this enum is the single place their literals are spelled.
+ * — and this enum is where the BUILT literals are spelled.
+ *
+ * Not yet the only place: the expiry pair still lives as a bare literal in the
+ * factory's `expired()` state (below), and the reject test class pins its own
+ * `rejection_source` values as strings on purpose — an assertion that reads its
+ * expected value from this enum would move whenever this enum moved, and could
+ * not fail. The withdraw class pins its two the same way, for the same reason.
  *
  * The backed values are the canon from ERD-1-05 §3: hyphenated, matching the
  * built `void_source` (`dispute-pre-payment` | `admin-correction`) and

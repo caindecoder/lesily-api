@@ -21,7 +21,8 @@ use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as Owne
  * different actor families (`Tests\Feature\Companies\OwnershipTransfers` and
  * `Tests\Feature\PlatformAdmin`) and E09 keeps one base per actor+subject pair.
  * LeaveDates does exactly this: `app/Leave/Cancellation/Testing/DeclineLeave.php`
- * is a trait consumed by eight classes across four modules (Rule #15).
+ * is a trait consumed by seven classes across four modules (Rule #15) — Leave
+ * Foundation, Retraction and Viewing, plus CompanyProfile Configurations.
  *
  * NONE of these is interchangeable with `aTransferInState()`: the factory writes
  * the PROJECTION only, so an aggregate retrieved against a factory row replays an

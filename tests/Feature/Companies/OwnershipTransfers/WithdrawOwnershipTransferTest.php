@@ -450,16 +450,22 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     /**
      * The actor is auth-resolved and the body cannot override it.
      *
-     * What REDs this test was MEASURED, not reasoned — the reject twin carried a
-     * hypothesis that was wrong twice running (s152 replaced a false `all()`
-     * claim with an ORDERING claim that was also false). Both variants were run:
+     * What REDs this test was MEASURED, not reasoned — and the measurement was
+     * then recorded wrong, which is the THIRD time this one hypothesis has been
+     * mis-stated on this module (s152 replaced a false `all()` claim with an
+     * ORDERING claim that was also false; s153 replaced that with a measured
+     * table; this row then restated the discarded ordering claim). All four
+     * permutations, as built and as mutated:
      *
-     *   A. body key admitted via `only([...,'cancelledBy'])`, auth assigned
-     *      LAST  → PASSES. Later-key-wins, so admitting the key is harmless.
-     *   B. auth assigned first, body spread AFTER it        → REDs.
+     *   as built   `only(['reason'])`, auth LAST   → AUTH id recorded
+     *   A          widened `only()`,   auth LAST   → AUTH id recorded (later key wins)
+     *   B          `only(['reason'])`, auth FIRST  → AUTH id recorded
+     *   C          widened `only()`,   auth FIRST  → IMPOSTOR id recorded
      *
-     * So this row binds the ORDER, not the key list. Widening `only()` alone
-     * would not be caught here, and that is worth knowing rather than assuming.
+     * So the teeth are the COMBINATION — the `only()` allow-list AND the key
+     * order — exactly as the reject twin concluded at s153. Neither one alone
+     * forges the actor: with `only(['reason'])` the spread can never contain
+     * `cancelledBy`, so reordering has nothing to override with.
      */
     #[Test]
     public function when_the_body_names_a_different_canceller_then_the_authenticated_owner_is_recorded(): void

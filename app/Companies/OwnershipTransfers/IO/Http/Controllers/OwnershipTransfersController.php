@@ -16,8 +16,8 @@ use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequ
 
 /**
  * The company's ownership-transfer resource — request (UC-1-028, SM-1-05 T1) +
- * the tenant reads (UC-1-126 history / UC-1-125 status). Withdraw (UC-1-114/115)
- * lands in a later slice-#11 task.
+ * the tenant reads (UC-1-126 history / UC-1-125 status) + withdraw
+ * (UC-1-114/115, SM-1-05 T6/T7).
  */
 class OwnershipTransfersController
 {
