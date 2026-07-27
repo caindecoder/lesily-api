@@ -206,6 +206,38 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     }
 
     /**
+     * PATCH the withdraw transition. Company context IS sent — unlike the admin
+     * transitions, withdraw is a tenant surface behind `auth.company`, so the
+     * company-scoped find needs it to resolve.
+     *
+     * The actor arrives as a `[Company, User]` pair rather than two parameters,
+     * so the helper stays inside §2.2's three-parameter cap with the body still
+     * available; the pair composes directly with `aCompanyWithOwner()`, which
+     * returns that exact shape.
+     *
+     * @param  array{0: Company, 1: User}  $actor
+     * @param  array<string, mixed>  $body
+     */
+    protected function withdrawTransfer(array $actor, string $requestId, array $body = []): TestResponse
+    {
+        [$company, $user] = $actor;
+        Sanctum::actingAs($user);
+
+        return $this->patchJson("/api/v1/ownership-transfers/{$requestId}/withdraw", $body, [
+            'X-Company-Context' => $company->getKey(),
+        ]);
+    }
+
+    /**
+     * PATCH the withdraw transition with no session at all — the unauthenticated
+     * sad path (the `postTransferRequestAsGuest` idiom).
+     */
+    protected function withdrawTransferAsGuest(string $requestId): TestResponse
+    {
+        return $this->patchJson("/api/v1/ownership-transfers/{$requestId}/withdraw");
+    }
+
+    /**
      * A persisted transfer row for $company targeting $target in $state (the
      * company's factory owner is the initiator). The write endpoints that
      * PRODUCE the terminal states land in later slice tasks; a read fixture

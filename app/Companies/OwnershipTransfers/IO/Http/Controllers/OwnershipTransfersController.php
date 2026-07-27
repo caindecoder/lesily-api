@@ -57,4 +57,9 @@ class OwnershipTransfersController
 
         return new OwnershipTransferRequestResource($transfer);
     }
+
+    public function withdraw(Request $request, string $requestId): OwnershipTransferRequestResource
+    {
+        throw new \RuntimeException('Not implemented');
+    }
 }
