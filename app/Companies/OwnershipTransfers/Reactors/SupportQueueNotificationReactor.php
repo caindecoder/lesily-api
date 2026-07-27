@@ -6,8 +6,11 @@ use App\Models\User;
 use App\Foundation\Http\Values\PlatformAdminAllowlist;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferNotification;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferRequestedNotification;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferWithdrawnNotification;
 
 /**
  * Alerts the platform support team that a transfer request entered the
@@ -27,13 +30,33 @@ class SupportQueueNotificationReactor extends Reactor
 {
     public function onOwnershipTransferRequested(OwnershipTransferRequested $event): void
     {
-        $transfer = OwnershipTransferRequest::query()->findOrFail($event->requestId);
+        $this->alertSupport($event->requestId, OwnershipTransferRequestedNotification::class);
+    }
+
+    /**
+     * SM-1-05 T6 + T7 (ruling J4). Deliberately UNFILTERED by `source`: this
+     * reactor announced the request's arrival, so it announces its departure in
+     * both windows. Contrast VerifierNotificationReactor, which IS source-filtered
+     * because only one window has a verifier to tell.
+     */
+    public function onOwnershipTransferCancelled(OwnershipTransferCancelled $event): void
+    {
+        $this->alertSupport($event->requestId, OwnershipTransferWithdrawnNotification::class);
+    }
+
+    /**
+     * Recipients resolve from the interim `platform.admin_user_ids` allowlist
+     * (s136 binding — the platform-admin slice replaces it with real admin auth).
+     *
+     * @param  class-string<OwnershipTransferNotification>  $notification
+     */
+    private function alertSupport(string $requestId, string $notification): void
+    {
+        $transfer = OwnershipTransferRequest::query()->findOrFail($requestId);
 
         User::query()
             ->whereIn('id', PlatformAdminAllowlist::userIds())
             ->get()
-            ->each(fn (User $admin) => $admin->notify(
-                new OwnershipTransferRequestedNotification($transfer),
-            ));
+            ->each(fn (User $admin) => $admin->notify(new $notification($transfer)));
     }
 }

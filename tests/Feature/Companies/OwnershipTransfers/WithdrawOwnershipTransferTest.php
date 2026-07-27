@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\OwnershipTransfers\Enums\TransitionSource;
@@ -14,6 +15,7 @@ use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferWithdrawnNotification;
 
 /**
  * SM-1-05 T6 + T7 (UC-1-114 pre-verification, UC-1-115 post-verification) — the
@@ -301,6 +303,53 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
         // Then the post-verification window is recorded, verification intact
         $this->assertWithdrawalRecorded($response, $owner, TransitionSource::PostVerification);
         $this->assertVerificationRecordPreserved($verifier);
+    }
+
+    /**
+     * Ruling J4 — the support team hears about the withdrawal in BOTH windows.
+     *
+     * The same reactor announces a transfer's arrival at T1, so staying silent
+     * on T6 would leave support hearing about arrivals and never about
+     * pre-verification disappearances. UC-1-114's "no admin-side cleanup
+     * required" concerns the queue ROW, which leaves the open set on its own
+     * when `status` flips.
+     *
+     * The requester is deliberately NOT notified: they are the actor here, the
+     * mirror-image of reject, where the admin acts and the requester is told.
+     */
+    #[Test]
+    public function when_a_transfer_is_withdrawn_then_the_support_queue_is_notified(): void
+    {
+        // Given an open transfer and an allowlisted support admin
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $supportAdmin = $this->aPlatformSupportAdmin();
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+
+        // When the requester withdraws it
+        $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then support is told, and the actor is not told about their own act
+        $this->assertSupportQueueNotifiedOfWithdrawal($supportAdmin, $company, $owner);
+    }
+
+    /**
+     * Named recipients, not merely "a notification was sent". The body is
+     * rendered so `companyName()` is actually observed — a static-substring
+     * check alone passes on an empty or wrong tenant name, which is the
+     * regression the s152 review caught in the T1/T2 retrofit.
+     */
+    private function assertSupportQueueNotifiedOfWithdrawal(User $supportAdmin, Company $company, User $requester): void
+    {
+        Notification::assertSentTo(
+            $supportAdmin,
+            OwnershipTransferWithdrawnNotification::class,
+            fn (OwnershipTransferWithdrawnNotification $notification): bool => $notification->transfer->company_id === $company->getKey()
+                && str_contains($notification->toArray($supportAdmin)['body'], 'withdrawn')
+                && str_contains($notification->toArray($supportAdmin)['body'], $company->name),
+        );
+        Notification::assertNotSentTo($requester, OwnershipTransferWithdrawnNotification::class);
     }
 
     /**
