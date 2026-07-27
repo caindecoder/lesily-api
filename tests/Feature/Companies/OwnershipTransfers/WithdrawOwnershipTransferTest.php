@@ -308,6 +308,71 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     /**
+     * API §7 OQ#2, and the precise asymmetry UC-1-115 turns on: a verified
+     * transfer that the requester withdraws must LEAVE the platform-admin queue,
+     * so no admin is left holding a work item that no longer exists.
+     *
+     * Asserted through the real admin endpoint rather than by restating its
+     * query — the queue defaults to the OPEN set (F5), so a terminal row drops
+     * out on its own when `status` flips, and this proves that rather than
+     * assuming it.
+     */
+    #[Test]
+    public function when_a_verified_transfer_is_withdrawn_then_it_leaves_the_admin_queue(): void
+    {
+        // Given a verified transfer sitting in the admin execution queue
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->aPlatformSupportAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, User::factory()->create());
+        $this->assertQueueContains($this->getAdminQueueAs($admin), $transfer);
+
+        // When the requester withdraws it
+        $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then the admin's queue no longer offers it for execution
+        $this->assertQueueOmits($this->getAdminQueueAs($admin), $transfer);
+    }
+
+    private function assertQueueContains(TestResponse $response, OwnershipTransferRequest $transfer): void
+    {
+        $response->assertOk();
+        $this->assertContains((string) $transfer->getKey(), $response->collect('data')->pluck('id')->all());
+    }
+
+    private function assertQueueOmits(TestResponse $response, OwnershipTransferRequest $transfer): void
+    {
+        $response->assertOk();
+        $this->assertNotContains((string) $transfer->getKey(), $response->collect('data')->pluck('id')->all());
+    }
+
+    /**
+     * The reason this transition is a PATCH and not a DELETE (slice decision D2).
+     * A withdrawn request stays readable in the company's own history — that is
+     * what makes `cancelled` a state rather than a disappearance, and it is why
+     * the API doc's original `DELETE /{id}` misrepresented the semantics.
+     */
+    #[Test]
+    public function when_a_transfer_is_withdrawn_then_it_remains_readable_in_the_company_history(): void
+    {
+        // Given a transfer the requester withdraws
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+        $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // When the company reads its transfer history
+        $response = $this->getTransferHistory($owner, $company);
+
+        // Then the withdrawn request is still there, in its terminal state
+        $response->assertOk();
+        $response->assertJsonPath('data.0.id', (string) $transfer->getKey());
+        $response->assertJsonPath('data.0.status', OwnershipTransferStatus::Cancelled->value);
+    }
+
+    /**
      * The projector's `whereKey` scope, made observable. With a single row in
      * the fixture an unscoped update hits the right one by accident and the
      * assertion proves nothing — s149 C6, and the reason a bystander exists at a

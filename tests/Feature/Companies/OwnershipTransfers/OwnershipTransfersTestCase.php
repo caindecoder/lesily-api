@@ -280,6 +280,21 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     }
 
     /**
+     * GET the cross-tenant admin queue as $admin. A tenant-side base reaching the
+     * admin surface is deliberate and narrow: UC-1-115's asymmetry is that a
+     * withdrawal REMOVES an entry from the platform-admin queue, and the only
+     * honest way to assert that is through the real admin endpoint rather than a
+     * restatement of the query. No X-Company-Context — the /v1/admin/* family
+     * carries no `auth.company`.
+     */
+    protected function getAdminQueueAs(User $admin): TestResponse
+    {
+        Sanctum::actingAs($admin);
+
+        return $this->getJson('/api/v1/admin/ownership-transfers');
+    }
+
+    /**
      * A transfer belonging to an entirely different tenant, left alone. Its only
      * job is to be a row this company must not reach — with a single row in the
      * fixture an unscoped read returns the right one by insertion order and the
