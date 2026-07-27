@@ -307,6 +307,51 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     /**
+     * SM-1-05 §7 puts the audit reactor on every transition, and both UC
+     * postconditions name the row explicitly: `cancelledBy`, the `source`
+     * discriminator and the optional reason.
+     *
+     * The ACTOR is the point. This is the only record of who ended a transfer,
+     * and it is the tenant-side counterpart of the rejection row — Lesily Legal's
+     * chain-of-custody reads "the requester withdrew it", not "it stopped".
+     */
+    #[Test]
+    public function when_a_transfer_is_withdrawn_then_the_audit_trail_records_who_ended_it(): void
+    {
+        // Given an open transfer
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+
+        // When the requester withdraws it
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then one audit row attributes it to them
+        $response->assertOk();
+        $this->assertWithdrawalAudited($transfer, $owner);
+    }
+
+    /**
+     * One row, carrying the tenant, the subject, the actor and the link back to
+     * the durable event. `actor_user_id` is nullable, so without pinning it a
+     * regression that dropped the actor would keep CI green while destroying
+     * exactly the evidence the row exists to hold.
+     */
+    private function assertWithdrawalAudited(OwnershipTransferRequest $transfer, User $requester): void
+    {
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $transfer->company_id,
+            'event_class' => 'OwnershipTransferCancelled',
+            'subject_type' => 'ownership_transfer_request',
+            'subject_id' => $transfer->getKey(),
+            'action' => 'transfer_withdrawn',
+            'actor_user_id' => $requester->getKey(),
+            'actor_label' => $requester->name,
+        ]);
+    }
+
+    /**
      * The Minimal Guarantee of BOTH UCs, stated identically in each: roles on
      * `company_user` are NEVER mutated by this path, and neither is
      * `companies.owner_id`. The pivot swap is exclusive to UC-1-093 (T4).
