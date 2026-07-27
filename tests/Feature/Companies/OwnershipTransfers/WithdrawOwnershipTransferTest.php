@@ -277,7 +277,7 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
         ]);
 
         // Then the pre-verification window is recorded end to end
-        $this->assertWithdrawalRecorded($response, $owner, TransitionSource::PreVerification);
+        $this->assertWithdrawalRecorded($response, $owner, 'pre-verification');
     }
 
     /**
@@ -303,7 +303,7 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
         ]);
 
         // Then the post-verification window is recorded, verification intact
-        $this->assertWithdrawalRecorded($response, $owner, TransitionSource::PostVerification);
+        $this->assertWithdrawalRecorded($response, $owner, 'post-verification');
         $this->assertVerificationRecordPreserved($verifier);
     }
 
@@ -418,7 +418,7 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
         ]);
 
         // Then the hold does not stand in the way
-        $this->assertWithdrawalRecorded($response, $owner, TransitionSource::PreVerification);
+        $this->assertWithdrawalRecorded($response, $owner, 'pre-verification');
     }
 
     /**
@@ -701,8 +701,22 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
      * leave identical columns behind and satisfy every response-level check, so
      * only the event lookup can tell the event-sourced write apart from one that
      * a projection replay would silently revert.
+     *
+     * $expectedSource is a LITERAL, deliberately, where it used to be a
+     * TransitionSource case. The enum form made this assertion read its expected
+     * value from the very symbol production writes, so both sides moved together:
+     * re-spelling the case as `post_verification` left all 91 rows in this
+     * directory green. ERD-1-05 §3 names the hyphenated spelling as canon, and
+     * `post-verification` is produced by nothing but T7 — so this is the only
+     * place in the suite where that literal is pinned at all.
+     *
+     * `updated_by` is in the map because the projector writes it and nothing
+     * asserted it — an `ArrayItemRemoval` mutant that Infection does generate.
+     * The projection is ONE column map rather than six assertSame calls: §2.2
+     * Rule 5 caps a helper at 2-5 aspects, and the reject twin was collapsed the
+     * same way at s152.
      */
-    private function assertWithdrawalRecorded(TestResponse $response, User $requester, TransitionSource $expected): void
+    private function assertWithdrawalRecorded(TestResponse $response, User $requester, string $expectedSource): void
     {
         $response->assertOk();
         $response->assertJsonPath('data.status', OwnershipTransferStatus::Cancelled->value);
@@ -711,13 +725,16 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
             'event_class' => OwnershipTransferCancelled::class,
         ]);
 
-        $transfer = OwnershipTransferRequest::query()->sole();
-        $this->assertSame(OwnershipTransferStatus::Cancelled, $transfer->status);
-        $this->assertSame($expected->value, $transfer->cancellation_source);
-        $this->assertSame(self::WITHDRAWAL_REASON, $transfer->cancellation_reason);
-        $this->assertSame($requester->getKey(), $transfer->cancelled_by);
-        $this->assertNotNull($transfer->cancelled_at);
-        $this->assertNull($transfer->next_state_transition_at);
+        $this->assertDatabaseHas('ownership_transfer_requests', [
+            'status' => OwnershipTransferStatus::Cancelled->value,
+            'cancellation_source' => $expectedSource,
+            'cancellation_reason' => self::WITHDRAWAL_REASON,
+            'cancelled_by' => $requester->getKey(),
+            'updated_by' => $requester->getKey(),
+            'next_state_transition_at' => null,
+        ]);
+
+        $this->assertNotNull(OwnershipTransferRequest::query()->sole()->cancelled_at);
     }
 
     /**
