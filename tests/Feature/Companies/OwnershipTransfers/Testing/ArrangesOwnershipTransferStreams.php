@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\OwnershipTransfers\Testing;
 use App\Models\User;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
+use App\Foundation\RolesPermissions\Entities\Role;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
@@ -31,6 +32,37 @@ use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as Owne
  */
 trait ArrangesOwnershipTransferStreams
 {
+    /**
+     * Supplied by both consuming bases (CompaniesTestCase and
+     * PlatformAdminTestCase each define it). Declared here so the dependency is
+     * explicit rather than discovered at runtime.
+     */
+    abstract protected function seededRole(string $code): Role;
+
+    /**
+     * A target user who is REALLY a member of $company.
+     *
+     * The derived helpers below used to hand `aRequestedTransferStream` a bare
+     * `User::factory()->create()`, producing a transfer whose target had no
+     * `company_user` row — a state production cannot emit, because
+     * `RequestOwnershipTransferInteractor` refuses a non-member target with a
+     * 422. That is not academic: it made this module's highest-value assertion
+     * silently vacuous, because a pivot mutation against such a fixture matches
+     * zero rows and every assertion stays green (the E-b/K1 catch, and the third
+     * instance of "the mutation must be reachable from the arrangement").
+     *
+     * Fixed at the helper rather than at the one test that noticed, so the next
+     * pivot-touching assertion in ANY consuming class starts out honest.
+     */
+    private function aTargetMemberOf(Company $company): User
+    {
+        $target = User::factory()->create();
+
+        $company->users()->attach($target, ['role_id' => $this->seededRole('employee')->getKey()]);
+
+        return $target;
+    }
+
     /**
      * A transfer whose stream genuinely carries the T1 genesis (and whose
      * projection the T1 projector therefore wrote), so a later transition
@@ -59,13 +91,19 @@ trait ArrangesOwnershipTransferStreams
      * the `Verified` window genuinely — the T5 rejection and the T7 withdrawal
      * both replay this history rather than trusting a projected row.
      *
-     * The target user is created inside rather than taken as a fourth parameter:
-     * callers exercising the verified window care who verified it, not who it was
-     * for, and §2.2 caps helpers at three parameters.
+     * The target user is created inside rather than taken as a fourth parameter,
+     * because callers exercising the verified window care who verified it, not
+     * who it was for.
+     *
+     * The original reason given was "§2.2 caps helpers at three parameters",
+     * which misreads the rule — that cap governs grouped ASSERTION helpers, not
+     * arrangement ones. It is worth correcting rather than deleting, because
+     * that misreading is what pushed the target inside the helper, and creating
+     * it inside is what let it be created as a non-member.
      */
     protected function aVerifiedTransferStream(Company $company, User $owner, User $verifier): OwnershipTransferRequest
     {
-        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+        $transfer = $this->aRequestedTransferStream($company, $owner, $this->aTargetMemberOf($company));
 
         OwnershipTransferRequestAggregate::retrieve($transfer->getKey())
             ->verifyIdentity(VerifyOwnershipTransferIdentityCommand::validateAndCreate([
@@ -90,7 +128,7 @@ trait ArrangesOwnershipTransferStreams
      */
     protected function aRejectedTransferStream(Company $company, User $owner, User $admin): OwnershipTransferRequest
     {
-        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+        $transfer = $this->aRequestedTransferStream($company, $owner, $this->aTargetMemberOf($company));
 
         OwnershipTransferRequestAggregate::retrieve($transfer->getKey())
             ->reject(RejectOwnershipTransferCommand::validateAndCreate([
@@ -115,7 +153,7 @@ trait ArrangesOwnershipTransferStreams
      */
     protected function aCancelledTransferStream(Company $company, User $owner): OwnershipTransferRequest
     {
-        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+        $transfer = $this->aRequestedTransferStream($company, $owner, $this->aTargetMemberOf($company));
 
         OwnershipTransferRequestAggregate::retrieve($transfer->getKey())
             ->withdraw(WithdrawOwnershipTransferCommand::validateAndCreate([
