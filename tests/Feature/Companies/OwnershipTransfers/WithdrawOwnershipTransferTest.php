@@ -12,7 +12,7 @@ use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
-use App\Companies\OwnershipTransfers\Enums\TransitionSource;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
@@ -560,6 +560,18 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
      * the durable event. `actor_user_id` is nullable, so without pinning it a
      * regression that dropped the actor would keep CI green while destroying
      * exactly the evidence the row exists to hold.
+     *
+     * `stored_event_id`, `actor_role_code`, `description` and `subject_label` are
+     * pinned because a combined revert-check showed none of them were: the row
+     * could lose its stored_event_id entirely, name the actor's role as `admin`,
+     * and carry a different description, with all 92 rows still green. The first
+     * of those is the whole claim this docblock makes — the link back to the
+     * durable event — and it is a nullable soft FK, so a dropped value inserts
+     * happily. The role code is the sentence Lesily Legal reads: this row must
+     * say the REQUESTER ended it, not a platform admin.
+     *
+     * The count guards a twice-firing reactor: two rows total, T1 genesis + this
+     * withdrawal, which the reject twin pins the same way.
      */
     private function assertWithdrawalAudited(OwnershipTransferRequest $transfer, User $requester): void
     {
@@ -568,10 +580,18 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
             'event_class' => 'OwnershipTransferCancelled',
             'subject_type' => 'ownership_transfer_request',
             'subject_id' => $transfer->getKey(),
+            'subject_label' => 'Ownership transfer request',
             'action' => 'transfer_withdrawn',
+            'description' => 'The requester withdrew the ownership transfer; the current owner retains ownership.',
             'actor_user_id' => $requester->getKey(),
+            'actor_role_code' => 'owner',
             'actor_label' => $requester->name,
         ]);
+
+        $this->assertDatabaseCount('audit_trail', 2);
+        $this->assertNotNull(
+            AuditEntry::query()->where('event_class', 'OwnershipTransferCancelled')->sole()->stored_event_id,
+        );
     }
 
     /**
