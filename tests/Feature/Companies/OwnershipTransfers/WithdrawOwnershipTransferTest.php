@@ -131,7 +131,7 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
         $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey());
 
         // Then identity, not role, is what refuses them
-        $this->assertRefusedWith($response, ApiErrorCode::TransferRequesterMismatch);
+        $this->assertRequesterMismatchRefused($response);
         $this->assertTransferStillOpen((string) $transfer->getKey(), OwnershipTransferStatus::Requested);
     }
 

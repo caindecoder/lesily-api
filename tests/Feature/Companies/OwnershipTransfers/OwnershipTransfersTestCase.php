@@ -359,6 +359,28 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     }
 
     /**
+     * The caller HOLDS `ownership-transfer.withdraw` but is not the transfer's
+     * recorded requester (ruling J3).
+     *
+     * Status and message are pinned as LITERALS, deliberately. `assertRefusedWith`
+     * reads its expected status from `ApiErrorCode::status()` — the same match arm
+     * production renders from — so both sides of that assertion move together and
+     * it cannot fail. Re-pointing the case at 418 left all 26 rows of this class
+     * green, which is why this helper exists.
+     *
+     * The message pin carries the other half: ROLE_INSUFFICIENT shares the 403
+     * status, so a code-only assertion would survive collapsing the two — and
+     * telling those refusals apart is the whole of J3.
+     */
+    protected function assertRequesterMismatchRefused(TestResponse $response): void
+    {
+        $response->assertStatus(403);
+        $response->assertJsonPath('error_code', 'TRANSFER_REQUESTER_MISMATCH');
+        $response->assertJsonPath('message', 'Only the member who requested this ownership transfer can withdraw it.');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    /**
      * The request was refused as shape-invalid — the validation envelope
      * (error_code VALIDATION_FAILED) with an error on $field.
      */
