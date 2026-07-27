@@ -208,6 +208,46 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * UC-1-128 Gherkin sc.7 — the race with an owner cancel — and the `Cancelled`
+     * row of this UC's transition table. Deferred out of s151 as ruling G1 for
+     * the same reason as its verify twin: `Cancelled` was unreachable until slice
+     * Task 6 built `withdraw()`, and a factory row replays an empty stream.
+     */
+    #[Test]
+    public function when_the_transfer_is_already_withdrawn_then_it_is_not_rejected(): void
+    {
+        // Given a transfer its requester withdrew before the admin acted
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aCancelledTransferStream($company, $owner);
+
+        // When the admin's rejection arrives after the withdrawal
+        $response = $this->rejectTransfer($admin, $transfer->getKey(), self::rejectionBody([
+            'reason' => 'Identity documents could not be matched to the applicant.',
+            'rejectionReasonCode' => 'identity_failed',
+        ]));
+
+        // Then it is refused and the withdrawal stands, unrejected
+        $this->assertStateGuardRefused($response, 'Only an open transfer can be rejected.');
+        $this->assertNeverRejected($transfer);
+    }
+
+    /**
+     * The withdrawal survives the losing rejection: still `Cancelled`, with none
+     * of the rejection columns written over it.
+     */
+    private function assertNeverRejected(OwnershipTransferRequest $transfer): void
+    {
+        $row = $this->currentTransfer($transfer);
+
+        $this->assertSame(OwnershipTransferStatus::Cancelled, $row->status);
+        $this->assertNull($row->rejected_at);
+        $this->assertNull($row->rejected_by);
+        $this->assertNull($row->rejection_reason);
+        $this->assertNull($row->rejection_source);
+    }
+
+    /**
      * The refused second attempt changed nothing: the stream still carries exactly
      * ONE rejection event, and the projected record still names the first
      * rejector, reason, code and time. Without the event-count aspect a guard that

@@ -196,6 +196,49 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     /**
+     * A second terminal state, reached by a DIFFERENT actor down a different
+     * path. E28 §5 wants the transition table enumerated rather than a single
+     * representative refusal, and `Rejected` is the other terminal currently
+     * reachable — `Executed` and `Expired` arrive with Tasks 8 and 7, which own
+     * their own rows here (the s151 G1 split).
+     *
+     * Born green off lap 9's `default` arm, which is the shared-mechanism case
+     * E12 sanctions; its teeth are that arm's, proven there.
+     */
+    #[Test]
+    public function when_the_transfer_was_already_rejected_then_it_is_not_withdrawn(): void
+    {
+        // Given a transfer a platform admin has already rejected
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRejectedTransferStream($company, $owner, User::factory()->create());
+
+        // When its requester tries to withdraw it anyway
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then the state guard refuses and the rejection stands
+        $this->assertStateGuardRefused($response, 'Only an open transfer can be withdrawn.');
+        $this->assertTransferStillRejected((string) $transfer->getKey());
+    }
+
+    /**
+     * The rejection survives a withdrawal attempt: still `Rejected`, and none of
+     * the cancellation columns were written over it.
+     */
+    private function assertTransferStillRejected(string $requestId): void
+    {
+        $this->assertDatabaseHas('ownership_transfer_requests', [
+            'id' => $requestId,
+            'status' => OwnershipTransferStatus::Rejected->value,
+            'cancelled_at' => null,
+            'cancelled_by' => null,
+            'cancellation_source' => null,
+            'cancellation_reason' => null,
+        ]);
+    }
+
+    /**
      * The first withdrawal's record survives the second attempt byte for byte —
      * a refusal that quietly overwrote the original reason or actor would still
      * return 409 and pass a status-only assertion.
