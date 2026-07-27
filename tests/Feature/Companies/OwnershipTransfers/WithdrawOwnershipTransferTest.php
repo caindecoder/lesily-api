@@ -137,6 +137,21 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     /**
+     * An open transfer at $company whose recorded requester is a third user.
+     * A named fixture helper carrying the column override is the sanctioned
+     * shape — §2.13 bans inline overrides in test BODIES, not in fixtures
+     * (the `aTransferDueAt` precedent).
+     */
+    private function aTransferRaisedBySomeoneElse(Company $company): OwnershipTransferRequest
+    {
+        return OwnershipTransferRequest::factory()->requested()->create([
+            'company_id' => $company->getKey(),
+            'current_owner_user_id' => User::factory()->create()->getKey(),
+            'target_user_id' => User::factory()->create()->getKey(),
+        ]);
+    }
+
+    /**
      * The two shapes a withdrawal can get wrong. `cancelledBy` is auth-resolved
      * and `reason` is optional, so there is no required-field matrix here — but
      * `reason` carries two rules and only one of them was ever exercised.
@@ -178,21 +193,6 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     /**
-     * An open transfer at $company whose recorded requester is a third user.
-     * A named fixture helper carrying the column override is the sanctioned
-     * shape — §2.13 bans inline overrides in test BODIES, not in fixtures
-     * (the `aTransferDueAt` precedent).
-     */
-    private function aTransferRaisedBySomeoneElse(Company $company): OwnershipTransferRequest
-    {
-        return OwnershipTransferRequest::factory()->requested()->create([
-            'company_id' => $company->getKey(),
-            'current_owner_user_id' => User::factory()->create()->getKey(),
-            'target_user_id' => User::factory()->create()->getKey(),
-        ]);
-    }
-
-    /**
      * The degenerate case for an aggregate command: the transition fired twice.
      * Arranged through a REAL prior T6, so the guard refuses because the state
      * genuinely IS terminal — a factory row would replay an empty stream and
@@ -214,6 +214,20 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
         // Then the state guard refuses and the first withdrawal is untouched
         $this->assertStateGuardRefused($response, 'Only an open transfer can be withdrawn.');
         $this->assertOriginalWithdrawalIntact($original);
+    }
+
+    /**
+     * The first withdrawal's record survives the second attempt byte for byte —
+     * a refusal that quietly overwrote the original reason or actor would still
+     * return 409 and pass a status-only assertion.
+     */
+    private function assertOriginalWithdrawalIntact(OwnershipTransferRequest $original): void
+    {
+        $current = $this->currentTransfer($original);
+        $this->assertSame($original->cancellation_reason, $current->cancellation_reason);
+        $this->assertSame($original->cancelled_by, $current->cancelled_by);
+        $this->assertEquals($original->cancelled_at, $current->cancelled_at);
+        $this->assertDatabaseCount('stored_events', 2);
     }
 
     /**
@@ -257,136 +271,6 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
             'cancellation_source' => null,
             'cancellation_reason' => null,
         ]);
-    }
-
-    /**
-     * The first withdrawal's record survives the second attempt byte for byte —
-     * a refusal that quietly overwrote the original reason or actor would still
-     * return 409 and pass a status-only assertion.
-     */
-    private function assertOriginalWithdrawalIntact(OwnershipTransferRequest $original): void
-    {
-        $current = $this->currentTransfer($original);
-        $this->assertSame($original->cancellation_reason, $current->cancellation_reason);
-        $this->assertSame($original->cancelled_by, $current->cancelled_by);
-        $this->assertEquals($original->cancelled_at, $current->cancelled_at);
-        $this->assertDatabaseCount('stored_events', 2);
-    }
-
-    /**
-     * SM-1-05 T6 (UC-1-114) — the pre-verification window, end to end.
-     *
-     * Arranged through a REAL T1 stream: the aggregate must replay genuine
-     * history for the `Requested` arm of `withdraw()`'s match to be the thing
-     * under test. A factory row would replay an empty stream and the guard would
-     * refuse for the wrong reason (s149 C1).
-     */
-    #[Test]
-    public function when_an_owner_withdraws_a_requested_transfer_then_it_is_cancelled_before_verification(): void
-    {
-        // Given a transfer whose stream carries the real T1 genesis
-        [$company, $owner] = $this->aCompanyWithOwner();
-        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
-
-        // When the requester withdraws it before any verification has happened
-        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
-            'reason' => self::WITHDRAWAL_REASON,
-        ]);
-
-        // Then the pre-verification window is recorded end to end
-        $this->assertWithdrawalRecorded($response, $owner, 'pre-verification');
-    }
-
-    /**
-     * SM-1-05 T7 (UC-1-115) — the post-verification window.
-     *
-     * The asymmetry with T6 is the point: admin verification work HAS happened,
-     * so the prior T2 record must survive the withdrawal intact, and the timer
-     * being cleared here is a DIFFERENT value (`verified_at + 14d`, not
-     * `requested_at + 30d`). At s153 the reject twin turned out to have asserted
-     * only one of its two windows' clears, so both are pinned here.
-     */
-    #[Test]
-    public function when_an_owner_withdraws_a_verified_transfer_then_it_is_cancelled_after_verification(): void
-    {
-        // Given a transfer a platform admin has already identity-verified
-        [$company, $owner] = $this->aCompanyWithOwner();
-        $verifier = User::factory()->create();
-        $transfer = $this->aVerifiedTransferStream($company, $owner, $verifier);
-
-        // When the requester withdraws it before it can be executed
-        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
-            'reason' => self::WITHDRAWAL_REASON,
-        ]);
-
-        // Then the post-verification window is recorded, verification intact
-        $this->assertWithdrawalRecorded($response, $owner, 'post-verification');
-        $this->assertVerificationRecordPreserved($verifier);
-    }
-
-    /**
-     * API §7 OQ#2, and the precise asymmetry UC-1-115 turns on: a verified
-     * transfer that the requester withdraws must LEAVE the platform-admin queue,
-     * so no admin is left holding a work item that no longer exists.
-     *
-     * Asserted through the real admin endpoint rather than by restating its
-     * query — the queue defaults to the OPEN set (F5), so a terminal row drops
-     * out on its own when `status` flips, and this proves that rather than
-     * assuming it.
-     */
-    #[Test]
-    public function when_a_verified_transfer_is_withdrawn_then_it_leaves_the_admin_queue(): void
-    {
-        // Given a verified transfer sitting in the admin execution queue
-        [$company, $owner] = $this->aCompanyWithOwner();
-        $admin = $this->aPlatformSupportAdmin();
-        $transfer = $this->aVerifiedTransferStream($company, $owner, User::factory()->create());
-        $this->assertQueueContains($this->getAdminQueueAs($admin), $transfer);
-
-        // When the requester withdraws it
-        $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
-            'reason' => self::WITHDRAWAL_REASON,
-        ]);
-
-        // Then the admin's queue no longer offers it for execution
-        $this->assertQueueOmits($this->getAdminQueueAs($admin), $transfer);
-    }
-
-    private function assertQueueContains(TestResponse $response, OwnershipTransferRequest $transfer): void
-    {
-        $response->assertOk();
-        $this->assertContains((string) $transfer->getKey(), $response->collect('data')->pluck('id')->all());
-    }
-
-    private function assertQueueOmits(TestResponse $response, OwnershipTransferRequest $transfer): void
-    {
-        $response->assertOk();
-        $this->assertNotContains((string) $transfer->getKey(), $response->collect('data')->pluck('id')->all());
-    }
-
-    /**
-     * The reason this transition is a PATCH and not a DELETE (slice decision D2).
-     * A withdrawn request stays readable in the company's own history — that is
-     * what makes `cancelled` a state rather than a disappearance, and it is why
-     * the API doc's original `DELETE /{id}` misrepresented the semantics.
-     */
-    #[Test]
-    public function when_a_transfer_is_withdrawn_then_it_remains_readable_in_the_company_history(): void
-    {
-        // Given a transfer the requester withdraws
-        [$company, $owner] = $this->aCompanyWithOwner();
-        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
-        $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
-            'reason' => self::WITHDRAWAL_REASON,
-        ]);
-
-        // When the company reads its transfer history
-        $response = $this->getTransferHistory($owner, $company);
-
-        // Then the withdrawn request is still there, in its terminal state
-        $response->assertOk();
-        $response->assertJsonPath('data.0.id', (string) $transfer->getKey());
-        $response->assertJsonPath('data.0.status', OwnershipTransferStatus::Cancelled->value);
     }
 
     /**
@@ -590,6 +474,194 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     /**
+     * The Minimal Guarantee of BOTH UCs, stated identically in each: roles on
+     * `company_user` are NEVER mutated by this path, and neither is
+     * `companies.owner_id`. The pivot swap is exclusive to UC-1-093 (T4).
+     *
+     * The target is attached as a REAL member, and that is load-bearing rather
+     * than decorative. Written first against `aVerifiedTransferStream`, this test
+     * was TOOTHLESS: that helper creates its target with `User::factory()` and
+     * never attaches it to `company_user`, so a revert-check that swapped the
+     * target's pivot role matched zero rows and the assertion stayed green. It is
+     * deferral E-b from the s153 ledger, met a task earlier than expected.
+     * Production could not produce that fixture either — UC-1-028 requires the
+     * target to be a company member.
+     */
+    #[Test]
+    public function when_a_transfer_is_withdrawn_then_the_ownership_records_are_left_untouched(): void
+    {
+        // Given an open transfer whose target really is a member of the company
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $target = $this->aMemberWithRole($company, 'employee');
+        $transfer = $this->aRequestedTransferStream($company, $owner, $target);
+        $rolesBefore = $this->currentPivotRoles($company);
+
+        // When the requester withdraws it
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then the transfer ended and nobody's ownership moved
+        $response->assertOk();
+        $this->assertOwnershipRecordsUntouched($company, $rolesBefore);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function currentPivotRoles(Company $company): array
+    {
+        return CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->pluck('role_id', 'user_id')
+            ->all();
+    }
+
+    /**
+     * @param  array<string, string>  $rolesBefore
+     */
+    private function assertOwnershipRecordsUntouched(Company $company, array $rolesBefore): void
+    {
+        $this->assertSame($rolesBefore, $this->currentPivotRoles($company));
+        $this->assertSame(
+            $company->owner_id,
+            Company::query()->whereKey($company->getKey())->value('owner_id'),
+        );
+    }
+
+    /**
+     * SM-1-05 T6 (UC-1-114) — the pre-verification window, end to end.
+     *
+     * Arranged through a REAL T1 stream: the aggregate must replay genuine
+     * history for the `Requested` arm of `withdraw()`'s match to be the thing
+     * under test. A factory row would replay an empty stream and the guard would
+     * refuse for the wrong reason (s149 C1).
+     */
+    #[Test]
+    public function when_an_owner_withdraws_a_requested_transfer_then_it_is_cancelled_before_verification(): void
+    {
+        // Given a transfer whose stream carries the real T1 genesis
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+
+        // When the requester withdraws it before any verification has happened
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then the pre-verification window is recorded end to end
+        $this->assertWithdrawalRecorded($response, $owner, 'pre-verification');
+    }
+
+    /**
+     * SM-1-05 T7 (UC-1-115) — the post-verification window.
+     *
+     * The asymmetry with T6 is the point: admin verification work HAS happened,
+     * so the prior T2 record must survive the withdrawal intact, and the timer
+     * being cleared here is a DIFFERENT value (`verified_at + 14d`, not
+     * `requested_at + 30d`). At s153 the reject twin turned out to have asserted
+     * only one of its two windows' clears, so both are pinned here.
+     */
+    #[Test]
+    public function when_an_owner_withdraws_a_verified_transfer_then_it_is_cancelled_after_verification(): void
+    {
+        // Given a transfer a platform admin has already identity-verified
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $verifier = User::factory()->create();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $verifier);
+
+        // When the requester withdraws it before it can be executed
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then the post-verification window is recorded, verification intact
+        $this->assertWithdrawalRecorded($response, $owner, 'post-verification');
+        $this->assertVerificationRecordPreserved($verifier);
+    }
+
+    /**
+     * The T2 evidence outlives the withdrawal. UC-1-115's legal-defensibility
+     * chain reads "verifier did their job; the requester later abandoned it", so
+     * the verifier's attribution and notes must still be readable on the
+     * cancelled row — and the T2 event itself is still in the stream.
+     */
+    private function assertVerificationRecordPreserved(User $verifier): void
+    {
+        $transfer = OwnershipTransferRequest::query()->sole();
+        $this->assertSame($verifier->getKey(), $transfer->verified_by);
+        $this->assertNotNull($transfer->verified_at);
+        $this->assertDatabaseHas('stored_events', [
+            'event_class' => OwnershipTransferIdentityVerified::class,
+        ]);
+    }
+
+    /**
+     * API §7 OQ#2, and the precise asymmetry UC-1-115 turns on: a verified
+     * transfer that the requester withdraws must LEAVE the platform-admin queue,
+     * so no admin is left holding a work item that no longer exists.
+     *
+     * Asserted through the real admin endpoint rather than by restating its
+     * query — the queue defaults to the OPEN set (F5), so a terminal row drops
+     * out on its own when `status` flips, and this proves that rather than
+     * assuming it.
+     */
+    #[Test]
+    public function when_a_verified_transfer_is_withdrawn_then_it_leaves_the_admin_queue(): void
+    {
+        // Given a verified transfer sitting in the admin execution queue
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->aPlatformSupportAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, User::factory()->create());
+        $this->assertQueueContains($this->getAdminQueueAs($admin), $transfer);
+
+        // When the requester withdraws it
+        $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then the admin's queue no longer offers it for execution
+        $this->assertQueueOmits($this->getAdminQueueAs($admin), $transfer);
+    }
+
+    private function assertQueueContains(TestResponse $response, OwnershipTransferRequest $transfer): void
+    {
+        $response->assertOk();
+        $this->assertContains((string) $transfer->getKey(), $response->collect('data')->pluck('id')->all());
+    }
+
+    private function assertQueueOmits(TestResponse $response, OwnershipTransferRequest $transfer): void
+    {
+        $response->assertOk();
+        $this->assertNotContains((string) $transfer->getKey(), $response->collect('data')->pluck('id')->all());
+    }
+
+    /**
+     * The reason this transition is a PATCH and not a DELETE (slice decision D2).
+     * A withdrawn request stays readable in the company's own history — that is
+     * what makes `cancelled` a state rather than a disappearance, and it is why
+     * the API doc's original `DELETE /{id}` misrepresented the semantics.
+     */
+    #[Test]
+    public function when_a_transfer_is_withdrawn_then_it_remains_readable_in_the_company_history(): void
+    {
+        // Given a transfer the requester withdraws
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+        $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // When the company reads its transfer history
+        $response = $this->getTransferHistory($owner, $company);
+
+        // Then the withdrawn request is still there, in its terminal state
+        $response->assertOk();
+        $response->assertJsonPath('data.0.id', (string) $transfer->getKey());
+        $response->assertJsonPath('data.0.status', OwnershipTransferStatus::Cancelled->value);
+    }
+
+    /**
      * SM-1-05 §7 puts the audit reactor on every transition, and both UC
      * postconditions name the row explicitly: `cancelledBy`, the `source`
      * discriminator and the optional reason.
@@ -651,62 +723,6 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
         $this->assertDatabaseCount('audit_trail', 2);
         $this->assertNotNull(
             AuditEntry::query()->where('event_class', 'OwnershipTransferCancelled')->sole()->stored_event_id,
-        );
-    }
-
-    /**
-     * The Minimal Guarantee of BOTH UCs, stated identically in each: roles on
-     * `company_user` are NEVER mutated by this path, and neither is
-     * `companies.owner_id`. The pivot swap is exclusive to UC-1-093 (T4).
-     *
-     * The target is attached as a REAL member, and that is load-bearing rather
-     * than decorative. Written first against `aVerifiedTransferStream`, this test
-     * was TOOTHLESS: that helper creates its target with `User::factory()` and
-     * never attaches it to `company_user`, so a revert-check that swapped the
-     * target's pivot role matched zero rows and the assertion stayed green. It is
-     * deferral E-b from the s153 ledger, met a task earlier than expected.
-     * Production could not produce that fixture either — UC-1-028 requires the
-     * target to be a company member.
-     */
-    #[Test]
-    public function when_a_transfer_is_withdrawn_then_the_ownership_records_are_left_untouched(): void
-    {
-        // Given an open transfer whose target really is a member of the company
-        [$company, $owner] = $this->aCompanyWithOwner();
-        $target = $this->aMemberWithRole($company, 'employee');
-        $transfer = $this->aRequestedTransferStream($company, $owner, $target);
-        $rolesBefore = $this->currentPivotRoles($company);
-
-        // When the requester withdraws it
-        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
-            'reason' => self::WITHDRAWAL_REASON,
-        ]);
-
-        // Then the transfer ended and nobody's ownership moved
-        $response->assertOk();
-        $this->assertOwnershipRecordsUntouched($company, $rolesBefore);
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function currentPivotRoles(Company $company): array
-    {
-        return CompanyUser::query()
-            ->where('company_id', $company->getKey())
-            ->pluck('role_id', 'user_id')
-            ->all();
-    }
-
-    /**
-     * @param  array<string, string>  $rolesBefore
-     */
-    private function assertOwnershipRecordsUntouched(Company $company, array $rolesBefore): void
-    {
-        $this->assertSame($rolesBefore, $this->currentPivotRoles($company));
-        $this->assertSame(
-            $company->owner_id,
-            Company::query()->whereKey($company->getKey())->value('owner_id'),
         );
     }
 
@@ -784,22 +800,6 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
                 && str_contains($notification->toArray($supportAdmin)['body'], $company->name),
         );
         Notification::assertNotSentTo($requester, OwnershipTransferWithdrawnNotification::class);
-    }
-
-    /**
-     * The T2 evidence outlives the withdrawal. UC-1-115's legal-defensibility
-     * chain reads "verifier did their job; the requester later abandoned it", so
-     * the verifier's attribution and notes must still be readable on the
-     * cancelled row — and the T2 event itself is still in the stream.
-     */
-    private function assertVerificationRecordPreserved(User $verifier): void
-    {
-        $transfer = OwnershipTransferRequest::query()->sole();
-        $this->assertSame($verifier->getKey(), $transfer->verified_by);
-        $this->assertNotNull($transfer->verified_at);
-        $this->assertDatabaseHas('stored_events', [
-            'event_class' => OwnershipTransferIdentityVerified::class,
-        ]);
     }
 
     /**
