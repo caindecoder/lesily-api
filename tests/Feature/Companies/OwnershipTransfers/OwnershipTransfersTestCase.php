@@ -15,6 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use Tests\Feature\Companies\OwnershipTransfers\Testing\ArrangesOwnershipTransferStreams;
 
 /**
  * Shared fixtures for the ownership-transfer feature tests (§2.10). Callers
@@ -24,6 +25,7 @@ use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
  */
 abstract class OwnershipTransfersTestCase extends CompaniesTestCase
 {
+    use ArrangesOwnershipTransferStreams;
     use RefreshDatabase;
     use WithRolePermissionFixtures;
 
@@ -206,6 +208,38 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     }
 
     /**
+     * PATCH the withdraw transition. Company context IS sent — unlike the admin
+     * transitions, withdraw is a tenant surface behind `auth.company`, so the
+     * company-scoped find needs it to resolve.
+     *
+     * The actor arrives as a `[Company, User]` pair rather than two parameters,
+     * so the helper stays inside §2.2's three-parameter cap with the body still
+     * available; the pair composes directly with `aCompanyWithOwner()`, which
+     * returns that exact shape.
+     *
+     * @param  array{0: Company, 1: User}  $actor
+     * @param  array<string, mixed>  $body
+     */
+    protected function withdrawTransfer(array $actor, string $requestId, array $body = []): TestResponse
+    {
+        [$company, $user] = $actor;
+        Sanctum::actingAs($user);
+
+        return $this->patchJson("/api/v1/ownership-transfers/{$requestId}/withdraw", $body, [
+            'X-Company-Context' => $company->getKey(),
+        ]);
+    }
+
+    /**
+     * PATCH the withdraw transition with no session at all — the unauthenticated
+     * sad path (the `postTransferRequestAsGuest` idiom).
+     */
+    protected function withdrawTransferAsGuest(string $requestId): TestResponse
+    {
+        return $this->patchJson("/api/v1/ownership-transfers/{$requestId}/withdraw");
+    }
+
+    /**
      * A persisted transfer row for $company targeting $target in $state (the
      * company's factory owner is the initiator). The write endpoints that
      * PRODUCE the terminal states land in later slice tasks; a read fixture
@@ -246,6 +280,38 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     }
 
     /**
+     * GET the cross-tenant admin queue as $admin. A tenant-side base reaching the
+     * admin surface is deliberate and narrow: UC-1-115's asymmetry is that a
+     * withdrawal REMOVES an entry from the platform-admin queue, and the only
+     * honest way to assert that is through the real admin endpoint rather than a
+     * restatement of the query. No X-Company-Context — the /v1/admin/* family
+     * carries no `auth.company`.
+     */
+    protected function getAdminQueueAs(User $admin): TestResponse
+    {
+        Sanctum::actingAs($admin);
+
+        return $this->getJson('/api/v1/admin/ownership-transfers');
+    }
+
+    /**
+     * A transfer belonging to an entirely different tenant, left alone. Its only
+     * job is to be a row this company must not reach — with a single row in the
+     * fixture an unscoped read returns the right one by insertion order and the
+     * isolation assertion proves nothing (s149 C6).
+     */
+    protected function aBystanderTransferAtAnotherCompany(): OwnershipTransferRequest
+    {
+        [$otherCompany] = $this->aCompanyWithOwner();
+
+        return $this->aTransferInState(
+            $otherCompany,
+            User::factory()->create(),
+            OwnershipTransferStatus::Requested,
+        );
+    }
+
+    /**
      * The list envelope's `meta.pagination` block equals $expected exactly.
      *
      * @param  array<string, int>  $expected
@@ -273,6 +339,45 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     {
         $response->assertStatus($code->status());
         $response->assertJsonPath('error_code', $code->value);
+    }
+
+    /**
+     * The transition was refused by a state guard — the shared 409 family the
+     * §8.4 registry reserves for illegal state-machine moves.
+     *
+     * The MESSAGE is asserted, not just the code, and that is the point: several
+     * refusals render the identical envelope, so without a discriminator throwing
+     * the wrong exception would stay green and the unused render arm in
+     * bootstrap/app.php would become dead code in the one file neither Infection
+     * nor coverage can see. This survives substitution, not merely deletion.
+     */
+    protected function assertStateGuardRefused(TestResponse $response, string $expectedMessage): void
+    {
+        $this->assertRefusedWith($response, ApiErrorCode::StateGuardViolation);
+        $response->assertJsonPath('message', $expectedMessage);
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    /**
+     * The caller HOLDS `ownership-transfer.withdraw` but is not the transfer's
+     * recorded requester (ruling J3).
+     *
+     * Status and message are pinned as LITERALS, deliberately. `assertRefusedWith`
+     * reads its expected status from `ApiErrorCode::status()` — the same match arm
+     * production renders from — so both sides of that assertion move together and
+     * it cannot fail. Re-pointing the case at 418 left all 26 rows of this class
+     * green, which is why this helper exists.
+     *
+     * The message pin carries the other half: ROLE_INSUFFICIENT shares the 403
+     * status, so a code-only assertion would survive collapsing the two — and
+     * telling those refusals apart is the whole of J3.
+     */
+    protected function assertRequesterMismatchRefused(TestResponse $response): void
+    {
+        $response->assertStatus(403);
+        $response->assertJsonPath('error_code', 'TRANSFER_REQUESTER_MISMATCH');
+        $response->assertJsonPath('message', 'Only the member who requested this ownership transfer can withdraw it.');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
     /**
