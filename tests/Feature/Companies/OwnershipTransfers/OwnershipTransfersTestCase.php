@@ -15,6 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use Tests\Feature\Companies\OwnershipTransfers\Testing\ArrangesOwnershipTransferStreams;
 
 /**
  * Shared fixtures for the ownership-transfer feature tests (§2.10). Callers
@@ -24,6 +25,7 @@ use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
  */
 abstract class OwnershipTransfersTestCase extends CompaniesTestCase
 {
+    use ArrangesOwnershipTransferStreams;
     use RefreshDatabase;
     use WithRolePermissionFixtures;
 
