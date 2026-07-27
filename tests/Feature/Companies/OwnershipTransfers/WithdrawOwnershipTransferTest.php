@@ -74,6 +74,26 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     /**
+     * An owner may hold `ownership-transfer.withdraw` and still not reach
+     * another tenant's transfer: the id is existence-hidden, so a foreign
+     * transfer and an absent one are byte-identical on the wire.
+     */
+    #[Test]
+    public function when_the_transfer_belongs_to_another_company_then_it_is_not_found(): void
+    {
+        // Given an owner, and an open transfer at a different company
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $foreign = $this->aBystanderTransferAtAnotherCompany();
+
+        // When the owner withdraws the foreign transfer through their own context
+        $response = $this->withdrawTransfer([$company, $owner], (string) $foreign->getKey());
+
+        // Then it is refused as absent, and the foreign row is untouched
+        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertTransferStillOpen((string) $foreign->getKey(), OwnershipTransferStatus::Requested);
+    }
+
+    /**
      * Every seeded company role except `owner`.
      *
      * @return array<string, array{string}>

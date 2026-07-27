@@ -278,6 +278,23 @@ abstract class OwnershipTransfersTestCase extends CompaniesTestCase
     }
 
     /**
+     * A transfer belonging to an entirely different tenant, left alone. Its only
+     * job is to be a row this company must not reach — with a single row in the
+     * fixture an unscoped read returns the right one by insertion order and the
+     * isolation assertion proves nothing (s149 C6).
+     */
+    protected function aBystanderTransferAtAnotherCompany(): OwnershipTransferRequest
+    {
+        [$otherCompany] = $this->aCompanyWithOwner();
+
+        return $this->aTransferInState(
+            $otherCompany,
+            User::factory()->create(),
+            OwnershipTransferStatus::Requested,
+        );
+    }
+
+    /**
      * The list envelope's `meta.pagination` block equals $expected exactly.
      *
      * @param  array<string, int>  $expected
