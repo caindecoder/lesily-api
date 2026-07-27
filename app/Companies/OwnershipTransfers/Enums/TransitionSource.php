@@ -22,6 +22,19 @@ namespace App\Companies\OwnershipTransfers\Enums;
  */
 enum TransitionSource: string
 {
+    /** T3 reject, and T6 withdraw — the request had not been verified yet. */
     case PreVerification = 'pre-verification';
+
+    /** T7 withdraw — verified, but the requester pulled it before execution. */
     case PostVerification = 'post-verification';
+
+    /** T5 reject — the admin found the problem at execution time. */
+    case ExecutionTime = 'execution-time';
+
+    // T8/T9 expiry (`requested-stage` / `verified-stage`) are deliberately NOT
+    // here yet. Task 7 builds `expireIfStale()`, which is their first producer;
+    // adding the cases now would ship two enum members no code path can emit —
+    // the unconsumed-artifact cut PR #114 made on an unused relation. The
+    // factory's `expired()` state keeps its bare literal until that task, which
+    // migrates it the way this one migrated reject's and cancel's.
 }

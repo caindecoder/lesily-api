@@ -107,8 +107,8 @@ class OwnershipTransferRequest extends AggregateRoot
         // and each names its own window. A separate `if` before this would have
         // to repeat the same state knowledge and could drift from it.
         $source = match ($this->status) {
-            OwnershipTransferStatus::Requested => 'pre-verification',
-            OwnershipTransferStatus::Verified => 'execution-time',
+            OwnershipTransferStatus::Requested => TransitionSource::PreVerification,
+            OwnershipTransferStatus::Verified => TransitionSource::ExecutionTime,
             default => throw new OwnershipTransferNotRejectableException,
         };
 
@@ -117,7 +117,7 @@ class OwnershipTransferRequest extends AggregateRoot
             rejectedBy: $command->rejectedBy,
             rejectionReason: $command->reason,
             rejectionReasonCode: $command->rejectionReasonCode,
-            source: $source,
+            source: $source->value,
             rejectedAt: CarbonImmutable::now(),
         ));
     }
