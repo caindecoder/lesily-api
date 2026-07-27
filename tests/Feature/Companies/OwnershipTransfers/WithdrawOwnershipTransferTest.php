@@ -136,28 +136,44 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     /**
-     * The only shape a withdrawal can get wrong. `reason` is optional and
-     * `cancelledBy` is auth-resolved, so there is no required-field matrix here —
-     * a DataProvider would pad the row count without adding evidence, which is
-     * precisely what s152 found when it re-checked reject's seven-row provider
-     * and could only give two of them teeth.
+     * The two shapes a withdrawal can get wrong. `cancelledBy` is auth-resolved
+     * and `reason` is optional, so there is no required-field matrix here — but
+     * `reason` carries two rules and only one of them was ever exercised.
+     *
+     * The non-string row exists because dropping `string` from the Command left
+     * all 92 rows green. Without that rule an array satisfies `max:1000` as a
+     * COUNT check, sails through the boundary, and then meets the `?string
+     * $reason` property — a TypeError, i.e. a 500 on a path every sibling
+     * answers with a 422.
+     *
+     * @param  array<string, mixed>  $body
      */
     #[Test]
-    public function when_the_withdrawal_reason_exceeds_the_bound_then_it_is_refused(): void
+    #[DataProvider('provideInvalidWithdrawalReasons')]
+    public function when_the_withdrawal_reason_is_invalid_then_it_is_refused(array $body): void
     {
         // Given an open transfer this owner raised
         [$company, $owner] = $this->aCompanyWithOwner();
         $target = $this->aMemberWithRole($company, 'employee');
         $transfer = $this->aTransferInState($company, $target, OwnershipTransferStatus::Requested);
 
-        // When they withdraw it with prose one character past the contract
-        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
-            'reason' => str_repeat('a', 1001),
-        ]);
+        // When they withdraw it with a reason the contract does not admit
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), $body);
 
         // Then the boundary refuses it and the transfer stands
         $this->assertValidationRejected($response, 'reason');
         $this->assertTransferStillOpen((string) $transfer->getKey(), OwnershipTransferStatus::Requested);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>}>
+     */
+    public static function provideInvalidWithdrawalReasons(): array
+    {
+        return [
+            'one character past the bound' => [['reason' => str_repeat('a', 1001)]],
+            'not a string at all' => [['reason' => ['first half', 'second half']]],
+        ];
     }
 
     /**
