@@ -13,6 +13,7 @@ use App\Companies\OwnershipTransfers\Enums\TransitionSource;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 
 /**
  * SM-1-05 T6 + T7 (UC-1-114 pre-verification, UC-1-115 post-verification) — the
@@ -192,6 +193,49 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
 
         // Then the pre-verification window is recorded end to end
         $this->assertWithdrawalRecorded($response, $owner, TransitionSource::PreVerification);
+    }
+
+    /**
+     * SM-1-05 T7 (UC-1-115) — the post-verification window.
+     *
+     * The asymmetry with T6 is the point: admin verification work HAS happened,
+     * so the prior T2 record must survive the withdrawal intact, and the timer
+     * being cleared here is a DIFFERENT value (`verified_at + 14d`, not
+     * `requested_at + 30d`). At s153 the reject twin turned out to have asserted
+     * only one of its two windows' clears, so both are pinned here.
+     */
+    #[Test]
+    public function when_an_owner_withdraws_a_verified_transfer_then_it_is_cancelled_after_verification(): void
+    {
+        // Given a transfer a platform admin has already identity-verified
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $verifier = User::factory()->create();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $verifier);
+
+        // When the requester withdraws it before it can be executed
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then the post-verification window is recorded, verification intact
+        $this->assertWithdrawalRecorded($response, $owner, TransitionSource::PostVerification);
+        $this->assertVerificationRecordPreserved($verifier);
+    }
+
+    /**
+     * The T2 evidence outlives the withdrawal. UC-1-115's legal-defensibility
+     * chain reads "verifier did their job; the requester later abandoned it", so
+     * the verifier's attribution and notes must still be readable on the
+     * cancelled row — and the T2 event itself is still in the stream.
+     */
+    private function assertVerificationRecordPreserved(User $verifier): void
+    {
+        $transfer = OwnershipTransferRequest::query()->sole();
+        $this->assertSame($verifier->getKey(), $transfer->verified_by);
+        $this->assertNotNull($transfer->verified_at);
+        $this->assertDatabaseHas('stored_events', [
+            'event_class' => OwnershipTransferIdentityVerified::class,
+        ]);
     }
 
     /**

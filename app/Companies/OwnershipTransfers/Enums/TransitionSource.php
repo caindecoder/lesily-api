@@ -23,4 +23,5 @@ namespace App\Companies\OwnershipTransfers\Enums;
 enum TransitionSource: string
 {
     case PreVerification = 'pre-verification';
+    case PostVerification = 'post-verification';
 }

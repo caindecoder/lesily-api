@@ -145,6 +145,7 @@ class OwnershipTransferRequest extends AggregateRoot
         // withdrawable, and each names its own window.
         $source = match ($this->status) {
             OwnershipTransferStatus::Requested => TransitionSource::PreVerification,
+            OwnershipTransferStatus::Verified => TransitionSource::PostVerification,
             default => throw new OwnershipTransferNotWithdrawableException,
         };
 
