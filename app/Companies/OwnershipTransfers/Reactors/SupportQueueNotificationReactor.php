@@ -33,7 +33,10 @@ class SupportQueueNotificationReactor extends Reactor
 {
     public function onOwnershipTransferRequested(OwnershipTransferRequested $event): void
     {
-        $this->alertSupport($event->requestId, OwnershipTransferRequestedNotification::class);
+        $this->alertSupport(
+            $event->requestId,
+            fn (OwnershipTransferRequest $transfer) => new OwnershipTransferRequestedNotification($transfer),
+        );
     }
 
     /**
@@ -48,22 +51,34 @@ class SupportQueueNotificationReactor extends Reactor
      */
     public function onOwnershipTransferCancelled(OwnershipTransferCancelled $event): void
     {
-        $this->alertSupport($event->requestId, OwnershipTransferWithdrawnNotification::class);
+        $this->alertSupport(
+            $event->requestId,
+            fn (OwnershipTransferRequest $transfer) => new OwnershipTransferWithdrawnNotification($transfer),
+        );
     }
 
     /**
      * Recipients resolve from the interim `platform.admin_user_ids` allowlist
      * (s136 binding — the platform-admin slice replaces it with real admin auth).
      *
-     * @param  class-string<OwnershipTransferNotification>  $notification
+     * Takes a FACTORY rather than a class-string. The class-string form was
+     * satisfiable by a subclass this method cannot actually construct:
+     * `OwnershipTransferRejectedNotification` is a valid
+     * class-string<OwnershipTransferNotification> but takes a second `$reason`
+     * argument, so passing it type-checked, passed Larastan, and threw
+     * ArgumentCountError at runtime. The two-literal shape this extraction
+     * replaced could not express that mistake; a closure restores that property
+     * and keeps the deduplication.
+     *
+     * @param  callable(OwnershipTransferRequest): OwnershipTransferNotification  $notification
      */
-    private function alertSupport(string $requestId, string $notification): void
+    private function alertSupport(string $requestId, callable $notification): void
     {
         $transfer = OwnershipTransferRequest::query()->findOrFail($requestId);
 
         User::query()
             ->whereIn('id', PlatformAdminAllowlist::userIds())
             ->get()
-            ->each(fn (User $admin) => $admin->notify(new $notification($transfer)));
+            ->each(fn (User $admin) => $admin->notify($notification($transfer)));
     }
 }
