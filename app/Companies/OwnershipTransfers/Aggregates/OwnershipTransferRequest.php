@@ -4,8 +4,10 @@ namespace App\Companies\OwnershipTransfers\Aggregates;
 
 use Carbon\CarbonImmutable;
 use App\Foundation\EventStore\AggregateRoot;
+use App\Companies\OwnershipTransfers\Enums\TransitionSource;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
@@ -13,14 +15,18 @@ use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCo
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotRejectableException;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotVerifiableException;
+use App\Companies\OwnershipTransfers\UseCases\Commands\WithdrawOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotWithdrawableException;
 use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferIdentityCommand;
 
 /**
  * The transfer-request lifecycle stream (SM-1-05): one aggregate per request,
  * multi-actor (Owner requests → support verifies → platform admin executes →
  * system expires). Unlike the guardless Memberships methods, transitions here
- * carry aggregate state guards (E28) — later slice tasks add
- * verifyIdentity / execute / reject / withdraw / expireIfStale.
+ * carry aggregate state guards (E28).
+ *
+ * Built: request (T1) · verifyIdentity (T2) · reject (T3/T5) · withdraw (T6/T7).
+ * Still to come: execute (T4, Task 8) · expireIfStale (T8/T9, Task 7).
  */
 class OwnershipTransferRequest extends AggregateRoot
 {
@@ -119,5 +125,40 @@ class OwnershipTransferRequest extends AggregateRoot
     public function applyOwnershipTransferRejected(OwnershipTransferRejected $event): void
     {
         $this->status = OwnershipTransferStatus::Rejected;
+    }
+
+    /**
+     * SM-1-05 T6 + T7. The requester's own exit, mirroring reject()'s two-window
+     * shape: the pre-transition state decides the `source`, so the caller never
+     * has to know which window it is in.
+     *
+     * No legal-hold check, for the same reason reject() has none (s151 H4):
+     * §S10b's hold freezes ownership CHANGES, and a withdrawal changes none. The
+     * ACTOR check is not here either — `current_owner_user_id` is answerable from
+     * the projection without replaying a stream, so the interactor holds it.
+     */
+    public function withdraw(WithdrawOwnershipTransferCommand $command): static
+    {
+        // The transition table IS the guard (E28 §5 — enumerate the transitions,
+        // refuse the rest). Deriving `source` and refusing an illegal state are
+        // the same question asked once: only the two OPEN states are
+        // withdrawable, and each names its own window.
+        $source = match ($this->status) {
+            OwnershipTransferStatus::Requested => TransitionSource::PreVerification,
+            default => throw new OwnershipTransferNotWithdrawableException,
+        };
+
+        return $this->recordThat(new OwnershipTransferCancelled(
+            requestId: $this->uuid(),
+            cancelledBy: $command->cancelledBy,
+            reason: $command->reason,
+            source: $source->value,
+            cancelledAt: CarbonImmutable::now(),
+        ));
+    }
+
+    public function applyOwnershipTransferCancelled(OwnershipTransferCancelled $event): void
+    {
+        $this->status = OwnershipTransferStatus::Cancelled;
     }
 }

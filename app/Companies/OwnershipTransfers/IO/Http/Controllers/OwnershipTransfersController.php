@@ -70,12 +70,15 @@ class OwnershipTransfersController
 
         // Client fields validated at the delivery boundary; the actor is
         // server-sourced and never trusted from the body (the reject precedent).
-        WithdrawOwnershipTransferCommand::validateAndCreate($request->only(['reason']));
+        $command = WithdrawOwnershipTransferCommand::validateAndCreate([
+            ...$request->only(['reason']),
+            'cancelledBy' => $actor->getKey(),
+        ]);
 
         $transfer = $interactor->execute(
             (string) $request->company()->getKey(),
             $requestId,
-            (string) $actor->getKey(),
+            $command,
         );
 
         return new OwnershipTransferRequestResource($transfer);

@@ -5,7 +5,9 @@ namespace App\Companies\OwnershipTransfers\UseCases\Interactors;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Exceptions\NotTheTransferRequesterException;
+use App\Companies\OwnershipTransfers\UseCases\Commands\WithdrawOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
+use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
  * SM-1-05 T6 + T7 (UC-1-114 / UC-1-115) — the original requester withdraws their
@@ -20,8 +22,11 @@ class WithdrawOwnershipTransferInteractor
 {
     public function __construct(private readonly OwnershipTransferRequestRepositoryInterface $transfers) {}
 
-    public function execute(string $companyId, string $requestId, string $actorId): OwnershipTransferRequest
-    {
+    public function execute(
+        string $companyId,
+        string $requestId,
+        WithdrawOwnershipTransferCommand $command,
+    ): OwnershipTransferRequest {
         $transfer = $this->transfers->findByIdForCompany($companyId, $requestId);
 
         if ($transfer === null) {
@@ -34,10 +39,16 @@ class WithdrawOwnershipTransferInteractor
         // because it is answerable from the projection alone and needs no
         // stream replay — the mirror of s149 B1, which put legal_hold in the
         // interactor for the opposite reason (it is another aggregate's state).
-        if ($transfer->current_owner_user_id !== $actorId) {
+        if ($transfer->current_owner_user_id !== $command->cancelledBy) {
             throw new NotTheTransferRequesterException;
         }
 
-        return $transfer;
+        OwnershipTransferRequestAggregate::retrieve($requestId)
+            ->withdraw($command)
+            ->persist();
+
+        // refresh(), not fresh(): it re-reads the projector's writes into THIS
+        // instance and is typed non-null, where fresh() hands back a nullable.
+        return $transfer->refresh();
     }
 }

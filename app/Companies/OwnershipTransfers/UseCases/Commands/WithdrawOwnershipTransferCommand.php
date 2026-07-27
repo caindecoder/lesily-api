@@ -20,6 +20,9 @@ class WithdrawOwnershipTransferCommand extends Data
 {
     public ?string $reason;
 
+    /** Auth-resolved at the boundary, not client-supplied. */
+    public string $cancelledBy;
+
     /**
      * @return array<string, array<int, mixed>>
      */
@@ -30,6 +33,7 @@ class WithdrawOwnershipTransferCommand extends Data
         // (UC-1-019 poison-event precedent).
         return [
             'reason' => ['nullable', 'string', 'max:1000'],
+            'cancelledBy' => ['required', 'uuid'],
         ];
     }
 }

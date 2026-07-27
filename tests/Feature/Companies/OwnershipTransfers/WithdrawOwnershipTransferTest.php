@@ -5,11 +5,14 @@ namespace Tests\Feature\Companies\OwnershipTransfers;
 use App\Models\User;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Companies\OwnershipTransfers\Enums\TransitionSource;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
 
 /**
  * SM-1-05 T6 + T7 (UC-1-114 pre-verification, UC-1-115 post-verification) — the
@@ -24,6 +27,8 @@ use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
  */
 class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
 {
+    private const string WITHDRAWAL_REASON = 'Decided to keep ownership after all.';
+
     #[Test]
     public function when_the_withdrawal_is_unauthenticated_then_it_is_refused(): void
     {
@@ -163,6 +168,57 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
             'current_owner_user_id' => User::factory()->create()->getKey(),
             'target_user_id' => User::factory()->create()->getKey(),
         ]);
+    }
+
+    /**
+     * SM-1-05 T6 (UC-1-114) — the pre-verification window, end to end.
+     *
+     * Arranged through a REAL T1 stream: the aggregate must replay genuine
+     * history for the `Requested` arm of `withdraw()`'s match to be the thing
+     * under test. A factory row would replay an empty stream and the guard would
+     * refuse for the wrong reason (s149 C1).
+     */
+    #[Test]
+    public function when_an_owner_withdraws_a_requested_transfer_then_it_is_cancelled_before_verification(): void
+    {
+        // Given a transfer whose stream carries the real T1 genesis
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+
+        // When the requester withdraws it before any verification has happened
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then the pre-verification window is recorded end to end
+        $this->assertWithdrawalRecorded($response, $owner, TransitionSource::PreVerification);
+    }
+
+    /**
+     * The whole write: the response, the stored event, the projected row and the
+     * SLA timer that a terminal state must not keep.
+     *
+     * The stored-event assertion is amendment R: a direct read-model write would
+     * leave identical columns behind and satisfy every response-level check, so
+     * only the event lookup can tell the event-sourced write apart from one that
+     * a projection replay would silently revert.
+     */
+    private function assertWithdrawalRecorded(TestResponse $response, User $requester, TransitionSource $expected): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data.status', OwnershipTransferStatus::Cancelled->value);
+
+        $this->assertDatabaseHas('stored_events', [
+            'event_class' => OwnershipTransferCancelled::class,
+        ]);
+
+        $transfer = OwnershipTransferRequest::query()->sole();
+        $this->assertSame(OwnershipTransferStatus::Cancelled, $transfer->status);
+        $this->assertSame($expected->value, $transfer->cancellation_source);
+        $this->assertSame(self::WITHDRAWAL_REASON, $transfer->cancellation_reason);
+        $this->assertSame($requester->getKey(), $transfer->cancelled_by);
+        $this->assertNotNull($transfer->cancelled_at);
+        $this->assertNull($transfer->next_state_transition_at);
     }
 
     /**
