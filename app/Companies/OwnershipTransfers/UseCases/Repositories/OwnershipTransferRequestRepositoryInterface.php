@@ -2,7 +2,9 @@
 
 namespace App\Companies\OwnershipTransfers\UseCases\Repositories;
 
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferFilters;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferAdminFilters;
@@ -49,4 +51,19 @@ interface OwnershipTransferRequestRepositoryInterface
      * as the innocent default when it is in fact the cross-tenant one.
      */
     public function findByIdAcrossTenants(string $requestId): ?OwnershipTransferRequest;
+
+    /**
+     * The transfers whose SLA deadline elapsed strictly before $asOf, as
+     * `id => status` — the daily expiry scan's selection (UC-1-116 T8 /
+     * UC-1-117 T9).
+     *
+     * Not hydrated models: the caller re-reads each aggregate from its event
+     * stream anyway, so a read model would be work the transition throws away.
+     * The status rides along because the pre-transition state is what selects
+     * the policy window (30d requested-stage vs 14d verified-stage, ruling M2),
+     * and resolving it here costs nothing on a query that already touched the row.
+     *
+     * @return array<string, OwnershipTransferStatus>
+     */
+    public function listTimerReady(CarbonInterface $asOf): array;
 }

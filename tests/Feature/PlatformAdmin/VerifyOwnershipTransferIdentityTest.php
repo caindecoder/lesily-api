@@ -187,6 +187,32 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * The `Expired` quarter of UC-1-113's transition table, and the LAST of
+     * deferral D-a's four to be paid. Payable only now for the same reason its
+     * `Cancelled` sibling above was payable only at Task 6: until this task built
+     * `expireIfStale()`, no genuinely expired stream existed, and a factory row
+     * would have replayed an empty stream and refused for the wrong reason
+     * (s149 C1/C2).
+     *
+     * `Executed` remains owed, to Task 8, which is the first task that can create it.
+     */
+    #[Test]
+    public function when_the_transfer_has_already_expired_then_it_is_not_verified(): void
+    {
+        // Given a transfer the daily scan has already expired
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->anExpiredTransferStream($company, $owner);
+
+        // When an allowlisted admin attempts to verify it
+        $response = $this->verifyTransfer($admin, $transfer->getKey(), $this->verificationBody());
+
+        // Then it is refused and the terminal state stands
+        $this->assertStateGuardRefused($response, 'Only a transfer awaiting verification can be verified.');
+        $this->assertNeverVerified($transfer, OwnershipTransferStatus::Expired);
+    }
+
+    /**
      * No verification was recorded and the row stayed terminal. The stream
      * legitimately carries its T1 genesis and T3 rejection, so the baseline here is
      * "zero verification events", not "zero events".

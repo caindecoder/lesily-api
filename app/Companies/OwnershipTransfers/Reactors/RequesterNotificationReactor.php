@@ -4,14 +4,16 @@ namespace App\Companies\OwnershipTransfers\Reactors;
 
 use App\Models\User;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferExpiredNotification;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferRejectedNotification;
 
 /**
  * Tells the ORIGINAL REQUESTER that their transfer ended, and why (SM-1-05 §7 —
- * RequesterNotificationReactor listens to Rejected and Expired; T9 joins it at
- * Task 7).
+ * RequesterNotificationReactor listens to Rejected and Expired; both expiry
+ * windows join it unfiltered).
  *
  * T7 deliberately does NOT join it, and never was going to: on a withdrawal the
  * requester IS the actor, so telling them is noise, and SM-1-05 §7's Cancelled
@@ -39,5 +41,19 @@ class RequesterNotificationReactor extends Reactor
             $transfer,
             $event->rejectionReason,
         ));
+    }
+
+    /**
+     * SM-1-05 T8 + T9. Unfiltered by `source`, deliberately: both windows end the
+     * requester's transfer without it completing, so both owe them the notice.
+     * The verifier's separate T9-only notice is what carries the asymmetry
+     * (UC-1-117), and it lives in its own reactor rather than as a branch here.
+     */
+    public function onOwnershipTransferExpired(OwnershipTransferExpired $event): void
+    {
+        $transfer = OwnershipTransferRequest::query()->findOrFail($event->requestId);
+        $requester = User::query()->findOrFail($transfer->current_owner_user_id);
+
+        $requester->notify(new OwnershipTransferExpiredNotification($transfer));
     }
 }

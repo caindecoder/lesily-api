@@ -124,15 +124,23 @@ class OwnershipTransferRequestFactory extends Factory
     }
 
     /**
-     * A lapsed transfer (SM-1-05 `Expired`, terminal). Expiry-write semantics
-     * land at Task 7; these are read-fixture defaults.
+     * A lapsed transfer (SM-1-05 `Expired`, terminal) — read-fixture defaults
+     * modelling the T8 requested-stage window.
+     *
+     * `expiry_source` now comes from the enum, the last of the three `*_source`
+     * literals to migrate (the other two moved at s152). It could only be done
+     * once T8 existed to produce the case; until then the enum carried no expiry
+     * member and a hand-written literal was the only option. Sourcing it from the
+     * enum is right HERE, in a fixture that mirrors production — and wrong in an
+     * ASSERTION, where reading the expected value from the same enum production
+     * renders from makes the check unable to fail (s155 L1).
      */
     public function expired(): static
     {
         return $this->state(fn (): array => [
             'status' => OwnershipTransferStatus::Expired,
             'expired_at' => now()->subHour(),
-            'expiry_source' => 'requested-stage',
+            'expiry_source' => TransitionSource::RequestedStage->value,
             'expired_after_days' => 30,
             'next_state_transition_at' => null,
         ]);
