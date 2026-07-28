@@ -155,6 +155,64 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         ];
     }
 
+    // Edge (OQ-1-006's "per-stage configurable" half) — retuning a window changes
+    // what the scan enforces AND what it records, for both stages.
+    //
+    // Nothing pinned this. Every other row asserts 30 or 14, which are exactly
+    // what `windowFor()`'s inline `config(..., 30)` / `config(..., 14)` fallbacks
+    // return — so misspelling either key, or replacing the method body with
+    // `return $status === Requested ? 30 : 14;`, left the whole class green while
+    // silently un-tuning production. Retuning `request_ttl_days` would have
+    // appeared to work while `expired_after_days` kept recording 30.
+    //
+    // Overriding the window also moves the anchor the T1/T2 projector writes, so
+    // one row pins both reads of each key: the deadline that makes the row due,
+    // and the figure the expiry records. `VerifyOwnershipTransferIdentityTest`
+    // already owns this idiom for the T2 projector's read.
+    #[Test]
+    #[DataProvider('provideRetunedWindows')]
+    public function when_an_sla_window_is_retuned_then_the_scan_enforces_and_records_the_configured_one(
+        string $stage,
+        int $window,
+        string $expectedSource,
+    ): void {
+        // Given both windows retuned well away from their defaults
+        config([
+            'ownership-transfers.request_ttl_days' => 3,
+            'ownership-transfers.verified_ttl_days' => 2,
+        ]);
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aTransferAwaitingStage($stage, $company, $owner);
+
+        // When the scan runs a day past the retuned deadline
+        $this->travel($window + 1)->days();
+
+        // Then it expired on the configured window, and recorded that window
+        $this->runExpiryScan()->expectsOutputToContain('1 transfer(s) expired.')->assertSuccessful();
+        $this->assertTransferExpiredAtStage($transfer, $expectedSource, $window);
+    }
+
+    /**
+     * Both stages, because each reads its own config key through its own arm of
+     * `windowFor()` — pinning one leaves the other free to fall back.
+     *
+     * @return array<string, array{0: string, 1: int, 2: string}>
+     */
+    public static function provideRetunedWindows(): array
+    {
+        return [
+            'a retuned requested-stage window' => ['requested', 3, 'requested-stage'],
+            'a retuned verified-stage window' => ['verified', 2, 'verified-stage'],
+        ];
+    }
+
+    protected function aTransferAwaitingStage(string $stage, Company $company, User $owner): OwnershipTransferRequest
+    {
+        return $stage === 'requested'
+            ? $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'))
+            : $this->aVerifiedTransferStream($company, $owner, $this->aPlatformSupportAdmin());
+    }
+
     // Edge (idempotency) — a second scan does not expire an already-expired
     // transfer. The exclusion is the terminal timer clear, and re-selection would
     // be visible in the count even though M1's no-op would stop a second event.
