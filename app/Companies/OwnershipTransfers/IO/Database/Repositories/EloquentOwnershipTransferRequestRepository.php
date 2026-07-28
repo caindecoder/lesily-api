@@ -103,6 +103,18 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
         // Strictly before: a transfer sitting exactly ON its deadline has not
         // outlived its window yet.
         //
+        // The status predicate is stated by the design in five places and carried
+        // by every analog — LeaveDates' `whereBillingStatus(Trial)`, and the two
+        // built scans' repositories. It was briefly left out on the grounds that a
+        // terminal row is already unselectable, which is true but not a property of
+        // THIS query: the timer is NULL on terminal rows only because a different
+        // class, the projector, clears it in every terminal arm, and `NULL < cutoff`
+        // is how that clearing takes effect rather than a second guard. Relying on
+        // it made the query depend on an invariant maintained elsewhere and owed
+        // Task 8 a residual — an `execute()` arm landing terminal without clearing
+        // the timer would have been re-selected nightly and silently skipped
+        // forever. Stating the states here costs one line and owes nothing (O2).
+        //
         // Legal hold is SKIP-ONLY (slice-#11 D3 / OQ-1-D07): a held company's
         // transfers are simply excluded while the hold stands, and their deadlines
         // are never paused or rewritten. When the hold lifts the ORIGINAL deadline
@@ -110,6 +122,10 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
         // documented, in preference to snapshot arithmetic nothing else needs.
         return OwnershipTransferRequest::query()
             ->where('next_state_transition_at', '<', $asOf)
+            ->whereIn('status', [
+                OwnershipTransferStatus::Requested,
+                OwnershipTransferStatus::Verified,
+            ])
             ->whereHas('company', fn (Builder $company) => $company->where('legal_hold', false))
             ->pluck('status', 'id')
             ->all();

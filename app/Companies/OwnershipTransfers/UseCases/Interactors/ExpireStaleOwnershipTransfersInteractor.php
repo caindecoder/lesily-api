@@ -59,6 +59,15 @@ class ExpireStaleOwnershipTransfersInteractor
      */
     private function windowFor(OwnershipTransferStatus $status): int
     {
+        // `default` IS the verified arm, and O2 is what makes that safe to say:
+        // the repository now selects `requested` or `verified` and nothing else,
+        // so no third status can reach here and quietly collect the 14-day figure.
+        //
+        // Naming both arms and dropping the catch-all was tried and reverted —
+        // Larastan L8 requires a match over this parameter to handle all six enum
+        // cases, and the honest alternative (`default => throw`) is a line no test
+        // can reach, which codecov/patch would reject. The guarantee belongs in the
+        // query, where it is now stated, rather than in an unreachable guard here.
         return (int) match ($status) {
             OwnershipTransferStatus::Requested => config('ownership-transfers.request_ttl_days', 30),
             default => config('ownership-transfers.verified_ttl_days', 14),
