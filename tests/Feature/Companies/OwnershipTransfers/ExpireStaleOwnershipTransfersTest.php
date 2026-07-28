@@ -12,6 +12,7 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferExpiredNotification;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferVerificationLapsedNotification;
 
 /**
  * SM-1-05 T8 + T9 — the daily `ownership-transfers:expire-stale` scan ends
@@ -84,6 +85,41 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         // Then it is expired at the verified stage, on the 14-day window
         $this->assertTransferExpiredAtStage($transfer, 'verified-stage', 14);
         $this->assertRequesterWasNotifiedOfExpiry($transfer);
+        $this->assertVerifierWasNotifiedOfLapse($transfer);
+    }
+
+    // Happy (UC-1-116, the T8 half of the dual-notification asymmetry) — nobody
+    // verified a requested-stage transfer, so there is no verifier to tell. The
+    // paired negative of the T9 row above: without it the source filter is
+    // asserted from one side only, which is precisely how the equivalent filter
+    // went unenforced at s155 (91 tests stayed green while it was silenced).
+    #[Test]
+    public function when_a_transfer_expires_before_it_was_verified_then_no_verifier_is_notified(): void
+    {
+        // Given a requested transfer whose 30-day window has elapsed, never verified
+        $this->anOverdueRequestedTransfer();
+
+        // When the daily scan runs
+        $this->runExpiryScan()->assertSuccessful();
+
+        // Then no verification-lapsed notice goes out
+        $this->assertNoVerifierWasNotified();
+    }
+
+    /**
+     * No verification-lapsed notice was sent to anyone.
+     *
+     * The revert-check for this row is worth stating precisely, because what it
+     * proves is stronger than the assertion reads. Removing `VerifierNotificationReactor`'s
+     * source filter does not merely send a spurious notice — a requested-stage
+     * transfer has a NULL `verified_by`, so the reactor's `findOrFail` throws and
+     * the whole scan fails. The filter is load-bearing for the scan's survival,
+     * not only for its etiquette, and `assertSuccessful()` in the caller is what
+     * catches that half.
+     */
+    protected function assertNoVerifierWasNotified(): void
+    {
+        Notification::assertSentTimes(OwnershipTransferVerificationLapsedNotification::class, 0);
     }
 
     /**
@@ -175,6 +211,26 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
 
         Notification::assertSentTo($requester, OwnershipTransferExpiredNotification::class);
         Notification::assertSentTimes(OwnershipTransferExpiredNotification::class, 1);
+    }
+
+    /**
+     * The admin who performed the prior T2 verification was told their work
+     * lapsed unexecuted — UC-1-117's dual-notification asymmetry, and the whole
+     * reason T9 differs from T8.
+     *
+     * The verifier is resolved from the projection's `verified_by` (ruling M3),
+     * written once at T2 by the table's sole writer straight from that event's
+     * own payload field. UC-1-117 asks for a `stored_events` read instead; that
+     * would be the first production read of the event store anywhere in the app
+     * and would couple this reactor to an event class name and payload shape
+     * (OQ-1-108) — the coupling J6 kept out of payloads.
+     */
+    protected function assertVerifierWasNotifiedOfLapse(OwnershipTransferRequest $transfer): void
+    {
+        $verifier = User::query()->findOrFail($this->currentTransfer($transfer)->verified_by);
+
+        Notification::assertSentTo($verifier, OwnershipTransferVerificationLapsedNotification::class);
+        Notification::assertSentTimes(OwnershipTransferVerificationLapsedNotification::class, 1);
     }
 
     protected function runExpiryScan(): PendingCommand
