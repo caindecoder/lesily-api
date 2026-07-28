@@ -402,6 +402,29 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         Notification::assertSentTimes(OwnershipTransferVerificationLapsedNotification::class, 0);
     }
 
+    // Happy (downstream chain) — after the scan expires a transfer, its own owner
+    // reading it back sees a request the SYSTEM ended, not a human. Proves the
+    // expiry reaches the surface the requester actually looks at, through the
+    // real UC-1-125 endpoint rather than a restatement of the projection.
+    #[Test]
+    public function when_an_owner_reads_a_transfer_the_scan_expired_then_it_reports_a_system_ended_request(): void
+    {
+        // Given a transfer the daily scan has expired
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
+        $this->travel(31)->days();
+        $this->runExpiryScan()->assertSuccessful();
+
+        // When its owner reads the transfer back
+        $response = $this->getTransferStatus($owner, $company, (string) $transfer->getKey());
+
+        // Then it reads as system-ended, with no SLA deadline left to show
+        $response->assertOk();
+        $response->assertJsonPath('data.status', 'expired');
+        $response->assertJsonPath('data.terminating_actor', 'system_timer');
+        $response->assertJsonPath('data.next_action', 'Transfer request expired');
+    }
+
     /**
      * A requested transfer whose 30-day window has just elapsed — arranged
      * through a REAL T1 stream, then the clock moved past the deadline the T1
