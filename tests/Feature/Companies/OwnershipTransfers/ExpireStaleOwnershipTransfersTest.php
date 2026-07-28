@@ -4,7 +4,6 @@ namespace Tests\Feature\Companies\OwnershipTransfers;
 
 use App\Models\User;
 use Carbon\CarbonImmutable;
-use Illuminate\Mail\Mailable;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
@@ -15,6 +14,7 @@ use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\IO\Mails\OwnershipTransferNotificationMail;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferExpiredNotification;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferVerificationLapsedNotification;
@@ -324,7 +324,7 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
      * and the view together, so a template that referenced a missing variable
      * would fail here and nowhere else in the suite.
      */
-    protected function assertNoticeRenders(Mailable $mail, string $expectedSubject, string $expectedPhrase): void
+    protected function assertNoticeRenders(OwnershipTransferNotificationMail $mail, string $expectedSubject, string $expectedPhrase): void
     {
         $rendered = $mail->render();
 
