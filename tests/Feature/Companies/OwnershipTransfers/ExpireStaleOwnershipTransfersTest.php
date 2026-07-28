@@ -7,6 +7,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
@@ -68,6 +69,7 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         // Then it is expired at the requested stage and its requester is told
         $this->assertTransferExpiredAtStage($transfer, 'requested-stage', 30);
         $this->assertRequesterWasNotifiedOfExpiry($transfer);
+        $this->assertExpiryAudited($transfer);
     }
 
     // Happy (UC-1-117 sc.1, T9) — a VERIFIED transfer that outlived its shorter
@@ -231,6 +233,47 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
 
         Notification::assertSentTo($verifier, OwnershipTransferVerificationLapsedNotification::class);
         Notification::assertSentTimes(OwnershipTransferVerificationLapsedNotification::class, 1);
+    }
+
+    /**
+     * The expiry left a chain-of-custody row naming no human actor.
+     *
+     * Every column here is pinned, and that is deliberate: at s155 the equivalent
+     * audit assertion could not fail — `stored_event_id` stripped, the role code
+     * changed to `admin` and the description rewritten all left 92 tests green.
+     * The actor triple is asserted NULL rather than skipped, because "no human
+     * did this" is the row's whole claim (ruling M7) and an unasserted null is
+     * indistinguishable from lost attribution.
+     *
+     * `stored_event_id` is a nullable soft FK, so a dropped value inserts happily
+     * — asserting it non-null is what keeps the audit row pointing at the event
+     * that justifies it.
+     */
+    protected function assertExpiryAudited(OwnershipTransferRequest $transfer): void
+    {
+        $entry = AuditEntry::query()
+            ->where('subject_id', $transfer->getKey())
+            ->where('event_class', 'OwnershipTransferExpired')
+            ->sole();
+
+        $this->assertSame([
+            'action' => 'transfer_expired',
+            'company_id' => $transfer->company_id,
+            'actor_user_id' => null,
+            'actor_role_code' => null,
+            'actor_label' => null,
+        ], [
+            'action' => $entry->action,
+            'company_id' => $entry->company_id,
+            'actor_user_id' => $entry->actor_user_id,
+            'actor_role_code' => $entry->actor_role_code,
+            'actor_label' => $entry->actor_label,
+        ]);
+        $this->assertNotNull($entry->stored_event_id);
+        $this->assertSame(
+            'The ownership transfer expired before it was completed; the current owner retains ownership.',
+            $entry->description,
+        );
     }
 
     protected function runExpiryScan(): PendingCommand
