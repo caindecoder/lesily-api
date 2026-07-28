@@ -40,8 +40,6 @@ enum TransitionSource: string
     /** T8 expiry — 30 days passed and nobody verified the request. */
     case RequestedStage = 'requested-stage';
 
-    // T9's `verified-stage` is deliberately still absent: row 11 of the Task-7
-    // table is its first producer, and shipping it here would add a member no
-    // code path can emit (the PR #114 unconsumed-artifact cut, which is also why
-    // T8's case arrives now rather than at s154 alongside the withdraw pair).
+    /** T9 expiry — verified, but 14 days passed and nobody executed it. */
+    case VerifiedStage = 'verified-stage';
 }

@@ -196,6 +196,7 @@ class OwnershipTransferRequest extends AggregateRoot
     {
         $source = match ($this->status) {
             OwnershipTransferStatus::Requested => TransitionSource::RequestedStage,
+            OwnershipTransferStatus::Verified => TransitionSource::VerifiedStage,
             default => null,
         };
 

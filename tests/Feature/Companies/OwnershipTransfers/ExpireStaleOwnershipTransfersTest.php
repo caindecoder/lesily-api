@@ -66,6 +66,22 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->assertTransferExpiredAtStage($transfer, TransitionSource::RequestedStage, 30);
     }
 
+    // Happy (UC-1-117 sc.1, T9) — a VERIFIED transfer that outlived its shorter
+    // 14-day window expires at the verified stage. The window is shorter because
+    // execution is a single admin click, so a stale verification is the risk.
+    #[Test]
+    public function when_a_verified_transfer_outlives_its_fourteen_day_window_then_it_expires_at_the_verified_stage(): void
+    {
+        // Given a verified transfer whose 14-day window has elapsed
+        $transfer = $this->anOverdueVerifiedTransfer();
+
+        // When the daily scan runs
+        $this->runExpiryScan()->expectsOutputToContain('1 transfer(s) expired.')->assertSuccessful();
+
+        // Then it is expired at the verified stage, on the 14-day window
+        $this->assertTransferExpiredAtStage($transfer, TransitionSource::VerifiedStage, 14);
+    }
+
     /**
      * A requested transfer whose 30-day window has just elapsed — arranged
      * through a REAL T1 stream, then the clock moved past the deadline the T1
@@ -77,6 +93,21 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $transfer = $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
 
         $this->travel(31)->days();
+
+        return $transfer;
+    }
+
+    /**
+     * A verified transfer whose 14-day post-verification window has just
+     * elapsed — a REAL T1 → T2 stream, so the deadline under test is the one the
+     * T2 projector RESET (verified_at + 14d), not the T1 anchor it replaced.
+     */
+    protected function anOverdueVerifiedTransfer(): OwnershipTransferRequest
+    {
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $this->aPlatformSupportAdmin());
+
+        $this->travel(15)->days();
 
         return $transfer;
     }
