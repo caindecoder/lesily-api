@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
@@ -177,7 +178,12 @@ trait ArrangesOwnershipTransferStreams
      * guard refuse for the wrong reason and the test's name a lie (s149 C1/C2).
      *
      * The clock is left where the caller set it — the expiry is driven directly
-     * rather than through the scan, so no travel is needed to make it due.
+     * rather than through the scan, so no travel is needed to make it due. That
+     * is deliberate for a FIXTURE and would be wrong as a claim about the scan:
+     * `expireIfStale()` verifies that the state has not moved since selection
+     * (ruling O1), not that a deadline has passed, and the repository's `WHERE`
+     * is what enforces dueness. `expectedStatus` is `Requested` here because that
+     * is the state this stream is in when the expiry fires.
      */
     protected function anExpiredTransferStream(Company $company, User $owner): OwnershipTransferRequest
     {
@@ -185,7 +191,7 @@ trait ArrangesOwnershipTransferStreams
 
         OwnershipTransferRequestAggregate::retrieve($transfer->getKey())
             ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
-                'requestId' => $transfer->getKey(),
+                'expectedStatus' => OwnershipTransferStatus::Requested,
                 'expiredAfterDays' => 30,
             ]))
             ->persist();

@@ -186,14 +186,37 @@ class OwnershipTransferRequest extends AggregateRoot
      * state x event combination to be explicitly handled, and "deliberately does
      * nothing" qualifies where "never considered" does not.
      *
-     * Reachable only by racing the scan — an admin verifying, executing or the
-     * owner withdrawing between the SELECT and this write. The repository's
-     * predicate excludes terminal rows, so the console can never reach the
-     * default arm; it is driven directly in test, the shape
-     * `ExpireTrialsCommandTest` uses for its own unreachable no-op arms.
+     * Both refusals answer the same hazard, from opposite ends. The scan reads
+     * the row's state from the PROJECTION to select it, then this method reads it
+     * again by replaying the STREAM — two tables, two instants. Anything that
+     * moves the row in between makes the selection stale:
+     *
+     *  - it left the open set entirely (withdrawn, rejected, already expired) —
+     *    the `default` arm; or
+     *  - it moved to the OTHER open state, which is the sharper case, because
+     *    the row now carries a fresh deadline and is not due at all. An admin
+     *    verifying at day 29 gives the transfer 14 new days; expiring it then
+     *    would fire 14 days early AND stamp `verified-stage` with the 30-day
+     *    figure the interactor derived before the move (ruling O1).
+     *
+     * So the Command carries what the scan saw and any disagreement refuses.
+     * That is what UC-1-116 error flow 4b asks for ("no event emitted"), and
+     * SM-1-05 §4 states both guards as state STILL `Requested` / STILL
+     * `Verified` — still, not merely open.
+     *
+     * The `default` arm stays reachable only by driving this method directly,
+     * the shape `ExpireTrialsCommandTest` uses for its own console-unreachable
+     * no-op arms. Note what the repository predicate does and does not do: it
+     * excludes rows whose timer is NULL, which covers terminal rows only because
+     * a different class — the projector — clears the timer in every terminal arm.
+     * It is not a state filter.
      */
     public function expireIfStale(ExpireOwnershipTransferCommand $command): static
     {
+        if ($this->status !== $command->expectedStatus) {
+            return $this;
+        }
+
         $source = match ($this->status) {
             OwnershipTransferStatus::Requested => TransitionSource::RequestedStage,
             OwnershipTransferStatus::Verified => TransitionSource::VerifiedStage,

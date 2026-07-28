@@ -41,7 +41,7 @@ class ExpireStaleOwnershipTransfersInteractor
         foreach ($this->transfers->listTimerReady($asOf) as $requestId => $status) {
             OwnershipTransferRequestAggregate::retrieve($requestId)
                 ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
-                    'requestId' => $requestId,
+                    'expectedStatus' => $status,
                     'expiredAfterDays' => $this->windowFor($status),
                 ]))
                 ->persist();

@@ -211,10 +211,12 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $transfer = $this->aTerminalTransferStream($arrangement, $company, $owner);
         $expiriesBefore = $this->expiryEventCount($transfer);
 
-        // When an expiry fires for it anyway
+        // When an expiry fires for it anyway, on a selection that AGREES with its
+        // state — so the O1 disagreement guard passes and the no-op arm is what
+        // has to refuse it
         OwnershipTransferRequestAggregate::retrieve($transfer->getKey())
             ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
-                'requestId' => $transfer->getKey(),
+                'expectedStatus' => $transfer->status,
                 'expiredAfterDays' => 30,
             ]))
             ->persist();
@@ -273,6 +275,41 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
             'rejected' => $this->aRejectedTransferStream($company, $owner, $this->aPlatformSupportAdmin()),
             default => $this->anExpiredTransferStream($company, $owner),
         };
+    }
+
+    // Edge (ruling O1) — the scan selected this row while it was `Requested`, and
+    // an admin verified it before the loop reached its write. The selection is
+    // therefore stale: the row now carries a FRESH `verified_at + 14d` deadline
+    // and is not due at all. UC-1-116 error flow 4b and its Gherkin sc.2 both
+    // require the transition to be SKIPPED — "no event emitted", "R1 remains in
+    // Verified state" — and SM-1-05 §4 states the T8 guard as "state STILL
+    // `Requested`", not "state open".
+    //
+    // Selection status and replayed status are read from different tables at
+    // different instants, so the aggregate cannot detect this on its own; the
+    // Command carries what the scan saw and the aggregate refuses on any
+    // disagreement. Without that guard the `Verified` arm fires and records an
+    // expiry stamped `verified-stage` carrying the 30-day figure the interactor
+    // derived from the pre-race status — a pairing ERD-1-05 §3 makes impossible,
+    // written permanently into an append-only stream.
+    #[Test]
+    public function when_the_transfer_was_verified_after_the_scan_selected_it_then_no_expiry_is_recorded(): void
+    {
+        // Given a transfer verified after the scan picked it up as requested
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $this->aPlatformSupportAdmin());
+        $expiriesBefore = $this->expiryEventCount($transfer);
+
+        // When the expiry fires under the window the scan selected it for
+        OwnershipTransferRequestAggregate::retrieve($transfer->getKey())
+            ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
+                'expectedStatus' => OwnershipTransferStatus::Requested,
+                'expiredAfterDays' => 30,
+            ]))
+            ->persist();
+
+        // Then nothing was recorded and it keeps its verified deadline
+        $this->assertNothingFurtherRecorded($transfer, $expiriesBefore);
     }
 
     // Edge (email leg) — the requester's notice renders, and says which company
