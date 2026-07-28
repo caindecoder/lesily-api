@@ -2,6 +2,7 @@
 
 namespace App\Companies\OwnershipTransfers\UseCases\Repositories;
 
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferFilters;
@@ -49,4 +50,16 @@ interface OwnershipTransferRequestRepositoryInterface
      * as the innocent default when it is in fact the cross-tenant one.
      */
     public function findByIdAcrossTenants(string $requestId): ?OwnershipTransferRequest;
+
+    /**
+     * Ids of the transfers whose SLA deadline elapsed strictly before $asOf —
+     * the daily expiry scan's selection (UC-1-116 T8 / UC-1-117 T9).
+     *
+     * Returns ids rather than models: the caller re-reads each aggregate from
+     * its event stream anyway, so hydrating read models here would be work the
+     * transition throws away. Both built scans do the same.
+     *
+     * @return list<string>
+     */
+    public function listTimerReady(CarbonInterface $asOf): array;
 }

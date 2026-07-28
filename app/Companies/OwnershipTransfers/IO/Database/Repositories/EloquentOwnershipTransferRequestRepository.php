@@ -2,6 +2,7 @@
 
 namespace App\Companies\OwnershipTransfers\IO\Database\Repositories;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
@@ -92,5 +93,18 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
                 perPage: $filters->per_page ?? self::DEFAULT_PER_PAGE,
                 page: $filters->page ?? 1,
             );
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function listTimerReady(CarbonInterface $asOf): array
+    {
+        // Strictly before: a transfer sitting exactly ON its deadline has not
+        // outlived its window yet.
+        return OwnershipTransferRequest::query()
+            ->where('next_state_transition_at', '<', $asOf)
+            ->pluck('id')
+            ->all();
     }
 }
