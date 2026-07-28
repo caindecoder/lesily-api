@@ -4,10 +4,12 @@ namespace Tests\Feature\Companies\OwnershipTransfers;
 
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
@@ -18,6 +20,8 @@ use App\Companies\OwnershipTransfers\IO\Mails\OwnershipTransferNotificationMail;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferExpiredNotification;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferVerificationLapsedNotification;
+use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
+use App\Companies\OwnershipTransfers\IO\Database\Repositories\EloquentOwnershipTransferRequestRepository;
 use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
@@ -41,6 +45,38 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         parent::setUp();
 
         $this->travelTo(CarbonImmutable::parse('2026-07-02 09:00:00'));
+    }
+
+    // Sad — the per-row command refuses a window that is not a positive number of
+    // days, and a stage the state machine does not have.
+    //
+    // The console cannot reach either: it builds every command from a row it has
+    // just selected. They guard future callers, which is exactly what the
+    // Command's docblock claims by citing `ApplyTrialExpirationCommand` — and
+    // that precedent is itself pinned, by `ExpireTrialsCommandTest`'s own
+    // rejection provider. The rationale had been copied across without the row,
+    // so `rules()` could be deleted whole and every test stayed green.
+    #[Test]
+    #[DataProvider('provideRejectedExpiryCommands')]
+    public function when_an_expiry_command_is_malformed_then_it_is_refused(array $payload): void
+    {
+        // Given a malformed per-row expiry command
+        $this->expectException(ValidationException::class);
+
+        // When it is assembled
+        // Then it never reaches an aggregate
+        ExpireOwnershipTransferCommand::validateAndCreate($payload);
+    }
+
+    /**
+     * @return array<string, array{0: array<string, mixed>}>
+     */
+    public static function provideRejectedExpiryCommands(): array
+    {
+        return [
+            'a window of no days at all' => [['expectedStatus' => 'requested', 'expiredAfterDays' => 0]],
+            'a stage the state machine does not have' => [['expectedStatus' => 'archived', 'expiredAfterDays' => 30]],
+        ];
     }
 
     // Sad — a transfer still inside its 30-day window is not due, so the daily
@@ -132,11 +168,11 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         [$company, $owner] = $this->aCompanyWithOwner();
         $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
 
-        // When the daily scan runs at a given instant relative to that deadline
-        $this->travelTo(CarbonImmutable::parse($runAt));
-
+        // When the daily scan runs with its cutoff at a given instant relative to
+        // that deadline — driven through `--date`, the scan's own input, rather
+        // than by moving the clock underneath it
         // Then it expires only if the deadline elapsed before the cutoff
-        $this->runExpiryScan()->expectsOutputToContain($expectedOutput)->assertSuccessful();
+        $this->runExpiryScan($runAt)->expectsOutputToContain($expectedOutput)->assertSuccessful();
     }
 
     /**
@@ -370,6 +406,63 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->assertNothingFurtherRecorded($transfer, $expiriesBefore);
     }
 
+    // Edge (ruling O1, through the whole scan) — the aggregate-level row above
+    // proves the guard refuses; this proves the SCAN survives the refusal and
+    // reports it honestly.
+    //
+    // It is the only row that can reach a no-op through the console, because the
+    // disagreement it needs cannot be arranged by a sequential suite — the two
+    // reads happen microseconds apart inside one call. Substituting the
+    // repository is the module's existing seam idiom (`AuthTestCase`'s
+    // `TotpVerifier`, `RegisterOwnerTest`'s uniqueness guard, `BillingTestCase`'s
+    // PDF renderer all bind an anonymous class at an interface), and the
+    // repository is a genuine architectural boundary, which is the only place
+    // E23 sanctions a double.
+    #[Test]
+    public function when_a_selection_goes_stale_before_its_row_is_written_then_the_scan_reports_no_expiry(): void
+    {
+        // Given a verified transfer that the scan still believes is requested
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $this->aPlatformSupportAdmin());
+        $this->selectionReports($transfer, OwnershipTransferStatus::Requested);
+
+        // When the daily scan runs
+        $this->runExpiryScan()->expectsOutputToContain('0 transfer(s) expired.')->assertSuccessful();
+
+        // Then nothing expired, and the reported count says so
+        $this->assertTransferStillOpen($transfer);
+    }
+
+    /**
+     * Makes the scan's SELECT report $status for $transfer, whatever its stream
+     * actually holds — the race, made deterministic.
+     *
+     * Extends the concrete repository rather than implementing the interface, so
+     * only the one method under test diverges and the other five keep their real
+     * behaviour (the `RegisterOwnerTest` shape).
+     */
+    protected function selectionReports(OwnershipTransferRequest $transfer, OwnershipTransferStatus $status): void
+    {
+        $this->app->instance(
+            OwnershipTransferRequestRepositoryInterface::class,
+            new class((string) $transfer->getKey(), $status) extends EloquentOwnershipTransferRequestRepository
+            {
+                public function __construct(
+                    private string $requestId,
+                    private OwnershipTransferStatus $status,
+                ) {}
+
+                /**
+                 * @return array<string, OwnershipTransferStatus>
+                 */
+                public function listTimerReady(CarbonInterface $asOf): array
+                {
+                    return [$this->requestId => $this->status];
+                }
+            },
+        );
+    }
+
     // Edge (email leg) — the requester's notice renders, and says which company
     // and that a fresh request is possible.
     //
@@ -390,7 +483,10 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $mail = (new OwnershipTransferExpiredNotification($transfer))->toMail($owner);
 
         // Then it carries the subject, the company and the resubmission path
-        $this->assertNoticeRenders($mail, 'Ownership transfer expired', 'raise a fresh request');
+        $this->assertNoticeRenders($mail, 'Ownership transfer expired', [
+            'raise a fresh request',
+            $company->name,
+        ]);
     }
 
     // Edge (email leg) — the verifier's notice renders, and says the transfer
@@ -407,24 +503,41 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         // When the lapsed-verification notice is rendered for its verifier
         $mail = (new OwnershipTransferVerificationLapsedNotification($transfer))->toMail($verifier);
 
-        // Then it carries the subject and says the verification was theirs
-        $this->assertNoticeRenders($mail, 'Verified ownership transfer expired', 'you verified');
+        // Then it carries the subject, the company and whose work lapsed
+        $this->assertNoticeRenders($mail, 'Verified ownership transfer expired', [
+            'you verified',
+            $company->name,
+        ]);
     }
 
     /**
-     * $mail carries $expectedSubject and $expectedPhrase, and its Blade view
-     * actually renders.
+     * $mail carries $expectedSubject and every phrase in $expectedPhrases, and
+     * its Blade view actually renders.
      *
      * `render()` is the load-bearing call: it drives the envelope, the content
      * and the view together, so a template that referenced a missing variable
      * would fail here and nowhere else in the suite.
+     *
+     * The TENANT NAME is one of the phrases every caller passes, and it is the
+     * reason this takes a list rather than one string. A static-substring check
+     * alone passes on an empty or wrong company name — the regression the s152
+     * review caught in the T1/T2 retrofit, which both `RequestOwnershipTransferTest`
+     * and `WithdrawOwnershipTransferTest` pin explicitly and which these two rows
+     * had lost. Both new notification bodies interpolate `companyName()` and
+     * argue in their docblocks that a recipient owning several companies cannot
+     * otherwise tell which transfer lapsed; nothing was holding them to it.
+     *
+     * @param  array<int, string>  $expectedPhrases
      */
-    protected function assertNoticeRenders(OwnershipTransferNotificationMail $mail, string $expectedSubject, string $expectedPhrase): void
+    protected function assertNoticeRenders(OwnershipTransferNotificationMail $mail, string $expectedSubject, array $expectedPhrases): void
     {
         $rendered = $mail->render();
 
         $this->assertSame($expectedSubject, $mail->envelope()->subject);
-        $this->assertStringContainsString($expectedPhrase, $rendered);
+
+        foreach ($expectedPhrases as $phrase) {
+            $this->assertStringContainsString($phrase, $rendered);
+        }
     }
 
     // Happy (UC-1-116 sc.1, T8) — a requested transfer that outlived its 30-day
@@ -672,9 +785,22 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         );
     }
 
-    protected function runExpiryScan(): PendingCommand
+    /**
+     * Runs the scan, optionally at an explicit cutoff via `--date`.
+     *
+     * The option exists so an operator can replay a missed night, and the class
+     * docblock on the console command cites the two built scans as its model —
+     * but only `ExpireTrialsCommandTest` actually drives it, so here the option
+     * could have been deleted from behaviour with every row still green. The
+     * boundary provider now goes through it rather than through the clock, which
+     * is also the more faithful shape: the cutoff is the scan's own input.
+     */
+    protected function runExpiryScan(?string $asOf = null): PendingCommand
     {
-        $command = $this->artisan('ownership-transfers:expire-stale');
+        $command = $this->artisan(
+            'ownership-transfers:expire-stale',
+            $asOf === null ? [] : ['--date' => $asOf],
+        );
         assert($command instanceof PendingCommand);
 
         return $command;

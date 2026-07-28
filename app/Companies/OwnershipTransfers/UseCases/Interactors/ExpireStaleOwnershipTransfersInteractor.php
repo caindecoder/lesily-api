@@ -39,14 +39,23 @@ class ExpireStaleOwnershipTransfersInteractor
         $expired = 0;
 
         foreach ($this->transfers->listTimerReady($asOf) as $requestId => $status) {
-            OwnershipTransferRequestAggregate::retrieve($requestId)
+            $transfer = OwnershipTransferRequestAggregate::retrieve($requestId)
                 ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
                     'expectedStatus' => $status,
                     'expiredAfterDays' => $this->windowFor($status),
-                ]))
-                ->persist();
+                ]));
 
-            $expired++;
+            // Rows SELECTED and rows EXPIRED are no longer the same number: since
+            // O1 the aggregate can decline a row whose selection went stale, and
+            // counting the iteration would report an expiry that never happened.
+            // The count is the command's only output and the thing an ops alert
+            // would key on, so it has to mean what it says. Asked before persist(),
+            // which takes the recorded events away.
+            if ($transfer->getRecordedEvents() !== []) {
+                $expired++;
+            }
+
+            $transfer->persist();
         }
 
         return $expired;
