@@ -30,13 +30,18 @@ use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as Owne
  * UC-1-117 verified-stage 14d). The slice's first SYSTEM flow: no HTTP surface,
  * no role gate, no tenant context — the actor is the scheduler.
  *
- * EVERY row here arranges a REAL stream and travels past the deadline. The scan
- * reads two different sources — selection queries the projection, the transition
- * replays the stream — so a factory row satisfies the first and is EMPTY for the
- * second. Under ruling M1 the aggregate would then see a null status, take the
- * no-op arm and record nothing: the scan reports "0 expired" and a careless test
- * passes for entirely the wrong reason. That is s149 C1 with a silent failure
- * mode instead of a throwing one.
+ * Every row that involves a TRANSFER arranges a REAL stream (the two command-
+ * validation rows assemble no transfer at all). The scan reads two different
+ * sources — selection queries the projection, the transition replays the stream —
+ * so a factory row satisfies the first and is EMPTY for the second. Under ruling
+ * M1 the aggregate would then see a null status, take the no-op arm and record
+ * nothing: the scan reports "0 expired" and a careless test passes for entirely
+ * the wrong reason. That is s149 C1 with a silent failure mode instead of a
+ * throwing one.
+ *
+ * That the two reads can disagree is not only a fixture hazard, it is a
+ * production one — ruling O1, and the reason the Command carries the state the
+ * scan saw.
  */
 class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
 {
@@ -92,28 +97,26 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->runExpiryScan()->expectsOutputToContain('0 transfer(s) expired.')->assertSuccessful();
 
         // Then the transfer is untouched
-        $this->assertTransferStillOpen($transfer);
+        $this->assertTransferUnchanged($transfer);
     }
 
     // Sad — a transfer that already ended is never re-ended. Arranged through a
     // REAL T1 → T6 stream, so the exclusion under test is the one production
     // produces rather than a factory row's.
     //
-    // BORN GREEN, and stated as such rather than left to read as proof. The
-    // design surface (ERD-1-05 §4, both UC bodies, cd §3) describes the scan as
-    // `next_state_transition_at < now() AND status IN ('requested','verified')`,
-    // but the status half has no reachable failure: every terminal transition
-    // CLEARS the timer in the same projector update, and `NULL < cutoff` is false
-    // in SQL, so a terminal row is already unselectable. Adding the predicate
-    // anyway would be a third mechanism guarding a case the other two make
-    // impossible — a row that reads as evidence and pins nothing (the s151 E2 /
-    // D-g class). This test therefore CHARACTERISES the timer-clear exclusion; it
-    // does not prove a status filter, because there is none to prove.
+    // BORN GREEN, and stated as such rather than left to read as proof. TWO
+    // mechanisms now exclude this row and the test cannot tell them apart: the
+    // projector cleared the timer when the withdrawal landed (`NULL < cutoff` is
+    // false in SQL), and since ruling O2 the query also names the states it
+    // selects. Removing either alone REDs nothing.
     //
-    // The residual risk is Task 8's: if `execute()` ever lands a terminal row
-    // WITHOUT clearing the timer, the scan would re-select it every night and
-    // M1's no-op would silently skip it forever. That is assertable where the
-    // arm is written, and belongs there.
+    // That is why the predicate went in on correctness grounds rather than
+    // test-provable ones. Relying on the timer clear alone made the query depend
+    // on an invariant a different class maintains, and owed Task 8 a residual —
+    // an `execute()` arm landing terminal without clearing the timer would have
+    // been re-selected nightly and silently skipped forever. Naming the states
+    // costs one line and owes nothing. This row characterises the exclusion; it
+    // does not prove which half did the excluding.
     #[Test]
     public function when_a_transfer_has_already_ended_then_the_scan_leaves_it_untouched(): void
     {
@@ -126,7 +129,7 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->runExpiryScan()->expectsOutputToContain('0 transfer(s) expired.')->assertSuccessful();
 
         // Then it is untouched — still cancelled, with no expiry event
-        $this->assertTransferStillOpen($transfer);
+        $this->assertTransferUnchanged($transfer);
     }
 
     // Sad (slice-#11 D3, skip-only legal hold) — a company frozen by a regulatory
@@ -151,7 +154,7 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->runExpiryScan()->expectsOutputToContain('1 transfer(s) expired.')->assertSuccessful();
 
         // Then only the unheld company's transfer expired
-        $this->assertTransferStillOpen($held);
+        $this->assertTransferUnchanged($held);
         $this->assertTransferExpiredAtStage($free, 'requested-stage', 30);
     }
 
@@ -285,7 +288,7 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         // Then both due transfers expired and the in-window one is untouched
         $this->assertTransferExpiredAtStage($firstDue, 'requested-stage', 30);
         $this->assertTransferExpiredAtStage($secondDue, 'requested-stage', 30);
-        $this->assertTransferStillOpen($inWindow);
+        $this->assertTransferUnchanged($inWindow);
     }
 
     // Edge (ruling M1's no-op arm) — an expiry that arrives after the transfer
@@ -328,6 +331,12 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
      * expiry event, so a "no expiry events" assertion would fail for the right
      * reason on the wrong row. What this proves is that the no-op arm added
      * NOTHING, which is the claim regardless of what the stream already held.
+     *
+     * The deadline comparison was vacuous while every caller arranged a terminal
+     * row: the projector nulls the timer on all of them, so it read
+     * `assertEquals(null, null)`. The O1 row is what gave it a data set with a
+     * live deadline — a Verified transfer holding `verified_at + 14d`, which an
+     * expiry firing anyway would have cleared.
      */
     protected function assertNothingFurtherRecorded(OwnershipTransferRequest $transfer, int $expiriesBefore): void
     {
@@ -430,7 +439,7 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->runExpiryScan()->expectsOutputToContain('0 transfer(s) expired.')->assertSuccessful();
 
         // Then nothing expired, and the reported count says so
-        $this->assertTransferStillOpen($transfer);
+        $this->assertTransferUnchanged($transfer);
     }
 
     /**
@@ -815,7 +824,7 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
      * mis-arranged fixture fails SILENTLY rather than throwing — so a row that
      * only compared columns would stay green against an empty stream.
      */
-    protected function assertTransferStillOpen(OwnershipTransferRequest $transfer): void
+    protected function assertTransferUnchanged(OwnershipTransferRequest $transfer): void
     {
         $current = $this->currentTransfer($transfer);
 

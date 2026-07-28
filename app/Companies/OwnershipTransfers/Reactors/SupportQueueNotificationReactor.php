@@ -42,9 +42,8 @@ class SupportQueueNotificationReactor extends Reactor
     /**
      * SM-1-05 T6 + T7 (ruling J4). Deliberately UNFILTERED by `source`: this
      * reactor announced the request's arrival, so it announces its departure in
-     * both windows. Contrast the DESIGNED `VerifierNotificationReactor` (Task 7,
-     * not yet built), which will be source-filtered because only one window has
-     * a verifier to tell.
+     * both windows. Contrast `VerifierNotificationReactor`, which IS
+     * source-filtered because only one window has a verifier to tell.
      *
      * Both windows are asserted. Filtering this to `pre-verification` used to
      * leave the whole suite green, which is how the T7 row came to exist.

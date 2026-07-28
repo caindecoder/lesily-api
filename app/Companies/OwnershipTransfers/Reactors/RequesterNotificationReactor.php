@@ -12,8 +12,8 @@ use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferRejectedN
 
 /**
  * Tells the ORIGINAL REQUESTER that their transfer ended, and why (SM-1-05 §7 —
- * RequesterNotificationReactor listens to Rejected and Expired; T9 joins it at
- * Task 7).
+ * RequesterNotificationReactor listens to Rejected and Expired; both expiry
+ * windows join it unfiltered).
  *
  * T7 deliberately does NOT join it, and never was going to: on a withdrawal the
  * requester IS the actor, so telling them is noise, and SM-1-05 §7's Cancelled
