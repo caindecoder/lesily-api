@@ -58,11 +58,19 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
     // days, and a stage the state machine does not have.
     //
     // The console cannot reach either: it builds every command from a row it has
-    // just selected. They guard future callers, which is exactly what the
-    // Command's docblock claims by citing `ApplyTrialExpirationCommand` — and
-    // that precedent is itself pinned, by `ExpireTrialsCommandTest`'s own
-    // rejection provider. The rationale had been copied across without the row,
-    // so `rules()` could be deleted whole and every test stayed green.
+    // just selected. They guard future callers, which is what the Command's
+    // docblock claims by citing `ApplyTrialExpirationCommand` — and that
+    // precedent is itself pinned, by `ExpireTrialsCommandTest`'s own rejection
+    // provider. The rationale had been copied across without the row.
+    //
+    // The two rows do NOT carry equal weight, and saying so matters. `min:1` is
+    // the only rule here with sole responsibility: nothing infers it, so deleting
+    // it silently accepts a zero-day window. The stage rule is belt-and-braces —
+    // spatie re-infers `required` + `Enum` from the property's own enum type
+    // (`BuiltInTypesRuleInferrer`), so deleting `rules()` wholesale would leave
+    // 'archived' refused anyway. It is kept because the inference depends on the
+    // property STAYING enum-typed: retype it to string and the explicit rule
+    // becomes the only guard left.
     #[Test]
     #[DataProvider('provideRejectedExpiryCommands')]
     public function when_an_expiry_command_is_malformed_then_it_is_refused(array $payload): void
