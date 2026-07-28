@@ -102,8 +102,15 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
     {
         // Strictly before: a transfer sitting exactly ON its deadline has not
         // outlived its window yet.
+        //
+        // Legal hold is SKIP-ONLY (slice-#11 D3 / OQ-1-D07): a held company's
+        // transfers are simply excluded while the hold stands, and their deadlines
+        // are never paused or rewritten. When the hold lifts the ORIGINAL deadline
+        // applies, so the next scan may expire the row immediately — accepted and
+        // documented, in preference to snapshot arithmetic nothing else needs.
         return OwnershipTransferRequest::query()
             ->where('next_state_transition_at', '<', $asOf)
+            ->whereHas('company', fn (Builder $company) => $company->where('legal_hold', false))
             ->pluck('status', 'id')
             ->all();
     }

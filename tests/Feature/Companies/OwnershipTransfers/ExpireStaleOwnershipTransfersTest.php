@@ -54,6 +54,32 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->assertTransferStillOpen($transfer);
     }
 
+    // Sad (slice-#11 D3, skip-only legal hold) — a company frozen by a regulatory
+    // hold is excluded from the scan, so its overdue transfer survives while an
+    // unheld one beside it expires. The second transfer is load-bearing: with one
+    // company in the fixture a scan that skipped EVERYTHING would look identical
+    // (s149 C6 — a scope assertion needs a row on the other side of the scope).
+    #[Test]
+    public function when_the_company_is_under_legal_hold_then_its_overdue_transfer_is_left_open(): void
+    {
+        // Given two equally overdue transfers, one at a company under legal hold
+        [$heldCompany, $heldOwner] = $this->aCompanyWithOwner();
+        $this->placeCompanyUnderLegalHold($heldCompany);
+        $held = $this->aRequestedTransferStream($heldCompany, $heldOwner, $this->aMemberWithRole($heldCompany, 'employee'));
+
+        [$freeCompany, $freeOwner] = $this->aCompanyWithOwner();
+        $free = $this->aRequestedTransferStream($freeCompany, $freeOwner, $this->aMemberWithRole($freeCompany, 'employee'));
+
+        $this->travel(31)->days();
+
+        // When the daily scan runs
+        $this->runExpiryScan()->expectsOutputToContain('1 transfer(s) expired.')->assertSuccessful();
+
+        // Then only the unheld company's transfer expired
+        $this->assertTransferStillOpen($held);
+        $this->assertTransferExpiredAtStage($free, 'requested-stage', 30);
+    }
+
     // Happy (UC-1-116 sc.1, T8) — a requested transfer that outlived its 30-day
     // window is ended by the scan: the aggregate records the expiry at the
     // requested stage, the projection goes terminal and the SLA timer clears.
