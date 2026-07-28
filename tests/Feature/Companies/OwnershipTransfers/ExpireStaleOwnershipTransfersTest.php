@@ -5,6 +5,8 @@ namespace Tests\Feature\Companies\OwnershipTransfers;
 use Carbon\CarbonImmutable;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\OwnershipTransfers\Enums\TransitionSource;
+use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
@@ -46,6 +48,72 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
 
         // Then the transfer is untouched
         $this->assertTransferStillOpen($transfer);
+    }
+
+    // Happy (UC-1-116 sc.1, T8) — a requested transfer that outlived its 30-day
+    // window is ended by the scan: the aggregate records the expiry at the
+    // requested stage, the projection goes terminal and the SLA timer clears.
+    #[Test]
+    public function when_a_requested_transfer_outlives_its_thirty_day_window_then_it_expires_at_the_requested_stage(): void
+    {
+        // Given a requested transfer whose 30-day window has elapsed
+        $transfer = $this->anOverdueRequestedTransfer();
+
+        // When the daily scan runs
+        $this->runExpiryScan()->expectsOutputToContain('1 transfer(s) expired.')->assertSuccessful();
+
+        // Then it is expired at the requested stage
+        $this->assertTransferExpiredAtStage($transfer, TransitionSource::RequestedStage, 30);
+    }
+
+    /**
+     * A requested transfer whose 30-day window has just elapsed — arranged
+     * through a REAL T1 stream, then the clock moved past the deadline the T1
+     * projector wrote.
+     */
+    protected function anOverdueRequestedTransfer(): OwnershipTransferRequest
+    {
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
+
+        $this->travel(31)->days();
+
+        return $transfer;
+    }
+
+    /**
+     * $transfer reached the Expired terminal at $stage: the projection carries
+     * the stage and the elapsed-window figure, the SLA timer is cleared, and a
+     * stored OwnershipTransferExpired event backs it.
+     *
+     * The stored-event assertion is amendment R: `expired_at`/`expiry_source`
+     * are projected columns, so a direct read-model write would satisfy every
+     * other assertion here while leaving the aggregate silent — and be reverted
+     * on the next projection replay.
+     */
+    protected function assertTransferExpiredAtStage(
+        OwnershipTransferRequest $transfer,
+        TransitionSource $stage,
+        int $afterDays,
+    ): void {
+        $current = $this->currentTransfer($transfer);
+
+        $this->assertSame([
+            'status' => OwnershipTransferStatus::Expired,
+            'expiry_source' => $stage->value,
+            'expired_after_days' => $afterDays,
+            'next_state_transition_at' => null,
+        ], [
+            'status' => $current->status,
+            'expiry_source' => $current->expiry_source,
+            'expired_after_days' => $current->expired_after_days,
+            'next_state_transition_at' => $current->next_state_transition_at,
+        ]);
+        $this->assertNotNull($current->expired_at);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferExpired::class)
+            ->where('event_properties->requestId', $transfer->getKey())
+            ->count());
     }
 
     protected function runExpiryScan(): PendingCommand

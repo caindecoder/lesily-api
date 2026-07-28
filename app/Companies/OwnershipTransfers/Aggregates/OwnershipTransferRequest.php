@@ -6,11 +6,13 @@ use Carbon\CarbonImmutable;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\OwnershipTransfers\Enums\TransitionSource;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
+use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotRejectableException;
@@ -25,8 +27,12 @@ use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferId
  * system expires). Unlike the guardless Memberships methods, transitions here
  * carry aggregate state guards (E28).
  *
- * Built: request (T1) · verifyIdentity (T2) · reject (T3/T5) · withdraw (T6/T7).
- * Still to come: execute (T4, Task 8) · expireIfStale (T8/T9, Task 7).
+ * Built: request (T1) · verifyIdentity (T2) · reject (T3/T5) · withdraw (T6/T7)
+ * · expireIfStale (T8/T9). Still to come: execute (T4, Task 8).
+ *
+ * One transition refuses differently from the rest: `expireIfStale()` no-ops
+ * where the others throw, because its caller is a scheduler with nobody to hand
+ * a 409 to (ruling M1). The reasoning lives on the method.
  */
 class OwnershipTransferRequest extends AggregateRoot
 {
@@ -161,5 +167,52 @@ class OwnershipTransferRequest extends AggregateRoot
     public function applyOwnershipTransferCancelled(OwnershipTransferCancelled $event): void
     {
         $this->status = OwnershipTransferStatus::Cancelled;
+    }
+
+    /**
+     * SM-1-05 T8 + T9. The system's own exit, and the ONLY transition here that
+     * refuses by doing nothing rather than by throwing (ruling M1).
+     *
+     * The asymmetry is deliberate. Every other method answers a human holding an
+     * HTTP request, so a `STATE_GUARD_VIOLATION` 409 reaches somebody who can
+     * act on it. This one answers a scheduler: there is no caller to inform, and
+     * a throw inside the batch loop would force a choice between aborting the
+     * remaining rows and swallowing the exception — the silent-failure shape
+     * OQ-1-141 was deferred over. Both UC bodies say "SKIPS the transition" in
+     * terms, and both built system scans agree (`Subscription::endTrial` returns
+     * unchanged; `UserMembership::expireIfPending` has no guard at all).
+     *
+     * The no-op is a WRITTEN match arm, not an absent check: E28 requires every
+     * state x event combination to be explicitly handled, and "deliberately does
+     * nothing" qualifies where "never considered" does not.
+     *
+     * Reachable only by racing the scan — an admin verifying, executing or the
+     * owner withdrawing between the SELECT and this write. The repository's
+     * predicate excludes terminal rows, so the console can never reach the
+     * default arm; it is driven directly in test, the shape
+     * `ExpireTrialsCommandTest` uses for its own unreachable no-op arms.
+     */
+    public function expireIfStale(ExpireOwnershipTransferCommand $command): static
+    {
+        $source = match ($this->status) {
+            OwnershipTransferStatus::Requested => TransitionSource::RequestedStage,
+            default => null,
+        };
+
+        if ($source === null) {
+            return $this;
+        }
+
+        return $this->recordThat(new OwnershipTransferExpired(
+            requestId: $this->uuid(),
+            source: $source->value,
+            expiredAfterDays: $command->expiredAfterDays,
+            expiredAt: CarbonImmutable::now(),
+        ));
+    }
+
+    public function applyOwnershipTransferExpired(OwnershipTransferExpired $event): void
+    {
+        $this->status = OwnershipTransferStatus::Expired;
     }
 }

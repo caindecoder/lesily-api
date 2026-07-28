@@ -96,7 +96,7 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
     }
 
     /**
-     * @return list<string>
+     * @return array<string, OwnershipTransferStatus>
      */
     public function listTimerReady(CarbonInterface $asOf): array
     {
@@ -104,7 +104,7 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
         // outlived its window yet.
         return OwnershipTransferRequest::query()
             ->where('next_state_transition_at', '<', $asOf)
-            ->pluck('id')
+            ->pluck('status', 'id')
             ->all();
     }
 }

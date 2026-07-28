@@ -37,10 +37,11 @@ enum TransitionSource: string
     /** T5 reject — the admin found the problem at execution time. */
     case ExecutionTime = 'execution-time';
 
-    // T8/T9 expiry (`requested-stage` / `verified-stage`) are deliberately NOT
-    // here yet. Task 7 builds `expireIfStale()`, which is their first producer;
-    // adding the cases now would ship two enum members no code path can emit —
-    // the unconsumed-artifact cut PR #114 made on an unused relation. The
-    // factory's `expired()` state keeps its bare literal until that task, which
-    // migrates it the way this one migrated reject's and cancel's.
+    /** T8 expiry — 30 days passed and nobody verified the request. */
+    case RequestedStage = 'requested-stage';
+
+    // T9's `verified-stage` is deliberately still absent: row 11 of the Task-7
+    // table is its first producer, and shipping it here would add a member no
+    // code path can emit (the PR #114 unconsumed-artifact cut, which is also why
+    // T8's case arrives now rather than at s154 alongside the withdraw pair).
 }

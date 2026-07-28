@@ -5,6 +5,7 @@ namespace App\Companies\OwnershipTransfers\Projectors;
 use Carbon\CarbonImmutable;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
@@ -92,6 +93,22 @@ class OwnershipTransferProjector extends Projector
      * drops `verified_at + 14d`. Both are asserted, because at s153 the reject
      * twin turned out to have only ever pinned one of its two.
      */
+    /**
+     * SM-1-05 T8 + T9. Terminal, so the expiry record and the SLA-timer clear
+     * land in the SAME update — sole-writer shape (ruling G3). The timer clear
+     * is what keeps an expired row out of every subsequent scan.
+     */
+    public function onOwnershipTransferExpired(OwnershipTransferExpired $event): void
+    {
+        OwnershipTransferRequest::query()->whereKey($event->requestId)->update([
+            'status' => OwnershipTransferStatus::Expired,
+            'expired_at' => CarbonImmutable::instance($event->expiredAt),
+            'expiry_source' => $event->source,
+            'expired_after_days' => $event->expiredAfterDays,
+            'next_state_transition_at' => null,
+        ]);
+    }
+
     public function onOwnershipTransferCancelled(OwnershipTransferCancelled $event): void
     {
         OwnershipTransferRequest::query()->whereKey($event->requestId)->update([
