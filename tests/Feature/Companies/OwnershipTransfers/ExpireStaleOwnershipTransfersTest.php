@@ -2,14 +2,16 @@
 
 namespace Tests\Feature\Companies\OwnershipTransfers;
 
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
-use App\Companies\OwnershipTransfers\Enums\TransitionSource;
+use Illuminate\Support\Facades\Notification;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferExpiredNotification;
 
 /**
  * SM-1-05 T8 + T9 — the daily `ownership-transfers:expire-stale` scan ends
@@ -62,8 +64,9 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         // When the daily scan runs
         $this->runExpiryScan()->expectsOutputToContain('1 transfer(s) expired.')->assertSuccessful();
 
-        // Then it is expired at the requested stage
+        // Then it is expired at the requested stage and its requester is told
         $this->assertTransferExpiredAtStage($transfer, 'requested-stage', 30);
+        $this->assertRequesterWasNotifiedOfExpiry($transfer);
     }
 
     // Happy (UC-1-117 sc.1, T9) — a VERIFIED transfer that outlived its shorter
@@ -80,6 +83,7 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
 
         // Then it is expired at the verified stage, on the 14-day window
         $this->assertTransferExpiredAtStage($transfer, 'verified-stage', 14);
+        $this->assertRequesterWasNotifiedOfExpiry($transfer);
     }
 
     /**
@@ -153,6 +157,24 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
             ->where('event_class', OwnershipTransferExpired::class)
             ->where('event_properties->requestId', $transfer->getKey())
             ->count());
+    }
+
+    /**
+     * The transfer's original requester was told it lapsed — exactly once.
+     *
+     * The times-assertion is the load-bearing half: `assertSentTo` alone stays
+     * green if the reactor fires for every recipient it can reach, which is the
+     * shape that let T1 and T2 emit byte-identical notices (OQ-1-144). It is
+     * scoped to this notification class rather than a global `assertCount`,
+     * because the T1 genesis in the arrangement legitimately notifies the
+     * support queue first.
+     */
+    protected function assertRequesterWasNotifiedOfExpiry(OwnershipTransferRequest $transfer): void
+    {
+        $requester = User::query()->findOrFail($transfer->current_owner_user_id);
+
+        Notification::assertSentTo($requester, OwnershipTransferExpiredNotification::class);
+        Notification::assertSentTimes(OwnershipTransferExpiredNotification::class, 1);
     }
 
     protected function runExpiryScan(): PendingCommand
