@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies\OwnershipTransfers;
 
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use App\Companies\Entities\Company;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
@@ -13,8 +14,10 @@ use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferExpiredNotification;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferVerificationLapsedNotification;
+use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
  * SM-1-05 T8 + T9 — the daily `ownership-transfers:expire-stale` scan ends
@@ -188,6 +191,87 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->assertTransferExpiredAtStage($firstDue, 'requested-stage', 30);
         $this->assertTransferExpiredAtStage($secondDue, 'requested-stage', 30);
         $this->assertTransferStillOpen($inWindow);
+    }
+
+    // Edge (ruling M1's no-op arm) — an expiry that arrives after the transfer
+    // already left the open set records nothing at all. This is the scan racing a
+    // human: an admin verifying or executing, or the owner withdrawing, between
+    // the SELECT and this row's write.
+    //
+    // Driven through the AGGREGATE directly, because the repository's timer
+    // predicate makes the arm unreachable from the console — the same shape
+    // ExpireTrialsCommandTest uses for its own console-unreachable no-op arms.
+    #[Test]
+    #[DataProvider('provideNonOpenStates')]
+    public function when_the_transfer_is_no_longer_open_at_fire_time_then_no_expiry_is_recorded(string $arrangement): void
+    {
+        // Given a transfer that already reached a terminal state
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aTerminalTransferStream($arrangement, $company, $owner);
+        $expiriesBefore = $this->expiryEventCount($transfer);
+
+        // When an expiry fires for it anyway
+        OwnershipTransferRequestAggregate::retrieve($transfer->getKey())
+            ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
+                'requestId' => $transfer->getKey(),
+                'expiredAfterDays' => 30,
+            ]))
+            ->persist();
+
+        // Then nothing changed and no FURTHER expiry was recorded
+        $this->assertNothingFurtherRecorded($transfer, $expiriesBefore);
+    }
+
+    /**
+     * $transfer is exactly as it was: same state, same deadline, and no expiry
+     * event beyond the $expiriesBefore it already carried.
+     *
+     * The before-count is a parameter rather than a hard zero, and the
+     * already-expired data set is why: that arrangement legitimately carries one
+     * expiry event, so a "no expiry events" assertion would fail for the right
+     * reason on the wrong row. What this proves is that the no-op arm added
+     * NOTHING, which is the claim regardless of what the stream already held.
+     */
+    protected function assertNothingFurtherRecorded(OwnershipTransferRequest $transfer, int $expiriesBefore): void
+    {
+        $current = $this->currentTransfer($transfer);
+
+        $this->assertSame($transfer->status, $current->status);
+        $this->assertEquals($transfer->next_state_transition_at, $current->next_state_transition_at);
+        $this->assertSame($expiriesBefore, $this->expiryEventCount($transfer));
+    }
+
+    protected function expiryEventCount(OwnershipTransferRequest $transfer): int
+    {
+        return LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferExpired::class)
+            ->where('event_properties->requestId', $transfer->getKey())
+            ->count();
+    }
+
+    /**
+     * The terminal states an expiry can collide with TODAY. `Executed` is absent
+     * because `execute()` does not exist until Task 8 — the same reason rows were
+     * deferred out of Tasks 5 and 6, not an oversight.
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function provideNonOpenStates(): array
+    {
+        return [
+            'a withdrawn transfer' => ['cancelled'],
+            'a rejected transfer' => ['rejected'],
+            'an already-expired transfer' => ['expired'],
+        ];
+    }
+
+    protected function aTerminalTransferStream(string $arrangement, Company $company, User $owner): OwnershipTransferRequest
+    {
+        return match ($arrangement) {
+            'cancelled' => $this->aCancelledTransferStream($company, $owner),
+            'rejected' => $this->aRejectedTransferStream($company, $owner, $this->aPlatformSupportAdmin()),
+            default => $this->anExpiredTransferStream($company, $owner),
+        };
     }
 
     // Happy (UC-1-116 sc.1, T8) — a requested transfer that outlived its 30-day
@@ -435,9 +519,6 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
 
         $this->assertSame($transfer->status, $current->status);
         $this->assertEquals($transfer->next_state_transition_at, $current->next_state_transition_at);
-        $this->assertSame(0, LesilyStoredEvent::query()
-            ->where('event_class', OwnershipTransferExpired::class)
-            ->where('event_properties->requestId', $transfer->getKey())
-            ->count());
+        $this->assertSame(0, $this->expiryEventCount($transfer));
     }
 }

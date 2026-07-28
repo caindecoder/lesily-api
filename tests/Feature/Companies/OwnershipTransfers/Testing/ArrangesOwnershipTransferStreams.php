@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\WithdrawOwnershipTransferCommand;
@@ -159,6 +160,33 @@ trait ArrangesOwnershipTransferStreams
             ->withdraw(WithdrawOwnershipTransferCommand::validateAndCreate([
                 'reason' => 'Withdrawn while the request was still awaiting verification.',
                 'cancelledBy' => $owner->getKey(),
+            ]))
+            ->persist();
+
+        return $transfer->refresh();
+    }
+
+    /**
+     * A transfer whose stream carries a REAL T1 → T8 history: requested, then
+     * expired by the system after its window elapsed.
+     *
+     * This is what makes `Expired` reachable at all, and it is why the
+     * verify-, reject- and withdraw-from-`Expired` rows were deferred out of
+     * s149, s151 and s154 to this task: until `expireIfStale()` existed the only
+     * way to arrange the state was a factory row, whose empty stream makes every
+     * guard refuse for the wrong reason and the test's name a lie (s149 C1/C2).
+     *
+     * The clock is left where the caller set it — the expiry is driven directly
+     * rather than through the scan, so no travel is needed to make it due.
+     */
+    protected function anExpiredTransferStream(Company $company, User $owner): OwnershipTransferRequest
+    {
+        $transfer = $this->aRequestedTransferStream($company, $owner, $this->aTargetMemberOf($company));
+
+        OwnershipTransferRequestAggregate::retrieve($transfer->getKey())
+            ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
+                'requestId' => $transfer->getKey(),
+                'expiredAfterDays' => 30,
             ]))
             ->persist();
 
