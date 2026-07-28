@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies\OwnershipTransfers\Testing;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use App\Foundation\RolesPermissions\Entities\Role;
@@ -193,6 +194,7 @@ trait ArrangesOwnershipTransferStreams
             ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
                 'expectedStatus' => OwnershipTransferStatus::Requested,
                 'expiredAfterDays' => 30,
+                'expiredAt' => CarbonImmutable::now(),
             ]))
             ->persist();
 

@@ -33,11 +33,13 @@ use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as Owne
  * Every row that involves a TRANSFER arranges a REAL stream (the two command-
  * validation rows assemble no transfer at all). The scan reads two different
  * sources — selection queries the projection, the transition replays the stream —
- * so a factory row satisfies the first and is EMPTY for the second. Under ruling
- * M1 the aggregate would then see a null status, take the no-op arm and record
- * nothing: the scan reports "0 expired" and a careless test passes for entirely
- * the wrong reason. That is s149 C1 with a silent failure mode instead of a
- * throwing one.
+ * so a factory row satisfies the first and is EMPTY for the second, leaving the
+ * aggregate with a null status that no longer matches anything the scan could
+ * have selected. It records nothing, the scan reports "0 expired", and a
+ * careless test passes for entirely the wrong reason. That is s149 C1 with a
+ * silent failure mode instead of a throwing one. (Pre-O1 the refusal came from
+ * M1's no-op arm; since O1 the `expectedStatus` guard refuses first. Same silent
+ * outcome, different mechanism.)
  *
  * That the two reads can disagree is not only a fixture hazard, it is a
  * production one — ruling O1, and the reason the Command carries the state the
@@ -252,9 +254,47 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
             : $this->aVerifiedTransferStream($company, $owner, $this->aPlatformSupportAdmin());
     }
 
+    // Edge (`--date` replay) — a missed night replayed at its own cutoff stamps
+    // the expiry AT that cutoff, not at the moment the replay happened to run.
+    //
+    // The option exists so an operator can catch up after the scheduler failed,
+    // and the whole point is that the record reads as though the scan had run on
+    // time. Stamping `now()` instead produces a row whose `expired_at` precedes
+    // the deadline it supposedly outlived — the transfer would read as having
+    // expired before its window closed, and `expired_after_days` would describe a
+    // window the timestamps contradict, permanently, in an append-only stream.
+    //
+    // `invitations:expire` already threads its cutoff into the event
+    // (`UserMembership::expireIfPending(CarbonInterface $expiredAt)`); `trials:expire`
+    // stamps `now()`. The two built scans disagree and this one follows the
+    // invitations shape, because only that shape survives a replay (Rule #15).
+    #[Test]
+    public function when_a_missed_night_is_replayed_then_the_expiry_is_stamped_at_the_replayed_cutoff(): void
+    {
+        // Given a transfer whose 30-day window elapsed while the scheduler was down
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
+
+        // When the missed run is replayed at the cutoff it should have used
+        $this->runExpiryScan('2026-08-01 09:00:01')->assertSuccessful();
+
+        // Then the expiry is stamped at that cutoff, after the deadline it breached
+        $this->assertSame(
+            '2026-08-01 09:00:01',
+            $this->currentTransfer($transfer)->expired_at?->toDateTimeString(),
+        );
+    }
+
     // Edge (idempotency) — a second scan does not expire an already-expired
-    // transfer. The exclusion is the terminal timer clear, and re-selection would
-    // be visible in the count even though M1's no-op would stop a second event.
+    // transfer. Two mechanisms exclude it now: the terminal timer clear, and O2's
+    // `openStates()` predicate.
+    //
+    // What this row proves is that no SECOND expiry event exists — the count
+    // inside `assertTransferExpiredAtStage`. It deliberately no longer claims to
+    // detect re-selection: since the count became event-based, a re-selected row
+    // that no-ops adds nothing to it and would print "0" either way. Detecting
+    // re-selection would take a counting repository seam, which is available via
+    // `selectionReports()` if it is ever worth pinning.
     #[Test]
     public function when_an_expired_transfer_is_scanned_again_then_it_is_not_expired_a_second_time(): void
     {
@@ -291,14 +331,18 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->assertTransferUnchanged($inWindow);
     }
 
-    // Edge (ruling M1's no-op arm) — an expiry that arrives after the transfer
-    // already left the open set records nothing at all. This is the scan racing a
-    // human: an admin verifying or executing, or the owner withdrawing, between
-    // the SELECT and this row's write.
+    // Edge (ruling M1's no-op arm) — an expiry whose selection AGREED that the
+    // transfer was already terminal records nothing at all.
     //
-    // Driven through the AGGREGATE directly, because the repository's timer
-    // predicate makes the arm unreachable from the console — the same shape
+    // Note what this is NOT: the human race (an admin verifying, the owner
+    // withdrawing between the SELECT and the write) produces a DISAGREEING
+    // selection, which the O1 guard refuses — that is the row below. This row
+    // arranges selection and stream agreeing on a terminal state, which the
+    // console cannot produce at all since O2 made the query select `openStates()`.
+    //
+    // So it is driven through the AGGREGATE directly, the same shape
     // ExpireTrialsCommandTest uses for its own console-unreachable no-op arms.
+    // The arm is kept because E28 wants every state × event combination written.
     #[Test]
     #[DataProvider('provideNonOpenStates')]
     public function when_the_transfer_is_no_longer_open_at_fire_time_then_no_expiry_is_recorded(string $arrangement): void
@@ -315,6 +359,7 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
             ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
                 'expectedStatus' => $transfer->status,
                 'expiredAfterDays' => 30,
+                'expiredAt' => CarbonImmutable::now(),
             ]))
             ->persist();
 
@@ -393,8 +438,11 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
     // Command carries what the scan saw and the aggregate refuses on any
     // disagreement. Without that guard the `Verified` arm fires and records an
     // expiry stamped `verified-stage` carrying the 30-day figure the interactor
-    // derived from the pre-race status — a pairing ERD-1-05 §3 makes impossible,
-    // written permanently into an append-only stream.
+    // derived from the pre-race status — a pairing ERD-1-05 §3 documents and
+    // NOTHING enforces (§4 records that these string-enums carry no CHECK
+    // constraint and are validated at the app layer), written permanently into an
+    // append-only stream. The aggregate is the only thing standing between the
+    // design's intent and a contradiction no migration can later undo.
     #[Test]
     public function when_the_transfer_was_verified_after_the_scan_selected_it_then_no_expiry_is_recorded(): void
     {
@@ -408,6 +456,7 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
             ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
                 'expectedStatus' => OwnershipTransferStatus::Requested,
                 'expiredAfterDays' => 30,
+                'expiredAt' => CarbonImmutable::now(),
             ]))
             ->persist();
 
@@ -419,14 +468,14 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
     // proves the guard refuses; this proves the SCAN survives the refusal and
     // reports it honestly.
     //
-    // It is the only row that can reach a no-op through the console, because the
-    // disagreement it needs cannot be arranged by a sequential suite — the two
-    // reads happen microseconds apart inside one call. Substituting the
-    // repository is the module's existing seam idiom (`AuthTestCase`'s
-    // `TotpVerifier`, `RegisterOwnerTest`'s uniqueness guard, `BillingTestCase`'s
-    // PDF renderer all bind an anonymous class at an interface), and the
-    // repository is a genuine architectural boundary, which is the only place
-    // E23 sanctions a double.
+    // It is the only row that can reach a refusal through the console, because
+    // the disagreement it needs cannot be arranged by a sequential suite — the
+    // two reads happen microseconds apart inside one call. Substituting the
+    // repository is the module's existing seam idiom: `AuthTestCase`'s
+    // `TotpVerifier` and `BillingTestCase`'s PDF renderer bind an anonymous class
+    // at an INTERFACE, `RegisterOwnerTest`'s uniqueness guard extends a CONCRETE
+    // class — which is the shape used here. The repository is a genuine
+    // architectural boundary, the only place E23 sanctions a double.
     #[Test]
     public function when_a_selection_goes_stale_before_its_row_is_written_then_the_scan_reports_no_expiry(): void
     {

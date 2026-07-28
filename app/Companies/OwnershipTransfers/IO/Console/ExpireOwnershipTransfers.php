@@ -12,7 +12,11 @@ use App\Companies\OwnershipTransfers\UseCases\Interactors\ExpireStaleOwnershipTr
  * SM-1-05 T8/T9 — the daily scan that ends transfers past their SLA window.
  * A pure boundary: it parses the cutoff and delegates, so delivery stays a thin
  * appendix (E07). Modelled on the built `trials:expire` / `invitations:expire`
- * pair, whose `--date=` option makes the cutoff explicit for replay.
+ * pair. The `--date=` option comes from `trials:expire` alone — `invitations:expire`
+ * takes no options and always runs at `now()` — and it makes the cutoff explicit
+ * so a night the scheduler missed can be replayed at the instant it should have
+ * used. That cutoff is threaded all the way to the recorded event, so a replay
+ * stamps the expiry when it was due rather than when the catch-up ran.
  *
  * No `Command` suffix, deliberately (ruling M5): both built scans and both
  * LeaveDates analogs name theirs `ExpireX`, and the suffix would sit this class

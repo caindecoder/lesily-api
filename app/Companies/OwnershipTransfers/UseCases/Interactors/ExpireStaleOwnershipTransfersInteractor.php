@@ -4,6 +4,7 @@ namespace App\Companies\OwnershipTransfers\UseCases\Interactors;
 
 use Carbon\CarbonInterface;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
 use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
@@ -43,22 +44,48 @@ class ExpireStaleOwnershipTransfersInteractor
                 ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
                     'expectedStatus' => $status,
                     'expiredAfterDays' => $this->windowFor($status),
+                    'expiredAt' => $asOf,
                 ]));
 
             // Rows SELECTED and rows EXPIRED are no longer the same number: since
             // O1 the aggregate can decline a row whose selection went stale, and
             // counting the iteration would report an expiry that never happened.
             // The count is the command's only output and the thing an ops alert
-            // would key on, so it has to mean what it says. Asked before persist(),
-            // which takes the recorded events away.
-            if ($transfer->getRecordedEvents() !== []) {
-                $expired++;
+            // would key on, so it has to mean what it says. Both built scans return
+            // count($rows) instead, correctly — neither of their aggregates can
+            // decline. Asked before persist(), which takes the recorded events away.
+            //
+            // A declined row is skipped rather than persisted: persisting an empty
+            // event set still runs a version query and can throw, so it would add a
+            // failure surface for a row that did nothing.
+            if ($this->recordedAnExpiry($transfer) === false) {
+                continue;
             }
 
             $transfer->persist();
+            $expired++;
         }
 
         return $expired;
+    }
+
+    /**
+     * Whether the aggregate actually recorded an expiry for this row.
+     *
+     * Narrowed to the event class rather than asking "did it record anything":
+     * the counter's claim is about EXPIRIES, and a future second `recordThat` in
+     * `expireIfStale()` would otherwise keep it green while meaning something
+     * different.
+     */
+    private function recordedAnExpiry(OwnershipTransferRequestAggregate $transfer): bool
+    {
+        foreach ($transfer->getRecordedEvents() as $event) {
+            if ($event instanceof OwnershipTransferExpired) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

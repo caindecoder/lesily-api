@@ -2,6 +2,7 @@
 
 namespace App\Companies\OwnershipTransfers\UseCases\Commands;
 
+use Carbon\CarbonImmutable;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
@@ -31,6 +32,15 @@ use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
  * broken rather than however long the row happened to sit. Both fields now
  * derive from ONE status read, so the event cannot contradict itself.
  *
+ * `expiredAt` is the scan's CUTOFF, for the same reason the aggregate does not
+ * read config: it must not read the clock either. A replayed run (`--date`) is
+ * catching up on a night the scheduler missed, and the record has to read as
+ * though the scan had run on time — stamping `now()` instead produces a row
+ * whose `expired_at` precedes the deadline it outlived, contradicting its own
+ * `expiredAfterDays` permanently in an append-only stream. `invitations:expire`
+ * threads its cutoff the same way (`UserMembership::expireIfPending`); the two
+ * built scans disagree on this and only that shape survives a replay.
+ *
  * Assembled via ::validateAndCreate only — never ::from, which skips rules()
  * (amendment U). The rules are unreachable from the console, which reads real
  * rows: they guard future callers, exactly as `ApplyTrialExpirationCommand`'s do
@@ -42,6 +52,8 @@ class ExpireOwnershipTransferCommand extends Data
 
     public int $expiredAfterDays;
 
+    public CarbonImmutable $expiredAt;
+
     /**
      * @return array<string, array<int, mixed>>
      */
@@ -50,6 +62,7 @@ class ExpireOwnershipTransferCommand extends Data
         return [
             'expectedStatus' => ['required', Rule::enum(OwnershipTransferStatus::class)],
             'expiredAfterDays' => ['required', 'integer', 'min:1'],
+            'expiredAt' => ['required', 'date'],
         ];
     }
 }

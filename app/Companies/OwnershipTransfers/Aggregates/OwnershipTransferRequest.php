@@ -186,30 +186,35 @@ class OwnershipTransferRequest extends AggregateRoot
      * state x event combination to be explicitly handled, and "deliberately does
      * nothing" qualifies where "never considered" does not.
      *
-     * Both refusals answer the same hazard, from opposite ends. The scan reads
-     * the row's state from the PROJECTION to select it, then this method reads it
-     * again by replaying the STREAM — two tables, two instants. Anything that
-     * moves the row in between makes the selection stale:
-     *
-     *  - it left the open set entirely (withdrawn, rejected, already expired) —
-     *    the `default` arm; or
-     *  - it moved to the OTHER open state, which is the sharper case, because
-     *    the row now carries a fresh deadline and is not due at all. An admin
-     *    verifying at day 29 gives the transfer 14 new days; expiring it then
-     *    would fire 14 days early AND stamp `verified-stage` with the 30-day
-     *    figure the interactor derived before the move (ruling O1).
+     * The scan reads the row's state from the PROJECTION to select it, then this
+     * method reads it again by replaying the STREAM — two tables, two instants.
+     * Anything that moves the row in between makes the selection stale, and the
+     * `expectedStatus` guard refuses ALL of it: a move out of the open set
+     * (withdrawn, rejected, already expired) and a move to the OTHER open state
+     * alike. The second is the sharper case, because the row then carries a FRESH
+     * deadline and is not due at all — an admin verifying at day 29 gives the
+     * transfer 14 new days, and expiring it would fire 14 days early while
+     * stamping `verified-stage` with the 30-day figure the interactor derived
+     * before the move (ruling O1).
      *
      * So the Command carries what the scan saw and any disagreement refuses.
      * That is what UC-1-116 error flow 4b asks for ("no event emitted"), and
      * SM-1-05 §4 states both guards as state STILL `Requested` / STILL
      * `Verified` — still, not merely open.
      *
-     * The `default` arm stays reachable only by driving this method directly,
-     * the shape `ExpireTrialsCommandTest` uses for its own console-unreachable
-     * no-op arms. Note what the repository predicate does and does not do: it
-     * excludes rows whose timer is NULL, which covers terminal rows only because
-     * a different class — the projector — clears the timer in every terminal arm.
-     * It is not a state filter.
+     * The `match`'s `default` arm therefore answers NEITHER production case: by
+     * the time it is evaluated, the replayed state already equals the selected
+     * one. It is reachable only by a caller that SELECTED a terminal state, which
+     * the repository cannot do (it selects `openStates()`) — so only a direct
+     * drive reaches it, the shape `ExpireTrialsCommandTest` uses for its own
+     * console-unreachable no-op arms. It stays written because E28 wants every
+     * state × event combination explicitly handled, and because deleting it would
+     * leave a `match` Larastan requires to cover all six cases.
+     *
+     * Do not read the two refusals as redundant: removing the `expectedStatus`
+     * guard does not fall through to `default`, it falls through to the
+     * `Requested`/`Verified` arms and records the spurious expiry O1 exists to
+     * prevent.
      */
     public function expireIfStale(ExpireOwnershipTransferCommand $command): static
     {
@@ -231,7 +236,7 @@ class OwnershipTransferRequest extends AggregateRoot
             requestId: $this->uuid(),
             source: $source->value,
             expiredAfterDays: $command->expiredAfterDays,
-            expiredAt: CarbonImmutable::now(),
+            expiredAt: $command->expiredAt,
         ));
     }
 
