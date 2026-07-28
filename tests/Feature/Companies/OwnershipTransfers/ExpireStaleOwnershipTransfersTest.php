@@ -7,6 +7,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -54,6 +55,40 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->assertTransferStillOpen($transfer);
     }
 
+    // Sad — a transfer that already ended is never re-ended. Arranged through a
+    // REAL T1 → T6 stream, so the exclusion under test is the one production
+    // produces rather than a factory row's.
+    //
+    // BORN GREEN, and stated as such rather than left to read as proof. The
+    // design surface (ERD-1-05 §4, both UC bodies, cd §3) describes the scan as
+    // `next_state_transition_at < now() AND status IN ('requested','verified')`,
+    // but the status half has no reachable failure: every terminal transition
+    // CLEARS the timer in the same projector update, and `NULL < cutoff` is false
+    // in SQL, so a terminal row is already unselectable. Adding the predicate
+    // anyway would be a third mechanism guarding a case the other two make
+    // impossible — a row that reads as evidence and pins nothing (the s151 E2 /
+    // D-g class). This test therefore CHARACTERISES the timer-clear exclusion; it
+    // does not prove a status filter, because there is none to prove.
+    //
+    // The residual risk is Task 8's: if `execute()` ever lands a terminal row
+    // WITHOUT clearing the timer, the scan would re-select it every night and
+    // M1's no-op would silently skip it forever. That is assertable where the
+    // arm is written, and belongs there.
+    #[Test]
+    public function when_a_transfer_has_already_ended_then_the_scan_leaves_it_untouched(): void
+    {
+        // Given a withdrawn transfer, now well past the deadline it once carried
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aCancelledTransferStream($company, $owner);
+        $this->travel(31)->days();
+
+        // When the daily scan runs
+        $this->runExpiryScan()->expectsOutputToContain('0 transfer(s) expired.')->assertSuccessful();
+
+        // Then it is untouched — still cancelled, with no expiry event
+        $this->assertTransferStillOpen($transfer);
+    }
+
     // Sad (slice-#11 D3, skip-only legal hold) — a company frozen by a regulatory
     // hold is excluded from the scan, so its overdue transfer survives while an
     // unheld one beside it expires. The second transfer is load-bearing: with one
@@ -78,6 +113,81 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         // Then only the unheld company's transfer expired
         $this->assertTransferStillOpen($held);
         $this->assertTransferExpiredAtStage($free, 'requested-stage', 30);
+    }
+
+    // Edge (boundary) — a transfer expires only once its deadline has elapsed
+    // STRICTLY. The exactly-at row is the one that kills a `<` -> `<=` mutation;
+    // both built scans carry the same three-row provider.
+    #[Test]
+    #[DataProvider('provideDeadlineBoundary')]
+    public function when_the_scan_runs_then_a_transfer_expires_only_once_its_deadline_has_elapsed(
+        string $runAt,
+        string $expectedOutput,
+    ): void {
+        // Given a requested transfer whose 30-day deadline falls on 2026-08-01 09:00:00
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
+
+        // When the daily scan runs at a given instant relative to that deadline
+        $this->travelTo(CarbonImmutable::parse($runAt));
+
+        // Then it expires only if the deadline elapsed before the cutoff
+        $this->runExpiryScan()->expectsOutputToContain($expectedOutput)->assertSuccessful();
+    }
+
+    /**
+     * The stream is arranged at T0 = 2026-07-02 09:00:00, so the T1 projector
+     * writes `next_state_transition_at` = T0 + 30d = 2026-08-01 09:00:00. The
+     * exactly-at row makes `next_state_transition_at < now()` strictly false.
+     *
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function provideDeadlineBoundary(): array
+    {
+        return [
+            'a day before the deadline' => ['2026-07-31 09:00:00', '0 transfer(s) expired.'],
+            'exactly at the deadline' => ['2026-08-01 09:00:00', '0 transfer(s) expired.'],
+            'a second after the deadline' => ['2026-08-01 09:00:01', '1 transfer(s) expired.'],
+        ];
+    }
+
+    // Edge (idempotency) — a second scan does not expire an already-expired
+    // transfer. The exclusion is the terminal timer clear, and re-selection would
+    // be visible in the count even though M1's no-op would stop a second event.
+    #[Test]
+    public function when_an_expired_transfer_is_scanned_again_then_it_is_not_expired_a_second_time(): void
+    {
+        // Given a transfer an earlier scan already expired
+        $transfer = $this->anOverdueRequestedTransfer();
+        $this->runExpiryScan()->assertSuccessful();
+
+        // When the daily scan runs again
+        $this->runExpiryScan()->expectsOutputToContain('0 transfer(s) expired.')->assertSuccessful();
+
+        // Then the expiry was recorded exactly once
+        $this->assertTransferExpiredAtStage($transfer, 'requested-stage', 30);
+    }
+
+    // Edge (batch) — one run ends EVERY due transfer across tenants, not just the
+    // first, and leaves an in-window one open. Three companies, because the scan
+    // is cross-tenant by design and a single-tenant fixture would not show it.
+    #[Test]
+    public function when_transfers_are_overdue_across_several_companies_then_every_due_one_expires(): void
+    {
+        // Given two overdue transfers at different companies, and one still in-window
+        $firstDue = $this->anOverdueRequestedTransfer();
+        $secondDue = $this->anOverdueRequestedTransfer();
+
+        [$freshCompany, $freshOwner] = $this->aCompanyWithOwner();
+        $inWindow = $this->aRequestedTransferStream($freshCompany, $freshOwner, $this->aMemberWithRole($freshCompany, 'employee'));
+
+        // When the daily scan runs
+        $this->runExpiryScan()->expectsOutputToContain('2 transfer(s) expired.')->assertSuccessful();
+
+        // Then both due transfers expired and the in-window one is untouched
+        $this->assertTransferExpiredAtStage($firstDue, 'requested-stage', 30);
+        $this->assertTransferExpiredAtStage($secondDue, 'requested-stage', 30);
+        $this->assertTransferStillOpen($inWindow);
     }
 
     // Happy (UC-1-116 sc.1, T8) — a requested transfer that outlived its 30-day
