@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies\OwnershipTransfers;
 
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Mail\Mailable;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
@@ -272,6 +273,63 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
             'rejected' => $this->aRejectedTransferStream($company, $owner, $this->aPlatformSupportAdmin()),
             default => $this->anExpiredTransferStream($company, $owner),
         };
+    }
+
+    // Edge (email leg) — the requester's notice renders, and says which company
+    // and that a fresh request is possible.
+    //
+    // This row exists because the base test case fakes notifications, so no
+    // channel method ever runs: `title()`, `body()`, `toMail()`, the envelope and
+    // the Blade view would ALL be unexecuted by the suite without it, and
+    // codecov/patch would reject them. That is not hypothetical — at s152 the
+    // entire email leg of this module turned out to be exercised by zero tests
+    // for exactly this reason.
+    #[Test]
+    public function when_an_expiry_notice_is_rendered_then_it_names_the_company_and_the_resubmission_path(): void
+    {
+        // Given a transfer at a company with a known name
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
+
+        // When the expiry notice is rendered for its requester
+        $mail = (new OwnershipTransferExpiredNotification($transfer))->toMail($owner);
+
+        // Then it carries the subject, the company and the resubmission path
+        $this->assertNoticeRenders($mail, 'Ownership transfer expired', 'raise a fresh request');
+    }
+
+    // Edge (email leg) — the verifier's notice renders, and says the transfer
+    // THEY verified lapsed. Same coverage reason as the row above; a second
+    // subclass means a second unexecuted title()/body() pair without it.
+    #[Test]
+    public function when_a_lapsed_verification_notice_is_rendered_then_it_names_the_transfer_it_verified(): void
+    {
+        // Given a verified transfer
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $verifier = $this->aPlatformSupportAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $verifier);
+
+        // When the lapsed-verification notice is rendered for its verifier
+        $mail = (new OwnershipTransferVerificationLapsedNotification($transfer))->toMail($verifier);
+
+        // Then it carries the subject and says the verification was theirs
+        $this->assertNoticeRenders($mail, 'Verified ownership transfer expired', 'you verified');
+    }
+
+    /**
+     * $mail carries $expectedSubject and $expectedPhrase, and its Blade view
+     * actually renders.
+     *
+     * `render()` is the load-bearing call: it drives the envelope, the content
+     * and the view together, so a template that referenced a missing variable
+     * would fail here and nowhere else in the suite.
+     */
+    protected function assertNoticeRenders(Mailable $mail, string $expectedSubject, string $expectedPhrase): void
+    {
+        $rendered = $mail->render();
+
+        $this->assertSame($expectedSubject, $mail->envelope()->subject);
+        $this->assertStringContainsString($expectedPhrase, $rendered);
     }
 
     // Happy (UC-1-116 sc.1, T8) — a requested transfer that outlived its 30-day
