@@ -63,7 +63,7 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->runExpiryScan()->expectsOutputToContain('1 transfer(s) expired.')->assertSuccessful();
 
         // Then it is expired at the requested stage
-        $this->assertTransferExpiredAtStage($transfer, TransitionSource::RequestedStage, 30);
+        $this->assertTransferExpiredAtStage($transfer, 'requested-stage', 30);
     }
 
     // Happy (UC-1-117 sc.1, T9) — a VERIFIED transfer that outlived its shorter
@@ -79,7 +79,7 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->runExpiryScan()->expectsOutputToContain('1 transfer(s) expired.')->assertSuccessful();
 
         // Then it is expired at the verified stage, on the 14-day window
-        $this->assertTransferExpiredAtStage($transfer, TransitionSource::VerifiedStage, 14);
+        $this->assertTransferExpiredAtStage($transfer, 'verified-stage', 14);
     }
 
     /**
@@ -113,9 +113,17 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
     }
 
     /**
-     * $transfer reached the Expired terminal at $stage: the projection carries
-     * the stage and the elapsed-window figure, the SLA timer is cleared, and a
-     * stored OwnershipTransferExpired event backs it.
+     * $transfer reached the Expired terminal at $expectedSource: the projection
+     * carries the stage and the elapsed-window figure, the SLA timer is cleared,
+     * and a stored OwnershipTransferExpired event backs it.
+     *
+     * `$expectedSource` is a plain STRING, and callers pass literals. Taking a
+     * `TransitionSource` and asserting `$stage->value` would read the expected
+     * value from the same enum production renders from, so both sides would move
+     * together and the assertion could not fail — the s155 L1 defect exactly
+     * (respelling `PostVerification` as `post_verification` left 91 tests green).
+     * The withdraw and reject classes pin their own `*_source` values as literals
+     * for this reason; ERD-1-05 §3 is the canon these literals answer to.
      *
      * The stored-event assertion is amendment R: `expired_at`/`expiry_source`
      * are projected columns, so a direct read-model write would satisfy every
@@ -124,14 +132,14 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
      */
     protected function assertTransferExpiredAtStage(
         OwnershipTransferRequest $transfer,
-        TransitionSource $stage,
+        string $expectedSource,
         int $afterDays,
     ): void {
         $current = $this->currentTransfer($transfer);
 
         $this->assertSame([
             'status' => OwnershipTransferStatus::Expired,
-            'expiry_source' => $stage->value,
+            'expiry_source' => $expectedSource,
             'expired_after_days' => $afterDays,
             'next_state_transition_at' => null,
         ], [

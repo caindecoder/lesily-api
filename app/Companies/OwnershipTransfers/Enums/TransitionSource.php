@@ -7,11 +7,16 @@ namespace App\Companies\OwnershipTransfers\Enums;
  * discriminator idiom — Cancelled (T6/T7), Rejected (T3/T5) and Expired (T8/T9)
  * — and this enum is where the BUILT literals are spelled.
  *
- * Not yet the only place: the expiry pair still lives as a bare literal in the
- * factory's `expired()` state (below), and the reject test class pins its own
- * `rejection_source` values as strings on purpose — an assertion that reads its
- * expected value from this enum would move whenever this enum moved, and could
- * not fail. The withdraw class pins its two the same way, for the same reason.
+ * Now the only place in PRODUCTION: the factory's `expired()` state migrated at
+ * Task 7, once T8 existed to produce the case, completing the set the other two
+ * literals joined at s152.
+ *
+ * TESTS deliberately still pin strings. An assertion that read its expected
+ * value from this enum would move whenever this enum moved, and so could not
+ * fail — s155 L1 proved that exactly, when respelling `PostVerification` as
+ * `post_verification` left 91 tests green. The reject, withdraw and expiry
+ * classes all pin literals for this reason; ERD-1-05 §3 is the canon they answer
+ * to, not this file.
  *
  * The backed values are the canon from ERD-1-05 §3: hyphenated, matching the
  * built `void_source` (`dispute-pre-payment` | `admin-correction`) and
