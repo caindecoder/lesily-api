@@ -4,12 +4,14 @@ namespace Tests\Feature\PlatformAdmin;
 
 use stdClass;
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Support\Str;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
+use App\Companies\Projectors\CompanyProjector;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\UseCases\Values\OwnershipSwap;
@@ -509,6 +511,47 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             Company::query()->whereKey($otherCompany->getKey())->value('owner_id'),
         );
         $this->assertSame('owner', $this->pivotRoleCodeOf($otherCompany->getKey(), $owner));
+    }
+
+    /**
+     * SD-1-02 §2.2, and the single most load-bearing row in this class: five
+     * write surfaces commit together or none do.
+     *
+     * The seam is a container-bound throwing subclass of `CompanyProjector`
+     * (ruling P8). It works because `Projectionist::callEventHandler` re-resolves
+     * every handler at dispatch — `app($eventHandler::class)` — a line Spatie's
+     * own comment says exists so tests can substitute fakes. The subclass
+     * inherits `$weight = 30`, so it throws AFTER the transfer row (w10) and both
+     * pivots (w20) have already been written inside the transaction. That is what
+     * makes this a rollback test rather than a never-started one: there is real
+     * work to undo.
+     *
+     * Task R1's F-b reuses this seam for its per-row isolation test.
+     */
+    #[Test]
+    public function when_a_projector_fails_mid_pipeline_then_no_write_survives(): void
+    {
+        // Given a verified transfer, and a cross-domain projector that will throw
+        // once the earlier two have already written
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+
+        $this->app->bind(CompanyProjector::class, fn (): CompanyProjector => new class extends CompanyProjector
+        {
+            public function onOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
+            {
+                throw new RuntimeException('induced mid-pipeline projector failure');
+            }
+        });
+
+        // When the execution runs
+        $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then it fails, and NOTHING the earlier projectors wrote survived —
+        // including the stored event itself, which is inside the transaction
+        $response->assertStatus(500);
+        $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Verified);
     }
 
     /**
