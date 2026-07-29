@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
+use Illuminate\Support\Facades\Notification;
 use App\Companies\Projectors\CompanyProjector;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\EventSourcing\Facades\Projectionist;
@@ -22,6 +23,7 @@ use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Projectors\CompanyUserPivotProjector;
 use Spatie\EventSourcing\AggregateRoots\Exceptions\CouldNotPersistAggregate;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExecuteOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\IO\Notifications\EmergencyContactRequiredNotification;
 use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferAggregate;
 
 /**
@@ -564,7 +566,7 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * projector runs, so a first-TOUCH scan would report the guards' reads as
      * dispatch order and pass while the real order was anything at all.
      *
-     * @param  list<array{query: string}>  $log
+     * @param  array<int, array{query: string}>  $log
      * @param  list<string>  $tables
      * @return list<string>
      */
@@ -771,6 +773,61 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             ->event_properties;
 
         $this->assertSame($verified->verification_notes, $payload['verificationNotes']);
+    }
+
+    /**
+     * Row 19a — the prompt itself, which must exist before its skip case can
+     * mean anything (§S10b: the emergency contact is mandatory for owners, so
+     * T4 hands the incoming owner that obligation; UC-1-029 collects it).
+     *
+     * This lap comes FIRST deliberately. Written the other way round, the skip
+     * assertion would have passed vacuously against a codebase with no reactor
+     * at all — nothing sends anything, so nothing is "skipped". That is the
+     * born-green-for-the-wrong-reason shape this slice has already hit twice.
+     */
+    #[Test]
+    public function when_the_new_owner_has_no_emergency_contact_then_they_are_prompted_to_set_one(): void
+    {
+        // Given a verified transfer whose target carries no emergency contact
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $target = User::query()->findOrFail($transfer->target_user_id);
+
+        // When it is executed
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
+
+        // Then the incoming owner is prompted to supply one
+        Notification::assertSentTo($target, EmergencyContactRequiredNotification::class);
+    }
+
+    /**
+     * Row 19 — the short-circuit (SD-1-02 OQ #3). The common case, since T1
+     * already refuses a target without a contact; prompting anyway would train
+     * owners to ignore the notice.
+     *
+     * Only meaningful because 19a exists. Against a codebase with no reactor
+     * this assertion passes while proving nothing, which is why the prompt was
+     * built first.
+     */
+    #[Test]
+    public function when_the_new_owner_already_has_an_emergency_contact_then_the_wizard_prompt_is_skipped(): void
+    {
+        // Given a verified transfer whose target already carries a contact
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $target = User::query()->findOrFail($transfer->target_user_id);
+        CompanyUser::query()
+            ->where('company_id', $transfer->company_id)
+            ->where('user_id', $target->getKey())
+            ->update(['emergency_contact_name' => 'Rani Perera']);
+
+        // When it is executed
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
+
+        // Then they are not asked for something they have already given
+        Notification::assertNotSentTo($target, EmergencyContactRequiredNotification::class);
     }
 
     /**
