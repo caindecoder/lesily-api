@@ -2,8 +2,11 @@
 
 namespace Tests\Feature\PlatformAdmin;
 
+use stdClass;
 use App\Models\User;
 use Illuminate\Support\Str;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -39,6 +42,12 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * Derives rather than snapshots: the pre-transfer owner IS
      * `current_owner_user_id` on the transfer row, so no BEFORE capture is
      * needed and the helper stays at two parameters (§2.2 Rule 5-extended).
+     *
+     * Recorded plainly: none of these aspects means anything until something can
+     * violate them, and `assertDatabaseCount(..., 0)` against a table nothing
+     * writes is the emptiest kind of green. The happy-path row is the positive
+     * control for all five — it drives the same five surfaces the other way, and
+     * fails if any of them stays put.
      */
     private function assertNoWriteSurvived(
         OwnershipTransferRequest $transfer,
@@ -61,13 +70,6 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         ]);
         $this->assertDatabaseCount('ownership_transfer_pivot_history', 0);
     }
-
-    /**
-     * The four aspects above say nothing until something can violate them, and
-     * `assertDatabaseCount(..., 0)` on a table nothing ever writes is the
-     * emptiest kind of green. Row 22 is the positive control for all five: it
-     * drives the same surfaces the other way and fails if any of them stays put.
-     */
 
     /**
      * A valid execution body, sent by every row that isolates something OTHER
@@ -100,7 +102,7 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertUnauthenticated($response);
         $this->assertSame(
             OwnershipTransferStatus::Requested,
-            OwnershipTransferRequest::query()->findOrFail($transfer->getKey())->status,
+            $this->currentTransfer($transfer)->status,
         );
     }
 
@@ -241,5 +243,118 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // Then the state guard refuses it and nothing was written
         $this->assertStateGuardRefused($response, 'This ownership transfer cannot be executed.');
         $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Expired);
+    }
+
+    /**
+     * Ownership actually moved, across all three read-model surfaces the swap
+     * touches. Four aspects, because any one alone is satisfiable by a partial
+     * write — and a partial write is precisely the state SD-1-02 §2.2 exists to
+     * make impossible.
+     */
+    private function assertOwnershipMoved(
+        OwnershipTransferRequest $transfer,
+        User $outgoingOwner,
+        User $incomingOwner,
+    ): void {
+        $current = $this->currentTransfer($transfer);
+
+        $this->assertSame(OwnershipTransferStatus::Executed, $current->status);
+        // The SLA timer is cleared, not merely ignored: a terminal row left with
+        // a live deadline is exactly what the expiry scan would pick up again.
+        $this->assertNull($current->next_state_transition_at);
+        $this->assertSame(
+            $incomingOwner->getKey(),
+            Company::query()->whereKey($transfer->company_id)->value('owner_id'),
+        );
+        $this->assertSame(
+            ['admin', 'owner'],
+            [
+                $this->pivotRoleCodeOf($transfer->company_id, $outgoingOwner),
+                $this->pivotRoleCodeOf($transfer->company_id, $incomingOwner),
+            ],
+        );
+    }
+
+    /**
+     * The role transition is RECORDED, not merely inferable (ruling P2). The
+     * old_role_id assertions are the only ones in this class that can catch a
+     * projector reading the prior role from company_user instead of the event
+     * payload — by the time it runs, MembershipProjector has already overwritten
+     * that row, so such a projector writes old_role_id == new_role_id.
+     */
+    private function assertPivotHistoryRecorded(
+        OwnershipTransferRequest $transfer,
+        User $outgoingOwner,
+        User $incomingOwner,
+    ): void {
+        $rows = DB::table('ownership_transfer_pivot_history')
+            ->where('request_id', $transfer->getKey())
+            ->get();
+
+        $this->assertCount(2, $rows);
+        $this->assertSame(
+            [
+                [$this->seededRole('owner')->getKey(), $this->seededRole('admin')->getKey()],
+                [$this->seededRole('employee')->getKey(), $this->seededRole('owner')->getKey()],
+            ],
+            [
+                $this->roleTransitionRecordedFor($rows, $outgoingOwner),
+                $this->roleTransitionRecordedFor($rows, $incomingOwner),
+            ],
+        );
+        // One transfer, one instant: both parties moved in the same transaction,
+        // so a differing pair would mean they did not.
+        $this->assertCount(1, $rows->pluck('executed_at')->unique());
+    }
+
+    private function pivotRoleCodeOf(string $companyId, User $user): ?string
+    {
+        return DB::table('company_user')
+            ->join('roles', 'roles.id', '=', 'company_user.role_id')
+            ->where('company_user.company_id', $companyId)
+            ->where('company_user.user_id', $user->getKey())
+            ->whereNull('company_user.deleted_at')
+            ->value('roles.code');
+    }
+
+    /**
+     * The recorded old → new role pair for $user, or a null pair when no row was
+     * written for them at all — which is a failure the CALLER's assertion
+     * reports in full, rather than an error thrown from in here.
+     *
+     * @param  Collection<int, stdClass>  $rows
+     * @return array{0: ?string, 1: ?string}
+     */
+    private function roleTransitionRecordedFor(Collection $rows, User $user): array
+    {
+        /** @var array<string, mixed> $row */
+        $row = (array) $rows->firstWhere('user_id', $user->getKey());
+
+        return [$row['old_role_id'] ?? null, $row['new_role_id'] ?? null];
+    }
+
+    #[Test]
+    public function when_a_platform_admin_executes_a_verified_transfer_then_ownership_moves_atomically(): void
+    {
+        // Given a verified transfer whose owner and target are both real members
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $target = User::query()->findOrFail($transfer->target_user_id);
+
+        // When an allowlisted admin executes it
+        $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then every write surface moved together
+        $response->assertOk();
+        $response->assertJsonPath('data.status', 'executed');
+        $this->assertOwnershipMoved($transfer, $owner, $target);
+        $this->assertPivotHistoryRecorded($transfer, $owner, $target);
+        // Amendment R: the read-model oracle proves the VALUE, never the
+        // mechanism. Without this, a direct write to the projected columns
+        // passes every assertion above and is silently reverted on replay.
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferExecuted::class)
+            ->count());
     }
 }

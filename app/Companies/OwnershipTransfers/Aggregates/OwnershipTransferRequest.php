@@ -2,12 +2,13 @@
 
 namespace App\Companies\OwnershipTransfers\Aggregates;
 
-use RuntimeException;
 use Carbon\CarbonImmutable;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\OwnershipTransfers\Enums\TransitionSource;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Companies\OwnershipTransfers\UseCases\Values\OwnershipSwap;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
@@ -31,8 +32,12 @@ use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferId
  * carry aggregate state guards (E28).
  *
  * Built: request (T1) · verifyIdentity (T2) · reject (T3/T5) · withdraw (T6/T7)
- * · expireIfStale (T8/T9) · execute (T4) — the last of these still records
- * nothing: its state guard is built and its recording lands with the happy path.
+ * · expireIfStale (T8/T9) · execute (T4).
+ *
+ * execute() is the only transition taking a second argument: its event carries
+ * membership and role ids that no aggregate can resolve, since reading them
+ * means reading another aggregate's read model. The interactor resolves them
+ * from live state and hands them over as an OwnershipSwap.
  *
  * One transition refuses differently from the rest: `expireIfStale()` no-ops
  * where the others throw, because its caller is a scheduler with nobody to hand
@@ -261,12 +266,32 @@ class OwnershipTransferRequest extends AggregateRoot
      * reads the database. The interactor holds all three (rulings P3 and P5,
      * following B1 and the LD ApproveLeaveAction shape).
      */
-    public function execute(ExecuteOwnershipTransferCommand $command): static
+    public function execute(ExecuteOwnershipTransferCommand $command, OwnershipSwap $swap): static
     {
         if ($this->status !== OwnershipTransferStatus::Verified) {
             throw new OwnershipTransferNotExecutableException;
         }
 
-        throw new RuntimeException('Not implemented');
+        return $this->recordThat(new OwnershipTransferExecuted(
+            requestId: $this->uuid(),
+            companyId: $swap->companyId,
+            oldOwnerUserId: $swap->oldOwnerUserId,
+            newOwnerUserId: $swap->newOwnerUserId,
+            oldOwnerMembershipId: $swap->oldOwnerMembershipId,
+            oldOwnerOldRoleId: $swap->oldOwnerOldRoleId,
+            oldOwnerNewRoleId: $swap->oldOwnerNewRoleId,
+            newOwnerMembershipId: $swap->newOwnerMembershipId,
+            newOwnerOldRoleId: $swap->newOwnerOldRoleId,
+            newOwnerNewRoleId: $swap->newOwnerNewRoleId,
+            executedBy: $command->executedBy,
+            reason: $command->reason,
+            verificationNotes: $swap->verificationNotes,
+            executedAt: CarbonImmutable::now(),
+        ));
+    }
+
+    public function applyOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
+    {
+        $this->status = OwnershipTransferStatus::Executed;
     }
 }
