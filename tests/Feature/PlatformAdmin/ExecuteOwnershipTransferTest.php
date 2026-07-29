@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Notification;
 use App\Companies\Projectors\CompanyProjector;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\EventSourcing\Facades\Projectionist;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\UseCases\Values\OwnershipSwap;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -894,6 +895,53 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertCount(1, $rows->pluck('executed_at')->unique());
     }
 
+    /**
+     * The append-only audit row for the transition, linked to its stored event.
+     *
+     * UC-1-093's Minimal Guarantee is that no role swap succeeds without a
+     * corresponding audit record, and T4 is the transition that actually moves
+     * legal authority — so this row is the evidence a later "that transfer was
+     * unauthorised" claim turns on (UC-1-093 stakeholders: Lesily Legal).
+     *
+     * The COUNT is an aspect, not decoration: the stream is T1 → T2 → T4, so
+     * three rows means execute added exactly one. Without it, a reactor that
+     * wrote two rows — or that wrote none while some other arm happened to
+     * satisfy the column map — would pass.
+     *
+     * Written as ONE assertDatabaseHas carrying the whole row plus the two
+     * null-shape checks a column map cannot express, which is the shape
+     * assertRejectionAudited was collapsed to at the s152 review (§2.2 Rule 5).
+     *
+     * metadata stays NULL per the s149 ruling, and the request-context columns
+     * are pinned in BOTH directions: an event-sourced write has no HTTP request
+     * behind it, unlike the sibling READ rows which pin them to real values.
+     */
+    private function assertExecutionAudited(OwnershipTransferRequest $transfer, User $admin): void
+    {
+        $this->assertDatabaseCount('audit_trail', 3);
+        $this->assertDatabaseHas('audit_trail', [
+            'event_class' => 'OwnershipTransferExecuted',
+            'subject_type' => 'ownership_transfer_request',
+            'subject_id' => $transfer->getKey(),
+            'subject_label' => 'Ownership transfer request',
+            'company_id' => $transfer->company_id,
+            'action' => 'transfer_executed',
+            'description' => 'Platform admin executed the ownership transfer; ownership moved to the new owner.',
+            'actor_user_id' => $admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $admin->name,
+            'request_id' => null,
+            'ip_address' => null,
+            'user_agent' => null,
+            'severity' => 'info',
+        ]);
+
+        $entry = AuditEntry::query()->where('event_class', 'OwnershipTransferExecuted')->sole();
+
+        $this->assertNotNull($entry->stored_event_id);
+        $this->assertNull($entry->metadata);
+    }
+
     private function pivotRoleCodeOf(string $companyId, User $user): ?string
     {
         return DB::table('company_user')
@@ -937,6 +985,10 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $response->assertJsonPath('data.status', 'executed');
         $this->assertOwnershipMoved($transfer, $owner, $target);
         $this->assertPivotHistoryRecorded($transfer, $owner, $target);
+        // UC-1-093's Minimal Guarantee: no role swap succeeds without a
+        // corresponding audit record. T4 is the transition that moves legal
+        // authority, so this is the one row a disputed transfer turns on.
+        $this->assertExecutionAudited($transfer, $admin);
         // Amendment R: the read-model oracle proves the VALUE, never the
         // mechanism. Without this, a direct write to the projected columns
         // passes every assertion above and is silently reverted on replay.
