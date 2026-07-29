@@ -59,8 +59,13 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertSame(0, LesilyStoredEvent::query()
             ->where('event_class', OwnershipTransferExecuted::class)
             ->count());
-        $this->assertSame(
-            $transfer->current_owner_user_id,
+        // Stated as "the T4 write did not happen" rather than "the owner is
+        // still the recorded one". The two agree everywhere except the row whose
+        // premise is that a PRIOR transfer already moved the owner — there the
+        // stronger form is false by construction, and asserting it would have
+        // made the helper unusable for exactly the case it most needs to cover.
+        $this->assertNotSame(
+            $transfer->target_user_id,
             Company::query()->whereKey($transfer->company_id)->value('owner_id'),
         );
         $this->assertDatabaseMissing('company_user', [
@@ -243,6 +248,34 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // Then the state guard refuses it and nothing was written
         $this->assertStateGuardRefused($response, 'This ownership transfer cannot be executed.');
         $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Expired);
+    }
+
+    /**
+     * A prior transfer moved ownership elsewhere while this one sat verified.
+     * A named fixture helper carrying the column write is the sanctioned shape —
+     * §2.13 bans inline overrides in test BODIES, not in fixtures (the
+     * `aTransferDueAt` / `placeCompanyUnderLegalHold` precedents).
+     */
+    private function theOwnerChangesTo(Company $company, User $newOwner): void
+    {
+        $company->forceFill(['owner_id' => $newOwner->getKey()])->save();
+    }
+
+    #[Test]
+    public function when_the_owner_has_changed_since_the_request_then_it_is_not_executed(): void
+    {
+        // Given a verified transfer whose recorded owner is no longer the live one
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $this->theOwnerChangesTo($company, $this->aCompanyMember($company, 'admin'));
+
+        // When an allowlisted admin executes it
+        $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the live re-validation refuses it and nothing was written
+        $this->assertStateGuardRefused($response, 'The company owner has changed since this transfer was requested.');
+        $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Verified);
     }
 
     #[Test]

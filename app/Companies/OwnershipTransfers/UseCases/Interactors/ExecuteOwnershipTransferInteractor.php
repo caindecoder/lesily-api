@@ -3,11 +3,14 @@
 namespace App\Companies\OwnershipTransfers\UseCases\Interactors;
 
 use Illuminate\Support\Facades\DB;
+use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\UseCases\Values\OwnershipSwap;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferOwnerChangedException;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExecuteOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
 use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
@@ -42,6 +45,8 @@ class ExecuteOwnershipTransferInteractor
             throw new ModelNotFoundException;
         }
 
+        $this->guardOwnerHasNotChanged($transfer);
+
         $swap = $this->resolveSwap($transfer);
 
         DB::transaction(function () use ($requestId, $command, $swap): void {
@@ -53,6 +58,41 @@ class ExecuteOwnershipTransferInteractor
         // refresh(), not fresh(): it re-reads the projectors' writes into THIS
         // instance and is typed non-null, where fresh() hands back a nullable.
         return $transfer->refresh();
+    }
+
+    /**
+     * The transfer recorded who the owner was at T1; nothing revalidates it
+     * until now (UC-1-093 error flow 3b). A prior transfer could have moved
+     * ownership while this one sat verified, and executing then would demote
+     * somebody who is no longer the owner and promote against a stale premise.
+     *
+     * firstOrFail, not value(): a missing company would make value() return null
+     * and the guard fail OPEN — the same trap the legal-hold guard documents.
+     *
+     * SCOPED to the open window deliberately. This guard re-validates a PREMISE
+     * of a pending transition; it has nothing to say about a transfer that can no
+     * longer transition at all, and the aggregate owns that question. Unscoped it
+     * pre-empted the aggregate: an already-executed transfer reported "the owner
+     * has changed", which is true only because executing it is what changed the
+     * owner — a strictly less useful answer than "already executed", and one that
+     * would have sent an admin looking for a transfer that never happened.
+     *
+     * Reading `status` from the projection here is safe in a way the expiry
+     * scan's read was not (ruling O1): it decides only whether to run an EXTRA
+     * guard, never whether to write. The aggregate remains the sole authority on
+     * whether the transition may happen.
+     */
+    private function guardOwnerHasNotChanged(OwnershipTransferRequest $transfer): void
+    {
+        if ($transfer->status !== OwnershipTransferStatus::Verified) {
+            return;
+        }
+
+        $liveOwnerId = Company::query()->whereKey($transfer->company_id)->firstOrFail()->owner_id;
+
+        if ($liveOwnerId !== $transfer->current_owner_user_id) {
+            throw new OwnershipTransferOwnerChangedException;
+        }
     }
 
     /**

@@ -52,6 +52,7 @@ use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 use App\Companies\OwnershipTransfers\Exceptions\NotTheTransferRequesterException;
 use App\Companies\OwnershipTransfers\Exceptions\EmergencyContactRequiredException;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
+use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferOwnerChangedException;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotExecutableException;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotRejectableException;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotVerifiableException;
@@ -292,6 +293,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // T4 attempted from a state that cannot reach Executed — not yet
         // verified, or already ended (UC-1-093; SM-1-05 §4 gives T4 one source).
         $exceptions->render(fn (OwnershipTransferNotExecutableException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // T4 attempted when a prior transfer moved ownership while this one sat
+        // verified — the recorded owner is no longer the live one (UC-1-093 3b).
+        $exceptions->render(fn (OwnershipTransferOwnerChangedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));
