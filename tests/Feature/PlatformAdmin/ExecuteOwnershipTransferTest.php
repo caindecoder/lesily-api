@@ -61,8 +61,12 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $current = $this->currentTransfer($transfer);
 
         $this->assertSame($expected, $current->status);
+        // Scoped to THIS aggregate, not the whole store. Unscoped, the helper
+        // could only ever be used in a test where nothing else executed — which
+        // is precisely the tenant-isolation row it most needs to serve.
         $this->assertSame(0, LesilyStoredEvent::query()
             ->where('event_class', OwnershipTransferExecuted::class)
+            ->where('aggregate_uuid', $transfer->getKey())
             ->count());
         // Stated as "the T4 write did not happen" rather than "the owner is
         // still the recorded one". The two agree everywhere except the row whose
@@ -78,7 +82,9 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             'user_id' => $transfer->target_user_id,
             'role_id' => $this->seededRole('owner')->getKey(),
         ]);
-        $this->assertDatabaseCount('ownership_transfer_pivot_history', 0);
+        $this->assertSame(0, DB::table('ownership_transfer_pivot_history')
+            ->where('request_id', $transfer->getKey())
+            ->count());
     }
 
     /**
@@ -452,6 +458,57 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             newOwnerNewRoleId: $this->seededRole('owner')->getKey(),
             verificationNotes: $transfer->verification_notes,
         );
+    }
+
+    /**
+     * A second transfer at a different tenant is the only thing that makes the
+     * projectors' `whereKey`/`company_id` scoping observable at all — with one
+     * row in the fixture an unscoped write hits the right row by accident (s149
+     * C6). Executing one transfer must leave the other's five surfaces alone.
+     */
+    #[Test]
+    public function when_a_transfer_is_executed_then_no_other_tenants_transfer_is_touched(): void
+    {
+        // Given a verified transfer, and an open transfer at another tenant
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $bystander = $this->aBystanderTransferAtAnotherCompany();
+
+        // When the first is executed
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
+
+        // Then the bystander is untouched on every surface
+        $this->assertNoWriteSurvived($bystander, OwnershipTransferStatus::Requested);
+    }
+
+    /**
+     * UC-1-093's "Other company ownership unaffected" scenario. Distinct from
+     * the bystander row above: there the second company belongs to somebody
+     * else, so scoping by `company_id` alone would pass it. Here the SAME user
+     * owns both, which is the case a `where('user_id', ...)` scope missing its
+     * company qualifier would break — Olive owns Contoso and ACME, and
+     * transferring Contoso must not touch ACME.
+     */
+    #[Test]
+    public function when_the_outgoing_owner_owns_another_company_then_that_ownership_is_untouched(): void
+    {
+        // Given an owner of two companies, transferring only the first
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $otherCompany = Company::factory()->create(['owner_id' => $owner->getKey()]);
+        $otherCompany->users()->attach($owner, ['role_id' => $this->seededRole('owner')->getKey()]);
+
+        // When the first company's transfer is executed
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
+
+        // Then the second company still belongs to them, at the owner role
+        $this->assertSame(
+            $owner->getKey(),
+            Company::query()->whereKey($otherCompany->getKey())->value('owner_id'),
+        );
+        $this->assertSame('owner', $this->pivotRoleCodeOf($otherCompany->getKey(), $owner));
     }
 
     /**
