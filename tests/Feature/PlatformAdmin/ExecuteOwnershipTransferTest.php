@@ -12,9 +12,13 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Companies\OwnershipTransfers\UseCases\Values\OwnershipSwap;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use Spatie\EventSourcing\AggregateRoots\Exceptions\CouldNotPersistAggregate;
+use App\Companies\OwnershipTransfers\UseCases\Commands\ExecuteOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferAggregate;
 
 /**
  * SM-1-05 T4 — a platform admin executes a verified transfer, moving ownership
@@ -339,6 +343,87 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             ->count());
         $this->assertOwnershipMoved($transfer, $owner, $target);
         $this->assertPivotHistoryRecorded($transfer, $owner, $target);
+    }
+
+    /**
+     * E-f, half one (ruling P11). The 409 has NO natural HTTP path: within one
+     * request retrieve/execute/persist are adjacent, so a second sequential call
+     * meets the state guard long before the version check — row 9 is that. The
+     * race needs two genuinely concurrent requests, which a sequential suite
+     * cannot stage.
+     *
+     * So this characterizes the invariant directly, via SD-1-02 §7's own recipe:
+     * two retrieves at the same version, both persisting. It is NOT a test of
+     * Spatie. It is a test that OUR event store enforces optimistic concurrency —
+     * that `stored_events` really carries its (uuid, version) UNIQUE and the check
+     * is live in this configuration. Without it the render arm could faithfully
+     * map an exception our stack never produces, with every gate green: the
+     * silently-dead-nightly-mutation class.
+     *
+     * BORN GREEN by construction and it says so plainly — the invariant pre-dates
+     * this task, so there is no RED to watch. Its worth is regression: it fails
+     * the day the constraint or the check is lost. The render half is proven
+     * separately by the `error-concurrent-modification` probe (ApiErrorResponseTest).
+     */
+    #[Test]
+    public function when_a_stale_aggregate_instance_is_persisted_then_the_event_store_refuses_it(): void
+    {
+        // Given a verified transfer and TWO instances retrieved at the same version
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $swap = $this->swapFor($transfer);
+        $command = ExecuteOwnershipTransferCommand::validateAndCreate([
+            'reason' => 'Founder departure confirmed by signed board resolution.',
+            'executedBy' => $admin->getKey(),
+        ]);
+
+        $winner = OwnershipTransferAggregate::retrieve($transfer->getKey());
+        $loser = OwnershipTransferAggregate::retrieve($transfer->getKey());
+
+        // When the first persists and the second then tries to record against the
+        // version it captured
+        $winner->execute($command, $swap)->persist();
+
+        try {
+            $loser->execute($command, $swap)->persist();
+            $this->fail('Expected CouldNotPersistAggregate for the stale instance.');
+        } catch (CouldNotPersistAggregate) {
+            // Then exactly one execution reached the store — the winner's
+            $this->assertSame(1, LesilyStoredEvent::query()
+                ->where('event_class', OwnershipTransferExecuted::class)
+                ->count());
+            $this->assertSame(OwnershipTransferStatus::Executed, $this->currentTransfer($transfer)->status);
+        }
+    }
+
+    /**
+     * The swap as the interactor would resolve it. Built here rather than reached
+     * for through the interactor deliberately: this row is about the STORE, so it
+     * must not fail for any reason to do with resolution.
+     */
+    private function swapFor(OwnershipTransferRequest $transfer): OwnershipSwap
+    {
+        $pivotOf = fn (string $userId): CompanyUser => CompanyUser::query()
+            ->where('company_id', $transfer->company_id)
+            ->where('user_id', $userId)
+            ->sole();
+
+        $outgoing = $pivotOf($transfer->current_owner_user_id);
+        $incoming = $pivotOf($transfer->target_user_id);
+
+        return new OwnershipSwap(
+            companyId: $transfer->company_id,
+            oldOwnerUserId: $transfer->current_owner_user_id,
+            newOwnerUserId: $transfer->target_user_id,
+            oldOwnerMembershipId: $outgoing->getKey(),
+            oldOwnerOldRoleId: $outgoing->role_id,
+            oldOwnerNewRoleId: $this->seededRole('admin')->getKey(),
+            newOwnerMembershipId: $incoming->getKey(),
+            newOwnerOldRoleId: $incoming->role_id,
+            newOwnerNewRoleId: $this->seededRole('owner')->getKey(),
+            verificationNotes: $transfer->verification_notes,
+        );
     }
 
     /**

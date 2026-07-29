@@ -147,6 +147,9 @@ class ApiErrorResponseTest extends FoundationTestCase
             'http not found' => ['error-http-not-found', 404, 'RESOURCE_NOT_FOUND'],
             'unmapped http exception preserves method-not-allowed status' => ['error-method-not-allowed', 405, 'HTTP_ERROR'],
             'unmapped http exception preserves gone status' => ['error-gone', 410, 'HTTP_ERROR'],
+            // E-f: the optimistic-concurrency conflict. api-1-infrastructure §8.4
+            // has promised this code since May while the arm rendered 500.
+            'concurrent modification' => ['error-concurrent-modification', 409, 'CONCURRENT_MODIFICATION'],
             'internal error' => ['error-internal', 500, 'INTERNAL_ERROR'],
         ];
     }

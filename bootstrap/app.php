@@ -49,6 +49,7 @@ use App\Companies\Memberships\Exceptions\OwnerTransferRequiredException;
 use App\Companies\Memberships\Exceptions\SelfRoleChangeBlockedException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
+use Spatie\EventSourcing\AggregateRoots\Exceptions\CouldNotPersistAggregate;
 use App\Companies\OwnershipTransfers\Exceptions\NotTheTransferRequesterException;
 use App\Companies\OwnershipTransfers\Exceptions\EmergencyContactRequiredException;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
@@ -295,6 +296,16 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (OwnershipTransferNotExecutableException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
+        ));
+
+        // An aggregate changed between retrieve and persist — Spatie's
+        // optimistic-concurrency check (E-f). App-wide on purpose: any aggregate
+        // can lose this race, so the message stays GENERIC. SD-1-02 §2.3's
+        // execute-specific wording ("just executed by another admin") would be
+        // wrong the first time an invoice or subscription raced, and is superseded.
+        $exceptions->render(fn (CouldNotPersistAggregate $e) => EnvelopeBuilder::build(
+            ApiErrorCode::ConcurrentModification,
+            'This record was changed by another process. Please retry.',
         ));
 
         // T4 attempted when a prior transfer moved ownership while this one sat
