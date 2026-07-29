@@ -711,6 +711,58 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * The identity of each history row, keyed by the pivot it describes.
+     *
+     * `updated_at` is deliberately absent: it records when the projection was
+     * last written, so a replay moving it is honest. `id` and `created_at` are
+     * the two that must not move — one is what a support ticket or a legal
+     * export cites, the other is when the record came into existence.
+     *
+     * @return array<string, array{id: string, created_at: string}>
+     */
+    private function pivotHistoryIdentityOf(OwnershipTransferRequest $transfer): array
+    {
+        return DB::table('ownership_transfer_pivot_history')
+            ->where('request_id', $transfer->getKey())
+            ->get(['membership_id', 'id', 'created_at'])
+            ->keyBy('membership_id')
+            ->map(fn (stdClass $row): array => ['id' => $row->id, 'created_at' => $row->created_at])
+            ->all();
+    }
+
+    /**
+     * A projector must be a deterministic function of the event stream (§2.15).
+     * This one was not: `updateOrInsert` applies its whole `$values` array on the
+     * UPDATE branch, and that array carried a freshly minted `Str::uuid7()` and
+     * `created_at => now()`. So every projection rebuild re-keyed each row and
+     * restamped its creation date.
+     *
+     * On this table specifically, because it is the forensic record of the role
+     * transition — the migration's own docblock justifies its existence as
+     * evidence "for a use case whose whole premise is legal defensibility". An id
+     * cited in a support ticket six months earlier would stop resolving, and
+     * `created_at` would claim the record was created on the day of the rebuild.
+     *
+     * The sibling replay row above cannot see it: it asserts row count and the
+     * role pair, and both survive a re-key intact.
+     */
+    #[Test]
+    public function when_the_projection_is_replayed_then_the_history_rows_keep_their_identity(): void
+    {
+        // Given an executed transfer whose two history rows have been written once
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->anExecutedTransferStream($company, $owner, $admin);
+        $before = $this->pivotHistoryIdentityOf($transfer);
+
+        // When the pivot-history projector replays the whole stream
+        Projectionist::replay(collect([app(CompanyUserPivotProjector::class)]));
+
+        // Then each row is still the same row, created when it was created
+        $this->assertEquals($before, $this->pivotHistoryIdentityOf($transfer));
+    }
+
+    /**
      * Ruling P5, and the transition that settles the B1-vs-H4 asymmetry.
      *
      * Verify refuses under a hold (B1); reject and withdraw proceed (H4), on the

@@ -71,12 +71,27 @@ class CompanyUserPivotProjector extends Projector
     {
         DB::table('ownership_transfer_pivot_history')->updateOrInsert(
             ['request_id' => $event->requestId, 'membership_id' => $membershipId],
-            [
+            fn (bool $exists): array => [
                 ...$transition,
-                'id' => (string) Str::uuid7(),
                 'company_id' => $event->companyId,
                 'updated_at' => CarbonImmutable::now(),
-                'created_at' => CarbonImmutable::now(),
+                // Identity is minted ONCE, on the insert branch only.
+                //
+                // `updateOrInsert` applies its whole $values array on the UPDATE
+                // branch, so leaving these here re-keyed every row on every
+                // projection rebuild and restamped its creation date — on the
+                // table that exists to be forensic evidence. A projector must be
+                // a deterministic function of the stream (§2.15); this one was
+                // not, and the row-count/role-pair replay assertions could not
+                // see it because both survive a re-key intact.
+                //
+                // `updated_at` stays on both branches deliberately: it records
+                // when the projection was last written, so a replay moving it is
+                // honest rather than a falsification.
+                ...($exists ? [] : [
+                    'id' => (string) Str::uuid7(),
+                    'created_at' => CarbonImmutable::now(),
+                ]),
             ],
         );
     }
