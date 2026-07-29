@@ -284,6 +284,73 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     /**
+     * Closes the last of the three refusals deferred out of Task 6, and settles
+     * UC-1-115 sc.2 — though NOT the way that scenario designed it (ruling P7,
+     * s160).
+     *
+     * sc.2 and error flow 4b both specify 409 STATE_GUARD_VIOLATION. That code is
+     * unreachable by construction. T4 is atomic, so the pivot demotion and the
+     * status flip commit together: there is no window in which the requester
+     * still holds `owner` while the transfer reads `Executed`. The transition
+     * that creates the state simultaneously removes the only actor authorised to
+     * attempt the withdrawal, and `ownership-transfer.withdraw` is owner-only
+     * (matrix Module 8, ruling J1). The new owner holds the permission but is not
+     * the requester (J3), so no caller reaches the state guard at all. The
+     * support-assisted path does not rescue it either — impersonation acts AS the
+     * requester, so it meets the same demoted role.
+     *
+     * The GUARANTEE still holds and is what this asserts: an executed transfer
+     * cannot be withdrawn. Only the mechanism moved, one layer earlier — the P4
+     * shape, from this same pre-flight.
+     *
+     * Named for the 403 it proves, deliberately. A row named after the designed
+     * 409 while asserting a 403 would be the "reads as proof, pins nothing" class
+     * this slice has caught twice already.
+     *
+     * Distinct from provideRolesWithoutWithdrawPermission above: that covers
+     * roles which NEVER held the permission, on an OPEN transfer. This covers a
+     * user who held it and lost it as a direct consequence of the transition —
+     * and it is the row that fails if `admin` is ever granted withdraw.
+     */
+    #[Test]
+    public function when_the_outgoing_owner_has_been_demoted_then_they_can_no_longer_withdraw(): void
+    {
+        // Given a transfer whose ownership swap has already completed, demoting
+        // its original requester from owner to admin
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->anExecutedTransferStream($company, $owner, $this->aPlatformSupportAdmin());
+
+        // When that original requester tries to withdraw it anyway
+        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then their lost authority refuses them, and the executed record stands
+        $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
+        $this->assertTransferStillExecuted((string) $transfer->getKey());
+    }
+
+    /**
+     * The executed swap survives a withdrawal attempt: still `Executed`, with no
+     * cancellation columns written over it — the shape its expired and rejected
+     * siblings assert for their own terminals.
+     *
+     * Phase-5 note: this is the FOURTH near-identical assertTransferStill*
+     * helper in this class, differing only by state. They want collapsing into
+     * one parameterised helper under green, alongside the assertTransferStillOpen
+     * duplication already recorded.
+     */
+    private function assertTransferStillExecuted(string $requestId): void
+    {
+        $this->assertDatabaseHas('ownership_transfer_requests', [
+            'id' => $requestId,
+            'status' => OwnershipTransferStatus::Executed->value,
+            'cancelled_at' => null,
+            'cancellation_source' => null,
+        ]);
+    }
+
+    /**
      * The transfer is still the terminal `Expired` the scan left, with no
      * cancellation columns written — the shape its rejected and withdrawn
      * siblings assert for their own terminals.
