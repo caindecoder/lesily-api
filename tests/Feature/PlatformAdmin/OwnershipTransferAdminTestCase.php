@@ -275,6 +275,25 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
     }
 
     /**
+     * PATCH the SM-1-05 T4 execute endpoint as $caller, or as a guest when null.
+     * Same shape as verifyTransfer/rejectTransfer — the admin family carries no
+     * auth.company. Unlike its two siblings this route DOES mount
+     * `idempotency-key:required` (api-conventions §13.2 names
+     * ownership-transfer-execute as one of the four required endpoints), so
+     * callers that need to pass the middleware supply the header themselves.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function executeTransfer(?User $caller, string $requestId, array $body = []): TestResponse
+    {
+        if ($caller !== null) {
+            Sanctum::actingAs($caller);
+        }
+
+        return $this->patchJson("/api/v1/admin/ownership-transfers/{$requestId}/execute", $body);
+    }
+
+    /**
      * PATCH the reject transition as $caller, or as a guest when null. Same
      * no-X-Company-Context shape as its verify sibling; Task 8 sits
      * executeTransfer() beside the pair.

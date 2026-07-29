@@ -341,3 +341,11 @@ Route::patch('/v1/admin/ownership-transfers/{requestId}/verify', [PlatformAdminO
 // for ownership-transfer-execute only, and the state guard refuses a duplicate).
 Route::patch('/v1/admin/ownership-transfers/{requestId}/reject', [PlatformAdminOwnershipTransfersController::class, 'reject'])
     ->middleware(['auth:sanctum', 'platform.admin']);
+
+// SM-1-05 T4 (UC-1-093) — the admin executes a verified transfer and ownership
+// moves atomically across four tables. Unlike its siblings this route mounts
+// idempotency-key:required (api-conventions §13.2 names ownership-transfer-execute
+// explicitly), because the transition is not self-deduplicating the way the
+// others are: a replayed click that loses the race must not 500.
+Route::patch('/v1/admin/ownership-transfers/{requestId}/execute', [PlatformAdminOwnershipTransfersController::class, 'execute'])
+    ->middleware(['auth:sanctum']);
