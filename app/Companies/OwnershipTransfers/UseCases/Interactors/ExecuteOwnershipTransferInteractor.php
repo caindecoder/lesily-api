@@ -47,15 +47,26 @@ class ExecuteOwnershipTransferInteractor
             throw new ModelNotFoundException;
         }
 
-        $this->guardCompanyIsNotUnderLegalHold($transfer);
-        $this->guardOwnerHasNotChanged($transfer);
+        DB::transaction(function () use ($requestId, $transfer, $command): void {
+            $aggregate = OwnershipTransferRequestAggregate::retrieve($requestId);
 
-        $swap = $this->resolveSwap($transfer);
+            // The aggregate answers FIRST. It is the only authority on whether
+            // this transition may happen at all, and asking it before any
+            // cross-entity work is what keeps a closed transfer from being
+            // refused for an incidental reason — a target who left the company
+            // after the transfer was already rejected is not why it failed.
+            $aggregate->guardIsExecutable();
 
-        DB::transaction(function () use ($requestId, $command, $swap): void {
-            OwnershipTransferRequestAggregate::retrieve($requestId)
-                ->execute($command, $swap)
-                ->persist();
+            // Inside the transaction, not before it. Every premise these three
+            // establish is one the projectors then act on, so reading them
+            // outside meant each could change in between: a membership removed
+            // between the check and the write lands ownership on a soft-deleted
+            // pivot, and a concurrent role change makes the pivot-history row's
+            // `old_role_id` name a role the member no longer held.
+            $this->guardCompanyIsNotUnderLegalHold($transfer);
+            $this->guardOwnerHasNotChanged($transfer);
+
+            $aggregate->execute($command, $this->resolveSwap($transfer))->persist();
         });
 
         // refresh(), not fresh(): it re-reads the projectors' writes into THIS
@@ -103,6 +114,12 @@ class ExecuteOwnershipTransferInteractor
      * has changed", which is true only because executing it is what changed the
      * owner — a strictly less useful answer than "already executed", and one that
      * would have sent an admin looking for a transfer that never happened.
+     *
+     * The scope is now a SECOND line of defence rather than the only one:
+     * `guardIsExecutable()` runs ahead of this and refuses every non-Verified
+     * transfer from the stream. The check stays because the two read different
+     * sources — the aggregate replays the stream, this reads the projection —
+     * and ruling O1 is the standing lesson about assuming those two agree.
      *
      * Reading `status` from the projection here is safe in a way the expiry
      * scan's read was not (ruling O1): it decides only whether to run an EXTRA

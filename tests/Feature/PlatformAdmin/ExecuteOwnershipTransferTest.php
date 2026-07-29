@@ -240,6 +240,42 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Rejected);
     }
 
+    /**
+     * The aggregate answers before any cross-entity resolution does.
+     *
+     * A closed transfer whose target has since left the company is an entirely
+     * ordinary sequence — rejected on Monday, the employee leaves on Friday,
+     * someone retries execute. Two things are true about it, and only one is
+     * worth telling the admin: the transfer is closed, and the target is no
+     * longer a member. The second is a consequence of time passing, not a reason
+     * the execution failed.
+     *
+     * This is the same pre-emption `guardOwnerHasNotChanged` scopes itself to
+     * avoid, and says so in terms at its own docblock — *"a strictly less useful
+     * answer than 'already executed'"*. The reasoning was applied to that guard
+     * at s160 and not carried to the swap resolution, which runs for every status.
+     *
+     * The existing rows cannot see it: the departed-target row uses a VERIFIED
+     * transfer, and the rejected row uses a target who is still a member. It
+     * takes both conditions at once.
+     */
+    #[Test]
+    public function when_a_closed_transfer_has_a_departed_target_then_it_is_refused_as_unexecutable(): void
+    {
+        // Given a rejected transfer whose target has since left the company
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aRejectedTransferStream($company, $owner, $admin);
+        $this->theTargetLeavesTheCompany($transfer);
+
+        // When an allowlisted admin attempts to execute it
+        $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the transfer's own state is the answer, not the stale membership
+        $this->assertStateGuardRefused($response, 'This ownership transfer cannot be executed.');
+        $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Rejected);
+    }
+
     #[Test]
     public function when_the_transfer_is_already_withdrawn_then_it_is_not_executed(): void
     {

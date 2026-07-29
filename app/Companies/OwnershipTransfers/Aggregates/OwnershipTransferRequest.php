@@ -266,11 +266,29 @@ class OwnershipTransferRequest extends AggregateRoot
      * reads the database. The interactor holds all three (rulings P3 and P5,
      * following B1 and the LD ApproveLeaveAction shape).
      */
-    public function execute(ExecuteOwnershipTransferCommand $command, OwnershipSwap $swap): static
+    /**
+     * The state guard, callable on its own so the interactor can ask this
+     * question BEFORE doing any cross-entity work.
+     *
+     * That ordering is the point. Resolving the swap first means a closed
+     * transfer whose target has since left the company answers *"the target is
+     * not a member"* — true, but a consequence of time passing rather than the
+     * reason the execution failed. The transfer being closed is the useful
+     * answer, and only this aggregate can give it.
+     *
+     * `execute()` still calls it, so a caller that drives the aggregate directly
+     * is guarded exactly as before.
+     */
+    public function guardIsExecutable(): void
     {
         if ($this->status !== OwnershipTransferStatus::Verified) {
             throw new OwnershipTransferNotExecutableException;
         }
+    }
+
+    public function execute(ExecuteOwnershipTransferCommand $command, OwnershipSwap $swap): static
+    {
+        $this->guardIsExecutable();
 
         return $this->recordThat(new OwnershipTransferExecuted(
             requestId: $this->uuid(),
