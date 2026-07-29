@@ -780,19 +780,24 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * The identity of each history row, keyed by the pivot it describes.
      *
      * `updated_at` is deliberately absent: it records when the projection was
-     * last written, so a replay moving it is honest. `id` and `created_at` are
-     * the two that must not move — one is what a support ticket or a legal
-     * export cites, the other is when the record came into existence.
+     * last written, so a replay moving it is honest. The three here must not
+     * move — `id` is what a support ticket or a legal export cites,
+     * `created_at` is when the record came into existence, and `executed_at` is
+     * when ownership actually changed hands.
      *
-     * @return array<string, array{id: string, created_at: string}>
+     * @return array<string, array{id: string, created_at: string, executed_at: string}>
      */
     private function pivotHistoryIdentityOf(OwnershipTransferRequest $transfer): array
     {
         return DB::table('ownership_transfer_pivot_history')
             ->where('request_id', $transfer->getKey())
-            ->get(['membership_id', 'id', 'created_at'])
+            ->get(['membership_id', 'id', 'created_at', 'executed_at'])
             ->keyBy('membership_id')
-            ->map(fn (stdClass $row): array => ['id' => $row->id, 'created_at' => $row->created_at])
+            ->map(fn (stdClass $row): array => [
+                'id' => $row->id,
+                'created_at' => $row->created_at,
+                'executed_at' => $row->executed_at,
+            ])
             ->all();
     }
 
@@ -821,10 +826,17 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $transfer = $this->anExecutedTransferStream($company, $owner, $admin);
         $before = $this->pivotHistoryIdentityOf($transfer);
 
-        // When the pivot-history projector replays the whole stream
+        // When the pivot-history projector replays the whole stream, a day later
+        //
+        // The time jump is what makes this falsifiable. Replayed in the same
+        // second, a clock-sourced `created_at` or `executed_at` is byte-identical
+        // to an event-sourced one and the assertion passes either way — which is
+        // exactly how the original re-keying defect hid: `created_at` looked
+        // stable while `id` churned.
+        $this->travel(1)->days();
         Projectionist::replay(collect([app(CompanyUserPivotProjector::class)]));
 
-        // Then each row is still the same row, created when it was created
+        // Then each row is still the same row, created and executed when it was
         $this->assertEquals($before, $this->pivotHistoryIdentityOf($transfer));
     }
 
@@ -933,6 +945,41 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * The admin's stated reason survives, and the event payload is the ONLY
+     * place it can.
+     *
+     * `ownership_transfer_requests.reason` holds the REQUESTER's reason from T1
+     * and is not overwritten; `audit_trail` writes a static description with
+     * `metadata => NULL` by the s149 ruling. So the one justification given for
+     * moving legal authority lives in `stored_events` alone — and nothing read
+     * it back, which meant `reason: ''` on the aggregate shipped green.
+     *
+     * UC-1-093 makes it mandatory at write time (error flow 4a) precisely
+     * because a transfer executed without a recorded why is the thing a later
+     * dispute cannot answer.
+     */
+    #[Test]
+    public function when_a_transfer_is_executed_then_the_admins_reason_is_recorded_verbatim(): void
+    {
+        // Given a verified transfer
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+
+        // When an allowlisted admin executes it with a stated reason
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
+
+        // Then that reason is on the executed event, exactly as submitted
+        $payload = LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferExecuted::class)
+            ->where('aggregate_uuid', $transfer->getKey())
+            ->sole()
+            ->event_properties;
+
+        $this->assertSame(self::executionBody()['reason'], $payload['reason']);
+    }
+
+    /**
      * Row 19a — the prompt itself, which must exist before its skip case can
      * mean anything (§S10b: the emergency contact is mandatory for owners, so
      * T4 hands the incoming owner that obligation; UC-1-029 collects it).
@@ -1018,6 +1065,34 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * WHO moved ownership, WHEN, and BETWEEN WHOM — the forensic quad on the
+     * transfer row (OQ-1-044).
+     *
+     * These four columns are all `nullable()`, so every one of them could be
+     * dropped from the projector's update and the row would still save. Until
+     * this helper existed nothing read them back after a T4: the whole quad
+     * could be deleted, or the owner pair written BACKWARDS, and the suite stayed
+     * green. On an append-only record whose stated purpose is to document the
+     * swap that ACTUALLY happened, a silently reversed pair is worse than an
+     * absent one — it reads as evidence.
+     *
+     * Derives rather than snapshots, the `assertNoWriteSurvived` idiom: the
+     * pre-transfer parties ARE `current_owner_user_id` and `target_user_id` on
+     * the transfer row, so the helper stays at two parameters (§2.2 Rule 5).
+     */
+    private function assertExecutionStamped(OwnershipTransferRequest $transfer, User $executedBy): void
+    {
+        $current = $this->currentTransfer($transfer);
+
+        $this->assertSame(
+            [$transfer->current_owner_user_id, $transfer->target_user_id],
+            [$current->old_owner_user_id, $current->new_owner_user_id],
+        );
+        $this->assertSame($executedBy->getKey(), $current->executed_by);
+        $this->assertNotNull($current->executed_at);
+    }
+
+    /**
      * The role transition is RECORDED, not merely inferable (ruling P2). The
      * old_role_id assertions are the only ones in this class that can catch a
      * projector reading the prior role from company_user instead of the event
@@ -1044,9 +1119,21 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
                 $this->roleTransitionRecordedFor($rows, $incomingOwner),
             ],
         );
-        // One transfer, one instant: both parties moved in the same transaction,
-        // so a differing pair would mean they did not.
-        $this->assertCount(1, $rows->pluck('executed_at')->unique());
+        // Both parties carry the transfer row's own execution instant — one
+        // transfer, one moment, sourced from the event rather than from whenever
+        // each projector happened to run.
+        //
+        // This replaced `assertCount(1, ...->unique())`, which could not fail:
+        // the projector hoists `$executedAt` once and passes the SAME variable
+        // into both rows, so the pair is identical by construction. Even the
+        // mutation it named — a per-row `now()` — left both values in the same
+        // second on a `timestamp` column. Compared against the transfer row, a
+        // clock-sourced value diverges the moment the two are not simultaneous,
+        // which the replay row then proves outright.
+        $this->assertSame(
+            [$this->currentTransfer($transfer)->executed_at?->toDateTimeString()],
+            $rows->pluck('executed_at')->unique()->values()->all(),
+        );
     }
 
     /**
@@ -1139,6 +1226,9 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $response->assertJsonPath('data.status', 'executed');
         $this->assertOwnershipMoved($transfer, $owner, $target);
         $this->assertPivotHistoryRecorded($transfer, $owner, $target);
+        // The forensic quad: who moved it, when, and between whom. Nullable
+        // columns nothing else reads back after a T4.
+        $this->assertExecutionStamped($transfer, $admin);
         // UC-1-093's Minimal Guarantee: no role swap succeeds without a
         // corresponding audit record. T4 is the transition that moves legal
         // authority, so this is the one row a disputed transfer turns on.
