@@ -347,11 +347,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'Receipt generation is temporarily unavailable. Please try again shortly.',
         )->withHeaders(['Retry-After' => '30']));
 
-        $exceptions->render(fn (ModelNotFoundException $e) => EnvelopeBuilder::build(
-            ApiErrorCode::ResourceNotFound,
-            'The requested resource was not found.',
-        ));
-
+        // E-d (s158): the ModelNotFoundException arm that stood here was DEAD and
+        // is removed. Laravel's handler runs prepareException() BEFORE the render
+        // callbacks, and that converts ModelNotFoundException into
+        // NotFoundHttpException — so the arm below is what has actually answered
+        // every interactor-thrown not-found all along. Deleting it changes no
+        // response: the 404 rows across the ownership-transfer, invoice and
+        // membership suites all still pass.
         $exceptions->render(fn (NotFoundHttpException $e) => EnvelopeBuilder::build(
             ApiErrorCode::ResourceNotFound,
             'The requested resource was not found.',

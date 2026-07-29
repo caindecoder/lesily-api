@@ -22,8 +22,10 @@ use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Projectors\CompanyUserPivotProjector;
 use Spatie\EventSourcing\AggregateRoots\Exceptions\CouldNotPersistAggregate;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipReceivedNotification;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExecuteOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Notifications\EmergencyContactRequiredNotification;
+use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferredAwayNotification;
 use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferAggregate;
 
 /**
@@ -941,5 +943,13 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', OwnershipTransferExecuted::class)
             ->count());
+        // Both parties are told, separately. UC-1-093's stakeholder list makes
+        // this the outgoing owner's ONLY signal that they no longer hold the
+        // company — they initiated the request, but an admin chose the moment.
+        Notification::assertSentTo($owner, OwnershipTransferredAwayNotification::class);
+        // The incoming owner gets their own notice, carrying a different fact.
+        // Distinct from the emergency-contact prompt, which is conditional —
+        // this one always fires.
+        Notification::assertSentTo($target, OwnershipReceivedNotification::class);
     }
 }
