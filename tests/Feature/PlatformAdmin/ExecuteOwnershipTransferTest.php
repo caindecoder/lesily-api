@@ -27,6 +27,19 @@ use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
  */
 class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
 {
+    /**
+     * A valid execution body, sent by every row that isolates something OTHER
+     * than validation — so an existence or gate assertion can never be satisfied
+     * by a validation failure standing in for it (the RejectOwnershipTransferTest
+     * idiom, which states the reasoning at its own not-found row).
+     *
+     * @return array<string, string>
+     */
+    private static function executionBody(): array
+    {
+        return ['reason' => 'Founder departure confirmed by signed board resolution.'];
+    }
+
     #[Test]
     public function when_the_execution_is_unauthenticated_then_it_is_refused(): void
     {
@@ -59,7 +72,7 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $caller = $this->aCompanyMember($company, $roleCode);
 
         // When that tenant role attempts to execute it
-        $response = $this->executeTransfer($caller, $transfer->getKey());
+        $response = $this->executeTransfer($caller, $transfer->getKey(), self::executionBody());
 
         // Then the admin surface never acknowledges the transfer exists
         $this->assertResourceNotFoundNoLeak($response);
@@ -76,7 +89,7 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $admin = $this->anAllowlistedAdmin();
 
         // When they attempt to execute it
-        $response = $this->executeTransfer($admin, (string) Str::uuid7());
+        $response = $this->executeTransfer($admin, (string) Str::uuid7(), self::executionBody());
 
         // Then the refusal is byte-identical to the one a denied caller gets
         $this->assertResourceNotFoundNoLeak($response);
