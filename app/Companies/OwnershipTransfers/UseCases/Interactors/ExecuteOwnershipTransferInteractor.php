@@ -5,6 +5,7 @@ namespace App\Companies\OwnershipTransfers\UseCases\Interactors;
 use RuntimeException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\UseCases\Commands\ExecuteOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
 
 /**
@@ -19,7 +20,7 @@ class ExecuteOwnershipTransferInteractor
 {
     public function __construct(private readonly OwnershipTransferRequestRepositoryInterface $transfers) {}
 
-    public function execute(string $requestId): OwnershipTransferRequest
+    public function execute(string $requestId, ExecuteOwnershipTransferCommand $command): OwnershipTransferRequest
     {
         $transfer = $this->transfers->findByIdAcrossTenants($requestId);
 

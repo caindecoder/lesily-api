@@ -95,4 +95,48 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertDatabaseCount('ownership_transfer_requests', 0);
     }
+
+    /**
+     * Every shape the execution record must refuse. The reason is mandatory AT
+     * WRITE TIME (UC-1-093 error flow 4a): T4 is the one transition that moves
+     * legal authority, so no execution may reach stored_events unexplained.
+     *
+     * Whitespace-only needs no rule of its own: TrimStrings and
+     * ConvertEmptyStringsToNull both sit ahead of validation in the HTTP
+     * pipeline, so `'   '` arrives as null and fails `required` — and Laravel's
+     * own `required` trims besides. Both rows stay because they are distinct
+     * CLIENT shapes; what they jointly pin is that neither reaches the event
+     * store, whichever layer happens to stop them.
+     *
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function provideInvalidExecutionInputs(): array
+    {
+        return [
+            'reason missing' => [[], 'reason'],
+            'reason empty' => [['reason' => ''], 'reason'],
+            'reason whitespace only' => [['reason' => '   '], 'reason'],
+            'reason over the 1000-char bound' => [['reason' => str_repeat('a', 1001)], 'reason'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('provideInvalidExecutionInputs')]
+    public function when_the_execution_input_is_invalid_then_it_is_refused(array $body, string $invalidField): void
+    {
+        // Given a verified transfer awaiting execution
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+
+        // When an allowlisted admin submits a malformed execution
+        $response = $this->executeTransfer($admin, $transfer->getKey(), $body);
+
+        // Then it is refused and the transfer never leaves the verified window
+        $this->assertValidationRejected($response, $invalidField);
+        $this->assertSame(
+            OwnershipTransferStatus::Verified,
+            $this->currentTransfer($transfer)->status,
+        );
+    }
 }

@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferAdminFilters;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\UseCases\Commands\ExecuteOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\RejectOwnershipTransferInteractor;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestAdminResource;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\ExecuteOwnershipTransferInteractor;
@@ -78,8 +79,16 @@ class PlatformAdminOwnershipTransfersController
         return new OwnershipTransferRequestAdminResource($interactor->execute($requestId, $command));
     }
 
-    public function execute(string $requestId, ExecuteOwnershipTransferInteractor $interactor): OwnershipTransferRequestAdminResource
+    public function execute(string $requestId, Request $request, ExecuteOwnershipTransferInteractor $interactor): OwnershipTransferRequestAdminResource
     {
-        return new OwnershipTransferRequestAdminResource($interactor->execute($requestId));
+        /** @var User $admin — guaranteed by auth:sanctum */
+        $admin = $request->user();
+
+        $command = ExecuteOwnershipTransferCommand::validateAndCreate([
+            ...$request->only(['reason']),
+            'executedBy' => $admin->getKey(),
+        ]);
+
+        return new OwnershipTransferRequestAdminResource($interactor->execute($requestId, $command));
     }
 }
