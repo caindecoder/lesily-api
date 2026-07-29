@@ -4,6 +4,7 @@ namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 
@@ -44,6 +45,26 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertSame(
             OwnershipTransferStatus::Requested,
             OwnershipTransferRequest::query()->findOrFail($transfer->getKey())->status,
+        );
+    }
+
+    #[Test]
+    #[DataProvider('provideTenantRoles')]
+    public function when_the_caller_is_not_a_platform_admin_then_the_transfer_is_not_found(string $roleCode): void
+    {
+        // Given a verified transfer and a tenant member of its own company
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $this->anAllowlistedAdmin());
+        $caller = $this->aCompanyMember($company, $roleCode);
+
+        // When that tenant role attempts to execute it
+        $response = $this->executeTransfer($caller, $transfer->getKey());
+
+        // Then the admin surface never acknowledges the transfer exists
+        $this->assertResourceNotFoundNoLeak($response);
+        $this->assertSame(
+            OwnershipTransferStatus::Verified,
+            $this->currentTransfer($transfer)->status,
         );
     }
 }

@@ -8,6 +8,7 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Notification;
+use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
@@ -56,6 +57,39 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
             'cancelled' => [OwnershipTransferStatus::Cancelled],
             'expired' => [OwnershipTransferStatus::Expired],
         ];
+    }
+
+    /**
+     * A company whose `companies.owner_id` user REALLY holds the owner pivot —
+     * the arrangement every T4 row needs, and the one `aCompanyWithMember()`
+     * cannot produce (ruling P6, s160).
+     *
+     * `aCompanyWithMember('owner')` mints a SECOND user and attaches the owner
+     * role to them, leaving `companies.owner_id` pointing at the factory's user,
+     * who has no `company_user` row at all: `CompanyFactory` attaches no pivot,
+     * and the pivot's real writer — `CompanyProjector::onCompanyCreated` — never
+     * fires on the factory path. For the read surfaces that never compared the
+     * two that was harmless. T4 compares them in the interactor (P3) and mutates
+     * BOTH pivots, so against that fixture the happy path can never reach 200,
+     * the owner-changed guard passes vacuously, and the demotion assertion
+     * matches zero rows — the s154 K1 shape.
+     *
+     * Mirrors `OwnershipTransfersTestCase::aCompanyWithOwner()` on the tenant
+     * side; module bases are independent (established precedent). The attached
+     * row is byte-identical to the one CompanyProjector writes in production.
+     *
+     * @return array{0: Company, 1: User}
+     */
+    protected function aCompanyWithOwner(): array
+    {
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $owner = User::query()->findOrFail($company->owner_id);
+
+        $company->users()->attach($owner, [
+            'role_id' => $this->seededRole('owner')->getKey(),
+        ]);
+
+        return [$company, $owner];
     }
 
     /**
