@@ -27,6 +27,13 @@ class OwnershipTransferProjector extends Projector
      * First of the four T4 projectors (ruling P4). Global rather than scoped to
      * OwnershipTransferExecuted because this class is the sole projector on
      * every other event it handles, so ordering them is a no-op.
+     *
+     * This particular weight is an EQUIVALENT MUTANT and is documented as such
+     * rather than chased: delete the property and `getWeight()` falls back to 0,
+     * which is still strictly less than 20/30/40, so this projector stays first
+     * and the dispatch-order row passes either way. The other three weights are
+     * genuinely killed by that row. Recorded so a future mutation escape here is
+     * recognised instead of "fixed" with a test that pins the literal.
      */
     public int $weight = 10;
 

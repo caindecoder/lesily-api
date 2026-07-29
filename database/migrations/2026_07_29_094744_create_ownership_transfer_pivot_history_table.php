@@ -42,7 +42,14 @@ return new class extends Migration
             $table->timestamps();
 
             // The replay key AND the natural key: one row per party per transfer.
-            $table->unique(['request_id', 'membership_id']);
+            //
+            // Named explicitly: the generated name
+            // `ownership_transfer_pivot_history_request_id_membership_id_unique`
+            // is exactly 64 characters — MySQL's identifier maximum, with zero
+            // headroom. Lengthening the table or either column by one character
+            // would fail at migrate time with SQLSTATE 1059, which is precisely
+            // the class of error the MySQL test-parity lock exists to catch.
+            $table->unique(['request_id', 'membership_id'], 'otph_request_membership_unique');
         });
     }
 };

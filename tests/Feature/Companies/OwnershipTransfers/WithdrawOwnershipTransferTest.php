@@ -331,11 +331,6 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     /**
-     * The executed swap survives a withdrawal attempt: still `Executed`, with no
-     * cancellation columns written over it — the shape its expired and rejected
-     * siblings assert for their own terminals.
-     */
-    /**
      * The transfer still sits at $expected with no cancellation columns written
      * over it — the assertion every refusal row in this class makes about its own
      * terminal or open state.

@@ -13,7 +13,6 @@ use App\Foundation\Http\Middleware\EnsurePermission;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Foundation\Http\Middleware\EnsurePlatformAdmin;
 use App\Foundation\Http\Middleware\EnsureIdempotencyKey;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
@@ -347,13 +346,18 @@ return Application::configure(basePath: dirname(__DIR__))
             'Receipt generation is temporarily unavailable. Please try again shortly.',
         )->withHeaders(['Retry-After' => '30']));
 
-        // E-d (s158): the ModelNotFoundException arm that stood here was DEAD and
-        // is removed. Laravel's handler runs prepareException() BEFORE the render
-        // callbacks, and that converts ModelNotFoundException into
+        // E-d (s158): the Eloquent model-not-found arm that stood here was DEAD
+        // and is removed. Laravel's handler runs prepareException() BEFORE the
+        // render callbacks, and that converts the Eloquent exception into
         // NotFoundHttpException — so the arm below is what has actually answered
         // every interactor-thrown not-found all along. Deleting it changes no
         // response: the 404 rows across the ownership-transfer, invoice and
         // membership suites all still pass.
+        //
+        // The import went with it (s161). Naming the class here kept Pint's
+        // no_unused_imports quiet — php-cs-fixer counts a short name in a
+        // comment as a use — so the removal note was the only thing keeping a
+        // dead symbol in the file.
         $exceptions->render(fn (NotFoundHttpException $e) => EnvelopeBuilder::build(
             ApiErrorCode::ResourceNotFound,
             'The requested resource was not found.',

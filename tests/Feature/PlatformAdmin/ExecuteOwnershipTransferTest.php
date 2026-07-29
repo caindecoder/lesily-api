@@ -50,7 +50,7 @@ use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as Owne
 class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
 {
     /**
-     * The refusal left every T4 write surface untouched. Four aspects, because
+     * The refusal left every T4 write surface untouched. Five aspects, because
      * a 409 on its own says only that the HTTP layer answered — it says nothing
      * about whether the aggregate recorded, the owner moved, or the target was
      * promoted on the way to answering.
@@ -374,6 +374,43 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
 
         // Then the live membership re-check refuses it and nothing was written
         $this->assertValidationRejected($response, 'targetUserId');
+        $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Verified);
+    }
+
+    /**
+     * Ruling P5, and the transition that settles the B1-vs-H4 asymmetry.
+     *
+     * Verify refuses under a hold (B1); reject and withdraw proceed (H4), on the
+     * stated test *"does it change ownership?"*. T4 is the one transition whose
+     * answer is yes, so the family's own reasoning decides it rather than a new
+     * principle.
+     *
+     * The guard is an INTERACTOR guard, following B1: `legal_hold` belongs to the
+     * Company aggregate and the OT aggregate never reads the database, so this
+     * cannot live on the aggregate at all.
+     *
+     * Its scoping companion — `when_another_company_is_under_legal_hold_then
+     * _this_transfer_still_executes` — sits with the edge rows rather than here,
+     * because it executes successfully. The pair is deliberately split by
+     * category (§2.2 Rule 1) rather than kept adjacent.
+     */
+    #[Test]
+    public function when_the_company_is_under_legal_hold_then_it_is_not_executed(): void
+    {
+        // Given a verified transfer whose company has since been frozen
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $this->placeCompanyUnderLegalHold($company);
+
+        // When an allowlisted admin executes it
+        $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the hold refuses it and nothing was written
+        $this->assertStateGuardRefused(
+            $response,
+            'This company is under a legal hold; ownership changes are frozen until it is lifted.',
+        );
         $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Verified);
     }
 
@@ -948,38 +985,6 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
 
         // Then each row is still the same row, created and executed when it was
         $this->assertEquals($before, $this->pivotHistoryIdentityOf($transfer));
-    }
-
-    /**
-     * Ruling P5, and the transition that settles the B1-vs-H4 asymmetry.
-     *
-     * Verify refuses under a hold (B1); reject and withdraw proceed (H4), on the
-     * stated test *"does it change ownership?"*. T4 is the one transition whose
-     * answer is yes, so the family's own reasoning decides it rather than a new
-     * principle.
-     *
-     * The guard is an INTERACTOR guard, following B1: `legal_hold` belongs to the
-     * Company aggregate and the OT aggregate never reads the database, so this
-     * cannot live on the aggregate at all.
-     */
-    #[Test]
-    public function when_the_company_is_under_legal_hold_then_it_is_not_executed(): void
-    {
-        // Given a verified transfer whose company has since been frozen
-        [$company, $owner] = $this->aCompanyWithOwner();
-        $admin = $this->anAllowlistedAdmin();
-        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
-        $this->placeCompanyUnderLegalHold($company);
-
-        // When an allowlisted admin executes it
-        $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
-
-        // Then the hold refuses it and nothing was written
-        $this->assertStateGuardRefused(
-            $response,
-            'This company is under a legal hold; ownership changes are frozen until it is lifted.',
-        );
-        $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Verified);
     }
 
     /**

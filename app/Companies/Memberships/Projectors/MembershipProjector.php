@@ -172,9 +172,18 @@ class MembershipProjector extends Projector
     /**
      * SM-1-05 T4 (UC-1-093) — the ownership swap's two role moves.
      *
-     * Cross-module by design: this projector stays the sole writer of
-     * company_user (§2.15), so the T4 pivot writes come here rather than to a
-     * projector in the OwnershipTransfers module. Ruling P1 chose this over
+     * Cross-module by design: this projector is the sole writer of company_user
+     * for MEMBERSHIP-LIFECYCLE events, so the T4 pivot writes come here rather
+     * than to a projector in the OwnershipTransfers module.
+     *
+     * That qualifier is load-bearing and was missing (s161). `CompanyProjector
+     * ::onCompanyCreated` attaches the genesis owner pivot with `users()->attach`,
+     * so an unqualified "sole writer of company_user" was simply false as built —
+     * and it was the entire stated justification for this placement. The
+     * placement still holds on its own terms (module cohesion, and not adding a
+     * second lifecycle writer); the reason just had to be true.
+     *
+     * Ruling P1 chose this over
      * emitting UserMembershipRoleChanged, which was unbuildable — the outgoing
      * owner's pivot is attached by CompanyProjector::onCompanyCreated and has no
      * UserMembership stream to record against, and `owner` is deliberately
