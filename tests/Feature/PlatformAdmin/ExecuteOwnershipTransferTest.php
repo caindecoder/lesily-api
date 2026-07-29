@@ -729,6 +729,51 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * The T2 verification record survives T4 untouched, and its notes ride
+     * FORWARD onto the executed event (ruling P3, OQ-1-146 / deferral D-c).
+     *
+     * Two distinct claims, and both matter for the same reason — UC-1-093's
+     * premise is legal defensibility, so the chain must read "verified by X on
+     * date D, then executed by Y" and stay readable afterwards:
+     *
+     * - The projection's verification columns are not overwritten. Execute
+     *   re-validates rather than re-enters (P3), so it must not restamp them.
+     * - `verificationNotes` appears on the `OwnershipTransferExecuted` payload,
+     *   satisfying SM-1-05 §7 without a second capture. This is the assertion
+     *   that would fail if someone "simplified" the event by dropping a field
+     *   the Command no longer carries — the notes are only reachable because the
+     *   interactor reads them forward off the projection.
+     */
+    #[Test]
+    public function when_a_transfer_is_executed_then_the_verification_record_survives_unchanged(): void
+    {
+        // Given a verified transfer, and its verification record as it stands
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $verified = $this->currentTransfer($transfer);
+
+        // When it is executed
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
+
+        // Then the verification columns read exactly as they did before
+        $executed = $this->currentTransfer($transfer);
+        $this->assertEquals(
+            [$verified->verified_at, $verified->verified_by, $verified->verification_notes],
+            [$executed->verified_at, $executed->verified_by, $executed->verification_notes],
+        );
+
+        // And the notes were carried forward onto the executed event itself
+        $payload = LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferExecuted::class)
+            ->where('aggregate_uuid', $transfer->getKey())
+            ->sole()
+            ->event_properties;
+
+        $this->assertSame($verified->verification_notes, $payload['verificationNotes']);
+    }
+
+    /**
      * Ownership actually moved, across all three read-model surfaces the swap
      * touches. Four aspects, because any one alone is satisfiable by a partial
      * write — and a partial write is precisely the state SD-1-02 §2.2 exists to
