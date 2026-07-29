@@ -245,6 +245,27 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Expired);
     }
 
+    #[Test]
+    public function when_the_transfer_is_already_executed_then_it_is_not_executed_again(): void
+    {
+        // Given a transfer whose ownership swap has already happened
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->anExecutedTransferStream($company, $owner, $admin);
+        $target = User::query()->findOrFail($transfer->target_user_id);
+
+        // When an allowlisted admin attempts to execute it a second time
+        $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the state guard refuses it and the FIRST execution stands intact
+        $this->assertStateGuardRefused($response, 'This ownership transfer cannot be executed.');
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferExecuted::class)
+            ->count());
+        $this->assertOwnershipMoved($transfer, $owner, $target);
+        $this->assertPivotHistoryRecorded($transfer, $owner, $target);
+    }
+
     /**
      * Ownership actually moved, across all three read-model surfaces the swap
      * touches. Four aspects, because any one alone is satisfiable by a partial

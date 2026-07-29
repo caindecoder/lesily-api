@@ -11,8 +11,10 @@ use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\UseCases\Commands\ExecuteOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\WithdrawOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\UseCases\Interactors\ExecuteOwnershipTransferInteractor;
 use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferIdentityCommand;
 use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
@@ -197,6 +199,38 @@ trait ArrangesOwnershipTransferStreams
                 'expiredAt' => CarbonImmutable::now(),
             ]))
             ->persist();
+
+        return $transfer->refresh();
+    }
+
+    /**
+     * A transfer whose stream carries a REAL T1 → T2 → T4 history: requested,
+     * verified, then executed — the ownership swap actually happened.
+     *
+     * This is what makes `Executed` reachable at all, and it is why the
+     * verify-, reject- and withdraw-from-`Executed` rows were deferred out of
+     * s149, s151 and s154 to this task: until execute() existed the only way to
+     * arrange the state was a factory row, whose empty stream makes every guard
+     * refuse for the wrong reason and the test's name a lie (s149 C1/C2).
+     *
+     * Drives the INTERACTOR rather than the aggregate directly, unlike its
+     * siblings above. T4 is the one transition whose event carries state no
+     * aggregate can resolve — membership and role ids belonging to other
+     * aggregates' read models — so resolving it here would mean copying the
+     * interactor's logic into a fixture, where it could drift from the thing it
+     * is supposed to be arranging.
+     */
+    protected function anExecutedTransferStream(Company $company, User $owner, User $admin): OwnershipTransferRequest
+    {
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+
+        app(ExecuteOwnershipTransferInteractor::class)->execute(
+            $transfer->getKey(),
+            ExecuteOwnershipTransferCommand::validateAndCreate([
+                'reason' => 'Ownership handed over after the founder stepped down.',
+                'executedBy' => $admin->getKey(),
+            ]),
+        );
 
         return $transfer->refresh();
     }
