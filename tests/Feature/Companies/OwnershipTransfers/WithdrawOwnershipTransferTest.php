@@ -71,7 +71,7 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
 
         // Then the permission gate refuses and the transfer is untouched
         $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
-        $this->assertTransferStillOpen((string) $transfer->getKey(), OwnershipTransferStatus::Requested);
+        $this->assertTransferUnchangedAt((string) $transfer->getKey(), OwnershipTransferStatus::Requested);
     }
 
     #[Test]
@@ -104,7 +104,7 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
 
         // Then it is refused as absent, and the foreign row is untouched
         $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
-        $this->assertTransferStillOpen((string) $foreign->getKey(), OwnershipTransferStatus::Requested);
+        $this->assertTransferUnchangedAt((string) $foreign->getKey(), OwnershipTransferStatus::Requested);
     }
 
     /**
@@ -133,7 +133,7 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
 
         // Then identity, not role, is what refuses them
         $this->assertRequesterMismatchRefused($response);
-        $this->assertTransferStillOpen((string) $transfer->getKey(), OwnershipTransferStatus::Requested);
+        $this->assertTransferUnchangedAt((string) $transfer->getKey(), OwnershipTransferStatus::Requested);
     }
 
     /**
@@ -178,7 +178,7 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
 
         // Then the boundary refuses it and the transfer stands
         $this->assertValidationRejected($response, 'reason');
-        $this->assertTransferStillOpen((string) $transfer->getKey(), OwnershipTransferStatus::Requested);
+        $this->assertTransferUnchangedAt((string) $transfer->getKey(), OwnershipTransferStatus::Requested);
     }
 
     /**
@@ -254,7 +254,7 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
 
         // Then the state guard refuses and the rejection stands
         $this->assertStateGuardRefused($response, 'Only an open transfer can be withdrawn.');
-        $this->assertTransferStillRejected((string) $transfer->getKey());
+        $this->assertTransferUnchangedAt((string) $transfer->getKey(), OwnershipTransferStatus::Rejected);
     }
 
     /**
@@ -280,7 +280,7 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
 
         // Then the state guard refuses and the expiry stands
         $this->assertStateGuardRefused($response, 'Only an open transfer can be withdrawn.');
-        $this->assertTransferStillExpired((string) $transfer->getKey());
+        $this->assertTransferUnchangedAt((string) $transfer->getKey(), OwnershipTransferStatus::Expired);
     }
 
     /**
@@ -327,52 +327,31 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
 
         // Then their lost authority refuses them, and the executed record stands
         $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
-        $this->assertTransferStillExecuted((string) $transfer->getKey());
+        $this->assertTransferUnchangedAt((string) $transfer->getKey(), OwnershipTransferStatus::Executed);
     }
 
     /**
      * The executed swap survives a withdrawal attempt: still `Executed`, with no
      * cancellation columns written over it — the shape its expired and rejected
      * siblings assert for their own terminals.
+     */
+    /**
+     * The transfer still sits at $expected with no cancellation columns written
+     * over it — the assertion every refusal row in this class makes about its own
+     * terminal or open state.
      *
-     * Phase-5 note: this is the FOURTH near-identical assertTransferStill*
-     * helper in this class, differing only by state. They want collapsing into
-     * one parameterised helper under green, alongside the assertTransferStillOpen
-     * duplication already recorded.
+     * One parameterised helper, collapsed s160 from four near-identical copies
+     * (`...StillExecuted` / `...StillExpired` / `...StillRejected`, plus the
+     * open-state form) that differed only by the status they named. All four
+     * columns are asserted for every state: the earlier copies each checked a
+     * different SUBSET, so which cancellation column was actually pinned depended
+     * on which helper a row happened to call.
      */
-    private function assertTransferStillExecuted(string $requestId): void
+    private function assertTransferUnchangedAt(string $requestId, OwnershipTransferStatus $expected): void
     {
         $this->assertDatabaseHas('ownership_transfer_requests', [
             'id' => $requestId,
-            'status' => OwnershipTransferStatus::Executed->value,
-            'cancelled_at' => null,
-            'cancellation_source' => null,
-        ]);
-    }
-
-    /**
-     * The transfer is still the terminal `Expired` the scan left, with no
-     * cancellation columns written — the shape its rejected and withdrawn
-     * siblings assert for their own terminals.
-     */
-    protected function assertTransferStillExpired(string $requestId): void
-    {
-        $transfer = OwnershipTransferRequest::query()->findOrFail($requestId);
-
-        $this->assertSame(OwnershipTransferStatus::Expired, $transfer->status);
-        $this->assertNull($transfer->cancelled_at);
-        $this->assertNull($transfer->cancellation_source);
-    }
-
-    /**
-     * The rejection survives a withdrawal attempt: still `Rejected`, and none of
-     * the cancellation columns were written over it.
-     */
-    private function assertTransferStillRejected(string $requestId): void
-    {
-        $this->assertDatabaseHas('ownership_transfer_requests', [
-            'id' => $requestId,
-            'status' => OwnershipTransferStatus::Rejected->value,
+            'status' => $expected->value,
             'cancelled_at' => null,
             'cancelled_by' => null,
             'cancellation_source' => null,
@@ -400,7 +379,7 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
         ]);
 
         // Then the other tenant's transfer is exactly as it was
-        $this->assertTransferStillOpen((string) $bystander->getKey(), OwnershipTransferStatus::Requested);
+        $this->assertTransferUnchangedAt((string) $bystander->getKey(), OwnershipTransferStatus::Requested);
     }
 
     /**
@@ -968,21 +947,5 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
             'auditor' => ['auditor'],
             'manager' => ['manager'],
         ];
-    }
-
-    /**
-     * The transfer is still in $expected, and no terminal columns were written —
-     * a refusal that leaves the row alone is the assertion, not merely the
-     * status code.
-     */
-    private function assertTransferStillOpen(string $requestId, OwnershipTransferStatus $expected): void
-    {
-        $this->assertDatabaseHas('ownership_transfer_requests', [
-            'id' => $requestId,
-            'status' => $expected->value,
-            'cancelled_at' => null,
-            'cancelled_by' => null,
-            'cancellation_source' => null,
-        ]);
     }
 }
