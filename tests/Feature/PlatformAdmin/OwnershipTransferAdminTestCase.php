@@ -313,8 +313,9 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
      * Same shape as verifyTransfer/rejectTransfer — the admin family carries no
      * auth.company. Unlike its two siblings this route DOES mount
      * `idempotency-key:required` (api-conventions §13.2 names
-     * ownership-transfer-execute as one of the four required endpoints), so
-     * callers that need to pass the middleware supply the header themselves.
+     * ownership-transfer-execute as one of the four required endpoints), so a
+     * fresh key rides every call — the `postTransferRequest` idiom on the tenant
+     * base, which mints one per call for the same reason.
      *
      * @param  array<string, mixed>  $body
      */
@@ -323,6 +324,21 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
         if ($caller !== null) {
             Sanctum::actingAs($caller);
         }
+
+        return $this->patchJson("/api/v1/admin/ownership-transfers/{$requestId}/execute", $body, [
+            'Idempotency-Key' => fake()->uuid(),
+        ]);
+    }
+
+    /**
+     * PATCH execute with NO Idempotency-Key — the required-mount sad path,
+     * mirroring `postTransferRequestWithoutKey` on the tenant base.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function executeTransferWithoutKey(User $caller, string $requestId, array $body = []): TestResponse
+    {
+        Sanctum::actingAs($caller);
 
         return $this->patchJson("/api/v1/admin/ownership-transfers/{$requestId}/execute", $body);
     }

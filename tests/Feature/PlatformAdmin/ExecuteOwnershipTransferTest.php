@@ -346,6 +346,34 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * The one admin transition that mounts `idempotency-key:required`
+     * (api-conventions §13.2 names ownership-transfer-execute explicitly, and
+     * verify/reject deliberately do NOT — rulings G1 and s151 STALE-3).
+     *
+     * The asymmetry is earned: those two are self-deduplicating, because a
+     * duplicate click meets a state guard that has already moved. Execute is
+     * too, in the same way — but it is the one transition where losing that race
+     * silently would move legal authority, so the contract does not rely on the
+     * guard alone.
+     */
+    #[Test]
+    public function when_the_execution_omits_the_idempotency_key_then_it_is_refused(): void
+    {
+        // Given a verified transfer awaiting execution
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+
+        // When an allowlisted admin executes it with no Idempotency-Key
+        $response = $this->executeTransferWithoutKey($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the mount refuses it before any write happens
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'IDEMPOTENCY_KEY_REQUIRED');
+        $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Verified);
+    }
+
+    /**
      * E-f, half one (ruling P11). The 409 has NO natural HTTP path: within one
      * request retrieve/execute/persist are adjacent, so a second sequential call
      * meets the state guard long before the version check — row 9 is that. The

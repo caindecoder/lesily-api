@@ -348,4 +348,4 @@ Route::patch('/v1/admin/ownership-transfers/{requestId}/reject', [PlatformAdminO
 // explicitly), because the transition is not self-deduplicating the way the
 // others are: a replayed click that loses the race must not 500.
 Route::patch('/v1/admin/ownership-transfers/{requestId}/execute', [PlatformAdminOwnershipTransfersController::class, 'execute'])
-    ->middleware(['auth:sanctum', 'platform.admin']);
+    ->middleware(['auth:sanctum', 'platform.admin', 'idempotency-key:required']);
