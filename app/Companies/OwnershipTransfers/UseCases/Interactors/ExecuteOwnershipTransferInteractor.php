@@ -5,6 +5,7 @@ namespace App\Companies\OwnershipTransfers\UseCases\Interactors;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
+use Illuminate\Validation\ValidationException;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
@@ -120,12 +121,39 @@ class ExecuteOwnershipTransferInteractor
         );
     }
 
+    /**
+     * The pivot must still be LIVE. A membership ends by soft-delete in this
+     * codebase (ERD-1-01 D5b), so the SoftDeletes scope is what makes this a
+     * re-check rather than a lookup — and `firstOrFail` would answer a departed
+     * target with a 404, hiding a transfer the admin is looking straight at.
+     *
+     * The 422 mirrors T1's own refusal of a non-member target (ruling F4), so
+     * both ends of the transfer answer the same question the same way. The key
+     * names the fact the TRANSFER recorded: execute accepts no target (P3), so
+     * there is no request field for the caller to correct.
+     *
+     * KNOWN IMPRECISION, deliberately left: this resolves BOTH parties, so an
+     * absent OUTGOING-owner pivot would also report `targetUserId`. That case is
+     * unreachable today — the owner guard above has already confirmed the live
+     * owner, and owner removal is blocked outright (OwnerRemovalBlockedException)
+     * — so there is no test that could drive it, and inventing a parameter to
+     * carry a message nothing can produce is worse than recording the gap here.
+     * Revisit if self-service transfer (OQ-1-D18) makes ownership mutable.
+     */
     private function liveMembership(string $companyId, string $userId): CompanyUser
     {
-        return CompanyUser::query()
+        $membership = CompanyUser::query()
             ->where('company_id', $companyId)
             ->where('user_id', $userId)
-            ->firstOrFail();
+            ->first();
+
+        if ($membership === null) {
+            throw ValidationException::withMessages([
+                'targetUserId' => 'The selected target user is not a member of this company.',
+            ]);
+        }
+
+        return $membership;
     }
 
     private function roleId(string $code): string

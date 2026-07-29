@@ -9,6 +9,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -275,6 +276,47 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
 
         // Then the live re-validation refuses it and nothing was written
         $this->assertStateGuardRefused($response, 'The company owner has changed since this transfer was requested.');
+        $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Verified);
+    }
+
+    /**
+     * The target was removed from the company between T1 and T4 — their pivot is
+     * soft-deleted, which is how this codebase ends a membership (ERD-1-01 D5b:
+     * rows survive so a re-invite can undelete them).
+     */
+    private function theTargetLeavesTheCompany(OwnershipTransferRequest $transfer): void
+    {
+        CompanyUser::query()
+            ->where('company_id', $transfer->company_id)
+            ->where('user_id', $transfer->target_user_id)
+            ->delete();
+    }
+
+    /**
+     * The 422 mirrors T1's own refusal of a non-member target (ruling F4,
+     * ValidationException → VALIDATION_FAILED), so the two ends of the transfer
+     * answer the same question the same way.
+     *
+     * Worth naming: the error is keyed to `targetUserId`, which at T4 is NOT a
+     * request field — execute accepts no target (P3). The key names the fact the
+     * TRANSFER recorded, not something the caller can correct by resending. That
+     * is a deliberate consistency with T1 rather than an oversight, and it is
+     * why the message speaks about the selected user rather than the input.
+     */
+    #[Test]
+    public function when_the_target_is_no_longer_a_member_then_it_is_not_executed(): void
+    {
+        // Given a verified transfer whose target has since left the company
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $this->theTargetLeavesTheCompany($transfer);
+
+        // When an allowlisted admin executes it
+        $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the live membership re-check refuses it and nothing was written
+        $this->assertValidationRejected($response, 'targetUserId');
         $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Verified);
     }
 
