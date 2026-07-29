@@ -208,4 +208,19 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertStateGuardRefused($response, 'This ownership transfer cannot be executed.');
         $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Rejected);
     }
+
+    #[Test]
+    public function when_the_transfer_is_already_withdrawn_then_it_is_not_executed(): void
+    {
+        // Given a transfer its own requester has withdrawn
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aCancelledTransferStream($company, $owner);
+
+        // When an allowlisted admin attempts to execute it
+        $response = $this->executeTransfer($this->anAllowlistedAdmin(), $transfer->getKey(), self::executionBody());
+
+        // Then the state guard refuses it and nothing was written
+        $this->assertStateGuardRefused($response, 'This ownership transfer cannot be executed.');
+        $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Cancelled);
+    }
 }
