@@ -425,6 +425,45 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * The replayed click the `idempotency-key:required` mount exists to absorb —
+     * the route's own stated justification, which nothing exercised.
+     *
+     * The missing-key row above proves the mount is PRESENT. It says nothing
+     * about what the mount then does, and those are different claims: a
+     * duplicate submission must replay the first answer, not meet the state
+     * guard with a 409 for a transfer the caller successfully executed a moment
+     * ago. The distinction matters most precisely here, because this is the one
+     * admin transition where losing that race silently would move legal
+     * authority (api-conventions §13.2 names ownership-transfer-execute).
+     *
+     * Ownership moves exactly once — one stored event, whichever answer the
+     * second call returns.
+     */
+    #[Test]
+    public function when_the_execution_is_replayed_under_the_same_key_then_it_is_not_executed_twice(): void
+    {
+        // Given a verified transfer
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+
+        // When an allowlisted admin submits the same execution twice under one key
+        [$first, $replay] = $this->executeTransferTwiceWithSameKey(
+            $admin,
+            $transfer->getKey(),
+            self::executionBody(),
+        );
+
+        // Then the replay is served the first answer, and ownership moved once
+        $first->assertOk();
+        $replay->assertOk();
+        $this->assertSame($first->json('data.id'), $replay->json('data.id'));
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferExecuted::class)
+            ->count());
+    }
+
+    /**
      * E-f, half one (ruling P11). The 409 has NO natural HTTP path: within one
      * request retrieve/execute/persist are adjacent, so a second sequential call
      * meets the state guard long before the version check — row 9 is that. The

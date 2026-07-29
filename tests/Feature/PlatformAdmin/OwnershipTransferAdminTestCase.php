@@ -284,9 +284,9 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
      */
     protected function aBystanderTransferAtAnotherCompany(): OwnershipTransferRequest
     {
-        [$otherCompany] = $this->aCompanyWithMember('owner');
+        [$otherCompany, $otherOwner] = $this->aCompanyWithOwner();
 
-        return $this->aTransferInState($otherCompany, User::factory()->create(), OwnershipTransferStatus::Requested);
+        return $this->aRequestedTransferStream($otherCompany, $otherOwner, $this->aCompanyMember($otherCompany));
     }
 
     /**
@@ -341,6 +341,33 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
         Sanctum::actingAs($caller);
 
         return $this->patchJson("/api/v1/admin/ownership-transfers/{$requestId}/execute", $body);
+    }
+
+    /**
+     * PATCH execute twice under the SAME Idempotency-Key — the replayed click
+     * the required mount exists to absorb.
+     *
+     * The key is passed in rather than minted per call, which is the whole
+     * point: `executeTransfer` mints a fresh `fake()->uuid()` every time, so no
+     * test using it can ever exercise a replay. Mirrors
+     * `postTransferRequestWithSameKey` on the tenant base (UC-1-028's precedent
+     * for the same mount).
+     *
+     * @param  array<string, mixed>  $body
+     * @return array{0: TestResponse, 1: TestResponse}
+     */
+    protected function executeTransferTwiceWithSameKey(User $caller, string $requestId, array $body = []): array
+    {
+        Sanctum::actingAs($caller);
+
+        $key = fake()->uuid();
+        $send = fn (): TestResponse => $this->patchJson(
+            "/api/v1/admin/ownership-transfers/{$requestId}/execute",
+            $body,
+            ['Idempotency-Key' => $key],
+        );
+
+        return [$send(), $send()];
     }
 
     /**

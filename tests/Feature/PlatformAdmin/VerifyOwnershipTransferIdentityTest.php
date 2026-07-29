@@ -310,10 +310,18 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->assertSame(0, LesilyStoredEvent::query()
             ->where('event_class', OwnershipTransferIdentityVerified::class)
             ->count());
-        // Exactly the T1 genesis row — the refusal logged nothing (UC error flow
-        // 6d: no audit entry). The sad-path trio asserts a zero baseline; here
-        // the legitimate baseline is one.
-        $this->assertDatabaseCount('audit_trail', 1);
+        // Exactly the T1 genesis row FOR THIS TRANSFER — the refusal logged
+        // nothing (UC error flow 6d: no audit entry).
+        //
+        // Scoped to the subject, not counted globally. A global count says "the
+        // refusal logged nothing" only while every other fixture in the test
+        // logs nothing either, so it was really asserting that the bystander
+        // company was inert — and it broke the moment that bystander was given
+        // the real requested stream its own row needs. The claim being made is
+        // about this transfer; the assertion now says so.
+        $this->assertSame(1, AuditEntry::query()
+            ->where('subject_id', $this->transfer->getKey())
+            ->count());
 
         $row = $this->currentTransfer($this->transfer);
 
