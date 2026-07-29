@@ -192,4 +192,20 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertStateGuardRefused($response, 'This ownership transfer cannot be executed.');
         $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Requested);
     }
+
+    #[Test]
+    public function when_the_transfer_is_already_rejected_then_it_is_not_executed(): void
+    {
+        // Given a transfer a platform admin has already rejected
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aRejectedTransferStream($company, $owner, $admin);
+
+        // When an allowlisted admin attempts to execute it
+        $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the state guard refuses it and nothing was written
+        $this->assertStateGuardRefused($response, 'This ownership transfer cannot be executed.');
+        $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Rejected);
+    }
 }
