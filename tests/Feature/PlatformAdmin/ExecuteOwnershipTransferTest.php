@@ -555,6 +555,89 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * The order in which $tables were first WRITTEN, read off the query log.
+     *
+     * Write-only on purpose: the interactor SELECTs `companies` and
+     * `company_user` during its guards and swap resolution, well before any
+     * projector runs, so a first-TOUCH scan would report the guards' reads as
+     * dispatch order and pass while the real order was anything at all.
+     *
+     * @param  list<array{query: string}>  $log
+     * @param  list<string>  $tables
+     * @return list<string>
+     */
+    private function firstWriteOrderOf(array $log, array $tables): array
+    {
+        $order = [];
+
+        foreach ($log as $entry) {
+            $sql = strtolower(trim($entry['query']));
+
+            if (! str_starts_with($sql, 'update') && ! str_starts_with($sql, 'insert')) {
+                continue;
+            }
+
+            foreach ($tables as $table) {
+                if (! in_array($table, $order, true) && str_contains($sql, "`{$table}`")) {
+                    $order[] = $table;
+                }
+            }
+        }
+
+        return $order;
+    }
+
+    /**
+     * The OQ-1-010 ordering regression, rebuilt on ruling P4's mechanism and
+     * observed per ruling P9.
+     *
+     * It asserts the order the projectors ACTUALLY dispatched in, by watching
+     * what they wrote. OQ-1-010's own mandated test enumerated
+     * `Projectionist::getProjectors()` — the registration LIST — while dispatch
+     * re-sorts on `getWeight()`, so it would have stayed green while the real
+     * order diverged. Recording doubles would have had the same defect one level
+     * down: they measure the order the DOUBLES ran.
+     *
+     * Nothing is substituted here. Each projector writes exactly one distinct
+     * table, so the write sequence IS the dispatch sequence.
+     *
+     * Recorded honestly (P4): no ordering DEPENDENCY exists today — all four read
+     * only the payload and write disjoint tables. The weights are insurance
+     * against a future cross-read, and this row is what would notice them being
+     * dropped.
+     */
+    #[Test]
+    public function when_the_execute_pipeline_runs_then_the_projectors_fire_in_the_declared_order(): void
+    {
+        // Given a verified transfer
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+
+        // When it is executed, with every query recorded
+        DB::enableQueryLog();
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
+        $log = DB::getQueryLog();
+        DB::disableQueryLog();
+
+        // Then the four projectors wrote in weight order: 10, 20, 30, 40
+        $this->assertSame(
+            [
+                'ownership_transfer_requests',      // OwnershipTransferProjector  w10
+                'company_user',                     // MembershipProjector         w20
+                'companies',                        // CompanyProjector            w30
+                'ownership_transfer_pivot_history', // CompanyUserPivotProjector   w40
+            ],
+            $this->firstWriteOrderOf($log, [
+                'ownership_transfer_requests',
+                'company_user',
+                'companies',
+                'ownership_transfer_pivot_history',
+            ]),
+        );
+    }
+
+    /**
      * Ownership actually moved, across all three read-model surfaces the swap
      * touches. Four aspects, because any one alone is satisfiable by a partial
      * write — and a partial write is precisely the state SD-1-02 §2.2 exists to
