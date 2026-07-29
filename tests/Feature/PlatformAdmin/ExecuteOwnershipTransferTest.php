@@ -670,6 +670,65 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * Ruling P5, and the transition that settles the B1-vs-H4 asymmetry.
+     *
+     * Verify refuses under a hold (B1); reject and withdraw proceed (H4), on the
+     * stated test *"does it change ownership?"*. T4 is the one transition whose
+     * answer is yes, so the family's own reasoning decides it rather than a new
+     * principle.
+     *
+     * The guard is an INTERACTOR guard, following B1: `legal_hold` belongs to the
+     * Company aggregate and the OT aggregate never reads the database, so this
+     * cannot live on the aggregate at all.
+     */
+    #[Test]
+    public function when_the_company_is_under_legal_hold_then_it_is_not_executed(): void
+    {
+        // Given a verified transfer whose company has since been frozen
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $this->placeCompanyUnderLegalHold($company);
+
+        // When an allowlisted admin executes it
+        $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the hold refuses it and nothing was written
+        $this->assertStateGuardRefused(
+            $response,
+            'This company is under a legal hold; ownership changes are frozen until it is lifted.',
+        );
+        $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Verified);
+    }
+
+    /**
+     * The scoping half of P5 (s149 C6). With only a held company in the fixture,
+     * a guard that read `legal_hold` unscoped would pass the row above and freeze
+     * every tenant on the platform — the failure is invisible until a SECOND,
+     * unheld company is present to be executed.
+     */
+    #[Test]
+    public function when_another_company_is_under_legal_hold_then_this_transfer_still_executes(): void
+    {
+        // Given a verified transfer, and an unrelated tenant that is frozen
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        [$heldCompany] = $this->aCompanyWithOwner();
+        $this->placeCompanyUnderLegalHold($heldCompany);
+
+        // When this company's transfer is executed
+        $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the other tenant's hold does not reach it
+        $response->assertOk();
+        $this->assertSame(
+            OwnershipTransferStatus::Executed,
+            $this->currentTransfer($transfer)->status,
+        );
+    }
+
+    /**
      * Ownership actually moved, across all three read-model surfaces the swap
      * touches. Four aspects, because any one alone is satisfiable by a partial
      * write — and a partial write is precisely the state SD-1-02 §2.2 exists to

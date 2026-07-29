@@ -8,6 +8,7 @@ use App\Companies\Entities\CompanyUser;
 use Illuminate\Validation\ValidationException;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Companies\Exceptions\CompanyUnderLegalHoldException;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\UseCases\Values\OwnershipSwap;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
@@ -46,6 +47,7 @@ class ExecuteOwnershipTransferInteractor
             throw new ModelNotFoundException;
         }
 
+        $this->guardCompanyIsNotUnderLegalHold($transfer);
         $this->guardOwnerHasNotChanged($transfer);
 
         $swap = $this->resolveSwap($transfer);
@@ -59,6 +61,30 @@ class ExecuteOwnershipTransferInteractor
         // refresh(), not fresh(): it re-reads the projectors' writes into THIS
         // instance and is typed non-null, where fresh() hands back a nullable.
         return $transfer->refresh();
+    }
+
+    /**
+     * §S10b: a hold freezes ownership CHANGES (slice-#11 D3, ruling P5). T4 is
+     * the one transition that actually makes one, which is what settles the
+     * asymmetry with reject and withdraw — both proceed under a hold (H4),
+     * because neither changes ownership.
+     *
+     * Placed and shaped exactly like its verify sibling (ruling B1): runs BEFORE
+     * the aggregate is retrieved so a held transfer never records a T4 event, and
+     * addresses THIS transfer's company by key — an unscoped read would let one
+     * tenant's hold freeze every tenant.
+     *
+     * firstOrFail, not value(): a missing company would make value() return null
+     * and the guard FAIL OPEN, silently unfreezing every held tenant the day
+     * Company gains SoftDeletes.
+     */
+    private function guardCompanyIsNotUnderLegalHold(OwnershipTransferRequest $transfer): void
+    {
+        $company = Company::query()->whereKey($transfer->company_id)->firstOrFail();
+
+        if ($company->legal_hold) {
+            throw new CompanyUnderLegalHoldException;
+        }
     }
 
     /**
