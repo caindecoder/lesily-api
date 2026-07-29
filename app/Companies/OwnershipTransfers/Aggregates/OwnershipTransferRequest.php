@@ -2,6 +2,7 @@
 
 namespace App\Companies\OwnershipTransfers\Aggregates;
 
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\OwnershipTransfers\Enums\TransitionSource;
@@ -14,7 +15,9 @@ use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\UseCases\Commands\ExecuteOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotExecutableException;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotRejectableException;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotVerifiableException;
 use App\Companies\OwnershipTransfers\UseCases\Commands\WithdrawOwnershipTransferCommand;
@@ -28,7 +31,8 @@ use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferId
  * carry aggregate state guards (E28).
  *
  * Built: request (T1) · verifyIdentity (T2) · reject (T3/T5) · withdraw (T6/T7)
- * · expireIfStale (T8/T9). Still to come: execute (T4, Task 8).
+ * · expireIfStale (T8/T9) · execute (T4) — the last of these still records
+ * nothing: its state guard is built and its recording lands with the happy path.
  *
  * One transition refuses differently from the rest: `expireIfStale()` no-ops
  * where the others throw, because its caller is a scheduler with nobody to hand
@@ -243,5 +247,26 @@ class OwnershipTransferRequest extends AggregateRoot
     public function applyOwnershipTransferExpired(OwnershipTransferExpired $event): void
     {
         $this->status = OwnershipTransferStatus::Expired;
+    }
+
+    /**
+     * SM-1-05 T4. The ONE invariant this aggregate can see on its own stream:
+     * only a Verified transfer can be executed, so a re-execute and every other
+     * source state are refused here (E28 — enumerate the transitions, refuse the
+     * rest).
+     *
+     * The three cross-entity guards are NOT here and cannot be: the live owner
+     * (companies.owner_id), the target's live membership, and the parent
+     * company's legal hold all belong to other aggregates, and this one never
+     * reads the database. The interactor holds all three (rulings P3 and P5,
+     * following B1 and the LD ApproveLeaveAction shape).
+     */
+    public function execute(ExecuteOwnershipTransferCommand $command): static
+    {
+        if ($this->status !== OwnershipTransferStatus::Verified) {
+            throw new OwnershipTransferNotExecutableException;
+        }
+
+        throw new RuntimeException('Not implemented');
     }
 }

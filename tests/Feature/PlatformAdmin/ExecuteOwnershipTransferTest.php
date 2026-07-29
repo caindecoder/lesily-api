@@ -4,9 +4,12 @@ namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 
 /**
@@ -27,6 +30,41 @@ use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
  */
 class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
 {
+    /**
+     * The refusal left every T4 write surface untouched. Four aspects, because
+     * a 409 on its own says only that the HTTP layer answered — it says nothing
+     * about whether the aggregate recorded, the owner moved, or the target was
+     * promoted on the way to answering.
+     *
+     * Derives rather than snapshots: the pre-transfer owner IS
+     * `current_owner_user_id` on the transfer row, so no BEFORE capture is
+     * needed and the helper stays at two parameters (§2.2 Rule 5-extended).
+     *
+     * The fifth aspect — zero `ownership_transfer_pivot_history` rows — lands
+     * with the migration that creates that table, and these rows are re-run
+     * against it then.
+     */
+    private function assertNoWriteSurvived(
+        OwnershipTransferRequest $transfer,
+        OwnershipTransferStatus $expected,
+    ): void {
+        $current = $this->currentTransfer($transfer);
+
+        $this->assertSame($expected, $current->status);
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferExecuted::class)
+            ->count());
+        $this->assertSame(
+            $transfer->current_owner_user_id,
+            Company::query()->whereKey($transfer->company_id)->value('owner_id'),
+        );
+        $this->assertDatabaseMissing('company_user', [
+            'company_id' => $transfer->company_id,
+            'user_id' => $transfer->target_user_id,
+            'role_id' => $this->seededRole('owner')->getKey(),
+        ]);
+    }
+
     /**
      * A valid execution body, sent by every row that isolates something OTHER
      * than validation — so an existence or gate assertion can never be satisfied
@@ -138,5 +176,20 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             OwnershipTransferStatus::Verified,
             $this->currentTransfer($transfer)->status,
         );
+    }
+
+    #[Test]
+    public function when_the_transfer_is_not_yet_verified_then_it_is_not_executed(): void
+    {
+        // Given a transfer whose identity check has not happened yet
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, $this->aCompanyMember($company));
+
+        // When an allowlisted admin attempts to execute it
+        $response = $this->executeTransfer($this->anAllowlistedAdmin(), $transfer->getKey(), self::executionBody());
+
+        // Then the state guard refuses it and nothing was written
+        $this->assertStateGuardRefused($response, 'This ownership transfer cannot be executed.');
+        $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Requested);
     }
 }

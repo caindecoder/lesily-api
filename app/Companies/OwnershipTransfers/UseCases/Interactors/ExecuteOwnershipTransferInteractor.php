@@ -2,11 +2,11 @@
 
 namespace App\Companies\OwnershipTransfers\UseCases\Interactors;
 
-use RuntimeException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExecuteOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
+use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
  * SM-1-05 T4 (UC-1-093) — the platform admin executes a verified transfer and
@@ -28,6 +28,12 @@ class ExecuteOwnershipTransferInteractor
             throw new ModelNotFoundException;
         }
 
-        throw new RuntimeException('Not implemented');
+        OwnershipTransferRequestAggregate::retrieve($requestId)
+            ->execute($command)
+            ->persist();
+
+        // refresh(), not fresh(): it re-reads the projector's writes into THIS
+        // instance and is typed non-null, where fresh() hands back a nullable.
+        return $transfer->refresh();
     }
 }
