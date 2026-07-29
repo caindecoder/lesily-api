@@ -5,6 +5,7 @@ namespace Tests\Feature\PlatformAdmin;
 use stdClass;
 use App\Models\User;
 use RuntimeException;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,7 @@ use App\Companies\Projectors\CompanyProjector;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\EventSourcing\Facades\Projectionist;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use Illuminate\Database\UniqueConstraintViolationException;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\UseCases\Values\OwnershipSwap;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -472,11 +474,23 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
      *
      * So this characterizes the invariant directly, via SD-1-02 §7's own recipe:
      * two retrieves at the same version, both persisting. It is NOT a test of
-     * Spatie. It is a test that OUR event store enforces optimistic concurrency —
-     * that `stored_events` really carries its (uuid, version) UNIQUE and the check
-     * is live in this configuration. Without it the render arm could faithfully
-     * map an exception our stack never produces, with every gate green: the
-     * silently-dead-nightly-mutation class.
+     * Spatie. It is a test that the version check is live in this configuration —
+     * without it the render arm could faithfully map an exception our stack never
+     * produces, with every gate green: the silently-dead-nightly-mutation class.
+     *
+     * SCOPE CORRECTED (s161). This row previously also claimed to prove
+     * *"`stored_events` really carries its (uuid, version) UNIQUE"*. It does not,
+     * and cannot: `persistWithoutApplyingToEventHandlers()` runs
+     * `ensureNoOtherEventsHaveBeenPersisted()` — an in-memory-vs-DB compare —
+     * BEFORE it attempts any insert, so the loser here throws without the index
+     * ever being consulted. Comment the UNIQUE out of the migration and this row
+     * stays green.
+     *
+     * The distinction is not academic. That PHP compare is itself check-then-act:
+     * two genuinely concurrent requests both read the same latest version, both
+     * pass it, and both attempt the insert. The UNIQUE is what stops the second,
+     * and `when_two_events_claim_one_aggregate_version_then_the_store_refuses_the_second`
+     * is the row that holds it.
      *
      * BORN GREEN by construction and it says so plainly — the invariant pre-dates
      * this task, so there is no RED to watch. Its worth is regression: it fails
@@ -512,6 +526,63 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
                 ->where('event_class', OwnershipTransferExecuted::class)
                 ->count());
             $this->assertSame(OwnershipTransferStatus::Executed, $this->currentTransfer($transfer)->status);
+        }
+    }
+
+    /**
+     * E-f, the half the row above does NOT cover — and the half that actually
+     * protects production.
+     *
+     * `persistWithoutApplyingToEventHandlers()` calls
+     * `ensureNoOtherEventsHaveBeenPersisted()` FIRST, an in-memory-vs-DB version
+     * compare, and only then attempts the insert inside a `catch (QueryException)`
+     * that converts a duplicate key into the same `CouldNotPersistAggregate`. Two
+     * sequential `retrieve()` calls therefore never reach the INSERT, so the row
+     * above exercises the PHP compare and never touches the UNIQUE — its own
+     * docblock claimed otherwise. Drop the index from the migration and it stays
+     * green.
+     *
+     * That matters because the PHP compare is itself check-then-act: under two
+     * genuinely concurrent requests both instances read the same latest version,
+     * both pass the compare, and both attempt to insert it. **The UNIQUE is the
+     * only thing that stops the second**, and it was the one thing untested.
+     *
+     * Driven at the store directly, because that is the only way to reach past a
+     * guard that answers first. Rule 9 shape: the throw is not the last
+     * observable — that the stream did not grow is.
+     */
+    #[Test]
+    public function when_two_events_claim_one_aggregate_version_then_the_store_refuses_the_second(): void
+    {
+        // Given an executed transfer, and the highest event its stream carries
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->anExecutedTransferStream($company, $owner, $admin);
+
+        $latest = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $transfer->getKey())
+            ->orderByDesc('aggregate_version')
+            ->firstOrFail();
+        $streamLength = LesilyStoredEvent::query()->where('aggregate_uuid', $transfer->getKey())->count();
+
+        // When a second event claims a version the stream already holds
+        try {
+            DB::table('stored_events')->insert([
+                'aggregate_uuid' => $latest->aggregate_uuid,
+                'aggregate_version' => $latest->aggregate_version,
+                'event_class' => $latest->event_class,
+                'event_properties' => '{}',
+                'meta_data' => '{}',
+                'created_at' => CarbonImmutable::now(),
+            ]);
+
+            $this->fail('Expected the event store to refuse a duplicate (aggregate_uuid, aggregate_version).');
+        } catch (UniqueConstraintViolationException) {
+            // Then the store refused it and the stream is unchanged
+            $this->assertSame(
+                $streamLength,
+                LesilyStoredEvent::query()->where('aggregate_uuid', $transfer->getKey())->count(),
+            );
         }
     }
 
