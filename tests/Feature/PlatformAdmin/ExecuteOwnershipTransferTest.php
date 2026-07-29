@@ -3,6 +3,7 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
@@ -66,5 +67,19 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             OwnershipTransferStatus::Verified,
             $this->currentTransfer($transfer)->status,
         );
+    }
+
+    #[Test]
+    public function when_the_transfer_does_not_exist_then_it_is_not_found(): void
+    {
+        // Given an allowlisted admin and an id no transfer carries
+        $admin = $this->anAllowlistedAdmin();
+
+        // When they attempt to execute it
+        $response = $this->executeTransfer($admin, (string) Str::uuid7());
+
+        // Then the refusal is byte-identical to the one a denied caller gets
+        $this->assertResourceNotFoundNoLeak($response);
+        $this->assertDatabaseCount('ownership_transfer_requests', 0);
     }
 }
