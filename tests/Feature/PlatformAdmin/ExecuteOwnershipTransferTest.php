@@ -39,10 +39,6 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * Derives rather than snapshots: the pre-transfer owner IS
      * `current_owner_user_id` on the transfer row, so no BEFORE capture is
      * needed and the helper stays at two parameters (§2.2 Rule 5-extended).
-     *
-     * The fifth aspect — zero `ownership_transfer_pivot_history` rows — lands
-     * with the migration that creates that table, and these rows are re-run
-     * against it then.
      */
     private function assertNoWriteSurvived(
         OwnershipTransferRequest $transfer,
@@ -63,7 +59,15 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             'user_id' => $transfer->target_user_id,
             'role_id' => $this->seededRole('owner')->getKey(),
         ]);
+        $this->assertDatabaseCount('ownership_transfer_pivot_history', 0);
     }
+
+    /**
+     * The four aspects above say nothing until something can violate them, and
+     * `assertDatabaseCount(..., 0)` on a table nothing ever writes is the
+     * emptiest kind of green. Row 22 is the positive control for all five: it
+     * drives the same surfaces the other way and fails if any of them stays put.
+     */
 
     /**
      * A valid execution body, sent by every row that isolates something OTHER
