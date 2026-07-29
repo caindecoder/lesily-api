@@ -115,15 +115,6 @@ class OwnershipTransferProjector extends Projector
     }
 
     /**
-     * SM-1-05 T8 + T9. Terminal, so the expiry record and the SLA-timer clear
-     * land in the SAME update — sole-writer shape (ruling G3). The timer clear
-     * is what keeps an expired row out of every subsequent scan.
-     *
-     * `expired_at` is the scan's CUTOFF, not the moment the row was written: a
-     * replayed run stamps the expiry when it was due (ruling O1's sibling — see
-     * the Command).
-     */
-    /**
      * SM-1-05 T4. Terminal, so the execution record and the SLA-timer clear land
      * in the SAME update — sole-writer shape (ruling G3).
      *
@@ -149,6 +140,15 @@ class OwnershipTransferProjector extends Projector
         ]);
     }
 
+    /**
+     * SM-1-05 T8 + T9. Terminal, so the expiry record and the SLA-timer clear
+     * land in the SAME update — sole-writer shape (ruling G3). The timer clear
+     * is what keeps an expired row out of every subsequent scan.
+     *
+     * `expired_at` is the scan's CUTOFF, not the moment the row was written: a
+     * replayed run stamps the expiry when it was due (ruling O1's sibling — see
+     * the Command).
+     */
     public function onOwnershipTransferExpired(OwnershipTransferExpired $event): void
     {
         OwnershipTransferRequest::query()->whereKey($event->requestId)->update([
