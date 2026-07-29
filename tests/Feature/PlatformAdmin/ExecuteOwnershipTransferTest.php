@@ -631,6 +631,72 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * The tables read under `FOR UPDATE`, in the order first locked.
+     *
+     * @param  array<int, array{query: string}>  $log
+     * @return list<string>
+     */
+    private function lockedReadTablesIn(array $log): array
+    {
+        $locked = [];
+
+        foreach ($log as $entry) {
+            $sql = strtolower(trim($entry['query']));
+
+            if (! str_starts_with($sql, 'select') || ! str_contains($sql, 'for update')) {
+                continue;
+            }
+
+            foreach (['companies', 'company_user'] as $table) {
+                if (! in_array($table, $locked, true) && str_contains($sql, "`{$table}`")) {
+                    $locked[] = $table;
+                }
+            }
+        }
+
+        return $locked;
+    }
+
+    /**
+     * Every premise the guards establish is one the projectors then act on, so
+     * each must be read under a lock held until they have.
+     *
+     * Without it the window is real and one arm of it corrupts silently: a
+     * membership removed between the read and the write leaves `companies
+     * .owner_id` pointing at a soft-deleted pivot — `MembershipProjector` uses
+     * `withTrashed()`, so it promotes the deleted row without complaint — and the
+     * company ends with an owner who can do nothing, recoverable only by support.
+     * A concurrent role change is worse for being quiet: the pivot-history row
+     * then records an `old_role_id` the member no longer held, falsifying the one
+     * column that table exists to carry.
+     *
+     * Observed as SQL rather than staged as a race, for the reason ruling P9
+     * gives: a sequential suite cannot interleave two requests, and a test double
+     * would measure the double. The query log substitutes nothing — this is the
+     * statement the database actually received.
+     *
+     * Today it holds only until COMMIT, which is what makes it sufficient: the
+     * projectors write inside the same transaction.
+     */
+    #[Test]
+    public function when_the_execution_reads_the_rows_it_will_write_then_it_locks_them(): void
+    {
+        // Given a verified transfer
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+
+        // When it is executed, with every query recorded
+        DB::enableQueryLog();
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
+        $log = DB::getQueryLog();
+        DB::disableQueryLog();
+
+        // Then the company row and both pivot rows were read under a write lock
+        $this->assertSame(['companies', 'company_user'], $this->lockedReadTablesIn($log));
+    }
+
+    /**
      * The OQ-1-010 ordering regression, rebuilt on ruling P4's mechanism and
      * observed per ruling P9.
      *

@@ -91,7 +91,7 @@ class ExecuteOwnershipTransferInteractor
      */
     private function guardCompanyIsNotUnderLegalHold(OwnershipTransferRequest $transfer): void
     {
-        $company = Company::query()->whereKey($transfer->company_id)->firstOrFail();
+        $company = Company::query()->whereKey($transfer->company_id)->lockForUpdate()->firstOrFail();
 
         if ($company->legal_hold) {
             throw new CompanyUnderLegalHoldException;
@@ -132,7 +132,7 @@ class ExecuteOwnershipTransferInteractor
             return;
         }
 
-        $liveOwnerId = Company::query()->whereKey($transfer->company_id)->firstOrFail()->owner_id;
+        $liveOwnerId = Company::query()->whereKey($transfer->company_id)->lockForUpdate()->firstOrFail()->owner_id;
 
         if ($liveOwnerId !== $transfer->current_owner_user_id) {
             throw new OwnershipTransferOwnerChangedException;
@@ -188,6 +188,7 @@ class ExecuteOwnershipTransferInteractor
         $membership = CompanyUser::query()
             ->where('company_id', $companyId)
             ->where('user_id', $userId)
+            ->lockForUpdate()
             ->first();
 
         if ($membership === null) {
