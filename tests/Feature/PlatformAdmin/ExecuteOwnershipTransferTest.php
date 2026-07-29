@@ -13,11 +13,13 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use App\Companies\Projectors\CompanyProjector;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Spatie\EventSourcing\Facades\Projectionist;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\UseCases\Values\OwnershipSwap;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\Projectors\CompanyUserPivotProjector;
 use Spatie\EventSourcing\AggregateRoots\Exceptions\CouldNotPersistAggregate;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExecuteOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferAggregate;
@@ -635,6 +637,36 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
                 'ownership_transfer_pivot_history',
             ]),
         );
+    }
+
+    /**
+     * The pivot-history table is a DERIVED read model, so replaying its
+     * projector must rebuild it — not duplicate it (ruling P2). That is the
+     * deliberate inverse of `audit_trail`, an append-only compliance record
+     * which must never rebuild (R5).
+     *
+     * Two things are asserted, and the second is the one that matters. Row count
+     * proves the `(request_id, membership_id)` key held. But `old_role_id` still
+     * reading the PRE-transfer role is what proves the projector took it off the
+     * event payload: by replay time `MembershipProjector` has long since
+     * overwritten `company_user.role_id`, so a projector reading the pivot would
+     * quietly write `old_role_id == new_role_id` and destroy the only record of
+     * the transition — while the row count stayed a perfect two.
+     */
+    #[Test]
+    public function when_the_projection_is_replayed_then_the_pivot_history_is_rebuilt_not_duplicated(): void
+    {
+        // Given an executed transfer with its two history rows
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->anExecutedTransferStream($company, $owner, $admin);
+        $target = User::query()->findOrFail($transfer->target_user_id);
+
+        // When the pivot-history projector replays the whole stream
+        Projectionist::replay(collect([app(CompanyUserPivotProjector::class)]));
+
+        // Then the same two rows stand, with the prior roles still intact
+        $this->assertPivotHistoryRecorded($transfer, $owner, $target);
     }
 
     /**
