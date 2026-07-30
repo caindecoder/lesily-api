@@ -252,10 +252,11 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * longer a member. The second is a consequence of time passing, not a reason
      * the execution failed.
      *
-     * This is the same pre-emption `guardOwnerHasNotChanged` scopes itself to
-     * avoid, and says so in terms at its own docblock — *"a strictly less useful
-     * answer than 'already executed'"*. The reasoning was applied to that guard
-     * at s160 and not carried to the swap resolution, which runs for every status.
+     * Ruling P14 fixed this pre-emption at the root: `guardIsExecutable()`
+     * answers before any cross-entity work — the owner guard and the swap
+     * resolution alike sit behind it. (This row originally leaned on the s160
+     * guard-scoping instead; that scoping read the projection's status where
+     * the aggregate reads the stream's, and was removed at s162.)
      *
      * The existing rows cannot see it: the departed-target row uses a VERIFIED
      * transfer, and the rejected row uses a target who is still a member. It
@@ -334,6 +335,47 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // Then the live re-validation refuses it and nothing was written
         $this->assertStateGuardRefused($response, 'The company owner has changed since this transfer was requested.');
         $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Verified);
+    }
+
+    /**
+     * The projection's status is written by a projector; the aggregate's is
+     * replayed from the stream. They agree everywhere except mid-replay, on a
+     * partial failure, or after manual intervention — and ruling O1 (s157) is
+     * the standing lesson that acting on the projection's answer while the
+     * stream says otherwise is how a real corruption shipped.
+     *
+     * At s160 the owner guard early-returned on the PROJECTION's status while
+     * `guardIsExecutable()` had just read the STREAM's — so on exactly this
+     * divergence it skipped the owner check when the state was least
+     * trustworthy. This row pins the corrected posture: the owner premise is
+     * re-validated no matter what the projection claims (s162).
+     */
+    #[Test]
+    public function when_the_projection_lags_behind_the_stream_then_a_changed_owner_is_still_refused(): void
+    {
+        // Given a verified stream whose projection lags and whose owner moved on
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $this->theProjectionLagsBehindTheStream($transfer);
+        $this->theOwnerChangesTo($company, $this->aCompanyMember($company, 'admin'));
+
+        // When an allowlisted admin executes it
+        $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the owner re-validation still refuses it and nothing was written
+        $this->assertStateGuardRefused($response, 'The company owner has changed since this transfer was requested.');
+        $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Requested);
+    }
+
+    /**
+     * A projection row whose status lags its own stream — the O1 divergence
+     * class. A named fixture helper carrying the column write is the sanctioned
+     * shape (§2.13; the `theOwnerChangesTo` precedent above).
+     */
+    private function theProjectionLagsBehindTheStream(OwnershipTransferRequest $transfer): void
+    {
+        $transfer->forceFill(['status' => OwnershipTransferStatus::Requested])->save();
     }
 
     /**
@@ -1116,8 +1158,18 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // When it is executed
         $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
 
-        // Then the incoming owner is prompted to supply one
-        Notification::assertSentTo($target, EmergencyContactRequiredNotification::class);
+        // Then the incoming owner is prompted to supply one, in their new company
+        //
+        // Rendered rather than class-matched: `Notification::fake()` means a
+        // class-only assertion never runs title()/body(), so the prompt's actual
+        // wording — the thing that has to send an owner to UC-1-029 — would be
+        // both unexecuted and unasserted.
+        Notification::assertSentTo(
+            $target,
+            EmergencyContactRequiredNotification::class,
+            fn (EmergencyContactRequiredNotification $notification): bool => $notification->toArray($target)['title'] === 'Add an emergency contact'
+                && str_contains($notification->toArray($target)['body'], $company->name),
+        );
     }
 
     /**
@@ -1354,13 +1406,36 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', OwnershipTransferExecuted::class)
             ->count());
-        // Both parties are told, separately. UC-1-093's stakeholder list makes
-        // this the outgoing owner's ONLY signal that they no longer hold the
-        // company — they initiated the request, but an admin chose the moment.
-        Notification::assertSentTo($owner, OwnershipTransferredAwayNotification::class);
+        // Both parties are told, separately, and each is told the RIGHT thing.
+        //
+        // The closures render the notification, which is the only thing that
+        // executes title()/body() at all: Notification::fake() in the base means
+        // a class-only assertSentTo never invokes a channel method, so the copy a
+        // user actually reads would go unexecuted and unasserted (the s152
+        // finding, and what codecov/patch caught on the first push of this PR).
+        //
+        // Each pins the company NAME, not just a static phrase — an empty or
+        // wrong tenant name passing a substring check is the specific regression
+        // the s152 review found in the sibling module.
+        //
+        // UC-1-093's stakeholder list makes this the outgoing owner's ONLY
+        // signal that they no longer hold the company: they initiated the
+        // request, but an admin chose the moment.
+        Notification::assertSentTo(
+            $owner,
+            OwnershipTransferredAwayNotification::class,
+            fn (OwnershipTransferredAwayNotification $notification): bool => $notification->toArray($owner)['title'] === 'Ownership transferred'
+                && str_contains($notification->toArray($owner)['body'], $company->name)
+                && str_contains($notification->toArray($owner)['body'], 'no longer the owner'),
+        );
         // The incoming owner gets their own notice, carrying a different fact.
         // Distinct from the emergency-contact prompt, which is conditional —
         // this one always fires.
-        Notification::assertSentTo($target, OwnershipReceivedNotification::class);
+        Notification::assertSentTo(
+            $target,
+            OwnershipReceivedNotification::class,
+            fn (OwnershipReceivedNotification $notification): bool => $notification->toArray($target)['title'] === 'You are now the owner'
+                && str_contains($notification->toArray($target)['body'], $company->name),
+        );
     }
 }

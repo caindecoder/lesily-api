@@ -9,7 +9,6 @@ use Illuminate\Validation\ValidationException;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Exceptions\CompanyUnderLegalHoldException;
-use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\UseCases\Values\OwnershipSwap;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferOwnerChangedException;
@@ -107,31 +106,28 @@ class ExecuteOwnershipTransferInteractor
      * firstOrFail, not value(): a missing company would make value() return null
      * and the guard fail OPEN — the same trap the legal-hold guard documents.
      *
-     * SCOPED to the open window deliberately. This guard re-validates a PREMISE
-     * of a pending transition; it has nothing to say about a transfer that can no
-     * longer transition at all, and the aggregate owns that question. Unscoped it
-     * pre-empted the aggregate: an already-executed transfer reported "the owner
-     * has changed", which is true only because executing it is what changed the
-     * owner — a strictly less useful answer than "already executed", and one that
-     * would have sent an admin looking for a transfer that never happened.
+     * UNCONDITIONAL, and that is a correction (s161).
      *
-     * The scope is now a SECOND line of defence rather than the only one:
-     * `guardIsExecutable()` runs ahead of this and refuses every non-Verified
-     * transfer from the stream. The check stays because the two read different
-     * sources — the aggregate replays the stream, this reads the projection —
-     * and ruling O1 is the standing lesson about assuming those two agree.
+     * At s160 this guard carried a `status !== Verified` early return, because
+     * unscoped it PRE-EMPTED the aggregate: an already-executed transfer reported
+     * "the owner has changed" — true, but only because executing it is what
+     * changed the owner, and strictly less useful to an admin than "already
+     * executed".
      *
-     * Reading `status` from the projection here is safe in a way the expiry
-     * scan's read was not (ruling O1): it decides only whether to run an EXTRA
-     * guard, never whether to write. The aggregate remains the sole authority on
-     * whether the transition may happen.
+     * Ruling P14 fixed that at the root instead. `guardIsExecutable()` now runs
+     * BEFORE this, so the aggregate has already refused every non-Verified
+     * transfer and the pre-emption is structurally impossible. That left the
+     * early return not merely dead but WRONG: it read the PROJECTION's status
+     * while the aggregate had just read the STREAM's, so on any divergence
+     * between the two it would skip the owner check precisely when the state is
+     * least trustworthy — the inverse of what ruling O1 teaches. Codecov flagged
+     * the line as uncovered, which is what prompted re-reading it.
+     *
+     * The aggregate remains the sole authority on whether the transition may
+     * happen; this validates a PREMISE of a transition already ruled legal.
      */
     private function guardOwnerHasNotChanged(OwnershipTransferRequest $transfer): void
     {
-        if ($transfer->status !== OwnershipTransferStatus::Verified) {
-            return;
-        }
-
         $liveOwnerId = Company::query()->whereKey($transfer->company_id)->lockForUpdate()->firstOrFail()->owner_id;
 
         if ($liveOwnerId !== $transfer->current_owner_user_id) {
