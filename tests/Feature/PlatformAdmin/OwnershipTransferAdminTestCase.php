@@ -262,8 +262,8 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
 
     /**
      * PATCH the verify transition as $caller, or as a guest when null. Same
-     * no-X-Company-Context shape as the admin reads; Tasks 5/8 sit their
-     * reject/execute action helpers beside this one.
+     * no-X-Company-Context shape as the admin reads; the rejectTransfer() and
+     * executeTransfer() action helpers sit beside this one.
      *
      * @param  array<string, mixed>  $body
      */
@@ -372,8 +372,8 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
 
     /**
      * PATCH the reject transition as $caller, or as a guest when null. Same
-     * no-X-Company-Context shape as its verify sibling; Task 8 sits
-     * executeTransfer() beside the pair.
+     * no-X-Company-Context shape as its verify sibling; executeTransfer()
+     * sits beside the pair.
      *
      * @param  array<string, mixed>  $body
      */

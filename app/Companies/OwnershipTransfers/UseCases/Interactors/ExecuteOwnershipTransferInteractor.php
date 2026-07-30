@@ -79,9 +79,11 @@ class ExecuteOwnershipTransferInteractor
      * asymmetry with reject and withdraw — both proceed under a hold (H4),
      * because neither changes ownership.
      *
-     * Placed and shaped exactly like its verify sibling (ruling B1): runs BEFORE
-     * the aggregate is retrieved so a held transfer never records a T4 event, and
-     * addresses THIS transfer's company by key — an unscoped read would let one
+     * Shaped like its verify sibling (ruling B1), placed differently since
+     * P14/P16 (s161): it runs INSIDE the transaction, behind the aggregate's
+     * own state guard, under lockForUpdate(). A held transfer still never
+     * records a T4 event — the throw lands before execute() — and the guard
+     * addresses THIS transfer's company by key; an unscoped read would let one
      * tenant's hold freeze every tenant.
      *
      * firstOrFail, not value(): a missing company would make value() return null

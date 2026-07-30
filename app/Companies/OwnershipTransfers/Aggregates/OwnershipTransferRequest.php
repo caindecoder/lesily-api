@@ -255,18 +255,6 @@ class OwnershipTransferRequest extends AggregateRoot
     }
 
     /**
-     * SM-1-05 T4. The ONE invariant this aggregate can see on its own stream:
-     * only a Verified transfer can be executed, so a re-execute and every other
-     * source state are refused here (E28 — enumerate the transitions, refuse the
-     * rest).
-     *
-     * The three cross-entity guards are NOT here and cannot be: the live owner
-     * (companies.owner_id), the target's live membership, and the parent
-     * company's legal hold all belong to other aggregates, and this one never
-     * reads the database. The interactor holds all three (rulings P3 and P5,
-     * following B1 and the LD ApproveLeaveAction shape).
-     */
-    /**
      * The state guard, callable on its own so the interactor can ask this
      * question BEFORE doing any cross-entity work.
      *
@@ -286,6 +274,18 @@ class OwnershipTransferRequest extends AggregateRoot
         }
     }
 
+    /**
+     * SM-1-05 T4. The ONE invariant this aggregate can see on its own stream:
+     * only a Verified transfer can be executed — guardIsExecutable() refuses a
+     * re-execute and every other source state (E28 — enumerate the transitions,
+     * refuse the rest).
+     *
+     * The three cross-entity guards are NOT here and cannot be: the live owner
+     * (companies.owner_id), the target's live membership, and the parent
+     * company's legal hold all belong to other aggregates, and this one never
+     * reads the database. The interactor holds all three (rulings P3 and P5,
+     * following B1 and the LD ApproveLeaveAction shape).
+     */
     public function execute(ExecuteOwnershipTransferCommand $command, OwnershipSwap $swap): static
     {
         $this->guardIsExecutable();

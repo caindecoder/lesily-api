@@ -27,7 +27,7 @@ class OwnershipTransferAuditReactor extends Reactor
      * so one label, whichever transition wrote the row. Extracted at the s153
      * SonarCloud round (php:S1192, the s118 UC-1-034 precedent): three literals
      * that must agree are three chances to disagree, and a tenant reads this
-     * string back through UC-1-066. Tasks 6/7/8 add three more writers here.
+     * string back through UC-1-066. All six transition arms share it.
      */
     private const SUBJECT_LABEL = 'Ownership transfer request';
 
