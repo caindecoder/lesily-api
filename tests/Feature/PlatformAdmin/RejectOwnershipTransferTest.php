@@ -236,7 +236,7 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * The `Expired` half of the s151 G1 split, payable only now. G1 moved the
      * `Executed`/`Cancelled`/`Expired` refusal rows out of Task 5 to the tasks
      * that make each state reachable: `Cancelled` landed at Task 6, this one
-     * lands with `expireIfStale()`, and `Executed` still waits for Task 8.
+     * lands with `expireIfStale()`, and `Executed` landed at Task 8, below.
      *
      * A factory row could not have stood in: it replays an empty stream, so the
      * guard would refuse for the wrong reason and the test's name would be a lie
@@ -259,6 +259,34 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // Then it is refused and the expiry stands, unrejected
         $this->assertStateGuardRefused($response, 'Only an open transfer can be rejected.');
         $this->assertNeverRejected($transfer, OwnershipTransferStatus::Expired);
+    }
+
+    /**
+     * The `Executed` half of the s151 G1 split, and the last of it to be paid —
+     * Task 8 built execute(), which is what finally makes the state reachable
+     * through a real stream rather than a factory row (s149 C1).
+     *
+     * This is the sharpest of the three refusals: the other terminal states end
+     * a transfer that changed nothing, whereas rejecting an EXECUTED transfer
+     * would be overwriting the record of a completed change of legal authority.
+     */
+    #[Test]
+    public function when_the_transfer_is_already_executed_then_it_is_not_rejected(): void
+    {
+        // Given a transfer whose ownership swap has already completed
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->anExecutedTransferStream($company, $owner, $admin);
+
+        // When an allowlisted admin attempts to reject it
+        $response = $this->rejectTransfer($admin, $transfer->getKey(), self::rejectionBody([
+            'reason' => 'Identity documents could not be matched to the applicant.',
+            'rejectionReasonCode' => 'identity_failed',
+        ]));
+
+        // Then it is refused and the executed record stands, unrejected
+        $this->assertStateGuardRefused($response, 'Only an open transfer can be rejected.');
+        $this->assertNeverRejected($transfer, OwnershipTransferStatus::Executed);
     }
 
     /**

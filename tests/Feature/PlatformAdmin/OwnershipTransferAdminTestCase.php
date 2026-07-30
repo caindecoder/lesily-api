@@ -8,6 +8,7 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Notification;
+use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
@@ -56,6 +57,39 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
             'cancelled' => [OwnershipTransferStatus::Cancelled],
             'expired' => [OwnershipTransferStatus::Expired],
         ];
+    }
+
+    /**
+     * A company whose `companies.owner_id` user REALLY holds the owner pivot —
+     * the arrangement every T4 row needs, and the one `aCompanyWithMember()`
+     * cannot produce (ruling P6, s160).
+     *
+     * `aCompanyWithMember('owner')` mints a SECOND user and attaches the owner
+     * role to them, leaving `companies.owner_id` pointing at the factory's user,
+     * who has no `company_user` row at all: `CompanyFactory` attaches no pivot,
+     * and the pivot's real writer — `CompanyProjector::onCompanyCreated` — never
+     * fires on the factory path. For the read surfaces that never compared the
+     * two that was harmless. T4 compares them in the interactor (P3) and mutates
+     * BOTH pivots, so against that fixture the happy path can never reach 200,
+     * the owner-changed guard passes vacuously, and the demotion assertion
+     * matches zero rows — the s154 K1 shape.
+     *
+     * Mirrors `OwnershipTransfersTestCase::aCompanyWithOwner()` on the tenant
+     * side; module bases are independent (established precedent). The attached
+     * row is byte-identical to the one CompanyProjector writes in production.
+     *
+     * @return array{0: Company, 1: User}
+     */
+    protected function aCompanyWithOwner(): array
+    {
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $owner = User::query()->findOrFail($company->owner_id);
+
+        $company->users()->attach($owner, [
+            'role_id' => $this->seededRole('owner')->getKey(),
+        ]);
+
+        return [$company, $owner];
     }
 
     /**
@@ -228,8 +262,8 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
 
     /**
      * PATCH the verify transition as $caller, or as a guest when null. Same
-     * no-X-Company-Context shape as the admin reads; Tasks 5/8 sit their
-     * reject/execute action helpers beside this one.
+     * no-X-Company-Context shape as the admin reads; the rejectTransfer() and
+     * executeTransfer() action helpers sit beside this one.
      *
      * @param  array<string, mixed>  $body
      */
@@ -250,9 +284,9 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
      */
     protected function aBystanderTransferAtAnotherCompany(): OwnershipTransferRequest
     {
-        [$otherCompany] = $this->aCompanyWithMember('owner');
+        [$otherCompany, $otherOwner] = $this->aCompanyWithOwner();
 
-        return $this->aTransferInState($otherCompany, User::factory()->create(), OwnershipTransferStatus::Requested);
+        return $this->aRequestedTransferStream($otherCompany, $otherOwner, $this->aCompanyMember($otherCompany));
     }
 
     /**
@@ -275,9 +309,71 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
     }
 
     /**
+     * PATCH the SM-1-05 T4 execute endpoint as $caller, or as a guest when null.
+     * Same shape as verifyTransfer/rejectTransfer — the admin family carries no
+     * auth.company. Unlike its two siblings this route DOES mount
+     * `idempotency-key:required` (api-conventions §13.2 names
+     * ownership-transfer-execute as one of the four required endpoints), so a
+     * fresh key rides every call — the `postTransferRequest` idiom on the tenant
+     * base, which mints one per call for the same reason.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function executeTransfer(?User $caller, string $requestId, array $body = []): TestResponse
+    {
+        if ($caller !== null) {
+            Sanctum::actingAs($caller);
+        }
+
+        return $this->patchJson("/api/v1/admin/ownership-transfers/{$requestId}/execute", $body, [
+            'Idempotency-Key' => fake()->uuid(),
+        ]);
+    }
+
+    /**
+     * PATCH execute with NO Idempotency-Key — the required-mount sad path,
+     * mirroring `postTransferRequestWithoutKey` on the tenant base.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function executeTransferWithoutKey(User $caller, string $requestId, array $body = []): TestResponse
+    {
+        Sanctum::actingAs($caller);
+
+        return $this->patchJson("/api/v1/admin/ownership-transfers/{$requestId}/execute", $body);
+    }
+
+    /**
+     * PATCH execute twice under the SAME Idempotency-Key — the replayed click
+     * the required mount exists to absorb.
+     *
+     * The key is passed in rather than minted per call, which is the whole
+     * point: `executeTransfer` mints a fresh `fake()->uuid()` every time, so no
+     * test using it can ever exercise a replay. Mirrors
+     * `postTransferRequestWithSameKey` on the tenant base (UC-1-028's precedent
+     * for the same mount).
+     *
+     * @param  array<string, mixed>  $body
+     * @return array{0: TestResponse, 1: TestResponse}
+     */
+    protected function executeTransferTwiceWithSameKey(User $caller, string $requestId, array $body = []): array
+    {
+        Sanctum::actingAs($caller);
+
+        $key = fake()->uuid();
+        $send = fn (): TestResponse => $this->patchJson(
+            "/api/v1/admin/ownership-transfers/{$requestId}/execute",
+            $body,
+            ['Idempotency-Key' => $key],
+        );
+
+        return [$send(), $send()];
+    }
+
+    /**
      * PATCH the reject transition as $caller, or as a guest when null. Same
-     * no-X-Company-Context shape as its verify sibling; Task 8 sits
-     * executeTransfer() beside the pair.
+     * no-X-Company-Context shape as its verify sibling; executeTransfer()
+     * sits beside the pair.
      *
      * @param  array<string, mixed>  $body
      */

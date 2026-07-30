@@ -130,6 +130,28 @@ class ApiErrorResponseTest extends FoundationTestCase
         $response->assertDontSee('sensitive internal detail', false);
     }
 
+    /**
+     * The version-conflict message is deliberately GENERIC (ruling P11): the
+     * render arm is app-wide and catches `CouldNotPersistAggregate` from ANY
+     * aggregate, so wording that names a specific operation would be wrong the
+     * first time a different aggregate races. SD-1-02 §2.3's execute-specific
+     * copy is superseded (s160); this row is what keeps it from coming back
+     * (s162, fifth-pass finding).
+     */
+    #[Test]
+    public function when_a_version_conflict_occurs_then_the_message_names_no_specific_operation(): void
+    {
+        // Given
+        config(['app.debug' => false]);
+
+        // When
+        $response = $this->getErrorProbe('error-concurrent-modification');
+
+        // Then
+        $response->assertStatus(409);
+        $response->assertJsonPath('message', 'This record was changed by another process. Please retry.');
+    }
+
     #[Test]
     public function when_the_generic_http_error_code_is_used_without_an_explicit_status_then_it_defaults_to_server_error(): void
     {
@@ -147,6 +169,9 @@ class ApiErrorResponseTest extends FoundationTestCase
             'http not found' => ['error-http-not-found', 404, 'RESOURCE_NOT_FOUND'],
             'unmapped http exception preserves method-not-allowed status' => ['error-method-not-allowed', 405, 'HTTP_ERROR'],
             'unmapped http exception preserves gone status' => ['error-gone', 410, 'HTTP_ERROR'],
+            // E-f: the optimistic-concurrency conflict. api-1-infrastructure §8.4
+            // has promised this code since May while the arm rendered 500.
+            'concurrent modification' => ['error-concurrent-modification', 409, 'CONCURRENT_MODIFICATION'],
             'internal error' => ['error-internal', 500, 'INTERNAL_ERROR'],
         ];
     }

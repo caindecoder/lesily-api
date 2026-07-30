@@ -37,6 +37,14 @@ enum ApiErrorCode: string
     case IdempotencyKeyConflict = 'IDEMPOTENCY_KEY_CONFLICT';
     case IdempotencyKeyProcessing = 'IDEMPOTENCY_KEY_PROCESSING';
     case StateGuardViolation = 'STATE_GUARD_VIOLATION';
+
+    /**
+     * An aggregate was changed by another process between the retrieve and the
+     * persist — Spatie's optimistic-concurrency check (E-f). Distinct from
+     * StateGuardViolation, which refuses a transition the state does not allow:
+     * here the transition WAS allowed, and simply lost a race.
+     */
+    case ConcurrentModification = 'CONCURRENT_MODIFICATION';
     case ReceiptGenerationUnavailable = 'RECEIPT_GENERATION_UNAVAILABLE';
     case EmergencyContactRequired = 'EMERGENCY_CONTACT_REQUIRED';
     case TransferRequesterMismatch = 'TRANSFER_REQUESTER_MISMATCH';
@@ -79,6 +87,7 @@ enum ApiErrorCode: string
             self::IdempotencyKeyConflict => 409,
             self::IdempotencyKeyProcessing => 409,
             self::StateGuardViolation => 409,
+            self::ConcurrentModification => 409,
             self::ReceiptGenerationUnavailable => 503,
             self::EmergencyContactRequired => 422,
             // Deliberately NOT RoleInsufficient: this caller HOLDS
