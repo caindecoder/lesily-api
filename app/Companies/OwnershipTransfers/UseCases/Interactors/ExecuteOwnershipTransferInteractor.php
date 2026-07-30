@@ -163,7 +163,6 @@ class ExecuteOwnershipTransferInteractor
             newOwnerMembershipId: $incoming->getKey(),
             newOwnerOldRoleId: $incoming->role_id,
             newOwnerNewRoleId: $this->roleId('owner'),
-            verificationNotes: $transfer->verification_notes,
         );
     }
 

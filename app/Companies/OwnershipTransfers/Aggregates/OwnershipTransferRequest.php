@@ -48,6 +48,14 @@ class OwnershipTransferRequest extends AggregateRoot
     private ?OwnershipTransferStatus $status = null;
 
     /**
+     * Captured at T2 so T4 can carry it forward as a pure function of the
+     * STREAM (ruling P18, s162). Reading it from the projection instead made
+     * the one forensic field on the executed payload inherit projection lag —
+     * the O1 divergence class the owner guard already refuses to trust.
+     */
+    private ?string $verificationNotes = null;
+
+    /**
      * SM-1-05 T1 genesis. The re-fire guard is Tier-2 of the one-open-request
      * invariant — the interactor's projection read (Tier-1) covers the
      * cross-stream case; this guard keeps a replayed or duplicated stream from
@@ -103,6 +111,7 @@ class OwnershipTransferRequest extends AggregateRoot
     public function applyOwnershipTransferIdentityVerified(OwnershipTransferIdentityVerified $event): void
     {
         $this->status = OwnershipTransferStatus::Verified;
+        $this->verificationNotes = $event->verificationNotes;
     }
 
     /**
@@ -303,7 +312,7 @@ class OwnershipTransferRequest extends AggregateRoot
             newOwnerNewRoleId: $swap->newOwnerNewRoleId,
             executedBy: $command->executedBy,
             reason: $command->reason,
-            verificationNotes: $swap->verificationNotes,
+            verificationNotes: $this->verificationNotes,
             executedAt: CarbonImmutable::now(),
         ));
     }

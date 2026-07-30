@@ -25,6 +25,7 @@ use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Projectors\CompanyUserPivotProjector;
 use Spatie\EventSourcing\AggregateRoots\Exceptions\CouldNotPersistAggregate;
+use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipReceivedNotification;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExecuteOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Notifications\EmergencyContactRequiredNotification;
@@ -690,7 +691,6 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             newOwnerMembershipId: $incoming->getKey(),
             newOwnerOldRoleId: $incoming->role_id,
             newOwnerNewRoleId: $this->seededRole('owner')->getKey(),
-            verificationNotes: $transfer->verification_notes,
         );
     }
 
@@ -1069,8 +1069,9 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * - `verificationNotes` appears on the `OwnershipTransferExecuted` payload,
      *   satisfying SM-1-05 §7 without a second capture. This is the assertion
      *   that would fail if someone "simplified" the event by dropping a field
-     *   the Command no longer carries — the notes are only reachable because the
-     *   interactor reads them forward off the projection.
+     *   the Command no longer carries — the aggregate carries the notes forward
+     *   from T2's event on the stream (ruling P18; the row after this one pins
+     *   the sourcing).
      */
     #[Test]
     public function when_a_transfer_is_executed_then_the_verification_record_survives_unchanged(): void
@@ -1099,6 +1100,53 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             ->event_properties;
 
         $this->assertSame($verified->verification_notes, $payload['verificationNotes']);
+    }
+
+    /**
+     * The projection can lag its own stream (the O1 class this file already
+     * stages for the owner guard), and the notes are FORENSIC — they justify
+     * the transition that moves legal authority. Sourced from the projection
+     * they inherit its lag; sourced from the stream they are a pure function
+     * of the events, immune to it. This row pins the stream as the source
+     * (ruling P18, s162): T2's own recorded notes reach the executed payload
+     * even when the projection row has dropped them.
+     */
+    #[Test]
+    public function when_the_projection_drops_the_notes_then_the_executed_event_still_carries_them(): void
+    {
+        // Given a verified transfer whose projection row has lost its notes
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $this->theProjectionDropsTheVerificationNotes($transfer);
+
+        // When it is executed
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
+
+        // Then the payload carries the notes T2 recorded on the stream
+        $t2Notes = LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferIdentityVerified::class)
+            ->where('aggregate_uuid', $transfer->getKey())
+            ->sole()
+            ->event_properties['verificationNotes'];
+        $payload = LesilyStoredEvent::query()
+            ->where('event_class', OwnershipTransferExecuted::class)
+            ->where('aggregate_uuid', $transfer->getKey())
+            ->sole()
+            ->event_properties;
+
+        $this->assertNotNull($t2Notes);
+        $this->assertSame($t2Notes, $payload['verificationNotes']);
+    }
+
+    /**
+     * A projection row that lost a T2 column while its stream kept it — the O1
+     * divergence class, notes flavour. Named fixture helper per §2.13 (the
+     * `theProjectionLagsBehindTheStream` precedent).
+     */
+    private function theProjectionDropsTheVerificationNotes(OwnershipTransferRequest $transfer): void
+    {
+        $transfer->forceFill(['verification_notes' => null])->save();
     }
 
     /**

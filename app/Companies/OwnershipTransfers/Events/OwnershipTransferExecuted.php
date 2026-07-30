@@ -23,9 +23,12 @@ use Spatie\EventSourcing\StoredEvents\ShouldBeStored;
  * `UserMembershipRoleChanged` emission that used to carry it, and nothing else
  * does: `audit_trail` writes `metadata => NULL` by deliberate s149 ruling.
  *
- * `verificationNotes` rides forward from T2 rather than being re-entered
- * (ruling P3) — SM-1-05 §7 puts it on this payload, and a `verified` row always
- * carries it because VerifyOwnershipTransferIdentityCommand makes it mandatory.
+ * `verificationNotes` rides forward from T2's own event on the STREAM rather
+ * than being re-entered (ruling P3) or read from the projection (ruling P18,
+ * s162) — the aggregate captures it at apply-time, so the one forensic field
+ * here is a pure function of the events and immune to projection lag. SM-1-05
+ * §7 puts it on this payload; VerifyOwnershipTransferIdentityCommand makes it
+ * mandatory at T2.
  *
  * Every field is a scalar and stays spelled out here — array shapes in this
  * module are written INLINE and never behind a `@phpstan-type` alias, which at

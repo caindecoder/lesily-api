@@ -28,6 +28,5 @@ class OwnershipSwap
         public string $newOwnerMembershipId,
         public string $newOwnerOldRoleId,
         public string $newOwnerNewRoleId,
-        public ?string $verificationNotes,
     ) {}
 }
