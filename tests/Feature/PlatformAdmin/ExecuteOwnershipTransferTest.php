@@ -23,10 +23,10 @@ use App\Companies\OwnershipTransfers\UseCases\Values\OwnershipSwap;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
-use App\Companies\OwnershipTransfers\Projectors\CompanyUserPivotProjector;
 use Spatie\EventSourcing\AggregateRoots\Exceptions\CouldNotPersistAggregate;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipReceivedNotification;
+use App\Companies\OwnershipTransfers\Projectors\OwnershipTransferPivotHistoryProjector;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExecuteOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Notifications\EmergencyContactRequiredNotification;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferredAwayNotification;
@@ -58,7 +58,7 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
      *
      * Derives rather than snapshots: the pre-transfer owner IS
      * `current_owner_user_id` on the transfer row, so no BEFORE capture is
-     * needed and the helper stays at two parameters (§2.2 Rule 5-extended).
+     * needed and the helper stays at two parameters (§2.2 Rule 3).
      *
      * Recorded plainly: none of these aspects means anything until something can
      * violate them, and `assertDatabaseCount(..., 0)` against a table nothing
@@ -89,9 +89,19 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             $transfer->target_user_id,
             Company::query()->whereKey($transfer->company_id)->value('owner_id'),
         );
+        // BOTH pivots unchanged — the design-table aspect, both halves. The
+        // target never gained `owner`, and the outgoing owner never lost it:
+        // MembershipProjector writes demotion THEN promotion, so observing only
+        // the promotion's absence would keep a demotion that escaped the
+        // transaction green (s162, fifth-pass finding).
         $this->assertDatabaseMissing('company_user', [
             'company_id' => $transfer->company_id,
             'user_id' => $transfer->target_user_id,
+            'role_id' => $this->seededRole('owner')->getKey(),
+        ]);
+        $this->assertDatabaseHas('company_user', [
+            'company_id' => $transfer->company_id,
+            'user_id' => $transfer->current_owner_user_id,
             'role_id' => $this->seededRole('owner')->getKey(),
         ]);
         $this->assertSame(0, DB::table('ownership_transfer_pivot_history')
@@ -415,8 +425,15 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // When an allowlisted admin executes it
         $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
 
-        // Then the live membership re-check refuses it and nothing was written
+        // Then the live membership re-check refuses it and nothing was written.
+        // The message is pinned verbatim (ruling P21, s162): it must match T1's
+        // twin refusal exactly — the two ends of the transfer answering the
+        // same question the same way IS the contract (ruling F4).
         $this->assertValidationRejected($response, 'targetUserId');
+        $response->assertJsonPath(
+            'errors.targetUserId.0',
+            'The selected target user is not a member of this company.',
+        );
         $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Verified);
     }
 
@@ -731,8 +748,7 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         [$company, $owner] = $this->aCompanyWithOwner();
         $admin = $this->anAllowlistedAdmin();
         $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
-        $otherCompany = Company::factory()->create(['owner_id' => $owner->getKey()]);
-        $otherCompany->users()->attach($owner, ['role_id' => $this->seededRole('owner')->getKey()]);
+        $otherCompany = $this->aSecondCompanyOwnedBy($owner);
 
         // When the first company's transfer is executed
         $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
@@ -881,7 +897,9 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $log = DB::getQueryLog();
         DB::disableQueryLog();
 
-        // Then the company row and both pivot rows were read under a write lock
+        // Then locked reads covered both tables the guards must hold. Per-TABLE
+        // proof: the helper dedupes, so this pins lock presence on each table,
+        // not one lock per pivot row.
         $this->assertSame(['companies', 'company_user'], $this->lockedReadTablesIn($log));
     }
 
@@ -924,7 +942,7 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
                 'ownership_transfer_requests',      // OwnershipTransferProjector  w10
                 'company_user',                     // MembershipProjector         w20
                 'companies',                        // CompanyProjector            w30
-                'ownership_transfer_pivot_history', // CompanyUserPivotProjector   w40
+                'ownership_transfer_pivot_history', // OwnershipTransferPivotHistoryProjector   w40
             ],
             $this->firstWriteOrderOf($log, [
                 'ownership_transfer_requests',
@@ -959,7 +977,7 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $target = User::query()->findOrFail($transfer->target_user_id);
 
         // When the pivot-history projector replays the whole stream
-        Projectionist::replay(collect([app(CompanyUserPivotProjector::class)]));
+        Projectionist::replay(collect([app(OwnershipTransferPivotHistoryProjector::class)]));
 
         // Then the same two rows stand, with the prior roles still intact
         $this->assertPivotHistoryRecorded($transfer, $owner, $target);
@@ -1023,7 +1041,7 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // exactly how the original re-keying defect hid: `created_at` looked
         // stable while `id` churned.
         $this->travel(1)->days();
-        Projectionist::replay(collect([app(CompanyUserPivotProjector::class)]));
+        Projectionist::replay(collect([app(OwnershipTransferPivotHistoryProjector::class)]));
 
         // Then each row is still the same row, created and executed when it was
         $this->assertEquals($before, $this->pivotHistoryIdentityOf($transfer));
@@ -1293,7 +1311,7 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
      *
      * Derives rather than snapshots, the `assertNoWriteSurvived` idiom: the
      * pre-transfer parties ARE `current_owner_user_id` and `target_user_id` on
-     * the transfer row, so the helper stays at two parameters (§2.2 Rule 5).
+     * the transfer row, so the helper stays at two parameters (§2.2 Rule 3).
      */
     private function assertExecutionStamped(OwnershipTransferRequest $transfer, User $executedBy): void
     {
@@ -1374,7 +1392,12 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
      */
     private function assertExecutionAudited(OwnershipTransferRequest $transfer, User $admin): void
     {
-        $this->assertDatabaseCount('audit_trail', 3);
+        // Scoped to THIS transfer's subject, not the whole table — a global
+        // count holds only while every other fixture logs nothing, the exact
+        // shape the sibling class retired at its s161 retrofit (s162).
+        $this->assertSame(3, AuditEntry::query()
+            ->where('subject_id', $transfer->getKey())
+            ->count());
         $this->assertDatabaseHas('audit_trail', [
             'event_class' => 'OwnershipTransferExecuted',
             'subject_type' => 'ownership_transfer_request',
@@ -1392,10 +1415,26 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             'severity' => 'info',
         ]);
 
-        $entry = AuditEntry::query()->where('event_class', 'OwnershipTransferExecuted')->sole();
+        $entry = AuditEntry::query()
+            ->where('event_class', 'OwnershipTransferExecuted')
+            ->where('subject_id', $transfer->getKey())
+            ->sole();
 
         $this->assertNotNull($entry->stored_event_id);
         $this->assertNull($entry->metadata);
+    }
+
+    /**
+     * A second company owned by the same user — the class's one cross-company
+     * fixture. Named fixture helper per §2.13 (inline attribute overrides live
+     * in fixtures, never test bodies; the `theOwnerChangesTo` precedent).
+     */
+    private function aSecondCompanyOwnedBy(User $owner): Company
+    {
+        $company = Company::factory()->create(['owner_id' => $owner->getKey()]);
+        $company->users()->attach($owner, ['role_id' => $this->seededRole('owner')->getKey()]);
+
+        return $company;
     }
 
     private function pivotRoleCodeOf(string $companyId, User $user): ?string

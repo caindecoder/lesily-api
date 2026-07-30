@@ -12,14 +12,15 @@ use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
  * Sole writer of ownership_transfer_pivot_history (ERD-1-05 §3, ruling P2) —
  * the T4 role-transition record, two rows per executed transfer.
  *
- * It writes that table and NOTHING else. In particular it does not touch
- * company_user: MembershipProjector is that table's sole writer (ruling P1),
- * and the design docs that had this class updating the pivot rows were
- * corrected at the s159 pre-flight.
+ * It writes that table and NOTHING else — company_user belongs to
+ * MembershipProjector (ruling P1); the design docs that had this class
+ * updating the pivot rows themselves were corrected at the s159 pre-flight.
+ * Renamed from CompanyUserPivotProjector at s162 (ruling P19) so the name
+ * states the table it writes rather than the one it must disclaim.
  *
  * $weight 40 — last of the four T4 projectors (ruling P4).
  */
-class CompanyUserPivotProjector extends Projector
+class OwnershipTransferPivotHistoryProjector extends Projector
 {
     public int $weight = 40;
 
@@ -32,10 +33,12 @@ class CompanyUserPivotProjector extends Projector
      * the pivot would write old_role_id == new_role_id on every replay —
      * silently destroying the one fact the table exists to hold.
      *
-     * updateOrCreate on (request_id, membership_id) so a projection rebuild
-     * overwrites rather than duplicates. Correct here precisely because this IS
-     * a derived read model, and the deliberate inverse of audit_trail's
-     * append-only posture (R5).
+     * updateOrInsert (closure form) on (request_id, membership_id) so a
+     * projection rebuild overwrites rather than duplicates. Correct here
+     * precisely because this IS a derived read model, and the deliberate
+     * inverse of audit_trail's append-only posture (R5). The determinism is
+     * scoped to IN-PLACE replays — a destructive truncate-then-rebuild would
+     * re-mint identity; Projectionist::replay() runs the non-destructive kind.
      */
     public function onOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
     {

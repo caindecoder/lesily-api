@@ -26,8 +26,8 @@ use App\Companies\OwnershipTransfers\IO\Notifications\EmergencyContactRequiredNo
  * amendment N would normally bite: `MembershipProjector` ($weight 20) writes the
  * incoming owner's pivot row before any reactor runs, and the emergency-contact
  * columns it carries are untouched by T4 — this reactor reads a field the
- * transaction never wrote. Synchronous, like the module's other five; Task R2
- * owns the queueing conformance pass.
+ * transaction never wrote. Synchronous, like the module's other reactors; Task
+ * R2 owns the queueing conformance pass.
  */
 class EmergencyContactWizardReactor extends Reactor
 {

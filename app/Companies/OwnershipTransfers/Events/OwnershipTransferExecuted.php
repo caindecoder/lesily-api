@@ -15,7 +15,7 @@ use Spatie\EventSourcing\StoredEvents\ShouldBeStored;
  * an event-versioning problem (OQ-1-108), not a refactor.
  *
  * The six membership/role fields are load-bearing, not convenience (ruling P2).
- * `CompanyUserPivotProjector` writes the pivot-history rows from THIS payload
+ * `OwnershipTransferPivotHistoryProjector` writes the pivot-history rows from THIS payload
  * and never from `company_user`, because `MembershipProjector` has already
  * mutated that pivot by the time it runs — a projector reading the prior role
  * from the row would write `old_role_id == new_role_id` on every replay,

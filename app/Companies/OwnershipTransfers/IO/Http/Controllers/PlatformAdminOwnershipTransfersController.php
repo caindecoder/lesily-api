@@ -18,12 +18,12 @@ use App\Companies\OwnershipTransfers\UseCases\Interactors\ReviewOwnershipTransfe
 use App\Companies\OwnershipTransfers\UseCases\Interactors\VerifyOwnershipTransferIdentityInteractor;
 
 /**
- * The platform-admin cross-tenant ownership-transfer reads (UC-1-127) — behind
- * auth:sanctum + platform.admin (B2 INTERIM allowlist; 404 no-info-leak),
- * deliberately NO auth.company. The delivery layer translates and presents
- * only; the unscoped reads and their audit_trail rows live in the interactors
- * (E07 — the UC-1-122 precedent). Tasks 4/5/8 extend this class with the
- * verify / reject / execute transitions.
+ * The platform-admin cross-tenant ownership-transfer surface — the UC-1-127
+ * reads plus the verify (T2), reject (T3/T5) and execute (T4) transitions —
+ * behind auth:sanctum + platform.admin (B2 INTERIM allowlist; 404
+ * no-info-leak), deliberately NO auth.company. The delivery layer translates
+ * and presents only; the unscoped reads, the guards and their audit_trail
+ * rows live in the interactors (E07 — the UC-1-122 precedent).
  */
 class PlatformAdminOwnershipTransfersController
 {
