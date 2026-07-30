@@ -62,8 +62,9 @@ class ExecuteOwnershipTransferInteractor
             // between the check and the write lands ownership on a soft-deleted
             // pivot, and a concurrent role change makes the pivot-history row's
             // `old_role_id` name a role the member no longer held.
-            $this->guardCompanyIsNotUnderLegalHold($transfer);
-            $this->guardOwnerHasNotChanged($transfer);
+            $company = $this->lockedCompany($transfer);
+            $this->guardCompanyIsNotUnderLegalHold($company);
+            $this->guardOwnerHasNotChanged($transfer, $company);
 
             $aggregate->execute($command, $this->resolveSwap($transfer))->persist();
         });
@@ -81,19 +82,12 @@ class ExecuteOwnershipTransferInteractor
      *
      * Shaped like its verify sibling (ruling B1), placed differently since
      * P14/P16 (s161): it runs INSIDE the transaction, behind the aggregate's
-     * own state guard, under lockForUpdate(). A held transfer still never
-     * records a T4 event — the throw lands before execute() — and the guard
-     * addresses THIS transfer's company by key; an unscoped read would let one
-     * tenant's hold freeze every tenant.
-     *
-     * firstOrFail, not value(): a missing company would make value() return null
-     * and the guard FAIL OPEN, silently unfreezing every held tenant the day
-     * Company gains SoftDeletes.
+     * own state guard, against the row lockedCompany() already holds. A held
+     * transfer still never records a T4 event — the throw lands before
+     * execute().
      */
-    private function guardCompanyIsNotUnderLegalHold(OwnershipTransferRequest $transfer): void
+    private function guardCompanyIsNotUnderLegalHold(Company $company): void
     {
-        $company = Company::query()->whereKey($transfer->company_id)->lockForUpdate()->firstOrFail();
-
         if ($company->legal_hold) {
             throw new CompanyUnderLegalHoldException;
         }
@@ -104,9 +98,6 @@ class ExecuteOwnershipTransferInteractor
      * until now (UC-1-093 error flow 3b). A prior transfer could have moved
      * ownership while this one sat verified, and executing then would demote
      * somebody who is no longer the owner and promote against a stale premise.
-     *
-     * firstOrFail, not value(): a missing company would make value() return null
-     * and the guard fail OPEN — the same trap the legal-hold guard documents.
      *
      * UNCONDITIONAL, and that is a correction (s161).
      *
@@ -128,13 +119,27 @@ class ExecuteOwnershipTransferInteractor
      * The aggregate remains the sole authority on whether the transition may
      * happen; this validates a PREMISE of a transition already ruled legal.
      */
-    private function guardOwnerHasNotChanged(OwnershipTransferRequest $transfer): void
+    private function guardOwnerHasNotChanged(OwnershipTransferRequest $transfer, Company $company): void
     {
-        $liveOwnerId = Company::query()->whereKey($transfer->company_id)->lockForUpdate()->firstOrFail()->owner_id;
-
-        if ($liveOwnerId !== $transfer->current_owner_user_id) {
+        if ($company->owner_id !== $transfer->current_owner_user_id) {
             throw new OwnershipTransferOwnerChangedException;
         }
+    }
+
+    /**
+     * ONE locked read serves both guards above — the same SELECT ... FOR UPDATE
+     * twice on the same companies row inside one transaction re-acquired a lock
+     * already held and re-read values nothing could have moved under it (s162).
+     * The read addresses THIS transfer's company by key; an unscoped read would
+     * let one tenant's hold freeze every tenant.
+     *
+     * firstOrFail, not value()/first(): a missing company would hand the guards
+     * null and both would FAIL OPEN — silently unfreezing every held tenant and
+     * skipping the owner check the day Company gains SoftDeletes.
+     */
+    private function lockedCompany(OwnershipTransferRequest $transfer): Company
+    {
+        return Company::query()->whereKey($transfer->company_id)->lockForUpdate()->firstOrFail();
     }
 
     /**
