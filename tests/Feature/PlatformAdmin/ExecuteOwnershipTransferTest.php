@@ -24,6 +24,7 @@ use App\Companies\OwnershipTransfers\UseCases\Values\OwnershipSwap;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\Reactors\NewOwnerNotificationReactor;
 use Spatie\EventSourcing\AggregateRoots\Exceptions\CouldNotPersistAggregate;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipReceivedNotification;
@@ -1604,5 +1605,65 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // Then the audit record is already durable with NO queued job having
         // run — the audit write rides the transaction, not the queue (R5)
         $this->assertExecutionAudited($transfer, $admin);
+    }
+
+    /**
+     * The OQ-1-157 polarity row — the obligation the whole of Task R2 exists
+     * to make true: a side effect may fail; it may NOT un-decide the domain
+     * decision it reacts to. Before R2 this was FALSE as built (a notification
+     * reactor's throw inside the transaction rolled back an authorised
+     * transfer and answered 404); SD-1-02 §5.1's invariant row said so and
+     * named this task. Born-green against the post-flip production, declared:
+     * its teeth are the lap-12 revert-check — stripping ShouldQueue from the
+     * induced reactor REDs the row at fail(), because the failure can then no
+     * longer surface after commit at all (it never leaves the transaction).
+     */
+    #[Test]
+    public function when_a_queued_reactor_fails_after_the_transfer_commits_then_the_transfer_is_not_undone(): void
+    {
+        // Given an executed transfer whose write surfaces are all committed
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        Queue::fake();
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
+        $this->assertExecutionAudited($transfer, $admin);
+
+        // ... and a reactor that will fail at delivery (the P8 container seam)
+        $this->app->bind(NewOwnerNotificationReactor::class, fn (): NewOwnerNotificationReactor => new class extends NewOwnerNotificationReactor
+        {
+            public function onOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
+            {
+                throw new RuntimeException('Induced reactor failure after commit (OQ-1-157).');
+            }
+        });
+
+        // When the queued handlers run, the failure surfaces as a failed job
+        // (catch_exceptions=false — the worker's retry/failed_jobs path), and
+        // post-throw state is asserted per §2.2 Rule 9
+        try {
+            $this->runQueuedHandlersFor(OwnershipTransferExecuted::class);
+            $this->fail('The induced reactor failure should have propagated out of the handler job.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Induced reactor failure after commit (OQ-1-157).', $exception->getMessage());
+        }
+
+        // Then the committed transfer survives its side-effect's failure
+        $this->assertTransferSurvivedReactorFailure($transfer);
+    }
+
+    /**
+     * The three surfaces a rolled-back transfer would lose, still intact after
+     * a delivery-time reactor failure: the terminal status, the swapped
+     * `companies.owner_id`, and the executed audit record (the T1 + T2 + T4
+     * rows the subject-scoped count pins).
+     */
+    private function assertTransferSurvivedReactorFailure(OwnershipTransferRequest $transfer): void
+    {
+        $current = $this->currentTransfer($transfer);
+
+        $this->assertSame(OwnershipTransferStatus::Executed, $current->status);
+        $this->assertSame($transfer->target_user_id, Company::query()->findOrFail($current->company_id)->owner_id);
+        $this->assertSame(3, AuditEntry::query()->where('subject_id', $transfer->getKey())->count());
     }
 }
