@@ -13,6 +13,7 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use Tests\Feature\Companies\OwnershipTransfers\Testing\InteractsWithQueuedReactors;
 use Tests\Feature\Companies\OwnershipTransfers\Testing\ArrangesOwnershipTransferStreams;
 
 /**
@@ -26,6 +27,7 @@ use Tests\Feature\Companies\OwnershipTransfers\Testing\ArrangesOwnershipTransfer
 abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
 {
     use ArrangesOwnershipTransferStreams;
+    use InteractsWithQueuedReactors;
     use RefreshDatabase;
 
     protected function setUp(): void

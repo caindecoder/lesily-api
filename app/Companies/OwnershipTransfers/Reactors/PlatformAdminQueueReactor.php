@@ -3,6 +3,7 @@
 namespace App\Companies\OwnershipTransfers\Reactors;
 
 use App\Models\User;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use App\Foundation\Http\Values\PlatformAdminAllowlist;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
@@ -24,7 +25,7 @@ use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferVerifiedN
  * OwnershipTransferVerifiedNotification — corrected s152; the H3 retrofit
  * swapped the body and left this line still naming SystemNotification.
  */
-class PlatformAdminQueueReactor extends Reactor
+class PlatformAdminQueueReactor extends Reactor implements ShouldQueue
 {
     public function onOwnershipTransferIdentityVerified(OwnershipTransferIdentityVerified $event): void
     {

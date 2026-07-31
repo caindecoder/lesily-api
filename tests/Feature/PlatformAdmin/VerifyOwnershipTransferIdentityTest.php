@@ -7,6 +7,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -529,6 +530,21 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->assertDeadlineMovedToTheVerifiedWindow(14);
         $this->assertExecutionQueueAlerted();
         $this->assertVerificationAudited();
+    }
+
+    #[Test]
+    public function when_a_transfer_is_verified_then_the_admin_alert_is_queued_not_sent_inline(): void
+    {
+        // Given a verifiable transfer with the queue captured
+        $this->arrangeVerifiableTransfer();
+        Queue::fake();
+
+        // When the admin submits the verification record
+        $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+
+        // Then the execution-queue alert rides the queued handler job instead
+        // of sending inline (CD `Queued.` conformance — OQ-1-153/Task R2)
+        $this->assertReactorDeferred(OwnershipTransferIdentityVerified::class, OwnershipTransferVerifiedNotification::class);
     }
 
     private Company $company;
