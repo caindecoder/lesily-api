@@ -3,6 +3,7 @@
 namespace App\Companies\OwnershipTransfers\UseCases\Interactors;
 
 use Throwable;
+use RuntimeException;
 use Carbon\CarbonInterface;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
@@ -88,8 +89,14 @@ class ExpireStaleOwnershipTransfersInteractor
                 // (LD idiom: SendCompanyDeletionWarningEmailsAction's per-row
                 // catch). It IS counted as failed: without that second number, a
                 // night where every row threw and a night where nothing was due
-                // would print identical healthy output (D1).
-                report($e);
+                // would print identical healthy output (D1). The wrap carries
+                // the row id (the LD Prune/Orphan sprintf idiom, review I2) —
+                // the divergent row is invisible to every query, so the report
+                // is the only place its identity can live.
+                report(new RuntimeException(
+                    sprintf("Failed to expire ownership transfer '%s'. (%s)", $requestId, $e->getMessage()),
+                    previous: $e,
+                ));
                 $failed++;
             }
         }

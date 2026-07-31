@@ -723,10 +723,16 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
 
     /**
      * $transfer is the row the scan could not finish, left in the divergence's
-     * honest shape: the STREAM recorded exactly one expiry (durable before the
-     * projector threw), the PROJECTION did not move (still `requested`, deadline
-     * intact — so the next scan re-selects it and the aggregate no-ops), and
-     * the failure was reported rather than swallowed.
+     * honest shape — which has an unrecoverable half. STREAM: exactly one
+     * expiry event, durable before the projector threw; a projection replay
+     * heals this half. PROJECTION: unmoved (still `requested`, deadline
+     * intact), so the next scan re-selects it and the aggregate no-ops —
+     * nightly, forever, with no repeat report after this first one. REACTORS:
+     * never ran and are never replayed, so the audit row and the requester's
+     * notice for this expiry are permanently absent unless repaired by hand —
+     * asserted, not just described. REPORT: carries the row id (review I2, the
+     * LD Prune/Orphan idiom) because a Sentry trace without the requestId
+     * cannot be traced back to the divergent row by any query.
      */
     protected function assertFailedRowDivergedAndWasReported(OwnershipTransferRequest $transfer): void
     {
@@ -734,8 +740,13 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
 
         $this->assertSame(OwnershipTransferStatus::Requested, $current->status);
         $this->assertSame(1, $this->expiryEventCount($transfer));
+        $this->assertSame(0, AuditEntry::query()
+            ->where('subject_id', $transfer->getKey())
+            ->where('event_class', 'OwnershipTransferExpired')
+            ->count());
         Exceptions::assertReported(
-            fn (RuntimeException $e): bool => $e->getMessage() === 'induced mid-scan projector failure',
+            fn (RuntimeException $e): bool => str_contains($e->getMessage(), (string) $transfer->getKey())
+                && str_contains($e->getMessage(), 'induced mid-scan projector failure'),
         );
     }
 
