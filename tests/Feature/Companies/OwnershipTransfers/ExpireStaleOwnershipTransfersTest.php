@@ -7,6 +7,7 @@ use RuntimeException;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
@@ -880,6 +881,29 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->assertTransferExpiredAtStage($transfer, 'requested-stage', 30);
         $this->assertRequesterWasNotifiedOfExpiry($transfer);
         $this->assertExpiryAudited($transfer);
+    }
+
+    /**
+     * BORN-GREEN PIN, declared as such (the OQ-1-155/R7 precedent): the
+     * Expired arm rides RequesterNotificationReactor's lap-5 class flip — its
+     * Rejected arm carried the watched RED — so this row could never RED on
+     * its own. Its teeth are the lap-6 revert-check recorded in the commit:
+     * stripping ShouldQueue REDs this row and the reject sibling together.
+     */
+    #[Test]
+    public function when_a_requested_transfer_expires_then_the_requester_notice_is_queued_not_sent_inline(): void
+    {
+        // Given a requested transfer whose 30-day window has elapsed, with the
+        // queue captured
+        $this->anOverdueRequestedTransfer();
+        Queue::fake();
+
+        // When the daily scan runs
+        $this->runExpiryScan()->assertSuccessful();
+
+        // Then the requester notice rides the queued handler job instead of
+        // sending inline (same reactor as reject, second event arm)
+        $this->assertReactorDeferred(OwnershipTransferExpired::class, OwnershipTransferExpiredNotification::class);
     }
 
     // Happy (UC-1-117 sc.1, T9) — a VERIFIED transfer that outlived its shorter
