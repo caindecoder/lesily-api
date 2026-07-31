@@ -66,4 +66,15 @@ interface OwnershipTransferRequestRepositoryInterface
      * @return array<string, OwnershipTransferStatus>
      */
     public function listTimerReady(CarbonInterface $asOf): array;
+
+    /**
+     * Whether $requestId may still be written to under §S10b: TRUE only when
+     * the row exists AND its company is not under legal hold. The scan asks
+     * this again immediately before each per-row write, because the SELECT-time
+     * `legal_hold = 0` join says nothing about a hold landing mid-scan — the
+     * same SELECT→write gap ruling O1 closed for `status`, on a different table
+     * (F-a / OQ-1-156, Task R1). A missing row answers FALSE: for a scheduler,
+     * fail-closed means skip (M1), never write.
+     */
+    public function clearOfLegalHold(string $requestId): bool;
 }

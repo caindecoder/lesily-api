@@ -40,6 +40,15 @@ class ExpireStaleOwnershipTransfersInteractor
         $expired = 0;
 
         foreach ($this->transfers->listTimerReady($asOf) as $requestId => $status) {
+            // §S10b re-read (F-a / OQ-1-156): selection excluded held companies,
+            // but a hold lands mid-scan without moving transfer status, so the
+            // O1 guard cannot see it. Asked again at write time; a held (or
+            // vanished) row is skipped, uncounted — the SELECT-time skip-only
+            // semantics (D3), applied at the moment that actually writes.
+            if (! $this->transfers->clearOfLegalHold($requestId)) {
+                continue;
+            }
+
             $transfer = OwnershipTransferRequestAggregate::retrieve($requestId)
                 ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
                     'expectedStatus' => $status,

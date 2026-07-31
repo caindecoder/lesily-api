@@ -128,15 +128,27 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
         // applies, so the next scan may expire the row immediately — accepted and
         // documented, in preference to snapshot arithmetic nothing else needs.
         //
-        // The hold is read HERE and never re-checked before the write, so a hold
-        // landing mid-scan does not stop the expiry — UC-1-116 EF-4d / UC-1-117
-        // EF-4e describe exactly that and leave it to build-phase confirmation.
-        // Deferred deliberately (O4), with the reliability set at Task 9.
+        // The hold is read HERE for selection and RE-CHECKED at write time by
+        // clearOfLegalHold() below (F-a / OQ-1-156, Task R1) — closing the
+        // SELECT→write gap UC-1-116 EF-4d / UC-1-117 EF-4e describe, whose
+        // proceed-anyway branch ruling O4 had taken deliberately until R1 built
+        // the re-fetch branch.
         return OwnershipTransferRequest::query()
             ->where('next_state_transition_at', '<', $asOf)
             ->openStates()
             ->whereHas('company', fn (Builder $company) => $company->where('legal_hold', false))
             ->pluck('status', 'id')
             ->all();
+    }
+
+    public function clearOfLegalHold(string $requestId): bool
+    {
+        // EXISTS on (row present AND company unheld): a vanished row and a held
+        // company answer identically — false, skip. Fail-closed the B1 way,
+        // skip-flavoured for a scheduler (M1 — nobody to hand an error to).
+        return OwnershipTransferRequest::query()
+            ->whereKey($requestId)
+            ->whereHas('company', fn (Builder $company) => $company->where('legal_hold', false))
+            ->exists();
     }
 }

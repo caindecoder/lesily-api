@@ -225,6 +225,38 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->assertTransferExpiredAtStage($free, 'requested-stage', 30);
     }
 
+    // Sad (F-a, OQ-1-156 — the O4 gap CLOSED) — a regulatory hold that lands
+    // AFTER the scan selected the row must stop the write. Selection excludes
+    // held companies, but `legal_hold` moves independently of transfer status,
+    // so the O1 guard cannot see it: an unchanged `expectedStatus` says nothing
+    // about the hold. The interactor re-reads the hold immediately before the
+    // aggregate call and SKIPS, uncounted — matching the SELECT-time skip-only
+    // semantics (D3). The unheld sibling is load-bearing: with one row in the
+    // selection, a scan that skipped EVERYTHING would look identical (s149 C6).
+    #[Test]
+    public function when_the_hold_lands_after_the_scan_selected_the_row_then_no_expiry_is_recorded(): void
+    {
+        // Given two overdue selected transfers, one at a company whose hold
+        // landed after selection
+        [$heldCompany, $heldOwner] = $this->aCompanyWithOwner();
+        $held = $this->aRequestedTransferStream($heldCompany, $heldOwner, $this->aMemberWithRole($heldCompany, 'employee'));
+        [$freeCompany, $freeOwner] = $this->aCompanyWithOwner();
+        $free = $this->aRequestedTransferStream($freeCompany, $freeOwner, $this->aMemberWithRole($freeCompany, 'employee'));
+        $this->travel(31)->days();
+        $this->selectionReportsMap([
+            (string) $held->getKey() => OwnershipTransferStatus::Requested,
+            (string) $free->getKey() => OwnershipTransferStatus::Requested,
+        ]);
+        $this->placeCompanyUnderLegalHold($heldCompany);
+
+        // When the daily scan runs
+        $this->runExpiryScan()->expectsOutputToContain('1 transfer(s) expired.')->assertSuccessful();
+
+        // Then only the unheld company's transfer expired
+        $this->assertTransferUnchanged($held);
+        $this->assertTransferExpiredAtStage($free, 'requested-stage', 30);
+    }
+
     // Edge (boundary) — a transfer expires only once its deadline has elapsed
     // STRICTLY. The exactly-at row is the one that kills a `<` -> `<=` mutation;
     // both built scans carry the same three-row provider.
@@ -564,28 +596,43 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
     /**
      * Makes the scan's SELECT report $status for $transfer, whatever its stream
      * actually holds — the race, made deterministic.
-     *
-     * Extends the concrete repository rather than implementing the interface, so
-     * only the one method under test diverges and the other five keep their real
-     * behaviour (the `RegisterOwnerTest` shape).
      */
     protected function selectionReports(OwnershipTransferRequest $transfer, OwnershipTransferStatus $status): void
     {
+        $this->selectionReportsMap([(string) $transfer->getKey() => $status]);
+    }
+
+    /**
+     * Makes the scan's SELECT report exactly $rows (`requestId => status`) —
+     * the race for several rows at once: the F-a row needs a held row AND an
+     * unheld sibling, because a scope assertion needs a row on the other side
+     * of the scope (s149 C6).
+     *
+     * Extends the concrete repository rather than implementing the interface, so
+     * only the one method under test diverges and the others keep their real
+     * behaviour (the `RegisterOwnerTest` shape) — load-bearing for F-a, whose
+     * legal-hold re-read must run through the INHERITED real method against the
+     * live database.
+     *
+     * @param  array<string, OwnershipTransferStatus>  $rows
+     */
+    protected function selectionReportsMap(array $rows): void
+    {
         $this->app->instance(
             OwnershipTransferRequestRepositoryInterface::class,
-            new class((string) $transfer->getKey(), $status) extends EloquentOwnershipTransferRequestRepository
+            new class($rows) extends EloquentOwnershipTransferRequestRepository
             {
-                public function __construct(
-                    private string $requestId,
-                    private OwnershipTransferStatus $status,
-                ) {}
+                /**
+                 * @param  array<string, OwnershipTransferStatus>  $rows
+                 */
+                public function __construct(private array $rows) {}
 
                 /**
                  * @return array<string, OwnershipTransferStatus>
                  */
                 public function listTimerReady(CarbonInterface $asOf): array
                 {
-                    return [$this->requestId => $this->status];
+                    return $this->rows;
                 }
             },
         );
