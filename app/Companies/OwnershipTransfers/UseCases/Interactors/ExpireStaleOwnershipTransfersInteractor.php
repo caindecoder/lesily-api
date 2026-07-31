@@ -2,6 +2,7 @@
 
 namespace App\Companies\OwnershipTransfers\UseCases\Interactors;
 
+use Throwable;
 use Carbon\CarbonInterface;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
@@ -24,10 +25,12 @@ use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as Owne
  * projection marker being re-expired on the next scan — a hazard that exists
  * only because ITS aggregate is guardless. Ours is not: `expireIfStale()`
  * replays the stream and no-ops once the state has left the open set, so a
- * second event cannot be recorded however often the row is re-selected. The
- * remaining exposure (a projector failure leaving the row divergent) is
- * pre-existing and module-wide — withdraw and reject carry it identically — and
- * is logged to Task 9 beside E-f and OQ-1-153 rather than swept in from here.
+ * second event cannot be recorded however often the row is re-selected. A
+ * projector failure can still leave one row divergent (stream `Expired`,
+ * projection not) — caught PER ROW below (F-b, Task R1), reported, and the
+ * batch continues; the divergent row replays as `Expired`, so a re-selection
+ * no-ops. The module-wide synchronous-reactor posture is Task R2's question
+ * (OQ-1-153); E-f landed at Task 8.
  */
 class ExpireStaleOwnershipTransfersInteractor
 {
@@ -40,39 +43,51 @@ class ExpireStaleOwnershipTransfersInteractor
         $expired = 0;
 
         foreach ($this->transfers->listTimerReady($asOf) as $requestId => $status) {
-            // §S10b re-read (F-a / OQ-1-156): selection excluded held companies,
-            // but a hold lands mid-scan without moving transfer status, so the
-            // O1 guard cannot see it. Asked again at write time; a held (or
-            // vanished) row is skipped, uncounted — the SELECT-time skip-only
-            // semantics (D3), applied at the moment that actually writes.
-            if (! $this->transfers->clearOfLegalHold($requestId)) {
+            try {
+                // §S10b re-read (F-a / OQ-1-156): selection excluded held companies,
+                // but a hold lands mid-scan without moving transfer status, so the
+                // O1 guard cannot see it. Asked again at write time; a held (or
+                // vanished) row is skipped, uncounted — the SELECT-time skip-only
+                // semantics (D3), applied at the moment that actually writes.
+                if (! $this->transfers->clearOfLegalHold($requestId)) {
+                    continue;
+                }
+
+                $transfer = OwnershipTransferRequestAggregate::retrieve($requestId)
+                    ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
+                        'expectedStatus' => $status,
+                        'expiredAfterDays' => $this->windowFor($status),
+                        'expiredAt' => $asOf,
+                    ]));
+
+                // Rows SELECTED and rows EXPIRED are no longer the same number: since
+                // O1 the aggregate can decline a row whose selection went stale, and
+                // counting the iteration would report an expiry that never happened.
+                // The count is the command's only output and the thing an ops alert
+                // would key on, so it has to mean what it says. Both built scans return
+                // count($rows) instead, correctly — neither of their aggregates can
+                // decline. Asked before persist(), which takes the recorded events away.
+                //
+                // A declined row is skipped rather than persisted: persisting an empty
+                // event set still runs a version query and can throw, so it would add a
+                // failure surface for a row that did nothing.
+                if ($this->recordedAnExpiry($transfer) === false) {
+                    continue;
+                }
+
+                $transfer->persist();
+                $expired++;
+            } catch (Throwable $e) {
+                // F-b (UC-1-116/117 Main Flow step 9): one row's failure must not
+                // abort the batch. Report and move on — a thrown row was never
+                // counted (the increment is the body's last act), and a row that
+                // failed AFTER its event became durable replays as Expired, so
+                // the next scan no-ops it rather than double-firing (LD idiom:
+                // SendCompanyDeletionWarningEmailsAction's per-row catch).
+                report($e);
+
                 continue;
             }
-
-            $transfer = OwnershipTransferRequestAggregate::retrieve($requestId)
-                ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
-                    'expectedStatus' => $status,
-                    'expiredAfterDays' => $this->windowFor($status),
-                    'expiredAt' => $asOf,
-                ]));
-
-            // Rows SELECTED and rows EXPIRED are no longer the same number: since
-            // O1 the aggregate can decline a row whose selection went stale, and
-            // counting the iteration would report an expiry that never happened.
-            // The count is the command's only output and the thing an ops alert
-            // would key on, so it has to mean what it says. Both built scans return
-            // count($rows) instead, correctly — neither of their aggregates can
-            // decline. Asked before persist(), which takes the recorded events away.
-            //
-            // A declined row is skipped rather than persisted: persisting an empty
-            // event set still runs a version query and can throw, so it would add a
-            // failure surface for a row that did nothing.
-            if ($this->recordedAnExpiry($transfer) === false) {
-                continue;
-            }
-
-            $transfer->persist();
-            $expired++;
         }
 
         return $expired;

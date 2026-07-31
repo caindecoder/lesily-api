@@ -3,11 +3,13 @@
 namespace Tests\Feature\Companies\OwnershipTransfers;
 
 use App\Models\User;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -16,6 +18,7 @@ use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\Projectors\OwnershipTransferProjector;
 use App\Companies\OwnershipTransfers\IO\Mails\OwnershipTransferNotificationMail;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferExpiredNotification;
@@ -635,6 +638,102 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
                     return $this->rows;
                 }
             },
+        );
+    }
+
+    // Edge (F-b — UC-1-116/117 Main Flow step 9, built at Task R1) — one row's
+    // failure must not abort the batch: the rows selected after it still
+    // expire, the count keeps meaning what it says, and the failure is REPORTED
+    // instead of silently swallowing the rest of the night. The selection order
+    // is pinned through the seam so the failing row genuinely sits MID-batch —
+    // an unordered real SELECT could have iterated it last, leaving the
+    // rows-after-the-failure claim unexercised.
+    //
+    // The failure is induced with the Task-8 P8 seam — a container-bound
+    // throwing subclass of the projector, selective to the middle row's id,
+    // bound AFTER arrangement so the T1 projections are real. LD's analog test
+    // (PermanentlyDeleteOrphanedUsersOlderThanSevenDaysTest, skipped-and-
+    // reported-while-others-deleted) induces its failure organically via an FK
+    // obstacle; this scan has no organic failure mode, hence the seam.
+    //
+    // What the middle row is left as is stated honestly: its stream DID record
+    // the expiry (the event was durable before the projector threw), its
+    // projection did not move — the pre-existing single-row divergence class,
+    // now visible in Sentry via the report and strictly better than today's
+    // silent batch-abort. The aggregate thereafter replays as Expired, so a
+    // re-selection no-ops rather than double-firing.
+    #[Test]
+    public function when_a_row_fails_mid_scan_then_the_remaining_rows_still_expire(): void
+    {
+        // Given three overdue selected transfers, the middle one rigged to fail
+        // at its projector
+        Exceptions::fake();
+        $first = $this->anOverdueRequestedTransfer();
+        $middle = $this->anOverdueRequestedTransfer();
+        $last = $this->anOverdueRequestedTransfer();
+        $this->selectionReportsMap([
+            (string) $first->getKey() => OwnershipTransferStatus::Requested,
+            (string) $middle->getKey() => OwnershipTransferStatus::Requested,
+            (string) $last->getKey() => OwnershipTransferStatus::Requested,
+        ]);
+        $this->projectorFailsFor($middle);
+
+        // When the daily scan runs
+        $this->runExpiryScan()->expectsOutputToContain('2 transfer(s) expired.')->assertSuccessful();
+
+        // Then the other rows expired, only their requesters were told, and the
+        // failure was reported
+        $this->assertTransferExpiredAtStage($first, 'requested-stage', 30);
+        $this->assertTransferExpiredAtStage($last, 'requested-stage', 30);
+        Notification::assertSentTimes(OwnershipTransferExpiredNotification::class, 2);
+        $this->assertFailedRowDivergedAndWasReported($middle);
+    }
+
+    /**
+     * Binds a throwing double of the projector, selective to $transfer — the
+     * Task-8 P8 seam: `Projectionist::callEventHandler` re-resolves every
+     * handler at dispatch (`app($eventHandler::class)`), so a container binding
+     * substitutes it. The subclass inherits `$weight` and full parent behaviour
+     * for every OTHER row, which is what lets the neighbouring rows project
+     * normally around the failure.
+     */
+    protected function projectorFailsFor(OwnershipTransferRequest $transfer): void
+    {
+        $failingId = (string) $transfer->getKey();
+
+        $this->app->bind(
+            OwnershipTransferProjector::class,
+            fn (): OwnershipTransferProjector => new class($failingId) extends OwnershipTransferProjector
+            {
+                public function __construct(private readonly string $failingRequestId) {}
+
+                public function onOwnershipTransferExpired(OwnershipTransferExpired $event): void
+                {
+                    if ($event->requestId === $this->failingRequestId) {
+                        throw new RuntimeException('induced mid-scan projector failure');
+                    }
+
+                    parent::onOwnershipTransferExpired($event);
+                }
+            },
+        );
+    }
+
+    /**
+     * $transfer is the row the scan could not finish, left in the divergence's
+     * honest shape: the STREAM recorded exactly one expiry (durable before the
+     * projector threw), the PROJECTION did not move (still `requested`, deadline
+     * intact — so the next scan re-selects it and the aggregate no-ops), and
+     * the failure was reported rather than swallowed.
+     */
+    protected function assertFailedRowDivergedAndWasReported(OwnershipTransferRequest $transfer): void
+    {
+        $current = $this->currentTransfer($transfer);
+
+        $this->assertSame(OwnershipTransferStatus::Requested, $current->status);
+        $this->assertSame(1, $this->expiryEventCount($transfer));
+        Exceptions::assertReported(
+            fn (RuntimeException $e): bool => $e->getMessage() === 'induced mid-scan projector failure',
         );
     }
 
