@@ -52,7 +52,7 @@ class ExpireStaleOwnershipTransfersInteractor
                 // O1 guard cannot see it. Asked again at write time; a held (or
                 // vanished) row is skipped, uncounted — the SELECT-time skip-only
                 // semantics (D3), applied at the moment that actually writes.
-                if (! $this->transfers->clearOfLegalHold($requestId)) {
+                if (! $this->transfers->isClearOfLegalHold($requestId)) {
                     continue;
                 }
 
@@ -66,10 +66,14 @@ class ExpireStaleOwnershipTransfersInteractor
                 // Rows SELECTED and rows EXPIRED are no longer the same number: since
                 // O1 the aggregate can decline a row whose selection went stale, and
                 // counting the iteration would report an expiry that never happened.
-                // The count is the command's only output and the thing an ops alert
-                // would key on, so it has to mean what it says. Both built scans return
-                // count($rows) instead, correctly — neither of their aggregates can
-                // decline. Asked before persist(), which takes the recorded events away.
+                // The two counts are the command's only structured output and what an
+                // ops alert keys on, so each has to mean what it says: expired =
+                // recorded AND persisted; failed = threw (a row that failed after its
+                // event became durable is counted failed on THIS night and never
+                // counted expired on any night — permanently absent from the tally
+                // until repaired). Both built scans return count($rows) instead,
+                // correctly — neither of their aggregates can decline. Asked before
+                // persist(), which takes the recorded events away.
                 //
                 // A declined row is skipped rather than persisted: persisting an empty
                 // event set still runs a version query and can throw, so it would add a
@@ -82,7 +86,11 @@ class ExpireStaleOwnershipTransfersInteractor
                 $expired++;
             } catch (Throwable $e) {
                 // F-b (UC-1-116/117 Main Flow step 9): one row's failure must not
-                // abort the batch. Report and move on — a thrown row was never
+                // abort the batch. This isolation exists only while
+                // event-sourcing.catch_exceptions stays false — flipped true,
+                // spatie swallows the throw before it reaches here and the
+                // divergent row would be COUNTED as expired; the F-b test pins
+                // the config. Report and move on — a thrown row was never
                 // counted as expired (the increment is the body's last act), and
                 // a row that failed AFTER its event became durable replays as
                 // Expired, so the next scan no-ops it rather than double-firing

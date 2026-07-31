@@ -228,7 +228,9 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->assertTransferExpiredAtStage($free, 'requested-stage', 30);
     }
 
-    // Sad (F-a, OQ-1-156 — the O4 gap CLOSED) — a regulatory hold that lands
+    // Sad (F-a, OQ-1-156 — the O4 gap NARROWED to the re-read→persist window;
+    // the unlocked re-read is cross-referenced to Task R4's sweep) — a
+    // regulatory hold that lands
     // AFTER the scan selected the row must stop the write. Selection excludes
     // held companies, but `legal_hold` moves independently of transfer status,
     // so the O1 guard cannot see it: an unchanged `expectedStatus` says nothing
@@ -277,8 +279,9 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         // that deadline — the clock travels WITH the cutoff, because a replay
         // cutoff must not be in the future (ruling R8) while `--date` stays the
         // scan's own input rather than a clock trick
-        // Then it expires only if the deadline elapsed before the cutoff
         $this->travelTo(CarbonImmutable::parse($runAt));
+
+        // Then it expires only if the deadline elapsed before the cutoff
         $this->runExpiryScan($runAt)->expectsOutputToContain($expectedOutput)->assertSuccessful();
     }
 
@@ -658,15 +661,21 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
     //
     // What the middle row is left as is stated honestly: its stream DID record
     // the expiry (the event was durable before the projector threw), its
-    // projection did not move — the pre-existing single-row divergence class,
-    // now visible in Sentry via the report and strictly better than today's
-    // silent batch-abort. The aggregate thereafter replays as Expired, so a
-    // re-selection no-ops rather than double-firing.
+    // projection did not move — the pre-existing single-row divergence class.
+    // The trade against the old behaviour is stated honestly too: before F-b
+    // the abort was LOUD (an uncaught throw, non-zero exit) but killed every
+    // later row; F-b keeps the batch running while keeping the failure loud
+    // through the report, the failed count and the FAILURE exit (D1). The
+    // aggregate thereafter replays as Expired, so a re-selection no-ops rather
+    // than double-firing.
     #[Test]
     public function when_a_row_fails_mid_scan_then_the_remaining_rows_still_expire(): void
     {
         // Given three overdue selected transfers, the middle one rigged to fail
-        // at its projector
+        // at its projector — and the config posture the isolation depends on
+        // pinned: with catch_exceptions true, spatie would swallow the throw
+        // before the interactor's catch and count the divergent row as expired
+        $this->assertFalse((bool) config('event-sourcing.catch_exceptions'));
         Exceptions::fake();
         $first = $this->anOverdueRequestedTransfer();
         $middle = $this->anOverdueRequestedTransfer();
@@ -885,12 +894,14 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
      * No verification-lapsed notice was sent to anyone.
      *
      * The revert-check for this row is worth stating precisely, because what it
-     * proves is stronger than the assertion reads. Removing `VerifierNotificationReactor`'s
+     * proves CHANGED at Task R1. Removing `VerifierNotificationReactor`'s
      * source filter does not merely send a spurious notice — a requested-stage
-     * transfer has a NULL `verified_by`, so the reactor's `findOrFail` throws and
-     * the whole scan fails. The filter is load-bearing for the scan's survival,
-     * not only for its etiquette, and `assertSuccessful()` in the caller is what
-     * catches that half.
+     * transfer has a NULL `verified_by`, so the reactor's `findOrFail` throws.
+     * Before R1 that throw killed the whole scan; since R1's per-row catch it
+     * is caught, reported and COUNTED, so the scan reports a failed row and
+     * exits FAILURE (D1) — and `assertSuccessful()` in the caller REDs on that
+     * exit rather than on an uncaught throw. The filter stays load-bearing for
+     * the scan's health; the exit-code contract is what now holds it to that.
      */
     protected function assertNoVerifierWasNotified(): void
     {

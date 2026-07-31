@@ -72,9 +72,12 @@ interface OwnershipTransferRequestRepositoryInterface
      * the row exists AND its company is not under legal hold. The scan asks
      * this again immediately before each per-row write, because the SELECT-time
      * `legal_hold = 0` join says nothing about a hold landing mid-scan — the
-     * same SELECT→write gap ruling O1 closed for `status`, on a different table
-     * (F-a / OQ-1-156, Task R1). A missing row answers FALSE: for a scheduler,
-     * fail-closed means skip (M1), never write.
+     * status twin of this race is what ruling O1 refuses via `expectedStatus`
+     * (F-a / OQ-1-156, Task R1). The re-read NARROWS the gap to the
+     * re-read→persist window rather than closing it — it is an unlocked read,
+     * cross-referenced to Task R4's unlocked-guard sweep (OQ-1-158). A missing
+     * row answers FALSE: for a scheduler, fail-closed means skip (M1), never
+     * write.
      */
-    public function clearOfLegalHold(string $requestId): bool;
+    public function isClearOfLegalHold(string $requestId): bool;
 }

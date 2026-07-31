@@ -32,16 +32,18 @@ class ExpireOwnershipTransfers extends Command
 {
     public function handle(ExpireStaleOwnershipTransfersInteractor $interactor): int
     {
+        $raw = $this->option('date');
+
         try {
-            $cutoff = CarbonImmutable::parse($this->option('date'));
+            $cutoff = CarbonImmutable::parse($raw);
         } catch (InvalidFormatException) {
-            $this->error("'{$this->option('date')}' is not a valid date/time; nothing was scanned.");
+            $this->error("'{$raw}' is not a valid date/time; nothing was scanned.");
 
             return self::FAILURE;
         }
 
         if ($cutoff->isFuture()) {
-            $this->error("'{$this->option('date')}' is in the future; a replay cutoff must be in the past. Nothing was scanned.");
+            $this->error("'{$raw}' is in the future; a replay cutoff must be in the past. Nothing was scanned.");
 
             return self::FAILURE;
         }

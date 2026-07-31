@@ -129,10 +129,11 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
         // documented, in preference to snapshot arithmetic nothing else needs.
         //
         // The hold is read HERE for selection and RE-CHECKED at write time by
-        // clearOfLegalHold() below (F-a / OQ-1-156, Task R1) — closing the
-        // SELECT→write gap UC-1-116 EF-4d / UC-1-117 EF-4e describe, whose
-        // proceed-anyway branch ruling O4 had taken deliberately until R1 built
-        // the re-fetch branch.
+        // isClearOfLegalHold() below (F-a / OQ-1-156, Task R1) — NARROWING the
+        // SELECT→write gap UC-1-116 EF-4d / UC-1-117 EF-4e describe (whose
+        // proceed-anyway branch ruling O4 had taken deliberately) to the
+        // re-read→persist window. Not CLOSED: the re-read is unlocked, which is
+        // the OQ-1-158 shape — cross-referenced to Task R4's sweep.
         return OwnershipTransferRequest::query()
             ->where('next_state_transition_at', '<', $asOf)
             ->openStates()
@@ -141,7 +142,7 @@ class EloquentOwnershipTransferRequestRepository implements OwnershipTransferReq
             ->all();
     }
 
-    public function clearOfLegalHold(string $requestId): bool
+    public function isClearOfLegalHold(string $requestId): bool
     {
         // EXISTS on (row present AND company unheld): a vanished row and a held
         // company answer identically — false, skip. Fail-closed the B1 way,
