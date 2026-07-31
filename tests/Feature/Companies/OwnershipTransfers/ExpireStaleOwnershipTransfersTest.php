@@ -924,6 +924,22 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->assertVerifierWasNotifiedOfLapse($transfer);
     }
 
+    #[Test]
+    public function when_a_verified_transfer_expires_then_the_verifier_notice_is_queued_not_sent_inline(): void
+    {
+        // Given a verified transfer whose 14-day window has elapsed, with the
+        // queue captured
+        $this->anOverdueVerifiedTransfer();
+        Queue::fake();
+
+        // When the daily scan runs
+        $this->runExpiryScan()->assertSuccessful();
+
+        // Then the verifier's lapse notice rides the queued handler job
+        // instead of sending inline (CD `Queued.` conformance — OQ-1-153)
+        $this->assertReactorDeferred(OwnershipTransferExpired::class, OwnershipTransferVerificationLapsedNotification::class);
+    }
+
     // Happy (UC-1-116, the T8 half of the dual-notification asymmetry) — nobody
     // verified a requested-stage transfer, so there is no verifier to tell. The
     // paired negative of the T9 row above: without it the source filter is
