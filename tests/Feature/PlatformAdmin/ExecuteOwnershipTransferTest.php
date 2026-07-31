@@ -10,6 +10,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Notification;
@@ -1524,5 +1525,22 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             fn (OwnershipReceivedNotification $notification): bool => $notification->toArray($target)['title'] === 'You are now the owner'
                 && str_contains($notification->toArray($target)['body'], $company->name),
         );
+    }
+
+    #[Test]
+    public function when_a_transfer_is_executed_then_the_old_owner_notice_is_queued_not_sent_inline(): void
+    {
+        // Given a verified transfer ready to execute, with the queue captured
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        Queue::fake();
+
+        // When an allowlisted admin executes it
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the old-owner notice rides the queued handler job instead of
+        // sending inline (CD `Queued.` conformance — OQ-1-153/Task R2)
+        $this->assertReactorDeferred(OwnershipTransferExecuted::class, OwnershipTransferredAwayNotification::class);
     }
 }
