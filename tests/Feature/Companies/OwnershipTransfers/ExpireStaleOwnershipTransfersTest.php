@@ -262,6 +262,34 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->assertTransferExpiredAtStage($free, 'requested-stage', 30);
     }
 
+    // Sad (F-a's vanished-row contract, ruling D4) — a row deleted between the
+    // scan's SELECT and its write is skipped, uncounted. The projection row is
+    // gone but the STREAM survives, so without the write-time re-read the
+    // aggregate — whose replayed state still agrees with `expectedStatus` —
+    // would record an expiry event against a row that no longer exists. BORN
+    // GREEN, stated as such: the F-a lap built this branch; teeth proven by
+    // revert-check at build (a re-read forced to answer clear records the
+    // stray event and REDs the no-event assertion).
+    #[Test]
+    public function when_a_selected_row_vanishes_before_its_write_then_the_scan_skips_it(): void
+    {
+        // Given an overdue selected transfer whose projection row vanished
+        // after selection
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
+        $this->travel(31)->days();
+        $this->selectionReportsMap([
+            (string) $transfer->getKey() => OwnershipTransferStatus::Requested,
+        ]);
+        OwnershipTransferRequest::query()->whereKey($transfer->getKey())->delete();
+
+        // When the daily scan runs
+        $this->runExpiryScan()->expectsOutputToContain('0 transfer(s) expired.')->assertSuccessful();
+
+        // Then no expiry was recorded against the vanished row
+        $this->assertSame(0, $this->expiryEventCount($transfer));
+    }
+
     // Edge (boundary) — a transfer expires only once its deadline has elapsed
     // STRICTLY. The exactly-at row is the one that kills a `<` -> `<=` mutation;
     // both built scans carry the same three-row provider.
