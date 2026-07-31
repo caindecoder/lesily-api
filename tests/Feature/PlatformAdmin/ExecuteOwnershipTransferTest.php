@@ -1543,4 +1543,21 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // sending inline (CD `Queued.` conformance — OQ-1-153/Task R2)
         $this->assertReactorDeferred(OwnershipTransferExecuted::class, OwnershipTransferredAwayNotification::class);
     }
+
+    #[Test]
+    public function when_a_transfer_is_executed_then_the_new_owner_notice_is_queued_not_sent_inline(): void
+    {
+        // Given a verified transfer ready to execute, with the queue captured
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        Queue::fake();
+
+        // When an allowlisted admin executes it
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the new-owner notice rides the queued handler job instead of
+        // sending inline (CD `Queued.` conformance — OQ-1-153/Task R2)
+        $this->assertReactorDeferred(OwnershipTransferExecuted::class, OwnershipReceivedNotification::class);
+    }
 }
