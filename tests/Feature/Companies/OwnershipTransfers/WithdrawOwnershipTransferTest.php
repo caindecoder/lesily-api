@@ -7,6 +7,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Notification;
@@ -862,6 +863,33 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
 
         // Then support is told in this window too
         $this->assertSupportQueueNotifiedOfWithdrawal($supportAdmin, $company, $owner);
+    }
+
+    /**
+     * BORN-GREEN PIN, declared as such (the OQ-1-155/R7 precedent): the
+     * Cancelled arm rides the SAME class flip as the Requested arm (lap 1,
+     * ruling Q1), so this row could never be watched RED on its own — one
+     * `implements ShouldQueue` queues both arms at once. Its teeth are the
+     * revert-check recorded in the lap-2 commit: stripping ShouldQueue REDs
+     * this row and the T1 sibling together.
+     */
+    #[Test]
+    public function when_a_transfer_is_withdrawn_then_the_support_notice_is_queued_not_sent_inline(): void
+    {
+        // Given an open transfer, an allowlisted support admin, and the queue captured
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $this->aPlatformSupportAdmin();
+        $transfer = $this->aRequestedTransferStream($company, $owner, User::factory()->create());
+        Queue::fake();
+
+        // When the requester withdraws it
+        $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
+            'reason' => self::WITHDRAWAL_REASON,
+        ]);
+
+        // Then the withdrawal notice rides the queued handler job instead of
+        // sending inline (ruling Q1 — same reactor, second event arm)
+        $this->assertReactorDeferred(OwnershipTransferCancelled::class, OwnershipTransferWithdrawnNotification::class);
     }
 
     /**
