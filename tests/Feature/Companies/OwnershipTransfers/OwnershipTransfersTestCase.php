@@ -15,6 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use Tests\Feature\Companies\OwnershipTransfers\Testing\InteractsWithQueuedReactors;
 use Tests\Feature\Companies\OwnershipTransfers\Testing\ArrangesOwnershipTransferStreams;
 
 /**
@@ -26,6 +27,7 @@ use Tests\Feature\Companies\OwnershipTransfers\Testing\ArrangesOwnershipTransfer
 abstract class OwnershipTransfersTestCase extends CompaniesTestCase
 {
     use ArrangesOwnershipTransferStreams;
+    use InteractsWithQueuedReactors;
     use RefreshDatabase;
     use WithRolePermissionFixtures;
 
