@@ -1578,4 +1578,31 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // sending inline (CD `Queued.` conformance — OQ-1-153/Task R2)
         $this->assertReactorDeferred(OwnershipTransferExecuted::class, EmergencyContactRequiredNotification::class);
     }
+
+    /**
+     * BORN-GREEN CHARACTERIZATION PIN, declared as such (the OQ-1-155/R7
+     * precedent): the audit reactor has been synchronous since T1, so this row
+     * cannot RED against current production. It exists to make ruling R5
+     * mechanical — spatie replays projectors but never reactors, audit_trail
+     * is an append-only PDPA §12 record, and its write must be able to veto
+     * the transfer it evidences (OQ-1-141: no action without evidence). Teeth:
+     * the lap-11 revert-check recorded in the commit — adding ShouldQueue to
+     * OwnershipTransferAuditReactor REDs this row.
+     */
+    #[Test]
+    public function when_a_transfer_is_executed_then_the_audit_row_is_written_before_any_queued_job_runs(): void
+    {
+        // Given a verified transfer ready to execute, with the queue captured
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        Queue::fake();
+
+        // When an allowlisted admin executes it
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the audit record is already durable with NO queued job having
+        // run — the audit write rides the transaction, not the queue (R5)
+        $this->assertExecutionAudited($transfer, $admin);
+    }
 }
