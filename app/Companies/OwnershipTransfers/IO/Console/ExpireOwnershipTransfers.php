@@ -32,19 +32,9 @@ class ExpireOwnershipTransfers extends Command
 {
     public function handle(ExpireStaleOwnershipTransfersInteractor $interactor): int
     {
-        $raw = $this->option('date');
+        $cutoff = $this->resolveCutoff();
 
-        try {
-            $cutoff = CarbonImmutable::parse($raw);
-        } catch (InvalidFormatException) {
-            $this->error("'{$raw}' is not a valid date/time; nothing was scanned.");
-
-            return self::FAILURE;
-        }
-
-        if ($cutoff->isFuture()) {
-            $this->error("'{$raw}' is in the future; a replay cutoff must be in the past. Nothing was scanned.");
-
+        if ($cutoff === null) {
             return self::FAILURE;
         }
 
@@ -64,5 +54,33 @@ class ExpireOwnershipTransfers extends Command
         $this->info("{$outcome->expired} transfer(s) expired.");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The R8-guarded cutoff: `now()` when `--date` is omitted, the parsed
+     * instant when it is valid and not in the future, and NULL — with the
+     * refusal already printed — when the boundary refuses it. Null rather than
+     * a throw because the refusal is this boundary's own outcome, not an
+     * exceptional state (E07: parsing and its messages stay together).
+     */
+    private function resolveCutoff(): ?CarbonImmutable
+    {
+        $raw = $this->option('date');
+
+        try {
+            $cutoff = CarbonImmutable::parse($raw);
+        } catch (InvalidFormatException) {
+            $this->error("'{$raw}' is not a valid date/time; nothing was scanned.");
+
+            return null;
+        }
+
+        if ($cutoff->isFuture()) {
+            $this->error("'{$raw}' is in the future; a replay cutoff must be in the past. Nothing was scanned.");
+
+            return null;
+        }
+
+        return $cutoff;
     }
 }
