@@ -2,9 +2,12 @@
 
 namespace App\Companies\OwnershipTransfers\UseCases\Interactors;
 
+use Throwable;
+use RuntimeException;
 use Carbon\CarbonInterface;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
+use App\Companies\OwnershipTransfers\UseCases\Values\ExpiryScanOutcome;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
 use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
@@ -24,10 +27,12 @@ use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as Owne
  * projection marker being re-expired on the next scan — a hazard that exists
  * only because ITS aggregate is guardless. Ours is not: `expireIfStale()`
  * replays the stream and no-ops once the state has left the open set, so a
- * second event cannot be recorded however often the row is re-selected. The
- * remaining exposure (a projector failure leaving the row divergent) is
- * pre-existing and module-wide — withdraw and reject carry it identically — and
- * is logged to Task 9 beside E-f and OQ-1-153 rather than swept in from here.
+ * second event cannot be recorded however often the row is re-selected. A
+ * projector failure can still leave one row divergent (stream `Expired`,
+ * projection not) — caught PER ROW below (F-b, Task R1), reported, and the
+ * batch continues; the divergent row replays as `Expired`, so a re-selection
+ * no-ops. The module-wide synchronous-reactor posture is Task R2's question
+ * (OQ-1-153); E-f landed at Task 8.
  */
 class ExpireStaleOwnershipTransfersInteractor
 {
@@ -35,38 +40,76 @@ class ExpireStaleOwnershipTransfersInteractor
         private OwnershipTransferRequestRepositoryInterface $transfers,
     ) {}
 
-    public function execute(CarbonInterface $asOf): int
+    public function execute(CarbonInterface $asOf): ExpiryScanOutcome
     {
         $expired = 0;
+        $failed = 0;
 
         foreach ($this->transfers->listTimerReady($asOf) as $requestId => $status) {
-            $transfer = OwnershipTransferRequestAggregate::retrieve($requestId)
-                ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
-                    'expectedStatus' => $status,
-                    'expiredAfterDays' => $this->windowFor($status),
-                    'expiredAt' => $asOf,
-                ]));
+            try {
+                // §S10b re-read (F-a / OQ-1-156): selection excluded held companies,
+                // but a hold lands mid-scan without moving transfer status, so the
+                // O1 guard cannot see it. Asked again at write time; a held (or
+                // vanished) row is skipped, uncounted — the SELECT-time skip-only
+                // semantics (D3), applied at the moment that actually writes.
+                if (! $this->transfers->isClearOfLegalHold($requestId)) {
+                    continue;
+                }
 
-            // Rows SELECTED and rows EXPIRED are no longer the same number: since
-            // O1 the aggregate can decline a row whose selection went stale, and
-            // counting the iteration would report an expiry that never happened.
-            // The count is the command's only output and the thing an ops alert
-            // would key on, so it has to mean what it says. Both built scans return
-            // count($rows) instead, correctly — neither of their aggregates can
-            // decline. Asked before persist(), which takes the recorded events away.
-            //
-            // A declined row is skipped rather than persisted: persisting an empty
-            // event set still runs a version query and can throw, so it would add a
-            // failure surface for a row that did nothing.
-            if ($this->recordedAnExpiry($transfer) === false) {
-                continue;
+                $transfer = OwnershipTransferRequestAggregate::retrieve($requestId)
+                    ->expireIfStale(ExpireOwnershipTransferCommand::validateAndCreate([
+                        'expectedStatus' => $status,
+                        'expiredAfterDays' => $this->windowFor($status),
+                        'expiredAt' => $asOf,
+                    ]));
+
+                // Rows SELECTED and rows EXPIRED are no longer the same number: since
+                // O1 the aggregate can decline a row whose selection went stale, and
+                // counting the iteration would report an expiry that never happened.
+                // The two counts are the command's only structured output and what an
+                // ops alert keys on, so each has to mean what it says: expired =
+                // recorded AND persisted; failed = threw (a row that failed after its
+                // event became durable is counted failed on THIS night and never
+                // counted expired on any night — permanently absent from the tally
+                // until repaired). Both built scans return count($rows) instead,
+                // correctly — neither of their aggregates can decline. Asked before
+                // persist(), which takes the recorded events away.
+                //
+                // A declined row is skipped rather than persisted: persisting an empty
+                // event set still runs a version query and can throw, so it would add a
+                // failure surface for a row that did nothing.
+                if ($this->recordedAnExpiry($transfer) === false) {
+                    continue;
+                }
+
+                $transfer->persist();
+                $expired++;
+            } catch (Throwable $e) {
+                // F-b (UC-1-116/117 Main Flow step 9): one row's failure must not
+                // abort the batch. This isolation exists only while
+                // event-sourcing.catch_exceptions stays false — flipped true,
+                // spatie swallows the throw before it reaches here and the
+                // divergent row would be COUNTED as expired; the F-b test pins
+                // the config. Report and move on — a thrown row was never
+                // counted as expired (the increment is the body's last act), and
+                // a row that failed AFTER its event became durable replays as
+                // Expired, so the next scan no-ops it rather than double-firing
+                // (LD idiom: SendCompanyDeletionWarningEmailsAction's per-row
+                // catch). It IS counted as failed: without that second number, a
+                // night where every row threw and a night where nothing was due
+                // would print identical healthy output (D1). The wrap carries
+                // the row id (the LD Prune/Orphan sprintf idiom, review I2) —
+                // the divergent row is invisible to every query, so the report
+                // is the only place its identity can live.
+                report(new RuntimeException(
+                    sprintf("Failed to expire ownership transfer '%s'. (%s)", $requestId, $e->getMessage()),
+                    previous: $e,
+                ));
+                $failed++;
             }
-
-            $transfer->persist();
-            $expired++;
         }
 
-        return $expired;
+        return new ExpiryScanOutcome($expired, $failed);
     }
 
     /**

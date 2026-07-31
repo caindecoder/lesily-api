@@ -3,11 +3,13 @@
 namespace Tests\Feature\Companies\OwnershipTransfers;
 
 use App\Models\User;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -16,6 +18,7 @@ use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\Projectors\OwnershipTransferProjector;
 use App\Companies\OwnershipTransfers\IO\Mails\OwnershipTransferNotificationMail;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferExpiredNotification;
@@ -94,6 +97,63 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         ];
     }
 
+    // Sad (F-c, ruling R8) — the replay option is an operator surface, and a
+    // cutoff Carbon cannot parse is refused at the boundary with a clear message
+    // instead of an uncaught InvalidFormatException. The overdue row in the
+    // arrangement is load-bearing: it proves the refusal short-circuits before
+    // the interactor ever selects, not merely that the error prints.
+    //
+    // Rollover strings ('2026-02-30') are deliberately NOT rows here: DateTime
+    // parses them by rolling the calendar over, so the guard refuses exactly
+    // what Carbon refuses — documenting that boundary rather than inventing a
+    // stricter one nothing else enforces.
+    #[Test]
+    #[DataProvider('provideMalformedCutoffs')]
+    public function when_the_scan_is_replayed_at_a_malformed_cutoff_then_it_refuses_to_run(string $cutoff): void
+    {
+        // Given a requested transfer whose window has already elapsed
+        $transfer = $this->anOverdueRequestedTransfer();
+
+        // When the scan is replayed at a cutoff that is not a date
+        $command = $this->runExpiryScan($cutoff);
+
+        // Then it refuses to run and the overdue transfer is untouched
+        $command->expectsOutputToContain('is not a valid date')->assertFailed();
+        $this->assertTransferUnchanged($transfer);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function provideMalformedCutoffs(): array
+    {
+        return [
+            'garbage text' => ['not-a-date'],
+            'an impossible calendar date' => ['2026-13-45'],
+        ];
+    }
+
+    // Sad (F-c, ruling R8) — a FUTURE cutoff is refused outright. The option
+    // exists to replay a night the scheduler missed, so a legitimate cutoff is
+    // always in the past; a future one would expire rows that are not yet due,
+    // writing facts the timestamps contradict into an append-only stream. The
+    // in-window fixture is the sharp half of the claim: before this guard, the
+    // run below genuinely expired it.
+    #[Test]
+    public function when_the_scan_is_replayed_at_a_future_cutoff_then_it_refuses_to_run(): void
+    {
+        // Given a requested transfer still inside its 30-day window
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
+
+        // When the scan is replayed at a cutoff that has not happened yet
+        $command = $this->runExpiryScan('2026-08-10 00:00:00');
+
+        // Then it refuses to run and the in-window transfer is untouched
+        $command->expectsOutputToContain('in the future')->assertFailed();
+        $this->assertTransferUnchanged($transfer);
+    }
+
     // Sad — a transfer still inside its 30-day window is not due, so the daily
     // scan selects nothing and the request stays open (the `<` cutoff excludes it).
     #[Test]
@@ -168,6 +228,68 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->assertTransferExpiredAtStage($free, 'requested-stage', 30);
     }
 
+    // Sad (F-a, OQ-1-156 — the O4 gap NARROWED to the re-read→persist window;
+    // the unlocked re-read is cross-referenced to Task R4's sweep) — a
+    // regulatory hold that lands
+    // AFTER the scan selected the row must stop the write. Selection excludes
+    // held companies, but `legal_hold` moves independently of transfer status,
+    // so the O1 guard cannot see it: an unchanged `expectedStatus` says nothing
+    // about the hold. The interactor re-reads the hold immediately before the
+    // aggregate call and SKIPS, uncounted — matching the SELECT-time skip-only
+    // semantics (D3). The unheld sibling is load-bearing: with one row in the
+    // selection, a scan that skipped EVERYTHING would look identical (s149 C6).
+    #[Test]
+    public function when_the_hold_lands_after_the_scan_selected_the_row_then_no_expiry_is_recorded(): void
+    {
+        // Given two overdue selected transfers, one at a company whose hold
+        // landed after selection
+        [$heldCompany, $heldOwner] = $this->aCompanyWithOwner();
+        $held = $this->aRequestedTransferStream($heldCompany, $heldOwner, $this->aMemberWithRole($heldCompany, 'employee'));
+        [$freeCompany, $freeOwner] = $this->aCompanyWithOwner();
+        $free = $this->aRequestedTransferStream($freeCompany, $freeOwner, $this->aMemberWithRole($freeCompany, 'employee'));
+        $this->travel(31)->days();
+        $this->selectionReportsMap([
+            (string) $held->getKey() => OwnershipTransferStatus::Requested,
+            (string) $free->getKey() => OwnershipTransferStatus::Requested,
+        ]);
+        $this->placeCompanyUnderLegalHold($heldCompany);
+
+        // When the daily scan runs
+        $this->runExpiryScan()->expectsOutputToContain('1 transfer(s) expired.')->assertSuccessful();
+
+        // Then only the unheld company's transfer expired
+        $this->assertTransferUnchanged($held);
+        $this->assertTransferExpiredAtStage($free, 'requested-stage', 30);
+    }
+
+    // Sad (F-a's vanished-row contract, ruling D4) — a row deleted between the
+    // scan's SELECT and its write is skipped, uncounted. The projection row is
+    // gone but the STREAM survives, so without the write-time re-read the
+    // aggregate — whose replayed state still agrees with `expectedStatus` —
+    // would record an expiry event against a row that no longer exists. BORN
+    // GREEN, stated as such: the F-a lap built this branch; teeth proven by
+    // revert-check at build (a re-read forced to answer clear records the
+    // stray event and REDs the no-event assertion).
+    #[Test]
+    public function when_a_selected_row_vanishes_before_its_write_then_the_scan_skips_it(): void
+    {
+        // Given an overdue selected transfer whose projection row vanished
+        // after selection
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
+        $this->travel(31)->days();
+        $this->selectionReportsMap([
+            (string) $transfer->getKey() => OwnershipTransferStatus::Requested,
+        ]);
+        OwnershipTransferRequest::query()->whereKey($transfer->getKey())->delete();
+
+        // When the daily scan runs
+        $this->runExpiryScan()->expectsOutputToContain('0 transfer(s) expired.')->assertSuccessful();
+
+        // Then no expiry was recorded against the vanished row
+        $this->assertSame(0, $this->expiryEventCount($transfer));
+    }
+
     // Edge (boundary) — a transfer expires only once its deadline has elapsed
     // STRICTLY. The exactly-at row is the one that kills a `<` -> `<=` mutation;
     // both built scans carry the same three-row provider.
@@ -182,8 +304,11 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
 
         // When the daily scan runs with its cutoff at a given instant relative to
-        // that deadline — driven through `--date`, the scan's own input, rather
-        // than by moving the clock underneath it
+        // that deadline — the clock travels WITH the cutoff, because a replay
+        // cutoff must not be in the future (ruling R8) while `--date` stays the
+        // scan's own input rather than a clock trick
+        $this->travelTo(CarbonImmutable::parse($runAt));
+
         // Then it expires only if the deadline elapsed before the cutoff
         $this->runExpiryScan($runAt)->expectsOutputToContain($expectedOutput)->assertSuccessful();
     }
@@ -283,7 +408,10 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         [$company, $owner] = $this->aCompanyWithOwner();
         $transfer = $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
 
-        // When the missed run is replayed at the cutoff it should have used
+        // When the missed run is replayed two days late, at the cutoff it should
+        // have used — the clock sits PAST the cutoff, which is what makes this a
+        // replay rather than a prediction (ruling R8 refuses the future kind)
+        $this->travelTo(CarbonImmutable::parse('2026-08-03 08:00:00'));
         $this->runExpiryScan('2026-08-01 09:00:01')->assertSuccessful();
 
         // Then the expiry is stamped at that cutoff, after the deadline it breached
@@ -502,30 +630,160 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
     /**
      * Makes the scan's SELECT report $status for $transfer, whatever its stream
      * actually holds — the race, made deterministic.
-     *
-     * Extends the concrete repository rather than implementing the interface, so
-     * only the one method under test diverges and the other five keep their real
-     * behaviour (the `RegisterOwnerTest` shape).
      */
     protected function selectionReports(OwnershipTransferRequest $transfer, OwnershipTransferStatus $status): void
     {
+        $this->selectionReportsMap([(string) $transfer->getKey() => $status]);
+    }
+
+    /**
+     * Makes the scan's SELECT report exactly $rows (`requestId => status`) —
+     * the race for several rows at once: the F-a row needs a held row AND an
+     * unheld sibling, because a scope assertion needs a row on the other side
+     * of the scope (s149 C6).
+     *
+     * Extends the concrete repository rather than implementing the interface, so
+     * only the one method under test diverges and the others keep their real
+     * behaviour (the `RegisterOwnerTest` shape) — load-bearing for F-a, whose
+     * legal-hold re-read must run through the INHERITED real method against the
+     * live database.
+     *
+     * @param  array<string, OwnershipTransferStatus>  $rows
+     */
+    protected function selectionReportsMap(array $rows): void
+    {
         $this->app->instance(
             OwnershipTransferRequestRepositoryInterface::class,
-            new class((string) $transfer->getKey(), $status) extends EloquentOwnershipTransferRequestRepository
+            new class($rows) extends EloquentOwnershipTransferRequestRepository
             {
-                public function __construct(
-                    private string $requestId,
-                    private OwnershipTransferStatus $status,
-                ) {}
+                /**
+                 * @param  array<string, OwnershipTransferStatus>  $rows
+                 */
+                public function __construct(private array $rows) {}
 
                 /**
                  * @return array<string, OwnershipTransferStatus>
                  */
                 public function listTimerReady(CarbonInterface $asOf): array
                 {
-                    return [$this->requestId => $this->status];
+                    return $this->rows;
                 }
             },
+        );
+    }
+
+    // Edge (F-b — UC-1-116/117 Main Flow step 9, built at Task R1) — one row's
+    // failure must not abort the batch: the rows selected after it still
+    // expire, the count keeps meaning what it says, and the failure is REPORTED
+    // instead of silently swallowing the rest of the night. The selection order
+    // is pinned through the seam so the failing row genuinely sits MID-batch —
+    // an unordered real SELECT could have iterated it last, leaving the
+    // rows-after-the-failure claim unexercised.
+    //
+    // The failure is induced with the Task-8 P8 seam — a container-bound
+    // throwing subclass of the projector, selective to the middle row's id,
+    // bound AFTER arrangement so the T1 projections are real. LD's analog test
+    // (PermanentlyDeleteOrphanedUsersOlderThanSevenDaysTest, skipped-and-
+    // reported-while-others-deleted) induces its failure organically via an FK
+    // obstacle; this scan has no organic failure mode, hence the seam.
+    //
+    // What the middle row is left as is stated honestly: its stream DID record
+    // the expiry (the event was durable before the projector threw), its
+    // projection did not move — the pre-existing single-row divergence class.
+    // The trade against the old behaviour is stated honestly too: before F-b
+    // the abort was LOUD (an uncaught throw, non-zero exit) but killed every
+    // later row; F-b keeps the batch running while keeping the failure loud
+    // through the report, the failed count and the FAILURE exit (D1). The
+    // aggregate thereafter replays as Expired, so a re-selection no-ops rather
+    // than double-firing.
+    #[Test]
+    public function when_a_row_fails_mid_scan_then_the_remaining_rows_still_expire(): void
+    {
+        // Given three overdue selected transfers, the middle one rigged to fail
+        // at its projector — and the config posture the isolation depends on
+        // pinned: with catch_exceptions true, spatie would swallow the throw
+        // before the interactor's catch and count the divergent row as expired
+        $this->assertFalse((bool) config('event-sourcing.catch_exceptions'));
+        Exceptions::fake();
+        $first = $this->anOverdueRequestedTransfer();
+        $middle = $this->anOverdueRequestedTransfer();
+        $last = $this->anOverdueRequestedTransfer();
+        $this->selectionReportsMap([
+            (string) $first->getKey() => OwnershipTransferStatus::Requested,
+            (string) $middle->getKey() => OwnershipTransferStatus::Requested,
+            (string) $last->getKey() => OwnershipTransferStatus::Requested,
+        ]);
+        $this->projectorFailsFor($middle);
+
+        // When the daily scan runs
+        $this->runExpiryScan()
+            ->expectsOutputToContain('2 transfer(s) expired, 1 failed.')
+            ->assertFailed();
+
+        // Then the other rows expired, only their requesters were told, and the
+        // failure was reported
+        $this->assertTransferExpiredAtStage($first, 'requested-stage', 30);
+        $this->assertTransferExpiredAtStage($last, 'requested-stage', 30);
+        Notification::assertSentTimes(OwnershipTransferExpiredNotification::class, 2);
+        $this->assertFailedRowDivergedAndWasReported($middle);
+    }
+
+    /**
+     * Binds a throwing double of the projector, selective to $transfer — the
+     * Task-8 P8 seam: `Projectionist::callEventHandler` re-resolves every
+     * handler at dispatch (`app($eventHandler::class)`), so a container binding
+     * substitutes it. The subclass inherits `$weight` and full parent behaviour
+     * for every OTHER row, which is what lets the neighbouring rows project
+     * normally around the failure.
+     */
+    protected function projectorFailsFor(OwnershipTransferRequest $transfer): void
+    {
+        $failingId = (string) $transfer->getKey();
+
+        $this->app->bind(
+            OwnershipTransferProjector::class,
+            fn (): OwnershipTransferProjector => new class($failingId) extends OwnershipTransferProjector
+            {
+                public function __construct(private readonly string $failingRequestId) {}
+
+                public function onOwnershipTransferExpired(OwnershipTransferExpired $event): void
+                {
+                    if ($event->requestId === $this->failingRequestId) {
+                        throw new RuntimeException('induced mid-scan projector failure');
+                    }
+
+                    parent::onOwnershipTransferExpired($event);
+                }
+            },
+        );
+    }
+
+    /**
+     * $transfer is the row the scan could not finish, left in the divergence's
+     * honest shape — which has an unrecoverable half. STREAM: exactly one
+     * expiry event, durable before the projector threw; a projection replay
+     * heals this half. PROJECTION: unmoved (still `requested`, deadline
+     * intact), so the next scan re-selects it and the aggregate no-ops —
+     * nightly, forever, with no repeat report after this first one. REACTORS:
+     * never ran and are never replayed, so the audit row and the requester's
+     * notice for this expiry are permanently absent unless repaired by hand —
+     * asserted, not just described. REPORT: carries the row id (review I2, the
+     * LD Prune/Orphan idiom) because a Sentry trace without the requestId
+     * cannot be traced back to the divergent row by any query.
+     */
+    protected function assertFailedRowDivergedAndWasReported(OwnershipTransferRequest $transfer): void
+    {
+        $current = $this->currentTransfer($transfer);
+
+        $this->assertSame(OwnershipTransferStatus::Requested, $current->status);
+        $this->assertSame(1, $this->expiryEventCount($transfer));
+        $this->assertSame(0, AuditEntry::query()
+            ->where('subject_id', $transfer->getKey())
+            ->where('event_class', 'OwnershipTransferExpired')
+            ->count());
+        Exceptions::assertReported(
+            fn (RuntimeException $e): bool => str_contains($e->getMessage(), (string) $transfer->getKey())
+                && str_contains($e->getMessage(), 'induced mid-scan projector failure'),
         );
     }
 
@@ -664,12 +922,14 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
      * No verification-lapsed notice was sent to anyone.
      *
      * The revert-check for this row is worth stating precisely, because what it
-     * proves is stronger than the assertion reads. Removing `VerifierNotificationReactor`'s
+     * proves CHANGED at Task R1. Removing `VerifierNotificationReactor`'s
      * source filter does not merely send a spurious notice — a requested-stage
-     * transfer has a NULL `verified_by`, so the reactor's `findOrFail` throws and
-     * the whole scan fails. The filter is load-bearing for the scan's survival,
-     * not only for its etiquette, and `assertSuccessful()` in the caller is what
-     * catches that half.
+     * transfer has a NULL `verified_by`, so the reactor's `findOrFail` throws.
+     * Before R1 that throw killed the whole scan; since R1's per-row catch it
+     * is caught, reported and COUNTED, so the scan reports a failed row and
+     * exits FAILURE (D1) — and `assertSuccessful()` in the caller REDs on that
+     * exit rather than on an uncaught throw. The filter stays load-bearing for
+     * the scan's health; the exit-code contract is what now holds it to that.
      */
     protected function assertNoVerifierWasNotified(): void
     {
