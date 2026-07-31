@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Notifications\ChannelManager;
@@ -879,6 +880,21 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertSlaTimerCleared();
         $this->assertRequesterNotifiedWithTheReason();
         $this->assertRejectionAudited();
+    }
+
+    #[Test]
+    public function when_a_transfer_is_rejected_then_the_requester_notice_is_queued_not_sent_inline(): void
+    {
+        // Given a transfer awaiting review with the queue captured
+        $this->arrangeRejectableTransfer();
+        Queue::fake();
+
+        // When the admin submits the rejection record
+        $this->rejectTransfer($this->admin, $this->transfer->getKey(), self::rejectionBody());
+
+        // Then the requester notice rides the queued handler job instead of
+        // sending inline (CD `Queued.` conformance — OQ-1-153/Task R2)
+        $this->assertReactorDeferred(OwnershipTransferRejected::class, OwnershipTransferRejectedNotification::class);
     }
 
     /**
