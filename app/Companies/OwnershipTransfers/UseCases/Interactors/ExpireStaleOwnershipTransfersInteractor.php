@@ -6,6 +6,7 @@ use Throwable;
 use Carbon\CarbonInterface;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
+use App\Companies\OwnershipTransfers\UseCases\Values\ExpiryScanOutcome;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
 use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
@@ -38,9 +39,10 @@ class ExpireStaleOwnershipTransfersInteractor
         private OwnershipTransferRequestRepositoryInterface $transfers,
     ) {}
 
-    public function execute(CarbonInterface $asOf): int
+    public function execute(CarbonInterface $asOf): ExpiryScanOutcome
     {
         $expired = 0;
+        $failed = 0;
 
         foreach ($this->transfers->listTimerReady($asOf) as $requestId => $status) {
             try {
@@ -80,17 +82,19 @@ class ExpireStaleOwnershipTransfersInteractor
             } catch (Throwable $e) {
                 // F-b (UC-1-116/117 Main Flow step 9): one row's failure must not
                 // abort the batch. Report and move on — a thrown row was never
-                // counted (the increment is the body's last act), and a row that
-                // failed AFTER its event became durable replays as Expired, so
-                // the next scan no-ops it rather than double-firing (LD idiom:
-                // SendCompanyDeletionWarningEmailsAction's per-row catch).
+                // counted as expired (the increment is the body's last act), and
+                // a row that failed AFTER its event became durable replays as
+                // Expired, so the next scan no-ops it rather than double-firing
+                // (LD idiom: SendCompanyDeletionWarningEmailsAction's per-row
+                // catch). It IS counted as failed: without that second number, a
+                // night where every row threw and a night where nothing was due
+                // would print identical healthy output (D1).
                 report($e);
-
-                continue;
+                $failed++;
             }
         }
 
-        return $expired;
+        return new ExpiryScanOutcome($expired, $failed);
     }
 
     /**

@@ -679,7 +679,9 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->projectorFailsFor($middle);
 
         // When the daily scan runs
-        $this->runExpiryScan()->expectsOutputToContain('2 transfer(s) expired.')->assertSuccessful();
+        $this->runExpiryScan()
+            ->expectsOutputToContain('2 transfer(s) expired, 1 failed.')
+            ->assertFailed();
 
         // Then the other rows expired, only their requesters were told, and the
         // failure was reported

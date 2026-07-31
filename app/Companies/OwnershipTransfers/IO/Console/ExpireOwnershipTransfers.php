@@ -46,9 +46,20 @@ class ExpireOwnershipTransfers extends Command
             return self::FAILURE;
         }
 
-        $expired = $interactor->execute($cutoff);
+        $outcome = $interactor->execute($cutoff);
 
-        $this->info("{$expired} transfer(s) expired.");
+        // A night with failures says so and exits non-zero (D1) — a deliberate
+        // divergence from the LD analog, which prints the error but always
+        // exits 0: the scheduler ignores exit codes, a --date replay is run by
+        // a human who should see red, and the exit code is the one structured
+        // signal a future runner check (#116) can key on.
+        if ($outcome->hasFailures()) {
+            $this->error("{$outcome->expired} transfer(s) expired, {$outcome->failed} failed.");
+
+            return self::FAILURE;
+        }
+
+        $this->info("{$outcome->expired} transfer(s) expired.");
 
         return self::SUCCESS;
     }
