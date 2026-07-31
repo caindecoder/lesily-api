@@ -130,6 +130,27 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         ];
     }
 
+    // Sad (F-c, ruling R8) — a FUTURE cutoff is refused outright. The option
+    // exists to replay a night the scheduler missed, so a legitimate cutoff is
+    // always in the past; a future one would expire rows that are not yet due,
+    // writing facts the timestamps contradict into an append-only stream. The
+    // in-window fixture is the sharp half of the claim: before this guard, the
+    // run below genuinely expired it.
+    #[Test]
+    public function when_the_scan_is_replayed_at_a_future_cutoff_then_it_refuses_to_run(): void
+    {
+        // Given a requested transfer still inside its 30-day window
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $transfer = $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
+
+        // When the scan is replayed at a cutoff that has not happened yet
+        $command = $this->runExpiryScan('2026-08-10 00:00:00');
+
+        // Then it refuses to run and the in-window transfer is untouched
+        $command->expectsOutputToContain('in the future')->assertFailed();
+        $this->assertTransferUnchanged($transfer);
+    }
+
     // Sad — a transfer still inside its 30-day window is not due, so the daily
     // scan selects nothing and the request stays open (the `<` cutoff excludes it).
     #[Test]
@@ -218,9 +239,11 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
 
         // When the daily scan runs with its cutoff at a given instant relative to
-        // that deadline — driven through `--date`, the scan's own input, rather
-        // than by moving the clock underneath it
+        // that deadline — the clock travels WITH the cutoff, because a replay
+        // cutoff must not be in the future (ruling R8) while `--date` stays the
+        // scan's own input rather than a clock trick
         // Then it expires only if the deadline elapsed before the cutoff
+        $this->travelTo(CarbonImmutable::parse($runAt));
         $this->runExpiryScan($runAt)->expectsOutputToContain($expectedOutput)->assertSuccessful();
     }
 
@@ -319,7 +342,10 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         [$company, $owner] = $this->aCompanyWithOwner();
         $transfer = $this->aRequestedTransferStream($company, $owner, $this->aMemberWithRole($company, 'employee'));
 
-        // When the missed run is replayed at the cutoff it should have used
+        // When the missed run is replayed two days late, at the cutoff it should
+        // have used — the clock sits PAST the cutoff, which is what makes this a
+        // replay rather than a prediction (ruling R8 refuses the future kind)
+        $this->travelTo(CarbonImmutable::parse('2026-08-03 08:00:00'));
         $this->runExpiryScan('2026-08-01 09:00:01')->assertSuccessful();
 
         // Then the expiry is stamped at that cutoff, after the deadline it breached

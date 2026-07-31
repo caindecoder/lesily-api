@@ -40,6 +40,12 @@ class ExpireOwnershipTransfers extends Command
             return self::FAILURE;
         }
 
+        if ($cutoff->isFuture()) {
+            $this->error("'{$this->option('date')}' is in the future; a replay cutoff must be in the past. Nothing was scanned.");
+
+            return self::FAILURE;
+        }
+
         $expired = $interactor->execute($cutoff);
 
         $this->info("{$expired} transfer(s) expired.");
