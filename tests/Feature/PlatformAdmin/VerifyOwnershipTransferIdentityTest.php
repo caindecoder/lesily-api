@@ -16,7 +16,9 @@ use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
+use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferVerifiedNotification;
+use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
  * SM-1-05 T2 — a platform admin confirms the requester's identity and moves the
@@ -545,6 +547,34 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         // Then the execution-queue alert rides the queued handler job instead
         // of sending inline (CD `Queued.` conformance — OQ-1-153/Task R2)
         $this->assertReactorDeferred(OwnershipTransferIdentityVerified::class, OwnershipTransferVerifiedNotification::class);
+    }
+
+    #[Test]
+    public function when_the_transfer_left_verified_before_the_admin_alert_job_runs_then_no_stale_alert_is_sent(): void
+    {
+        // Given a verified transfer whose T2 alert job is captured on the queue
+        $this->arrangeVerifiableTransfer();
+        Queue::fake();
+        $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+
+        // ... and the transfer leaves `verified` before the job is delivered
+        // (a real T5 rejection through the aggregate — the trait's stream idiom)
+        OwnershipTransferRequestAggregate::retrieve($this->transfer->getKey())
+            ->reject(RejectOwnershipTransferCommand::validateAndCreate([
+                'reason' => 'Identity documents could not be matched to the applicant.',
+                'rejectionReasonCode' => 'identity_failed',
+                'rejectedBy' => $this->admin->getKey(),
+            ]))
+            ->persist();
+
+        // When the queued handler runs at delivery time
+        $this->runQueuedHandlersFor(OwnershipTransferIdentityVerified::class);
+
+        // Then no stale "awaiting execution" alert goes out (ruling Q2, s164 —
+        // the reactor re-reads the row at delivery and skips once status has
+        // moved on; an alert asserting a live claim must not describe a
+        // terminal transfer)
+        Notification::assertSentTimes(OwnershipTransferVerifiedNotification::class, 0);
     }
 
     private Company $company;
