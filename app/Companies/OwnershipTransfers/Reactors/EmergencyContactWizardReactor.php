@@ -4,6 +4,7 @@ namespace App\Companies\OwnershipTransfers\Reactors;
 
 use App\Models\User;
 use App\Companies\Entities\CompanyUser;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
@@ -22,14 +23,24 @@ use App\Companies\OwnershipTransfers\IO\Notifications\EmergencyContactRequiredNo
  * common case, since T1 required it. Prompting anyway would train owners to
  * ignore the notice.
  *
- * Reads the pivot rather than the event payload, and that is safe here where
- * amendment N would normally bite: `MembershipProjector` ($weight 20) writes the
- * incoming owner's pivot row before any reactor runs, and the emergency-contact
- * columns it carries are untouched by T4 — this reactor reads a field the
- * transaction never wrote. Synchronous, like the module's other reactors; Task
- * R2 owns the queueing conformance pass.
+ * Reads the pivot rather than the event payload — deliberately, and the
+ * queued posture (ShouldQueue, Task R2 — CD `Queued.` conformance) sharpens
+ * why: the short-circuit now evaluates at DELIVERY time, so an owner who set
+ * their contact between commit and delivery is correctly not prompted. The
+ * obligation is about the contact's presence when the prompt would land, not
+ * at the execution instant.
+ *
+ * Before R2 this class's bare findOrFail was an ACCIDENTAL transaction guard
+ * (s161 Phase-5 finding): running inside the interactor's transaction, its
+ * SoftDeletes-scoped miss on a concurrently-removed pivot threw and rolled
+ * the whole transfer back. Queueing removes that accident BY DESIGN — the
+ * invariant is held where it belongs, by the interactor's in-transaction
+ * `lockForUpdate()` reads (ruling P16: `lockedCompany()` + `liveMembership()`
+ * on both pivots), verified at the R2 pre-flight. A pivot row that vanishes
+ * AFTER the locks released stays loud here: findOrFail in a worker fails the
+ * job into failed_jobs rather than silently skipping the §S10b obligation.
  */
-class EmergencyContactWizardReactor extends Reactor
+class EmergencyContactWizardReactor extends Reactor implements ShouldQueue
 {
     public function onOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
     {
