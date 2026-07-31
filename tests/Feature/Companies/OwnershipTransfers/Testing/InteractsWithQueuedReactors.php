@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\OwnershipTransfers\Testing;
 use Illuminate\Support\Facades\Queue;
 use Spatie\EventSourcing\Projectionist;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Testing\Fakes\QueueFake;
 use Spatie\EventSourcing\StoredEvents\HandleStoredEventJob;
 
 /**
@@ -45,7 +46,13 @@ trait InteractsWithQueuedReactors
      */
     protected function runQueuedHandlersFor(string $eventClass): void
     {
-        Queue::pushed(HandleStoredEventJob::class)
+        $queue = Queue::getFacadeRoot();
+
+        if (! $queue instanceof QueueFake) {
+            self::fail('Queue::fake() must be armed before draining queued handler jobs.');
+        }
+
+        $queue->pushed(HandleStoredEventJob::class)
             ->filter(fn (HandleStoredEventJob $job): bool => $job->storedEvent->event_class === $eventClass)
             ->each(fn (HandleStoredEventJob $job) => $job->handle(app(Projectionist::class)));
     }
