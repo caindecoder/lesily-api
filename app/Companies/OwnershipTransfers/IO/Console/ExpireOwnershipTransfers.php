@@ -5,6 +5,7 @@ namespace App\Companies\OwnershipTransfers\IO\Console;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Console\Attributes\Signature;
+use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Console\Attributes\Description;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\ExpireStaleOwnershipTransfersInteractor;
 
@@ -16,7 +17,10 @@ use App\Companies\OwnershipTransfers\UseCases\Interactors\ExpireStaleOwnershipTr
  * takes no options and always runs at `now()` — and it makes the cutoff explicit
  * so a night the scheduler missed can be replayed at the instant it should have
  * used. That cutoff is threaded all the way to the recorded event, so a replay
- * stamps the expiry when it was due rather than when the catch-up ran.
+ * stamps the expiry when it was due rather than when the catch-up ran. The
+ * option is guarded here, at the parsing boundary (Task R1, ruling R8): a
+ * malformed cutoff is refused with a clear message instead of an uncaught
+ * Carbon throw.
  *
  * No `Command` suffix, deliberately (ruling M5): both built scans and both
  * LeaveDates analogs name theirs `ExpireX`, and the suffix would sit this class
@@ -28,7 +32,15 @@ class ExpireOwnershipTransfers extends Command
 {
     public function handle(ExpireStaleOwnershipTransfersInteractor $interactor): int
     {
-        $expired = $interactor->execute(CarbonImmutable::parse($this->option('date')));
+        try {
+            $cutoff = CarbonImmutable::parse($this->option('date'));
+        } catch (InvalidFormatException) {
+            $this->error("'{$this->option('date')}' is not a valid date/time; nothing was scanned.");
+
+            return self::FAILURE;
+        }
+
+        $expired = $interactor->execute($cutoff);
 
         $this->info("{$expired} transfer(s) expired.");
 

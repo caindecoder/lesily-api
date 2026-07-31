@@ -94,6 +94,42 @@ class ExpireStaleOwnershipTransfersTest extends OwnershipTransfersTestCase
         ];
     }
 
+    // Sad (F-c, ruling R8) — the replay option is an operator surface, and a
+    // cutoff Carbon cannot parse is refused at the boundary with a clear message
+    // instead of an uncaught InvalidFormatException. The overdue row in the
+    // arrangement is load-bearing: it proves the refusal short-circuits before
+    // the interactor ever selects, not merely that the error prints.
+    //
+    // Rollover strings ('2026-02-30') are deliberately NOT rows here: DateTime
+    // parses them by rolling the calendar over, so the guard refuses exactly
+    // what Carbon refuses — documenting that boundary rather than inventing a
+    // stricter one nothing else enforces.
+    #[Test]
+    #[DataProvider('provideMalformedCutoffs')]
+    public function when_the_scan_is_replayed_at_a_malformed_cutoff_then_it_refuses_to_run(string $cutoff): void
+    {
+        // Given a requested transfer whose window has already elapsed
+        $transfer = $this->anOverdueRequestedTransfer();
+
+        // When the scan is replayed at a cutoff that is not a date
+        $command = $this->runExpiryScan($cutoff);
+
+        // Then it refuses to run and the overdue transfer is untouched
+        $command->expectsOutputToContain('is not a valid date')->assertFailed();
+        $this->assertTransferUnchanged($transfer);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function provideMalformedCutoffs(): array
+    {
+        return [
+            'garbage text' => ['not-a-date'],
+            'an impossible calendar date' => ['2026-13-45'],
+        ];
+    }
+
     // Sad — a transfer still inside its 30-day window is not due, so the daily
     // scan selects nothing and the request stays open (the `<` cutoff excludes it).
     #[Test]
