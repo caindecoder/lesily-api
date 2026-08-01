@@ -25,6 +25,7 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Reactors\NewOwnerNotificationReactor;
+use App\Companies\OwnershipTransfers\Reactors\OwnershipTransferAuditReactor;
 use Spatie\EventSourcing\AggregateRoots\Exceptions\CouldNotPersistAggregate;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipReceivedNotification;
@@ -800,6 +801,51 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
 
         // Then it fails, and NOTHING the earlier projectors wrote survived —
         // including the stored event itself, which is inside the transaction
+        $response->assertStatus(500);
+        $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Verified);
+    }
+
+    /**
+     * BORN-GREEN CHARACTERIZATION PIN, declared (the OQ-1-155/R7 precedent):
+     * the audit reactor has vetoed in-transaction since T1, so this row cannot
+     * RED against current production. It pins the SECOND direction of
+     * UC-1-093's Minimal Guarantee — the R5 row proves the audit write comes
+     * BEFORE any queued job; this one proves a FAILING audit write takes the
+     * whole transfer down with it (OQ-1-141: no action without evidence).
+     *
+     * Its honest boundary, stated: the bound double replaces the reactor's
+     * method wholesale, so what this row pins is the PIPELINE that delivers
+     * the veto — the reactor synchronous, inside the transaction, with
+     * `catch_exceptions=false` rethrowing. It cannot see a future try/catch
+     * INSIDE the real reactor's arm (that temptation is near: R2 just made
+     * "a side effect must not undo the decision" the module's theme, and the
+     * audit reactor is the one place the opposite holds — the R5 pin's
+     * docblock carries that warning). Teeth: the revert-check recorded in the
+     * commit — flipping `event-sourcing.catch_exceptions` to true REDs this
+     * row (200, swap committed, no evidence), the same config coupling the
+     * F-b isolation row pins inline.
+     */
+    #[Test]
+    public function when_the_audit_write_fails_then_the_transfer_is_not_executed(): void
+    {
+        // Given a verified transfer, and an audit writer that fails at the
+        // moment of evidence
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+
+        $this->app->bind(OwnershipTransferAuditReactor::class, fn (): OwnershipTransferAuditReactor => new class extends OwnershipTransferAuditReactor
+        {
+            public function onOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
+            {
+                throw new RuntimeException('induced audit-write failure');
+            }
+        });
+
+        // When the execution runs
+        $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the audit failure VETOES the transfer — no surface survives
         $response->assertStatus(500);
         $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Verified);
     }
