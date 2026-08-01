@@ -24,6 +24,13 @@ trait InteractsWithQueuedReactors
      * The $eventClass's handler job was pushed and $notificationClass was NOT
      * sent inline — the deferred posture, grouped (§2.2 Rule 2).
      *
+     * Scope note (review, all four passes): the job-pushed prong is
+     * EVENT-scoped, not reactor-scoped — on a multi-reactor event any queued
+     * sibling satisfies it. Per-reactor teeth come from the not-sent-inline
+     * prong PAIRED with the class's pre-existing positive delivery row; a
+     * deferred row whose positive twin is deleted degrades to near-vacuous
+     * silently.
+     *
      * @param  class-string  $eventClass
      * @param  class-string  $notificationClass
      */
@@ -37,10 +44,17 @@ trait InteractsWithQueuedReactors
     }
 
     /**
-     * Execute every captured handler job for $eventClass the way a worker
-     * would — outside any transaction, after the write committed. This is the
-     * delivery-time simulation the staleness-guard and reactor-failure rows
-     * are built on.
+     * Execute every captured handler job for $eventClass — the delivery-time
+     * simulation the staleness-guard and reactor-failure rows are built on.
+     *
+     * Its honest scope, stated (review, three passes): the drain runs after
+     * the INTERACTOR's transaction closed and the request returned — under
+     * RefreshDatabase the test wrapper transaction is still open, so
+     * "committed" is savepoint release — and it replays the same in-memory
+     * job object, so a real worker's serialize/deserialize round trip is NOT
+     * exercised here. Production deferral itself rests on the database
+     * connection's `after_commit => true`, pinned app-level by
+     * EmailVerificationTest's after-commit contract row.
      *
      * @param  class-string  $eventClass
      */

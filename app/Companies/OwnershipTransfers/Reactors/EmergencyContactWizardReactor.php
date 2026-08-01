@@ -38,7 +38,10 @@ use App\Companies\OwnershipTransfers\IO\Notifications\EmergencyContactRequiredNo
  * `lockForUpdate()` reads (ruling P16: `lockedCompany()` + `liveMembership()`
  * on both pivots), verified at the R2 pre-flight. A pivot row that vanishes
  * AFTER the locks released stays loud here: findOrFail in a worker fails the
- * job into failed_jobs rather than silently skipping the §S10b obligation.
+ * job into failed_jobs rather than silently skipping the §S10b obligation —
+ * at the fan-out cost OQ-1-160 records: the Executed reactors share ONE
+ * handler job, so this throw also starves any sibling that had not yet run,
+ * and a `queue:retry` re-runs the siblings that already sent.
  */
 class EmergencyContactWizardReactor extends Reactor implements ShouldQueue
 {

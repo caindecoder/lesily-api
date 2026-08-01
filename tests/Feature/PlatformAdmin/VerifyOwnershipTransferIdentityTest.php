@@ -517,41 +517,8 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->assertStampedAt($frozen);
     }
 
-    // Happy — the T2 walk: the record is captured, the transfer moves to
-    // Verified, and the projection mirrors it.
-    #[Test]
-    public function when_a_platform_admin_verifies_a_requested_transfer_then_the_identity_is_verified(): void
-    {
-        // Given a transfer awaiting verification and the admin reviewing it
-        $this->arrangeVerifiableTransfer();
-
-        // When the admin submits the verification record
-        $response = $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
-
-        // Then the transfer is verified and the record is projected verbatim
-        $this->assertVerificationAccepted($response);
-        $this->assertIdentityVerifiedEventRecorded();
-        $this->assertProjectionMirrorsVerification();
-        $this->assertDeadlineMovedToTheVerifiedWindow(14);
-        $this->assertExecutionQueueAlerted();
-        $this->assertVerificationAudited();
-    }
-
-    #[Test]
-    public function when_a_transfer_is_verified_then_the_admin_alert_is_queued_not_sent_inline(): void
-    {
-        // Given a verifiable transfer with the queue captured
-        $this->arrangeVerifiableTransfer();
-        Queue::fake();
-
-        // When the admin submits the verification record
-        $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
-
-        // Then the execution-queue alert rides the queued handler job instead
-        // of sending inline (CD `Queued.` conformance — OQ-1-153/Task R2)
-        $this->assertReactorDeferred(OwnershipTransferIdentityVerified::class, OwnershipTransferVerifiedNotification::class);
-    }
-
+    // Edge — delivery-time staleness (ruling Q2): the alert job outlives the
+    // fact it announces; the guard re-reads at delivery and skips LOUDLY.
     #[Test]
     public function when_the_transfer_left_verified_before_the_admin_alert_job_runs_then_no_stale_alert_is_sent(): void
     {
@@ -609,6 +576,41 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
 
         // Then no stale alert goes out and the skip is reported
         $this->assertStaleAlertSkippedLoudly();
+    }
+
+    // Happy — the T2 walk: the record is captured, the transfer moves to
+    // Verified, and the projection mirrors it.
+    #[Test]
+    public function when_a_platform_admin_verifies_a_requested_transfer_then_the_identity_is_verified(): void
+    {
+        // Given a transfer awaiting verification and the admin reviewing it
+        $this->arrangeVerifiableTransfer();
+
+        // When the admin submits the verification record
+        $response = $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+
+        // Then the transfer is verified and the record is projected verbatim
+        $this->assertVerificationAccepted($response);
+        $this->assertIdentityVerifiedEventRecorded();
+        $this->assertProjectionMirrorsVerification();
+        $this->assertDeadlineMovedToTheVerifiedWindow(14);
+        $this->assertExecutionQueueAlerted();
+        $this->assertVerificationAudited();
+    }
+
+    #[Test]
+    public function when_a_transfer_is_verified_then_the_admin_alert_is_queued_not_sent_inline(): void
+    {
+        // Given a verifiable transfer with the queue captured
+        $this->arrangeVerifiableTransfer();
+        Queue::fake();
+
+        // When the admin submits the verification record
+        $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+
+        // Then the execution-queue alert rides the queued handler job instead
+        // of sending inline (CD `Queued.` conformance — OQ-1-153/Task R2)
+        $this->assertReactorDeferred(OwnershipTransferIdentityVerified::class, OwnershipTransferVerifiedNotification::class);
     }
 
     #[Test]

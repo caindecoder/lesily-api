@@ -851,6 +851,57 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * The OQ-1-157 polarity row — the obligation the whole of Task R2 exists
+     * to make true: a side effect may fail; it may NOT un-decide the domain
+     * decision it reacts to. Before R2 this was FALSE as built (a notification
+     * reactor's throw inside the transaction rolled back an authorised
+     * transfer and answered 404); SD-1-02 §5.1's invariant row said so and
+     * named this task. Born-green against the post-flip production, declared:
+     * its teeth are the lap-12 revert-check — stripping ShouldQueue from the
+     * induced reactor REDs the row at fail(), because the failure can then no
+     * longer surface after commit at all (it never leaves the transaction).
+     */
+    #[Test]
+    public function when_a_queued_reactor_fails_after_the_transfer_commits_then_the_transfer_is_not_undone(): void
+    {
+        // Given an executed transfer whose write surfaces are all committed
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        Queue::fake();
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
+        $this->assertExecutionAudited($transfer, $admin);
+
+        // ... and a reactor that will fail at delivery (the P8 container seam)
+        $this->app->bind(NewOwnerNotificationReactor::class, fn (): NewOwnerNotificationReactor => new class extends NewOwnerNotificationReactor
+        {
+            public function onOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
+            {
+                throw new RuntimeException('Induced reactor failure after commit (OQ-1-157).');
+            }
+        });
+
+        // When the queued handlers run, the failure surfaces as a failed job
+        // (catch_exceptions=false — the worker's retry/failed_jobs path), and
+        // post-throw state is asserted per §2.2 Rule 9
+        try {
+            $this->runQueuedHandlersFor(OwnershipTransferExecuted::class);
+            $this->fail('The induced reactor failure should have propagated out of the handler job.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Induced reactor failure after commit (OQ-1-157).', $exception->getMessage());
+        }
+
+        // Then the committed transfer survives its side-effect's failure —
+        // and the fan-out truth is characterized rather than hidden (review
+        // finding, all four passes; OQ-1-160): the reactors share ONE job, so
+        // the sibling behind the failure is STARVED. OldOwner sorts after
+        // NewOwner in discovery order, so its notice never goes out; retrying
+        // the failed job would also re-run the siblings that already sent.
+        $this->assertTransferSurvivedReactorFailure($transfer);
+        Notification::assertSentTimes(OwnershipTransferredAwayNotification::class, 0);
+    }
+
+    /**
      * The order in which $tables were first WRITTEN, read off the query log.
      *
      * Write-only on purpose: the interactor SELECTs `companies` and
@@ -1627,6 +1678,39 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * The delivery-instant half of the wizard's documented semantics (review
+     * fix, test-analyzer 3.4): the short-circuit evaluates when the prompt
+     * would LAND, not at the execution instant. At execution the contact was
+     * absent, so an implementation reading an execution-time snapshot (e.g. a
+     * payload field) would prompt — and RED this row. Born-green against the
+     * fresh-pivot-read production, declared; the remove-the-short-circuit
+     * revert-check is recorded in the commit.
+     */
+    #[Test]
+    public function when_the_new_owner_sets_a_contact_before_the_prompt_job_runs_then_no_prompt_is_sent(): void
+    {
+        // Given an executed transfer whose prompt job is captured, with the
+        // incoming owner lacking a contact at execution time
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $target = User::query()->findOrFail($transfer->target_user_id);
+        Queue::fake();
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
+
+        // ... and the new owner sets their contact before delivery
+        $this->withEmergencyContact($company, $target);
+
+        // When the queued handlers run at delivery time
+        $this->runQueuedHandlersFor(OwnershipTransferExecuted::class);
+
+        // Then no prompt is sent — the sibling notice doubles as the proof
+        // the drain genuinely delivered this event's job
+        Notification::assertSentTimes(EmergencyContactRequiredNotification::class, 0);
+        Notification::assertSentTo($target, OwnershipReceivedNotification::class);
+    }
+
+    /**
      * BORN-GREEN CHARACTERIZATION PIN, declared as such (the OQ-1-155/R7
      * precedent): the audit reactor has been synchronous since T1, so this row
      * cannot RED against current production. It exists to make ruling R5
@@ -1651,51 +1735,6 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
         // Then the audit record is already durable with NO queued job having
         // run — the audit write rides the transaction, not the queue (R5)
         $this->assertExecutionAudited($transfer, $admin);
-    }
-
-    /**
-     * The OQ-1-157 polarity row — the obligation the whole of Task R2 exists
-     * to make true: a side effect may fail; it may NOT un-decide the domain
-     * decision it reacts to. Before R2 this was FALSE as built (a notification
-     * reactor's throw inside the transaction rolled back an authorised
-     * transfer and answered 404); SD-1-02 §5.1's invariant row said so and
-     * named this task. Born-green against the post-flip production, declared:
-     * its teeth are the lap-12 revert-check — stripping ShouldQueue from the
-     * induced reactor REDs the row at fail(), because the failure can then no
-     * longer surface after commit at all (it never leaves the transaction).
-     */
-    #[Test]
-    public function when_a_queued_reactor_fails_after_the_transfer_commits_then_the_transfer_is_not_undone(): void
-    {
-        // Given an executed transfer whose write surfaces are all committed
-        [$company, $owner] = $this->aCompanyWithOwner();
-        $admin = $this->anAllowlistedAdmin();
-        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
-        Queue::fake();
-        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
-        $this->assertExecutionAudited($transfer, $admin);
-
-        // ... and a reactor that will fail at delivery (the P8 container seam)
-        $this->app->bind(NewOwnerNotificationReactor::class, fn (): NewOwnerNotificationReactor => new class extends NewOwnerNotificationReactor
-        {
-            public function onOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
-            {
-                throw new RuntimeException('Induced reactor failure after commit (OQ-1-157).');
-            }
-        });
-
-        // When the queued handlers run, the failure surfaces as a failed job
-        // (catch_exceptions=false — the worker's retry/failed_jobs path), and
-        // post-throw state is asserted per §2.2 Rule 9
-        try {
-            $this->runQueuedHandlersFor(OwnershipTransferExecuted::class);
-            $this->fail('The induced reactor failure should have propagated out of the handler job.');
-        } catch (RuntimeException $exception) {
-            $this->assertSame('Induced reactor failure after commit (OQ-1-157).', $exception->getMessage());
-        }
-
-        // Then the committed transfer survives its side-effect's failure
-        $this->assertTransferSurvivedReactorFailure($transfer);
     }
 
     /**

@@ -31,8 +31,9 @@ use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as Owne
  * projector failure can still leave one row divergent (stream `Expired`,
  * projection not) — caught PER ROW below (F-b, Task R1), reported, and the
  * batch continues; the divergent row replays as `Expired`, so a re-selection
- * no-ops. The module-wide synchronous-reactor posture is Task R2's question
- * (OQ-1-153); E-f landed at Task 8.
+ * no-ops. The module's notification reactors queue since Task R2 (OQ-1-153
+ * answered — only the audit reactor stays synchronous, by R5); E-f landed at
+ * Task 8.
  */
 class ExpireStaleOwnershipTransfersInteractor
 {
