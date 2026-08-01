@@ -52,8 +52,13 @@ trait InteractsWithQueuedReactors
             self::fail('Queue::fake() must be armed before draining queued handler jobs.');
         }
 
-        $queue->pushed(HandleStoredEventJob::class)
-            ->filter(fn (HandleStoredEventJob $job): bool => $job->storedEvent->event_class === $eventClass)
-            ->each(fn (HandleStoredEventJob $job) => $job->handle(app(Projectionist::class)));
+        $jobs = $queue->pushed(HandleStoredEventJob::class)
+            ->filter(fn (HandleStoredEventJob $job): bool => $job->storedEvent->event_class === $eventClass);
+
+        if ($jobs->isEmpty()) {
+            self::fail("No captured HandleStoredEventJob matches {$eventClass} — nothing to drain (find-nothing guard).");
+        }
+
+        $jobs->each(fn (HandleStoredEventJob $job) => $job->handle(app(Projectionist::class)));
     }
 }

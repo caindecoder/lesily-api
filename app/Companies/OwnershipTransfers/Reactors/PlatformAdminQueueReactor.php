@@ -3,6 +3,7 @@
 namespace App\Companies\OwnershipTransfers\Reactors;
 
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use App\Foundation\Http\Values\PlatformAdminAllowlist;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
@@ -40,6 +41,10 @@ class PlatformAdminQueueReactor extends Reactor implements ShouldQueue
         $transfer = OwnershipTransferRequest::query()->findOrFail($event->requestId);
 
         if ($transfer->status !== OwnershipTransferStatus::Verified) {
+            report(new RuntimeException(
+                "Stale platform-admin alert skipped: transfer {$transfer->getKey()} left verified before delivery (now {$transfer->status->value}).",
+            ));
+
             return;
         }
 
