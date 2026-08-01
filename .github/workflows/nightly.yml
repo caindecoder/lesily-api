@@ -47,7 +47,7 @@ jobs:
       # suite includes Browsershot receipt tests (UC-1-121) — without these steps
       # Infection's initial run fails. The old report-only `|| true` masked exactly
       # that failure nightly since s135 while the job reported success (R-053, s144).
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with: { node-version: '24', cache: 'npm' }
       - name: Cache puppeteer browsers
         uses: actions/cache@v6
