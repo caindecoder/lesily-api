@@ -15,6 +15,19 @@
     // measured cost, still low enough to catch a real infinite loop. CI core
     // count differs from the local 4 threads, so CI's run is the confirmation
     // (amendment H — CI is authoritative for the mutation verdict).
+    //
+    // SECOND sub-class, measured at Task R2 (s164): when a mutant's NOMINAL
+    // covering-test runtime already exceeds this budget, Infection SKIPS it
+    // pre-emptively without ever running it — and skipped mutants are removed
+    // from the MSI denominator, so "MSI 100%" silently means 100% of those
+    // ATTEMPTED. Distinct from the timeout-as-KILL story above (that one
+    // scores; this one stops looking). First seen on the two
+    // SupportQueueNotificationReactor MethodCallRemoval mutants after R2
+    // widened that reactor's covering set past 120s; a one-off timeout-600
+    // run executed both and both were KILLED by tests (recorded s164). When a
+    // scoped run reports skips, read infection.json's skippedCount and
+    // re-verify the skipped set with a raised timeout before trusting the
+    // headline MSI.
     timeout: 120,
     logs: {
         text: "infection.log",

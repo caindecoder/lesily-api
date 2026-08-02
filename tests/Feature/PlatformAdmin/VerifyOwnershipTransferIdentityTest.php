@@ -3,11 +3,14 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -15,7 +18,10 @@ use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
+use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
+use App\Companies\OwnershipTransfers\UseCases\Commands\WithdrawOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferVerifiedNotification;
+use App\Companies\OwnershipTransfers\Aggregates\OwnershipTransferRequest as OwnershipTransferRequestAggregate;
 
 /**
  * SM-1-05 T2 — a platform admin confirms the requester's identity and moves the
@@ -511,6 +517,67 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->assertStampedAt($frozen);
     }
 
+    // Edge — delivery-time staleness (ruling Q2): the alert job outlives the
+    // fact it announces; the guard re-reads at delivery and skips LOUDLY.
+    #[Test]
+    public function when_the_transfer_left_verified_before_the_admin_alert_job_runs_then_no_stale_alert_is_sent(): void
+    {
+        // Given a verified transfer whose T2 alert job is captured on the queue
+        $this->arrangeVerifiableTransfer();
+        Exceptions::fake();
+        Queue::fake();
+        $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+
+        // ... and the transfer leaves `verified` before the job is delivered
+        // (a real T5 rejection through the aggregate — the trait's stream idiom)
+        OwnershipTransferRequestAggregate::retrieve($this->transfer->getKey())
+            ->reject(RejectOwnershipTransferCommand::validateAndCreate([
+                'reason' => 'Identity documents could not be matched to the applicant.',
+                'rejectionReasonCode' => 'identity_failed',
+                'rejectedBy' => $this->admin->getKey(),
+            ]))
+            ->persist();
+
+        // When the queued handler runs at delivery time
+        $this->runQueuedHandlersFor(OwnershipTransferIdentityVerified::class);
+
+        // Then no stale "awaiting execution" alert goes out, and the skip is
+        // REPORTED rather than silent (review fix, the D1/I2 observability
+        // idiom — a dropped admin alert must be countable in Sentry)
+        $this->assertStaleAlertSkippedLoudly();
+    }
+
+    /**
+     * The guard's SHAPE pin: withdrawal is a departure from a different
+     * column family than rejection, so a guard rewritten against any single
+     * terminal column (the review's `rejected_at !== null` neutralization
+     * construction) stays green on the reject row and REDs here. Together the
+     * two departure rows hold the guard to its status-based generality.
+     */
+    #[Test]
+    public function when_the_transfer_was_withdrawn_before_the_admin_alert_job_runs_then_no_stale_alert_is_sent(): void
+    {
+        // Given a verified transfer whose T2 alert job is captured on the queue
+        $this->arrangeVerifiableTransfer();
+        Exceptions::fake();
+        Queue::fake();
+        $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+
+        // ... and the requester withdraws it before the job is delivered (T7)
+        OwnershipTransferRequestAggregate::retrieve($this->transfer->getKey())
+            ->withdraw(WithdrawOwnershipTransferCommand::validateAndCreate([
+                'reason' => 'Owner changed their mind after verification.',
+                'cancelledBy' => $this->transfer->current_owner_user_id,
+            ]))
+            ->persist();
+
+        // When the queued handler runs at delivery time
+        $this->runQueuedHandlersFor(OwnershipTransferIdentityVerified::class);
+
+        // Then no stale alert goes out and the skip is reported
+        $this->assertStaleAlertSkippedLoudly();
+    }
+
     // Happy — the T2 walk: the record is captured, the transfer moves to
     // Verified, and the projection mirrors it.
     #[Test]
@@ -529,6 +596,51 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->assertDeadlineMovedToTheVerifiedWindow(14);
         $this->assertExecutionQueueAlerted();
         $this->assertVerificationAudited();
+    }
+
+    #[Test]
+    public function when_a_transfer_is_verified_then_the_admin_alert_is_queued_not_sent_inline(): void
+    {
+        // Given a verifiable transfer with the queue captured
+        $this->arrangeVerifiableTransfer();
+        Queue::fake();
+
+        // When the admin submits the verification record
+        $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+
+        // Then the execution-queue alert rides the queued handler job instead
+        // of sending inline (CD `Queued.` conformance — OQ-1-153/Task R2)
+        $this->assertReactorDeferred(OwnershipTransferIdentityVerified::class, OwnershipTransferVerifiedNotification::class);
+    }
+
+    #[Test]
+    public function when_the_transfer_is_still_verified_at_delivery_then_the_admin_alert_is_sent(): void
+    {
+        // Given a verified transfer whose T2 alert job is captured on the queue
+        $this->arrangeVerifiableTransfer();
+        Queue::fake();
+        $this->verifyTransfer($this->admin, $this->transfer->getKey(), $this->verificationBody());
+
+        // When the queued handler runs at delivery time with the row unmoved
+        $this->runQueuedHandlersFor(OwnershipTransferIdentityVerified::class);
+
+        // Then the alert IS delivered — the guard's pass branch proven at the
+        // drain seam rather than only via the sync driver's inline run, and
+        // the in-class positive control that the drain matches + executes jobs
+        $this->assertExecutionQueueAlerted();
+    }
+
+    /**
+     * The Q2 skip's two observable halves: nobody was alerted, and the skip
+     * left a report naming the transfer (ruling Q2 + the review's F7 —
+     * a silent skip is invisible in production).
+     */
+    private function assertStaleAlertSkippedLoudly(): void
+    {
+        Notification::assertSentTimes(OwnershipTransferVerifiedNotification::class, 0);
+        Exceptions::assertReported(
+            fn (RuntimeException $exception): bool => str_contains($exception->getMessage(), $this->transfer->getKey()),
+        );
     }
 
     private Company $company;

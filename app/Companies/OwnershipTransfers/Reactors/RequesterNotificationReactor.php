@@ -3,6 +3,7 @@
 namespace App\Companies\OwnershipTransfers\Reactors;
 
 use App\Models\User;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
@@ -27,10 +28,17 @@ use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferRejectedN
  * decision that was never theirs (UC-1-128 stakeholders).
  *
  * Reading the transfer row here is safe despite amendment N: T3/T5 is a
- * single-aggregate write and this event's own projector runs before its reactors,
- * so the row is committed and current by the time we look.
+ * single-aggregate write and this event's own projector runs before its
+ * reactors, so the row is committed by the time we look. Queued (ShouldQueue,
+ * Task R2 — CD `Queued.` conformance), and delivery-time staleness is benign
+ * here BY the states involved: both handled events land the row in a TERMINAL
+ * state (rejected / expired), which no built flow moves again, and
+ * `current_owner_user_id` records the requester at T1 — the projector never
+ * rewrites it after the terminal transition. Contrast
+ * PlatformAdminQueueReactor, whose alert asserts a live claim and carries the
+ * Q2 delivery-time guard.
  */
-class RequesterNotificationReactor extends Reactor
+class RequesterNotificationReactor extends Reactor implements ShouldQueue
 {
     public function onOwnershipTransferRejected(OwnershipTransferRejected $event): void
     {

@@ -10,6 +10,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Notification;
@@ -23,6 +24,8 @@ use App\Companies\OwnershipTransfers\UseCases\Values\OwnershipSwap;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
+use App\Companies\OwnershipTransfers\Reactors\NewOwnerNotificationReactor;
+use App\Companies\OwnershipTransfers\Reactors\OwnershipTransferAuditReactor;
 use Spatie\EventSourcing\AggregateRoots\Exceptions\CouldNotPersistAggregate;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipReceivedNotification;
@@ -803,6 +806,106 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
     }
 
     /**
+     * BORN-GREEN CHARACTERIZATION PIN, declared (the OQ-1-155/R7 precedent):
+     * the audit reactor has vetoed in-transaction since T1, so this row cannot
+     * RED against current production. It pins the SECOND direction of
+     * UC-1-093's Minimal Guarantee — the R5 row proves the audit write comes
+     * BEFORE any queued job; this one proves a FAILING audit write takes the
+     * whole transfer down with it (OQ-1-141: no action without evidence).
+     *
+     * Its honest boundary, stated: the bound double replaces the reactor's
+     * method wholesale, so what this row pins is the PIPELINE that delivers
+     * the veto — the reactor synchronous, inside the transaction, with
+     * `catch_exceptions=false` rethrowing. It cannot see a future try/catch
+     * INSIDE the real reactor's arm (that temptation is near: R2 just made
+     * "a side effect must not undo the decision" the module's theme, and the
+     * audit reactor is the one place the opposite holds — the R5 pin's
+     * docblock carries that warning). Teeth: the revert-check recorded in the
+     * commit — flipping `event-sourcing.catch_exceptions` to true REDs this
+     * row (200, swap committed, no evidence), the same config coupling the
+     * F-b isolation row pins inline.
+     */
+    #[Test]
+    public function when_the_audit_write_fails_then_the_transfer_is_not_executed(): void
+    {
+        // Given a verified transfer, and an audit writer that fails at the
+        // moment of evidence
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+
+        $this->app->bind(OwnershipTransferAuditReactor::class, fn (): OwnershipTransferAuditReactor => new class extends OwnershipTransferAuditReactor
+        {
+            public function onOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
+            {
+                throw new RuntimeException('induced audit-write failure');
+            }
+        });
+
+        // When the execution runs
+        $response = $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the audit failure VETOES the transfer — no surface survives
+        $response->assertStatus(500);
+        $this->assertNoWriteSurvived($transfer, OwnershipTransferStatus::Verified);
+    }
+
+    /**
+     * The OQ-1-157 polarity row — the obligation the whole of Task R2 exists
+     * to make true: a side effect may fail; it may NOT un-decide the domain
+     * decision it reacts to. Before R2 this was FALSE as built (a notification
+     * reactor's throw inside the transaction rolled back an authorised
+     * transfer and answered 404); SD-1-02 §5.1's invariant row said so and
+     * named this task. Born-green against the post-flip production, declared:
+     * its teeth are the lap-12 revert-check — stripping ShouldQueue from the
+     * induced reactor REDs the row at fail(), because the failure can then no
+     * longer surface after commit at all (it never leaves the transaction).
+     */
+    #[Test]
+    public function when_a_queued_reactor_fails_after_the_transfer_commits_then_the_transfer_is_not_undone(): void
+    {
+        // Given an executed transfer whose write surfaces are all committed
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        Queue::fake();
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
+        $this->assertExecutionAudited($transfer, $admin);
+
+        // ... and a reactor that will fail at delivery (the P8 container seam)
+        $this->app->bind(NewOwnerNotificationReactor::class, fn (): NewOwnerNotificationReactor => new class extends NewOwnerNotificationReactor
+        {
+            public function onOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
+            {
+                throw new RuntimeException('Induced reactor failure after commit (OQ-1-157).');
+            }
+        });
+
+        // When the queued handlers run, the failure surfaces as a failed job
+        // (catch_exceptions=false — the worker's retry/failed_jobs path), and
+        // post-throw state is asserted per §2.2 Rule 9
+        try {
+            $this->runQueuedHandlersFor(OwnershipTransferExecuted::class);
+            $this->fail('The induced reactor failure should have propagated out of the handler job.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Induced reactor failure after commit (OQ-1-157).', $exception->getMessage());
+        }
+
+        // Then the committed transfer survives its side-effect's failure, at
+        // the cost of the failing reactor's own notice — the fan-out truth
+        // (review finding, all four passes; OQ-1-160): the reactors share ONE
+        // job, so siblings BEHIND the failure are starved too and a retry
+        // re-runs the ones that already sent. WHICH sibling starves is
+        // filesystem-discovery order, undeclared and platform-dependent —
+        // proven by this row's own history: a starved-OldOwner assert held on
+        // Windows and REDDED on Linux CI, fresh evidence for OQ-1-160's
+        // declare-the-order recommendation. Asserted here is only the
+        // order-independent half.
+        $this->assertTransferSurvivedReactorFailure($transfer);
+        Notification::assertSentTimes(OwnershipReceivedNotification::class, 0);
+    }
+
+    /**
      * The order in which $tables were first WRITTEN, read off the query log.
      *
      * Write-only on purpose: the interactor SELECTs `companies` and
@@ -1524,5 +1627,132 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             fn (OwnershipReceivedNotification $notification): bool => $notification->toArray($target)['title'] === 'You are now the owner'
                 && str_contains($notification->toArray($target)['body'], $company->name),
         );
+    }
+
+    #[Test]
+    public function when_a_transfer_is_executed_then_the_old_owner_notice_is_queued_not_sent_inline(): void
+    {
+        // Given a verified transfer ready to execute, with the queue captured
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        Queue::fake();
+
+        // When an allowlisted admin executes it
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the old-owner notice rides the queued handler job instead of
+        // sending inline (CD `Queued.` conformance — OQ-1-153/Task R2)
+        $this->assertReactorDeferred(OwnershipTransferExecuted::class, OwnershipTransferredAwayNotification::class);
+    }
+
+    #[Test]
+    public function when_a_transfer_is_executed_then_the_new_owner_notice_is_queued_not_sent_inline(): void
+    {
+        // Given a verified transfer ready to execute, with the queue captured
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        Queue::fake();
+
+        // When an allowlisted admin executes it
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the new-owner notice rides the queued handler job instead of
+        // sending inline (CD `Queued.` conformance — OQ-1-153/Task R2)
+        $this->assertReactorDeferred(OwnershipTransferExecuted::class, OwnershipReceivedNotification::class);
+    }
+
+    #[Test]
+    public function when_a_transfer_is_executed_then_the_emergency_contact_prompt_is_queued_not_sent_inline(): void
+    {
+        // Given a verified transfer whose incoming owner has no emergency
+        // contact yet, with the queue captured
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        Queue::fake();
+
+        // When an allowlisted admin executes it
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the wizard prompt rides the queued handler job instead of
+        // sending inline (CD `Queued.` conformance — OQ-1-153/Task R2)
+        $this->assertReactorDeferred(OwnershipTransferExecuted::class, EmergencyContactRequiredNotification::class);
+    }
+
+    /**
+     * The delivery-instant half of the wizard's documented semantics (review
+     * fix, test-analyzer 3.4): the short-circuit evaluates when the prompt
+     * would LAND, not at the execution instant. At execution the contact was
+     * absent, so an implementation reading an execution-time snapshot (e.g. a
+     * payload field) would prompt — and RED this row. Born-green against the
+     * fresh-pivot-read production, declared; the remove-the-short-circuit
+     * revert-check is recorded in the commit.
+     */
+    #[Test]
+    public function when_the_new_owner_sets_a_contact_before_the_prompt_job_runs_then_no_prompt_is_sent(): void
+    {
+        // Given an executed transfer whose prompt job is captured, with the
+        // incoming owner lacking a contact at execution time
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        $target = User::query()->findOrFail($transfer->target_user_id);
+        Queue::fake();
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody())->assertOk();
+
+        // ... and the new owner sets their contact before delivery
+        $this->withEmergencyContact($company, $target);
+
+        // When the queued handlers run at delivery time
+        $this->runQueuedHandlersFor(OwnershipTransferExecuted::class);
+
+        // Then no prompt is sent — the sibling notice doubles as the proof
+        // the drain genuinely delivered this event's job
+        Notification::assertSentTimes(EmergencyContactRequiredNotification::class, 0);
+        Notification::assertSentTo($target, OwnershipReceivedNotification::class);
+    }
+
+    /**
+     * BORN-GREEN CHARACTERIZATION PIN, declared as such (the OQ-1-155/R7
+     * precedent): the audit reactor has been synchronous since T1, so this row
+     * cannot RED against current production. It exists to make ruling R5
+     * mechanical — spatie replays projectors but never reactors, audit_trail
+     * is an append-only PDPA §12 record, and its write must be able to veto
+     * the transfer it evidences (OQ-1-141: no action without evidence). Teeth:
+     * the lap-11 revert-check recorded in the commit — adding ShouldQueue to
+     * OwnershipTransferAuditReactor REDs this row.
+     */
+    #[Test]
+    public function when_a_transfer_is_executed_then_the_audit_row_is_written_before_any_queued_job_runs(): void
+    {
+        // Given a verified transfer ready to execute, with the queue captured
+        [$company, $owner] = $this->aCompanyWithOwner();
+        $admin = $this->anAllowlistedAdmin();
+        $transfer = $this->aVerifiedTransferStream($company, $owner, $admin);
+        Queue::fake();
+
+        // When an allowlisted admin executes it
+        $this->executeTransfer($admin, $transfer->getKey(), self::executionBody());
+
+        // Then the audit record is already durable with NO queued job having
+        // run — the audit write rides the transaction, not the queue (R5)
+        $this->assertExecutionAudited($transfer, $admin);
+    }
+
+    /**
+     * The three surfaces a rolled-back transfer would lose, still intact after
+     * a delivery-time reactor failure: the terminal status, the swapped
+     * `companies.owner_id`, and the executed audit record (the T1 + T2 + T4
+     * rows the subject-scoped count pins).
+     */
+    private function assertTransferSurvivedReactorFailure(OwnershipTransferRequest $transfer): void
+    {
+        $current = $this->currentTransfer($transfer);
+
+        $this->assertSame(OwnershipTransferStatus::Executed, $current->status);
+        $this->assertSame($transfer->target_user_id, Company::query()->findOrFail($current->company_id)->owner_id);
+        $this->assertSame(3, AuditEntry::query()->where('subject_id', $transfer->getKey())->count());
     }
 }

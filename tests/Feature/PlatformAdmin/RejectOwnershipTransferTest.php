@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Notifications\ChannelManager;
@@ -561,24 +562,24 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
      * DEFERRED to the queue rather than sent inline, so a dead SMTP transport
      * cannot reach the request at all.
      *
-     * What is NOT proven, and what the previous wording ("pinned at the one place
-     * we own it") wrongly implied was covered: `config/event-sourcing.php` sets
-     * `catch_exceptions` to false and no env file overrides it, so a THROWING
-     * REACTOR propagates out of `persist()`. Three DB writes still sit in the
-     * request path — the `database` channel's `notifications` insert, the
-     * `jobs` insert behind `Mail::to()->queue()`, and the audit reactor's
-     * `audit_trail` insert. If any of those fails the event and projection are
-     * already committed, the admin gets a 5xx, and their retry meets the 409 state
-     * guard: a contradictory pair from which they cannot tell whether their own
-     * action landed. `Notification::fake()` plus the `sync` queue means nothing in
-     * this suite can observe it. That gap is project-wide (every notification
-     * reactor in the repo shares it) and is routed to the backlog, not fixed here.
+     * Since Task R2 queued RequesterNotificationReactor, the notification's
+     * own DB writes — the `database` channel's insert and the `jobs` insert
+     * behind `Mail::to()->queue()` — left the request path too: they ride the
+     * HandleStoredEventJob dispatched after the sync handlers run. What
+     * REMAINS in the request path is the audit reactor's `audit_trail`
+     * insert, deliberately (R5/OQ-1-141: an audit failure must veto the write
+     * it evidences). The paragraph that stood here — "three DB writes still
+     * sit in the request path … routed to the backlog, not fixed here" —
+     * described the pre-R2 posture; R2 was that fix, and this class's
+     * deferred-posture row pins it.
      *
-     * That second fact is a channel choice, and swapping QueuedMailChannel for
-     * Laravel's synchronous `mail` channel would silently undo it — in production,
-     * where the queue is the database driver, a rejection would then 500 after the
-     * event was already committed and the admin would be told their successful
-     * rejection failed. Nothing else in the suite would notice.
+     * The channel choice still matters one layer down: swapping
+     * QueuedMailChannel for the synchronous `mail` channel would couple the
+     * mail transport to the handler job, so a dead SMTP would fail the job
+     * AFTER the in-app row landed — failed_jobs noise and retry
+     * double-inserts (OQ-1-160) rather than the request-path 500 that R2 made
+     * impossible for this leg. Nothing else in the suite would notice the
+     * swap.
      *
      * Deliberately NOT written as "make the transport throw and assert the rejection
      * stands": tests run on the `sync` queue (phpunit.xml), where `queue()` sends
@@ -879,6 +880,21 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
         $this->assertSlaTimerCleared();
         $this->assertRequesterNotifiedWithTheReason();
         $this->assertRejectionAudited();
+    }
+
+    #[Test]
+    public function when_a_transfer_is_rejected_then_the_requester_notice_is_queued_not_sent_inline(): void
+    {
+        // Given a transfer awaiting review with the queue captured
+        $this->arrangeRejectableTransfer();
+        Queue::fake();
+
+        // When the admin submits the rejection record
+        $this->rejectTransfer($this->admin, $this->transfer->getKey(), self::rejectionBody());
+
+        // Then the requester notice rides the queued handler job instead of
+        // sending inline (CD `Queued.` conformance — OQ-1-153/Task R2)
+        $this->assertReactorDeferred(OwnershipTransferRejected::class, OwnershipTransferRejectedNotification::class);
     }
 
     /**
