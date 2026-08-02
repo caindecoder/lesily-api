@@ -891,14 +891,18 @@ class ExecuteOwnershipTransferTest extends OwnershipTransferAdminTestCase
             $this->assertSame('Induced reactor failure after commit (OQ-1-157).', $exception->getMessage());
         }
 
-        // Then the committed transfer survives its side-effect's failure —
-        // and the fan-out truth is characterized rather than hidden (review
-        // finding, all four passes; OQ-1-160): the reactors share ONE job, so
-        // the sibling behind the failure is STARVED. OldOwner sorts after
-        // NewOwner in discovery order, so its notice never goes out; retrying
-        // the failed job would also re-run the siblings that already sent.
+        // Then the committed transfer survives its side-effect's failure, at
+        // the cost of the failing reactor's own notice — the fan-out truth
+        // (review finding, all four passes; OQ-1-160): the reactors share ONE
+        // job, so siblings BEHIND the failure are starved too and a retry
+        // re-runs the ones that already sent. WHICH sibling starves is
+        // filesystem-discovery order, undeclared and platform-dependent —
+        // proven by this row's own history: a starved-OldOwner assert held on
+        // Windows and REDDED on Linux CI, fresh evidence for OQ-1-160's
+        // declare-the-order recommendation. Asserted here is only the
+        // order-independent half.
         $this->assertTransferSurvivedReactorFailure($transfer);
-        Notification::assertSentTimes(OwnershipTransferredAwayNotification::class, 0);
+        Notification::assertSentTimes(OwnershipReceivedNotification::class, 0);
     }
 
     /**
