@@ -66,7 +66,7 @@ jobs:
       # Chromium re-download (M3). Node 24 (LTS) bundles npm 11, matching the
       # npm major that wrote package-lock.json — npm 10 rejects the lock's
       # optional @emnapi/* entries with EUSAGE (CI rounds 1-2, s135).
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with: { node-version: '24', cache: 'npm' }
       - name: Cache puppeteer browsers
         uses: actions/cache@v6
@@ -175,7 +175,7 @@ jobs:
       # Chromium re-download (M3). Node 24 (LTS) bundles npm 11, matching the
       # npm major that wrote package-lock.json — npm 10 rejects the lock's
       # optional @emnapi/* entries with EUSAGE (CI rounds 1-2, s135).
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with: { node-version: '24', cache: 'npm' }
       - name: Cache puppeteer browsers
         uses: actions/cache@v6
