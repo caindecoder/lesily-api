@@ -15,20 +15,4 @@ return [
 
     'request_ttl_days' => 30,
 
-    /*
-    |--------------------------------------------------------------------------
-    | Tenant read presentation (UC-1-125/126)
-    |--------------------------------------------------------------------------
-    |
-    | expected_completion_at is a default SLA hint surfaced to the requesting
-    | owner ("within N business days") until real queue-depth metrics exist
-    | (api-1-ownership-transfer §7 OQ #4). The support channel is echoed on an
-    | open (requested) transfer so the owner can follow up between touchpoints.
-    |
-    */
-
-    'completion_business_days' => 5,
-
-    'support_email' => env('OWNERSHIP_TRANSFER_SUPPORT_EMAIL', 'support@lesily.com'),
-
 ];

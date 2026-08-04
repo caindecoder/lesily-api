@@ -92,10 +92,10 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $afterSecond = $this->tableCounts();
 
         // Then every table's row count is stable across runs (idempotent — no duplicates)
-        // 13 permissions / 36 grants since the two transfer-view permissions joined
-        // for owner+admin+auditor (matrix §Module-8, UC-1-125/126 slice-#11 T2):
-        // +2 permissions, +6 grants over the 11/30 that UC-1-028 T1 left (s146).
-        $this->assertSame(['roles' => 8, 'permissions' => 13, 'role_permission' => 36], $afterFirst);
+        // 11 permissions / 30 grants since ownership-transfer.request joined for
+        // owner only (matrix §Module-8, UC-1-028 slice-#11 T1, s146); 10/29 was
+        // payroll_officer's billing.view coming out (F2/D-A, slice-plans-billing T1).
+        $this->assertSame(['roles' => 8, 'permissions' => 11, 'role_permission' => 30], $afterFirst);
         $this->assertSame($afterFirst, $afterSecond);
     }
 
@@ -166,16 +166,16 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         // Then per-role grant counts match the locked matrix, and manager has none
         $expected = [
             'platform_super_admin' => 0,
-            // owner/admin/auditor each +2 for the transfer-view permissions
-            // (matrix §Module-8 view rows, UC-1-125/126, s147). Owner also carries
-            // ownership-transfer.request (UC-1-028, owner-ONLY, s146).
-            'owner' => 13,
-            'admin' => 11,
+            // owner +1 for ownership-transfer.request — owner-ONLY per the matrix
+            // §Module-8 (UC-1-028, s146); before that, owner/admin each +1 for
+            // users.remove (D10, UC-1-024, s113).
+            'owner' => 11,
+            'admin' => 9,
             'hr_officer' => 4,
             // 1 since billing.view came out too (matrix §Module-6 ❌ — F2/D-A,
             // slice-plans-billing T1, s130); users.view left at D-A, s108.
             'payroll_officer' => 1,
-            'auditor' => 6,
+            'auditor' => 4,
             'employee' => 1,
             'manager' => 0,
         ];

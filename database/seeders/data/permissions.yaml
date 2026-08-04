@@ -68,15 +68,3 @@
   name: Request Ownership Transfer
   description: Formally request transfer of company ownership to another member (support-verified before execution).
   module: ownership-transfer
-
-- code: ownership-transfer.view-status
-  id: 0193abcd-2222-7000-8000-00000000000c
-  name: View Ownership Transfer Status
-  description: Read the current lifecycle state of a single ownership-transfer record for the company.
-  module: ownership-transfer
-
-- code: ownership-transfer.view-history
-  id: 0193abcd-2222-7000-8000-00000000000d
-  name: View Ownership Transfer History
-  description: Read the paginated history of the company's ownership-transfer records (all states).
-  module: ownership-transfer
