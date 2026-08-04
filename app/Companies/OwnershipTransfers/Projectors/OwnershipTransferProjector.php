@@ -6,7 +6,6 @@ use Carbon\CarbonImmutable;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
-use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
@@ -23,20 +22,6 @@ use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
  */
 class OwnershipTransferProjector extends Projector
 {
-    /**
-     * First of the four T4 projectors (ruling P4). Global rather than scoped to
-     * OwnershipTransferExecuted because this class is the sole projector on
-     * every other event it handles, so ordering them is a no-op.
-     *
-     * This particular weight is an EQUIVALENT MUTANT and is documented as such
-     * rather than chased: delete the property and `getWeight()` falls back to 0,
-     * which is still strictly less than 20/30/40, so this projector stays first
-     * and the dispatch-order row passes either way. The other three weights are
-     * genuinely killed by that row. Recorded so a future mutation escape here is
-     * recognised instead of "fixed" with a test that pins the literal.
-     */
-    public int $weight = 10;
-
     public function onOwnershipTransferRequested(OwnershipTransferRequested $event): void
     {
         $requestedAt = CarbonImmutable::instance($event->requestedAt);
@@ -118,32 +103,6 @@ class OwnershipTransferProjector extends Projector
             'cancellation_source' => $event->source,
             'next_state_transition_at' => null,
             'updated_by' => $event->cancelledBy,
-        ]);
-    }
-
-    /**
-     * SM-1-05 T4. Terminal, so the execution record and the SLA-timer clear land
-     * in the SAME update — sole-writer shape (ruling G3).
-     *
-     * The forensic old/new-owner pair is stamped from the event payload rather
-     * than re-derived: OQ-1-044 kept these columns precisely so the row
-     * documents the swap that ACTUALLY happened, which a later read of
-     * companies.owner_id could no longer distinguish from a subsequent transfer.
-     *
-     * $weight 10 — first of the four T4 projectors (ruling P4). Projectionist
-     * sorts on getWeight() before dispatch, so registration order is not the
-     * contract.
-     */
-    public function onOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
-    {
-        OwnershipTransferRequest::query()->whereKey($event->requestId)->update([
-            'status' => OwnershipTransferStatus::Executed,
-            'executed_at' => CarbonImmutable::instance($event->executedAt),
-            'executed_by' => $event->executedBy,
-            'old_owner_user_id' => $event->oldOwnerUserId,
-            'new_owner_user_id' => $event->newOwnerUserId,
-            'next_state_transition_at' => null,
-            'updated_by' => $event->executedBy,
         ]);
     }
 

@@ -6,9 +6,7 @@ use Carbon\CarbonImmutable;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\OwnershipTransfers\Enums\TransitionSource;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
-use App\Companies\OwnershipTransfers\UseCases\Values\OwnershipSwap;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
-use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
@@ -16,9 +14,7 @@ use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
 use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
-use App\Companies\OwnershipTransfers\UseCases\Commands\ExecuteOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
-use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotExecutableException;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotRejectableException;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotVerifiableException;
 use App\Companies\OwnershipTransfers\UseCases\Commands\WithdrawOwnershipTransferCommand;
@@ -32,12 +28,7 @@ use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferId
  * carry aggregate state guards (E28).
  *
  * Built: request (T1) · verifyIdentity (T2) · reject (T3/T5) · withdraw (T6/T7)
- * · expireIfStale (T8/T9) · execute (T4).
- *
- * execute() is the only transition taking a second argument: its event carries
- * membership and role ids that no aggregate can resolve, since reading them
- * means reading another aggregate's read model. The interactor resolves them
- * from live state and hands them over as an OwnershipSwap.
+ * · expireIfStale (T8/T9). Still to come: execute (T4, Task 8).
  *
  * One transition refuses differently from the rest: `expireIfStale()` no-ops
  * where the others throw, because its caller is a scheduler with nobody to hand
@@ -46,14 +37,6 @@ use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferId
 class OwnershipTransferRequest extends AggregateRoot
 {
     private ?OwnershipTransferStatus $status = null;
-
-    /**
-     * Captured at T2 so T4 can carry it forward as a pure function of the
-     * STREAM (ruling P18, s162). Reading it from the projection instead made
-     * the one forensic field on the executed payload inherit projection lag —
-     * the O1 divergence class the owner guard already refuses to trust.
-     */
-    private ?string $verificationNotes = null;
 
     /**
      * SM-1-05 T1 genesis. The re-fire guard is Tier-2 of the one-open-request
@@ -111,7 +94,6 @@ class OwnershipTransferRequest extends AggregateRoot
     public function applyOwnershipTransferIdentityVerified(OwnershipTransferIdentityVerified $event): void
     {
         $this->status = OwnershipTransferStatus::Verified;
-        $this->verificationNotes = $event->verificationNotes;
     }
 
     /**
@@ -261,64 +243,5 @@ class OwnershipTransferRequest extends AggregateRoot
     public function applyOwnershipTransferExpired(OwnershipTransferExpired $event): void
     {
         $this->status = OwnershipTransferStatus::Expired;
-    }
-
-    /**
-     * The state guard, callable on its own so the interactor can ask this
-     * question BEFORE doing any cross-entity work.
-     *
-     * That ordering is the point. Resolving the swap first means a closed
-     * transfer whose target has since left the company answers *"the target is
-     * not a member"* — true, but a consequence of time passing rather than the
-     * reason the execution failed. The transfer being closed is the useful
-     * answer, and only this aggregate can give it.
-     *
-     * `execute()` still calls it, so a caller that drives the aggregate directly
-     * is guarded exactly as before.
-     */
-    public function guardIsExecutable(): void
-    {
-        if ($this->status !== OwnershipTransferStatus::Verified) {
-            throw new OwnershipTransferNotExecutableException;
-        }
-    }
-
-    /**
-     * SM-1-05 T4. The ONE invariant this aggregate can see on its own stream:
-     * only a Verified transfer can be executed — guardIsExecutable() refuses a
-     * re-execute and every other source state (E28 — enumerate the transitions,
-     * refuse the rest).
-     *
-     * The three cross-entity guards are NOT here and cannot be: the live owner
-     * (companies.owner_id), the target's live membership, and the parent
-     * company's legal hold all belong to other aggregates, and this one never
-     * reads the database. The interactor holds all three (rulings P3 and P5,
-     * following B1 and the LD ApproveLeaveAction shape).
-     */
-    public function execute(ExecuteOwnershipTransferCommand $command, OwnershipSwap $swap): static
-    {
-        $this->guardIsExecutable();
-
-        return $this->recordThat(new OwnershipTransferExecuted(
-            requestId: $this->uuid(),
-            companyId: $swap->companyId,
-            oldOwnerUserId: $swap->oldOwnerUserId,
-            newOwnerUserId: $swap->newOwnerUserId,
-            oldOwnerMembershipId: $swap->oldOwnerMembershipId,
-            oldOwnerOldRoleId: $swap->oldOwnerOldRoleId,
-            oldOwnerNewRoleId: $swap->oldOwnerNewRoleId,
-            newOwnerMembershipId: $swap->newOwnerMembershipId,
-            newOwnerOldRoleId: $swap->newOwnerOldRoleId,
-            newOwnerNewRoleId: $swap->newOwnerNewRoleId,
-            executedBy: $command->executedBy,
-            reason: $command->reason,
-            verificationNotes: $this->verificationNotes,
-            executedAt: CarbonImmutable::now(),
-        ));
-    }
-
-    public function applyOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
-    {
-        $this->status = OwnershipTransferStatus::Executed;
     }
 }

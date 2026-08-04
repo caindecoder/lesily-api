@@ -194,8 +194,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
      * would have replayed an empty stream and refused for the wrong reason
      * (s149 C1/C2).
      *
-     * `Executed` was the last one owed, and Task 8 paid it in the row below —
-     * it was the first task that could create the state.
+     * `Executed` remains owed, to Task 8, which is the first task that can create it.
      */
     #[Test]
     public function when_the_transfer_has_already_expired_then_it_is_not_verified(): void
@@ -211,40 +210,6 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         // Then it is refused and the terminal state stands
         $this->assertStateGuardRefused($response, 'Only a transfer awaiting verification can be verified.');
         $this->assertNeverVerified($transfer, OwnershipTransferStatus::Expired);
-    }
-
-    /**
-     * Pays the s149 C2 deferral: `Executed` was unreachable until Task 8 built
-     * execute(), so this row waited for it.
-     *
-     * Deliberately NOT assertNeverVerified. Every other terminal state in this
-     * class is reached WITHOUT verification, so that helper's "zero verification
-     * events, verified_at null" baseline holds for them. Executed is the only
-     * terminal state reached THROUGH verification — its row legitimately carries
-     * verified_at and exactly one verification event. What must not happen is a
-     * SECOND one, so that is what this asserts.
-     */
-    #[Test]
-    public function when_the_transfer_is_already_executed_then_it_is_not_verified(): void
-    {
-        // Given a transfer whose ownership swap has already completed
-        [$company, $owner] = $this->aCompanyWithOwner();
-        $admin = $this->anAllowlistedAdmin();
-        $transfer = $this->anExecutedTransferStream($company, $owner, $admin);
-        $originalVerifiedAt = $this->currentTransfer($transfer)->verified_at;
-
-        // When an allowlisted admin attempts to verify it again
-        $response = $this->verifyTransfer($admin, $transfer->getKey(), $this->verificationBody());
-
-        // Then it is refused and the ORIGINAL verification stands untouched
-        $this->assertStateGuardRefused($response, 'Only a transfer awaiting verification can be verified.');
-        $this->assertSame(1, LesilyStoredEvent::query()
-            ->where('event_class', OwnershipTransferIdentityVerified::class)
-            ->count());
-
-        $row = $this->currentTransfer($transfer);
-        $this->assertSame(OwnershipTransferStatus::Executed, $row->status);
-        $this->assertEquals($originalVerifiedAt, $row->verified_at);
     }
 
     /**
@@ -310,18 +275,10 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
         $this->assertSame(0, LesilyStoredEvent::query()
             ->where('event_class', OwnershipTransferIdentityVerified::class)
             ->count());
-        // Exactly the T1 genesis row FOR THIS TRANSFER — the refusal logged
-        // nothing (UC error flow 6d: no audit entry).
-        //
-        // Scoped to the subject, not counted globally. A global count says "the
-        // refusal logged nothing" only while every other fixture in the test
-        // logs nothing either, so it was really asserting that the bystander
-        // company was inert — and it broke the moment that bystander was given
-        // the real requested stream its own row needs. The claim being made is
-        // about this transfer; the assertion now says so.
-        $this->assertSame(1, AuditEntry::query()
-            ->where('subject_id', $this->transfer->getKey())
-            ->count());
+        // Exactly the T1 genesis row — the refusal logged nothing (UC error flow
+        // 6d: no audit entry). The sad-path trio asserts a zero baseline; here
+        // the legitimate baseline is one.
+        $this->assertDatabaseCount('audit_trail', 1);
 
         $row = $this->currentTransfer($this->transfer);
 

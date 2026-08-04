@@ -9,7 +9,6 @@ use App\Companies\Events\CompanyDetailsUpdated;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Companies\Entities\Company as CompanyReadModel;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
-use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 
 /**
  * Mirrors the Company aggregate's lifecycle events into the `companies` read
@@ -18,12 +17,6 @@ use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
  */
 class CompanyProjector extends Projector
 {
-    /**
-     * Third of the four T4 projectors (ruling P4). Sole projector on every other
-     * event it handles, so the global weight reorders nothing else.
-     */
-    public int $weight = 30;
-
     public function onCompanyCreated(CompanyCreated $event): void
     {
         $company = CompanyReadModel::query()->create([
@@ -57,21 +50,5 @@ class CompanyProjector extends Projector
     {
         CompanyReadModel::query()->whereKey($event->aggregateRootUuid())
             ->update(['name' => $event->name]);
-    }
-
-    /**
-     * SM-1-05 T4 (UC-1-093) — ownership moves to the incoming owner.
-     *
-     * Cross-module by design, and deliberately NOT a new CompanyOwnerProjector:
-     * this class is the sole writer of `companies` (§2.15), and adding a second
-     * one is the exact shape ruling G3 rejected for OwnershipTransferTimerProjector.
-     * The designed CompanyOwnerProjector is superseded and never built (ruling P1).
-     *
-     * $weight 30 — third of the four T4 projectors (ruling P4).
-     */
-    public function onOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
-    {
-        CompanyReadModel::query()->whereKey($event->companyId)
-            ->update(['owner_id' => $event->newOwnerUserId]);
     }
 }

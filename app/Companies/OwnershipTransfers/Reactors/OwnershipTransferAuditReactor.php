@@ -6,7 +6,6 @@ use App\Models\User;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
-use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
@@ -27,7 +26,7 @@ class OwnershipTransferAuditReactor extends Reactor
      * so one label, whichever transition wrote the row. Extracted at the s153
      * SonarCloud round (php:S1192, the s118 UC-1-034 precedent): three literals
      * that must agree are three chances to disagree, and a tenant reads this
-     * string back through UC-1-066. All six transition arms share it.
+     * string back through UC-1-066. Tasks 6/7/8 add three more writers here.
      */
     private const SUBJECT_LABEL = 'Ownership transfer request';
 
@@ -137,42 +136,6 @@ class OwnershipTransferAuditReactor extends Reactor
             'actor_user_id' => $event->cancelledBy,
             'actor_role_code' => 'owner',
             'actor_label' => User::query()->whereKey($event->cancelledBy)->value('name'),
-            'recorded_at' => now(),
-        ]);
-    }
-
-    /**
-     * SM-1-05 T4 (UC-1-093). The row UC-1-093's Minimal Guarantee names: no role
-     * swap succeeds without a corresponding audit record. Every other transition
-     * here records something that did NOT move ownership; this is the one that
-     * did, which makes it the evidence a later "that transfer was unauthorised"
-     * claim turns on (UC-1-093 stakeholders: Lesily Legal).
-     *
-     * The only arm that does NOT read the projection: `OwnershipTransferExecuted`
-     * carries `companyId` on the payload (ruling P2 put it there for the pivot
-     * history), so the tenant is already in hand — the `onOwnershipTransferRequested`
-     * shape rather than the four that must look the row up.
-     *
-     * metadata stays NULL per the s149 ruling, and deliberately so here despite
-     * this row having the most to say: the reason, both parties and both role
-     * transitions are all on the event, reachable through stored_event_id, and
-     * audit_trail is TENANT-readable via UC-1-066. The durable forensic record is
-     * the event itself.
-     */
-    public function onOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
-    {
-        AuditEntry::query()->create([
-            'company_id' => $event->companyId,
-            'stored_event_id' => $event->storedEventId(),
-            'event_class' => 'OwnershipTransferExecuted',
-            'subject_type' => 'ownership_transfer_request',
-            'subject_id' => $event->requestId,
-            'subject_label' => self::SUBJECT_LABEL,
-            'action' => 'transfer_executed',
-            'description' => 'Platform admin executed the ownership transfer; ownership moved to the new owner.',
-            'actor_user_id' => $event->executedBy,
-            'actor_role_code' => 'platform_super_admin',
-            'actor_label' => User::query()->whereKey($event->executedBy)->value('name'),
             'recorded_at' => now(),
         ]);
     }
