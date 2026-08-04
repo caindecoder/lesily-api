@@ -17,8 +17,6 @@ owner:
   - billing.view
   - billing.manage
   - audit.view
-  # Owner-only per the matrix §Module-8 (UC-1-028 — every other tenant role ❌).
-  - ownership-transfer.request
 
 admin:
   - users.invite

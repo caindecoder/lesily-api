@@ -92,10 +92,10 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $afterSecond = $this->tableCounts();
 
         // Then every table's row count is stable across runs (idempotent — no duplicates)
-        // 11 permissions / 30 grants since ownership-transfer.request joined for
-        // owner only (matrix §Module-8, UC-1-028 slice-#11 T1, s146); 10/29 was
-        // payroll_officer's billing.view coming out (F2/D-A, slice-plans-billing T1).
-        $this->assertSame(['roles' => 8, 'permissions' => 11, 'role_permission' => 30], $afterFirst);
+        // 10 permissions / 29 grants since payroll_officer's billing.view came out
+        // (matrix §Module-6 ❌ — F2/D-A, slice-plans-billing T1, s130); 30 was
+        // users.remove joining for owner/admin (D10, UC-1-024, s113).
+        $this->assertSame(['roles' => 8, 'permissions' => 10, 'role_permission' => 29], $afterFirst);
         $this->assertSame($afterFirst, $afterSecond);
     }
 
@@ -134,14 +134,12 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $this->newSeeder($this->givenRealCatalogPath())->run();
 
         // Then every seeded permission code matches {module}.{action} dot-notation
-        // (a multi-word action may hyphenate — D10: users.revoke-invitation, users.change-role;
-        // a multi-word MODULE may too — the matrix's module list has always carried
-        // ownership-transfer + country-config, first seeded s146 UC-1-028)
+        // (a multi-word action may hyphenate — D10: users.revoke-invitation, users.change-role)
         $codes = Permission::query()->pluck('code')->all();
         $this->assertNotEmpty($codes, 'No permissions were seeded.');
         foreach ($codes as $code) {
             $this->assertMatchesRegularExpression(
-                '/^[a-z_-]+\.[a-z_-]+$/',
+                '/^[a-z_]+\.[a-z_-]+$/',
                 $code,
                 "Permission code '{$code}' is not {module}.{action} dot-notation."
             );
@@ -166,10 +164,9 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         // Then per-role grant counts match the locked matrix, and manager has none
         $expected = [
             'platform_super_admin' => 0,
-            // owner +1 for ownership-transfer.request — owner-ONLY per the matrix
-            // §Module-8 (UC-1-028, s146); before that, owner/admin each +1 for
-            // users.remove (D10, UC-1-024, s113).
-            'owner' => 11,
+            // owner/admin each +1 for users.remove (D10, UC-1-024, s113); the prior
+            // +1 each (+ hr_officer) came from users.revoke-invitation (s111).
+            'owner' => 10,
             'admin' => 9,
             'hr_officer' => 4,
             // 1 since billing.view came out too (matrix §Module-6 ❌ — F2/D-A,

@@ -29,7 +29,6 @@ use App\Billing\Subscriptions\IO\Http\Controllers\SubscriptionsController;
 use App\Billing\Invoices\IO\Http\Controllers\PlatformAdminInvoicesController;
 use App\Companies\Memberships\IO\Http\Controllers\AcceptInvitationController;
 use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
-use App\Companies\OwnershipTransfers\IO\Http\Controllers\OwnershipTransfersController;
 
 // Health is operational tooling and opts out of the platform cross-cutting
 // middleware (no Correlation-Id) — UC-1-118 / cd-foundation-http §4.2.
@@ -248,12 +247,6 @@ Route::delete('/v1/memberships/{membershipId}', [MembershipsController::class, '
 // guessing. Every token failure collapses to 422 INVITE_INVALID (H4 session 109).
 Route::post('/v1/invitations/accept/{token}', AcceptInvitationController::class)
     ->middleware(['throttle:auth-tier']);
-
-// Request an ownership transfer (UC-1-028, SM-1-05 T1) — owner-only per the
-// 2026-05-24 matrix Module 8 (`ownership-transfer.request`); the request is
-// support-verified (UC-1-113) before any privilege change (UC-1-093).
-Route::post('/v1/ownership-transfers', [OwnershipTransfersController::class, 'store'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:ownership-transfer.request', 'idempotency-key:required']);
 
 // The plan catalog (UC-1-042 partial — the plan-picker read, slice-plans-billing T1).
 // Enum-derived static read, non-paginated {data: [...]} (MyCompaniesCollection
