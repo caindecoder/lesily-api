@@ -2,6 +2,7 @@
 
 namespace App\Companies\Reactors;
 
+use Illuminate\Contracts\Queue\ShouldQueue;
 use App\Companies\Events\CompanyTrialExpired;
 use App\Companies\Entities\Company as CompanyReadModel;
 use App\Foundation\Notifications\Enums\NotificationType;
@@ -15,7 +16,7 @@ use App\Foundation\Notifications\Notifications\SystemNotification;
  * notification pattern (OQ-1-104), not cd-notifications' bespoke dispatcher. A company with
  * no owner (e.g. arranged purely by event replay) is a no-op.
  */
-class TrialExpiredEmailReactor extends Reactor
+class TrialExpiredEmailReactor extends Reactor implements ShouldQueue
 {
     public function onCompanyTrialExpired(CompanyTrialExpired $event): void
     {

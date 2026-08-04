@@ -2,21 +2,26 @@
 
 namespace Tests\Feature\Billing;
 
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Queue;
 use App\Companies\Enums\CompanyStatus;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\AssertionFailedError;
 use Illuminate\Support\Facades\Notification;
 use App\Companies\Events\CompanyTrialExpired;
 use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Companies\CreatesTrialCompanies;
+use App\Companies\Reactors\TrialExpiredEmailReactor;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
 use App\Companies\Entities\Company as CompanyReadModel;
+use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Billing\Subscriptions\Events\SubscriptionTrialEnded;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -31,6 +36,7 @@ use App\Billing\Subscriptions\UseCases\Interactors\ApplyTrialExpirationInteracto
 class ExpireTrialsCommandTest extends BillingTestCase
 {
     use CreatesTrialCompanies;
+    use InteractsWithQueuedReactors;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -129,6 +135,32 @@ class ExpireTrialsCommandTest extends BillingTestCase
             'non-uuid company id' => ['not-a-uuid', '22222222-2222-4222-8222-222222222222'],
             'non-uuid subscription id' => ['11111111-1111-4111-8111-111111111111', 'not-a-uuid'],
         ];
+    }
+
+    // Sad (OQ-1-161 / F1) — a delivery-time notification failure must not undo the committed
+    // expiry; the sync form threw inside the expiry transaction and rolled both aggregates back.
+    #[Test]
+    public function when_a_queued_reactor_fails_after_the_trial_expiry_commits_then_the_expiry_is_not_undone(): void
+    {
+        // Given an elapsed trial and a reactor that fails at delivery time
+        $companyId = (string) Str::uuid();
+        $subscriptionId = (string) Str::uuid();
+        $this->givenTrialEndingAt($companyId, $subscriptionId, CarbonImmutable::now()->subDay());
+        Queue::fake();
+        $this->bindThrowingTrialExpiredReactor();
+
+        // When the daily scan runs and the deferred handlers are drained
+        $this->runExpireTrials()->expectsOutputToContain('1 trial(s) expired.')->assertSuccessful();
+
+        try {
+            $this->runQueuedHandlersFor(CompanyTrialExpired::class);
+            $this->fail('Draining the queued reactor should surface the induced failure.');
+        } catch (AssertionFailedError $guard) {
+            throw $guard;
+        } catch (RuntimeException $failure) {
+            // Then the committed expiry survived the delivery failure
+            $this->assertExpirySurvivedReactorFailure($companyId, $subscriptionId, $failure);
+        }
     }
 
     // Edge/selection (UC-1-049 Sc1 selection) — a company is expired only when its trial
@@ -240,5 +272,23 @@ class ExpireTrialsCommandTest extends BillingTestCase
     {
         $this->assertSame(CompanyStatus::TrialExpired, CompanyReadModel::findOrFail($firstCompanyId)->status);
         $this->assertSame(CompanyStatus::TrialExpired, CompanyReadModel::findOrFail($secondCompanyId)->status);
+    }
+
+    protected function bindThrowingTrialExpiredReactor(): void
+    {
+        $this->app->bind(TrialExpiredEmailReactor::class, fn (): TrialExpiredEmailReactor => new class extends TrialExpiredEmailReactor
+        {
+            public function onCompanyTrialExpired(CompanyTrialExpired $event): void
+            {
+                throw new RuntimeException('Induced delivery-time reactor failure.');
+            }
+        });
+    }
+
+    protected function assertExpirySurvivedReactorFailure(string $companyId, string $subscriptionId, RuntimeException $failure): void
+    {
+        $this->assertSame('Induced delivery-time reactor failure.', $failure->getMessage());
+        $this->assertSame(CompanyStatus::TrialExpired, CompanyReadModel::findOrFail($companyId)->status);
+        $this->assertSubscriptionCancelledAsTrialExpired($subscriptionId);
     }
 }
