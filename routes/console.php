@@ -10,4 +10,3 @@ Artisan::command('inspire', function () {
 
 Schedule::command('trials:expire')->dailyAt('00:00')->onOneServer();
 Schedule::command('invitations:expire')->dailyAt('00:00')->onOneServer();
-Schedule::command('ownership-transfers:expire-stale')->dailyAt('00:00')->onOneServer();

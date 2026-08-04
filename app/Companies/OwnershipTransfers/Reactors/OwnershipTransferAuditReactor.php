@@ -5,7 +5,6 @@ namespace App\Companies\OwnershipTransfers\Reactors;
 use App\Models\User;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
-use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
@@ -136,41 +135,6 @@ class OwnershipTransferAuditReactor extends Reactor
             'actor_user_id' => $event->cancelledBy,
             'actor_role_code' => 'owner',
             'actor_label' => User::query()->whereKey($event->cancelledBy)->value('name'),
-            'recorded_at' => now(),
-        ]);
-    }
-
-    /**
-     * SM-1-05 T8 + T9 (UC-1-116 / UC-1-117). The app's FIRST system-actor audit
-     * row, and the precedent for every scheduled write that follows.
-     *
-     * All three actor columns are NULL (ruling M7). No human acted, so naming one
-     * would be false; and a sentinel like `'system'` in `actor_role_code` would
-     * put a value in that column which the RBAC catalog does not contain — on a
-     * feed UC-1-066 exposes to tenants. "The system did it" is carried by the
-     * absent actor together with the `transfer_expired` verb.
-     *
-     * One arm for both windows, and the description does not name the stage —
-     * the same reasoning the withdrawal arm records: the audit row's job is
-     * attribution, not restating the state machine. Which window expired lives on
-     * the event and the projection, and `stored_event_id` is the route to it.
-     */
-    public function onOwnershipTransferExpired(OwnershipTransferExpired $event): void
-    {
-        $transfer = OwnershipTransferRequest::query()->findOrFail($event->requestId);
-
-        AuditEntry::query()->create([
-            'company_id' => $transfer->company_id,
-            'stored_event_id' => $event->storedEventId(),
-            'event_class' => 'OwnershipTransferExpired',
-            'subject_type' => 'ownership_transfer_request',
-            'subject_id' => $event->requestId,
-            'subject_label' => self::SUBJECT_LABEL,
-            'action' => 'transfer_expired',
-            'description' => 'The ownership transfer expired before it was completed; the current owner retains ownership.',
-            'actor_user_id' => null,
-            'actor_role_code' => null,
-            'actor_label' => null,
             'recorded_at' => now(),
         ]);
     }

@@ -229,52 +229,18 @@ class RejectOwnershipTransferTest extends OwnershipTransferAdminTestCase
 
         // Then it is refused and the withdrawal stands, unrejected
         $this->assertStateGuardRefused($response, 'Only an open transfer can be rejected.');
-        $this->assertNeverRejected($transfer, OwnershipTransferStatus::Cancelled);
+        $this->assertNeverRejected($transfer);
     }
 
     /**
-     * The `Expired` half of the s151 G1 split, payable only now. G1 moved the
-     * `Executed`/`Cancelled`/`Expired` refusal rows out of Task 5 to the tasks
-     * that make each state reachable: `Cancelled` landed at Task 6, this one
-     * lands with `expireIfStale()`, and `Executed` still waits for Task 8.
-     *
-     * A factory row could not have stood in: it replays an empty stream, so the
-     * guard would refuse for the wrong reason and the test's name would be a lie
-     * (s149 C1).
+     * The withdrawal survives the losing rejection: still `Cancelled`, with none
+     * of the rejection columns written over it.
      */
-    #[Test]
-    public function when_the_transfer_has_already_expired_then_it_is_not_rejected(): void
-    {
-        // Given a transfer the daily scan has already expired
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $admin = $this->anAllowlistedAdmin();
-        $transfer = $this->anExpiredTransferStream($company, $owner);
-
-        // When an allowlisted admin attempts to reject it
-        $response = $this->rejectTransfer($admin, $transfer->getKey(), self::rejectionBody([
-            'reason' => 'Identity documents could not be matched to the applicant.',
-            'rejectionReasonCode' => 'identity_failed',
-        ]));
-
-        // Then it is refused and the expiry stands, unrejected
-        $this->assertStateGuardRefused($response, 'Only an open transfer can be rejected.');
-        $this->assertNeverRejected($transfer, OwnershipTransferStatus::Expired);
-    }
-
-    /**
-     * The existing terminal survives the losing rejection: still $expected, with
-     * none of the rejection columns written over it.
-     *
-     * $expected is a parameter rather than a hardcoded `Cancelled`, which is what
-     * it was until the expiry row arrived: a second terminal state now reaches
-     * this helper, and a hardcoded one would have made the new row assert the
-     * WRONG survivor while still looking like a passing terminal check.
-     */
-    private function assertNeverRejected(OwnershipTransferRequest $transfer, OwnershipTransferStatus $expected): void
+    private function assertNeverRejected(OwnershipTransferRequest $transfer): void
     {
         $row = $this->currentTransfer($transfer);
 
-        $this->assertSame($expected, $row->status);
+        $this->assertSame(OwnershipTransferStatus::Cancelled, $row->status);
         $this->assertNull($row->rejected_at);
         $this->assertNull($row->rejected_by);
         $this->assertNull($row->rejection_reason);

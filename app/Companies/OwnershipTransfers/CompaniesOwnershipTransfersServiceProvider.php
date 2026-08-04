@@ -3,7 +3,6 @@
 namespace App\Companies\OwnershipTransfers;
 
 use Illuminate\Support\ServiceProvider;
-use App\Companies\OwnershipTransfers\IO\Console\ExpireOwnershipTransfers;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
 use App\Companies\OwnershipTransfers\IO\Database\Repositories\EloquentOwnershipTransferRequestRepository;
 
@@ -20,15 +19,5 @@ class CompaniesOwnershipTransfersServiceProvider extends ServiceProvider
             OwnershipTransferRequestRepositoryInterface::class,
             EloquentOwnershipTransferRequestRepository::class,
         );
-    }
-
-    public function boot(): void
-    {
-        // The module's console commands live under IO/Console, outside Laravel's
-        // auto-discovery path — so each module registers its own, exactly as
-        // Memberships and Billing/Subscriptions do for their expiry scans.
-        if ($this->app->runningInConsole()) {
-            $this->commands([ExpireOwnershipTransfers::class]);
-        }
     }
 }

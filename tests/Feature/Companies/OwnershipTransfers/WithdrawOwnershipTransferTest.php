@@ -258,46 +258,6 @@ class WithdrawOwnershipTransferTest extends OwnershipTransfersTestCase
     }
 
     /**
-     * The row Task 6 deferred to Task 7, and which the Task-7 plan cell had
-     * OMITTED — it named the `verify` and `reject` refusals from `Expired` but
-     * not this one, though Task 6 Step 2 deferred all three (s156 STALE-10).
-     *
-     * Payable only now: `expireIfStale()` is what makes `Expired` reachable
-     * through the aggregate, and a factory row would replay an empty stream and
-     * refuse for the wrong reason (s149 C1).
-     */
-    #[Test]
-    public function when_the_transfer_has_already_expired_then_it_is_not_withdrawn(): void
-    {
-        // Given a transfer the daily scan has already expired
-        [$company, $owner] = $this->aCompanyWithOwner();
-        $transfer = $this->anExpiredTransferStream($company, $owner);
-
-        // When its requester tries to withdraw it anyway
-        $response = $this->withdrawTransfer([$company, $owner], (string) $transfer->getKey(), [
-            'reason' => self::WITHDRAWAL_REASON,
-        ]);
-
-        // Then the state guard refuses and the expiry stands
-        $this->assertStateGuardRefused($response, 'Only an open transfer can be withdrawn.');
-        $this->assertTransferStillExpired((string) $transfer->getKey());
-    }
-
-    /**
-     * The transfer is still the terminal `Expired` the scan left, with no
-     * cancellation columns written — the shape its rejected and withdrawn
-     * siblings assert for their own terminals.
-     */
-    protected function assertTransferStillExpired(string $requestId): void
-    {
-        $transfer = OwnershipTransferRequest::query()->findOrFail($requestId);
-
-        $this->assertSame(OwnershipTransferStatus::Expired, $transfer->status);
-        $this->assertNull($transfer->cancelled_at);
-        $this->assertNull($transfer->cancellation_source);
-    }
-
-    /**
      * The rejection survives a withdrawal attempt: still `Rejected`, and none of
      * the cancellation columns were written over it.
      */

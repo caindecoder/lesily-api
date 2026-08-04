@@ -6,13 +6,11 @@ use Carbon\CarbonImmutable;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\OwnershipTransfers\Enums\TransitionSource;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
-use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
-use App\Companies\OwnershipTransfers\UseCases\Commands\ExpireOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotRejectableException;
@@ -27,12 +25,8 @@ use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferId
  * system expires). Unlike the guardless Memberships methods, transitions here
  * carry aggregate state guards (E28).
  *
- * Built: request (T1) · verifyIdentity (T2) · reject (T3/T5) · withdraw (T6/T7)
- * · expireIfStale (T8/T9). Still to come: execute (T4, Task 8).
- *
- * One transition refuses differently from the rest: `expireIfStale()` no-ops
- * where the others throw, because its caller is a scheduler with nobody to hand
- * a 409 to (ruling M1). The reasoning lives on the method.
+ * Built: request (T1) · verifyIdentity (T2) · reject (T3/T5) · withdraw (T6/T7).
+ * Still to come: execute (T4, Task 8) · expireIfStale (T8/T9, Task 7).
  */
 class OwnershipTransferRequest extends AggregateRoot
 {
@@ -167,81 +161,5 @@ class OwnershipTransferRequest extends AggregateRoot
     public function applyOwnershipTransferCancelled(OwnershipTransferCancelled $event): void
     {
         $this->status = OwnershipTransferStatus::Cancelled;
-    }
-
-    /**
-     * SM-1-05 T8 + T9. The system's own exit, and the ONLY transition here that
-     * refuses by doing nothing rather than by throwing (ruling M1).
-     *
-     * The asymmetry is deliberate. Every other method answers a human holding an
-     * HTTP request, so a `STATE_GUARD_VIOLATION` 409 reaches somebody who can
-     * act on it. This one answers a scheduler: there is no caller to inform, and
-     * a throw inside the batch loop would force a choice between aborting the
-     * remaining rows and swallowing the exception — the silent-failure shape
-     * OQ-1-141 was deferred over. Both UC bodies say "SKIPS the transition" in
-     * terms, and both built system scans agree (`Subscription::endTrial` returns
-     * unchanged; `UserMembership::expireIfPending` has no guard at all).
-     *
-     * The no-op is a WRITTEN match arm, not an absent check: E28 requires every
-     * state x event combination to be explicitly handled, and "deliberately does
-     * nothing" qualifies where "never considered" does not.
-     *
-     * The scan reads the row's state from the PROJECTION to select it, then this
-     * method reads it again by replaying the STREAM — two tables, two instants.
-     * Anything that moves the row in between makes the selection stale, and the
-     * `expectedStatus` guard refuses ALL of it: a move out of the open set
-     * (withdrawn, rejected, already expired) and a move to the OTHER open state
-     * alike. The second is the sharper case, because the row then carries a FRESH
-     * deadline and is not due at all — an admin verifying at day 29 gives the
-     * transfer 14 new days, and expiring it would fire 14 days early while
-     * stamping `verified-stage` with the 30-day figure the interactor derived
-     * before the move (ruling O1).
-     *
-     * So the Command carries what the scan saw and any disagreement refuses.
-     * That is what UC-1-116 error flow 4b asks for ("no event emitted"), and
-     * SM-1-05 §4 states both guards as state STILL `Requested` / STILL
-     * `Verified` — still, not merely open.
-     *
-     * The `match`'s `default` arm therefore answers NEITHER production case: by
-     * the time it is evaluated, the replayed state already equals the selected
-     * one. It is reachable only by a caller that SELECTED a terminal state, which
-     * the repository cannot do (it selects `openStates()`) — so only a direct
-     * drive reaches it, the shape `ExpireTrialsCommandTest` uses for its own
-     * console-unreachable no-op arms. It stays written because E28 wants every
-     * state × event combination explicitly handled, and because deleting it would
-     * leave a `match` Larastan requires to cover all six cases.
-     *
-     * Do not read the two refusals as redundant: removing the `expectedStatus`
-     * guard does not fall through to `default`, it falls through to the
-     * `Requested`/`Verified` arms and records the spurious expiry O1 exists to
-     * prevent.
-     */
-    public function expireIfStale(ExpireOwnershipTransferCommand $command): static
-    {
-        if ($this->status !== $command->expectedStatus) {
-            return $this;
-        }
-
-        $source = match ($this->status) {
-            OwnershipTransferStatus::Requested => TransitionSource::RequestedStage,
-            OwnershipTransferStatus::Verified => TransitionSource::VerifiedStage,
-            default => null,
-        };
-
-        if ($source === null) {
-            return $this;
-        }
-
-        return $this->recordThat(new OwnershipTransferExpired(
-            requestId: $this->uuid(),
-            source: $source->value,
-            expiredAfterDays: $command->expiredAfterDays,
-            expiredAt: $command->expiredAt,
-        ));
-    }
-
-    public function applyOwnershipTransferExpired(OwnershipTransferExpired $event): void
-    {
-        $this->status = OwnershipTransferStatus::Expired;
     }
 }
