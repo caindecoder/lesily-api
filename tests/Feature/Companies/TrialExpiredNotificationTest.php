@@ -85,7 +85,7 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
     }
 
     // Happy (OQ-1-161 / F1 posture) — the owner notice rides the queue: nothing is sent inline
-    // at persist time; the event's handler job carries the delivery.
+    // at persist time; the captured handler job carries the delivery when drained.
     #[Test]
     public function when_a_trial_expires_then_the_owner_notice_is_queued_not_sent_inline(): void
     {
@@ -98,8 +98,10 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
         // When the trial expires
         $this->expire($companyId);
 
-        // Then the notice is deferred to the queue, not sent inline
+        // Then the notice is deferred — not sent inline — and delivers to the owner at the drain
         $this->assertReactorDeferred(CompanyTrialExpired::class, SystemNotification::class);
+        $this->runQueuedHandlersFor(CompanyTrialExpired::class);
+        Notification::assertSentTo($this->genesisOwnerOf($companyId), SystemNotification::class);
     }
 
     protected function givenOtherTrialCompany(): string
