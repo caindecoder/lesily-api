@@ -85,7 +85,7 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
     }
 
     // Happy (OQ-1-161 / F1 posture) — the owner notice rides the queue: nothing is sent inline
-    // at persist time; the event's handler job carries the delivery after commit.
+    // at persist time; the event's handler job carries the delivery.
     #[Test]
     public function when_a_trial_expires_then_the_owner_notice_is_queued_not_sent_inline(): void
     {

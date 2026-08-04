@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Queue;
 use App\Companies\Enums\CompanyStatus;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\AssertionFailedError;
 use Illuminate\Support\Facades\Notification;
 use App\Companies\Events\CompanyTrialExpired;
 use Illuminate\Validation\ValidationException;
@@ -154,6 +155,8 @@ class ExpireTrialsCommandTest extends BillingTestCase
         try {
             $this->runQueuedHandlersFor(CompanyTrialExpired::class);
             $this->fail('Draining the queued reactor should surface the induced failure.');
+        } catch (AssertionFailedError $guard) {
+            throw $guard;
         } catch (RuntimeException $failure) {
             // Then the committed expiry survived the delivery failure
             $this->assertExpirySurvivedReactorFailure($companyId, $subscriptionId, $failure);
