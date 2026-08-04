@@ -5,17 +5,21 @@ namespace Tests\Feature\Companies;
 use App\Models\User;
 use Illuminate\Support\Str;
 use App\Companies\Aggregates\Company;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
+use App\Companies\Events\CompanyTrialExpired;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Entities\Company as CompanyReadModel;
 use App\Foundation\Notifications\Enums\NotificationType;
+use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 
 class TrialExpiredNotificationTest extends CompaniesTestCase
 {
     use CreatesTrialCompanies;
+    use InteractsWithQueuedReactors;
     use RefreshDatabase;
 
     private const COMPANY_NAME = 'Contoso';
@@ -78,6 +82,24 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
 
         // Then only its own owner is notified, not the other company's
         $this->assertNotifiedExactly($owner, $otherOwner, self::COMPANY_NAME);
+    }
+
+    // Happy (OQ-1-161 / F1 posture) — the owner notice rides the queue: nothing is sent inline
+    // at persist time; the event's handler job carries the delivery after commit.
+    #[Test]
+    public function when_a_trial_expires_then_the_owner_notice_is_queued_not_sent_inline(): void
+    {
+        // Given a trial company, with the fakes armed only after genesis
+        $companyId = (string) Str::uuid();
+        $this->createCompanyOnTrial($companyId);
+        Notification::fake();
+        Queue::fake();
+
+        // When the trial expires
+        $this->expire($companyId);
+
+        // Then the notice is deferred to the queue, not sent inline
+        $this->assertReactorDeferred(CompanyTrialExpired::class, SystemNotification::class);
     }
 
     protected function givenOtherTrialCompany(): string

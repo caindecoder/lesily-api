@@ -4,11 +4,22 @@ namespace Tests\Feature\Foundation;
 
 use Illuminate\Support\Facades\Queue;
 use Spatie\EventSourcing\Projectionist;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Testing\Fakes\QueueFake;
 use Spatie\EventSourcing\StoredEvents\HandleStoredEventJob;
 
 trait InteractsWithQueuedReactors
 {
+    protected function assertReactorDeferred(string $eventClass, string $notificationClass): void
+    {
+        Notification::assertSentTimes($notificationClass, 0);
+
+        Queue::assertPushed(
+            HandleStoredEventJob::class,
+            fn (HandleStoredEventJob $job): bool => $job->storedEvent->event_class === $eventClass,
+        );
+    }
+
     protected function runQueuedHandlersFor(string $eventClass): void
     {
         $queue = Queue::getFacadeRoot();
