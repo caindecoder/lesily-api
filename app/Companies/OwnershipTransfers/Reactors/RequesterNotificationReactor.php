@@ -10,14 +10,8 @@ use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferRejectedN
 
 /**
  * Tells the ORIGINAL REQUESTER that their transfer ended, and why (SM-1-05 §7 —
- * RequesterNotificationReactor listens to Rejected and Expired; T9 joins it at
- * Task 7).
- *
- * T7 deliberately does NOT join it, and never was going to: on a withdrawal the
- * requester IS the actor, so telling them is noise, and SM-1-05 §7's Cancelled
- * row lists only SupportQueueNotificationReactor + AuditTrailReactor. This line
- * previously read "T7/T9 join it at their own tasks", which would have sent the
- * next reader looking for a notification the design forbids.
+ * RequesterNotificationReactor listens to Rejected and Expired; T7/T9 join it at
+ * their own tasks).
  *
  * Only the requester is notified. The designated new owner is deliberately not:
  * a rejection lands before any role change, so they were never affected, and

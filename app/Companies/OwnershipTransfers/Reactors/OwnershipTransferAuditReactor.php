@@ -7,7 +7,6 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
-use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 
@@ -100,41 +99,6 @@ class OwnershipTransferAuditReactor extends Reactor
             'actor_user_id' => $event->rejectedBy,
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => User::query()->whereKey($event->rejectedBy)->value('name'),
-            'recorded_at' => now(),
-        ]);
-    }
-
-    /**
-     * SM-1-05 T6 + T7 (UC-1-114 / UC-1-115). The tenant-side counterpart of the
-     * rejection row: the actor here is the REQUESTER, not a platform admin, and
-     * the role code says so. Lesily Legal's chain-of-custody has to read "the
-     * requester withdrew it" rather than merely "it stopped" — the withdrawal is
-     * evidence the owner did NOT transfer authority.
-     *
-     * One arm for both windows: the `source` discriminator lives on the event and
-     * the projection, and the audit row's job is attribution, not restating the
-     * state machine.
-     *
-     * metadata stays NULL per the s149 ruling: audit_trail rows are TENANT-readable
-     * via UC-1-066, and the durable forensic record is the event itself, reachable
-     * from here through stored_event_id.
-     */
-    public function onOwnershipTransferCancelled(OwnershipTransferCancelled $event): void
-    {
-        $transfer = OwnershipTransferRequest::query()->findOrFail($event->requestId);
-
-        AuditEntry::query()->create([
-            'company_id' => $transfer->company_id,
-            'stored_event_id' => $event->storedEventId(),
-            'event_class' => 'OwnershipTransferCancelled',
-            'subject_type' => 'ownership_transfer_request',
-            'subject_id' => $event->requestId,
-            'subject_label' => self::SUBJECT_LABEL,
-            'action' => 'transfer_withdrawn',
-            'description' => 'The requester withdrew the ownership transfer; the current owner retains ownership.',
-            'actor_user_id' => $event->cancelledBy,
-            'actor_role_code' => 'owner',
-            'actor_label' => User::query()->whereKey($event->cancelledBy)->value('name'),
             'recorded_at' => now(),
         ]);
     }

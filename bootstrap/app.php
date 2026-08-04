@@ -49,12 +49,10 @@ use App\Companies\Memberships\Exceptions\OwnerTransferRequiredException;
 use App\Companies\Memberships\Exceptions\SelfRoleChangeBlockedException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
-use App\Companies\OwnershipTransfers\Exceptions\NotTheTransferRequesterException;
 use App\Companies\OwnershipTransfers\Exceptions\EmergencyContactRequiredException;
 use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotRejectableException;
 use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotVerifiableException;
-use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotWithdrawableException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -277,22 +275,6 @@ return Application::configure(basePath: dirname(__DIR__))
         // SM-1-05 §4 makes only the two OPEN states rejectable).
         $exceptions->render(fn (OwnershipTransferNotRejectableException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
-            $e->getMessage(),
-        ));
-
-        // T6/T7 attempted from a state that cannot reach Cancelled — already
-        // ended, whether cancelled, rejected, expired or executed (UC-1-114 4b /
-        // UC-1-115 4b-4c; SM-1-05 §4 makes only the two OPEN states withdrawable).
-        $exceptions->render(fn (OwnershipTransferNotWithdrawableException $e) => EnvelopeBuilder::build(
-            ApiErrorCode::StateGuardViolation,
-            $e->getMessage(),
-        ));
-
-        // T6/T7 attempted by a permission-holder who is not the transfer's own
-        // requester (UC-1-114/115 error-flow 3a). Its own 403 code, not the
-        // middleware's ROLE_INSUFFICIENT — this caller has the role (ruling J3).
-        $exceptions->render(fn (NotTheTransferRequesterException $e) => EnvelopeBuilder::build(
-            ApiErrorCode::TransferRequesterMismatch,
             $e->getMessage(),
         ));
 

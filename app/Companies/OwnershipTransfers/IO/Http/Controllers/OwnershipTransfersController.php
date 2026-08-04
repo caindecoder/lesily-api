@@ -8,16 +8,14 @@ use Illuminate\Http\JsonResponse;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferFilters;
 use App\Companies\OwnershipTransfers\UseCases\Commands\RequestOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestResource;
-use App\Companies\OwnershipTransfers\UseCases\Commands\WithdrawOwnershipTransferCommand;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestCollection;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\RequestOwnershipTransferInteractor;
-use App\Companies\OwnershipTransfers\UseCases\Interactors\WithdrawOwnershipTransferInteractor;
 use App\Companies\OwnershipTransfers\UseCases\Repositories\OwnershipTransferRequestRepositoryInterface;
 
 /**
  * The company's ownership-transfer resource — request (UC-1-028, SM-1-05 T1) +
- * the tenant reads (UC-1-126 history / UC-1-125 status) + withdraw
- * (UC-1-114/115, SM-1-05 T6/T7).
+ * the tenant reads (UC-1-126 history / UC-1-125 status). Withdraw (UC-1-114/115)
+ * lands in a later slice-#11 task.
  */
 class OwnershipTransfersController
 {
@@ -56,30 +54,6 @@ class OwnershipTransfersController
     {
         $transfer = $this->transfers->findByIdForCompany((string) $request->company()->getKey(), $requestId)
             ?? abort(404);
-
-        return new OwnershipTransferRequestResource($transfer);
-    }
-
-    public function withdraw(
-        Request $request,
-        string $requestId,
-        WithdrawOwnershipTransferInteractor $interactor,
-    ): OwnershipTransferRequestResource {
-        /** @var User $actor — guaranteed by auth:sanctum */
-        $actor = $request->user();
-
-        // Client fields validated at the delivery boundary; the actor is
-        // server-sourced and never trusted from the body (the reject precedent).
-        $command = WithdrawOwnershipTransferCommand::validateAndCreate([
-            ...$request->only(['reason']),
-            'cancelledBy' => $actor->getKey(),
-        ]);
-
-        $transfer = $interactor->execute(
-            (string) $request->company()->getKey(),
-            $requestId,
-            $command,
-        );
 
         return new OwnershipTransferRequestResource($transfer);
     }

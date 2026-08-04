@@ -160,30 +160,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
 
         // Then it is refused and the terminal state stands
         $this->assertStateGuardRefused($response, 'Only a transfer awaiting verification can be verified.');
-        $this->assertNeverVerified($transfer, OwnershipTransferStatus::Rejected);
-    }
-
-    /**
-     * The `Cancelled` quarter of UC-1-113's transition table, deferred out of
-     * s149 as ruling C2 and payable only now: slice Task 6 built `withdraw()`,
-     * so this is the first session in which a genuinely cancelled stream exists.
-     * A factory row would have replayed an empty stream and refused for the
-     * wrong reason, making the test's name a lie.
-     */
-    #[Test]
-    public function when_the_transfer_is_already_withdrawn_then_it_is_not_verified(): void
-    {
-        // Given a transfer its requester has withdrawn
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $admin = $this->anAllowlistedAdmin();
-        $transfer = $this->aCancelledTransferStream($company, $owner);
-
-        // When an allowlisted admin attempts to verify it
-        $response = $this->verifyTransfer($admin, $transfer->getKey(), $this->verificationBody());
-
-        // Then it is refused and the terminal state stands
-        $this->assertStateGuardRefused($response, 'Only a transfer awaiting verification can be verified.');
-        $this->assertNeverVerified($transfer, OwnershipTransferStatus::Cancelled);
+        $this->assertNeverVerified($transfer);
     }
 
     /**
@@ -191,7 +168,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
      * legitimately carries its T1 genesis and T3 rejection, so the baseline here is
      * "zero verification events", not "zero events".
      */
-    private function assertNeverVerified(OwnershipTransferRequest $transfer, OwnershipTransferStatus $expected): void
+    private function assertNeverVerified(OwnershipTransferRequest $transfer): void
     {
         $this->assertSame(0, LesilyStoredEvent::query()
             ->where('event_class', OwnershipTransferIdentityVerified::class)
@@ -199,7 +176,7 @@ class VerifyOwnershipTransferIdentityTest extends OwnershipTransferAdminTestCase
 
         $row = $this->currentTransfer($transfer);
 
-        $this->assertSame($expected, $row->status);
+        $this->assertSame(OwnershipTransferStatus::Rejected, $row->status);
         $this->assertNull($row->verified_at);
         $this->assertNull($row->verified_by);
     }

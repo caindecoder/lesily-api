@@ -7,7 +7,6 @@ use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRejected;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
-use App\Companies\OwnershipTransfers\Events\OwnershipTransferCancelled;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferRequested;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferIdentityVerified;
 
@@ -80,28 +79,6 @@ class OwnershipTransferProjector extends Projector
             'rejection_source' => $event->source,
             'next_state_transition_at' => null,
             'updated_by' => $event->rejectedBy,
-        ]);
-    }
-
-    /**
-     * SM-1-05 T6 + T7. Terminal, so the withdrawal record and the SLA-timer clear
-     * land in the SAME update — this projector remains the table's sole writer
-     * (ruling G3), and a terminal row carries no next deadline by definition.
-     *
-     * The two windows clear DIFFERENT values: T6 drops `requested_at + 30d`, T7
-     * drops `verified_at + 14d`. Both are asserted, because at s153 the reject
-     * twin turned out to have only ever pinned one of its two.
-     */
-    public function onOwnershipTransferCancelled(OwnershipTransferCancelled $event): void
-    {
-        OwnershipTransferRequest::query()->whereKey($event->requestId)->update([
-            'status' => OwnershipTransferStatus::Cancelled,
-            'cancelled_at' => CarbonImmutable::instance($event->cancelledAt),
-            'cancelled_by' => $event->cancelledBy,
-            'cancellation_reason' => $event->reason,
-            'cancellation_source' => $event->source,
-            'next_state_transition_at' => null,
-            'updated_by' => $event->cancelledBy,
         ]);
     }
 }

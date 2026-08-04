@@ -92,12 +92,10 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $afterSecond = $this->tableCounts();
 
         // Then every table's row count is stable across runs (idempotent — no duplicates)
-        // 14 permissions / 37 grants since `ownership-transfer.withdraw` joined for
-        // OWNER ONLY (matrix §Module-8, UC-1-114/115 slice-#11 T6/T7, ruling J1):
-        // +1 permission, +1 grant over the 13/36 the transfer-view pair left (s147).
-        // One grant, not three, because withdrawal is the requester's own
-        // authority — admin and auditor can read a transfer but never end one.
-        $this->assertSame(['roles' => 8, 'permissions' => 14, 'role_permission' => 37], $afterFirst);
+        // 13 permissions / 36 grants since the two transfer-view permissions joined
+        // for owner+admin+auditor (matrix §Module-8, UC-1-125/126 slice-#11 T2):
+        // +2 permissions, +6 grants over the 11/30 that UC-1-028 T1 left (s146).
+        $this->assertSame(['roles' => 8, 'permissions' => 13, 'role_permission' => 36], $afterFirst);
         $this->assertSame($afterFirst, $afterSecond);
     }
 
@@ -169,12 +167,9 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $expected = [
             'platform_super_admin' => 0,
             // owner/admin/auditor each +2 for the transfer-view permissions
-            // (matrix §Module-8 view rows, UC-1-125/126, s147). Owner ALSO carries
-            // ownership-transfer.request (UC-1-028, owner-ONLY, s146) and
-            // ownership-transfer.withdraw (UC-1-114/115, owner-ONLY, ruling J1) —
-            // 14. Admin and auditor stay put: they can read a transfer, never end
-            // one, because withdrawal is the requester's own authority.
-            'owner' => 14,
+            // (matrix §Module-8 view rows, UC-1-125/126, s147). Owner also carries
+            // ownership-transfer.request (UC-1-028, owner-ONLY, s146).
+            'owner' => 13,
             'admin' => 11,
             'hr_officer' => 4,
             // 1 since billing.view came out too (matrix §Module-6 ❌ — F2/D-A,
