@@ -61,11 +61,7 @@ class InvoiceAdminResource extends JsonResource
             // Constant false until the platform-admin slice builds company
             // soft-deletion (UC-1-095 pathway; s137 F-a ruling).
             'tenant_soft_deleted' => false,
-            // Null until OQ-1-135 delivers the legal-hold SETTER (UC-1-039/040)
-            // and its reason/date/order_reference companions. The bare boolean
-            // column landed in slice-#11 Task 4 for the ownership-transfer guard,
-            // but nothing can set it true yet, so surfacing a constant false here
-            // would read as "we checked the hold" when no hold can exist.
+            // Null until OQ-1-135 builds the legal-hold columns.
             'legal_hold' => null,
             'company' => $this->companySummary(),
         ];

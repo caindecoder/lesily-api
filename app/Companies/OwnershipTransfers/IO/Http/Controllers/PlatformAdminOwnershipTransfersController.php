@@ -7,11 +7,9 @@ use Illuminate\Http\Request;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferAdminFilters;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestAdminResource;
-use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferIdentityCommand;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestAdminCollection;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\ReviewOwnershipTransferQueueInteractor;
 use App\Companies\OwnershipTransfers\UseCases\Interactors\ReviewOwnershipTransferAsAdminInteractor;
-use App\Companies\OwnershipTransfers\UseCases\Interactors\VerifyOwnershipTransferIdentityInteractor;
 
 /**
  * The platform-admin cross-tenant ownership-transfer reads (UC-1-127) — behind
@@ -45,20 +43,5 @@ class PlatformAdminOwnershipTransfersController
         return new OwnershipTransferRequestAdminResource(
             $interactor->execute($requestId, $admin, AdminRequestContext::fromRequest($request))
         );
-    }
-
-    public function verify(string $requestId, Request $request, VerifyOwnershipTransferIdentityInteractor $interactor): OwnershipTransferRequestAdminResource
-    {
-        /** @var User $admin — guaranteed by auth:sanctum */
-        $admin = $request->user();
-
-        // Client fields + auth context validated at the delivery boundary
-        // (the OwnershipTransfersController@store precedent).
-        $command = VerifyOwnershipTransferIdentityCommand::validateAndCreate([
-            ...$request->only(['verificationNotes', 'verificationArtefacts']),
-            'verifiedBy' => $admin->getKey(),
-        ]);
-
-        return new OwnershipTransferRequestAdminResource($interactor->execute($requestId, $command));
     }
 }

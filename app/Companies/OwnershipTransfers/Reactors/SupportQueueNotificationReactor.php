@@ -4,7 +4,6 @@ namespace App\Companies\OwnershipTransfers\Reactors;
 
 use App\Models\User;
 use App\Companies\Entities\Company;
-use App\Foundation\Http\Values\PlatformAdminAllowlist;
 use App\Foundation\Notifications\Enums\NotificationType;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
 use App\Foundation\Notifications\Notifications\SystemNotification;
@@ -24,7 +23,11 @@ class SupportQueueNotificationReactor extends Reactor
     {
         $company = Company::query()->findOrFail($event->companyId);
 
-        $adminIds = PlatformAdminAllowlist::userIds();
+        // Same normalization idiom as EnsurePlatformAdmin (the allowlist's one
+        // other consumer): cast, trim, reject blanks — padding fails closed.
+        $adminIds = collect((array) config('platform.admin_user_ids', []))
+            ->map(fn ($id): string => trim((string) $id))
+            ->reject(fn (string $id): bool => $id === '');
 
         User::query()
             ->whereIn('id', $adminIds)

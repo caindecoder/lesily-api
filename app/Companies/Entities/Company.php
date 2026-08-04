@@ -42,16 +42,12 @@ class Company extends Model
         'current_billing_plan',
         'status',
         'trial_ends_at',
-        'legal_hold',
     ];
 
     protected $casts = [
         'current_billing_plan' => BillingPlan::class,
         'status' => CompanyStatus::class,
         'trial_ends_at' => 'immutable_datetime',
-        // tinyint(1) reads back as int without this; the UC-1-113 guard should not
-        // have to cast at every use site (slice-#11 Task 4).
-        'legal_hold' => 'boolean',
     ];
 
     /**

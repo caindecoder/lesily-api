@@ -315,11 +315,3 @@ Route::get('/v1/admin/ownership-transfers', [PlatformAdminOwnershipTransfersCont
 // byte-identical 404s.
 Route::get('/v1/admin/ownership-transfers/{requestId}', [PlatformAdminOwnershipTransfersController::class, 'show'])
     ->middleware(['auth:sanctum', 'platform.admin']);
-
-// SM-1-05 T2 (UC-1-113) — the admin confirms the requester's identity and moves
-// the transfer Requested -> Verified. PATCH sub-path per api-conventions 4.3;
-// same admin chain as the reads above. No idempotency-key mount (s149 ruling G1:
-// conventions 13.2 requires it for ownership-transfer-execute only, and the
-// aggregate's from-Requested guard already refuses a duplicate click).
-Route::patch('/v1/admin/ownership-transfers/{requestId}/verify', [PlatformAdminOwnershipTransfersController::class, 'verify'])
-    ->middleware(['auth:sanctum', 'platform.admin']);

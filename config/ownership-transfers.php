@@ -7,16 +7,13 @@ return [
     | SLA windows (SM-1-05 timers, OQ-1-006 lock)
     |--------------------------------------------------------------------------
     |
-    | A Requested transfer expires after 30 days without verification (T8), and
-    | a Verified one after 14 days without execution (T9) — the verified-stage
-    | window is shorter because execution is a single admin click and stale
-    | verification credentials are the risk being bounded.
+    | A Requested transfer expires after 30 days without verification (T8).
+    | Config-driven per the slice-#11 spec §5; the verified-stage 14-day window
+    | joins when the verify task (UC-1-113) lands.
     |
     */
 
     'request_ttl_days' => 30,
-
-    'verified_ttl_days' => 14,
 
     /*
     |--------------------------------------------------------------------------
