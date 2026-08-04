@@ -29,8 +29,6 @@ use App\Billing\Subscriptions\IO\Http\Controllers\SubscriptionsController;
 use App\Billing\Invoices\IO\Http\Controllers\PlatformAdminInvoicesController;
 use App\Companies\Memberships\IO\Http\Controllers\AcceptInvitationController;
 use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
-use App\Companies\OwnershipTransfers\IO\Http\Controllers\OwnershipTransfersController;
-use App\Companies\OwnershipTransfers\IO\Http\Controllers\PlatformAdminOwnershipTransfersController;
 
 // Health is operational tooling and opts out of the platform cross-cutting
 // middleware (no Correlation-Id) — UC-1-118 / cd-foundation-http §4.2.
@@ -250,31 +248,6 @@ Route::delete('/v1/memberships/{membershipId}', [MembershipsController::class, '
 Route::post('/v1/invitations/accept/{token}', AcceptInvitationController::class)
     ->middleware(['throttle:auth-tier']);
 
-// Request an ownership transfer (UC-1-028, SM-1-05 T1) — owner-only per the
-// 2026-05-24 matrix Module 8 (`ownership-transfer.request`); the request is
-// support-verified (UC-1-113) before any privilege change (UC-1-093).
-Route::post('/v1/ownership-transfers', [OwnershipTransfersController::class, 'store'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:ownership-transfer.request', 'idempotency-key:required']);
-
-// Tenant transfer reads (UC-1-126 history / UC-1-125 status) — Owner + Admin +
-// Auditor per the 2026-05-24 matrix Module 8 (`view-history` / `view-status`),
-// company-scoped; a cross-tenant id is existence-hidden (404).
-Route::get('/v1/ownership-transfers', [OwnershipTransfersController::class, 'index'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:ownership-transfer.view-history']);
-
-Route::get('/v1/ownership-transfers/{requestId}', [OwnershipTransfersController::class, 'show'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:ownership-transfer.view-status']);
-
-// SM-1-05 T6 + T7 (UC-1-114 pre-verification / UC-1-115 post-verification) — the
-// original requester withdraws their own transfer; the aggregate branches on
-// state to pick the window. PATCH sub-path per api-conventions 4.3.
-// Owner-only via the seeded `ownership-transfer.withdraw` (matrix Module 8, one
-// permission for both windows — J1). No idempotency-key mount (J5): conventions
-// §13.2 requires one for ownership-transfer-execute only, and the state guard
-// already refuses a duplicate click with 409.
-Route::patch('/v1/ownership-transfers/{requestId}/withdraw', [OwnershipTransfersController::class, 'withdraw'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:ownership-transfer.withdraw']);
-
 // The plan catalog (UC-1-042 partial — the plan-picker read, slice-plans-billing T1).
 // Enum-derived static read, non-paginated {data: [...]} (MyCompaniesCollection
 // precedent); permission:billing.view per the 2026-05-24 matrix (owner full
@@ -311,41 +284,3 @@ Route::get('/v1/invoices/{invoiceId}/receipt', [InvoicesController::class, 'rece
 // No throttle (tiered — OQ-1-098).
 Route::get('/v1/admin/invoices/{invoiceId}', [PlatformAdminInvoicesController::class, 'show'])
     ->middleware(['auth:sanctum', 'platform.admin']);
-
-// The platform admin's cross-tenant ownership-transfer triage queue (UC-1-127,
-// slice #11 Task 3) — same admin chain as the invoice review above, no
-// auth.company, no permission: gate (the admin family carries no company
-// context, and matrix line 185 keeps admin reads on the allowlist rather than a
-// seeded permission). Ordered soonest-deadline-first, open states by default.
-Route::get('/v1/admin/ownership-transfers', [PlatformAdminOwnershipTransfersController::class, 'index'])
-    ->middleware(['auth:sanctum', 'platform.admin']);
-
-// The admin's single-transfer detail — the forensic view UC-1-128 / UC-1-113 /
-// UC-1-093 act from. Unscoped find; an unknown id and a denied caller are
-// byte-identical 404s.
-Route::get('/v1/admin/ownership-transfers/{requestId}', [PlatformAdminOwnershipTransfersController::class, 'show'])
-    ->middleware(['auth:sanctum', 'platform.admin']);
-
-// SM-1-05 T2 (UC-1-113) — the admin confirms the requester's identity and moves
-// the transfer Requested -> Verified. PATCH sub-path per api-conventions 4.3;
-// same admin chain as the reads above. No idempotency-key mount (s149 ruling G1:
-// conventions 13.2 requires it for ownership-transfer-execute only, and the
-// aggregate's from-Requested guard already refuses a duplicate click).
-Route::patch('/v1/admin/ownership-transfers/{requestId}/verify', [PlatformAdminOwnershipTransfersController::class, 'verify'])
-    ->middleware(['auth:sanctum', 'platform.admin']);
-
-// SM-1-05 T3 + T5 (UC-1-128) — the admin ends the transfer with a reasoned
-// rejection, from Requested (pre-verification) or Verified (execution-time); the
-// aggregate branches on state. Same admin chain, and like verify no
-// idempotency-key mount (s151 STALE-3 / s149 G1: conventions 13.2 requires it
-// for ownership-transfer-execute only, and the state guard refuses a duplicate).
-Route::patch('/v1/admin/ownership-transfers/{requestId}/reject', [PlatformAdminOwnershipTransfersController::class, 'reject'])
-    ->middleware(['auth:sanctum', 'platform.admin']);
-
-// SM-1-05 T4 (UC-1-093) — the admin executes a verified transfer and ownership
-// moves atomically across four tables. Unlike its siblings this route mounts
-// idempotency-key:required (api-conventions §13.2 names ownership-transfer-execute
-// explicitly), because the transition is not self-deduplicating the way the
-// others are: a replayed click that loses the race must not 500.
-Route::patch('/v1/admin/ownership-transfers/{requestId}/execute', [PlatformAdminOwnershipTransfersController::class, 'execute'])
-    ->middleware(['auth:sanctum', 'platform.admin', 'idempotency-key:required']);

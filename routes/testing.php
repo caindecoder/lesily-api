@@ -12,7 +12,6 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
-use Spatie\EventSourcing\AggregateRoots\Exceptions\CouldNotPersistAggregate;
 
 Route::get('correlation-probe', fn () => response()->json([
     'downstream_correlation_id' => Context::get('correlation_id'),
@@ -145,15 +144,5 @@ Route::get('platform-admin-bare-probe', fn () => response()->json(['ok' => true]
 Route::get('error-method-not-allowed', fn () => throw new MethodNotAllowedHttpException(['POST']));
 
 Route::get('error-gone', fn () => throw new HttpException(410));
-
-// The optimistic-concurrency conflict (E-f). It gets a probe because it has no
-// natural HTTP path: within one request retrieve/execute/persist are adjacent,
-// so a second sequential call is refused by the state guard long before the
-// version check — the race needs two genuinely concurrent requests. The real
-// mechanism is characterized against the aggregate in
-// ExecuteOwnershipTransferTest; this proves only that the arm maps it.
-Route::get('error-concurrent-modification', fn () => throw new CouldNotPersistAggregate(
-    'Could not persist aggregate because it was changed by another process.',
-));
 
 Route::get('error-http-detail', fn () => throw new HttpException(410, 'sensitive internal detail'));

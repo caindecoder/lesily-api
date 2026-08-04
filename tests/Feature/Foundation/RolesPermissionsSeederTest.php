@@ -92,12 +92,10 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $afterSecond = $this->tableCounts();
 
         // Then every table's row count is stable across runs (idempotent — no duplicates)
-        // 14 permissions / 37 grants since `ownership-transfer.withdraw` joined for
-        // OWNER ONLY (matrix §Module-8, UC-1-114/115 slice-#11 T6/T7, ruling J1):
-        // +1 permission, +1 grant over the 13/36 the transfer-view pair left (s147).
-        // One grant, not three, because withdrawal is the requester's own
-        // authority — admin and auditor can read a transfer but never end one.
-        $this->assertSame(['roles' => 8, 'permissions' => 14, 'role_permission' => 37], $afterFirst);
+        // 10 permissions / 29 grants since payroll_officer's billing.view came out
+        // (matrix §Module-6 ❌ — F2/D-A, slice-plans-billing T1, s130); 30 was
+        // users.remove joining for owner/admin (D10, UC-1-024, s113).
+        $this->assertSame(['roles' => 8, 'permissions' => 10, 'role_permission' => 29], $afterFirst);
         $this->assertSame($afterFirst, $afterSecond);
     }
 
@@ -136,14 +134,12 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $this->newSeeder($this->givenRealCatalogPath())->run();
 
         // Then every seeded permission code matches {module}.{action} dot-notation
-        // (a multi-word action may hyphenate — D10: users.revoke-invitation, users.change-role;
-        // a multi-word MODULE may too — the matrix's module list has always carried
-        // ownership-transfer + country-config, first seeded s146 UC-1-028)
+        // (a multi-word action may hyphenate — D10: users.revoke-invitation, users.change-role)
         $codes = Permission::query()->pluck('code')->all();
         $this->assertNotEmpty($codes, 'No permissions were seeded.');
         foreach ($codes as $code) {
             $this->assertMatchesRegularExpression(
-                '/^[a-z_-]+\.[a-z_-]+$/',
+                '/^[a-z_]+\.[a-z_-]+$/',
                 $code,
                 "Permission code '{$code}' is not {module}.{action} dot-notation."
             );
@@ -168,19 +164,15 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         // Then per-role grant counts match the locked matrix, and manager has none
         $expected = [
             'platform_super_admin' => 0,
-            // owner/admin/auditor each +2 for the transfer-view permissions
-            // (matrix §Module-8 view rows, UC-1-125/126, s147). Owner ALSO carries
-            // ownership-transfer.request (UC-1-028, owner-ONLY, s146) and
-            // ownership-transfer.withdraw (UC-1-114/115, owner-ONLY, ruling J1) —
-            // 14. Admin and auditor stay put: they can read a transfer, never end
-            // one, because withdrawal is the requester's own authority.
-            'owner' => 14,
-            'admin' => 11,
+            // owner/admin each +1 for users.remove (D10, UC-1-024, s113); the prior
+            // +1 each (+ hr_officer) came from users.revoke-invitation (s111).
+            'owner' => 10,
+            'admin' => 9,
             'hr_officer' => 4,
             // 1 since billing.view came out too (matrix §Module-6 ❌ — F2/D-A,
             // slice-plans-billing T1, s130); users.view left at D-A, s108.
             'payroll_officer' => 1,
-            'auditor' => 6,
+            'auditor' => 4,
             'employee' => 1,
             'manager' => 0,
         ];

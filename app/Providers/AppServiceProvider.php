@@ -4,7 +4,6 @@ namespace App\Providers;
 
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
-use Illuminate\Mail\Markdown;
 use App\Companies\Entities\Company;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -34,25 +33,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Every markdown mail view interpolates text somebody outside Lesily
-        // chose — a company name (`emails.invitation`, and the ownership-transfer
-        // body through its notification), admin prose on a rejection — and
-        // CommonMark reads that text as MARKUP unless told otherwise. Laravel
-        // escapes `[`, `<` and `>` in echoed values only while this is in force
-        // (Markdown::render, `withSecuredEncoding === true`); the framework
-        // default is off, and `allow_unsafe_links` refuses `javascript:` but not
-        // `https:`.
-        //
-        // Without this a tenant naming their company
-        // `Acme [Verify identity now](https://not-lesily.example)` puts a live
-        // anchor, with text and destination of their choosing, inside a genuine
-        // Lesily email — and the ownership-transfer T1/T2 notices go to the
-        // platform-admin allowlist, the recipients holding cross-tenant
-        // authority, in the workflow where they are expected to click and act.
-        // Global rather than per-view: the safe default has to be the one you
-        // get by not thinking about it, or the next mail view reopens this.
-        Markdown::withSecuredEncoding();
-
         // The company AuthorizeCompany resolved and validated for this request —
         // the tenant context every tenant-scoped controller consumes
         // (cd-foundation-http §3 step 4; §S11 isolation Layer 3).

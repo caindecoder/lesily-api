@@ -13,7 +13,6 @@ use App\Companies\Memberships\Events\UserRemovedFromCompany;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Companies\Memberships\Events\UserMembershipRoleChanged;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
-use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 
 /**
  * The membership read-model writer, fed by TWO streams: the UserMembership
@@ -28,12 +27,6 @@ use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
  */
 class MembershipProjector extends Projector
 {
-    /**
-     * Second of the four T4 projectors (ruling P4). Sole projector on every
-     * other event it handles, so the global weight reorders nothing else.
-     */
-    public int $weight = 20;
-
     /**
      * Upsert, not insert: a re-invite of a removed member reuses the SAME
      * invitation row (id = the resumed aggregate's UUID — D5b), so the fresh
@@ -167,41 +160,6 @@ class MembershipProjector extends Projector
                 'deleted_at' => null,
             ],
         );
-    }
-
-    /**
-     * SM-1-05 T4 (UC-1-093) — the ownership swap's two role moves.
-     *
-     * Cross-module by design: this projector is the sole writer of company_user
-     * for MEMBERSHIP-LIFECYCLE events, so the T4 pivot writes come here rather
-     * than to a projector in the OwnershipTransfers module.
-     *
-     * That qualifier is load-bearing and was missing (s161). `CompanyProjector
-     * ::onCompanyCreated` attaches the genesis owner pivot with `users()->attach`,
-     * so an unqualified "sole writer of company_user" was simply false as built —
-     * and it was the entire stated justification for this placement. The
-     * placement still holds on its own terms (module cohesion, and not adding a
-     * second lifecycle writer); the reason just had to be true.
-     *
-     * Ruling P1 chose this over
-     * emitting UserMembershipRoleChanged, which was unbuildable — the outgoing
-     * owner's pivot is attached by CompanyProjector::onCompanyCreated and has no
-     * UserMembership stream to record against, and `owner` is deliberately
-     * excluded from ChangeMembershipRoleCommand::ASSIGNABLE_ROLE_CODES.
-     *
-     * withTrashed for replay fidelity, matching the two handlers above.
-     *
-     * $weight 20 — second of the four T4 projectors (ruling P4).
-     */
-    public function onOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
-    {
-        CompanyUser::withTrashed()
-            ->whereKey($event->oldOwnerMembershipId)
-            ->update(['role_id' => $event->oldOwnerNewRoleId]);
-
-        CompanyUser::withTrashed()
-            ->whereKey($event->newOwnerMembershipId)
-            ->update(['role_id' => $event->newOwnerNewRoleId]);
     }
 
     public function onUserMembershipEmergencyContactSet(UserMembershipEmergencyContactSet $event): void

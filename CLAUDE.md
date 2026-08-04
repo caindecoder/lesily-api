@@ -184,7 +184,7 @@ The Laravel Boost block above is auto-generated and covers Laravel/PHPUnit frame
 
 - **§2.2 Rules 1-9** — Test conventions: Sad → Edge → Happy ordering; grouped assertion helpers (2-5 aspects, max 3 params); shared test data via `setUp()`; no HTTP status codes in test names (Rule 6 + grep enforcement); one scenario per test method (Rule 7); no transport identifiers in test names (Rule 8); exception-test idiom — `expectException` ONLY when the throw is the scenario's last observable, try/`fail()`/catch + post-throw state asserts otherwise (Rule 9, locked s138).
 - **§2.8** — Style baselines: LeaveDates primary, subscription-platform parity.
-- **§2.9** — `php artisan make:*` mandatory for ALL framework class scaffolding (pass `--no-interaction`).
+- **§2.9** — `php artisan make:*` mandatory for ALL framework class scaffolding (pass `--no-interaction`). **CORRECTED s165:** `make:trait` (core), `make:aggregate` / `make:reactor` / `make:projector` / `make:storable-event` (spatie event-sourcing) and `make:data` (spatie data) all EXIST — verify with `php artisan list make` before claiming otherwise. Hand-creation is correct only for **Interactors** (no maker) and **value objects** (use `make:class`).
 - **§2.10** — Abstract base TestCase per chunk module (`FoundationTestCase`, `EmployeeTestCase`, etc.) at `tests/Feature/{Module}/{Module}TestCase.php`.
 - **§2.11** — Test routes centralized in `routes/testing.php` (env-gated); NO inline `Route::middleware(...)->post(...)` inside test method bodies.
 - **§2.12** — DataProviders mandatory for ≥3-variation parametric scenarios.

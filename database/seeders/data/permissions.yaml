@@ -62,32 +62,3 @@
   name: View Audit Trail
   description: Read the immutable audit log of data changes.
   module: audit
-
-- code: ownership-transfer.request
-  id: 0193abcd-2222-7000-8000-00000000000b
-  name: Request Ownership Transfer
-  description: Formally request transfer of company ownership to another member (support-verified before execution).
-  module: ownership-transfer
-
-- code: ownership-transfer.view-status
-  id: 0193abcd-2222-7000-8000-00000000000c
-  name: View Ownership Transfer Status
-  description: Read the current lifecycle state of a single ownership-transfer record for the company.
-  module: ownership-transfer
-
-- code: ownership-transfer.view-history
-  id: 0193abcd-2222-7000-8000-00000000000d
-  name: View Ownership Transfer History
-  description: Read the paginated history of the company's ownership-transfer records (all states).
-  module: ownership-transfer
-
-# ONE permission for both withdraw windows (T6 pre-verification / T7
-# post-verification). The matrix carried a `cancel-pre-verification` +
-# `cancel-post-verification` pair until s154: one endpoint serves both, the
-# window is decided by aggregate state AFTER middleware, and the two grant
-# vectors were identical — so the split could never be enforced (ruling J1).
-- code: ownership-transfer.withdraw
-  id: 0193abcd-2222-7000-8000-00000000000e
-  name: Withdraw Ownership Transfer
-  description: Withdraw an ownership-transfer request the caller originally raised, before it is executed.
-  module: ownership-transfer

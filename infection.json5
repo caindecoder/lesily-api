@@ -4,31 +4,7 @@
         directories: ["app"],
         excludes: ["Console", "Exceptions", "Providers"]
     },
-    // Per-mutant wall-clock budget. A timeout is a HANG detector, and Infection
-    // scores one as a KILL — so a budget set below the honest runtime of the
-    // covering test set makes the gate pass vacuously. Measured at slice-#11
-    // Task 5 (s151, OQ-1-152): of 178 mutants only 29 were killed by tests and
-    // 149 "required more time than configured" at 30s; a 180s diagnostic over two
-    // of those files returned 18/18 genuinely killed with 0 timeouts, so these
-    // were never hangs — the covering set simply cannot finish in 30s (~35s per
-    // mutant at 4 threads). Raised to 120 (s152): ~3.4x headroom over the
-    // measured cost, still low enough to catch a real infinite loop. CI core
-    // count differs from the local 4 threads, so CI's run is the confirmation
-    // (amendment H — CI is authoritative for the mutation verdict).
-    //
-    // SECOND sub-class, measured at Task R2 (s164): when a mutant's NOMINAL
-    // covering-test runtime already exceeds this budget, Infection SKIPS it
-    // pre-emptively without ever running it — and skipped mutants are removed
-    // from the MSI denominator, so "MSI 100%" silently means 100% of those
-    // ATTEMPTED. Distinct from the timeout-as-KILL story above (that one
-    // scores; this one stops looking). First seen on the two
-    // SupportQueueNotificationReactor MethodCallRemoval mutants after R2
-    // widened that reactor's covering set past 120s; a one-off timeout-600
-    // run executed both and both were KILLED by tests (recorded s164). When a
-    // scoped run reports skips, read infection.json's skippedCount and
-    // re-verify the skipped set with a raised timeout before trusting the
-    // headline MSI.
-    timeout: 120,
+    timeout: 30,
     logs: {
         text: "infection.log",
         html: "infection.html",
@@ -110,12 +86,6 @@
                 "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoiceRefunded",
                 "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoiceVoided",
                 "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoiceDisputeFiled",
-                // slice-#11 Task 1 / UC-1-028 (2026-07-22): the T1 projector arm +
-                // the two T1 reactors — same spatie-discovery equivalent class
-                // (protected still projects / notifies / audits).
-                "App\\Companies\\OwnershipTransfers\\Projectors\\OwnershipTransferProjector::onOwnershipTransferRequested",
-                "App\\Companies\\OwnershipTransfers\\Reactors\\SupportQueueNotificationReactor::onOwnershipTransferRequested",
-                "App\\Companies\\OwnershipTransfers\\Reactors\\OwnershipTransferAuditReactor::onOwnershipTransferRequested",
             ],
         },
         // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only

@@ -376,28 +376,6 @@ abstract class PlatformAdminTestCase extends TestCase
     }
 
     /**
-     * The six tenant-side roles every /api/v1/admin/* surface must turn away
-     * with the indistinguishable 404 — the shared denial matrix, not one
-     * endpoint's concern (lifted off ReviewInvoiceAsAdminTest s148 D4 when the
-     * ownership-transfer admin reads became its second consumer). The gate's
-     * own manager + unallowlisted-platform_super_admin pins live in
-     * EnsurePlatformAdminTest.
-     *
-     * @return array<string, array{string}>
-     */
-    public static function provideTenantRoles(): array
-    {
-        return [
-            'owner' => ['owner'],
-            'admin' => ['admin'],
-            'hr_officer' => ['hr_officer'],
-            'payroll_officer' => ['payroll_officer'],
-            'employee' => ['employee'],
-            'auditor' => ['auditor'],
-        ];
-    }
-
-    /**
      * The insert was rejected by the NOT NULL constraint on $column — the
      * SPECIFIC integrity violation (SQLSTATE 23000) named in the DRIVER
      * message (errorInfo[2]), not the rendered query: the exception message

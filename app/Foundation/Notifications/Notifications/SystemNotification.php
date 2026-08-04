@@ -6,7 +6,6 @@ use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 use App\Foundation\Notifications\Enums\NotificationType;
-use App\Foundation\Notifications\Contracts\SendsQueuedMail;
 use App\Foundation\Notifications\Channels\QueuedMailChannel;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\Notifications\Entities\NotificationPreference;
@@ -19,7 +18,7 @@ use App\Foundation\Notifications\Entities\NotificationPreference;
  * the email leg is a queued Mailable (SystemNotificationMail) that retries
  * independently, so email failure never blocks the in-app record.
  */
-class SystemNotification extends Notification implements SendsQueuedMail
+class SystemNotification extends Notification
 {
     use Queueable;
 

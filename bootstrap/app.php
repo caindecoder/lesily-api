@@ -13,10 +13,10 @@ use App\Foundation\Http\Middleware\EnsurePermission;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Foundation\Http\Middleware\EnsurePlatformAdmin;
 use App\Foundation\Http\Middleware\EnsureIdempotencyKey;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
-use App\Companies\Exceptions\CompanyUnderLegalHoldException;
 use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use App\Foundation\Auth\Exceptions\InvalidResetLinkException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
@@ -48,15 +48,6 @@ use App\Companies\Memberships\Exceptions\OwnerTransferRequiredException;
 use App\Companies\Memberships\Exceptions\SelfRoleChangeBlockedException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
-use Spatie\EventSourcing\AggregateRoots\Exceptions\CouldNotPersistAggregate;
-use App\Companies\OwnershipTransfers\Exceptions\NotTheTransferRequesterException;
-use App\Companies\OwnershipTransfers\Exceptions\EmergencyContactRequiredException;
-use App\Companies\OwnershipTransfers\Exceptions\OpenOwnershipTransferExistsException;
-use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferOwnerChangedException;
-use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotExecutableException;
-use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotRejectableException;
-use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotVerifiableException;
-use App\Companies\OwnershipTransfers\Exceptions\OwnershipTransferNotWithdrawableException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -253,82 +244,6 @@ return Application::configure(basePath: dirname(__DIR__))
             $e->getMessage(),
         ));
 
-        // An ownership-transfer target has never set an emergency contact —
-        // §S10b makes it mandatory for the incoming owner (UC-1-028 T1 guard).
-        $exceptions->render(fn (EmergencyContactRequiredException $e) => EnvelopeBuilder::build(
-            ApiErrorCode::EmergencyContactRequired,
-            $e->getMessage(),
-        ));
-
-        // A second transfer request while one is still open — one transfer at
-        // a time per company (UC-1-028 T1 guard; ERD-1-05 §5 invariant).
-        $exceptions->render(fn (OpenOwnershipTransferExistsException $e) => EnvelopeBuilder::build(
-            ApiErrorCode::StateGuardViolation,
-            $e->getMessage(),
-        ));
-
-        // T2 attempted from a state that cannot reach Verified — already
-        // verified, or terminal (UC-1-113 6a; SM-1-05 §4 gives T2 one source).
-        $exceptions->render(fn (OwnershipTransferNotVerifiableException $e) => EnvelopeBuilder::build(
-            ApiErrorCode::StateGuardViolation,
-            $e->getMessage(),
-        ));
-
-        // T3/T5 attempted from a state that cannot reach Rejected — already
-        // ended, whether rejected, cancelled, expired or executed (UC-1-128 6c;
-        // SM-1-05 §4 makes only the two OPEN states rejectable).
-        $exceptions->render(fn (OwnershipTransferNotRejectableException $e) => EnvelopeBuilder::build(
-            ApiErrorCode::StateGuardViolation,
-            $e->getMessage(),
-        ));
-
-        // T6/T7 attempted from a state that cannot reach Cancelled — already
-        // ended, whether cancelled, rejected, expired or executed (UC-1-114 4b /
-        // UC-1-115 4b-4c; SM-1-05 §4 makes only the two OPEN states withdrawable).
-        $exceptions->render(fn (OwnershipTransferNotWithdrawableException $e) => EnvelopeBuilder::build(
-            ApiErrorCode::StateGuardViolation,
-            $e->getMessage(),
-        ));
-
-        // T4 attempted from a state that cannot reach Executed — not yet
-        // verified, or already ended (UC-1-093; SM-1-05 §4 gives T4 one source).
-        $exceptions->render(fn (OwnershipTransferNotExecutableException $e) => EnvelopeBuilder::build(
-            ApiErrorCode::StateGuardViolation,
-            $e->getMessage(),
-        ));
-
-        // An aggregate changed between retrieve and persist — Spatie's
-        // optimistic-concurrency check (E-f). App-wide on purpose: any aggregate
-        // can lose this race, so the message stays GENERIC. SD-1-02 §2.3's
-        // execute-specific wording ("just executed by another admin") would be
-        // wrong the first time an invoice or subscription raced, and is superseded.
-        $exceptions->render(fn (CouldNotPersistAggregate $e) => EnvelopeBuilder::build(
-            ApiErrorCode::ConcurrentModification,
-            'This record was changed by another process. Please retry.',
-        ));
-
-        // T4 attempted when a prior transfer moved ownership while this one sat
-        // verified — the recorded owner is no longer the live one (UC-1-093 3b).
-        $exceptions->render(fn (OwnershipTransferOwnerChangedException $e) => EnvelopeBuilder::build(
-            ApiErrorCode::StateGuardViolation,
-            $e->getMessage(),
-        ));
-
-        // T6/T7 attempted by a permission-holder who is not the transfer's own
-        // requester (UC-1-114/115 error-flow 3a). Its own 403 code, not the
-        // middleware's ROLE_INSUFFICIENT — this caller has the role (ruling J3).
-        $exceptions->render(fn (NotTheTransferRequesterException $e) => EnvelopeBuilder::build(
-            ApiErrorCode::TransferRequesterMismatch,
-            $e->getMessage(),
-        ));
-
-        // A regulatory hold freezes ownership changes, not merely the expiry
-        // timers (§S10b; slice-#11 D3 / UC-1-113 6d).
-        $exceptions->render(fn (CompanyUnderLegalHoldException $e) => EnvelopeBuilder::build(
-            ApiErrorCode::StateGuardViolation,
-            $e->getMessage(),
-        ));
-
         // The receipt state guard refused the download — non-paid status (echoed
         // as current_status) or an open dispute (UC-1-121 5a/5b; s135 F-c).
         $exceptions->render(fn (ReceiptNotAvailableException $e) => EnvelopeBuilder::build(
@@ -346,18 +261,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'Receipt generation is temporarily unavailable. Please try again shortly.',
         )->withHeaders(['Retry-After' => '30']));
 
-        // E-d (s158): the Eloquent model-not-found arm that stood here was DEAD
-        // and is removed. Laravel's handler runs prepareException() BEFORE the
-        // render callbacks, and that converts the Eloquent exception into
-        // NotFoundHttpException — so the arm below is what has actually answered
-        // every interactor-thrown not-found all along. Deleting it changes no
-        // response: the 404 rows across the ownership-transfer, invoice and
-        // membership suites all still pass.
-        //
-        // The import went with it (s161). Naming the class here kept Pint's
-        // no_unused_imports quiet — php-cs-fixer counts a short name in a
-        // comment as a use — so the removal note was the only thing keeping a
-        // dead symbol in the file.
+        $exceptions->render(fn (ModelNotFoundException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::ResourceNotFound,
+            'The requested resource was not found.',
+        ));
+
         $exceptions->render(fn (NotFoundHttpException $e) => EnvelopeBuilder::build(
             ApiErrorCode::ResourceNotFound,
             'The requested resource was not found.',
