@@ -14,7 +14,7 @@ use App\Foundation\Notifications\Notifications\SystemNotification;
  * UserPasswordChanged / UserPasswordReset event, so the confirmation is bound to a COMMITTED write and
  * never a failed attempt, and sends the critical PasswordChanged SystemNotification whose isCritical()
  * tier bypasses opt-out — an account-security notice cannot be silenced (questionnaire S16 L474).
- * Synchronous, like TrialExpiredEmailReactor: neither flow wraps a transaction, so there is no rollback
+ * Synchronous by design: neither password flow wraps a transaction, so there is no rollback
  * to defer the send past (the email leg still queues inside SystemNotification). The companyName is
  * resolved deterministically by User::notificationCompanyName() (OQ-1-124) — a company-less user
  * degrades to an empty label rather than failing the notice.
