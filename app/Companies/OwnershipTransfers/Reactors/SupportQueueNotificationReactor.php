@@ -3,7 +3,6 @@
 namespace App\Companies\OwnershipTransfers\Reactors;
 
 use App\Models\User;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use App\Foundation\Http\Values\PlatformAdminAllowlist;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
@@ -23,18 +22,6 @@ use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferWithdrawn
  * OwnershipTransferWithdrawnNotification, not cd-notifications' bespoke
  * dispatcher (CD-1-05's Slack/Teams note is unbuilt infra).
  *
- * Queued (ShouldQueue) — ruling Q1 (s164, Task R2): a NEW decision, not CD
- * conformance. This reactor was never among the CD's six `Queued.` rows, but
- * leaving it synchronous would have kept the OQ-1-153 failure class (a
- * throwing notification 5xx-ing a committed write) alive on T1/T6/T7 alone.
- * Delivery-time staleness is benign here, for a reason worth stating: the T1
- * arm may deliver after the row has already moved on (an immediate
- * withdrawal), but this same reactor announces the departure too (J4), so the
- * pair self-corrects — and the notification bodies are per-class static text
- * + tenant name, not status renderings. Contrast PlatformAdminQueueReactor,
- * whose alert asserts a live claim ("awaiting execution") and therefore
- * carries the Q2 delivery-time status guard.
- *
  * This docblock has now gone stale twice in the commit that made it stale. It
  * said "the native SystemNotification per OQ-1-104" until s152, when the H3
  * retrofit replaced the body and left it asserting the opposite; then it still
@@ -42,7 +29,7 @@ use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferWithdrawn
  * review rather than by any gate — the second time with this very paragraph
  * sitting underneath, describing the first.
  */
-class SupportQueueNotificationReactor extends Reactor implements ShouldQueue
+class SupportQueueNotificationReactor extends Reactor
 {
     public function onOwnershipTransferRequested(OwnershipTransferRequested $event): void
     {

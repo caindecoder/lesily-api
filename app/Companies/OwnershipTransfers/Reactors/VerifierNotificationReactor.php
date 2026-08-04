@@ -3,7 +3,6 @@
 namespace App\Companies\OwnershipTransfers\Reactors;
 
 use App\Models\User;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
 use App\Companies\OwnershipTransfers\Enums\TransitionSource;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExpired;
@@ -34,14 +33,10 @@ use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipTransferVerificat
  * to an event class name and payload shape (OQ-1-108).
  *
  * Reading the row here is safe despite amendment N: T9 is a single-aggregate
- * write and this event's own projector runs before its reactors, so the row
- * is committed by the time we look. Queued (ShouldQueue, Task R2 — CD
- * `Queued.` conformance); delivery-time staleness cannot arise on either
- * read: the event lands the row in the terminal `expired` state, and
- * `verified_by` is written exactly once at T2 (the M3 argument) — neither
- * moves between commit and delivery.
+ * write and this event's own projector runs before its reactors, so the row is
+ * committed and current by the time we look.
  */
-class VerifierNotificationReactor extends Reactor implements ShouldQueue
+class VerifierNotificationReactor extends Reactor
 {
     public function onOwnershipTransferExpired(OwnershipTransferExpired $event): void
     {

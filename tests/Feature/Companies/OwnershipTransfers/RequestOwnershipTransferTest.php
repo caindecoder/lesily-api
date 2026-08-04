@@ -6,7 +6,6 @@ use App\Models\User;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
-use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Notification;
@@ -329,25 +328,6 @@ class RequestOwnershipTransferTest extends OwnershipTransfersTestCase
         $this->assertThirtyDayTimerAnchored($requestId);
         $this->assertSupportQueueNotified();
         $this->assertAuditRowRecorded($requestId);
-    }
-
-    #[Test]
-    public function when_the_owner_requests_a_transfer_then_the_support_notice_is_queued_not_sent_inline(): void
-    {
-        // Given an eligible transfer arrangement with the queue captured
-        $this->arrangeEligibleTransfer();
-        Queue::fake();
-
-        // When the owner requests the transfer
-        $response = $this->postTransferRequest($this->owner, $this->company, $this->transferBodyFor($this->target));
-
-        // Then the request is created and the support notice rides the queued
-        // handler job instead of sending inline (ruling Q1, s164 — a NEW
-        // decision, not CD conformance: this reactor was never among the six
-        // `Queued.` rows, but leaving it synchronous would keep the OQ-1-153
-        // failure class alive on T1/T6/T7 alone)
-        $response->assertCreated();
-        $this->assertReactorDeferred(OwnershipTransferRequested::class, OwnershipTransferRequestedNotification::class);
     }
 
     private Company $company;

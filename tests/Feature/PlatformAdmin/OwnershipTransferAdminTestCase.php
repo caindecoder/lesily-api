@@ -7,14 +7,12 @@ use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
-use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Notification;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\OwnershipTransfers\Enums\OwnershipTransferStatus;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
-use Tests\Feature\Companies\OwnershipTransfers\Testing\InteractsWithQueuedReactors;
 use Tests\Feature\Companies\OwnershipTransfers\Testing\ArrangesOwnershipTransferStreams;
 
 /**
@@ -28,7 +26,6 @@ use Tests\Feature\Companies\OwnershipTransfers\Testing\ArrangesOwnershipTransfer
 abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
 {
     use ArrangesOwnershipTransferStreams;
-    use InteractsWithQueuedReactors;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -93,26 +90,6 @@ abstract class OwnershipTransferAdminTestCase extends PlatformAdminTestCase
         ]);
 
         return [$company, $owner];
-    }
-
-    /**
-     * Stamp $member's pivot with emergency-contact data (§S10b shape) —
-     * mirrors `OwnershipTransfersTestCase::withEmergencyContact()` on the
-     * tenant side (module bases are independent, established precedent). A
-     * named fixture helper carrying the column write is the sanctioned shape;
-     * §2.13 bans inline overrides in test BODIES, not in fixtures.
-     */
-    protected function withEmergencyContact(Company $company, User $member): void
-    {
-        CompanyUser::query()
-            ->where('company_id', $company->getKey())
-            ->where('user_id', $member->getKey())
-            ->update([
-                'emergency_contact_name' => 'Nadia Perera',
-                'emergency_contact_email' => 'nadia.perera@example.com',
-                'emergency_contact_phone' => '+94771234567',
-                'emergency_contact_relationship' => 'spouse',
-            ]);
     }
 
     /**

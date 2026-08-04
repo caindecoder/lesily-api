@@ -3,7 +3,6 @@
 namespace App\Companies\OwnershipTransfers\Reactors;
 
 use App\Models\User;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
 use App\Companies\OwnershipTransfers\Events\OwnershipTransferExecuted;
 use App\Companies\OwnershipTransfers\Entities\OwnershipTransferRequest;
@@ -18,11 +17,10 @@ use App\Companies\OwnershipTransfers\IO\Notifications\OwnershipReceivedNotificat
  * owner who already had a contact heard nothing at all — and would put two
  * unrelated change-drivers in one class.
  *
- * Queued (ShouldQueue, Task R2 — CD `Queued.` conformance). Delivery-time
- * staleness is benign: the recipient comes from the immutable event payload,
- * and the row the notification renders is terminal `executed`.
+ * Synchronous, like the module's other reactors; Task R2 owns the queueing
+ * conformance pass.
  */
-class NewOwnerNotificationReactor extends Reactor implements ShouldQueue
+class NewOwnerNotificationReactor extends Reactor
 {
     public function onOwnershipTransferExecuted(OwnershipTransferExecuted $event): void
     {
