@@ -323,11 +323,3 @@ Route::get('/v1/admin/ownership-transfers/{requestId}', [PlatformAdminOwnershipT
 // aggregate's from-Requested guard already refuses a duplicate click).
 Route::patch('/v1/admin/ownership-transfers/{requestId}/verify', [PlatformAdminOwnershipTransfersController::class, 'verify'])
     ->middleware(['auth:sanctum', 'platform.admin']);
-
-// SM-1-05 T3 + T5 (UC-1-128) — the admin ends the transfer with a reasoned
-// rejection, from Requested (pre-verification) or Verified (execution-time); the
-// aggregate branches on state. Same admin chain, and like verify no
-// idempotency-key mount (s151 STALE-3 / s149 G1: conventions 13.2 requires it
-// for ownership-transfer-execute only, and the state guard refuses a duplicate).
-Route::patch('/v1/admin/ownership-transfers/{requestId}/reject', [PlatformAdminOwnershipTransfersController::class, 'reject'])
-    ->middleware(['auth:sanctum', 'platform.admin']);

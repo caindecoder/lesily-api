@@ -6,8 +6,6 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\OwnershipTransfers\UseCases\Commands\OwnershipTransferAdminFilters;
-use App\Companies\OwnershipTransfers\UseCases\Commands\RejectOwnershipTransferCommand;
-use App\Companies\OwnershipTransfers\UseCases\Interactors\RejectOwnershipTransferInteractor;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestAdminResource;
 use App\Companies\OwnershipTransfers\UseCases\Commands\VerifyOwnershipTransferIdentityCommand;
 use App\Companies\OwnershipTransfers\IO\Http\Resources\OwnershipTransferRequestAdminCollection;
@@ -59,19 +57,6 @@ class PlatformAdminOwnershipTransfersController
         $command = VerifyOwnershipTransferIdentityCommand::validateAndCreate([
             ...$request->only(['verificationNotes', 'verificationArtefacts']),
             'verifiedBy' => $admin->getKey(),
-        ]);
-
-        return new OwnershipTransferRequestAdminResource($interactor->execute($requestId, $command));
-    }
-
-    public function reject(string $requestId, Request $request, RejectOwnershipTransferInteractor $interactor): OwnershipTransferRequestAdminResource
-    {
-        /** @var User $admin — guaranteed by auth:sanctum */
-        $admin = $request->user();
-
-        $command = RejectOwnershipTransferCommand::validateAndCreate([
-            ...$request->only(['reason', 'rejectionReasonCode']),
-            'rejectedBy' => $admin->getKey(),
         ]);
 
         return new OwnershipTransferRequestAdminResource($interactor->execute($requestId, $command));

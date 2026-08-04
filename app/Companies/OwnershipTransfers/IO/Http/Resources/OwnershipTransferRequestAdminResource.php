@@ -52,7 +52,6 @@ class OwnershipTransferRequestAdminResource extends JsonResource
             'rejected_at' => $this->resource->rejected_at,
             'rejected_by' => $this->resource->rejected_by,
             'rejection_reason' => $this->resource->rejection_reason,
-            'rejection_reason_code' => $this->resource->rejection_reason_code,
             'rejection_source' => $this->resource->rejection_source,
             'cancelled_at' => $this->resource->cancelled_at,
             'cancelled_by' => $this->resource->cancelled_by,

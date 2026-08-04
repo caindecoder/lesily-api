@@ -215,7 +215,6 @@ class ReviewOwnershipTransferAsAdminTest extends OwnershipTransferAdminTestCase
             'rejected_at' => null,
             'rejected_by' => null,
             'rejection_reason' => null,
-            'rejection_reason_code' => null,
             'rejection_source' => null,
             'cancelled_at' => null,
             'cancelled_by' => null,
