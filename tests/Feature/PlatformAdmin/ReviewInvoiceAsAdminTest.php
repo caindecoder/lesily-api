@@ -356,4 +356,23 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $response->assertOk();
         $this->assertAdminReviewAuditRecorded($invoice, $admin, $response);
     }
+
+    /**
+     * The six tenant-side roles of UC-1-122's Denied list (the gate's own
+     * manager + unallowlisted-platform_super_admin pins live in
+     * EnsurePlatformAdminTest — T6).
+     *
+     * @return array<string, array{string}>
+     */
+    public static function provideTenantRoles(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+            'hr_officer' => ['hr_officer'],
+            'payroll_officer' => ['payroll_officer'],
+            'employee' => ['employee'],
+            'auditor' => ['auditor'],
+        ];
+    }
 }
