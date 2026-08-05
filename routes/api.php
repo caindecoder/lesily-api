@@ -9,6 +9,7 @@ use App\Foundation\Auth\IO\Http\Controllers\ProfileController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
 use App\Billing\Invoices\IO\Http\Controllers\InvoicesController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutAllController;
+use App\Companies\IO\Http\Controllers\CompanyOwnershipController;
 use App\Billing\Subscriptions\IO\Http\Controllers\PlansController;
 use App\Foundation\Auth\IO\Http\Controllers\MyCompaniesController;
 use App\Foundation\Auth\IO\Http\Controllers\ViewSessionsController;
@@ -203,6 +204,15 @@ Route::get('/v1/companies/{companyId}', [CompaniesController::class, 'show'])
 // membership writes omit it (s122 ruling). No throttle (tiered limits — OQ-1-098).
 Route::put('/v1/companies/{companyId}', [CompaniesController::class, 'update'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:companies.update']);
+
+// Transfer company ownership (UC-1-028) — the Owner hands the seat to an existing
+// member through the event-sourced Company aggregate (CompanyOwnershipTransferred);
+// the locked interactor re-validates live state in-transaction (slice-11R spec §4).
+// permission:companies.transfer-ownership is seeded owner-only. No idempotency-key —
+// the post-lock state guard is the dedup (s122 sibling ruling; ruled s170). No
+// throttle (tiered limits — OQ-1-098).
+Route::patch('/v1/companies/{companyId}/owner', CompanyOwnershipController::class)
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:companies.transfer-ownership']);
 
 // Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
 // a pending invitation is created and the invite email dispatched inline. auth:sanctum
