@@ -11,9 +11,11 @@ enum NotificationType: string
     case OwnershipReceived = 'ownership_received';
 
     /**
-     * Critical notifications (account-security alerts, password-change confirmations)
-     * are mandatory: users cannot opt their email out of them. See foundation-brief /
-     * questionnaire S16 L474 (security notices reach all tiers and bypass preferences).
+     * Critical notifications (account-security alerts, password-change
+     * confirmations, ownership-received notices) are mandatory: users cannot
+     * opt their email out of them. Security notices per foundation-brief /
+     * questionnaire S16 L474; ownership-received is a control-surface change —
+     * who owns the company — ruled critical at the UC-1-028 build (s170).
      */
     public function isCritical(): bool
     {

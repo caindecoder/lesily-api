@@ -76,9 +76,10 @@ class TransferCompanyOwnershipInteractor
     }
 
     /**
-     * Lock the pivot rows in ascending user-id order — both writers of an
-     * opposite-direction transfer pair order the same two rows identically, so
-     * they serialize instead of deadlocking (the s169 lock-order rule).
+     * Lock the pivot rows in ascending user-id order (the s169 lock-order
+     * rule). Same-company transfers are already serialized by the companies
+     * row lock above; the deterministic order removes any reliance on that —
+     * insurance for future writers that skip the companies lock.
      *
      * @param  array<int, string>  $userIds
      * @return array<string, CompanyUser> keyed by user_id

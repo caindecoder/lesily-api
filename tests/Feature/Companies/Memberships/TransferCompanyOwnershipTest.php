@@ -18,9 +18,11 @@ use Illuminate\Support\Facades\Notification;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Tests\Feature\Companies\CreatesTrialCompanies;
 use App\Companies\Events\CompanyOwnershipTransferred;
+use App\Foundation\Notifications\Enums\NotificationType;
 use App\Companies\Aggregates\Company as CompanyAggregate;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
+use App\Foundation\Notifications\Entities\NotificationPreference;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -102,6 +104,24 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_target_membership_was_removed_then_the_transfer_is_refused(): void
+    {
+        // Given
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+        $removed = User::factory()->create();
+        $this->aRemovedMembership($company, $removed);
+
+        // When
+        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $removed->getKey()]);
+
+        // Then — a soft-deleted pivot is not membership; the locked lookup's
+        // live scope decides (the projector's withTrashed is replay-only)
+        $this->assertRefusedWith($response, ApiErrorCode::TargetNotMember);
+        $this->assertNothingTransferred($company, $owner);
+    }
+
+    #[Test]
     public function when_the_owner_targets_themselves_then_the_transfer_is_refused(): void
     {
         // Given
@@ -180,12 +200,40 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     }
 
     #[Test]
-    public function when_the_transfer_reads_the_rows_it_will_write_then_it_locks_them_in_ascending_order(): void
+    public function when_the_transfer_lock_wait_times_out_then_it_is_refused_as_a_conflict(): void
     {
-        // Given
+        // Given — a 1205-shaped failure whose message avoids Laravel's
+        // concurrency-detector strings, so it reaches the interactor as the RAW
+        // QueryException production surfaces at top level (the DeadlockException
+        // wrap fires only for detector-matched errors in nested transactions)
         $owner = User::factory()->create();
         $company = $this->aTrialCompanyOwnedBy($owner);
         [$target] = $this->aMembership($company, 'employee');
+        $lockWait = new PDOException('SQLSTATE[HY000]: General error: 1205');
+        $lockWait->errorInfo = ['HY000', 1205, 'Lock wait timeout exceeded'];
+        $this->induceProjectorFailureFor(
+            CompanyOwnershipTransferred::class,
+            new QueryException('mysql', 'select * from `company_user` for update', [], $lockWait),
+        );
+
+        // When
+        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
+
+        // Then — the errorInfo classification answers 409 and the rollback held
+        $this->assertRefusedWith($response, ApiErrorCode::StateGuardViolation);
+        $this->assertNothingTransferred($company, $owner);
+    }
+
+    #[Test]
+    public function when_the_transfer_reads_the_rows_it_will_write_then_it_locks_them_in_ascending_order(): void
+    {
+        // Given — the target user is minted BEFORE the owner: uuid7 ids are
+        // time-ordered, so ascending id order is the REVERSE of the interactor's
+        // [owner, target] argument order and only a real sort can produce it
+        $target = User::factory()->create();
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+        $this->attachMember($company, $target, $this->seededRole('employee'));
         $expectedOrder = collect([$owner->getKey(), $target->getKey()])->sort()->values()->all();
 
         // When
@@ -241,7 +289,30 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     }
 
     #[Test]
-    public function when_the_transfer_commits_then_the_new_owner_notification_is_deferred_past_the_commit(): void
+    public function when_the_new_owner_has_opted_out_of_mail_then_the_ownership_notice_still_arrives(): void
+    {
+        // Given — ownership is a control-surface change; its notice is critical
+        // and cannot be silenced (s170 PAUSE-1 ruling)
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+        [$target] = $this->aMembership($company, 'employee');
+        NotificationPreference::factory()->mailDisabled($target, NotificationType::OwnershipReceived)->create();
+        Queue::fake();
+
+        // When
+        $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()])->assertOk();
+
+        // Then
+        $this->runQueuedHandlersFor(CompanyOwnershipTransferred::class);
+        Mail::assertQueued(
+            SystemNotificationMail::class,
+            fn (SystemNotificationMail $mail): bool => $mail->type === NotificationType::OwnershipReceived
+                && $mail->hasTo($target->email),
+        );
+    }
+
+    #[Test]
+    public function when_the_transfer_commits_then_the_new_owner_notification_rides_the_queue(): void
     {
         // Given
         $owner = User::factory()->create();
@@ -253,7 +324,9 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         // When
         $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
 
-        // Then
+        // Then — queued, not inline: the swap is committed while zero notices
+        // have been sent and the reactor job sits on the queue (the after-commit
+        // half is config/queue.php after_commit, pinned app-level elsewhere)
         $response->assertOk();
         $this->assertOwnershipMoved($company, $owner, $target);
         $this->assertReactorDeferred(CompanyOwnershipTransferred::class, SystemNotification::class);
@@ -304,9 +377,10 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
      * The swap serialized on its locks (spec §4 + the s169 lock-order rule):
      * inside the interactor's own transaction (depth > ambient), the companies
      * row and BOTH company_user rows were read FOR UPDATE, the two pivot locks
-     * were taken in ascending user-id order (opposite-direction transfers
-     * cannot deadlock), and every write followed the locks. Implementation-
-     * coupled by design — the invariant is invisible to single-connection
+     * were taken in ascending user-id order, and every write followed the
+     * locks. The companies lock serializes same-company transfers today; the
+     * pivot order is pinned as insurance for writers that skip it.
+     * Implementation-coupled by design — invisible to single-connection
      * behavioral rows (E21/P9; T2 depth+position oracle extended).
      *
      * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>}  $capture
@@ -393,6 +467,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
             ->where('event_properties->transferredBy', $from->getKey())
             ->where('event_properties->source', 'self_service')
             ->whereNull('event_properties->caseId')
+            ->where('meta_data->company_id', $company->getKey())
             ->count());
     }
 

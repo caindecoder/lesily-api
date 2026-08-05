@@ -59,6 +59,17 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
         $mail->assertHasSubject('Your password was changed');
     }
 
+    #[Test]
+    public function when_an_ownership_received_mail_is_rendered_then_its_subject_names_the_company_handed_over(): void
+    {
+        // Given
+        $mail = new SystemNotificationMail(NotificationType::OwnershipReceived, 'Contoso');
+
+        // When / Then — a missing lang entry would ship the literal translation
+        // key as the subject (UC-1-028 new-owner notice)
+        $mail->assertHasSubject('You are now the owner of Contoso');
+    }
+
     /**
      * The blade uses the <x-mail::message> component, whose `mail` view namespace
      * is registered only by the markdown render path — so pinning `content()` to

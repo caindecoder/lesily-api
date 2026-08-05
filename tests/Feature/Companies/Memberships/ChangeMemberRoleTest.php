@@ -211,6 +211,23 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_projector_fails_mid_role_change_then_nothing_is_persisted(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $this->induceProjectorFailureFor(UserMembershipRoleChanged::class);
+
+        // When
+        $response = $this->changeRole($admin, $company, $membershipId);
+
+        // Then — the transaction the lock row proves PRESENT rolls back whole:
+        // zero stored events, role untouched (the T2-deferred atomicity half)
+        $this->assertRefusedWith($response, ApiErrorCode::InternalError);
+        $this->assertMembershipRoleUnchanged($membershipId, $this->seededRole('employee'));
+    }
+
+    #[Test]
     public function when_new_role_equals_current_role_then_change_succeeds(): void
     {
         // Given
@@ -314,23 +331,6 @@ class ChangeMemberRoleTest extends MembershipsTestCase
 
         // Then
         $this->assertOwnerGuardDecidedUnderLock($capture, 'company_user');
-    }
-
-    #[Test]
-    public function when_the_projector_fails_mid_role_change_then_nothing_is_persisted(): void
-    {
-        // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
-        $this->induceProjectorFailureFor(UserMembershipRoleChanged::class);
-
-        // When
-        $response = $this->changeRole($admin, $company, $membershipId);
-
-        // Then — the transaction the lock row proves PRESENT rolls back whole:
-        // zero stored events, role untouched (the T2-deferred atomicity half)
-        $this->assertRefusedWith($response, ApiErrorCode::InternalError);
-        $this->assertMembershipRoleUnchanged($membershipId, $this->seededRole('employee'));
     }
 
     /**
