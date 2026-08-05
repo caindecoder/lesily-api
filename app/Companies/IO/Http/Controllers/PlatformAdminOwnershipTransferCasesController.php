@@ -2,8 +2,11 @@
 
 namespace App\Companies\IO\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\Request;
+use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
+use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
 
 /**
  * The platform-admin ownership-transfer case surface (slice-11R spec §3).
@@ -14,8 +17,15 @@ use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
  */
 class PlatformAdminOwnershipTransferCasesController
 {
-    public function store(Request $request): void
+    public function store(Request $request, OpenOwnershipTransferCaseInteractor $interactor): void
     {
-        OpenOwnershipTransferCaseCommand::validateAndCreate($request);
+        /** @var User $admin */
+        $admin = $request->user();
+
+        $interactor->execute(
+            OpenOwnershipTransferCaseCommand::validateAndCreate($request),
+            $admin,
+            AdminRequestContext::fromRequest($request),
+        );
     }
 }

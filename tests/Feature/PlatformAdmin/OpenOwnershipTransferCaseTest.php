@@ -3,11 +3,13 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use RuntimeException;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
@@ -91,6 +93,20 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
         $this->assertNoCaseOpened();
     }
 
+    #[Test]
+    public function when_the_audit_write_fails_then_no_case_row_survives(): void
+    {
+        // Given the audit write will fail
+        AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the admin opens a case
+        $response = $this->openCase($this->admin, $this->validPayload());
+
+        // Then the whole transaction rolls back — a case exists only alongside its audit row
+        $this->assertOpenFailedSafely($response);
+        $this->assertNoCaseOpened();
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
@@ -131,6 +147,16 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
             'requestedContext' => 'Owner deceased; brother called support claiming next-of-kin, death certificate offered.',
             ...$overrides,
         ];
+    }
+
+    /**
+     * The open failed safely — generic 500 §S21 envelope, no internal details
+     * (debug is off in setUp, so the production Throwable catch-all renders).
+     */
+    protected function assertOpenFailedSafely(TestResponse $response): void
+    {
+        $response->assertStatus(500);
+        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
     }
 
     /**
