@@ -34,6 +34,7 @@ use App\Billing\Invoices\Exceptions\ReceiptNotAvailableException;
 use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use App\Companies\Exceptions\OwnershipTransferContentionException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
@@ -215,6 +216,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // Under the row lock the company's owner is no longer the actor — a
         // concurrent transfer won (UC-1-028 flow 3b; the world moved → 409).
         $exceptions->render(fn (StaleOwnershipException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // The transfer's locked transaction lost to lock contention (MySQL
+        // 1205/1213 — ruled s170: same 409 family as the stale-owner guard).
+        $exceptions->render(fn (OwnershipTransferContentionException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));

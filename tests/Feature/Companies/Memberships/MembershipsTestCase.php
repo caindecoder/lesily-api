@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Companies\Memberships;
 
+use Throwable;
 use App\Models\User;
+use RuntimeException;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
@@ -12,6 +14,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
+use Spatie\EventSourcing\Projectionist;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Events\QueryExecuted;
 use Tests\Feature\Companies\CompaniesTestCase;
@@ -21,10 +24,12 @@ use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\EventSourcing\StoredEvents\ShouldBeStored;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
+use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -219,6 +224,39 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $this->assertNotNull($writeIndex, 'Expected an in-transaction write to follow the locked read.');
         $this->assertGreaterThan($lockIndex, $guardIndex, 'The owner-guard must decide AFTER the row is locked.');
         $this->assertGreaterThan($lockIndex, $writeIndex, 'The write must follow the locked read.');
+    }
+
+    /**
+     * Register a projector that throws $failure when $eventClass is dispatched
+     * (weight 1000 — AFTER the real projectors, so their writes happen and the
+     * rollback is proven against them). Register AFTER the arrange: the handler
+     * matches every stored event and filters by class in the body.
+     */
+    protected function induceProjectorFailureFor(string $eventClass, ?Throwable $failure = null): void
+    {
+        $projector = new class extends Projector
+        {
+            public string $targetEventClass = '';
+
+            public ?Throwable $failure = null;
+
+            public int $weight = 1000;
+
+            public function onStoredEvent(ShouldBeStored $event): void
+            {
+                if ($event::class === $this->targetEventClass) {
+                    throw $this->failure ?? new RuntimeException('Induced projector failure');
+                }
+            }
+        };
+        $projector->targetEventClass = $eventClass;
+        $projector->failure = $failure;
+
+        // The projectionist re-resolves handlers from the container by class
+        // name on every call; without this instance binding the dispatch would
+        // get a FRESH copy whose target class is '' and never throw.
+        app()->instance($projector::class, $projector);
+        app(Projectionist::class)->addProjector($projector);
     }
 
     /**

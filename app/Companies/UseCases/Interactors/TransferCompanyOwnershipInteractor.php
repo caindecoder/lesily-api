@@ -5,10 +5,13 @@ namespace App\Companies\UseCases\Interactors;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\DeadlockException;
 use App\Companies\Exceptions\StaleOwnershipException;
 use App\Companies\Exceptions\TargetNotMemberException;
 use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Companies\Exceptions\SelfTransferBlockedException;
+use App\Companies\Exceptions\OwnershipTransferContentionException;
 use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 
 /**
@@ -20,12 +23,33 @@ use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
  */
 class TransferCompanyOwnershipInteractor
 {
+    private const int MYSQL_LOCK_WAIT_TIMEOUT = 1205;
+
+    private const int MYSQL_DEADLOCK = 1213;
+
     public function execute(Company $company, TransferCompanyOwnershipCommand $command): CompanyUser
     {
         if ($command->newOwnerUserId === $command->transferredBy) {
             throw new SelfTransferBlockedException;
         }
 
+        try {
+            return $this->executeLocked($company, $command);
+        } catch (DeadlockException) {
+            // Laravel wraps a concurrency loser inside a nested transaction;
+            // at top level the raw QueryException surfaces instead (below).
+            throw new OwnershipTransferContentionException;
+        } catch (QueryException $exception) {
+            if (in_array($exception->errorInfo[1] ?? null, [self::MYSQL_LOCK_WAIT_TIMEOUT, self::MYSQL_DEADLOCK], true)) {
+                throw new OwnershipTransferContentionException;
+            }
+
+            throw $exception;
+        }
+    }
+
+    private function executeLocked(Company $company, TransferCompanyOwnershipCommand $command): CompanyUser
+    {
         return DB::transaction(function () use ($company, $command): CompanyUser {
             $lockedCompany = Company::query()
                 ->whereKey($company->getKey())

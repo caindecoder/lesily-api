@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Companies\Memberships;
 
+use PDOException;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -12,6 +13,7 @@ use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
+use Illuminate\Database\QueryException;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Tests\Feature\Companies\CreatesTrialCompanies;
 use App\Companies\Events\CompanyOwnershipTransferred;
@@ -114,6 +116,49 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         // Then
         $this->assertRefusedWith($response, ApiErrorCode::StateGuardViolation);
         $this->assertNothingTransferred($company, $usurper);
+    }
+
+    #[Test]
+    public function when_the_projector_fails_mid_transfer_then_nothing_is_persisted(): void
+    {
+        // Given
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+        [$target] = $this->aMembership($company, 'employee');
+        $this->induceProjectorFailureFor(CompanyOwnershipTransferred::class);
+
+        // When
+        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::InternalError);
+        $this->assertNothingTransferred($company, $owner);
+        $this->assertSame($this->seededRole('employee')->getKey(), $this->pivotOf($company, $target)->role_id);
+    }
+
+    #[Test]
+    public function when_the_transfer_hits_lock_contention_then_it_is_refused_as_a_conflict(): void
+    {
+        // Given — a deadlock raised inside the locked transaction (a REAL
+        // two-connection deadlock stays out per P9; the shape is what MySQL
+        // 1213 surfaces as through the query layer)
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+        [$target] = $this->aMembership($company, 'employee');
+        $deadlock = new PDOException('SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock');
+        $deadlock->errorInfo = ['40001', 1213, 'Deadlock found when trying to get lock; try restarting transaction'];
+        $this->induceProjectorFailureFor(
+            CompanyOwnershipTransferred::class,
+            new QueryException('mysql', 'update `company_user` set `role_id` = ?', [], $deadlock),
+        );
+
+        // When
+        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
+
+        // Then — the render classification only: a REAL 1213 is rolled back by
+        // MySQL server-side before Laravel ever sees it, which a synthetic
+        // cannot model; the atomicity net is the projector-failure row.
+        $this->assertRefusedWith($response, ApiErrorCode::StateGuardViolation);
     }
 
     #[Test]
