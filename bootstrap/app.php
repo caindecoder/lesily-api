@@ -10,12 +10,14 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Foundation\Http\Middleware\AuthorizeCompany;
 use App\Foundation\Http\Middleware\EnsurePermission;
+use App\Companies\Exceptions\TargetNotMemberException;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Foundation\Http\Middleware\EnsurePlatformAdmin;
 use App\Foundation\Http\Middleware\EnsureIdempotencyKey;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
+use App\Companies\Exceptions\SelfTransferBlockedException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
 use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use App\Foundation\Auth\Exceptions\InvalidResetLinkException;
@@ -193,6 +195,19 @@ return Application::configure(basePath: dirname(__DIR__))
         // OWNER_TRANSFER_REQUIRED (422) code with a removal-specific message.
         $exceptions->render(fn (OwnerRemovalBlockedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::OwnerTransferRequired,
+            $e->getMessage(),
+        ));
+
+        // An ownership transfer named a target with no live membership here —
+        // an unaccepted invitation is not membership (UC-1-028 flow 3a).
+        $exceptions->render(fn (TargetNotMemberException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::TargetNotMember,
+            $e->getMessage(),
+        ));
+
+        // The Owner named themselves as the transfer target (UC-1-028 flow 1c).
+        $exceptions->render(fn (SelfTransferBlockedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::SelfTransferBlocked,
             $e->getMessage(),
         ));
 

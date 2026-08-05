@@ -25,6 +25,8 @@ enum ApiErrorCode: string
     case OwnerTransferRequired = 'OWNER_TRANSFER_REQUIRED';
     case SelfRoleChangeBlocked = 'SELF_ROLE_CHANGE_BLOCKED';
     case SelfRemovalBlocked = 'SELF_REMOVAL_BLOCKED';
+    case TargetNotMember = 'TARGET_NOT_MEMBER';
+    case SelfTransferBlocked = 'SELF_TRANSFER_BLOCKED';
     case ResourceNotFound = 'RESOURCE_NOT_FOUND';
     case EmailRegistered = 'EMAIL_REGISTERED';
     case BrNumberRegistered = 'BR_NUMBER_REGISTERED';
@@ -65,6 +67,8 @@ enum ApiErrorCode: string
             self::OwnerTransferRequired => 422,
             self::SelfRoleChangeBlocked => 422,
             self::SelfRemovalBlocked => 422,
+            self::TargetNotMember => 422,
+            self::SelfTransferBlocked => 422,
             self::ResourceNotFound => 404,
             self::EmailRegistered => 409,
             self::BrNumberRegistered => 409,

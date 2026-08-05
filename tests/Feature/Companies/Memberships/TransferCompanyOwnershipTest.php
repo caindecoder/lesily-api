@@ -40,6 +40,55 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $this->assertNothingTransferred($company, $owner);
     }
 
+    #[Test]
+    public function when_the_target_is_not_a_member_of_the_company_then_the_transfer_is_refused(): void
+    {
+        // Given
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+        $outsider = User::factory()->create();
+
+        // When
+        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $outsider->getKey()]);
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::TargetNotMember);
+        $this->assertNothingTransferred($company, $owner);
+    }
+
+    #[Test]
+    public function when_the_target_holds_only_a_pending_invitation_then_the_transfer_is_refused(): void
+    {
+        // Given
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+        $invitee = User::factory()->create();
+        $this->aPendingInvitation($company, $owner, $invitee->email);
+
+        // When
+        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $invitee->getKey()]);
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::TargetNotMember);
+        $this->assertNothingTransferred($company, $owner);
+        $this->assertInvitationNotConsumed($company, $invitee->email);
+    }
+
+    #[Test]
+    public function when_the_owner_targets_themselves_then_the_transfer_is_refused(): void
+    {
+        // Given
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+
+        // When
+        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $owner->getKey()]);
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::SelfTransferBlocked);
+        $this->assertNothingTransferred($company, $owner);
+    }
+
     /**
      * A genesis company owned by $owner: real Company stream, owner pivot and
      * companies.owner_id both written by the production genesis projector.
