@@ -12,9 +12,11 @@ use App\Companies\Events\CompanyTrialExpired;
 use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsCreated;
 use App\Companies\Events\CompanySettingsUpdated;
+use App\Companies\Events\CompanyOwnershipTransferred;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use App\Companies\UseCases\Commands\UpdateCompanyCommand;
 use App\Companies\Exceptions\CompanyAlreadyExistsException;
+use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 
 class Company extends AggregateRoot
 {
@@ -99,6 +101,25 @@ class Company extends AggregateRoot
         }
 
         return $this->recordThat(new CompanyTrialExpired);
+    }
+
+    /**
+     * Record the ownership move (UC-1-028 / UC-1-093). Guardless — eligibility
+     * and staleness are decided at the interactor seam under row locks (T2
+     * precedent), which supplies previousOwnerUserId from the locked read.
+     * forCompany re-tags the tenant (updateDetails parity).
+     */
+    public function transferOwnership(TransferCompanyOwnershipCommand $command, string $previousOwnerUserId): static
+    {
+        $this->forCompany($this->uuid());
+
+        return $this->recordThat(new CompanyOwnershipTransferred(
+            previousOwnerUserId: $previousOwnerUserId,
+            newOwnerUserId: $command->newOwnerUserId,
+            transferredBy: $command->transferredBy,
+            source: $command->source,
+            caseId: $command->caseId,
+        ));
     }
 
     protected function applyCompanyCreated(CompanyCreated $event): void

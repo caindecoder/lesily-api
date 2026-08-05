@@ -16,4 +16,7 @@ return [
     'team_welcome' => [
         'subject' => 'Welcome to :company',
     ],
+    'ownership_received' => [
+        'subject' => 'You are now the owner of :company',
+    ],
 ];

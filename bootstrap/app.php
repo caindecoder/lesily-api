@@ -10,12 +10,15 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Foundation\Http\Middleware\AuthorizeCompany;
 use App\Foundation\Http\Middleware\EnsurePermission;
+use App\Companies\Exceptions\StaleOwnershipException;
+use App\Companies\Exceptions\TargetNotMemberException;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Foundation\Http\Middleware\EnsurePlatformAdmin;
 use App\Foundation\Http\Middleware\EnsureIdempotencyKey;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
+use App\Companies\Exceptions\SelfTransferBlockedException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
 use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use App\Foundation\Auth\Exceptions\InvalidResetLinkException;
@@ -31,6 +34,7 @@ use App\Billing\Invoices\Exceptions\ReceiptNotAvailableException;
 use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use App\Companies\Exceptions\OwnershipTransferContentionException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
@@ -193,6 +197,33 @@ return Application::configure(basePath: dirname(__DIR__))
         // OWNER_TRANSFER_REQUIRED (422) code with a removal-specific message.
         $exceptions->render(fn (OwnerRemovalBlockedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::OwnerTransferRequired,
+            $e->getMessage(),
+        ));
+
+        // An ownership transfer named a target with no live membership here —
+        // an unaccepted invitation is not membership (UC-1-028 flow 3a).
+        $exceptions->render(fn (TargetNotMemberException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::TargetNotMember,
+            $e->getMessage(),
+        ));
+
+        // The Owner named themselves as the transfer target (UC-1-028 flow 1c).
+        $exceptions->render(fn (SelfTransferBlockedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::SelfTransferBlocked,
+            $e->getMessage(),
+        ));
+
+        // Under the row lock the company's owner is no longer the actor — a
+        // concurrent transfer won (UC-1-028 flow 3b; the world moved → 409).
+        $exceptions->render(fn (StaleOwnershipException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // The transfer's locked transaction lost to lock contention (MySQL
+        // 1205/1213 — ruled s170: same 409 family as the stale-owner guard).
+        $exceptions->render(fn (OwnershipTransferContentionException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));
 

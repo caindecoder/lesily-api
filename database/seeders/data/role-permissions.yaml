@@ -14,6 +14,7 @@ owner:
   - users.remove
   - companies.view
   - companies.update
+  - companies.transfer-ownership
   - billing.view
   - billing.manage
   - audit.view
