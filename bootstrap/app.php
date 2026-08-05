@@ -10,6 +10,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Foundation\Http\Middleware\AuthorizeCompany;
 use App\Foundation\Http\Middleware\EnsurePermission;
+use App\Companies\Exceptions\StaleOwnershipException;
 use App\Companies\Exceptions\TargetNotMemberException;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Foundation\Http\Middleware\EnsurePlatformAdmin;
@@ -208,6 +209,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // The Owner named themselves as the transfer target (UC-1-028 flow 1c).
         $exceptions->render(fn (SelfTransferBlockedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::SelfTransferBlocked,
+            $e->getMessage(),
+        ));
+
+        // Under the row lock the company's owner is no longer the actor — a
+        // concurrent transfer won (UC-1-028 flow 3b; the world moved → 409).
+        $exceptions->render(fn (StaleOwnershipException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));
 

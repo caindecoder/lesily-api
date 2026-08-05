@@ -2,11 +2,12 @@
 
 namespace App\Companies\UseCases\Interactors;
 
-use RuntimeException;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
+use App\Companies\Exceptions\StaleOwnershipException;
 use App\Companies\Exceptions\TargetNotMemberException;
+use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Companies\Exceptions\SelfTransferBlockedException;
 use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 
@@ -26,6 +27,15 @@ class TransferCompanyOwnershipInteractor
         }
 
         return DB::transaction(function () use ($company, $command): CompanyUser {
+            $lockedCompany = Company::query()
+                ->whereKey($company->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedCompany->owner_id !== $command->transferredBy) {
+                throw new StaleOwnershipException;
+            }
+
             $target = CompanyUser::query()
                 ->where('company_id', $company->getKey())
                 ->where('user_id', $command->newOwnerUserId)
@@ -36,7 +46,11 @@ class TransferCompanyOwnershipInteractor
                 throw new TargetNotMemberException;
             }
 
-            throw new RuntimeException('Not implemented');
+            CompanyAggregate::retrieve($company->getKey())
+                ->transferOwnership($command, $lockedCompany->owner_id)
+                ->persist();
+
+            return $target->refresh();
         });
     }
 }

@@ -8,6 +8,7 @@ enum NotificationType: string
     case GeneralAccountNotice = 'general_account_notice';
     case PasswordChanged = 'password_changed';
     case TeamWelcome = 'team_welcome';
+    case OwnershipReceived = 'ownership_received';
 
     /**
      * Critical notifications (account-security alerts, password-change confirmations)
@@ -19,6 +20,7 @@ enum NotificationType: string
         return match ($this) {
             self::AccountSecurityAlert => true,
             self::PasswordChanged => true,
+            self::OwnershipReceived => true,
             self::GeneralAccountNotice => false,
             self::TeamWelcome => false,
         };

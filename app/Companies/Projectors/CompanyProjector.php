@@ -3,10 +3,12 @@
 namespace App\Companies\Projectors;
 
 use App\Companies\Enums\CompanyStatus;
+use App\Companies\Entities\CompanyUser;
 use App\Companies\Events\CompanyCreated;
 use App\Companies\Events\CompanyTrialExpired;
 use App\Companies\Events\CompanyDetailsUpdated;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Companies\Events\CompanyOwnershipTransferred;
 use App\Companies\Entities\Company as CompanyReadModel;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 
@@ -50,5 +52,29 @@ class CompanyProjector extends Projector
     {
         CompanyReadModel::query()->whereKey($event->aggregateRootUuid())
             ->update(['name' => $event->name]);
+    }
+
+    /**
+     * The dual-representation swap in ONE arm (spec §4): the owner column and
+     * both company_user role rows move together, so they can never diverge.
+     * Roles resolved by seeded code (genesis parity); withTrashed for replay
+     * fidelity (MembershipProjector parity).
+     */
+    public function onCompanyOwnershipTransferred(CompanyOwnershipTransferred $event): void
+    {
+        $companyId = $event->aggregateRootUuid();
+
+        CompanyReadModel::query()->whereKey($companyId)
+            ->update(['owner_id' => $event->newOwnerUserId]);
+
+        CompanyUser::withTrashed()
+            ->where('company_id', $companyId)
+            ->where('user_id', $event->previousOwnerUserId)
+            ->update(['role_id' => Role::query()->where('code', 'admin')->sole()->getKey()]);
+
+        CompanyUser::withTrashed()
+            ->where('company_id', $companyId)
+            ->where('user_id', $event->newOwnerUserId)
+            ->update(['role_id' => Role::query()->where('code', 'owner')->sole()->getKey()]);
     }
 }

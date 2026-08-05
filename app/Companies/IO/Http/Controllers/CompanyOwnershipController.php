@@ -4,7 +4,7 @@ namespace App\Companies\IO\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
+use App\Companies\IO\Http\Resources\CompanyOwnerResource;
 use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 use App\Companies\UseCases\Interactors\TransferCompanyOwnershipInteractor;
 
@@ -16,7 +16,7 @@ use App\Companies\UseCases\Interactors\TransferCompanyOwnershipInteractor;
  */
 class CompanyOwnershipController
 {
-    public function __invoke(Request $request, TransferCompanyOwnershipInteractor $interactor): JsonResponse
+    public function __invoke(Request $request, TransferCompanyOwnershipInteractor $interactor): CompanyOwnerResource
     {
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
@@ -27,8 +27,6 @@ class CompanyOwnershipController
             'source' => TransferCompanyOwnershipCommand::SOURCE_SELF_SERVICE,
         ]);
 
-        $interactor->execute($request->company(), $command);
-
-        return new JsonResponse;
+        return new CompanyOwnerResource($interactor->execute($request->company(), $command));
     }
 }
