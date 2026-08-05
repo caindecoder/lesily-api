@@ -8,6 +8,7 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -237,7 +238,11 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
 
         $this->assertSame(
             $this->seededRole('employee')->getKey(),
-            $company->users()->whereKey($proposed->getKey())->sole()->pivot->role_id,
+            CompanyUser::query()
+                ->where('company_id', $company->getKey())
+                ->where('user_id', $proposed->getKey())
+                ->sole()
+                ->role_id,
         );
     }
 
