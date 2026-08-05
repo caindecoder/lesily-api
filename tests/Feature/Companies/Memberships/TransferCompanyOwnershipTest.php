@@ -52,6 +52,22 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_target_reference_is_malformed_then_the_transfer_is_refused_as_invalid(): void
+    {
+        // Given
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+
+        // When
+        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => 'not-a-uuid']);
+
+        // Then — the command boundary enforces its rules() (amendment U: a
+        // ::from swap leaves them dead; this row REDs on that swap)
+        $this->assertValidationRejected($response, 'newOwnerUserId');
+        $this->assertNothingTransferred($company, $owner);
+    }
+
+    #[Test]
     public function when_the_target_is_not_a_member_of_the_company_then_the_transfer_is_refused(): void
     {
         // Given
