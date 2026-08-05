@@ -1,0 +1,35 @@
+<?php
+
+namespace App\Companies\IO\Http\Controllers;
+
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use App\Foundation\Http\Values\AdminRequestContext;
+use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
+use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminResource;
+use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
+
+/**
+ * The platform-admin ownership-transfer case surface (slice-11R spec §3).
+ * Cross-tenant by design: auth:sanctum + platform.admin only — no
+ * auth.company, no permission gate (EnsurePermission needs a company context
+ * this family deliberately lacks). Non-allowlisted callers are 404ed by the
+ * middleware before any method here runs.
+ */
+class PlatformAdminOwnershipTransferCasesController
+{
+    public function store(Request $request, OpenOwnershipTransferCaseInteractor $interactor): JsonResponse
+    {
+        /** @var User $admin */
+        $admin = $request->user();
+
+        $case = $interactor->execute(
+            OpenOwnershipTransferCaseCommand::validateAndCreate($request),
+            $admin,
+            AdminRequestContext::fromRequest($request),
+        );
+
+        return (new OwnershipTransferCaseAdminResource($case))->response($request)->setStatusCode(201);
+    }
+}

@@ -355,6 +355,18 @@ abstract class PlatformAdminTestCase extends TestCase
     }
 
     /**
+     * The request was refused as shape-invalid — 422 with the §S21
+     * VALIDATION_FAILED envelope and an error on $field. Duplicated from
+     * CompaniesTestCase (module bases are independent — established precedent).
+     */
+    protected function assertValidationFailed(TestResponse $response, string $field): void
+    {
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
+        $response->assertJsonValidationErrors($field);
+    }
+
+    /**
      * The request was rejected as unauthenticated — 401 §S21 UNAUTHENTICATED.
      * Duplicated from BillingTestCase (module bases are independent —
      * established precedent).

@@ -15,8 +15,10 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * admin surface never acknowledges its existence (UC-1-122 2a no-info-leak).
  *
  * INTERIM binding (slice-plans-billing B2): an env allowlist of user ids, to
- * be replaced by the platform-admin slice's real admin auth. Never extend it
- * to further admin surfaces without that slice's design (spec §9 pointer).
+ * be replaced by the platform-admin slice's real admin auth. Extending it to a
+ * further admin surface needs that surface's slice design — the invoice review
+ * (UC-1-122) and the ownership-transfer case family (slice-11R spec §4 seam
+ * reuse) are the two designed consumers.
  */
 class EnsurePlatformAdmin
 {
