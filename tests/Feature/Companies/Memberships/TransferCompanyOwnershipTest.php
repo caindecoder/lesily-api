@@ -225,6 +225,29 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_transfer_fails_on_an_unrelated_database_error_then_the_failure_surfaces(): void
+    {
+        // Given — a non-contention DB failure (duplicate-entry shape): the
+        // classification must NOT swallow it into the retryable 409
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+        [$target] = $this->aMembership($company, 'employee');
+        $duplicate = new PDOException('SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry');
+        $duplicate->errorInfo = ['23000', 1062, 'Duplicate entry'];
+        $this->induceProjectorFailureFor(
+            CompanyOwnershipTransferred::class,
+            new QueryException('mysql', 'insert into `stored_events`', [], $duplicate),
+        );
+
+        // When
+        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
+
+        // Then
+        $this->assertRefusedWith($response, ApiErrorCode::InternalError);
+        $this->assertNothingTransferred($company, $owner);
+    }
+
+    #[Test]
     public function when_the_transfer_reads_the_rows_it_will_write_then_it_locks_them_in_ascending_order(): void
     {
         // Given — the target user is minted BEFORE the owner: uuid7 ids are
