@@ -7,6 +7,7 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
@@ -42,6 +43,33 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
         // Then the admin surface is never acknowledged and nothing is written
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertNoCaseOpened();
+    }
+
+    #[Test]
+    #[DataProvider('invalidCasePayloadProvider')]
+    public function when_the_case_payload_is_invalid_then_the_case_is_refused(array $overrides, string $field): void
+    {
+        // Given an allowlisted platform admin
+        // When they submit a payload carrying this row's defect
+        $response = $this->openCase($this->admin, $this->validPayload($overrides));
+
+        // Then the case is refused naming the offending field and nothing is written
+        $this->assertValidationFailed($response, $field);
+        $this->assertNoCaseOpened();
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function invalidCasePayloadProvider(): array
+    {
+        return [
+            'missing companyId' => [['companyId' => null], 'companyId'],
+            'unknown companyId' => [['companyId' => '01980000-0000-7000-8000-000000000000'], 'companyId'],
+            'empty requestedContext' => [['requestedContext' => ''], 'requestedContext'],
+            'overlong requestedContext' => [['requestedContext' => str_repeat('a', 1001)], 'requestedContext'],
+            'malformed newOwnerUserId' => [['newOwnerUserId' => 'not-a-uuid'], 'newOwnerUserId'],
+        ];
     }
 
     /**

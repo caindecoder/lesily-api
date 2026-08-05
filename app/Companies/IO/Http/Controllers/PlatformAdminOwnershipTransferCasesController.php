@@ -2,6 +2,9 @@
 
 namespace App\Companies\IO\Http\Controllers;
 
+use Illuminate\Http\Request;
+use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
+
 /**
  * The platform-admin ownership-transfer case surface (slice-11R spec §3).
  * Cross-tenant by design: auth:sanctum + platform.admin only — no
@@ -11,5 +14,8 @@ namespace App\Companies\IO\Http\Controllers;
  */
 class PlatformAdminOwnershipTransferCasesController
 {
-    public function store(): void {}
+    public function store(Request $request): void
+    {
+        OpenOwnershipTransferCaseCommand::validateAndCreate($request);
+    }
 }
