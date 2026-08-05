@@ -60,11 +60,8 @@ class TransferCompanyOwnershipInteractor
                 throw new StaleOwnershipException;
             }
 
-            $target = CompanyUser::query()
-                ->where('company_id', $company->getKey())
-                ->where('user_id', $command->newOwnerUserId)
-                ->lockForUpdate()
-                ->first();
+            $memberships = $this->lockedMemberships($company, [$lockedCompany->owner_id, $command->newOwnerUserId]);
+            $target = $memberships[$command->newOwnerUserId] ?? null;
 
             if ($target === null) {
                 throw new TargetNotMemberException;
@@ -76,5 +73,32 @@ class TransferCompanyOwnershipInteractor
 
             return $target->refresh();
         });
+    }
+
+    /**
+     * Lock the pivot rows in ascending user-id order — both writers of an
+     * opposite-direction transfer pair order the same two rows identically, so
+     * they serialize instead of deadlocking (the s169 lock-order rule).
+     *
+     * @param  array<int, string>  $userIds
+     * @return array<string, CompanyUser> keyed by user_id
+     */
+    private function lockedMemberships(Company $company, array $userIds): array
+    {
+        $memberships = [];
+
+        foreach (collect($userIds)->sort()->values() as $userId) {
+            $membership = CompanyUser::query()
+                ->where('company_id', $company->getKey())
+                ->where('user_id', $userId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($membership !== null) {
+                $memberships[$userId] = $membership;
+            }
+        }
+
+        return $memberships;
     }
 }

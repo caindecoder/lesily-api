@@ -14,12 +14,14 @@ use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Notification;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Tests\Feature\Companies\CreatesTrialCompanies;
 use App\Companies\Events\CompanyOwnershipTransferred;
 use App\Companies\Aggregates\Company as CompanyAggregate;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
+use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -162,6 +164,24 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_transfer_reads_the_rows_it_will_write_then_it_locks_them_in_ascending_order(): void
+    {
+        // Given
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+        [$target] = $this->aMembership($company, 'employee');
+        $expectedOrder = collect([$owner->getKey(), $target->getKey()])->sort()->values()->all();
+
+        // When
+        $capture = $this->recordedQueriesDuring(function () use ($owner, $company, $target): void {
+            $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()])->assertOk();
+        });
+
+        // Then
+        $this->assertSwapDecidedUnderOrderedLocks($capture, $expectedOrder);
+    }
+
+    #[Test]
     public function when_the_owner_transfers_ownership_to_an_active_teammate_then_ownership_moves_atomically(): void
     {
         // Given
@@ -183,6 +203,44 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $this->assertTransferRecorded($company, $owner, $target);
         $this->runQueuedHandlersFor(CompanyOwnershipTransferred::class);
         $this->assertOnlyNewOwnerNotified($company, $target, $owner);
+    }
+
+    #[Test]
+    public function when_the_outgoing_owner_owns_other_companies_then_those_are_untouched(): void
+    {
+        // Given
+        $owner = User::factory()->create();
+        $contoso = $this->aTrialCompanyOwnedBy($owner, 'Contoso');
+        $acme = $this->aTrialCompanyOwnedBy($owner, 'Acme');
+        [$target] = $this->aMembership($contoso, 'employee');
+
+        // When
+        $response = $this->transferOwnership($owner, $contoso, ['newOwnerUserId' => $target->getKey()]);
+
+        // Then
+        $response->assertOk();
+        $this->assertOwnershipMoved($contoso, $owner, $target);
+        $this->assertNothingTransferred($acme, $owner);
+        $this->assertSame($this->seededRole('owner')->getKey(), $this->pivotOf($acme, $owner)->role_id);
+    }
+
+    #[Test]
+    public function when_the_transfer_commits_then_the_new_owner_notification_is_deferred_past_the_commit(): void
+    {
+        // Given
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+        [$target] = $this->aMembership($company, 'employee');
+        Notification::fake();
+        Queue::fake();
+
+        // When
+        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
+
+        // Then
+        $response->assertOk();
+        $this->assertOwnershipMoved($company, $owner, $target);
+        $this->assertReactorDeferred(CompanyOwnershipTransferred::class, SystemNotification::class);
     }
 
     /**
@@ -224,6 +282,58 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
             ->where('event_class', CompanyOwnershipTransferred::class)
             ->where('aggregate_uuid', $company->getKey())
             ->count());
+    }
+
+    /**
+     * The swap serialized on its locks (spec §4 + the s169 lock-order rule):
+     * inside the interactor's own transaction (depth > ambient), the companies
+     * row and BOTH company_user rows were read FOR UPDATE, the two pivot locks
+     * were taken in ascending user-id order (opposite-direction transfers
+     * cannot deadlock), and every write followed the locks. Implementation-
+     * coupled by design — the invariant is invisible to single-connection
+     * behavioral rows (E21/P9; T2 depth+position oracle extended).
+     *
+     * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>}  $capture
+     * @param  array<int, string>  $expectedUserIdOrder
+     */
+    protected function assertSwapDecidedUnderOrderedLocks(array $capture, array $expectedUserIdOrder): void
+    {
+        $companiesLockIndex = null;
+        $pivotLocks = [];
+        $firstWriteIndex = null;
+
+        foreach ($capture['queries'] as $index => $query) {
+            if ($query['depth'] <= $capture['ambient']) {
+                continue;
+            }
+
+            $isLockedRead = str_starts_with($query['sql'], 'select') && str_contains($query['sql'], 'for update');
+
+            if ($companiesLockIndex === null && $isLockedRead && str_contains($query['sql'], '`companies`')) {
+                $companiesLockIndex = $index;
+            }
+
+            if ($isLockedRead && str_contains($query['sql'], '`company_user`')) {
+                $pivotLocks[] = ['index' => $index, 'bindings' => $query['bindings']];
+            }
+
+            if ($firstWriteIndex === null
+                && (str_starts_with($query['sql'], 'update') || str_starts_with($query['sql'], 'insert'))
+                && (str_contains($query['sql'], '`companies`') || str_contains($query['sql'], '`company_user`') || str_contains($query['sql'], '`stored_events`'))) {
+                $firstWriteIndex = $index;
+            }
+        }
+
+        $this->assertNotNull($companiesLockIndex, 'Expected a locked companies read inside the transaction.');
+        $this->assertCount(2, $pivotLocks, 'Expected BOTH company_user rows read FOR UPDATE inside the transaction.');
+
+        $lockedUserIds = array_map(
+            fn (array $lock): ?string => collect($lock['bindings'])->first(fn ($binding): bool => in_array($binding, $expectedUserIdOrder, true)),
+            $pivotLocks,
+        );
+        $this->assertSame($expectedUserIdOrder, $lockedUserIds, 'The pivot rows must be locked in ascending user-id order.');
+        $this->assertNotNull($firstWriteIndex, 'Expected an in-transaction write to follow the locks.');
+        $this->assertGreaterThan(max($companiesLockIndex, $pivotLocks[1]['index']), $firstWriteIndex, 'Writes must follow all three locks.');
     }
 
     /**
