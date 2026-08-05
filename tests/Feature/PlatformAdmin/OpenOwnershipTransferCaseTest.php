@@ -10,6 +10,7 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -50,6 +51,18 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
     }
 
     #[Test]
+    public function when_an_unauthenticated_caller_attempts_to_open_a_case_then_the_request_is_rejected(): void
+    {
+        // Given no authenticated caller at all
+        // When the open-case endpoint is called as a guest
+        $response = $this->openCase(null, $this->validPayload());
+
+        // Then the request is rejected as unauthenticated and nothing is written
+        $this->assertUnauthenticated($response);
+        $this->assertNoCaseOpened();
+    }
+
+    #[Test]
     #[DataProvider('invalidCasePayloadProvider')]
     public function when_the_case_payload_is_invalid_then_the_case_is_refused(array $overrides, string $field): void
     {
@@ -65,12 +78,14 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
     #[Test]
     public function when_the_proposed_incoming_owner_is_not_a_member_of_the_company_then_the_case_is_refused(): void
     {
-        // Given a user with no membership in the named company
-        $outsider = User::factory()->create();
+        // Given a live member of a DIFFERENT company — membership elsewhere
+        // must not satisfy the named company's rule (the discriminating
+        // arrange: only the company_id scoping can reject this user)
+        $foreignMember = $this->aCompanyMember(Company::factory()->create(), 'employee');
 
         // When the admin proposes them as the incoming owner
         $response = $this->openCase($this->admin, $this->validPayload([
-            'newOwnerUserId' => $outsider->getKey(),
+            'newOwnerUserId' => $foreignMember->getKey(),
         ]));
 
         // Then the case is refused on the proposed owner and nothing is written
@@ -145,7 +160,7 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
     public static function invalidCasePayloadProvider(): array
     {
         return [
-            'missing companyId' => [['companyId' => null], 'companyId'],
+            'null companyId' => [['companyId' => null], 'companyId'],
             'unknown companyId' => [['companyId' => '01980000-0000-7000-8000-000000000000'], 'companyId'],
             'empty requestedContext' => [['requestedContext' => ''], 'requestedContext'],
             'overlong requestedContext' => [['requestedContext' => str_repeat('a', 1001)], 'requestedContext'],
@@ -182,14 +197,15 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
     }
 
     /**
-     * The case is on the record — 201 with the created case in the §8.2 data
-     * envelope, exactly ONE open case row carrying the shared company + the
-     * verbatim context plus $expected's overrides.
+     * The case is on the record — 201 with the created case as the FULL admin
+     * contract, locked byte-for-byte (§8.2 data envelope, snake_case response
+     * keys per the built Resource convention — exact-envelope leak-guard, the
+     * ReviewInvoiceAsAdminTest idiom), and exactly ONE open case row carrying
+     * the shared company + the verbatim context plus $expected's overrides.
      */
     protected function assertCaseOpened(TestResponse $response, array $expected): void
     {
         $response->assertCreated();
-        $this->assertNotNull($response->json('data.id'));
         $this->assertDatabaseCount('ownership_transfer_cases', 1);
         $this->assertDatabaseHas('ownership_transfer_cases', [
             'company_id' => $this->company->getKey(),
@@ -198,15 +214,27 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
             'requested_context' => $this->validPayload()['requestedContext'],
             ...$expected,
         ]);
+
+        $case = OwnershipTransferCase::query()->sole();
+        $response->assertExactJson(['data' => [
+            'id' => $case->getKey(),
+            'company_id' => $case->company_id,
+            'status' => 'open',
+            'requested_context' => $case->requested_context,
+            'new_owner_user_id' => $case->new_owner_user_id,
+            'created_at' => $case->created_at->toISOString(),
+        ]]);
     }
 
     /**
      * Exactly ONE audit row records the open, in the cd-audit-trail
      * Direct-write shape (stored_event_id NULL — opening a case records no
-     * domain event), actor + subject identity-pinned, and the request-context
-     * columns IDENTITY-pinned (ip = the test client's loopback, request_id =
-     * the very Correlation-Id the response carries) — presence-only asserts
-     * could not catch the interactor threading nulls.
+     * domain event; metadata NULL — no request-derived data may leak into the
+     * append-only compliance table), actor + subject + description pinned to
+     * the sibling assertAdminReviewAuditRecorded standard, and the
+     * request-context columns IDENTITY-pinned (ip = the test client's
+     * loopback, request_id = the very Correlation-Id the response carries) —
+     * presence-only asserts could not catch the interactor threading nulls.
      */
     protected function assertCaseOpenAudited(User $actor, string $caseId, TestResponse $response): void
     {
@@ -215,11 +243,15 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
             'event_class' => 'OwnershipTransferCaseOpened',
             'subject_type' => 'ownership_transfer_case',
             'subject_id' => $caseId,
+            'subject_label' => null,
             'action' => 'case_opened',
+            'description' => 'Platform admin opened an ownership-transfer case.',
             'company_id' => $this->company->getKey(),
             'actor_user_id' => $actor->getKey(),
             'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $actor->name,
             'stored_event_id' => null,
+            'metadata' => null,
             'severity' => 'info',
             'ip_address' => '127.0.0.1',
         ]);
