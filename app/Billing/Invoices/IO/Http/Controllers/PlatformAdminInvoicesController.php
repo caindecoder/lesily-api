@@ -4,7 +4,7 @@ namespace App\Billing\Invoices\IO\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
-use App\Billing\Invoices\UseCases\Values\AdminRequestContext;
+use App\Foundation\Http\Values\AdminRequestContext;
 use App\Billing\Invoices\IO\Http\Resources\InvoiceAdminResource;
 use App\Billing\Invoices\UseCases\Interactors\ReviewInvoiceAsAdminInteractor;
 
