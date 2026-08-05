@@ -30,6 +30,7 @@ use App\Billing\Subscriptions\IO\Http\Controllers\SubscriptionsController;
 use App\Billing\Invoices\IO\Http\Controllers\PlatformAdminInvoicesController;
 use App\Companies\Memberships\IO\Http\Controllers\AcceptInvitationController;
 use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
+use App\Companies\IO\Http\Controllers\PlatformAdminOwnershipTransferCasesController;
 
 // Health is operational tooling and opts out of the platform cross-cutting
 // middleware (no Correlation-Id) — UC-1-118 / cd-foundation-http §4.2.
@@ -293,4 +294,12 @@ Route::get('/v1/invoices/{invoiceId}/receipt', [InvoicesController::class, 'rece
 // persistence (s129 R8/E07): ONE audit_trail row on 200, none on 404.
 // No throttle (tiered — OQ-1-098).
 Route::get('/v1/admin/invoices/{invoiceId}', [PlatformAdminInvoicesController::class, 'show'])
+    ->middleware(['auth:sanctum', 'platform.admin']);
+
+// A platform admin opens a support-assisted ownership-transfer case (UC-1-140,
+// slice-11R T4) — plain-write intake: case row + ONE in-transaction audit row
+// (an audit failure vetoes the open). auth:sanctum + platform.admin only,
+// deliberately NO auth.company / no permission gate (cross-tenant family,
+// spec §4 seam reuse). No idempotency mount (§13.2 names execute only).
+Route::post('/v1/admin/ownership-transfer-cases', [PlatformAdminOwnershipTransferCasesController::class, 'store'])
     ->middleware(['auth:sanctum', 'platform.admin']);
