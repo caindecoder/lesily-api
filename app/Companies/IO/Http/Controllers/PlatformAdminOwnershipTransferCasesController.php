@@ -4,8 +4,10 @@ namespace App\Companies\IO\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
+use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminResource;
 use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
 
 /**
@@ -17,15 +19,17 @@ use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
  */
 class PlatformAdminOwnershipTransferCasesController
 {
-    public function store(Request $request, OpenOwnershipTransferCaseInteractor $interactor): void
+    public function store(Request $request, OpenOwnershipTransferCaseInteractor $interactor): JsonResponse
     {
         /** @var User $admin */
         $admin = $request->user();
 
-        $interactor->execute(
+        $case = $interactor->execute(
             OpenOwnershipTransferCaseCommand::validateAndCreate($request),
             $admin,
             AdminRequestContext::fromRequest($request),
         );
+
+        return (new OwnershipTransferCaseAdminResource($case))->response($request)->setStatusCode(201);
     }
 }

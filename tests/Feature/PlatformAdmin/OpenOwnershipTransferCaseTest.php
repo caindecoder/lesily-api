@@ -107,6 +107,18 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
         $this->assertNoCaseOpened();
     }
 
+    #[Test]
+    public function when_the_incoming_owner_is_not_yet_known_then_the_case_opens_without_one(): void
+    {
+        // Given the incoming owner is not yet known
+        // When the admin opens a case with only the company and the context
+        $response = $this->openCase($this->admin, $this->validPayload());
+
+        // Then the case is open with no incoming owner and the audit row is present
+        $this->assertCaseOpened($response, ['new_owner_user_id' => null]);
+        $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'));
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
@@ -147,6 +159,46 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
             'requestedContext' => 'Owner deceased; brother called support claiming next-of-kin, death certificate offered.',
             ...$overrides,
         ];
+    }
+
+    /**
+     * The case is on the record — 201 with the created case in the §8.2 data
+     * envelope, exactly ONE open case row carrying the shared company + the
+     * verbatim context plus $expected's overrides.
+     */
+    protected function assertCaseOpened(TestResponse $response, array $expected): void
+    {
+        $response->assertCreated();
+        $this->assertNotNull($response->json('data.id'));
+        $this->assertDatabaseCount('ownership_transfer_cases', 1);
+        $this->assertDatabaseHas('ownership_transfer_cases', [
+            'company_id' => $this->company->getKey(),
+            'status' => 'open',
+            'closed_outcome' => null,
+            'requested_context' => $this->validPayload()['requestedContext'],
+            ...$expected,
+        ]);
+    }
+
+    /**
+     * Exactly ONE audit row records the open, in the cd-audit-trail
+     * Direct-write shape (stored_event_id NULL — opening a case records no
+     * domain event), actor + subject identity-pinned.
+     */
+    protected function assertCaseOpenAudited(User $actor, string $caseId): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'event_class' => 'OwnershipTransferCaseOpened',
+            'subject_type' => 'ownership_transfer_case',
+            'subject_id' => $caseId,
+            'action' => 'case_opened',
+            'company_id' => $this->company->getKey(),
+            'actor_user_id' => $actor->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'stored_event_id' => null,
+            'severity' => 'info',
+        ]);
     }
 
     /**
