@@ -35,7 +35,8 @@ class OpenOwnershipTransferCaseCommand extends Data
                 'nullable',
                 'uuid',
                 Rule::exists('company_user', 'user_id')
-                    ->where('company_id', $context->payload['companyId'] ?? null),
+                    ->where('company_id', $context->payload['companyId'] ?? null)
+                    ->whereNull('deleted_at'),
             ],
         ];
     }

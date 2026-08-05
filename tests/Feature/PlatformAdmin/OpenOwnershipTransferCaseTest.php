@@ -74,6 +74,23 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
         $this->assertNoCaseOpened();
     }
 
+    #[Test]
+    public function when_the_proposed_incoming_owner_holds_only_a_removed_membership_then_the_case_is_refused(): void
+    {
+        // Given a user whose membership in the company was removed
+        $removed = $this->aCompanyMember($this->company, 'employee');
+        $this->company->users()->updateExistingPivot($removed->getKey(), ['deleted_at' => now()]);
+
+        // When the admin proposes them as the incoming owner
+        $response = $this->openCase($this->admin, $this->validPayload([
+            'newOwnerUserId' => $removed->getKey(),
+        ]));
+
+        // Then the case is refused — an active member means a live pivot
+        $this->assertValidationFailed($response, 'newOwnerUserId');
+        $this->assertNoCaseOpened();
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
