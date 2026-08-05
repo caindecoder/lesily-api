@@ -300,6 +300,22 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $this->assertMembershipRoleUnchanged($membershipIdB, $this->seededRole('admin'));
     }
 
+    #[Test]
+    public function when_the_role_change_reads_the_membership_it_will_write_then_it_locks_it(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+
+        // When
+        $capture = $this->recordedQueriesDuring(
+            fn () => $this->changeRole($admin, $company, $membershipId)->assertOk()
+        );
+
+        // Then
+        $this->assertOwnerGuardDecidedUnderLock($capture, 'company_user');
+    }
+
     /**
      * Roles WITH users.change-role (matrix D4) — owner and admin only.
      *

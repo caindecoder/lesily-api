@@ -220,6 +220,22 @@ class RemoveMemberTest extends MembershipsTestCase
         $this->assertRosterExcludes($this->viewMemberships($actor, $company), $target);
     }
 
+    #[Test]
+    public function when_the_removal_reads_the_membership_it_will_write_then_it_locks_it(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+
+        // When
+        $capture = $this->recordedQueriesDuring(
+            fn () => $this->removeMember($admin, $company, $membershipId)->assertNoContent()
+        );
+
+        // Then
+        $this->assertOwnerGuardDecidedUnderLock($capture, 'company_user');
+    }
+
     /**
      * Roles WITHOUT users.remove — only Owner/Admin hold it (matrix D4/D10;
      * hr_officer may invite/revoke-invitation but NOT remove members).

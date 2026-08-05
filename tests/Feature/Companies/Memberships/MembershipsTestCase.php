@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
@@ -12,6 +13,7 @@ use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
 use App\Foundation\Billing\Enums\BillingPlan;
+use Illuminate\Database\Events\QueryExecuted;
 use Tests\Feature\Companies\CompaniesTestCase;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Events\UserInvited;
@@ -150,6 +152,73 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     {
         $response->assertStatus($code->status());
         $response->assertJsonPath('error_code', $code->value);
+    }
+
+    /**
+     * Run $act recording every SQL statement with the transaction depth at the
+     * moment it executed. DB::listen sees what getQueryLog cannot: the log
+     * stores text only, and BEGIN/SAVEPOINT never enter it — so depth is the
+     * only observable that distinguishes a held lock from an autocommit one.
+     *
+     * @return array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>}
+     */
+    protected function recordedQueriesDuring(callable $act): array
+    {
+        $ambient = DB::transactionLevel();
+        $queries = [];
+        DB::listen(function (QueryExecuted $query) use (&$queries): void {
+            $queries[] = [
+                'sql' => strtolower($query->sql),
+                'bindings' => $query->bindings,
+                'depth' => DB::transactionLevel(),
+            ];
+        });
+
+        $act();
+
+        return ['ambient' => $ambient, 'queries' => $queries];
+    }
+
+    /**
+     * The owner-guard decided under the held lock (OQ-1-158): a `select … for
+     * update` on $table ran inside a transaction DEEPER than the ambient one
+     * (an autocommit lock releases the instant its statement returns), the
+     * owner-guard's roles read (the 'owner'-bound query) ran AFTER that locked
+     * read, and the write followed it inside the same transaction window.
+     *
+     * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>}  $capture
+     */
+    protected function assertOwnerGuardDecidedUnderLock(array $capture, string $table): void
+    {
+        $lockIndex = null;
+        $guardIndex = null;
+        $writeIndex = null;
+
+        foreach ($capture['queries'] as $index => $query) {
+            $inTransaction = $query['depth'] > $capture['ambient'];
+
+            if ($lockIndex === null && $inTransaction && str_starts_with($query['sql'], 'select')
+                && str_contains($query['sql'], 'for update') && str_contains($query['sql'], "`{$table}`")) {
+                $lockIndex = $index;
+            }
+
+            if ($guardIndex === null && str_contains($query['sql'], '`roles`')
+                && in_array('owner', $query['bindings'], true)) {
+                $guardIndex = $index;
+            }
+
+            if ($writeIndex === null && $inTransaction
+                && (str_starts_with($query['sql'], 'update') || str_starts_with($query['sql'], 'insert'))
+                && (str_contains($query['sql'], "`{$table}`") || str_contains($query['sql'], '`stored_events`'))) {
+                $writeIndex = $index;
+            }
+        }
+
+        $this->assertNotNull($lockIndex, "Expected a select-for-update on `{$table}` inside the interactor's own transaction.");
+        $this->assertNotNull($guardIndex, 'Expected the owner-guard roles read during the request.');
+        $this->assertNotNull($writeIndex, 'Expected an in-transaction write to follow the locked read.');
+        $this->assertGreaterThan($lockIndex, $guardIndex, 'The owner-guard must decide AFTER the row is locked.');
+        $this->assertGreaterThan($lockIndex, $writeIndex, 'The write must follow the locked read.');
     }
 
     /**
