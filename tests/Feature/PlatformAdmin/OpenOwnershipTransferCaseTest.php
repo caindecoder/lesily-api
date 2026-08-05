@@ -118,7 +118,7 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
 
         // Then the case is open with no incoming owner and the audit row is present
         $this->assertCaseOpened($response, ['new_owner_user_id' => null]);
-        $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'));
+        $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'), $response);
     }
 
     #[Test]
@@ -135,7 +135,7 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
         // Then the case is on the record, exactly one audit row names the
         // admin, and nothing about the company changed
         $this->assertCaseOpened($response, ['new_owner_user_id' => $alex->getKey()]);
-        $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'));
+        $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'), $response);
         $this->assertCompanyUntouched($this->company, $alex);
     }
 
@@ -203,9 +203,12 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
     /**
      * Exactly ONE audit row records the open, in the cd-audit-trail
      * Direct-write shape (stored_event_id NULL — opening a case records no
-     * domain event), actor + subject identity-pinned.
+     * domain event), actor + subject identity-pinned, and the request-context
+     * columns IDENTITY-pinned (ip = the test client's loopback, request_id =
+     * the very Correlation-Id the response carries) — presence-only asserts
+     * could not catch the interactor threading nulls.
      */
-    protected function assertCaseOpenAudited(User $actor, string $caseId): void
+    protected function assertCaseOpenAudited(User $actor, string $caseId, TestResponse $response): void
     {
         $this->assertDatabaseCount('audit_trail', 1);
         $this->assertDatabaseHas('audit_trail', [
@@ -218,7 +221,12 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
             'actor_role_code' => 'platform_super_admin',
             'stored_event_id' => null,
             'severity' => 'info',
+            'ip_address' => '127.0.0.1',
         ]);
+
+        $entry = AuditEntry::query()->sole();
+        $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
+        $this->assertNotNull($entry->user_agent);
     }
 
     /**
