@@ -58,6 +58,22 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
         $this->assertNoCaseOpened();
     }
 
+    #[Test]
+    public function when_the_proposed_incoming_owner_is_not_a_member_of_the_company_then_the_case_is_refused(): void
+    {
+        // Given a user with no membership in the named company
+        $outsider = User::factory()->create();
+
+        // When the admin proposes them as the incoming owner
+        $response = $this->openCase($this->admin, $this->validPayload([
+            'newOwnerUserId' => $outsider->getKey(),
+        ]));
+
+        // Then the case is refused on the proposed owner and nothing is written
+        $this->assertValidationFailed($response, 'newOwnerUserId');
+        $this->assertNoCaseOpened();
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */

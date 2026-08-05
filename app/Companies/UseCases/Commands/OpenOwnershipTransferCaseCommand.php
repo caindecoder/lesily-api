@@ -31,7 +31,12 @@ class OpenOwnershipTransferCaseCommand extends Data
         return [
             'companyId' => ['required', 'uuid', Rule::exists('companies', 'id')],
             'requestedContext' => ['required', 'string', 'max:1000'],
-            'newOwnerUserId' => ['nullable', 'uuid'],
+            'newOwnerUserId' => [
+                'nullable',
+                'uuid',
+                Rule::exists('company_user', 'user_id')
+                    ->where('company_id', $context->payload['companyId'] ?? null),
+            ],
         ];
     }
 }
