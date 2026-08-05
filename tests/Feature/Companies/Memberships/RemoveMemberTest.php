@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
@@ -218,6 +219,23 @@ class RemoveMemberTest extends MembershipsTestCase
         // off the roster
         $this->assertMemberRemoved($response, $actor, $membershipId);
         $this->assertRosterExcludes($this->viewMemberships($actor, $company), $target);
+    }
+
+    #[Test]
+    public function when_the_removal_reads_the_membership_it_will_write_then_it_locks_it(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+
+        // When
+        DB::enableQueryLog();
+        $this->removeMember($admin, $company, $membershipId)->assertNoContent();
+        $log = DB::getQueryLog();
+        DB::disableQueryLog();
+
+        // Then
+        $this->assertLockedReadPrecedesWrite($log, 'company_user');
     }
 
     /**

@@ -14,7 +14,9 @@ use App\Companies\Memberships\UseCases\Commands\RemoveUserFromCompanyCommand;
 /**
  * Remove a member from the company (UC-1-024). Guards live here at the
  * interactor seam (the aggregate is guardless — cd-users §5): the company-scoped
- * lookup hides unknown/cross-tenant/removed ids as 404.
+ * lookup hides unknown/cross-tenant/removed ids as 404. The lookup locks the
+ * pivot row inside the transaction so the owner-guard decides against live
+ * state, not a snapshot a concurrent owner-writer can invalidate (OQ-1-158).
  */
 class RemoveUserFromCompanyInteractor
 {
@@ -22,20 +24,21 @@ class RemoveUserFromCompanyInteractor
 
     public function execute(Company $company, RemoveUserFromCompanyCommand $command, string $membershipId): void
     {
-        $membership = CompanyUser::query()
-            ->where('company_id', $company->getKey())
-            ->whereKey($membershipId)
-            ->firstOrFail();
+        DB::transaction(function () use ($company, $command, $membershipId): void {
+            $membership = CompanyUser::query()
+                ->where('company_id', $company->getKey())
+                ->whereKey($membershipId)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        if ($membership->user_id === $command->removedBy) {
-            throw new SelfRemovalBlockedException;
-        }
+            if ($membership->user_id === $command->removedBy) {
+                throw new SelfRemovalBlockedException;
+            }
 
-        if ($membership->role()->where('code', 'owner')->exists()) {
-            throw new OwnerRemovalBlockedException;
-        }
+            if ($membership->role()->where('code', 'owner')->exists()) {
+                throw new OwnerRemovalBlockedException;
+            }
 
-        DB::transaction(function () use ($membership, $command): void {
             UserMembership::retrieve($membership->getKey())
                 ->remove($command)
                 ->persist();
