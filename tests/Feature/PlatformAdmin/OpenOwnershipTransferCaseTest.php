@@ -11,6 +11,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
 {
@@ -119,6 +120,24 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
         $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'));
     }
 
+    #[Test]
+    public function when_a_platform_admin_opens_a_case_for_a_company_then_the_case_is_on_the_record(): void
+    {
+        // Given company Contoso and Alex, a live member proposed as incoming owner
+        $alex = $this->aCompanyMember($this->company, 'employee');
+
+        // When the platform admin opens the case naming Alex
+        $response = $this->openCase($this->admin, $this->validPayload([
+            'newOwnerUserId' => $alex->getKey(),
+        ]));
+
+        // Then the case is on the record, exactly one audit row names the
+        // admin, and nothing about the company changed
+        $this->assertCaseOpened($response, ['new_owner_user_id' => $alex->getKey()]);
+        $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'));
+        $this->assertCompanyUntouched($this->company, $alex);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
@@ -199,6 +218,27 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
             'stored_event_id' => null,
             'severity' => 'info',
         ]);
+    }
+
+    /**
+     * Opening a case changed nothing about the company (UC-1-140
+     * postcondition): the owner column still names the pre-act owner, the
+     * company's stream recorded no domain event, and the proposed owner's
+     * pivot role is untouched — a case is a record, never a transfer.
+     */
+    protected function assertCompanyUntouched(Company $company, User $proposed): void
+    {
+        $ownerBefore = $company->owner_id;
+        $this->assertSame($ownerBefore, $company->refresh()->owner_id);
+
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $company->getKey())
+            ->count());
+
+        $this->assertSame(
+            $this->seededRole('employee')->getKey(),
+            $company->users()->whereKey($proposed->getKey())->sole()->pivot->role_id,
+        );
     }
 
     /**
