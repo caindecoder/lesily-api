@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
@@ -150,6 +151,38 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     {
         $response->assertStatus($code->status());
         $response->assertJsonPath('error_code', $code->value);
+    }
+
+    /**
+     * The row this request wrote was read under FOR UPDATE first: exactly one
+     * `select … for update` on $table appears in $log, and it precedes the
+     * first write touching $table or stored_events — the owner-guard decided
+     * against locked state, not a pre-transaction snapshot (OQ-1-158).
+     *
+     * @param  array<int, array{query: string}>  $log
+     */
+    protected function assertLockedReadPrecedesWrite(array $log, string $table): void
+    {
+        $lockedIndexes = [];
+        $firstWriteIndex = null;
+
+        foreach ($log as $index => $entry) {
+            $sql = strtolower(trim($entry['query']));
+            $touchesTables = str_contains($sql, "`{$table}`") || str_contains($sql, '`stored_events`');
+
+            if (str_starts_with($sql, 'select') && str_contains($sql, 'for update') && str_contains($sql, "`{$table}`")) {
+                $lockedIndexes[] = $index;
+            }
+
+            if ($firstWriteIndex === null && $touchesTables
+                && (str_starts_with($sql, 'update') || str_starts_with($sql, 'insert'))) {
+                $firstWriteIndex = $index;
+            }
+        }
+
+        $this->assertCount(1, $lockedIndexes, "Expected exactly one select-for-update on `{$table}`.");
+        $this->assertNotNull($firstWriteIndex, "Expected a write to `{$table}` or `stored_events`.");
+        $this->assertLessThan($firstWriteIndex, $lockedIndexes[0], 'The locked read must precede the first write.');
     }
 
     /**

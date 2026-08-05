@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
@@ -298,6 +299,23 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $this->assertRoleChangeEnvelope($response, $this->seededRole('hr_officer'), $membershipIdA);
         $this->assertMembershipRoleChanged($membershipIdA, $adminA, $this->seededRole('hr_officer'));
         $this->assertMembershipRoleUnchanged($membershipIdB, $this->seededRole('admin'));
+    }
+
+    #[Test]
+    public function when_the_role_change_reads_the_membership_it_will_write_then_it_locks_it(): void
+    {
+        // Given
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+
+        // When
+        DB::enableQueryLog();
+        $this->changeRole($admin, $company, $membershipId)->assertOk();
+        $log = DB::getQueryLog();
+        DB::disableQueryLog();
+
+        // Then
+        $this->assertLockedReadPrecedesWrite($log, 'company_user');
     }
 
     /**
