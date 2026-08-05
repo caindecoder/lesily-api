@@ -5,7 +5,6 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
-use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
@@ -309,13 +308,12 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
 
         // When
-        DB::enableQueryLog();
-        $this->changeRole($admin, $company, $membershipId)->assertOk();
-        $log = DB::getQueryLog();
-        DB::disableQueryLog();
+        $capture = $this->recordedQueriesDuring(
+            fn () => $this->changeRole($admin, $company, $membershipId)->assertOk()
+        );
 
         // Then
-        $this->assertLockedReadPrecedesWrite($log, 'company_user');
+        $this->assertOwnerGuardDecidedUnderLock($capture, 'company_user');
     }
 
     /**

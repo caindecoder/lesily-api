@@ -4,7 +4,6 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
@@ -229,13 +228,12 @@ class RemoveMemberTest extends MembershipsTestCase
         [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
 
         // When
-        DB::enableQueryLog();
-        $this->removeMember($admin, $company, $membershipId)->assertNoContent();
-        $log = DB::getQueryLog();
-        DB::disableQueryLog();
+        $capture = $this->recordedQueriesDuring(
+            fn () => $this->removeMember($admin, $company, $membershipId)->assertNoContent()
+        );
 
         // Then
-        $this->assertLockedReadPrecedesWrite($log, 'company_user');
+        $this->assertOwnerGuardDecidedUnderLock($capture, 'company_user');
     }
 
     /**
