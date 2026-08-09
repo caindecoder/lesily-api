@@ -3,7 +3,6 @@
 namespace App\Companies\IO\Http\Controllers;
 
 use App\Models\User;
-use RuntimeException;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Foundation\Http\Values\AdminRequestContext;
@@ -13,6 +12,7 @@ use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminResource;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminCollection;
 use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
 use App\Companies\UseCases\Interactors\ReviewOwnershipTransferCaseQueueInteractor;
+use App\Companies\UseCases\Interactors\ReviewOwnershipTransferCaseAsAdminInteractor;
 
 /**
  * The platform-admin ownership-transfer case surface (slice-11R spec §3).
@@ -37,9 +37,16 @@ class PlatformAdminOwnershipTransferCasesController
         return (new OwnershipTransferCaseAdminCollection($page))->response($request);
     }
 
-    public function show(string $caseId, Request $request): JsonResponse
+    public function show(string $caseId, Request $request, ReviewOwnershipTransferCaseAsAdminInteractor $interactor): OwnershipTransferCaseAdminResource
     {
-        throw new RuntimeException('Not implemented');
+        /** @var User $admin */
+        $admin = $request->user();
+
+        return new OwnershipTransferCaseAdminResource($interactor->execute(
+            $caseId,
+            $admin,
+            AdminRequestContext::fromRequest($request),
+        ));
     }
 
     public function store(Request $request, OpenOwnershipTransferCaseInteractor $interactor): JsonResponse

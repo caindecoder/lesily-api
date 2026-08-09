@@ -77,6 +77,47 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
     }
 
     /**
+     * Exactly ONE audit row evidences the case read, subject-pinned to the
+     * case and company-attributed (the UC-1-122 detail-read shape), with
+     * request-context columns IDENTITY-pinned per the sibling standard.
+     */
+    protected function assertCaseReadAudited(OwnershipTransferCase $case, User $actor, TestResponse $response): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'event_class' => 'OwnershipTransferCaseViewed',
+            'subject_type' => 'ownership_transfer_case',
+            'subject_id' => $case->getKey(),
+            'subject_label' => null,
+            'action' => 'case_viewed',
+            'description' => 'Platform admin viewed an ownership-transfer case.',
+            'company_id' => $case->company_id,
+            'actor_user_id' => $actor->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $actor->name,
+            'stored_event_id' => null,
+            'metadata' => null,
+            'severity' => 'info',
+            'ip_address' => '127.0.0.1',
+        ]);
+
+        $entry = AuditEntry::query()->sole();
+        $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
+        $this->assertNotNull($entry->user_agent);
+    }
+
+    /**
+     * The read mutated nothing: status, outcome and updated_at untouched.
+     */
+    protected function assertCaseUnchanged(OwnershipTransferCase $case): void
+    {
+        $fresh = $case->fresh();
+        $this->assertSame($case->status, $fresh->status);
+        $this->assertSame($case->closed_outcome, $fresh->closed_outcome);
+        $this->assertTrue($case->updated_at->equalTo($fresh->updated_at));
+    }
+
+    /**
      * The pagination meta is exactly this (api-conventions §8.3 envelope).
      */
     protected function assertCasePage(TestResponse $response, array $meta): void
