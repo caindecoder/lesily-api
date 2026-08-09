@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Companies\Enums\OwnershipTransferCaseOutcome;
 
 class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCase
 {
@@ -119,6 +120,65 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
             'result_count' => 3,
             'page' => 1,
         ]);
+    }
+
+    #[Test]
+    #[DataProvider('statusFilterProvider')]
+    public function when_the_queue_is_filtered_by_status_then_only_matching_cases_are_returned(string $token): void
+    {
+        // Given one case in each lifecycle state
+        $admin = $this->anAllowlistedAdmin();
+        $company = Company::factory()->create();
+        $cases = [
+            'open' => $this->anOpenCaseFor($company),
+            'verified' => $this->aVerifiedCaseFor($company),
+            'closed' => $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Rejected),
+        ];
+
+        // When the queue is filtered to this row's status
+        $response = $this->listCases($admin, ['status' => $token]);
+
+        // Then only the matching case is listed and the filter rides the audit row
+        $this->assertCasesListedInOrder($response, [$cases[$token]->getKey()]);
+        $this->assertQueueReadAudited($admin, $response, [
+            'filters' => ['status' => $token],
+            'result_count' => 1,
+            'page' => 1,
+        ]);
+    }
+
+    #[Test]
+    public function when_the_queue_is_filtered_by_company_then_only_that_companys_cases_are_returned(): void
+    {
+        // Given one case in each of two tenants
+        $admin = $this->anAllowlistedAdmin();
+        $contoso = Company::factory()->create();
+        $acme = Company::factory()->create();
+        $contosoCase = $this->anOpenCaseFor($contoso);
+        $this->anOpenCaseFor($acme);
+
+        // When the queue is filtered to Contoso
+        $response = $this->listCases($admin, ['company_id' => $contoso->getKey()]);
+
+        // Then only Contoso's case is listed — company_id is a filter, not a scope
+        $this->assertCasesListedInOrder($response, [$contosoCase->getKey()]);
+        $this->assertQueueReadAudited($admin, $response, [
+            'filters' => ['company_id' => $contoso->getKey()],
+            'result_count' => 1,
+            'page' => 1,
+        ]);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function statusFilterProvider(): array
+    {
+        return [
+            'open cases' => ['open'],
+            'verified cases' => ['verified'],
+            'closed cases' => ['closed'],
+        ];
     }
 
     /**

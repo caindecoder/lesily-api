@@ -8,6 +8,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Companies\Enums\OwnershipTransferCaseOutcome;
 
 abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
 {
@@ -55,6 +56,22 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
         if ($proposed !== null) {
             $factory = $factory->proposedOwner($proposed);
         }
+
+        return $factory->create();
+    }
+
+    protected function aVerifiedCaseFor(Company $company): OwnershipTransferCase
+    {
+        return OwnershipTransferCase::factory()->forCompany($company)->verified()->create();
+    }
+
+    protected function aClosedCaseFor(Company $company, OwnershipTransferCaseOutcome $outcome): OwnershipTransferCase
+    {
+        $factory = OwnershipTransferCase::factory()->forCompany($company);
+
+        $factory = $outcome === OwnershipTransferCaseOutcome::Executed
+            ? $factory->closedExecuted()
+            : $factory->closedRejected();
 
         return $factory->create();
     }

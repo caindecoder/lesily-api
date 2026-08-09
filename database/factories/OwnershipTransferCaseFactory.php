@@ -7,6 +7,7 @@ use App\Companies\Entities\Company;
 use App\Companies\Entities\OwnershipTransferCase;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
+use App\Companies\Enums\OwnershipTransferCaseOutcome;
 
 /**
  * @extends Factory<OwnershipTransferCase>
@@ -36,5 +37,39 @@ class OwnershipTransferCaseFactory extends Factory
     public function proposedOwner(User $user): static
     {
         return $this->state(['new_owner_user_id' => $user->getKey()]);
+    }
+
+    public function verified(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => OwnershipTransferCaseStatus::Verified,
+            'verified_at' => now(),
+            'verified_by' => User::factory(),
+            'new_owner_user_id' => $attributes['new_owner_user_id'] ?? User::factory(),
+            'verification_notes' => fake()->sentence(),
+            'verification_artefacts' => [
+                ['type' => 'id_document', 'reference' => fake()->uuid(), 'capturedAt' => now()->toISOString()],
+            ],
+        ]);
+    }
+
+    public function closedExecuted(): static
+    {
+        return $this->verified()->state([
+            'status' => OwnershipTransferCaseStatus::Closed,
+            'closed_outcome' => OwnershipTransferCaseOutcome::Executed,
+            'executed_at' => now(),
+            'executed_by' => User::factory(),
+        ]);
+    }
+
+    public function closedRejected(): static
+    {
+        return $this->state([
+            'status' => OwnershipTransferCaseStatus::Closed,
+            'closed_outcome' => OwnershipTransferCaseOutcome::Rejected,
+            'rejection_reason' => fake()->sentence(),
+            'rejection_reason_code' => 'identity_failed',
+        ]);
     }
 }

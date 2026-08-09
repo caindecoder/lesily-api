@@ -82,4 +82,23 @@ class OwnershipTransferCase extends Model
     {
         $query->orderByDesc('created_at')->orderByDesc('id');
     }
+
+    /**
+     * @param  Builder<self>  $query
+     */
+    protected function scopeWithStatus(Builder $query, OwnershipTransferCaseStatus $status): void
+    {
+        $query->where('status', $status);
+    }
+
+    /**
+     * A cross-tenant FILTER, not a tenant scope — the admin queue is
+     * deliberately unscoped and this narrows it to one company on request.
+     *
+     * @param  Builder<self>  $query
+     */
+    protected function scopeForCompanyId(Builder $query, string $companyId): void
+    {
+        $query->where('company_id', $companyId);
+    }
 }

@@ -8,6 +8,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\Http\Values\AdminRequestContext;
+use App\Companies\Enums\OwnershipTransferCaseStatus;
 use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
 
 /**
@@ -27,6 +28,8 @@ class ReviewOwnershipTransferCaseQueueInteractor
     {
         return DB::transaction(function () use ($filters, $admin, $context): LengthAwarePaginator {
             $page = OwnershipTransferCase::query()
+                ->when($filters->status, fn ($query, string $status) => $query->withStatus(OwnershipTransferCaseStatus::from($status)))
+                ->when($filters->company_id, fn ($query, string $companyId) => $query->forCompanyId($companyId))
                 ->newestFirst()
                 ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
 
