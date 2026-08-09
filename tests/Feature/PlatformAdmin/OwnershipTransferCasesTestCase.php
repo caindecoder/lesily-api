@@ -112,9 +112,10 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
     protected function assertCaseUnchanged(OwnershipTransferCase $case): void
     {
         $fresh = $case->fresh();
+        $this->assertInstanceOf(OwnershipTransferCase::class, $fresh);
         $this->assertSame($case->status, $fresh->status);
         $this->assertSame($case->closed_outcome, $fresh->closed_outcome);
-        $this->assertTrue($case->updated_at->equalTo($fresh->updated_at));
+        $this->assertEquals($case->updated_at, $fresh->updated_at);
     }
 
     /**
