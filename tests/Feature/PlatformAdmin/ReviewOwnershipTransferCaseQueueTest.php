@@ -49,11 +49,10 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     public function when_the_queue_query_is_invalid_then_the_read_is_refused(array $query, string $field): void
     {
         // Given an allowlisted platform admin and an existing case
-        $admin = $this->anAllowlistedAdmin();
         $this->anOpenCaseFor(Company::factory()->create());
 
         // When the queue is requested with this row's defective query
-        $response = $this->listCases($admin, $query);
+        $response = $this->listCases($this->admin, $query);
 
         // Then the read is refused naming the offending key and nothing is audited
         $this->assertValidationFailed($response, $field);
@@ -63,15 +62,16 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     #[Test]
     public function when_the_audit_write_fails_then_the_queue_read_returns_no_case_data(): void
     {
-        // Given an allowlisted admin, an existing case, and a failing audit write
-        $admin = $this->anAllowlistedAdmin();
+        // Given an existing case and an audit write that fails AFTER its row
+        // is inserted — only the read's transaction can take the row back out
         $this->anOpenCaseFor(Company::factory()->create());
-        AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
+        AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the queue is requested
-        $response = $this->listCases($admin);
+        $response = $this->listCases($this->admin);
 
-        // Then the read fails closed — no case data, no evidence row
+        // Then the read fails closed — no case data, and the inserted
+        // evidence row was rolled back with the read
         $this->assertReadFailedSafely($response);
         $this->assertNoAuditRecorded();
     }
@@ -80,15 +80,13 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     public function when_no_cases_match_then_the_queue_is_empty_and_the_read_is_still_recorded(): void
     {
         // Given an allowlisted platform admin and no cases at all
-        $admin = $this->anAllowlistedAdmin();
-
         // When the queue is requested
-        $response = $this->listCases($admin);
+        $response = $this->listCases($this->admin);
 
         // Then the page is empty and the read still left its evidence
         $response->assertOk();
         $this->assertSame([], $response->json('data'));
-        $this->assertQueueReadAudited($admin, $response, [
+        $this->assertQueueReadAudited($this->admin, $response, [
             'filters' => [],
             'result_count' => 0,
             'page' => 1,
@@ -100,7 +98,6 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     {
         // Given three cases across two tenants, minted at distinct instants
         // interleaved across companies — newest is NOT the last-minted-per-company
-        $admin = $this->anAllowlistedAdmin();
         $contoso = Company::factory()->create();
         $acme = Company::factory()->create();
         $this->travelTo(CarbonImmutable::parse('2026-08-09 09:00:00'));
@@ -112,11 +109,11 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
         $this->travelBack();
 
         // When the queue is requested with no filter
-        $response = $this->listCases($admin);
+        $response = $this->listCases($this->admin);
 
         // Then every company's cases appear, newest first, and the read is audited
         $this->assertCasesListedInOrder($response, [$newest->getKey(), $middle->getKey(), $oldest->getKey()]);
-        $this->assertQueueReadAudited($admin, $response, [
+        $this->assertQueueReadAudited($this->admin, $response, [
             'filters' => [],
             'result_count' => 3,
             'page' => 1,
@@ -124,11 +121,33 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     }
 
     #[Test]
+    public function when_cases_share_a_created_at_second_then_the_order_stays_total(): void
+    {
+        // Given three cases opened inside one frozen second — the tie the
+        // timestamp column cannot break
+        $company = Company::factory()->create();
+        $this->travelTo(CarbonImmutable::parse('2026-08-09 09:00:00'));
+        $caseIds = [
+            $this->anOpenCaseFor($company)->getKey(),
+            $this->anOpenCaseFor($company)->getKey(),
+            $this->anOpenCaseFor($company)->getKey(),
+        ];
+        $this->travelBack();
+
+        // When the queue is requested
+        $response = $this->listCases($this->admin);
+
+        // Then equal created_at falls back to descending id — pages can
+        // never duplicate or skip a tied case
+        rsort($caseIds);
+        $this->assertCasesListedInOrder($response, $caseIds);
+    }
+
+    #[Test]
     #[DataProvider('statusFilterProvider')]
     public function when_the_queue_is_filtered_by_status_then_only_matching_cases_are_returned(string $token): void
     {
         // Given one case in each lifecycle state
-        $admin = $this->anAllowlistedAdmin();
         $company = Company::factory()->create();
         $cases = [
             'open' => $this->anOpenCaseFor($company),
@@ -137,11 +156,11 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
         ];
 
         // When the queue is filtered to this row's status
-        $response = $this->listCases($admin, ['status' => $token]);
+        $response = $this->listCases($this->admin, ['status' => $token]);
 
         // Then only the matching case is listed and the filter rides the audit row
         $this->assertCasesListedInOrder($response, [$cases[$token]->getKey()]);
-        $this->assertQueueReadAudited($admin, $response, [
+        $this->assertQueueReadAudited($this->admin, $response, [
             'filters' => ['status' => $token],
             'result_count' => 1,
             'page' => 1,
@@ -152,19 +171,44 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     public function when_the_queue_is_filtered_by_company_then_only_that_companys_cases_are_returned(): void
     {
         // Given one case in each of two tenants
-        $admin = $this->anAllowlistedAdmin();
         $contoso = Company::factory()->create();
         $acme = Company::factory()->create();
         $contosoCase = $this->anOpenCaseFor($contoso);
         $this->anOpenCaseFor($acme);
 
         // When the queue is filtered to Contoso
-        $response = $this->listCases($admin, ['company_id' => $contoso->getKey()]);
+        $response = $this->listCases($this->admin, ['company_id' => $contoso->getKey()]);
 
         // Then only Contoso's case is listed — company_id is a filter, not a scope
         $this->assertCasesListedInOrder($response, [$contosoCase->getKey()]);
-        $this->assertQueueReadAudited($admin, $response, [
+        $this->assertQueueReadAudited($this->admin, $response, [
             'filters' => ['company_id' => $contoso->getKey()],
+            'result_count' => 1,
+            'page' => 1,
+        ]);
+    }
+
+    #[Test]
+    public function when_status_and_company_filters_combine_then_only_the_intersection_is_returned(): void
+    {
+        // Given cases that each match only ONE of the two filters, and one
+        // matching both
+        $contoso = Company::factory()->create();
+        $acme = Company::factory()->create();
+        $match = $this->aVerifiedCaseFor($contoso);
+        $this->anOpenCaseFor($contoso);
+        $this->aVerifiedCaseFor($acme);
+
+        // When the queue is filtered by status AND company together
+        $response = $this->listCases($this->admin, [
+            'status' => 'verified',
+            'company_id' => $contoso->getKey(),
+        ]);
+
+        // Then only the intersection is listed and both filters ride the audit row
+        $this->assertCasesListedInOrder($response, [$match->getKey()]);
+        $this->assertQueueReadAudited($this->admin, $response, [
+            'filters' => ['status' => 'verified', 'company_id' => $contoso->getKey()],
             'result_count' => 1,
             'page' => 1,
         ]);
@@ -174,18 +218,17 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     public function when_the_queue_spans_multiple_pages_then_the_requested_page_is_returned_with_its_own_audit_row(): void
     {
         // Given sixteen cases — one more than a default page
-        $admin = $this->anAllowlistedAdmin();
         OwnershipTransferCase::factory()->count(16)->forCompany(Company::factory()->create())->create();
 
         // When the second page is requested
-        $response = $this->listCases($admin, ['page' => 2]);
+        $response = $this->listCases($this->admin, ['page' => 2]);
 
         // Then the page holds the one remaining case, the meta says so exactly,
         // and the audit row evidences THIS page — one row per page
         $response->assertOk();
         $response->assertJsonCount(1, 'data');
         $this->assertCasePage($response, ['page' => 2, 'per_page' => 15, 'total' => 16, 'last_page' => 2]);
-        $this->assertQueueReadAudited($admin, $response, [
+        $this->assertQueueReadAudited($this->admin, $response, [
             'filters' => [],
             'result_count' => 1,
             'page' => 2,
@@ -193,15 +236,33 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     }
 
     #[Test]
+    public function when_a_page_size_is_requested_then_the_page_honours_it(): void
+    {
+        // Given five cases and a request for pages of two
+        OwnershipTransferCase::factory()->count(5)->forCompany(Company::factory()->create())->create();
+
+        // When the queue is requested with per_page=2
+        $response = $this->listCases($this->admin, ['per_page' => 2]);
+
+        // Then exactly two rows come back and the meta reports the requested size
+        $response->assertJsonCount(2, 'data');
+        $this->assertCasePage($response, ['page' => 1, 'per_page' => 2, 'total' => 5, 'last_page' => 3]);
+        $this->assertQueueReadAudited($this->admin, $response, [
+            'filters' => [],
+            'result_count' => 2,
+            'page' => 1,
+        ]);
+    }
+
+    #[Test]
     public function when_the_admin_lists_the_queue_then_the_page_carries_exactly_the_admin_contract(): void
     {
         // Given one closed-executed case — every contract key meaningful
-        $admin = $this->anAllowlistedAdmin();
         $company = Company::factory()->create();
         $case = $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Executed);
 
         // When the queue is requested
-        $response = $this->listCases($admin);
+        $response = $this->listCases($this->admin);
 
         // Then the envelope is exactly the admin contract — nothing more
         $response->assertExactJson([

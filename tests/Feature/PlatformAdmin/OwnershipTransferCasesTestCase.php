@@ -12,6 +12,8 @@ use App\Companies\Enums\OwnershipTransferCaseOutcome;
 
 abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
 {
+    protected User $admin;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -19,6 +21,8 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
         config(['app.debug' => false]);
 
         $this->seedRbacCatalog();
+
+        $this->admin = $this->anAllowlistedAdmin();
     }
 
     protected function anAllowlistedAdmin(): User
@@ -60,9 +64,15 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
         return $factory->create();
     }
 
-    protected function aVerifiedCaseFor(Company $company): OwnershipTransferCase
+    protected function aVerifiedCaseFor(Company $company, ?User $proposed = null): OwnershipTransferCase
     {
-        return OwnershipTransferCase::factory()->forCompany($company)->verified()->create();
+        $factory = OwnershipTransferCase::factory()->forCompany($company);
+
+        if ($proposed !== null) {
+            $factory = $factory->proposedOwner($proposed);
+        }
+
+        return $factory->verified()->create();
     }
 
     protected function aClosedCaseFor(Company $company, OwnershipTransferCaseOutcome $outcome): OwnershipTransferCase

@@ -7,6 +7,7 @@ use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
+use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
  * The admin case-queue query input (UC-1-127): whitelisted filter/pagination
@@ -49,7 +50,7 @@ class OwnershipTransferCaseAdminFilters extends Data
     /**
      * @return array<string, array<int, mixed>>
      */
-    public static function rules(): array
+    public static function rules(ValidationContext $context): array
     {
         return [
             'status' => ['sometimes', 'string', Rule::enum(OwnershipTransferCaseStatus::class)],

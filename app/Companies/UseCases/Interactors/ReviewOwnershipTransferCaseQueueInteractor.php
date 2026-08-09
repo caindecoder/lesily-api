@@ -17,7 +17,8 @@ use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
  * read — an audit failure vetoes the read (no read without evidence,
  * slice-11R spec §4; stricter than the invoice precedent's transaction-free
  * observation). A list has no single subject, so the row is platform-level:
- * subject_id and company_id NULL, query context in metadata.
+ * subject_id and company_id NULL, query context in metadata — validated
+ * filter tokens only (an enum value and a uuid), never free text.
  */
 class ReviewOwnershipTransferCaseQueueInteractor
 {
