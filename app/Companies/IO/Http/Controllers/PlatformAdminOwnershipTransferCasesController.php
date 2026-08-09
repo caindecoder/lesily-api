@@ -3,6 +3,7 @@
 namespace App\Companies\IO\Http\Controllers;
 
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Foundation\Http\Values\AdminRequestContext;
@@ -19,6 +20,16 @@ use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
  */
 class PlatformAdminOwnershipTransferCasesController
 {
+    public function index(Request $request): JsonResponse
+    {
+        throw new RuntimeException('Not implemented');
+    }
+
+    public function show(string $caseId, Request $request): JsonResponse
+    {
+        throw new RuntimeException('Not implemented');
+    }
+
     public function store(Request $request, OpenOwnershipTransferCaseInteractor $interactor): JsonResponse
     {
         /** @var User $admin */
