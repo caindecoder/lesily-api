@@ -7,6 +7,7 @@ use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
@@ -166,6 +167,58 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
             'filters' => ['company_id' => $contoso->getKey()],
             'result_count' => 1,
             'page' => 1,
+        ]);
+    }
+
+    #[Test]
+    public function when_the_queue_spans_multiple_pages_then_the_requested_page_is_returned_with_its_own_audit_row(): void
+    {
+        // Given sixteen cases — one more than a default page
+        $admin = $this->anAllowlistedAdmin();
+        OwnershipTransferCase::factory()->count(16)->forCompany(Company::factory()->create())->create();
+
+        // When the second page is requested
+        $response = $this->listCases($admin, ['page' => 2]);
+
+        // Then the page holds the one remaining case, the meta says so exactly,
+        // and the audit row evidences THIS page — one row per page
+        $response->assertOk();
+        $response->assertJsonCount(1, 'data');
+        $this->assertCasePage($response, ['page' => 2, 'per_page' => 15, 'total' => 16, 'last_page' => 2]);
+        $this->assertQueueReadAudited($admin, $response, [
+            'filters' => [],
+            'result_count' => 1,
+            'page' => 2,
+        ]);
+    }
+
+    #[Test]
+    public function when_the_admin_lists_the_queue_then_the_page_carries_exactly_the_admin_contract(): void
+    {
+        // Given one closed-executed case — every contract key meaningful
+        $admin = $this->anAllowlistedAdmin();
+        $company = Company::factory()->create();
+        $case = $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Executed);
+
+        // When the queue is requested
+        $response = $this->listCases($admin);
+
+        // Then the envelope is exactly the admin contract — nothing more
+        $response->assertExactJson([
+            'data' => [
+                [
+                    'id' => $case->getKey(),
+                    'company_id' => $company->getKey(),
+                    'status' => 'closed',
+                    'closed_outcome' => 'executed',
+                    'new_owner_user_id' => $case->new_owner_user_id,
+                    'requested_context' => $case->requested_context,
+                    'created_at' => $case->created_at->toISOString(),
+                ],
+            ],
+            'meta' => [
+                'pagination' => ['page' => 1, 'per_page' => 15, 'total' => 1, 'last_page' => 1],
+            ],
         ]);
     }
 

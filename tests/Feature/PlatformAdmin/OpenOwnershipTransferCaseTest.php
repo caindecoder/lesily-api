@@ -220,6 +220,7 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
             'id' => $case->getKey(),
             'company_id' => $case->company_id,
             'status' => 'open',
+            'closed_outcome' => null,
             'requested_context' => $case->requested_context,
             'new_owner_user_id' => $case->new_owner_user_id,
             'created_at' => $case->created_at->toISOString(),

@@ -77,6 +77,14 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
     }
 
     /**
+     * The pagination meta is exactly this (api-conventions §8.3 envelope).
+     */
+    protected function assertCasePage(TestResponse $response, array $meta): void
+    {
+        $this->assertSame($meta, $response->json('meta.pagination'));
+    }
+
+    /**
      * The page lists exactly these cases, in exactly this order.
      */
     protected function assertCasesListedInOrder(TestResponse $response, array $caseIdsInOrder): void
