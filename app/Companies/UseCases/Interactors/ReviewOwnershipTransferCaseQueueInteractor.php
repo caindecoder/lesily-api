@@ -27,6 +27,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
     {
         return DB::transaction(function () use ($filters, $admin, $context): LengthAwarePaginator {
             $page = OwnershipTransferCase::query()
+                ->newestFirst()
                 ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
 
             $this->recordQueueRead($this->queryContextOf($filters, $page), $admin, $context);

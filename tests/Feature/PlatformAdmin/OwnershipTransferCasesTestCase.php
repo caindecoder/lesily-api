@@ -60,6 +60,15 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
     }
 
     /**
+     * The page lists exactly these cases, in exactly this order.
+     */
+    protected function assertCasesListedInOrder(TestResponse $response, array $caseIdsInOrder): void
+    {
+        $response->assertOk();
+        $this->assertSame($caseIdsInOrder, $response->json('data.*.id'));
+    }
+
+    /**
      * The read failed closed (no read without evidence, slice-11R spec §4):
      * a 500 INTERNAL_ERROR envelope carrying no case data at all.
      */

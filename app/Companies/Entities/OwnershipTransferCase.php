@@ -5,6 +5,7 @@ namespace App\Companies\Entities;
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
 use Database\Factories\OwnershipTransferCaseFactory;
@@ -69,5 +70,16 @@ class OwnershipTransferCase extends Model
     protected static function newFactory(): OwnershipTransferCaseFactory
     {
         return OwnershipTransferCaseFactory::new();
+    }
+
+    /**
+     * Newest case first; the id tie-break keeps the order total when two
+     * cases share a created_at second (uuid7 ids are time-ordered).
+     *
+     * @param  Builder<self>  $query
+     */
+    protected function scopeNewestFirst(Builder $query): void
+    {
+        $query->orderByDesc('created_at')->orderByDesc('id');
     }
 }

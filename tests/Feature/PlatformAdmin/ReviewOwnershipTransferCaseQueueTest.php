@@ -3,6 +3,7 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use RuntimeException;
+use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -88,6 +89,34 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
         $this->assertQueueReadAudited($admin, $response, [
             'filters' => [],
             'result_count' => 0,
+            'page' => 1,
+        ]);
+    }
+
+    #[Test]
+    public function when_cases_exist_across_tenants_then_the_queue_lists_every_company_newest_first(): void
+    {
+        // Given three cases across two tenants, minted at distinct instants
+        // interleaved across companies — newest is NOT the last-minted-per-company
+        $admin = $this->anAllowlistedAdmin();
+        $contoso = Company::factory()->create();
+        $acme = Company::factory()->create();
+        $this->travelTo(CarbonImmutable::parse('2026-08-09 09:00:00'));
+        $oldest = $this->anOpenCaseFor($contoso);
+        $this->travelTo(CarbonImmutable::parse('2026-08-09 10:00:00'));
+        $middle = $this->anOpenCaseFor($acme);
+        $this->travelTo(CarbonImmutable::parse('2026-08-09 11:00:00'));
+        $newest = $this->anOpenCaseFor($contoso);
+        $this->travelBack();
+
+        // When the queue is requested with no filter
+        $response = $this->listCases($admin);
+
+        // Then every company's cases appear, newest first, and the read is audited
+        $this->assertCasesListedInOrder($response, [$newest->getKey(), $middle->getKey(), $oldest->getKey()]);
+        $this->assertQueueReadAudited($admin, $response, [
+            'filters' => [],
+            'result_count' => 3,
             'page' => 1,
         ]);
     }
