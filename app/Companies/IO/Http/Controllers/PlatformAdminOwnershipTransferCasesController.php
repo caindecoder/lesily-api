@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
+use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminResource;
 use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
 
@@ -22,6 +23,8 @@ class PlatformAdminOwnershipTransferCasesController
 {
     public function index(Request $request): JsonResponse
     {
+        OwnershipTransferCaseAdminFilters::fromQuery($request);
+
         throw new RuntimeException('Not implemented');
     }
 
