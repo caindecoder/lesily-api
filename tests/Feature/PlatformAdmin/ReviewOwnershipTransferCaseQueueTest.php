@@ -2,9 +2,11 @@
 
 namespace Tests\Feature\PlatformAdmin;
 
+use RuntimeException;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCase
@@ -53,6 +55,41 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
         // Then the read is refused naming the offending key and nothing is audited
         $this->assertValidationFailed($response, $field);
         $this->assertNoAuditRecorded();
+    }
+
+    #[Test]
+    public function when_the_audit_write_fails_then_the_queue_read_returns_no_case_data(): void
+    {
+        // Given an allowlisted admin, an existing case, and a failing audit write
+        $admin = $this->anAllowlistedAdmin();
+        $this->anOpenCaseFor(Company::factory()->create());
+        AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the queue is requested
+        $response = $this->listCases($admin);
+
+        // Then the read fails closed — no case data, no evidence row
+        $this->assertReadFailedSafely($response);
+        $this->assertNoAuditRecorded();
+    }
+
+    #[Test]
+    public function when_no_cases_match_then_the_queue_is_empty_and_the_read_is_still_recorded(): void
+    {
+        // Given an allowlisted platform admin and no cases at all
+        $admin = $this->anAllowlistedAdmin();
+
+        // When the queue is requested
+        $response = $this->listCases($admin);
+
+        // Then the page is empty and the read still left its evidence
+        $response->assertOk();
+        $this->assertSame([], $response->json('data'));
+        $this->assertQueueReadAudited($admin, $response, [
+            'filters' => [],
+            'result_count' => 0,
+            'page' => 1,
+        ]);
     }
 
     /**

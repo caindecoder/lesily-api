@@ -10,7 +10,9 @@ use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
 use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminResource;
+use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminCollection;
 use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
+use App\Companies\UseCases\Interactors\ReviewOwnershipTransferCaseQueueInteractor;
 
 /**
  * The platform-admin ownership-transfer case surface (slice-11R spec §3).
@@ -21,11 +23,18 @@ use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
  */
 class PlatformAdminOwnershipTransferCasesController
 {
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, ReviewOwnershipTransferCaseQueueInteractor $interactor): JsonResponse
     {
-        OwnershipTransferCaseAdminFilters::fromQuery($request);
+        /** @var User $admin */
+        $admin = $request->user();
 
-        throw new RuntimeException('Not implemented');
+        $page = $interactor->execute(
+            OwnershipTransferCaseAdminFilters::fromQuery($request),
+            $admin,
+            AdminRequestContext::fromRequest($request),
+        );
+
+        return (new OwnershipTransferCaseAdminCollection($page))->response($request);
     }
 
     public function show(string $caseId, Request $request): JsonResponse
