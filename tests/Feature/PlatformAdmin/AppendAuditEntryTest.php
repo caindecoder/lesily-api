@@ -27,11 +27,12 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
 
     // Sad — the schema rejects an entry missing a required field: action is
     // NOT NULL per ERD-1-11 §3 and stands as the REPRESENTATIVE pin for the
-    // schema's required set (event_class/subject_type/subject_id share the
-    // same constraint class — TA-4.3). The assertion pins the SPECIFIC
-    // violation (SQLSTATE 23000 + the driver message naming the column) so
-    // neither a missing TABLE (42S02) nor a violation on a different column
-    // can false-pass this test.
+    // schema's required set (event_class/subject_type share the same
+    // constraint class — TA-4.3; subject_id left that set at UC-1-127's
+    // nullable migration, since a list-page read has no single subject).
+    // The assertion pins the SPECIFIC violation (SQLSTATE 23000 + the driver
+    // message naming the column) so neither a missing TABLE (42S02) nor a
+    // violation on a different column can false-pass this test.
     #[Test]
     public function when_appending_an_entry_missing_a_required_field_then_insert_is_rejected(): void
     {
@@ -51,11 +52,11 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
         }
     }
 
-    // Edge — a platform-level system row holds all three nullable scopes at
-    // once: no tenant (company_id NULL — platform events, ERD-1-11 §3), no
-    // human actor (system-driven), and no source domain event (the direct-
-    // write case T7 rides). Teeth: REDs if any of the trio is ever tightened
-    // to NOT NULL.
+    // Edge — a platform-level system row holds the nullable scopes at once:
+    // no tenant (company_id NULL — platform events, ERD-1-11 §3), no human
+    // actor (system-driven), and no source domain event (the direct-write
+    // case T7 rides); subject_id joined the nullable set at UC-1-127. Teeth:
+    // REDs if any of these is ever tightened to NOT NULL.
     #[Test]
     public function when_appending_a_platform_level_system_entry_then_nullable_scopes_hold(): void
     {

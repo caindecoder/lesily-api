@@ -220,6 +220,7 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
             'id' => $case->getKey(),
             'company_id' => $case->company_id,
             'status' => 'open',
+            'closed_outcome' => null,
             'requested_context' => $case->requested_context,
             'new_owner_user_id' => $case->new_owner_user_id,
             'created_at' => $case->created_at->toISOString(),
@@ -229,8 +230,9 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
     /**
      * Exactly ONE audit row records the open, in the cd-audit-trail
      * Direct-write shape (stored_event_id NULL — opening a case records no
-     * domain event; metadata NULL — no request-derived data may leak into the
-     * append-only compliance table), actor + subject + description pinned to
+     * domain event; metadata NULL — an open has no query context to record,
+     * unlike the queue read's row, which carries validated
+     * {filters, result_count, page}), actor + subject + description pinned to
      * the sibling assertAdminReviewAuditRecorded standard, and the
      * request-context columns IDENTITY-pinned (ip = the test client's
      * loopback, request_id = the very Correlation-Id the response carries) —

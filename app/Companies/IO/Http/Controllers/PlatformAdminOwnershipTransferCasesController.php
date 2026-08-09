@@ -7,8 +7,12 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
+use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminResource;
+use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminCollection;
 use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
+use App\Companies\UseCases\Interactors\ReviewOwnershipTransferCaseQueueInteractor;
+use App\Companies\UseCases\Interactors\ReviewOwnershipTransferCaseAsAdminInteractor;
 
 /**
  * The platform-admin ownership-transfer case surface (slice-11R spec §3).
@@ -19,6 +23,32 @@ use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
  */
 class PlatformAdminOwnershipTransferCasesController
 {
+    public function index(Request $request, ReviewOwnershipTransferCaseQueueInteractor $interactor): JsonResponse
+    {
+        /** @var User $admin */
+        $admin = $request->user();
+
+        $page = $interactor->execute(
+            OwnershipTransferCaseAdminFilters::fromQuery($request),
+            $admin,
+            AdminRequestContext::fromRequest($request),
+        );
+
+        return (new OwnershipTransferCaseAdminCollection($page))->response($request);
+    }
+
+    public function show(string $caseId, Request $request, ReviewOwnershipTransferCaseAsAdminInteractor $interactor): OwnershipTransferCaseAdminResource
+    {
+        /** @var User $admin */
+        $admin = $request->user();
+
+        return new OwnershipTransferCaseAdminResource($interactor->execute(
+            $caseId,
+            $admin,
+            AdminRequestContext::fromRequest($request),
+        ));
+    }
+
     public function store(Request $request, OpenOwnershipTransferCaseInteractor $interactor): JsonResponse
     {
         /** @var User $admin */

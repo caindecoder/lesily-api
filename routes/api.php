@@ -303,3 +303,12 @@ Route::get('/v1/admin/invoices/{invoiceId}', [PlatformAdminInvoicesController::c
 // spec §4 seam reuse). No idempotency mount (§13.2 names execute only).
 Route::post('/v1/admin/ownership-transfer-cases', [PlatformAdminOwnershipTransferCasesController::class, 'store'])
     ->middleware(['auth:sanctum', 'platform.admin']);
+
+// A platform admin reviews the case queue + a single case (UC-1-127, slice-11R
+// T5) — cross-tenant reads, one in-transaction audit row per read (an audit
+// failure vetoes the read: no read without evidence). Same seam as the intake:
+// auth:sanctum + platform.admin only, no auth.company, no permission gate.
+Route::get('/v1/admin/ownership-transfer-cases', [PlatformAdminOwnershipTransferCasesController::class, 'index'])
+    ->middleware(['auth:sanctum', 'platform.admin']);
+Route::get('/v1/admin/ownership-transfer-cases/{caseId}', [PlatformAdminOwnershipTransferCasesController::class, 'show'])
+    ->middleware(['auth:sanctum', 'platform.admin']);

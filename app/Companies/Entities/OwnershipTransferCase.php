@@ -5,9 +5,12 @@ namespace App\Companies\Entities;
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
+use Database\Factories\OwnershipTransferCaseFactory;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
  * A support-assisted ownership-transfer case (UC-1-140; slice-11R spec §4).
@@ -35,7 +38,8 @@ use App\Companies\Enums\OwnershipTransferCaseOutcome;
  */
 class OwnershipTransferCase extends Model
 {
-    use HasUuids;
+    /** @use HasFactory<OwnershipTransferCaseFactory> */
+    use HasFactory, HasUuids;
 
     protected $fillable = [
         'company_id',
@@ -62,4 +66,39 @@ class OwnershipTransferCase extends Model
         'verified_at' => 'immutable_datetime',
         'executed_at' => 'immutable_datetime',
     ];
+
+    protected static function newFactory(): OwnershipTransferCaseFactory
+    {
+        return OwnershipTransferCaseFactory::new();
+    }
+
+    /**
+     * Newest case first; the id tie-break keeps the order total when two
+     * cases share a created_at second (uuid7 ids are time-ordered).
+     *
+     * @param  Builder<self>  $query
+     */
+    protected function scopeNewestFirst(Builder $query): void
+    {
+        $query->orderByDesc('created_at')->orderByDesc('id');
+    }
+
+    /**
+     * @param  Builder<self>  $query
+     */
+    protected function scopeWithStatus(Builder $query, OwnershipTransferCaseStatus $status): void
+    {
+        $query->where('status', $status);
+    }
+
+    /**
+     * A cross-tenant FILTER, not a tenant scope — the admin queue is
+     * deliberately unscoped and this narrows it to one company on request.
+     *
+     * @param  Builder<self>  $query
+     */
+    protected function scopeForCompanyId(Builder $query, string $companyId): void
+    {
+        $query->where('company_id', $companyId);
+    }
 }
