@@ -3,6 +3,7 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
@@ -10,6 +11,7 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -145,6 +147,28 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Then the verification is refused on the target and nothing is written
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'TARGET_NOT_MEMBER');
+        $this->assertNothingVerified($case);
+    }
+
+    #[Test]
+    public function when_the_audit_write_fails_then_the_whole_verification_rolls_back(): void
+    {
+        // Given an open case, a live member, and an audit write that fails
+        // AFTER its row is inserted — only the transaction can take it back
+        $company = Company::factory()->create();
+        $member = $this->aCompanyMember($company, 'employee');
+        $case = $this->anOpenCaseFor($company);
+        AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the admin verifies the case
+        $response = $this->verifyCase(
+            $this->admin,
+            $case->getKey(),
+            $this->aValidVerificationPayload($member),
+        );
+
+        // Then the whole verification rolls back — no event, no stamp, no evidence
+        $this->assertReadFailedSafely($response);
         $this->assertNothingVerified($case);
     }
 

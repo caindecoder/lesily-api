@@ -53,12 +53,19 @@ class PlatformAdminOwnershipTransferCasesController
 
     public function verify(string $caseId, Request $request, VerifyOwnershipTransferCaseInteractor $interactor): OwnershipTransferCaseAdminResource
     {
+        /** @var User $admin */
+        $admin = $request->user();
+
         $command = VerifyOwnershipTransferCaseCommand::validateAndCreate([
             ...$request->all(),
             'caseId' => $caseId,
         ]);
 
-        return new OwnershipTransferCaseAdminResource($interactor->execute($command));
+        return new OwnershipTransferCaseAdminResource($interactor->execute(
+            $command,
+            $admin,
+            AdminRequestContext::fromRequest($request),
+        ));
     }
 
     public function store(Request $request, OpenOwnershipTransferCaseInteractor $interactor): JsonResponse

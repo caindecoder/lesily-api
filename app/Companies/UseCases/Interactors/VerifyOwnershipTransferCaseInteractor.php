@@ -2,24 +2,57 @@
 
 namespace App\Companies\UseCases\Interactors;
 
-use RuntimeException;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\CompanyUser;
 use App\Companies\Entities\OwnershipTransferCase;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
 use App\Companies\Exceptions\TargetNotMemberException;
+use App\Companies\Aggregates\Company as CompanyAggregate;
+use App\Companies\Events\CompanyOwnershipVerificationRecorded;
 use App\Companies\Exceptions\OwnershipTransferCaseNotOpenException;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\UseCases\Commands\VerifyOwnershipTransferCaseCommand;
 
+/**
+ * A platform admin records how the identity behind a support-assisted
+ * handover was proven (UC-1-113; slice-11R spec §2/§4). The event, the case
+ * stamp and the audit row land together or not at all — the audit row
+ * references the stored event, never the notes, and the notes reach only the
+ * case row.
+ */
 class VerifyOwnershipTransferCaseInteractor
 {
-    public function execute(VerifyOwnershipTransferCaseCommand $command): OwnershipTransferCase
+    public function execute(VerifyOwnershipTransferCaseCommand $command, User $admin, AdminRequestContext $context): OwnershipTransferCase
     {
-        $case = OwnershipTransferCase::query()->findOrFail($command->caseId);
+        return DB::transaction(function () use ($command, $admin, $context): OwnershipTransferCase {
+            $case = OwnershipTransferCase::query()->lockForUpdate()->findOrFail($command->caseId);
 
-        $this->guardTargetIsLiveMember($case, $command->newOwnerUserId);
-        $this->guardCaseIsOpen($case);
+            $this->guardTargetIsLiveMember($case, $command->newOwnerUserId);
+            $this->guardCaseIsOpen($case);
 
-        throw new RuntimeException('Not implemented');
+            CompanyAggregate::retrieve($case->company_id)
+                ->recordOwnershipVerification($command, $admin->id)
+                ->persist();
+
+            $verificationEventId = $this->latestVerificationEventId($case->company_id);
+
+            $case->update([
+                'status' => OwnershipTransferCaseStatus::Verified,
+                'verified_at' => now(),
+                'verified_by' => $admin->id,
+                'new_owner_user_id' => $command->newOwnerUserId,
+                'verification_notes' => $command->notes,
+                'verification_artefacts' => $command->artefactMetadata(),
+                'verification_event_id' => $verificationEventId,
+            ]);
+
+            $this->recordCaseVerified($case, $admin, $context, $verificationEventId);
+
+            return $case;
+        });
     }
 
     private function guardCaseIsOpen(OwnershipTransferCase $case): void
@@ -44,5 +77,39 @@ class VerifyOwnershipTransferCaseInteractor
         if ($membership === null) {
             throw new TargetNotMemberException;
         }
+    }
+
+    /**
+     * The id of the verification event this call just persisted — read back
+     * inside the same transaction, keyed by aggregate + event class.
+     */
+    private function latestVerificationEventId(string $companyId): int
+    {
+        return (int) LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $companyId)
+            ->where('event_class', CompanyOwnershipVerificationRecorded::class)
+            ->max('id');
+    }
+
+    private function recordCaseVerified(OwnershipTransferCase $case, User $admin, AdminRequestContext $context, int $verificationEventId): void
+    {
+        AuditEntry::query()->create([
+            'company_id' => $case->company_id,
+            'stored_event_id' => $verificationEventId,
+            'event_class' => 'CompanyOwnershipVerificationRecorded',
+            'subject_type' => 'ownership_transfer_case',
+            'subject_id' => $case->id,
+            'subject_label' => null,
+            'action' => 'case_verified',
+            'description' => 'Platform admin recorded identity verification on an ownership-transfer case.',
+            'actor_user_id' => $admin->id,
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $admin->name,
+            'ip_address' => $context->ip,
+            'user_agent' => $context->boundedUserAgent(),
+            'request_id' => $context->boundedRequestId(),
+            'metadata' => null,
+            'recorded_at' => now(),
+        ]);
     }
 }
