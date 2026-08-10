@@ -48,6 +48,7 @@ use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 use App\Companies\Memberships\Exceptions\OwnerRemovalBlockedException;
+use App\Companies\Exceptions\OwnershipTransferCaseNotVerifiedException;
 use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
 use App\Companies\Memberships\Exceptions\OwnerTransferRequiredException;
 use App\Companies\Memberships\Exceptions\SelfRoleChangeBlockedException;
@@ -224,6 +225,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // Only an open ownership-transfer case may be verified — the case had
         // already moved on (UC-1-113 flow 4a; the world moved → 409).
         $exceptions->render(fn (OwnershipTransferCaseNotOpenException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // Only a verified ownership-transfer case may be executed — open or
+        // already closed refuses with the state named (UC-1-093 flow 3a → 409).
+        $exceptions->render(fn (OwnershipTransferCaseNotVerifiedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));

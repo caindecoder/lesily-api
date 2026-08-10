@@ -8,8 +8,10 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Companies\Events\CompanyOwnershipTransferred;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -69,6 +71,60 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the execution is refused as missing its key and nothing moved
         $this->assertRefusedAsMissingIdempotencyKey($response);
+        $this->assertNothingExecuted($case, $company->owner_id);
+    }
+
+    #[Test]
+    #[DataProvider('nonVerifiedCaseProvider')]
+    public function when_the_case_is_not_verified_then_the_execution_is_refused_with_the_current_state_named(string $fixture, string $stateName): void
+    {
+        // Given a case that is not verified
+        $company = Company::factory()->create();
+        $case = match ($fixture) {
+            'open' => $this->anOpenCaseFor($company),
+            'closedExecuted' => $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Executed),
+            'closedRejected' => $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Rejected),
+            default => $this->fail('Unknown case fixture token: '.$fixture),
+        };
+
+        // When the admin attempts to execute it
+        $response = $this->executeCase($this->admin, $case->getKey());
+
+        // Then the refusal names the case's current state and nothing moved
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
+        $response->assertJsonPath('message', 'Only a verified ownership-transfer case can be executed; this case is '.$stateName.'.');
+        $this->assertNothingExecuted($case, $company->owner_id);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function nonVerifiedCaseProvider(): array
+    {
+        return [
+            'still open' => ['open', 'open'],
+            'closed executed' => ['closedExecuted', 'closed'],
+            'closed rejected' => ['closedRejected', 'closed'],
+        ];
+    }
+
+    #[Test]
+    public function when_the_case_is_unverified_and_the_member_is_gone_then_the_state_refusal_wins(): void
+    {
+        // Given an OPEN case whose proposed owner's membership was since removed
+        $company = Company::factory()->create();
+        $gone = $this->aCompanyMember($company, 'employee');
+        $case = $this->anOpenCaseFor($company, $gone);
+        $company->users()->updateExistingPivot($gone->getKey(), ['deleted_at' => now()]);
+
+        // When the admin attempts to execute it
+        $response = $this->executeCase($this->admin, $case->getKey());
+
+        // Then the refusal is the STATE guard's, asked before any cross-entity
+        // work — never the member guard's (the 422-where-409 leak, P14)
+        $response->assertStatus(409);
+        $response->assertJsonPath('message', 'Only a verified ownership-transfer case can be executed; this case is open.');
         $this->assertNothingExecuted($case, $company->owner_id);
     }
 

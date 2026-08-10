@@ -7,6 +7,8 @@ use RuntimeException;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\Http\Values\AdminRequestContext;
+use App\Companies\Enums\OwnershipTransferCaseStatus;
+use App\Companies\Exceptions\OwnershipTransferCaseNotVerifiedException;
 use App\Companies\UseCases\Commands\ExecuteOwnershipTransferCaseCommand;
 
 /**
@@ -24,6 +26,10 @@ class ExecuteOwnershipTransferCaseInteractor
             $case = OwnershipTransferCase::query()
                 ->lockForUpdate()
                 ->findOrFail($command->caseId);
+
+            if ($case->status !== OwnershipTransferCaseStatus::Verified) {
+                throw new OwnershipTransferCaseNotVerifiedException($case->status);
+            }
 
             throw new RuntimeException('Not implemented');
         });
