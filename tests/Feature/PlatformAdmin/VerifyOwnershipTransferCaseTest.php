@@ -16,6 +16,8 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 {
     use RefreshDatabase;
 
+    protected string $notes = 'Death certificate matched the registered Owner';
+
     #[Test]
     public function when_no_token_is_presented_then_the_verify_request_is_rejected_as_unauthenticated(): void
     {
@@ -44,6 +46,24 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNothingVerified($case);
     }
 
+    #[Test]
+    public function when_the_case_id_is_unknown_then_nothing_is_found_and_no_verification_is_recorded(): void
+    {
+        // Given an allowlisted admin and no case at all
+        $stranger = User::factory()->create();
+
+        // When they verify an id that names no case
+        $response = $this->verifyCase(
+            $this->admin,
+            (string) Str::uuid7(),
+            $this->aValidVerificationPayload($stranger),
+        );
+
+        // Then nothing is found and no verification evidence is written
+        $this->assertResourceNotFoundNoLeak($response);
+        $this->assertNoAuditRecorded();
+    }
+
     /**
      * Call the REAL admin verify endpoint (UC-1-113) as $caller, or as a
      * guest when null. Deliberately NO X-Company-Context header — the
@@ -56,6 +76,27 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         }
 
         return $this->patchJson('/api/v1/admin/ownership-transfer-cases/'.$caseId.'/verify', $payload);
+    }
+
+    /**
+     * A shape-valid verify body naming $newOwner (§8.1 camelCase request
+     * keys, spec §2 artefact shape); rows override or remove keys to arrange
+     * their defect.
+     */
+    protected function aValidVerificationPayload(User $newOwner, array $overrides = []): array
+    {
+        return [
+            'newOwnerUserId' => $newOwner->getKey(),
+            'notes' => $this->notes,
+            'artefacts' => [
+                [
+                    'type' => 'id_document',
+                    'reference' => 'NIC 199012345678 sighted via notarised copy',
+                    'capturedAt' => '2026-08-09T10:30:00Z',
+                ],
+            ],
+            ...$overrides,
+        ];
     }
 
     /**

@@ -11,6 +11,7 @@ use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminResource;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminCollection;
 use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
+use App\Companies\UseCases\Interactors\VerifyOwnershipTransferCaseInteractor;
 use App\Companies\UseCases\Interactors\ReviewOwnershipTransferCaseQueueInteractor;
 use App\Companies\UseCases\Interactors\ReviewOwnershipTransferCaseAsAdminInteractor;
 
@@ -49,9 +50,9 @@ class PlatformAdminOwnershipTransferCasesController
         ));
     }
 
-    public function verify(string $caseId, Request $request): OwnershipTransferCaseAdminResource
+    public function verify(string $caseId, Request $request, VerifyOwnershipTransferCaseInteractor $interactor): OwnershipTransferCaseAdminResource
     {
-        throw new \RuntimeException('Not implemented');
+        return new OwnershipTransferCaseAdminResource($interactor->execute($caseId));
     }
 
     public function store(Request $request, OpenOwnershipTransferCaseInteractor $interactor): JsonResponse
