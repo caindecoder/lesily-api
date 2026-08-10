@@ -128,6 +128,43 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNothingExecuted($case, $company->owner_id);
     }
 
+    #[Test]
+    public function when_the_recorded_new_owner_is_no_longer_an_active_member_then_the_execution_is_refused(): void
+    {
+        // Given a verified case naming Alex, whose membership was since removed
+        $company = Company::factory()->create();
+        $alex = $this->aCompanyMember($company, 'employee');
+        $case = $this->aVerifiedCaseFor($company, $alex);
+        $company->users()->updateExistingPivot($alex->getKey(), ['deleted_at' => now()]);
+
+        // When the admin executes the case
+        $response = $this->executeCase($this->admin, $case->getKey());
+
+        // Then the execution is refused on the vanished member and the case stays verified
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'TARGET_NOT_MEMBER');
+        $this->assertNothingExecuted($case, $company->owner_id);
+    }
+
+    #[Test]
+    public function when_ownership_moved_after_the_case_was_opened_then_the_execution_loses_under_the_row_lock(): void
+    {
+        // Given a verified case whose recorded owner has since been replaced
+        $company = Company::factory()->create();
+        $alex = $this->aCompanyMember($company, 'employee');
+        $case = $this->aVerifiedCaseFor($company, $alex);
+        $bob = $this->aCompanyMember($company, 'admin');
+        $company->update(['owner_id' => $bob->getKey()]);
+
+        // When the admin executes the case
+        $response = $this->executeCase($this->admin, $case->getKey());
+
+        // Then the world has moved — the execution is refused and the case stays verified
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
+        $this->assertNothingExecuted($case, $bob->getKey());
+    }
+
     /**
      * Call the REAL admin execute endpoint (UC-1-093) as $actor, or as a guest
      * when null. Every call carries an Idempotency-Key, minted fresh unless

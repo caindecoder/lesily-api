@@ -5,9 +5,11 @@ namespace App\Companies\UseCases\Interactors;
 use App\Models\User;
 use RuntimeException;
 use Illuminate\Support\Facades\DB;
+use App\Companies\Entities\Company;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
+use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 use App\Companies\Exceptions\OwnershipTransferCaseNotVerifiedException;
 use App\Companies\UseCases\Commands\ExecuteOwnershipTransferCaseCommand;
 
@@ -20,9 +22,11 @@ use App\Companies\UseCases\Commands\ExecuteOwnershipTransferCaseCommand;
  */
 class ExecuteOwnershipTransferCaseInteractor
 {
+    public function __construct(private TransferCompanyOwnershipInteractor $transferInteractor) {}
+
     public function execute(ExecuteOwnershipTransferCaseCommand $command, User $admin, AdminRequestContext $context): OwnershipTransferCase
     {
-        return DB::transaction(function () use ($command): OwnershipTransferCase {
+        return DB::transaction(function () use ($command, $admin): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()
                 ->lockForUpdate()
                 ->findOrFail($command->caseId);
@@ -30,6 +34,15 @@ class ExecuteOwnershipTransferCaseInteractor
             if ($case->status !== OwnershipTransferCaseStatus::Verified) {
                 throw new OwnershipTransferCaseNotVerifiedException($case->status);
             }
+
+            $company = Company::query()->findOrFail($case->company_id);
+
+            $this->transferInteractor->execute($company, TransferCompanyOwnershipCommand::validateAndCreate([
+                'newOwnerUserId' => $case->new_owner_user_id,
+                'transferredBy' => $admin->getKey(),
+                'source' => TransferCompanyOwnershipCommand::SOURCE_ADMIN,
+                'caseId' => $case->getKey(),
+            ]), $case->expected_owner_user_id);
 
             throw new RuntimeException('Not implemented');
         });
