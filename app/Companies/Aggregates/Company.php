@@ -16,7 +16,9 @@ use App\Companies\Events\CompanyOwnershipTransferred;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use App\Companies\UseCases\Commands\UpdateCompanyCommand;
 use App\Companies\Exceptions\CompanyAlreadyExistsException;
+use App\Companies\Events\CompanyOwnershipVerificationRecorded;
 use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
+use App\Companies\UseCases\Commands\VerifyOwnershipTransferCaseCommand;
 
 class Company extends AggregateRoot
 {
@@ -119,6 +121,25 @@ class Company extends AggregateRoot
             transferredBy: $command->transferredBy,
             source: $command->source,
             caseId: $command->caseId,
+        ));
+    }
+
+    /**
+     * Record how the identity behind a support-assisted handover was proven
+     * (UC-1-113). Guardless — the open-only case guard lives at the interactor
+     * seam (T2 precedent). Artefact METADATA only, never the prose notes
+     * (spec §2 invariant: the Command projects entries to the closed shape).
+     * forCompany re-tags the tenant (updateDetails parity).
+     */
+    public function recordOwnershipVerification(VerifyOwnershipTransferCaseCommand $command, string $verifiedBy): static
+    {
+        $this->forCompany($this->uuid());
+
+        return $this->recordThat(new CompanyOwnershipVerificationRecorded(
+            caseId: $command->caseId,
+            verifiedBy: $verifiedBy,
+            artefacts: $command->artefactMetadata(),
+            verifiedAt: CarbonImmutable::now(),
         ));
     }
 

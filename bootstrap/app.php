@@ -36,6 +36,7 @@ use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use App\Companies\Exceptions\OwnershipTransferContentionException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use App\Companies\Exceptions\OwnershipTransferCaseNotOpenException;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
@@ -216,6 +217,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // Under the row lock the company's owner is no longer the actor — a
         // concurrent transfer won (UC-1-028 flow 3b; the world moved → 409).
         $exceptions->render(fn (StaleOwnershipException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // Only an open ownership-transfer case may be verified — the case had
+        // already moved on (UC-1-113 flow 4a; the world moved → 409).
+        $exceptions->render(fn (OwnershipTransferCaseNotOpenException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));

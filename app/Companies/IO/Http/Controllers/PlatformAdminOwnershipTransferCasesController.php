@@ -9,8 +9,10 @@ use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
 use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminResource;
+use App\Companies\UseCases\Commands\VerifyOwnershipTransferCaseCommand;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminCollection;
 use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
+use App\Companies\UseCases\Interactors\VerifyOwnershipTransferCaseInteractor;
 use App\Companies\UseCases\Interactors\ReviewOwnershipTransferCaseQueueInteractor;
 use App\Companies\UseCases\Interactors\ReviewOwnershipTransferCaseAsAdminInteractor;
 
@@ -44,6 +46,23 @@ class PlatformAdminOwnershipTransferCasesController
 
         return new OwnershipTransferCaseAdminResource($interactor->execute(
             $caseId,
+            $admin,
+            AdminRequestContext::fromRequest($request),
+        ));
+    }
+
+    public function verify(string $caseId, Request $request, VerifyOwnershipTransferCaseInteractor $interactor): OwnershipTransferCaseAdminResource
+    {
+        /** @var User $admin */
+        $admin = $request->user();
+
+        $command = VerifyOwnershipTransferCaseCommand::validateAndCreate([
+            ...$request->all(),
+            'caseId' => $caseId,
+        ]);
+
+        return new OwnershipTransferCaseAdminResource($interactor->execute(
+            $command,
             $admin,
             AdminRequestContext::fromRequest($request),
         ));

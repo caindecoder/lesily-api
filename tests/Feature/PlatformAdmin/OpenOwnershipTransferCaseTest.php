@@ -15,25 +15,17 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
-class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
+class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 {
     use RefreshDatabase;
 
     protected Company $company;
 
-    protected User $admin;
-
     protected function setUp(): void
     {
         parent::setUp();
 
-        config(['app.debug' => false]);
-
-        $this->seedRbacCatalog();
-
         $this->company = Company::factory()->create();
-        $this->admin = User::factory()->create();
-        $this->allowlist([$this->admin->getKey()]);
     }
 
     #[Test]
@@ -223,6 +215,8 @@ class OpenOwnershipTransferCaseTest extends PlatformAdminTestCase
             'closed_outcome' => null,
             'requested_context' => $case->requested_context,
             'new_owner_user_id' => $case->new_owner_user_id,
+            'verified_at' => null,
+            'verified_by' => null,
             'created_at' => $case->created_at->toISOString(),
         ]]);
     }
