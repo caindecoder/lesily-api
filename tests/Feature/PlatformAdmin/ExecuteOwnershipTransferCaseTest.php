@@ -226,7 +226,9 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the execution completes — the missing contact never blocks it
         $response->assertOk();
-        $this->assertSame('closed', $case->fresh()->status->value);
+        $fresh = $case->fresh();
+        $this->assertInstanceOf(OwnershipTransferCase::class, $fresh);
+        $this->assertSame('closed', $fresh->status->value);
         $this->assertSame($alex->getKey(), Company::query()->whereKey($case->company_id)->sole()->owner_id);
     }
 
@@ -398,13 +400,14 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     protected function assertCaseClosedExecuted(OwnershipTransferCase $case, int $transferEventId): void
     {
         $fresh = $case->fresh();
+        $this->assertInstanceOf(OwnershipTransferCase::class, $fresh);
 
         $this->assertSame('closed', $fresh->status->value);
-        $this->assertSame('executed', $fresh->closed_outcome->value);
-        $this->assertSame(now()->toDateTimeString(), $fresh->executed_at->toDateTimeString());
+        $this->assertSame('executed', $fresh->closed_outcome?->value);
+        $this->assertSame(now()->toDateTimeString(), $fresh->executed_at?->toDateTimeString());
         $this->assertSame($this->admin->getKey(), $fresh->executed_by);
         $this->assertSame($transferEventId, $fresh->transfer_event_id);
-        $this->assertSame($case->verified_at->toDateTimeString(), $fresh->verified_at->toDateTimeString());
+        $this->assertSame($case->verified_at?->toDateTimeString(), $fresh->verified_at?->toDateTimeString());
     }
 
     /**
@@ -447,6 +450,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     protected function assertExecutedCaseOnTheWire(TestResponse $response, OwnershipTransferCase $case): void
     {
         $fresh = $case->fresh();
+        $this->assertInstanceOf(OwnershipTransferCase::class, $fresh);
 
         $response->assertOk();
         $response->assertExactJson(['data' => [
@@ -456,9 +460,9 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             'closed_outcome' => 'executed',
             'new_owner_user_id' => $fresh->new_owner_user_id,
             'requested_context' => $fresh->requested_context,
-            'verified_at' => $fresh->verified_at->toISOString(),
+            'verified_at' => $fresh->verified_at?->toISOString(),
             'verified_by' => $fresh->verified_by,
-            'executed_at' => $fresh->executed_at->toISOString(),
+            'executed_at' => $fresh->executed_at?->toISOString(),
             'executed_by' => $fresh->executed_by,
             'created_at' => $fresh->created_at->toISOString(),
         ]]);
@@ -512,8 +516,10 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             ->whereNull('event_properties->caseId')
             ->sole();
 
-        $this->assertSame((int) $ownEvent->id, $case->fresh()->transfer_event_id);
-        $this->assertNotSame((int) $routineEvent->id, $case->fresh()->transfer_event_id);
+        $fresh = $case->fresh();
+        $this->assertInstanceOf(OwnershipTransferCase::class, $fresh);
+        $this->assertSame((int) $ownEvent->id, $fresh->transfer_event_id);
+        $this->assertNotSame((int) $routineEvent->id, $fresh->transfer_event_id);
         $this->assertSame('admin', $ownEvent->event_properties['source']);
     }
 
@@ -535,8 +541,9 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertDatabaseCount('audit_trail', 1);
 
         $fresh = $case->fresh();
+        $this->assertInstanceOf(OwnershipTransferCase::class, $fresh);
         $this->assertSame('closed', $fresh->status->value);
-        $this->assertSame('executed', $fresh->closed_outcome->value);
+        $this->assertSame('executed', $fresh->closed_outcome?->value);
     }
 
     /**
