@@ -6,22 +6,28 @@ use App\Models\User;
 use RuntimeException;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Companies\Events\CompanyOwnershipTransferred;
+use Tests\Feature\Foundation\InteractsWithQueuedReactors;
+use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\UseCases\Interactors\TransferCompanyOwnershipInteractor;
 
 class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 {
-    use RefreshDatabase;
+    use InteractsWithQueuedReactors, RefreshDatabase;
 
     #[Test]
     public function when_no_token_is_presented_then_the_execute_request_is_rejected_as_unauthenticated(): void
@@ -270,6 +276,38 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertClosedCaseCitesItsOwnTransferEvent($case);
     }
 
+    #[Test]
+    public function when_the_admin_executes_a_verified_case_then_the_ownership_moves_whole(): void
+    {
+        // Given a frozen clock, Contoso recording Olive as its owner, and a
+        // verified case naming live member Alex (emergency contact on file)
+        $this->freezeTime();
+        Mail::fake();
+        $company = Company::factory()->create();
+        $olive = User::query()->findOrFail($company->owner_id);
+        $company->users()->attach($olive->getKey(), ['role_id' => $this->seededRole('owner')->getKey()]);
+        $alex = $this->aCompanyMember($company, 'employee');
+        $company->users()->updateExistingPivot($alex->getKey(), [
+            'emergency_contact_name' => 'Sam Perera',
+            'emergency_contact_email' => 'sam@example.com',
+        ]);
+        $case = $this->aVerifiedCaseFor($company, $alex);
+        Queue::fake();
+
+        // When the admin executes the case
+        $response = $this->executeCase($this->admin, $case->getKey());
+
+        // Then the swap, the recorded fact, the closed case, the audit row
+        // and the wire contract land whole — and only Alex is told
+        $eventId = $this->assertAdminTransferRecorded($case, $olive, $alex);
+        $this->assertOwnershipMovedByCase($case, $olive, $alex);
+        $this->assertCaseClosedExecuted($case, $eventId);
+        $this->assertExecutionAudited($case, $eventId, $response);
+        $this->assertExecutedCaseOnTheWire($response, $case);
+        $this->runQueuedHandlersFor(CompanyOwnershipTransferred::class);
+        $this->assertOnlyNewOwnerNotifiedOfCase($company, $alex, $olive);
+    }
+
     /**
      * Call the REAL admin execute endpoint (UC-1-093) as $actor, or as a guest
      * when null. Every call carries an Idempotency-Key, minted fresh unless
@@ -312,6 +350,147 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         }
 
         return $this->patchJson("/api/v1/admin/ownership-transfer-cases/{$caseId}/execute");
+    }
+
+    /**
+     * Exactly ONE CompanyOwnershipTransferred names this case in its payload
+     * (sole — by identity), pinned end-to-end: previous/new owner, the acting
+     * admin as transferredBy, and source=admin. Returns the stored-event id
+     * the close and the audit row must both cite.
+     */
+    protected function assertAdminTransferRecorded(OwnershipTransferCase $case, User $from, User $to): int
+    {
+        $event = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $case->company_id)
+            ->where('event_class', CompanyOwnershipTransferred::class)
+            ->where('event_properties->caseId', $case->getKey())
+            ->sole();
+
+        $this->assertSame($from->getKey(), $event->event_properties['previousOwnerUserId']);
+        $this->assertSame($to->getKey(), $event->event_properties['newOwnerUserId']);
+        $this->assertSame($this->admin->getKey(), $event->event_properties['transferredBy']);
+        $this->assertSame('admin', $event->event_properties['source']);
+
+        return (int) $event->id;
+    }
+
+    /**
+     * The dual representation flipped together (the UC-1-028-identical swap):
+     * companies.owner_id names $to, $to's pivot role is owner, and $from is
+     * left an active admin — never roleless, never removed.
+     */
+    protected function assertOwnershipMovedByCase(OwnershipTransferCase $case, User $from, User $to): void
+    {
+        $this->assertSame($to->getKey(), Company::query()->whereKey($case->company_id)->sole()->owner_id);
+
+        $this->assertSame($this->seededRole('owner')->getKey(), $this->pivotOf($case, $to)->role_id);
+
+        $fromPivot = $this->pivotOf($case, $from);
+        $this->assertSame($this->seededRole('admin')->getKey(), $fromPivot->role_id);
+        $this->assertNull($fromPivot->deleted_at);
+    }
+
+    /**
+     * The case closed executed under the frozen clock: outcome + both stamps
+     * instant-pinned to now(), transfer_event_id cites exactly the event this
+     * execution recorded, and the verify columns are untouched.
+     */
+    protected function assertCaseClosedExecuted(OwnershipTransferCase $case, int $transferEventId): void
+    {
+        $fresh = $case->fresh();
+
+        $this->assertSame('closed', $fresh->status->value);
+        $this->assertSame('executed', $fresh->closed_outcome->value);
+        $this->assertSame(now()->toDateTimeString(), $fresh->executed_at->toDateTimeString());
+        $this->assertSame($this->admin->getKey(), $fresh->executed_by);
+        $this->assertSame($transferEventId, $fresh->transfer_event_id);
+        $this->assertSame($case->verified_at->toDateTimeString(), $fresh->verified_at->toDateTimeString());
+    }
+
+    /**
+     * Exactly one audit row evidences the execution, in the cd-audit-trail
+     * shape: action case_executed on the case subject, stored_event_id citing
+     * the transfer event (the module's SECOND non-null producer), actor trio
+     * pinned, and the request-context columns IDENTITY-pinned (the T4 lesson —
+     * presence-only asserts cannot catch nulls threaded through).
+     */
+    protected function assertExecutionAudited(OwnershipTransferCase $case, int $transferEventId, TestResponse $response): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'event_class' => 'CompanyOwnershipTransferred',
+            'subject_type' => 'ownership_transfer_case',
+            'subject_id' => $case->getKey(),
+            'subject_label' => null,
+            'action' => 'case_executed',
+            'description' => 'Platform admin executed a verified ownership-transfer case.',
+            'company_id' => $case->company_id,
+            'actor_user_id' => $this->admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $this->admin->name,
+            'stored_event_id' => $transferEventId,
+            'metadata' => null,
+            'severity' => 'info',
+            'ip_address' => '127.0.0.1',
+        ]);
+
+        $entry = AuditEntry::query()->sole();
+        $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
+        $this->assertNotNull($entry->user_agent);
+    }
+
+    /**
+     * The executed case on the wire — 200 with the FULL admin contract locked
+     * byte-for-byte (11 keys as of T7: + executed_at/executed_by; the
+     * transfer_event_id, notes and artefacts stay OFF the wire).
+     */
+    protected function assertExecutedCaseOnTheWire(TestResponse $response, OwnershipTransferCase $case): void
+    {
+        $fresh = $case->fresh();
+
+        $response->assertOk();
+        $response->assertExactJson(['data' => [
+            'id' => $fresh->getKey(),
+            'company_id' => $fresh->company_id,
+            'status' => 'closed',
+            'closed_outcome' => 'executed',
+            'new_owner_user_id' => $fresh->new_owner_user_id,
+            'requested_context' => $fresh->requested_context,
+            'verified_at' => $fresh->verified_at->toISOString(),
+            'verified_by' => $fresh->verified_by,
+            'executed_at' => $fresh->executed_at->toISOString(),
+            'executed_by' => $fresh->executed_by,
+            'created_at' => $fresh->created_at->toISOString(),
+        ]]);
+    }
+
+    /**
+     * Exactly the new owner learned about the transfer (D4 absence-as-behavior):
+     * one ownership_received in-app row for $to carrying the company name, the
+     * queued mail leg addressed to $to, and NOTHING for $from — on the admin
+     * path they are deceased or incapacitated.
+     */
+    protected function assertOnlyNewOwnerNotifiedOfCase(Company $company, User $to, User $from): void
+    {
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_id' => $to->getKey(),
+            'data->notification_type' => 'ownership_received',
+            'data->company_name' => $company->name,
+        ]);
+        $this->assertSame(0, DB::table('notifications')->where('notifiable_id', $from->getKey())->count());
+        Mail::assertQueued(SystemNotificationMail::class, fn (SystemNotificationMail $mail): bool => $mail->hasTo($to->email));
+    }
+
+    /**
+     * The membership pivot row joining this case's company to $user.
+     */
+    protected function pivotOf(OwnershipTransferCase $case, User $user): CompanyUser
+    {
+        return CompanyUser::query()
+            ->where('company_id', $case->company_id)
+            ->where('user_id', $user->getKey())
+            ->withTrashed()
+            ->sole();
     }
 
     /**
