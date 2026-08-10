@@ -5,7 +5,9 @@ namespace App\Companies\UseCases\Interactors;
 use RuntimeException;
 use App\Companies\Entities\CompanyUser;
 use App\Companies\Entities\OwnershipTransferCase;
+use App\Companies\Enums\OwnershipTransferCaseStatus;
 use App\Companies\Exceptions\TargetNotMemberException;
+use App\Companies\Exceptions\OwnershipTransferCaseNotOpenException;
 use App\Companies\UseCases\Commands\VerifyOwnershipTransferCaseCommand;
 
 class VerifyOwnershipTransferCaseInteractor
@@ -15,8 +17,16 @@ class VerifyOwnershipTransferCaseInteractor
         $case = OwnershipTransferCase::query()->findOrFail($command->caseId);
 
         $this->guardTargetIsLiveMember($case, $command->newOwnerUserId);
+        $this->guardCaseIsOpen($case);
 
         throw new RuntimeException('Not implemented');
+    }
+
+    private function guardCaseIsOpen(OwnershipTransferCase $case): void
+    {
+        if ($case->status !== OwnershipTransferCaseStatus::Open) {
+            throw new OwnershipTransferCaseNotOpenException($case->status);
+        }
     }
 
     /**

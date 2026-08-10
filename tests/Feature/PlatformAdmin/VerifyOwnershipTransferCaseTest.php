@@ -11,6 +11,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
@@ -84,6 +85,45 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Then the verification is refused naming the offending field and nothing is written
         $this->assertValidationFailed($response, $field);
         $this->assertNothingVerified($case);
+    }
+
+    #[Test]
+    #[DataProvider('nonOpenCaseProvider')]
+    public function when_the_case_is_not_open_then_the_verification_is_refused_with_the_current_state_named(string $fixture, string $stateName): void
+    {
+        // Given a case that is no longer open and a live member of its company
+        $company = Company::factory()->create();
+        $member = $this->aCompanyMember($company, 'employee');
+        $case = match ($fixture) {
+            'verified' => $this->aVerifiedCaseFor($company),
+            'closedExecuted' => $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Executed),
+            'closedRejected' => $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Rejected),
+        };
+
+        // When the admin attempts to verify it
+        $response = $this->verifyCase(
+            $this->admin,
+            $case->getKey(),
+            $this->aValidVerificationPayload($member),
+        );
+
+        // Then the refusal names the case's current state and nothing new is recorded
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
+        $response->assertJsonPath('message', 'Only an open ownership-transfer case can be verified; this case is '.$stateName.'.');
+        $this->assertNothingVerified($case);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function nonOpenCaseProvider(): array
+    {
+        return [
+            'already verified' => ['verified', 'verified'],
+            'closed executed' => ['closedExecuted', 'closed'],
+            'closed rejected' => ['closedRejected', 'closed'],
+        ];
     }
 
     #[Test]
