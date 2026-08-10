@@ -117,6 +117,17 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     #[Test]
+    public function when_a_case_is_opened_then_the_companys_live_owner_is_recorded_as_its_expected_owner(): void
+    {
+        // Given company Contoso owned by its live owner
+        // When the platform admin opens a case for it
+        $response = $this->openCase($this->admin, $this->validPayload());
+
+        // Then the case records that owner as the expected owner of the handover
+        $this->assertExpectedOwnerRecorded($response, $this->company);
+    }
+
+    #[Test]
     public function when_the_incoming_owner_is_not_yet_known_then_the_case_opens_without_one(): void
     {
         // Given the incoming owner is not yet known
@@ -217,6 +228,8 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             'new_owner_user_id' => $case->new_owner_user_id,
             'verified_at' => null,
             'verified_by' => null,
+            'executed_at' => null,
+            'executed_by' => null,
             'created_at' => $case->created_at->toISOString(),
         ]]);
     }
@@ -255,6 +268,20 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $entry = AuditEntry::query()->sole();
         $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
         $this->assertNotNull($entry->user_agent);
+    }
+
+    /**
+     * The open stamped the company's live owner as the case's expected owner
+     * (UC-1-093 precondition, s174 GAP-1 ruling) — the column the execute
+     * path's stale-owner guard compares against.
+     */
+    protected function assertExpectedOwnerRecorded(TestResponse $response, Company $company): void
+    {
+        $response->assertCreated();
+        $this->assertDatabaseHas('ownership_transfer_cases', [
+            'id' => $response->json('data.id'),
+            'expected_owner_user_id' => $company->owner_id,
+        ]);
     }
 
     /**

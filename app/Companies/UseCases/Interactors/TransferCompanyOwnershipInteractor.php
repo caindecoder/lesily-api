@@ -15,11 +15,15 @@ use App\Companies\Exceptions\OwnershipTransferContentionException;
 use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 
 /**
- * Owns the ownership-transfer transaction (UC-1-028 / spec §4): row locks
- * first, live re-validation under them, then the event-sourced swap. Guards
- * live here at the interactor seam — the aggregate is guardless (T2/cd-users
- * precedent), and the company-scoped locked lookup decides against live state,
- * not a snapshot a concurrent owner-writer can invalidate (OQ-1-158).
+ * Owns the ownership-transfer transaction (UC-1-028 + the UC-1-093 admin
+ * dispatch / spec §4): row locks first, live re-validation under them, then
+ * the event-sourced swap. Guards live here at the interactor seam — the
+ * aggregate is guardless (T2/cd-users precedent), and the company-scoped
+ * locked lookup decides against live state, not a snapshot a concurrent
+ * owner-writer can invalidate (OQ-1-158). Both guards compare against the
+ * caller-declared EXPECTED owner: the routine path expects its own actor,
+ * the admin path expects the owner the case was opened about — never the
+ * acting admin.
  */
 class TransferCompanyOwnershipInteractor
 {
@@ -27,14 +31,14 @@ class TransferCompanyOwnershipInteractor
 
     private const int MYSQL_DEADLOCK = 1213;
 
-    public function execute(Company $company, TransferCompanyOwnershipCommand $command): CompanyUser
+    public function execute(Company $company, TransferCompanyOwnershipCommand $command, string $expectedOwnerUserId): CompanyUser
     {
-        if ($command->newOwnerUserId === $command->transferredBy) {
+        if ($command->newOwnerUserId === $expectedOwnerUserId) {
             throw new SelfTransferBlockedException;
         }
 
         try {
-            return $this->executeLocked($company, $command);
+            return $this->executeLocked($company, $command, $expectedOwnerUserId);
         } catch (DeadlockException) {
             // Laravel wraps a concurrency loser inside a nested transaction;
             // at top level the raw QueryException surfaces instead (below).
@@ -48,15 +52,15 @@ class TransferCompanyOwnershipInteractor
         }
     }
 
-    private function executeLocked(Company $company, TransferCompanyOwnershipCommand $command): CompanyUser
+    private function executeLocked(Company $company, TransferCompanyOwnershipCommand $command, string $expectedOwnerUserId): CompanyUser
     {
-        return DB::transaction(function () use ($company, $command): CompanyUser {
+        return DB::transaction(function () use ($company, $command, $expectedOwnerUserId): CompanyUser {
             $lockedCompany = Company::query()
                 ->whereKey($company->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($lockedCompany->owner_id !== $command->transferredBy) {
+            if ($lockedCompany->owner_id !== $expectedOwnerUserId) {
                 throw new StaleOwnershipException;
             }
 

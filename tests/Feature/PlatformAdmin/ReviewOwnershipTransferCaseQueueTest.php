@@ -276,6 +276,8 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
                     'requested_context' => $case->requested_context,
                     'verified_at' => $case->verified_at?->toISOString(),
                     'verified_by' => $case->verified_by,
+                    'executed_at' => $case->executed_at?->toISOString(),
+                    'executed_by' => $case->executed_by,
                     'created_at' => $case->created_at->toISOString(),
                 ],
             ],

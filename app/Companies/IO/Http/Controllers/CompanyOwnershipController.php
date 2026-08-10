@@ -27,6 +27,6 @@ class CompanyOwnershipController
             'source' => TransferCompanyOwnershipCommand::SOURCE_SELF_SERVICE,
         ]);
 
-        return new CompanyOwnerResource($interactor->execute($request->company(), $command));
+        return new CompanyOwnerResource($interactor->execute($request->company(), $command, $actor->getKey()));
     }
 }

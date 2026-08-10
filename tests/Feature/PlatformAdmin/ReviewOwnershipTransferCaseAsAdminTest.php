@@ -84,9 +84,9 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
         // When the admin opens the case by id
         $response = $this->showCase($this->admin, $case->getKey());
 
-        // Then EXACTLY the 7-key admin contract returns — the verification
-        // prose stays off the wire — the read is recorded against the case,
-        // and the case itself is untouched
+        // Then EXACTLY the admin contract returns (11-key as of T7) — the
+        // verification prose stays off the wire — the read is recorded
+        // against the case, and the case itself is untouched
         $response->assertExactJson(['data' => [
             'id' => $case->getKey(),
             'company_id' => $company->getKey(),
@@ -96,6 +96,8 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
             'requested_context' => $case->requested_context,
             'verified_at' => $case->verified_at?->toISOString(),
             'verified_by' => $case->verified_by,
+            'executed_at' => null,
+            'executed_by' => null,
             'created_at' => $case->created_at->toISOString(),
         ]]);
         $this->assertCaseReadAudited($case, $this->admin, $response);

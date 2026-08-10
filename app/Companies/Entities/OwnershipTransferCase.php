@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  *
  * @property string $id
  * @property string $company_id
+ * @property string $expected_owner_user_id
  * @property OwnershipTransferCaseStatus $status
  * @property ?OwnershipTransferCaseOutcome $closed_outcome
  * @property ?string $new_owner_user_id
@@ -43,6 +44,7 @@ class OwnershipTransferCase extends Model
 
     protected $fillable = [
         'company_id',
+        'expected_owner_user_id',
         'status',
         'closed_outcome',
         'new_owner_user_id',
