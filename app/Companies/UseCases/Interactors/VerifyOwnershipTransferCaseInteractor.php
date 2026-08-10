@@ -49,7 +49,7 @@ class VerifyOwnershipTransferCaseInteractor
                 'verification_event_id' => $verificationEventId,
             ]);
 
-            $this->recordCaseVerified($case, $admin, $context, $verificationEventId);
+            $this->recordCaseVerified($case, $admin, $context);
 
             return $case;
         });
@@ -91,11 +91,11 @@ class VerifyOwnershipTransferCaseInteractor
             ->max('id');
     }
 
-    private function recordCaseVerified(OwnershipTransferCase $case, User $admin, AdminRequestContext $context, int $verificationEventId): void
+    private function recordCaseVerified(OwnershipTransferCase $case, User $admin, AdminRequestContext $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $case->company_id,
-            'stored_event_id' => $verificationEventId,
+            'stored_event_id' => $case->verification_event_id,
             'event_class' => 'CompanyOwnershipVerificationRecorded',
             'subject_type' => 'ownership_transfer_case',
             'subject_id' => $case->id,
