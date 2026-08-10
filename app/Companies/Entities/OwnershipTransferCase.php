@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  *
  * @property string $id
  * @property string $company_id
+ * @property string $expected_owner_user_id
  * @property OwnershipTransferCaseStatus $status
  * @property ?OwnershipTransferCaseOutcome $closed_outcome
  * @property ?string $new_owner_user_id

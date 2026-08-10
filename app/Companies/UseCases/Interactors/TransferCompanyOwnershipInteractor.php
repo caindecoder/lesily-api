@@ -23,7 +23,7 @@ use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
  * owner-writer can invalidate (OQ-1-158). Both guards compare against the
  * caller-declared EXPECTED owner: the routine path expects its own actor,
  * the admin path expects the owner the case was opened about — never the
- * acting admin (the T3 seam note, proven by execution at T7).
+ * acting admin.
  */
 class TransferCompanyOwnershipInteractor
 {

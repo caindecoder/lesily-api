@@ -6,10 +6,10 @@ use Illuminate\Database\Migrations\Migration;
 
 /**
  * The case records the owner whose handover it is about (UC-1-093
- * precondition, s174 GAP-1 ruling): stamped at open from the company's live
- * owner_id, compared by the execute path's stale-owner guard under the row
- * lock. NOT NULL — every case is opened about a specific owner, and the
- * table is empty in every environment at this migration's landing.
+ * precondition): stamped at open from the company's live owner_id, compared
+ * by the execute path's stale-owner guard under the row lock. NOT NULL —
+ * every case is opened about a specific owner, and the table is empty in
+ * every environment at this migration's landing.
  */
 return new class extends Migration
 {

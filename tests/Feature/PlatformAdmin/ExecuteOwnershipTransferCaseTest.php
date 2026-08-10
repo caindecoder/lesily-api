@@ -47,6 +47,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given tenant Owner Olive and HER OWN company's verified case
         $company = Company::factory()->create();
         $owner = $this->aCompanyMember($company, 'owner');
+        $company->update(['owner_id' => $owner->getKey()]);
         $case = $this->aVerifiedCaseFor($company);
 
         // When she calls the execute endpoint for that case
@@ -54,7 +55,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the admin surface is never acknowledged and nothing moved
         $this->assertResourceNotFoundNoLeak($response);
-        $this->assertNothingExecuted($case, $company->owner_id);
+        $this->assertNothingExecuted($case, $owner->getKey());
     }
 
     #[Test]
@@ -170,6 +171,28 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response = $this->executeCase($this->admin, $case->getKey());
 
         // Then the world has moved — the execution is refused and the case stays verified
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
+        $this->assertNothingExecuted($case, $bob->getKey());
+    }
+
+    #[Test]
+    public function when_ownership_moved_and_the_member_is_gone_then_the_stale_refusal_wins(): void
+    {
+        // Given a verified case whose recorded owner was replaced AND whose
+        // incoming member has left — both world-moved guards are violated
+        $company = Company::factory()->create();
+        $alex = $this->aCompanyMember($company, 'employee');
+        $case = $this->aVerifiedCaseFor($company, $alex);
+        $bob = $this->aCompanyMember($company, 'admin');
+        $company->update(['owner_id' => $bob->getKey()]);
+        $company->users()->updateExistingPivot($alex->getKey(), ['deleted_at' => now()]);
+
+        // When the admin executes the case
+        $response = $this->executeCase($this->admin, $case->getKey());
+
+        // Then the STALE refusal wins — 409 answers the world moving before
+        // any cross-entity complaint (the owner seat is the deeper premise)
         $response->assertStatus(409);
         $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
         $this->assertNothingExecuted($case, $bob->getKey());
@@ -500,8 +523,10 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     /**
      * The closed case's transfer_event_id resolves by IDENTITY: it equals the
      * stored event whose payload names THIS case, differs from the older
-     * routine event (caseId NULL), and that cited event carries source=admin
-     * — an insert-order read-back could cite the wrong transfer.
+     * routine event (caseId NULL), and that cited event carries source=admin.
+     * This arrange kills min/first-order read-backs and a filterless sole();
+     * a max-order read-back is coincidentally equivalent under the company
+     * row lock — the caseId filter, not ordering, is the guard being pinned.
      */
     protected function assertClosedCaseCitesItsOwnTransferEvent(OwnershipTransferCase $case): void
     {
@@ -549,8 +574,9 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     /**
      * Nothing was executed — the case row is exactly as arranged, the
      * company's stream carries no CompanyOwnershipTransferred event, no audit
-     * row exists, and the company's owner column still names $ownerUserId
-     * (the refusal invariant: every refusal leaves the world untouched).
+     * row exists, the company's owner column still names $ownerUserId, and
+     * nobody else was promoted to an owner-role pivot (the split-brain arm:
+     * a half-applied swap must fail here even if everything else rolls back).
      */
     protected function assertNothingExecuted(OwnershipTransferCase $case, string $ownerUserId): void
     {
@@ -564,5 +590,12 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNoAuditRecorded();
 
         $this->assertSame($ownerUserId, Company::query()->whereKey($case->company_id)->sole()->owner_id);
+
+        $this->assertSame(0, CompanyUser::query()
+            ->where('company_id', $case->company_id)
+            ->where('role_id', $this->seededRole('owner')->getKey())
+            ->where('user_id', '!=', $ownerUserId)
+            ->withTrashed()
+            ->count());
     }
 }

@@ -42,7 +42,7 @@ class ExecuteOwnershipTransferCaseInteractor
 
             $this->transferInteractor->execute($company, TransferCompanyOwnershipCommand::validateAndCreate([
                 'newOwnerUserId' => $case->new_owner_user_id,
-                'transferredBy' => $admin->getKey(),
+                'transferredBy' => $admin->id,
                 'source' => TransferCompanyOwnershipCommand::SOURCE_ADMIN,
                 'caseId' => $case->getKey(),
             ]), $case->expected_owner_user_id);
