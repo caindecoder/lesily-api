@@ -327,5 +327,7 @@ Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/verify', [PlatformAdmi
 // with source=admin + caseId through the SAME locked re-validation, closes
 // the case executed and writes ONE in-transaction audit row referencing the
 // stored transfer event (an audit failure vetoes the execution whole).
+// Idempotency-Key REQUIRED — §13.2 names this execute in its required list
+// (the ONE ownership-transfer route where a duplicate causes real-world harm).
 Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/execute', [PlatformAdminOwnershipTransferCasesController::class, 'execute'])
-    ->middleware(['auth:sanctum', 'platform.admin']);
+    ->middleware(['auth:sanctum', 'platform.admin', 'idempotency-key:required']);

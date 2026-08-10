@@ -57,6 +57,21 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNoAuditRecorded();
     }
 
+    #[Test]
+    public function when_the_idempotency_key_is_missing_then_the_execution_is_refused(): void
+    {
+        // Given a verified case an allowlisted admin could otherwise execute
+        $company = Company::factory()->create();
+        $case = $this->aVerifiedCaseFor($company);
+
+        // When the execute is submitted without an Idempotency-Key
+        $response = $this->executeCaseWithoutIdempotencyKey($this->admin, $case->getKey());
+
+        // Then the execution is refused as missing its key and nothing moved
+        $this->assertRefusedAsMissingIdempotencyKey($response);
+        $this->assertNothingExecuted($case, $company->owner_id);
+    }
+
     /**
      * Call the REAL admin execute endpoint (UC-1-093) as $actor, or as a guest
      * when null. Every call carries an Idempotency-Key, minted fresh unless
@@ -75,6 +90,30 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             [],
             ['Idempotency-Key' => $idempotencyKey ?? (string) Str::uuid7()],
         );
+    }
+
+    /**
+     * The §13.2 REQUIRED mount refused the keyless mutation — 422 naming the
+     * missing key in the §S21 envelope (the EnsureIdempotencyKeyTest contract;
+     * this row pins only that THIS route mounts it).
+     */
+    protected function assertRefusedAsMissingIdempotencyKey(TestResponse $response): void
+    {
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'IDEMPOTENCY_KEY_REQUIRED');
+    }
+
+    /**
+     * The execute endpoint called WITHOUT any Idempotency-Key header — the
+     * row-4 omission form of executeCase.
+     */
+    protected function executeCaseWithoutIdempotencyKey(?User $actor, string $caseId): TestResponse
+    {
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
+        }
+
+        return $this->patchJson("/api/v1/admin/ownership-transfer-cases/{$caseId}/execute");
     }
 
     /**
