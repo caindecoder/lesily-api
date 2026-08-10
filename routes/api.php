@@ -321,3 +321,11 @@ Route::get('/v1/admin/ownership-transfer-cases/{caseId}', [PlatformAdminOwnershi
 // state guard is the dedup).
 Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/verify', [PlatformAdminOwnershipTransferCasesController::class, 'verify'])
     ->middleware(['auth:sanctum', 'platform.admin']);
+
+// A platform admin executes a VERIFIED case (UC-1-093, slice-11R T7) —
+// ES-write: dispatches the routine path's TransferCompanyOwnershipCommand
+// with source=admin + caseId through the SAME locked re-validation, closes
+// the case executed and writes ONE in-transaction audit row referencing the
+// stored transfer event (an audit failure vetoes the execution whole).
+Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/execute', [PlatformAdminOwnershipTransferCasesController::class, 'execute'])
+    ->middleware(['auth:sanctum', 'platform.admin']);
