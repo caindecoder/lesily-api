@@ -215,6 +215,8 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             'closed_outcome' => null,
             'requested_context' => $case->requested_context,
             'new_owner_user_id' => $case->new_owner_user_id,
+            'verified_at' => null,
+            'verified_by' => null,
             'created_at' => $case->created_at->toISOString(),
         ]]);
     }

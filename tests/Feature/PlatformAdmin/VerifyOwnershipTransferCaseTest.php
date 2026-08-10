@@ -13,6 +13,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Companies\Enums\OwnershipTransferCaseStatus;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -21,6 +22,15 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     use RefreshDatabase;
 
     protected string $notes = 'Death certificate matched the registered Owner';
+
+    /**
+     * @var array{type: string, reference: string, capturedAt: string}
+     */
+    protected array $artefact = [
+        'type' => 'id_document',
+        'reference' => 'NIC 199012345678 sighted via notarised copy',
+        'capturedAt' => '2026-08-09T10:30:00Z',
+    ];
 
     #[Test]
     public function when_no_token_is_presented_then_the_verify_request_is_rejected_as_unauthenticated(): void
@@ -172,6 +182,53 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNothingVerified($case);
     }
 
+    #[Test]
+    public function when_a_verification_is_recorded_then_the_prose_notes_never_reach_the_event_or_the_audit_row(): void
+    {
+        // Given an open case, a live member, and an artefact entry smuggling
+        // an extra prose key alongside the closed metadata shape
+        $company = Company::factory()->create();
+        $member = $this->aCompanyMember($company, 'employee');
+        $case = $this->anOpenCaseFor($company);
+
+        // When the admin verifies with notes and the smuggling entry
+        $response = $this->verifyCase(
+            $this->admin,
+            $case->getKey(),
+            $this->aValidVerificationPayload($member, [
+                'artefacts' => [[...$this->artefact, 'note' => 'smuggled prose that must not survive']],
+            ]),
+        );
+
+        // Then the notes are readable only on the case row
+        $response->assertOk();
+        $this->assertNotesStayOnTheRowOnly($case);
+    }
+
+    #[Test]
+    public function when_the_admin_verifies_an_open_case_then_the_verification_is_recorded_whole(): void
+    {
+        // Given an open case with no incoming owner yet (UC-1-140 alt-2a) and
+        // Alex, a live member of the case's company
+        $company = Company::factory()->create();
+        $alex = $this->aCompanyMember($company, 'employee');
+        $case = $this->anOpenCaseFor($company);
+
+        // When the admin verifies the case naming Alex
+        $response = $this->verifyCase(
+            $this->admin,
+            $case->getKey(),
+            $this->aValidVerificationPayload($alex),
+        );
+
+        // Then the event, the stamp and the audit row landed together, and the
+        // wire carries the verification facts without the prose
+        $eventId = $this->assertVerificationEventRecorded($case);
+        $this->assertCaseRowStampedVerified($case, $alex, $eventId);
+        $this->assertVerificationAudited($case, $eventId, $response);
+        $this->assertVerifiedCaseOnTheWire($response, $alex);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
@@ -222,15 +279,122 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         return [
             'newOwnerUserId' => $newOwner->getKey(),
             'notes' => $this->notes,
-            'artefacts' => [
-                [
-                    'type' => 'id_document',
-                    'reference' => 'NIC 199012345678 sighted via notarised copy',
-                    'capturedAt' => '2026-08-09T10:30:00Z',
-                ],
-            ],
+            'artefacts' => [$this->artefact],
             ...$overrides,
         ];
+    }
+
+    /**
+     * Exactly ONE CompanyOwnershipVerificationRecorded event sits on the
+     * case's company stream, its payload pinned to the caseId, the verifying
+     * admin and the projected artefact metadata; returns the stored-event id
+     * so the row stamp and the audit row can be pinned to the same record.
+     */
+    protected function assertVerificationEventRecorded(OwnershipTransferCase $case): int
+    {
+        $event = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $case->company_id)
+            ->where('event_class', 'App\Companies\Events\CompanyOwnershipVerificationRecorded')
+            ->sole();
+
+        $properties = $event->event_properties;
+        $this->assertSame($case->getKey(), $properties['caseId']);
+        $this->assertSame($this->admin->getKey(), $properties['verifiedBy']);
+        $this->assertSame([$this->artefact], $properties['artefacts']);
+
+        return (int) $event->id;
+    }
+
+    /**
+     * The case row carries the whole verification (UC-1-113 postconditions):
+     * status verified, the verifying admin + timestamp, the incoming owner,
+     * the notes verbatim, the projected artefact metadata, and the
+     * verification_event_id pinned to the stored event just asserted.
+     */
+    protected function assertCaseRowStampedVerified(OwnershipTransferCase $case, User $newOwner, int $verificationEventId): void
+    {
+        $fresh = $case->fresh();
+        $this->assertInstanceOf(OwnershipTransferCase::class, $fresh);
+        $this->assertSame(OwnershipTransferCaseStatus::Verified, $fresh->status);
+        $this->assertNotNull($fresh->verified_at);
+        $this->assertSame($this->admin->getKey(), $fresh->verified_by);
+        $this->assertSame($newOwner->getKey(), $fresh->new_owner_user_id);
+        $this->assertSame($this->notes, $fresh->verification_notes);
+        $this->assertSame([$this->artefact], $fresh->verification_artefacts);
+        $this->assertSame($verificationEventId, $fresh->verification_event_id);
+    }
+
+    /**
+     * Exactly ONE audit row evidences the verification, subject-pinned to the
+     * case, stored_event_id pinned to the verification event (the module's
+     * FIRST non-null producer — the row references the durable record, never
+     * the notes), request-context columns IDENTITY-pinned per the sibling
+     * standard.
+     */
+    protected function assertVerificationAudited(OwnershipTransferCase $case, int $storedEventId, TestResponse $response): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'event_class' => 'CompanyOwnershipVerificationRecorded',
+            'subject_type' => 'ownership_transfer_case',
+            'subject_id' => $case->getKey(),
+            'subject_label' => null,
+            'action' => 'case_verified',
+            'description' => 'Platform admin recorded identity verification on an ownership-transfer case.',
+            'company_id' => $case->company_id,
+            'actor_user_id' => $this->admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $this->admin->name,
+            'stored_event_id' => $storedEventId,
+            'metadata' => null,
+            'severity' => 'info',
+            'ip_address' => '127.0.0.1',
+        ]);
+
+        $entry = AuditEntry::query()->sole();
+        $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
+        $this->assertNotNull($entry->user_agent);
+    }
+
+    /**
+     * The wire carries the verification facts — 200, status verified, the
+     * incoming owner and the verified_at/verified_by stamps — while the
+     * notes and artefacts stay off it (the T5 detail-read invariant).
+     */
+    protected function assertVerifiedCaseOnTheWire(TestResponse $response, User $newOwner): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data.status', 'verified');
+        $response->assertJsonPath('data.new_owner_user_id', $newOwner->getKey());
+        $response->assertJsonPath('data.verified_by', $this->admin->getKey());
+        $this->assertNotNull($response->json('data.verified_at'));
+        $response->assertJsonMissingPath('data.verification_notes');
+        $response->assertJsonMissingPath('data.verification_artefacts');
+    }
+
+    /**
+     * The prose notes live ONLY on the case row (UC-1-113 sc.2): the stored
+     * event's payload key-set is exactly the closed metadata set with every
+     * artefact entry projected to {type, reference, capturedAt}, the audit
+     * row carries the notes text nowhere, and the row holds them verbatim.
+     */
+    protected function assertNotesStayOnTheRowOnly(OwnershipTransferCase $case): void
+    {
+        $event = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $case->company_id)
+            ->sole();
+        $properties = $event->event_properties;
+        $this->assertEqualsCanonicalizing(['caseId', 'verifiedBy', 'artefacts', 'verifiedAt'], array_keys($properties));
+        foreach ($properties['artefacts'] as $entry) {
+            $this->assertEqualsCanonicalizing(['type', 'reference', 'capturedAt'], array_keys($entry));
+        }
+
+        $auditRow = AuditEntry::query()->sole();
+        $this->assertStringNotContainsString($this->notes, (string) json_encode($auditRow->getAttributes()));
+
+        $fresh = $case->fresh();
+        $this->assertInstanceOf(OwnershipTransferCase::class, $fresh);
+        $this->assertSame($this->notes, $fresh->verification_notes);
     }
 
     /**

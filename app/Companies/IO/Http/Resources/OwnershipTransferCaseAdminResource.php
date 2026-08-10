@@ -29,6 +29,8 @@ class OwnershipTransferCaseAdminResource extends JsonResource
             'closed_outcome' => $this->resource->closed_outcome?->value,
             'new_owner_user_id' => $this->resource->new_owner_user_id,
             'requested_context' => $this->resource->requested_context,
+            'verified_at' => $this->resource->verified_at?->toISOString(),
+            'verified_by' => $this->resource->verified_by,
             'created_at' => $this->resource->created_at->toISOString(),
         ];
     }
