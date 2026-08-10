@@ -49,6 +49,11 @@ class PlatformAdminOwnershipTransferCasesController
         ));
     }
 
+    public function verify(string $caseId, Request $request): OwnershipTransferCaseAdminResource
+    {
+        throw new \RuntimeException('Not implemented');
+    }
+
     public function store(Request $request, OpenOwnershipTransferCaseInteractor $interactor): JsonResponse
     {
         /** @var User $admin */

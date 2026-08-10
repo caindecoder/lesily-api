@@ -312,3 +312,12 @@ Route::get('/v1/admin/ownership-transfer-cases', [PlatformAdminOwnershipTransfer
     ->middleware(['auth:sanctum', 'platform.admin']);
 Route::get('/v1/admin/ownership-transfer-cases/{caseId}', [PlatformAdminOwnershipTransferCasesController::class, 'show'])
     ->middleware(['auth:sanctum', 'platform.admin']);
+
+// A platform admin records identity verification on an open case (UC-1-113,
+// slice-11R T6) — ES-write: CompanyOwnershipVerificationRecorded on the Company
+// aggregate + case-row stamp + ONE in-transaction audit row referencing the
+// stored event (an audit failure vetoes the verification). Same seam as its
+// siblings; no idempotency mount (§13.2 names execute only — the open-only
+// state guard is the dedup).
+Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/verify', [PlatformAdminOwnershipTransferCasesController::class, 'verify'])
+    ->middleware(['auth:sanctum', 'platform.admin']);
