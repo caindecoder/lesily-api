@@ -86,6 +86,28 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNothingVerified($case);
     }
 
+    #[Test]
+    public function when_the_named_incoming_owner_is_not_an_active_member_then_the_verification_is_refused(): void
+    {
+        // Given an open case for Contoso and a live member of a DIFFERENT
+        // company — membership elsewhere must not satisfy the case's company
+        $company = Company::factory()->create();
+        $case = $this->anOpenCaseFor($company);
+        $foreignMember = $this->aCompanyMember(Company::factory()->create(), 'employee');
+
+        // When the admin verifies naming them as the incoming owner
+        $response = $this->verifyCase(
+            $this->admin,
+            $case->getKey(),
+            $this->aValidVerificationPayload($foreignMember),
+        );
+
+        // Then the verification is refused on the target and nothing is written
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'TARGET_NOT_MEMBER');
+        $this->assertNothingVerified($case);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string}>
      */
