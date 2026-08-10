@@ -186,6 +186,42 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNothingExecuted($case, $company->owner_id);
     }
 
+    #[Test]
+    public function when_the_verified_case_names_the_current_owner_then_the_execution_is_refused_as_a_self_transfer(): void
+    {
+        // Given a verified case whose incoming owner IS the company's live owner
+        // (verification legally permits it — the owner is a live member)
+        $company = Company::factory()->create();
+        $owner = User::query()->findOrFail($company->owner_id);
+        $case = $this->aVerifiedCaseFor($company, $owner);
+
+        // When the admin executes the case
+        $response = $this->executeCase($this->admin, $case->getKey());
+
+        // Then the generalized self-guard refuses — an owner cannot succeed themselves
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'SELF_TRANSFER_BLOCKED');
+        $this->assertNothingExecuted($case, $company->owner_id);
+    }
+
+    #[Test]
+    public function when_the_incoming_owner_has_no_emergency_contact_then_the_execution_still_completes(): void
+    {
+        // Given a verified case whose incoming owner has NO emergency contact
+        // on their membership (the §10b mandate flags-and-prompts, never blocks)
+        $company = Company::factory()->create();
+        $alex = $this->aCompanyMember($company, 'employee');
+        $case = $this->aVerifiedCaseFor($company, $alex);
+
+        // When the admin executes the case
+        $response = $this->executeCase($this->admin, $case->getKey());
+
+        // Then the execution completes — the missing contact never blocks it
+        $response->assertOk();
+        $this->assertSame('closed', $case->fresh()->status->value);
+        $this->assertSame($alex->getKey(), Company::query()->whereKey($case->company_id)->sole()->owner_id);
+    }
+
     /**
      * Call the REAL admin execute endpoint (UC-1-093) as $actor, or as a guest
      * when null. Every call carries an Idempotency-Key, minted fresh unless
