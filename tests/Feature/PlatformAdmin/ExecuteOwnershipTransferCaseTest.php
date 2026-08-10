@@ -3,6 +3,7 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
@@ -10,6 +11,7 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Companies\Events\CompanyOwnershipTransferred;
@@ -163,6 +165,25 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response->assertStatus(409);
         $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
         $this->assertNothingExecuted($case, $bob->getKey());
+    }
+
+    #[Test]
+    public function when_the_audit_write_fails_then_the_whole_execution_rolls_back(): void
+    {
+        // Given a verified case, a live incoming member, and an audit write
+        // that will fail AFTER its row is inserted (the post-insert oracle)
+        $company = Company::factory()->create();
+        $alex = $this->aCompanyMember($company, 'employee');
+        $case = $this->aVerifiedCaseFor($company, $alex);
+        AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the admin executes the case
+        $response = $this->executeCase($this->admin, $case->getKey());
+
+        // Then the ONE transaction takes back the swap, the event, the close
+        // and the already-inserted audit row together
+        $this->assertReadFailedSafely($response);
+        $this->assertNothingExecuted($case, $company->owner_id);
     }
 
     /**
