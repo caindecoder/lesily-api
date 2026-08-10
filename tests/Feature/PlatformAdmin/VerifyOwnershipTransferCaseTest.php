@@ -110,6 +110,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             'verified' => $this->aVerifiedCaseFor($company),
             'closedExecuted' => $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Executed),
             'closedRejected' => $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Rejected),
+            default => $this->fail('Unknown case fixture token: '.$fixture),
         };
 
         // When the admin attempts to verify it

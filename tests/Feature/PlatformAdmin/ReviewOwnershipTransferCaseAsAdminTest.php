@@ -94,7 +94,7 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
             'closed_outcome' => null,
             'new_owner_user_id' => $alex->getKey(),
             'requested_context' => $case->requested_context,
-            'verified_at' => $case->verified_at->toISOString(),
+            'verified_at' => $case->verified_at?->toISOString(),
             'verified_by' => $case->verified_by,
             'created_at' => $case->created_at->toISOString(),
         ]]);
