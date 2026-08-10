@@ -8,6 +8,7 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -62,6 +63,53 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Then nothing is found and no verification evidence is written
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertNoAuditRecorded();
+    }
+
+    #[Test]
+    #[DataProvider('invalidVerificationPayloadProvider')]
+    public function when_the_verification_payload_is_invalid_then_the_verification_is_refused(array $overrides, string $field): void
+    {
+        // Given an open case and a payload carrying this row's defect
+        $company = Company::factory()->create();
+        $case = $this->anOpenCaseFor($company);
+        $stranger = User::factory()->create();
+
+        // When the admin submits the verification
+        $response = $this->verifyCase(
+            $this->admin,
+            $case->getKey(),
+            $this->aValidVerificationPayload($stranger, $overrides),
+        );
+
+        // Then the verification is refused naming the offending field and nothing is written
+        $this->assertValidationFailed($response, $field);
+        $this->assertNothingVerified($case);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function invalidVerificationPayloadProvider(): array
+    {
+        $capturedAt = '2026-08-09T10:30:00Z';
+
+        return [
+            'empty notes' => [['notes' => ''], 'notes'],
+            'whitespace notes' => [['notes' => '   '], 'notes'],
+            'overlong notes' => [['notes' => str_repeat('a', 1001)], 'notes'],
+            'missing artefacts' => [['artefacts' => null], 'artefacts'],
+            'empty artefacts' => [['artefacts' => []], 'artefacts'],
+            'artefact type outside the seven' => [
+                ['artefacts' => [['type' => 'hearsay', 'reference' => 'sworn statement', 'capturedAt' => $capturedAt]]],
+                'artefacts.0.type',
+            ],
+            'artefact missing reference' => [
+                ['artefacts' => [['type' => 'id_document', 'capturedAt' => $capturedAt]]],
+                'artefacts.0.reference',
+            ],
+            'missing newOwnerUserId' => [['newOwnerUserId' => null], 'newOwnerUserId'],
+            'non-uuid newOwnerUserId' => [['newOwnerUserId' => 'not-a-uuid'], 'newOwnerUserId'],
+        ];
     }
 
     /**

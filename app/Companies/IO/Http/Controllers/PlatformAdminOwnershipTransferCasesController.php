@@ -9,6 +9,7 @@ use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
 use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminResource;
+use App\Companies\UseCases\Commands\VerifyOwnershipTransferCaseCommand;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminCollection;
 use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
 use App\Companies\UseCases\Interactors\VerifyOwnershipTransferCaseInteractor;
@@ -52,7 +53,12 @@ class PlatformAdminOwnershipTransferCasesController
 
     public function verify(string $caseId, Request $request, VerifyOwnershipTransferCaseInteractor $interactor): OwnershipTransferCaseAdminResource
     {
-        return new OwnershipTransferCaseAdminResource($interactor->execute($caseId));
+        $command = VerifyOwnershipTransferCaseCommand::validateAndCreate([
+            ...$request->all(),
+            'caseId' => $caseId,
+        ]);
+
+        return new OwnershipTransferCaseAdminResource($interactor->execute($command));
     }
 
     public function store(Request $request, OpenOwnershipTransferCaseInteractor $interactor): JsonResponse
