@@ -18,9 +18,9 @@ use App\Companies\UseCases\Commands\ExecuteOwnershipTransferCaseCommand;
 
 /**
  * A platform admin executes a VERIFIED ownership-transfer case (UC-1-093;
- * slice-11R spec Â§4/Â§5): case-state guard first, then the routine path's own
+ * slice-11R spec §4/§5): case-state guard first, then the routine path's own
  * locked re-validation via the composed transfer interactor, then the case
- * close and its audit row â€” all inside ONE transaction, so an audit failure
+ * close and its audit row — all inside ONE transaction, so an audit failure
  * vetoes the swap, the event and the close together (the Minimal Guarantee).
  */
 class ExecuteOwnershipTransferCaseInteractor
@@ -62,7 +62,7 @@ class ExecuteOwnershipTransferCaseInteractor
     }
 
     /**
-     * The id of the transfer event this call just persisted â€” read back
+     * The id of the transfer event this call just persisted — read back
      * inside the same transaction by IDENTITY (aggregate + event class + the
      * case named in the payload), never by insert order: routine transfers
      * carry caseId NULL and a sibling case cites its OWN event, so sole()

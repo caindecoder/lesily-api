@@ -15,7 +15,9 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Companies\Events\CompanyOwnershipTransferred;
+use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Companies\UseCases\Interactors\TransferCompanyOwnershipInteractor;
 
 class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 {
@@ -222,6 +224,52 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertSame($alex->getKey(), Company::query()->whereKey($case->company_id)->sole()->owner_id);
     }
 
+    #[Test]
+    public function when_the_same_idempotency_key_is_replayed_then_the_transfer_is_not_executed_twice(): void
+    {
+        // Given a verified case executed once under an explicit key
+        $company = Company::factory()->create();
+        $alex = $this->aCompanyMember($company, 'employee');
+        $case = $this->aVerifiedCaseFor($company, $alex);
+        $key = (string) Str::uuid7();
+        $this->executeCase($this->admin, $case->getKey(), $key)->assertOk();
+
+        // When the identical request is replayed under the SAME key
+        $replay = $this->executeCase($this->admin, $case->getKey(), $key);
+
+        // Then the remembered response returns and nothing runs twice
+        $this->assertExecutedExactlyOnce($case, $replay);
+    }
+
+    #[Test]
+    public function when_a_routine_transfer_preceded_the_case_then_the_closed_case_cites_its_own_transfer_event(): void
+    {
+        // Given a company whose ownership already moved once via the REAL
+        // routine path (event 1, caseId NULL) …
+        $company = Company::factory()->create();
+        $olive = User::query()->findOrFail($company->owner_id);
+        $bob = $this->aCompanyMember($company, 'admin');
+        app(TransferCompanyOwnershipInteractor::class)->execute(
+            $company,
+            TransferCompanyOwnershipCommand::validateAndCreate([
+                'newOwnerUserId' => $bob->getKey(),
+                'transferredBy' => $olive->getKey(),
+                'source' => TransferCompanyOwnershipCommand::SOURCE_SELF_SERVICE,
+            ]),
+            $olive->getKey(),
+        );
+
+        // … and a case opened AFTERWARDS, verified for a third member
+        $carol = $this->aCompanyMember($company->refresh(), 'employee');
+        $case = $this->aVerifiedCaseFor($company, $carol);
+
+        // When the admin executes the case (event 2, caseId set)
+        $this->executeCase($this->admin, $case->getKey())->assertOk();
+
+        // Then the closed case cites ITS OWN event by identity, never the older routine one
+        $this->assertClosedCaseCitesItsOwnTransferEvent($case);
+    }
+
     /**
      * Call the REAL admin execute endpoint (UC-1-093) as $actor, or as a guest
      * when null. Every call carries an Idempotency-Key, minted fresh unless
@@ -264,6 +312,52 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         }
 
         return $this->patchJson("/api/v1/admin/ownership-transfer-cases/{$caseId}/execute");
+    }
+
+    /**
+     * The closed case's transfer_event_id resolves by IDENTITY: it equals the
+     * stored event whose payload names THIS case, differs from the older
+     * routine event (caseId NULL), and that cited event carries source=admin
+     * — an insert-order read-back could cite the wrong transfer.
+     */
+    protected function assertClosedCaseCitesItsOwnTransferEvent(OwnershipTransferCase $case): void
+    {
+        $ownEvent = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $case->company_id)
+            ->where('event_class', CompanyOwnershipTransferred::class)
+            ->where('event_properties->caseId', $case->getKey())
+            ->sole();
+        $routineEvent = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $case->company_id)
+            ->where('event_class', CompanyOwnershipTransferred::class)
+            ->whereNull('event_properties->caseId')
+            ->sole();
+
+        $this->assertSame((int) $ownEvent->id, $case->fresh()->transfer_event_id);
+        $this->assertNotSame((int) $routineEvent->id, $case->fresh()->transfer_event_id);
+        $this->assertSame('admin', $ownEvent->event_properties['source']);
+    }
+
+    /**
+     * The duplicate submission did NOT re-run the execution — the second
+     * response is the remembered one (200 + the replay marker header), the
+     * company's stream holds exactly ONE transfer event beside exactly ONE
+     * audit row, and the case is still closed executed.
+     */
+    protected function assertExecutedExactlyOnce(OwnershipTransferCase $case, TestResponse $replay): void
+    {
+        $replay->assertOk();
+        $this->assertSame('true', $replay->headers->get('Idempotency-Replayed'));
+
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $case->company_id)
+            ->where('event_class', CompanyOwnershipTransferred::class)
+            ->count());
+        $this->assertDatabaseCount('audit_trail', 1);
+
+        $fresh = $case->fresh();
+        $this->assertSame('closed', $fresh->status->value);
+        $this->assertSame('executed', $fresh->closed_outcome->value);
     }
 
     /**
