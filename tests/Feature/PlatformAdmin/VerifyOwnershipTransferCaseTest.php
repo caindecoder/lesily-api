@@ -4,6 +4,7 @@ namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
 use RuntimeException;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
@@ -140,6 +141,53 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     #[Test]
+    public function when_a_non_open_case_names_a_non_member_then_the_refusal_names_the_case_state(): void
+    {
+        // Given a VERIFIED case and a target who is no member of its company
+        // — both guards would fire; the case state is the REAL reason
+        // (cd-ownership-transfer P14: state guard first, never an incidental
+        // refusal)
+        $company = Company::factory()->create();
+        $case = $this->aVerifiedCaseFor($company);
+        $foreignMember = $this->aCompanyMember(Company::factory()->create(), 'employee');
+
+        // When the admin attempts to verify it naming the non-member
+        $response = $this->verifyCase(
+            $this->admin,
+            $case->getKey(),
+            $this->aValidVerificationPayload($foreignMember),
+        );
+
+        // Then the refusal is the state guard's, not the target guard's
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
+        $this->assertNothingVerified($case);
+    }
+
+    #[Test]
+    public function when_the_named_incoming_owner_holds_only_a_removed_membership_then_the_verification_is_refused(): void
+    {
+        // Given an open case and a user whose membership in the case's
+        // company was removed — an active member means a live pivot
+        $company = Company::factory()->create();
+        $case = $this->anOpenCaseFor($company);
+        $removed = $this->aCompanyMember($company, 'employee');
+        $company->users()->updateExistingPivot($removed->getKey(), ['deleted_at' => now()]);
+
+        // When the admin verifies naming them as the incoming owner
+        $response = $this->verifyCase(
+            $this->admin,
+            $case->getKey(),
+            $this->aValidVerificationPayload($removed),
+        );
+
+        // Then the verification is refused on the target and nothing is written
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'TARGET_NOT_MEMBER');
+        $this->assertNothingVerified($case);
+    }
+
+    #[Test]
     public function when_the_named_incoming_owner_is_not_an_active_member_then_the_verification_is_refused(): void
     {
         // Given an open case for Contoso and a live member of a DIFFERENT
@@ -207,10 +255,42 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     #[Test]
+    public function when_a_second_case_for_the_same_company_is_verified_then_its_record_cites_its_own_event(): void
+    {
+        // Given Contoso with case A already verified through this very
+        // endpoint, and a second open case B for the same company
+        $company = Company::factory()->create();
+        $member = $this->aCompanyMember($company, 'employee');
+        $caseA = $this->anOpenCaseFor($company);
+        $caseB = $this->anOpenCaseFor($company);
+        $this->verifyCase($this->admin, $caseA->getKey(), $this->aValidVerificationPayload($member))->assertOk();
+
+        // When the admin verifies case B
+        $response = $this->verifyCase(
+            $this->admin,
+            $caseB->getKey(),
+            $this->aValidVerificationPayload($member),
+        );
+
+        // Then B's stamp and B's audit row cite B's OWN event, never A's
+        $response->assertOk();
+        $ownEvent = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $company->getKey())
+            ->where('event_properties->caseId', $caseB->getKey())
+            ->sole();
+        $this->assertSame((int) $ownEvent->id, $caseB->fresh()?->verification_event_id);
+        $this->assertSame((int) $ownEvent->id, (int) AuditEntry::query()
+            ->where('subject_id', $caseB->getKey())
+            ->sole()
+            ->stored_event_id);
+    }
+
+    #[Test]
     public function when_the_admin_verifies_an_open_case_then_the_verification_is_recorded_whole(): void
     {
         // Given an open case with no incoming owner yet (UC-1-140 alt-2a) and
-        // Alex, a live member of the case's company
+        // Alex, a live member of the case's company, on a frozen clock
+        $this->travelTo(CarbonImmutable::parse('2026-08-10 09:00:00'));
         $company = Company::factory()->create();
         $alex = $this->aCompanyMember($company, 'employee');
         $case = $this->anOpenCaseFor($company);
@@ -236,6 +316,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public static function invalidVerificationPayloadProvider(): array
     {
         $capturedAt = '2026-08-09T10:30:00Z';
+        $artefact = ['type' => 'id_document', 'reference' => 'NIC sighted', 'capturedAt' => $capturedAt];
 
         return [
             'empty notes' => [['notes' => ''], 'notes'],
@@ -250,6 +331,26 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             'artefact missing reference' => [
                 ['artefacts' => [['type' => 'id_document', 'capturedAt' => $capturedAt]]],
                 'artefacts.0.reference',
+            ],
+            'artefact missing capturedAt' => [
+                ['artefacts' => [['type' => 'id_document', 'reference' => 'NIC sighted']]],
+                'artefacts.0.capturedAt',
+            ],
+            'artefact relative capturedAt' => [
+                ['artefacts' => [[...$artefact, 'capturedAt' => 'tomorrow']]],
+                'artefacts.0.capturedAt',
+            ],
+            'artefact future capturedAt' => [
+                ['artefacts' => [[...$artefact, 'capturedAt' => '2027-01-01T00:00:00Z']]],
+                'artefacts.0.capturedAt',
+            ],
+            'artefacts keyed as a map' => [
+                ['artefacts' => ['a' => $artefact]],
+                'artefacts',
+            ],
+            'twenty-one artefacts' => [
+                ['artefacts' => array_fill(0, 21, $artefact)],
+                'artefacts',
             ],
             'missing newOwnerUserId' => [['newOwnerUserId' => null], 'newOwnerUserId'],
             'non-uuid newOwnerUserId' => [['newOwnerUserId' => 'not-a-uuid'], 'newOwnerUserId'],
@@ -302,6 +403,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertSame($case->getKey(), $properties['caseId']);
         $this->assertSame($this->admin->getKey(), $properties['verifiedBy']);
         $this->assertSame([$this->artefact], $properties['artefacts']);
+        $this->assertTrue(CarbonImmutable::parse($properties['verifiedAt'])->equalTo(now()));
 
         return (int) $event->id;
     }
@@ -317,7 +419,9 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $fresh = $case->fresh();
         $this->assertInstanceOf(OwnershipTransferCase::class, $fresh);
         $this->assertSame(OwnershipTransferCaseStatus::Verified, $fresh->status);
-        $this->assertNotNull($fresh->verified_at);
+        $verifiedAt = $fresh->verified_at;
+        $this->assertNotNull($verifiedAt);
+        $this->assertTrue($verifiedAt->equalTo(now()));
         $this->assertSame($this->admin->getKey(), $fresh->verified_by);
         $this->assertSame($newOwner->getKey(), $fresh->new_owner_user_id);
         $this->assertSame($this->notes, $fresh->verification_notes);

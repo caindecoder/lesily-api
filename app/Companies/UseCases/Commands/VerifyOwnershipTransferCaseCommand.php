@@ -38,11 +38,11 @@ class VerifyOwnershipTransferCaseCommand extends Data
             'caseId' => ['required', 'uuid'],
             'newOwnerUserId' => ['required', 'uuid'],
             'notes' => ['required', 'string', 'max:1000'],
-            'artefacts' => ['required', 'array', 'min:1', 'max:20'],
+            'artefacts' => ['required', 'array', 'list', 'min:1', 'max:20'],
             'artefacts.*' => ['array'],
             'artefacts.*.type' => ['required', Rule::enum(VerificationArtefactType::class)],
             'artefacts.*.reference' => ['required', 'string', 'max:255'],
-            'artefacts.*.capturedAt' => ['required', 'date'],
+            'artefacts.*.capturedAt' => ['required', 'date_format:Y-m-d\TH:i:sp', 'before_or_equal:now'],
         ];
     }
 

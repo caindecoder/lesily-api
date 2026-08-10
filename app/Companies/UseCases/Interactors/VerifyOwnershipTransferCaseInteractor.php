@@ -30,14 +30,14 @@ class VerifyOwnershipTransferCaseInteractor
         return DB::transaction(function () use ($command, $admin, $context): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()->lockForUpdate()->findOrFail($command->caseId);
 
-            $this->guardTargetIsLiveMember($case, $command->newOwnerUserId);
             $this->guardCaseIsOpen($case);
+            $this->guardTargetIsLiveMember($case, $command->newOwnerUserId);
 
             CompanyAggregate::retrieve($case->company_id)
                 ->recordOwnershipVerification($command, $admin->id)
                 ->persist();
 
-            $verificationEventId = $this->latestVerificationEventId($case->company_id);
+            $verificationEventId = $this->verificationEventIdFor($case);
 
             $case->update([
                 'status' => OwnershipTransferCaseStatus::Verified,
@@ -81,14 +81,19 @@ class VerifyOwnershipTransferCaseInteractor
 
     /**
      * The id of the verification event this call just persisted — read back
-     * inside the same transaction, keyed by aggregate + event class.
+     * inside the same transaction by IDENTITY (aggregate + event class + the
+     * case named in the payload), never by insert order, and fail-loud via
+     * sole(): a missing or ambiguous record rolls the whole verification
+     * back rather than stamping an evidence chain with the wrong id.
      */
-    private function latestVerificationEventId(string $companyId): int
+    private function verificationEventIdFor(OwnershipTransferCase $case): int
     {
         return (int) LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $companyId)
+            ->where('aggregate_uuid', $case->company_id)
             ->where('event_class', CompanyOwnershipVerificationRecorded::class)
-            ->max('id');
+            ->where('event_properties->caseId', $case->getKey())
+            ->sole()
+            ->id;
     }
 
     private function recordCaseVerified(OwnershipTransferCase $case, User $admin, AdminRequestContext $context): void

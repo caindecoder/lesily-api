@@ -8,8 +8,10 @@ use App\Companies\Entities\OwnershipTransferCase;
 
 /**
  * The admin-facing case read (slice-11R spec §3) — minimal at open (UC-1-140);
- * the queue/detail reads (UC-1-127, T5) extend this same resource. Response
- * keys are snake_case per the built Resource convention (CompanyOwnerResource,
+ * the queue/detail reads (UC-1-127, T5) and the verify response (UC-1-113,
+ * T6: + verified_at/verified_by) extend this same resource. Verification
+ * notes and artefacts stay OFF the wire by design. Response keys are
+ * snake_case per the built Resource convention (CompanyOwnerResource,
  * InvoiceAdminResource, the §S21 envelope) — camelCase is the REQUEST-side
  * convention only.
  *
