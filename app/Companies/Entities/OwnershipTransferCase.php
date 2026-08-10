@@ -43,6 +43,7 @@ class OwnershipTransferCase extends Model
 
     protected $fillable = [
         'company_id',
+        'expected_owner_user_id',
         'status',
         'closed_outcome',
         'new_owner_user_id',

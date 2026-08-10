@@ -23,6 +23,9 @@ class OwnershipTransferCaseFactory extends Factory
     {
         return [
             'company_id' => Company::factory(),
+            'expected_owner_user_id' => fn (array $attributes) => Company::query()
+                ->whereKey($attributes['company_id'])
+                ->value('owner_id'),
             'status' => OwnershipTransferCaseStatus::Open,
             'requested_context' => fake()->sentence(),
             'new_owner_user_id' => null,
@@ -31,7 +34,10 @@ class OwnershipTransferCaseFactory extends Factory
 
     public function forCompany(Company $company): static
     {
-        return $this->state(['company_id' => $company->getKey()]);
+        return $this->state([
+            'company_id' => $company->getKey(),
+            'expected_owner_user_id' => $company->owner_id,
+        ]);
     }
 
     public function proposedOwner(User $user): static
