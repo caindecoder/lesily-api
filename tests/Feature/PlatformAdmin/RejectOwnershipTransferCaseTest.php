@@ -11,6 +11,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
+use App\Companies\Enums\RejectionReasonCode;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -158,6 +159,29 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNothingRejected($case, $company->owner_id);
     }
 
+    #[Test]
+    public function when_a_verified_case_is_rejected_then_no_ownership_change_is_persisted(): void
+    {
+        // Given a VERIFIED case naming live member Alex — everything an
+        // execute would need is present, yet reject must move nothing
+        $company = Company::factory()->create();
+        $alex = $this->aCompanyMember($company, 'employee');
+        $case = $this->aVerifiedCaseFor($company, $alex);
+
+        // When the admin rejects it citing target ineligibility
+        $response = $this->rejectCase($this->admin, $case->getKey(), [
+            'reason' => 'Target is not eligible to assume ownership',
+            'reasonCode' => 'target_ineligible',
+        ]);
+
+        // Then the case closes rejected with its verification evidence
+        // preserved, the rejection is audited, and ownership never moved
+        $response->assertOk();
+        $this->assertCaseClosedRejected($case, 'Target is not eligible to assume ownership', RejectionReasonCode::TargetIneligible);
+        $this->assertRejectionAudited($case, $response);
+        $this->assertNoOwnershipMoved($case, $company->owner_id);
+    }
+
     /**
      * Call the REAL admin reject endpoint (UC-1-128) as $actor, or as a guest
      * when null. The default payload is a valid rejection; rows override or
@@ -231,6 +255,79 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     /**
+     * The case closed rejected: outcome + the reason stored verbatim beside
+     * its code (the enum cast round-trips), the verification evidence
+     * preserved exactly as arranged, and the executed columns untouched.
+     */
+    protected function assertCaseClosedRejected(OwnershipTransferCase $case, string $reason, RejectionReasonCode $code): void
+    {
+        $fresh = $case->fresh();
+        $this->assertInstanceOf(OwnershipTransferCase::class, $fresh);
+
+        $this->assertSame('closed', $fresh->status->value);
+        $this->assertSame('rejected', $fresh->closed_outcome?->value);
+        $this->assertSame($reason, $fresh->rejection_reason);
+        $this->assertSame($code, $fresh->rejection_reason_code);
+        $this->assertSame($case->verified_at?->toDateTimeString(), $fresh->verified_at?->toDateTimeString());
+        $this->assertSame($case->verified_by, $fresh->verified_by);
+        $this->assertNull($fresh->executed_at);
+        $this->assertNull($fresh->executed_by);
+    }
+
+    /**
+     * Exactly one audit row evidences the rejection, in the cd-audit-trail
+     * shape: action case_rejected on the case subject, stored_event_id NULL
+     * (no domain event exists — nothing about the company changed), actor
+     * trio pinned, and the request-context columns IDENTITY-pinned.
+     */
+    protected function assertRejectionAudited(OwnershipTransferCase $case, TestResponse $response): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'event_class' => 'OwnershipTransferCaseRejected',
+            'subject_type' => 'ownership_transfer_case',
+            'subject_id' => $case->getKey(),
+            'subject_label' => null,
+            'action' => 'case_rejected',
+            'description' => 'Platform admin rejected an ownership-transfer case.',
+            'company_id' => $case->company_id,
+            'actor_user_id' => $this->admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $this->admin->name,
+            'stored_event_id' => null,
+            'metadata' => null,
+            'severity' => 'info',
+            'ip_address' => '127.0.0.1',
+        ]);
+
+        $entry = AuditEntry::query()->sole();
+        $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
+        $this->assertNotNull($entry->user_agent);
+    }
+
+    /**
+     * No ownership change was persisted: the company's stream carries no
+     * CompanyOwnershipTransferred event, the owner column still names
+     * $ownerUserId, and nobody else holds an owner-role pivot.
+     */
+    protected function assertNoOwnershipMoved(OwnershipTransferCase $case, string $ownerUserId): void
+    {
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $case->company_id)
+            ->where('event_class', CompanyOwnershipTransferred::class)
+            ->count());
+
+        $this->assertSame($ownerUserId, Company::query()->whereKey($case->company_id)->sole()->owner_id);
+
+        $this->assertSame(0, CompanyUser::query()
+            ->where('company_id', $case->company_id)
+            ->where('role_id', $this->seededRole('owner')->getKey())
+            ->where('user_id', '!=', $ownerUserId)
+            ->withTrashed()
+            ->count());
+    }
+
+    /**
      * Nothing was rejected — the case row is exactly as arranged with its
      * rejection columns still empty, no domain event was recorded, no audit
      * row exists, the company's owner column still names $ownerUserId, and
@@ -246,20 +343,8 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNull($fresh->rejection_reason);
         $this->assertNull($fresh->rejection_reason_code);
 
-        $this->assertSame(0, LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $case->company_id)
-            ->where('event_class', CompanyOwnershipTransferred::class)
-            ->count());
-
         $this->assertNoAuditRecorded();
 
-        $this->assertSame($ownerUserId, Company::query()->whereKey($case->company_id)->sole()->owner_id);
-
-        $this->assertSame(0, CompanyUser::query()
-            ->where('company_id', $case->company_id)
-            ->where('role_id', $this->seededRole('owner')->getKey())
-            ->where('user_id', '!=', $ownerUserId)
-            ->withTrashed()
-            ->count());
+        $this->assertNoOwnershipMoved($case, $ownerUserId);
     }
 }

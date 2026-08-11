@@ -33,6 +33,8 @@ class RejectOwnershipTransferCaseInteractor
             $case->update([
                 'status' => OwnershipTransferCaseStatus::Closed,
                 'closed_outcome' => OwnershipTransferCaseOutcome::Rejected,
+                'rejection_reason' => $command->reason,
+                'rejection_reason_code' => $command->reasonCode,
             ]);
 
             $this->recordCaseRejected($case, $admin, $context);
