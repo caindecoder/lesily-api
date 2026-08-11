@@ -9,10 +9,12 @@ use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
 use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminResource;
+use App\Companies\UseCases\Commands\RejectOwnershipTransferCaseCommand;
 use App\Companies\UseCases\Commands\VerifyOwnershipTransferCaseCommand;
 use App\Companies\UseCases\Commands\ExecuteOwnershipTransferCaseCommand;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminCollection;
 use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
+use App\Companies\UseCases\Interactors\RejectOwnershipTransferCaseInteractor;
 use App\Companies\UseCases\Interactors\VerifyOwnershipTransferCaseInteractor;
 use App\Companies\UseCases\Interactors\ExecuteOwnershipTransferCaseInteractor;
 use App\Companies\UseCases\Interactors\ReviewOwnershipTransferCaseQueueInteractor;
@@ -86,9 +88,21 @@ class PlatformAdminOwnershipTransferCasesController
         ));
     }
 
-    public function reject(string $caseId, Request $request): OwnershipTransferCaseAdminResource
+    public function reject(string $caseId, Request $request, RejectOwnershipTransferCaseInteractor $interactor): OwnershipTransferCaseAdminResource
     {
-        throw new \RuntimeException('Not implemented');
+        /** @var User $admin */
+        $admin = $request->user();
+
+        $command = RejectOwnershipTransferCaseCommand::validateAndCreate([
+            ...$request->all(),
+            'caseId' => $caseId,
+        ]);
+
+        return new OwnershipTransferCaseAdminResource($interactor->execute(
+            $command,
+            $admin,
+            AdminRequestContext::fromRequest($request),
+        ));
     }
 
     public function store(Request $request, OpenOwnershipTransferCaseInteractor $interactor): JsonResponse

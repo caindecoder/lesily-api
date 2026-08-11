@@ -47,6 +47,18 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNothingRejected($case, $owner->getKey());
     }
 
+    #[Test]
+    public function when_the_case_id_is_unknown_then_nothing_is_found_and_no_rejection_is_recorded(): void
+    {
+        // Given an allowlisted admin and no case at all
+        // When they reject an unknown case id
+        $response = $this->rejectCase($this->admin, (string) Str::uuid7());
+
+        // Then nothing is found and nothing is audited (find-before-audit)
+        $this->assertResourceNotFoundNoLeak($response);
+        $this->assertNoAuditRecorded();
+    }
+
     /**
      * Call the REAL admin reject endpoint (UC-1-128) as $actor, or as a guest
      * when null. The default payload is a valid rejection; rows override or
