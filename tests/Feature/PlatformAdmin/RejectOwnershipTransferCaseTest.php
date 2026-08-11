@@ -3,6 +3,7 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Support\Facades\DB;
@@ -12,6 +13,7 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Companies\Events\CompanyOwnershipTransferred;
@@ -136,6 +138,24 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the close decision is made against the locked case row
         $this->assertCloseDecidedUnderCaseRowLock($capture);
+    }
+
+    #[Test]
+    public function when_the_audit_write_fails_then_the_whole_rejection_rolls_back(): void
+    {
+        // Given an open case and an audit write that will fail AFTER its row
+        // is inserted (the post-insert oracle)
+        $company = Company::factory()->create();
+        $case = $this->anOpenCaseFor($company);
+        AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the admin rejects the case
+        $response = $this->rejectCase($this->admin, $case->getKey());
+
+        // Then the ONE transaction takes back the close, the reason stamp and
+        // the already-inserted audit row together
+        $this->assertReadFailedSafely($response);
+        $this->assertNothingRejected($case, $company->owner_id);
     }
 
     /**
