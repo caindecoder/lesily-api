@@ -213,7 +213,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the ONE transaction takes back the swap, the event, the close
         // and the already-inserted audit row together
-        $this->assertReadFailedSafely($response);
+        $this->assertFailedClosed($response);
         $this->assertNothingExecuted($case, $company->owner_id);
     }
 

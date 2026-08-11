@@ -68,7 +68,7 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
 
         // Then the read fails closed — no case data, and the inserted
         // evidence row was rolled back with the read
-        $this->assertReadFailedSafely($response);
+        $this->assertFailedClosed($response);
         $this->assertNoAuditRecorded();
     }
 

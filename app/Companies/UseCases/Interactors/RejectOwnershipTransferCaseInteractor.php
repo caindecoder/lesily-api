@@ -26,8 +26,9 @@ class RejectOwnershipTransferCaseInteractor
                 ->lockForUpdate()
                 ->findOrFail($command->caseId);
 
-            if ($case->status === OwnershipTransferCaseStatus::Closed) {
-                throw new OwnershipTransferCaseAlreadyClosedException;
+            $rejectableStates = [OwnershipTransferCaseStatus::Open, OwnershipTransferCaseStatus::Verified];
+            if (! in_array($case->status, $rejectableStates, true)) {
+                throw new OwnershipTransferCaseAlreadyClosedException($case->status);
             }
 
             $case->update([

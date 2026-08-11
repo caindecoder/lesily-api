@@ -9,6 +9,7 @@ use Laravel\Sanctum\Sanctum;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Event;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use App\Companies\Enums\RejectionReasonCode;
@@ -16,8 +17,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Database\Events\TransactionBeginning;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
-use App\Companies\Events\CompanyOwnershipTransferred;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
@@ -107,11 +108,13 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // When the admin attempts to reject it
         $response = $this->rejectCase($this->admin, $case->getKey());
 
-        // Then the refusal names the closed state and the case is unchanged
+        // Then the refusal names the closed state and nothing was written
         $response->assertStatus(409);
         $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
         $response->assertJsonPath('message', 'Only an open or verified ownership-transfer case can be rejected; this case is closed.');
         $this->assertCaseUnchanged($case);
+        $this->assertNoAuditRecorded();
+        $this->assertNoOwnershipMoved($case, $company->owner_id);
     }
 
     /**
@@ -123,22 +126,6 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             'closed executed' => [OwnershipTransferCaseOutcome::Executed],
             'closed rejected' => [OwnershipTransferCaseOutcome::Rejected],
         ];
-    }
-
-    #[Test]
-    public function when_a_case_is_rejected_then_the_close_decides_under_the_case_row_lock(): void
-    {
-        // Given an open case
-        $company = Company::factory()->create();
-        $case = $this->anOpenCaseFor($company);
-
-        // When the rejection runs with every statement's depth recorded
-        $capture = $this->recordedQueriesDuring(function () use ($case): void {
-            $this->rejectCase($this->admin, $case->getKey())->assertOk();
-        });
-
-        // Then the close decision is made against the locked case row
-        $this->assertCloseDecidedUnderCaseRowLock($capture);
     }
 
     #[Test]
@@ -155,8 +142,78 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the ONE transaction takes back the close, the reason stamp and
         // the already-inserted audit row together
-        $this->assertReadFailedSafely($response);
+        $this->assertFailedClosed($response);
         $this->assertNothingRejected($case, $company->owner_id);
+    }
+
+    #[Test]
+    public function when_the_reason_is_exactly_at_the_limit_then_the_rejection_succeeds(): void
+    {
+        // Given an open case and a reason at exactly the 1000-character bound
+        $company = Company::factory()->create();
+        $case = $this->anOpenCaseFor($company);
+        $reason = str_repeat('a', 1000);
+
+        // When the admin rejects with the at-limit reason
+        $response = $this->rejectCase($this->admin, $case->getKey(), [
+            'reason' => $reason,
+            'reasonCode' => 'other',
+        ]);
+
+        // Then the rejection succeeds and the reason is stored verbatim
+        $response->assertOk();
+        $this->assertCaseClosedRejected($case, $reason, RejectionReasonCode::Other);
+    }
+
+    #[Test]
+    #[DataProvider('acceptedReasonCodeProvider')]
+    public function when_any_accepted_reason_code_is_cited_then_the_rejection_records_it(RejectionReasonCode $code): void
+    {
+        // Given an open case
+        $company = Company::factory()->create();
+        $case = $this->anOpenCaseFor($company);
+
+        // When the admin rejects citing this row's code
+        $response = $this->rejectCase($this->admin, $case->getKey(), [
+            'reason' => 'Recorded under the cited reason code',
+            'reasonCode' => $code->value,
+        ]);
+
+        // Then the rejection succeeds with the code recorded
+        $response->assertOk();
+        $this->assertCaseClosedRejected($case, 'Recorded under the cited reason code', $code);
+    }
+
+    /**
+     * Every accepted reason code, derived from the enum itself — a future
+     * case joins the matrix without this provider changing.
+     *
+     * @return array<string, array{RejectionReasonCode}>
+     */
+    public static function acceptedReasonCodeProvider(): array
+    {
+        $rows = [];
+        foreach (RejectionReasonCode::cases() as $code) {
+            $rows[$code->value] = [$code];
+        }
+
+        return $rows;
+    }
+
+    #[Test]
+    public function when_a_case_is_rejected_then_the_close_decides_under_the_case_row_lock(): void
+    {
+        // Given an open case
+        $company = Company::factory()->create();
+        $case = $this->anOpenCaseFor($company);
+
+        // When the rejection runs with every statement's depth recorded
+        $capture = $this->recordedQueriesDuring(function () use ($case): void {
+            $this->rejectCase($this->admin, $case->getKey())->assertOk();
+        });
+
+        // Then the close decision is made against the locked case row
+        $this->assertCloseDecidedUnderCaseRowLock($capture);
     }
 
     #[Test]
@@ -185,8 +242,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     #[Test]
     public function when_an_open_case_is_rejected_then_it_closes_with_the_reason_on_the_record(): void
     {
-        // Given a frozen clock and Contoso's open case, Owner Olive on the seat
-        $this->freezeTime();
+        // Given Contoso's open case, Owner Olive holding her owner pivot
         $company = Company::factory()->create();
         $olive = User::query()->findOrFail($company->owner_id);
         $company->users()->attach($olive->getKey(), ['role_id' => $this->seededRole('owner')->getKey()]);
@@ -197,10 +253,15 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the case closes rejected with the reason verbatim on the
         // record, exactly one audit row names the admin, no domain event
-        // exists, Olive keeps ownership, and the wire carries the code
+        // exists, Olive keeps her seat AND her pivot, and the wire carries the code
         $this->assertCaseClosedRejected($case, 'Requester could not evidence the claimed relationship', RejectionReasonCode::IdentityFailed);
         $this->assertRejectionAudited($case, $response);
         $this->assertNoOwnershipMoved($case, $olive->getKey());
+        $olivePivot = CompanyUser::query()
+            ->where('company_id', $case->company_id)
+            ->where('user_id', $olive->getKey())
+            ->sole();
+        $this->assertSame($this->seededRole('owner')->getKey(), $olivePivot->role_id);
         $this->assertRejectedCaseOnTheWire($response, $case);
     }
 
@@ -224,16 +285,18 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
     /**
      * Record every SQL statement run during $act with the transaction depth
-     * it ran at (DB::listen + per-statement DB::transactionLevel() — the T2
-     * oracle idiom: SQL text alone cannot see transaction boundaries, and
-     * RefreshDatabase's ambient wrapper supplies the depth baseline).
+     * it ran at, plus how many transactions BEGAN during the act (DB::listen
+     * + per-statement DB::transactionLevel() — the T2 oracle idiom: SQL text
+     * alone cannot see transaction boundaries, and RefreshDatabase's ambient
+     * wrapper supplies the depth baseline).
      *
-     * @return array{ambient: int, queries: list<array{sql: string, depth: int}>}
+     * @return array{ambient: int, queries: list<array{sql: string, depth: int}>, transactions: int}
      */
     protected function recordedQueriesDuring(callable $act): array
     {
         $ambient = DB::transactionLevel();
         $queries = [];
+        $transactionsBegun = 0;
 
         DB::listen(function ($query) use (&$queries): void {
             $queries[] = [
@@ -241,17 +304,22 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
                 'depth' => DB::transactionLevel(),
             ];
         });
+        Event::listen(TransactionBeginning::class, function () use (&$transactionsBegun): void {
+            $transactionsBegun++;
+        });
 
         $act();
 
-        return ['ambient' => $ambient, 'queries' => $queries];
+        return ['ambient' => $ambient, 'queries' => $queries, 'transactions' => $transactionsBegun];
     }
 
     /**
-     * The close decision was made under the case-row lock: a select … for
-     * update on ownership_transfer_cases at depth above ambient, with the
-     * closing update after that locked read — reject is the case row's
-     * second writer beside execute, and the lock is the race's arbiter.
+     * The close decision was made under the case-row lock, inside ONE
+     * transaction: the FIRST read of ownership_transfer_cases is the locked
+     * one (no unlocked pre-read may feed the guard), it runs at depth above
+     * ambient, the closing update follows it at depth above ambient, and
+     * exactly one transaction spans the whole act — a lock released before
+     * the write, or a stale unlocked snapshot, fails here.
      */
     protected function assertCloseDecidedUnderCaseRowLock(array $capture): void
     {
@@ -259,14 +327,17 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $updateIndex = null;
 
         foreach ($capture['queries'] as $index => $query) {
-            if ($lockIndex === null
-                && str_contains($query['sql'], 'from `ownership_transfer_cases`')
-                && str_contains($query['sql'], 'for update')) {
+            $readsCases = str_starts_with($query['sql'], 'select')
+                && str_contains($query['sql'], 'from `ownership_transfer_cases`');
+
+            if ($lockIndex === null && $readsCases) {
+                $this->assertStringContainsString('for update', $query['sql'], 'The FIRST read of ownership_transfer_cases must be the locked one.');
                 $this->assertGreaterThan($capture['ambient'], $query['depth']);
                 $lockIndex = $index;
             }
 
             if ($updateIndex === null && str_starts_with($query['sql'], 'update `ownership_transfer_cases`')) {
+                $this->assertGreaterThan($capture['ambient'], $query['depth']);
                 $updateIndex = $index;
             }
         }
@@ -274,6 +345,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNotNull($lockIndex, 'No locked read of ownership_transfer_cases was recorded.');
         $this->assertNotNull($updateIndex, 'No closing update of ownership_transfer_cases was recorded.');
         $this->assertGreaterThan($lockIndex, $updateIndex);
+        $this->assertSame(1, $capture['transactions'], 'Expected exactly ONE transaction to span the whole rejection.');
     }
 
     /**
@@ -355,16 +427,15 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     /**
-     * No ownership change was persisted: the company's stream carries no
-     * CompanyOwnershipTransferred event, the owner column still names
-     * $ownerUserId, and nobody else holds an owner-role pivot.
+     * No ownership change was persisted: NO domain event of ANY class exists
+     * on ANY stream (the plain-write invariant — fixtures never record
+     * events, so zero is exact), the owner column still names $ownerUserId,
+     * nobody else holds an owner-role pivot, and no membership pivot of the
+     * company was soft-deleted by the rejection.
      */
     protected function assertNoOwnershipMoved(OwnershipTransferCase $case, string $ownerUserId): void
     {
-        $this->assertSame(0, LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $case->company_id)
-            ->where('event_class', CompanyOwnershipTransferred::class)
-            ->count());
+        $this->assertSame(0, LesilyStoredEvent::query()->count());
 
         $this->assertSame($ownerUserId, Company::query()->whereKey($case->company_id)->sole()->owner_id);
 
@@ -373,6 +444,11 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             ->where('role_id', $this->seededRole('owner')->getKey())
             ->where('user_id', '!=', $ownerUserId)
             ->withTrashed()
+            ->count());
+
+        $this->assertSame(0, CompanyUser::query()
+            ->where('company_id', $case->company_id)
+            ->onlyTrashed()
             ->count());
     }
 

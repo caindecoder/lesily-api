@@ -146,10 +146,11 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
     }
 
     /**
-     * The read failed closed (no read without evidence, slice-11R spec §4):
-     * a 500 INTERNAL_ERROR envelope carrying no case data at all.
+     * The action failed closed (slice-11R spec §4): a 500 INTERNAL_ERROR
+     * envelope carrying no case data at all — for reads, no read without
+     * evidence; for writes, the in-transaction audit veto.
      */
-    protected function assertReadFailedSafely(TestResponse $response): void
+    protected function assertFailedClosed(TestResponse $response): void
     {
         $response->assertStatus(500);
         $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
