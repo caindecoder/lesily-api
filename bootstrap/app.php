@@ -54,6 +54,7 @@ use App\Companies\Memberships\Exceptions\OwnerTransferRequiredException;
 use App\Companies\Memberships\Exceptions\SelfRoleChangeBlockedException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
+use App\Companies\Exceptions\OwnershipTransferCaseAlreadyClosedException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -232,6 +233,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // Only a verified ownership-transfer case may be executed — open or
         // already closed refuses with the state named (UC-1-093 flow 3a → 409).
         $exceptions->render(fn (OwnershipTransferCaseNotVerifiedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // A rejection may close an open OR a verified case — one already
+        // closed refuses with the state named (UC-1-128 flow 4a → 409).
+        $exceptions->render(fn (OwnershipTransferCaseAlreadyClosedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));

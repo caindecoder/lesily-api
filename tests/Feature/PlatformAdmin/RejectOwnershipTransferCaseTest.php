@@ -12,6 +12,7 @@ use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Companies\Events\CompanyOwnershipTransferred;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -88,6 +89,35 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             'overlong reason' => [['reason' => str_repeat('a', 1001), 'reasonCode' => 'identity_failed'], 'reason'],
             'missing reason code' => [['reason' => 'Requester could not evidence the claimed relationship'], 'reasonCode'],
             'unknown reason code' => [['reason' => 'Requester could not evidence the claimed relationship', 'reasonCode' => 'because'], 'reasonCode'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('closedCaseProvider')]
+    public function when_the_case_is_already_closed_then_the_rejection_is_refused_with_the_current_state_named(OwnershipTransferCaseOutcome $outcome): void
+    {
+        // Given a case already closed, whichever way it ended
+        $company = Company::factory()->create();
+        $case = $this->aClosedCaseFor($company, $outcome);
+
+        // When the admin attempts to reject it
+        $response = $this->rejectCase($this->admin, $case->getKey());
+
+        // Then the refusal names the closed state and the case is unchanged
+        $response->assertStatus(409);
+        $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
+        $response->assertJsonPath('message', 'Only an open or verified ownership-transfer case can be rejected; this case is closed.');
+        $this->assertCaseUnchanged($case);
+    }
+
+    /**
+     * @return array<string, array{OwnershipTransferCaseOutcome}>
+     */
+    public static function closedCaseProvider(): array
+    {
+        return [
+            'closed executed' => [OwnershipTransferCaseOutcome::Executed],
+            'closed rejected' => [OwnershipTransferCaseOutcome::Rejected],
         ];
     }
 
