@@ -481,6 +481,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             'company_id' => $fresh->company_id,
             'status' => 'closed',
             'closed_outcome' => 'executed',
+            'rejection_reason_code' => null,
             'new_owner_user_id' => $fresh->new_owner_user_id,
             'requested_context' => $fresh->requested_context,
             'verified_at' => $fresh->verified_at?->toISOString(),

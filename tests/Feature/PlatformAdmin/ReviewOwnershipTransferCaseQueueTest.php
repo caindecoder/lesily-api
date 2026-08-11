@@ -272,6 +272,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
                     'company_id' => $company->getKey(),
                     'status' => 'closed',
                     'closed_outcome' => 'executed',
+                    'rejection_reason_code' => null,
                     'new_owner_user_id' => $case->new_owner_user_id,
                     'requested_context' => $case->requested_context,
                     'verified_at' => $case->verified_at?->toISOString(),

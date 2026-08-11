@@ -182,6 +182,28 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNoOwnershipMoved($case, $company->owner_id);
     }
 
+    #[Test]
+    public function when_an_open_case_is_rejected_then_it_closes_with_the_reason_on_the_record(): void
+    {
+        // Given a frozen clock and Contoso's open case, Owner Olive on the seat
+        $this->freezeTime();
+        $company = Company::factory()->create();
+        $olive = User::query()->findOrFail($company->owner_id);
+        $company->users()->attach($olive->getKey(), ['role_id' => $this->seededRole('owner')->getKey()]);
+        $case = $this->anOpenCaseFor($company);
+
+        // When the admin rejects it for failed identity evidence
+        $response = $this->rejectCase($this->admin, $case->getKey());
+
+        // Then the case closes rejected with the reason verbatim on the
+        // record, exactly one audit row names the admin, no domain event
+        // exists, Olive keeps ownership, and the wire carries the code
+        $this->assertCaseClosedRejected($case, 'Requester could not evidence the claimed relationship', RejectionReasonCode::IdentityFailed);
+        $this->assertRejectionAudited($case, $response);
+        $this->assertNoOwnershipMoved($case, $olive->getKey());
+        $this->assertRejectedCaseOnTheWire($response, $case);
+    }
+
     /**
      * Call the REAL admin reject endpoint (UC-1-128) as $actor, or as a guest
      * when null. The default payload is a valid rejection; rows override or
@@ -303,6 +325,33 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $entry = AuditEntry::query()->sole();
         $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
         $this->assertNotNull($entry->user_agent);
+    }
+
+    /**
+     * The rejected case on the wire — 200 with the FULL admin contract locked
+     * byte-for-byte (12 keys as of T8: + rejection_reason_code; the prose
+     * rejection_reason stays OFF the wire, notes/artefacts/event-id parity).
+     */
+    protected function assertRejectedCaseOnTheWire(TestResponse $response, OwnershipTransferCase $case): void
+    {
+        $fresh = $case->fresh();
+        $this->assertInstanceOf(OwnershipTransferCase::class, $fresh);
+
+        $response->assertOk();
+        $response->assertExactJson(['data' => [
+            'id' => $fresh->getKey(),
+            'company_id' => $fresh->company_id,
+            'status' => 'closed',
+            'closed_outcome' => 'rejected',
+            'rejection_reason_code' => 'identity_failed',
+            'new_owner_user_id' => $fresh->new_owner_user_id,
+            'requested_context' => $fresh->requested_context,
+            'verified_at' => null,
+            'verified_by' => null,
+            'executed_at' => null,
+            'executed_by' => null,
+            'created_at' => $fresh->created_at->toISOString(),
+        ]]);
     }
 
     /**

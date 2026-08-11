@@ -224,6 +224,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             'company_id' => $case->company_id,
             'status' => 'open',
             'closed_outcome' => null,
+            'rejection_reason_code' => null,
             'requested_context' => $case->requested_context,
             'new_owner_user_id' => $case->new_owner_user_id,
             'verified_at' => null,
