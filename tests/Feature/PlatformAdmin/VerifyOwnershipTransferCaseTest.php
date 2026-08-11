@@ -227,7 +227,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         );
 
         // Then the whole verification rolls back — no event, no stamp, no evidence
-        $this->assertReadFailedSafely($response);
+        $this->assertFailedClosed($response);
         $this->assertNothingVerified($case);
     }
 

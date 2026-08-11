@@ -331,3 +331,12 @@ Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/verify', [PlatformAdmi
 // (the ONE ownership-transfer route where a duplicate causes real-world harm).
 Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/execute', [PlatformAdminOwnershipTransferCasesController::class, 'execute'])
     ->middleware(['auth:sanctum', 'platform.admin', 'idempotency-key:required']);
+
+// A platform admin rejects an open OR verified case (UC-1-128, slice-11R
+// T8) — plain write: close rejected with the reason on the record + ONE
+// in-transaction audit row (an audit failure vetoes the close; NO domain
+// event — nothing about the company changed). Same seam as its siblings;
+// no idempotency mount (§13.2 names execute only — the closed-state guard
+// is the dedup).
+Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/reject', [PlatformAdminOwnershipTransferCasesController::class, 'reject'])
+    ->middleware(['auth:sanctum', 'platform.admin']);

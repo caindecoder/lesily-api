@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
+use App\Companies\Enums\RejectionReasonCode;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
 use Database\Factories\OwnershipTransferCaseFactory;
@@ -29,7 +30,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property ?string $verification_notes
  * @property ?array<int, array<string, string>> $verification_artefacts
  * @property ?string $rejection_reason
- * @property ?string $rejection_reason_code
+ * @property ?RejectionReasonCode $rejection_reason_code
  * @property ?CarbonImmutable $executed_at
  * @property ?string $executed_by
  * @property ?int $verification_event_id
@@ -64,6 +65,7 @@ class OwnershipTransferCase extends Model
     protected $casts = [
         'status' => OwnershipTransferCaseStatus::class,
         'closed_outcome' => OwnershipTransferCaseOutcome::class,
+        'rejection_reason_code' => RejectionReasonCode::class,
         'verification_artefacts' => 'array',
         'verified_at' => 'immutable_datetime',
         'executed_at' => 'immutable_datetime',

@@ -68,7 +68,7 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
 
         // Then the read fails closed — no case data, and the inserted
         // evidence row was rolled back with the read
-        $this->assertReadFailedSafely($response);
+        $this->assertFailedClosed($response);
         $this->assertNoAuditRecorded();
     }
 
@@ -92,6 +92,7 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
             'company_id' => $company->getKey(),
             'status' => 'verified',
             'closed_outcome' => null,
+            'rejection_reason_code' => null,
             'new_owner_user_id' => $alex->getKey(),
             'requested_context' => $case->requested_context,
             'verified_at' => $case->verified_at?->toISOString(),
