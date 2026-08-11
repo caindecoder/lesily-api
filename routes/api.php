@@ -333,4 +333,4 @@ Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/execute', [PlatformAdm
     ->middleware(['auth:sanctum', 'platform.admin', 'idempotency-key:required']);
 
 Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/reject', [PlatformAdminOwnershipTransferCasesController::class, 'reject'])
-    ->middleware(['auth:sanctum']);
+    ->middleware(['auth:sanctum', 'platform.admin']);
