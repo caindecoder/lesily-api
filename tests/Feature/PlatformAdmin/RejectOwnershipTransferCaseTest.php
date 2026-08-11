@@ -5,6 +5,7 @@ namespace Tests\Feature\PlatformAdmin;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -121,6 +122,22 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         ];
     }
 
+    #[Test]
+    public function when_a_case_is_rejected_then_the_close_decides_under_the_case_row_lock(): void
+    {
+        // Given an open case
+        $company = Company::factory()->create();
+        $case = $this->anOpenCaseFor($company);
+
+        // When the rejection runs with every statement's depth recorded
+        $capture = $this->recordedQueriesDuring(function () use ($case): void {
+            $this->rejectCase($this->admin, $case->getKey())->assertOk();
+        });
+
+        // Then the close decision is made against the locked case row
+        $this->assertCloseDecidedUnderCaseRowLock($capture);
+    }
+
     /**
      * Call the REAL admin reject endpoint (UC-1-128) as $actor, or as a guest
      * when null. The default payload is a valid rejection; rows override or
@@ -137,6 +154,60 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         }
 
         return $this->patchJson("/api/v1/admin/ownership-transfer-cases/{$caseId}/reject", $payload);
+    }
+
+    /**
+     * Record every SQL statement run during $act with the transaction depth
+     * it ran at (DB::listen + per-statement DB::transactionLevel() — the T2
+     * oracle idiom: SQL text alone cannot see transaction boundaries, and
+     * RefreshDatabase's ambient wrapper supplies the depth baseline).
+     *
+     * @return array{ambient: int, queries: list<array{sql: string, depth: int}>}
+     */
+    protected function recordedQueriesDuring(callable $act): array
+    {
+        $ambient = DB::transactionLevel();
+        $queries = [];
+
+        DB::listen(function ($query) use (&$queries): void {
+            $queries[] = [
+                'sql' => strtolower($query->sql),
+                'depth' => DB::transactionLevel(),
+            ];
+        });
+
+        $act();
+
+        return ['ambient' => $ambient, 'queries' => $queries];
+    }
+
+    /**
+     * The close decision was made under the case-row lock: a select … for
+     * update on ownership_transfer_cases at depth above ambient, with the
+     * closing update after that locked read — reject is the case row's
+     * second writer beside execute, and the lock is the race's arbiter.
+     */
+    protected function assertCloseDecidedUnderCaseRowLock(array $capture): void
+    {
+        $lockIndex = null;
+        $updateIndex = null;
+
+        foreach ($capture['queries'] as $index => $query) {
+            if ($lockIndex === null
+                && str_contains($query['sql'], 'from `ownership_transfer_cases`')
+                && str_contains($query['sql'], 'for update')) {
+                $this->assertGreaterThan($capture['ambient'], $query['depth']);
+                $lockIndex = $index;
+            }
+
+            if ($updateIndex === null && str_starts_with($query['sql'], 'update `ownership_transfer_cases`')) {
+                $updateIndex = $index;
+            }
+        }
+
+        $this->assertNotNull($lockIndex, 'No locked read of ownership_transfer_cases was recorded.');
+        $this->assertNotNull($updateIndex, 'No closing update of ownership_transfer_cases was recorded.');
+        $this->assertGreaterThan($lockIndex, $updateIndex);
     }
 
     /**

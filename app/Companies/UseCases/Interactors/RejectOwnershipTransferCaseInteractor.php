@@ -3,9 +3,11 @@
 namespace App\Companies\UseCases\Interactors;
 
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
+use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Companies\UseCases\Commands\RejectOwnershipTransferCaseCommand;
 use App\Companies\Exceptions\OwnershipTransferCaseAlreadyClosedException;
 
@@ -18,12 +20,21 @@ class RejectOwnershipTransferCaseInteractor
 {
     public function execute(RejectOwnershipTransferCaseCommand $command, User $admin, AdminRequestContext $context): OwnershipTransferCase
     {
-        $case = OwnershipTransferCase::query()->findOrFail($command->caseId);
+        return DB::transaction(function () use ($command): OwnershipTransferCase {
+            $case = OwnershipTransferCase::query()
+                ->lockForUpdate()
+                ->findOrFail($command->caseId);
 
-        if ($case->status === OwnershipTransferCaseStatus::Closed) {
-            throw new OwnershipTransferCaseAlreadyClosedException;
-        }
+            if ($case->status === OwnershipTransferCaseStatus::Closed) {
+                throw new OwnershipTransferCaseAlreadyClosedException;
+            }
 
-        return $case;
+            $case->update([
+                'status' => OwnershipTransferCaseStatus::Closed,
+                'closed_outcome' => OwnershipTransferCaseOutcome::Rejected,
+            ]);
+
+            return $case;
+        });
     }
 }
