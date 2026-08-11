@@ -9,6 +9,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Events\CompanyOwnershipTransferred;
@@ -57,6 +58,37 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Then nothing is found and nothing is audited (find-before-audit)
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertNoAuditRecorded();
+    }
+
+    #[Test]
+    #[DataProvider('invalidRejectionProvider')]
+    public function when_the_rejection_reason_or_code_is_invalid_then_the_rejection_is_refused(array $payload, string $field): void
+    {
+        // Given an open case an allowlisted admin could otherwise reject
+        $company = Company::factory()->create();
+        $case = $this->anOpenCaseFor($company);
+
+        // When the admin submits the invalid rejection
+        $response = $this->rejectCase($this->admin, $case->getKey(), $payload);
+
+        // Then the rejection is refused on the offending field and nothing was written
+        $this->assertValidationFailed($response, $field);
+        $this->assertNothingRejected($case, $company->owner_id);
+    }
+
+    /**
+     * @return array<string, array{array<string, string>, string}>
+     */
+    public static function invalidRejectionProvider(): array
+    {
+        return [
+            'missing reason' => [['reasonCode' => 'identity_failed'], 'reason'],
+            'empty reason' => [['reason' => '', 'reasonCode' => 'identity_failed'], 'reason'],
+            'whitespace-only reason' => [['reason' => '   ', 'reasonCode' => 'identity_failed'], 'reason'],
+            'overlong reason' => [['reason' => str_repeat('a', 1001), 'reasonCode' => 'identity_failed'], 'reason'],
+            'missing reason code' => [['reason' => 'Requester could not evidence the claimed relationship'], 'reasonCode'],
+            'unknown reason code' => [['reason' => 'Requester could not evidence the claimed relationship', 'reasonCode' => 'because'], 'reasonCode'],
+        ];
     }
 
     /**

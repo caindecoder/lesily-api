@@ -3,6 +3,8 @@
 namespace App\Companies\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
+use Illuminate\Validation\Rule;
+use App\Companies\Enums\RejectionReasonCode;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -15,13 +17,19 @@ class RejectOwnershipTransferCaseCommand extends Data
 {
     public string $caseId;
 
+    public string $reason;
+
+    public RejectionReasonCode $reasonCode;
+
     /**
-     * @return array<string, array<int, string>>
+     * @return array<string, array<int, mixed>>
      */
     public static function rules(ValidationContext $context): array
     {
         return [
             'caseId' => ['required', 'uuid'],
+            'reason' => ['required', 'string', 'max:1000'],
+            'reasonCode' => ['required', Rule::enum(RejectionReasonCode::class)],
         ];
     }
 }
