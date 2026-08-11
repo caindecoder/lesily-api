@@ -331,3 +331,6 @@ Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/verify', [PlatformAdmi
 // (the ONE ownership-transfer route where a duplicate causes real-world harm).
 Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/execute', [PlatformAdminOwnershipTransferCasesController::class, 'execute'])
     ->middleware(['auth:sanctum', 'platform.admin', 'idempotency-key:required']);
+
+Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/reject', [PlatformAdminOwnershipTransferCasesController::class, 'reject'])
+    ->middleware(['auth:sanctum']);
