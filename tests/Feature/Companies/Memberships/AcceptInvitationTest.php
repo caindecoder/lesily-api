@@ -305,6 +305,27 @@ class AcceptInvitationTest extends MembershipsTestCase
             ->assertSuccessful();
     }
 
+    #[Test]
+    public function when_contention_strikes_after_the_accept_committed_then_it_is_not_disguised_as_retryable(): void
+    {
+        // Given — a new user's invitation, with contention striking the
+        // POST-COMMIT write: the account and membership are already durable,
+        // so a "please retry" would send the invitee to a consumed link
+        [$company, $actor] = $this->aCompanyWithMember();
+        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        User::updated(fn () => throw $this->syntheticQueryException(
+            ['sqlstate' => 'HY000', 'code' => 1205, 'message' => 'SQLSTATE[HY000]: General error: 1205'],
+        ));
+
+        // When — the invitee accepts with valid registration details
+        $response = $this->acceptInvitation($token, $this->validNewUserBody());
+
+        // Then — a plain failure, never the 409 retry hint; the membership
+        // itself is already durable
+        $this->assertRefusedWith($response, ApiErrorCode::InternalError);
+        $this->assertMembershipActivated($company, 'kasun@newjoiner.lk');
+    }
+
     /**
      * @param  array{sqlstate: string, code: int, message: string}  $failure
      */

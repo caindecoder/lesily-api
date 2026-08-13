@@ -55,14 +55,30 @@ class AcceptInvitationInteractor
             throw new AuthenticationException;
         }
 
+        if (! $invitee instanceof User) {
+            $this->ensureRegistrationDetails($command);
+
+            return $this->provisionAndJoin($invitation, $command, $deviceName);
+        }
+
+        return new ExistingUserJoined($this->join($invitation, $invitee));
+    }
+
+    /**
+     * Classify lock contention from THIS accept's transaction only — the
+     * post-commit tail (read-model reads, last_logged_at, session mint) is
+     * deliberately non-atomic and must never answer "retry": the membership
+     * is already durable, so a retry would find the link consumed.
+     *
+     * @template TReturn
+     *
+     * @param  callable(): TReturn  $transaction
+     * @return TReturn
+     */
+    protected function classifyingContention(callable $transaction): mixed
+    {
         try {
-            if (! $invitee instanceof User) {
-                $this->ensureRegistrationDetails($command);
-
-                return $this->provisionAndJoin($invitation, $command, $deviceName);
-            }
-
-            return new ExistingUserJoined($this->join($invitation, $invitee));
+            return $transaction();
         } catch (DeadlockException $exception) {
             throw new InvitationAcceptContentionException($exception);
         } catch (QueryException $exception) {
@@ -85,7 +101,7 @@ class AcceptInvitationInteractor
         // rounds, and the invitation row lock must not be held through it.
         $passwordHash = Hash::make((string) $command->password);
 
-        DB::transaction(function () use ($invitation, $command, $userId, $passwordHash): void {
+        $this->classifyingContention(fn () => DB::transaction(function () use ($invitation, $command, $userId, $passwordHash): void {
             $live = $this->lockedLivePendingInvitation($invitation);
 
             UserAggregate::retrieve($userId)
@@ -100,7 +116,7 @@ class AcceptInvitationInteractor
             UserMembership::retrieve($live->getKey())
                 ->acceptInvitation($userId, $live->role_id)
                 ->persist();
-        });
+        }));
 
         $user = User::query()->findOrFail($userId);
         $user->last_logged_at = now();
@@ -121,14 +137,14 @@ class AcceptInvitationInteractor
      */
     protected function join(Invitation $invitation, User $joiner): CompanyUser
     {
-        DB::transaction(function () use ($invitation, $joiner): void {
+        $this->classifyingContention(fn () => DB::transaction(function () use ($invitation, $joiner): void {
             $live = $this->lockedLivePendingInvitation($invitation);
             $this->guardAgainstResurrectingARemovedMember($live, $joiner);
 
             UserMembership::retrieve($live->getKey())
                 ->acceptInvitation($joiner->getKey(), $live->role_id)
                 ->persist();
-        });
+        }));
 
         // The live pivot for (company, joiner) — normally the invitation's own
         // UUID (D5b); on an idempotent alt-4a accept, the earlier membership
