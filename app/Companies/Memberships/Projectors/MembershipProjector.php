@@ -21,9 +21,10 @@ use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
  * the invitations expired_at marker) and
  * the User identity stream's membership attributes (emergency contact → the
  * company_user pivot, slice C1). The owner pivot itself is written by
- * CompanyProjector::onCompanyCreated — the FK chain (users → companies →
- * company_user) means the pivot can only land once the company row exists;
- * by the time the EC event persists, the pivot row is in place.
+ * CompanyProjector (onCompanyCreated; onCompanyOwnershipTransferred since
+ * slice-11R) — the FK chain (users → companies → company_user) means the
+ * pivot can only land once the company row exists; by the time the EC event
+ * persists, the pivot row is in place.
  */
 class MembershipProjector extends Projector
 {
