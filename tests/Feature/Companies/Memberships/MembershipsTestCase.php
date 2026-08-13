@@ -248,7 +248,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      *
      * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}  $capture
      */
-    protected function assertAcceptDecidedUnderInvitationLock(array $capture): void
+    protected function assertAcceptDecidedUnderInvitationLock(array $capture, string $invitationId): void
     {
         $lockIndex = null;
         $writeIndex = null;
@@ -259,6 +259,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
             if ($lockIndex === null && $inTransaction && str_starts_with($query['sql'], 'select')
                 && str_contains($query['sql'], 'from `invitations`')) {
                 $this->assertStringContainsString('for update', $query['sql'], 'The FIRST in-transaction read of invitations must be the locked one.');
+                $this->assertContains($invitationId, $query['bindings'], 'The locked read must target THIS invitation row.');
                 $lockIndex = $index;
             }
 
@@ -283,7 +284,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      *
      * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}  $capture
      */
-    protected function assertPivotSetLockedBeforeWrite(array $capture): void
+    protected function assertPivotSetLockedBeforeWrite(array $capture, string $companyId, string $userId): void
     {
         $invitationLockIndex = null;
         $pivotLockIndex = null;
@@ -300,7 +301,8 @@ abstract class MembershipsTestCase extends CompaniesTestCase
             }
 
             if ($pivotLockIndex === null && str_starts_with($query['sql'], 'select')
-                && str_contains($query['sql'], 'from `company_user`') && str_contains($query['sql'], 'for update')) {
+                && str_contains($query['sql'], 'from `company_user`') && str_contains($query['sql'], 'for update')
+                && in_array($companyId, $query['bindings'], true) && in_array($userId, $query['bindings'], true)) {
                 $pivotLockIndex = $index;
             }
 
@@ -391,13 +393,14 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      *
      * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}  $capture
      */
-    protected function assertLockedInvitationReadRecorded(array $capture): void
+    protected function assertLockedInvitationReadRecorded(array $capture, string $invitationId): void
     {
         $locked = null;
 
         foreach ($capture['queries'] as $query) {
             if ($query['depth'] > $capture['ambient'] && str_starts_with($query['sql'], 'select')
-                && str_contains($query['sql'], 'from `invitations`') && str_contains($query['sql'], 'for update')) {
+                && str_contains($query['sql'], 'from `invitations`') && str_contains($query['sql'], 'for update')
+                && in_array($invitationId, $query['bindings'], true)) {
                 $locked = $query;
                 break;
             }
@@ -413,7 +416,11 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      */
     protected function assertRefusalLeftMemberRemoved(Company $company, string $email, string $membershipId): void
     {
-        $this->assertNull(Invitation::query()->where('email', $email)->sole()->accepted_at);
+        $this->assertNull(Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->sole()
+            ->accepted_at);
         $this->assertNotNull(CompanyUser::withTrashed()->whereKey($membershipId)->sole()->deleted_at);
         $this->assertSame(1, CompanyUser::withTrashed()
             ->where('company_id', $company->getKey())

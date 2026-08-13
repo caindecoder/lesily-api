@@ -352,6 +352,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         [$company, $actor] = $this->aCompanyWithMember();
         $invitee = User::factory()->withEmail('anushka@member.lk')->create();
         $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $invitationId = (string) Invitation::query()->where('email', 'anushka@member.lk')->sole()->getKey();
 
         // When — the accept runs with every SQL statement recorded
         $capture = $this->recordedQueriesDuring(
@@ -359,8 +360,8 @@ class AcceptInvitationTest extends MembershipsTestCase
         );
 
         // Then — the consume decided under held locks, in one transaction
-        $this->assertAcceptDecidedUnderInvitationLock($capture);
-        $this->assertPivotSetLockedBeforeWrite($capture);
+        $this->assertAcceptDecidedUnderInvitationLock($capture, $invitationId);
+        $this->assertPivotSetLockedBeforeWrite($capture, (string) $company->getKey(), (string) $invitee->getKey());
     }
 
     #[Test, DataProvider('invitationDeathProvider')]
@@ -392,7 +393,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         });
 
         // Then — the re-check ran under the lock and nothing was written
-        $this->assertLockedInvitationReadRecorded($capture);
+        $this->assertLockedInvitationReadRecorded($capture, (string) $staleSnapshot->getKey());
         $this->assertSame($joinsBefore, LesilyStoredEvent::query()->where('event_class', UserJoinedCompany::class)->count());
         $this->assertSame($pivotsBefore, CompanyUser::withTrashed()->where('company_id', $this->company->getKey())->count());
     }
@@ -441,6 +442,28 @@ class AcceptInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_a_member_removed_from_another_company_accepts_then_they_join_this_one(): void
+    {
+        // Given — an invitee removed from a DIFFERENT company (their trashed
+        // pivot lives there), another removed member in THIS company, and a
+        // valid invitation from this company
+        [$otherCompany] = $this->aCompanyWithMember();
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('ruwan@member.lk')->create();
+        $this->aRemovedMembership($otherCompany, $invitee);
+        $this->aRemovedMembership($company, User::factory()->withEmail('sunil@member.lk')->create());
+        $token = $this->aPendingInvitation($company, $actor, 'ruwan@member.lk');
+
+        // When — they accept while authenticated
+        $response = $this->acceptInvitation($token, [], $invitee);
+
+        // Then — a removal elsewhere (or someone else's removal here) does
+        // not block this join
+        $response->assertOk();
+        $this->assertMembershipActivated($company, 'ruwan@member.lk');
+    }
+
+    #[Test]
     public function when_a_new_users_invitation_died_after_the_first_look_then_no_account_is_created(): void
     {
         // Given — a brand-new email's invitation, revoked after the accept's
@@ -478,6 +501,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Given — a pending invitation for a brand-new email
         [$company, $actor] = $this->aCompanyWithMember();
         $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $invitationId = (string) Invitation::query()->where('email', 'kasun@newjoiner.lk')->sole()->getKey();
 
         // When — the accept runs with every SQL statement recorded
         $capture = $this->recordedQueriesDuring(
@@ -486,7 +510,7 @@ class AcceptInvitationTest extends MembershipsTestCase
 
         // Then — the genesis + join decided under the invitation lock, in
         // one transaction
-        $this->assertAcceptDecidedUnderInvitationLock($capture);
+        $this->assertAcceptDecidedUnderInvitationLock($capture, $invitationId);
     }
 
     #[Test]
