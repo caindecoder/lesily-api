@@ -69,19 +69,24 @@ class AcceptInvitationInteractor
     protected function provisionAndJoin(Invitation $invitation, AcceptInvitationCommand $command, string $deviceName): NewUserJoined
     {
         $userId = (string) Str::uuid7();
+        // Hashed BEFORE the transaction: bcrypt takes ~300ms at production
+        // rounds, and the invitation row lock must not be held through it.
+        $passwordHash = Hash::make((string) $command->password);
 
-        DB::transaction(function () use ($invitation, $command, $userId): void {
+        DB::transaction(function () use ($invitation, $command, $userId, $passwordHash): void {
+            $live = $this->lockedLivePendingInvitation($invitation);
+
             UserAggregate::retrieve($userId)
                 ->createFromInvitation(CreateUserFromInvitationCommand::validateAndCreate([
-                    'companyId' => $invitation->company_id,
-                    'email' => $invitation->email,
-                    'passwordHash' => Hash::make((string) $command->password),
+                    'companyId' => $live->company_id,
+                    'email' => $live->email,
+                    'passwordHash' => $passwordHash,
                     'name' => (string) $command->name,
                 ]))
                 ->persist();
 
-            UserMembership::retrieve($invitation->getKey())
-                ->acceptInvitation($userId, $invitation->role_id)
+            UserMembership::retrieve($live->getKey())
+                ->acceptInvitation($userId, $live->role_id)
                 ->persist();
         });
 
@@ -105,8 +110,11 @@ class AcceptInvitationInteractor
     protected function join(Invitation $invitation, User $joiner): CompanyUser
     {
         DB::transaction(function () use ($invitation, $joiner): void {
-            UserMembership::retrieve($invitation->getKey())
-                ->acceptInvitation($joiner->getKey(), $invitation->role_id)
+            $live = $this->lockedLivePendingInvitation($invitation);
+            $this->guardAgainstResurrectingARemovedMember($live, $joiner);
+
+            UserMembership::retrieve($live->getKey())
+                ->acceptInvitation($joiner->getKey(), $live->role_id)
                 ->persist();
         });
 
@@ -118,6 +126,57 @@ class AcceptInvitationInteractor
             ->where('user_id', $joiner->getKey())
             ->with(['user', 'role'])
             ->sole();
+    }
+
+    /**
+     * The invitation re-read under a held row lock (must run inside the accept
+     * transaction, after which the lock serializes concurrent consumers): the
+     * live-pending conditions re-checked here decide against committed state,
+     * so a concurrent accept's loser collapses to INVITE_INVALID instead of a
+     * duplicate stream append. The token_hash clause covers the one live-state
+     * mutation the other predicates miss — a resend rotating the token.
+     */
+    protected function lockedLivePendingInvitation(Invitation $invitation): Invitation
+    {
+        $live = Invitation::query()
+            ->whereKey($invitation->getKey())
+            ->where('token_hash', $invitation->token_hash)
+            ->whereNull('accepted_at')
+            ->whereNull('revoked_at')
+            ->where('expires_at', '>', now())
+            ->lockForUpdate()
+            ->first();
+
+        if (! $live instanceof Invitation) {
+            throw new InvalidInvitationException;
+        }
+
+        return $live;
+    }
+
+    /**
+     * A leftover invitation (a different stream than the member's own pivot)
+     * must not re-admit a REMOVED member: their soft-deleted pivot still owns
+     * the (company, user) unique slot — at most ONE row exists here — and
+     * re-entry is the deliberate same-UUID re-invite (D5b), never a stale
+     * token, so the accept collapses to INVITE_INVALID (H4). A live sibling
+     * passes untouched (alt-4a). The locked read serializes the decision
+     * against the membership writers that lock the same pivot row (the
+     * OQ-1-158 convention); lock order is invitations → company_user.
+     */
+    protected function guardAgainstResurrectingARemovedMember(Invitation $lockedInvitation, User $joiner): void
+    {
+        $sibling = CompanyUser::withTrashed()
+            ->where('company_id', $lockedInvitation->company_id)
+            ->where('user_id', $joiner->getKey())
+            ->lockForUpdate()
+            ->first();
+
+        if ($sibling instanceof CompanyUser
+            && $sibling->deleted_at !== null
+            && $sibling->getKey() !== $lockedInvitation->getKey()) {
+            throw new InvalidInvitationException;
+        }
     }
 
     /**

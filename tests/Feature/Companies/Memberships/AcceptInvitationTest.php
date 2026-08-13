@@ -4,15 +4,21 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
+use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Auth;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
+use App\Companies\Memberships\Events\UserJoinedCompany;
 use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\Auth\Exceptions\UserAlreadyRegisteredException;
+use App\Companies\Memberships\Exceptions\InvalidInvitationException;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 use App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand;
 
@@ -26,6 +32,12 @@ use App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand;
  */
 class AcceptInvitationTest extends MembershipsTestCase
 {
+    protected Company $company;
+
+    protected User $actor;
+
+    protected User $invitee;
+
     #[Test]
     public function when_the_token_is_unknown_then_acceptance_is_refused(): void
     {
@@ -180,6 +192,152 @@ class AcceptInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_a_removed_member_accepts_a_leftover_invitation_then_acceptance_is_refused(): void
+    {
+        // Given — a member removed from the company, plus a leftover pending
+        // invitation for their email on a DIFFERENT stream (the OQ-1-126 race
+        // artifact, seeded through the guardless aggregate); their trashed
+        // pivot still occupies the (company, user) unique slot
+        [$company, $actor] = $this->aCompanyWithMember();
+        $removed = User::factory()->withEmail('ruwan@member.lk')->create();
+        $membershipId = $this->aRemovedMembership($company, $removed);
+        $plaintext = Str::random(40);
+        UserMembership::retrieve((string) Str::uuid7())
+            ->invite(CreateInvitationCommand::validateAndCreate([
+                'companyId' => $company->getKey(),
+                'email' => 'ruwan@member.lk',
+                'roleId' => $this->seededRole('employee')->getKey(),
+                'invitedByUserId' => $actor->getKey(),
+                'plaintextToken' => $plaintext,
+            ]))
+            ->persist();
+
+        // When — the removed member accepts the leftover invitation while
+        // authenticated
+        $response = $this->acceptInvitation($plaintext, [], $removed);
+
+        // Then — refused with the collapsed envelope (H4; OQ-1-162): a leftover
+        // invitation cannot resurrect a removed member — re-entry is the
+        // deliberate same-UUID re-invite — and the removal stays intact
+        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertRefusalLeftMemberRemoved($company, 'ruwan@member.lk', $membershipId);
+    }
+
+    /**
+     * @param  'consumed'|'revoked'|'expired'|'superseded'  $death
+     */
+    #[Test, DataProvider('invitationDeathProvider')]
+    public function when_the_invitation_died_after_the_first_look_then_the_late_accept_is_refused(string $death): void
+    {
+        // Given — an accept holding a STALE snapshot of the invitation (its
+        // pre-transaction look) while the row moves on before the locked
+        // re-read; the seam feeds the snapshot, the re-check is production
+        [$this->company, $this->actor] = $this->aCompanyWithMember();
+        $this->invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($this->company, $this->actor, 'anushka@member.lk');
+        $staleSnapshot = Invitation::query()->where('email', 'anushka@member.lk')->sole();
+        $this->applyInvitationDeath($death, $token);
+        $joinsBefore = LesilyStoredEvent::query()->where('event_class', UserJoinedCompany::class)->count();
+        $pivotsBefore = CompanyUser::withTrashed()->where('company_id', $this->company->getKey())->count();
+
+        // When — the stale accept reaches the transaction, every statement recorded
+        $capture = $this->recordedQueriesDuring(function () use ($staleSnapshot, $token): void {
+            try {
+                $this->staleSnapshotAccept($staleSnapshot)->execute(
+                    AcceptInvitationCommand::validateAndCreate(['token' => $token]),
+                    $this->invitee,
+                    'web',
+                );
+                $this->fail('The locked re-check must refuse a dead invitation.');
+            } catch (InvalidInvitationException) {
+                // Then — the in-transaction locked re-check refused the late accept
+            }
+        });
+
+        // Then — the re-check ran under the lock and nothing was written
+        $this->assertLockedInvitationReadRecorded($capture, (string) $staleSnapshot->getKey());
+        $this->assertSame($joinsBefore, LesilyStoredEvent::query()->where('event_class', UserJoinedCompany::class)->count());
+        $this->assertSame($pivotsBefore, CompanyUser::withTrashed()->where('company_id', $this->company->getKey())->count());
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function invitationDeathProvider(): array
+    {
+        return [
+            'consumed by a concurrent accept' => ['consumed'],
+            'revoked while the accept was in flight' => ['revoked'],
+            'expired while the accept was in flight' => ['expired'],
+            'superseded by a resend while the accept was in flight' => ['superseded'],
+        ];
+    }
+
+    /**
+     * Move the invitation past the stale snapshot the way a concurrent writer
+     * would: consume it, revoke it, let it expire, or rotate its token.
+     *
+     * @param  'consumed'|'revoked'|'expired'|'superseded'  $death
+     */
+    protected function applyInvitationDeath(string $death, string $token): void
+    {
+        match ($death) {
+            'consumed' => $this->acceptInvitation($token, [], $this->invitee)->assertOk(),
+            'revoked' => $this->revokeInvitation($this->actor, $this->company,
+                (string) Invitation::query()->where('email', $this->invitee->email)->sole()->getKey())->assertNoContent(),
+            'expired' => $this->travel(8)->days(),
+            'superseded' => $this->resendInvitationAsAdmin(),
+        };
+
+        Auth::forgetGuards();
+    }
+
+    /**
+     * Rotate the invitation's token through the resend endpoint (UC-1-021) —
+     * the live-state mutation that leaves the ROW pending but the presented
+     * plaintext dead.
+     */
+    protected function resendInvitationAsAdmin(): void
+    {
+        Sanctum::actingAs($this->actor);
+        $invitationId = Invitation::query()->where('email', $this->invitee->email)->sole()->getKey();
+        $this->postJson("/api/v1/invitations/{$invitationId}/resend", [], ['X-Company-Context' => $this->company->getKey()])
+            ->assertSuccessful();
+    }
+
+    #[Test]
+    public function when_a_new_users_invitation_died_after_the_first_look_then_no_account_is_created(): void
+    {
+        // Given — a brand-new email's invitation, revoked after the accept's
+        // first look (the stale-snapshot seam on the genesis branch)
+        [$company, $actor] = $this->aCompanyWithMember();
+        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $staleSnapshot = Invitation::query()->where('email', 'kasun@newjoiner.lk')->sole();
+        $this->revokeInvitation($actor, $company, (string) $staleSnapshot->getKey())->assertNoContent();
+        Auth::forgetGuards();
+
+        // When — the stale genesis accept reaches the transaction
+        try {
+            $this->staleSnapshotAccept($staleSnapshot)->execute(
+                AcceptInvitationCommand::validateAndCreate([
+                    'token' => $token,
+                    'name' => 'Nimal Perera',
+                    'password' => 'Str0ng-Pass!',
+                ]),
+                null,
+                'web',
+            );
+            $this->fail('The locked re-check must refuse the revoked invitation before provisioning.');
+        } catch (InvalidInvitationException) {
+            // Then — refused inside the transaction, before any account write
+        }
+
+        // Then — no account was provisioned and nothing was consumed
+        $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
+        $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
+    }
+
+    #[Test]
     public function when_an_authenticated_existing_user_accepts_then_they_join_the_new_company(): void
     {
         // Given — an account already on the platform, invited to a company it
@@ -237,7 +395,7 @@ class AcceptInvitationTest extends MembershipsTestCase
             ->getKey();
         $plaintext = Str::random(40);
         UserMembership::retrieve((string) Str::uuid7())
-            ->invite(CreateInvitationCommand::from([
+            ->invite(CreateInvitationCommand::validateAndCreate([
                 'companyId' => $company->getKey(),
                 'email' => 'ruwan@member.lk',
                 'roleId' => $this->seededRole('employee')->getKey(),
@@ -299,6 +457,65 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Then — a fresh session is issued against the accept-time credential
         $response->assertOk();
         $this->assertNotSame('', (string) $response->json('data.token'), 'The accept-time password must log in.');
+    }
+
+    #[Test]
+    public function when_the_accept_reads_the_invitation_it_will_consume_then_it_locks_it(): void
+    {
+        // Given — an existing account invited to a company it doesn't belong to
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $invitationId = (string) Invitation::query()->where('email', 'anushka@member.lk')->sole()->getKey();
+
+        // When — the accept runs with every SQL statement recorded
+        $capture = $this->recordedQueriesDuring(
+            fn () => $this->acceptInvitation($token, [], $invitee)->assertOk()
+        );
+
+        // Then — the consume decided under held locks, in one transaction
+        $this->assertAcceptDecidedUnderInvitationLock($capture, $invitationId);
+        $this->assertPivotSetLockedBeforeWrite($capture, (string) $company->getKey(), (string) $invitee->getKey());
+    }
+
+    #[Test]
+    public function when_a_member_removed_from_another_company_accepts_then_they_join_this_one(): void
+    {
+        // Given — an invitee removed from a DIFFERENT company (their trashed
+        // pivot lives there), another removed member in THIS company, and a
+        // valid invitation from this company
+        [$otherCompany] = $this->aCompanyWithMember();
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('ruwan@member.lk')->create();
+        $this->aRemovedMembership($otherCompany, $invitee);
+        $this->aRemovedMembership($company, User::factory()->withEmail('sunil@member.lk')->create());
+        $token = $this->aPendingInvitation($company, $actor, 'ruwan@member.lk');
+
+        // When — they accept while authenticated
+        $response = $this->acceptInvitation($token, [], $invitee);
+
+        // Then — a removal elsewhere (or someone else's removal here) does
+        // not block this join
+        $response->assertOk();
+        $this->assertMembershipActivated($company, 'ruwan@member.lk');
+    }
+
+    #[Test]
+    public function when_a_new_user_accepts_then_the_provisioning_decides_under_the_invitation_lock(): void
+    {
+        // Given — a pending invitation for a brand-new email
+        [$company, $actor] = $this->aCompanyWithMember();
+        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $invitationId = (string) Invitation::query()->where('email', 'kasun@newjoiner.lk')->sole()->getKey();
+
+        // When — the accept runs with every SQL statement recorded
+        $capture = $this->recordedQueriesDuring(
+            fn () => $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated()
+        );
+
+        // Then — the genesis + join decided under the invitation lock, in
+        // one transaction
+        $this->assertAcceptDecidedUnderInvitationLock($capture, $invitationId);
     }
 
     #[Test]

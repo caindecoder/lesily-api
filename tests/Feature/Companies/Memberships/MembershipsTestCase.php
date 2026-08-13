@@ -12,18 +12,21 @@ use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
 use Spatie\EventSourcing\Projectionist;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Events\QueryExecuted;
 use Tests\Feature\Companies\CompaniesTestCase;
+use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Database\Events\TransactionBeginning;
 use Spatie\EventSourcing\StoredEvents\ShouldBeStored;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
@@ -32,6 +35,7 @@ use App\Companies\Memberships\Events\UserInvitationRevoked;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
 
 /**
  * Shared fixtures for the membership (team-invite) feature tests (§2.10). Callers
@@ -164,13 +168,18 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      * moment it executed. DB::listen sees what getQueryLog cannot: the log
      * stores text only, and BEGIN/SAVEPOINT never enter it — so depth is the
      * only observable that distinguishes a held lock from an autocommit one.
+     * `transactions` counts only TOP-LEVEL begins (event-time level exactly one
+     * above ambient) — interior savepoints (e.g. createOrFirst's) are not a
+     * second transaction. The count is REQUEST-WIDE: every top-level begin
+     * during $act, not just the interactor under test.
      *
-     * @return array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>}
+     * @return array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}
      */
     protected function recordedQueriesDuring(callable $act): array
     {
         $ambient = DB::transactionLevel();
         $queries = [];
+        $transactionsBegun = 0;
         DB::listen(function (QueryExecuted $query) use (&$queries): void {
             $queries[] = [
                 'sql' => strtolower($query->sql),
@@ -178,10 +187,15 @@ abstract class MembershipsTestCase extends CompaniesTestCase
                 'depth' => DB::transactionLevel(),
             ];
         });
+        Event::listen(TransactionBeginning::class, function () use (&$transactionsBegun, $ambient): void {
+            if (DB::transactionLevel() === $ambient + 1) {
+                $transactionsBegun++;
+            }
+        });
 
         $act();
 
-        return ['ambient' => $ambient, 'queries' => $queries];
+        return ['ambient' => $ambient, 'queries' => $queries, 'transactions' => $transactionsBegun];
     }
 
     /**
@@ -191,7 +205,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      * owner-guard's roles read (the 'owner'-bound query) ran AFTER that locked
      * read, and the write followed it inside the same transaction window.
      *
-     * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>}  $capture
+     * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}  $capture
      */
     protected function assertOwnerGuardDecidedUnderLock(array $capture, string $table): void
     {
@@ -224,6 +238,89 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $this->assertNotNull($writeIndex, 'Expected an in-transaction write to follow the locked read.');
         $this->assertGreaterThan($lockIndex, $guardIndex, 'The owner-guard must decide AFTER the row is locked.');
         $this->assertGreaterThan($lockIndex, $writeIndex, 'The write must follow the locked read.');
+    }
+
+    /**
+     * The accept decided under the invitation row lock (OQ-1-162): exactly ONE
+     * top-level transaction spanned the write, the FIRST in-transaction read of
+     * `invitations` was the locked one (an unlocked pre-read inside the window
+     * would re-arm the TOCTOU), and the event write followed it in the same
+     * window. The pre-transaction fast-fail read is unlocked by design.
+     *
+     * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}  $capture
+     */
+    protected function assertAcceptDecidedUnderInvitationLock(array $capture, string $invitationId): void
+    {
+        $lockIndex = null;
+        $writeIndex = null;
+
+        foreach ($capture['queries'] as $index => $query) {
+            $inTransaction = $query['depth'] > $capture['ambient'];
+
+            if ($lockIndex === null && $inTransaction && str_starts_with($query['sql'], 'select')
+                && str_contains($query['sql'], 'from `invitations`')) {
+                $this->assertStringContainsString('for update', $query['sql'], 'The FIRST in-transaction read of invitations must be the locked one.');
+                $this->assertContains($invitationId, $query['bindings'], 'The locked read must target THIS invitation row.');
+                $lockIndex = $index;
+            }
+
+            if ($writeIndex === null && $inTransaction && str_starts_with($query['sql'], 'insert')
+                && str_contains($query['sql'], '`stored_events`')) {
+                $writeIndex = $index;
+            }
+        }
+
+        $this->assertNotNull($lockIndex, 'No locked in-transaction read of invitations was recorded.');
+        $this->assertNotNull($writeIndex, 'No in-transaction event write was recorded.');
+        $this->assertGreaterThan($lockIndex, $writeIndex, 'The event write must follow the locked read.');
+        $this->assertSame(1, $capture['transactions'], 'Expected exactly ONE top-level transaction to span the accept.');
+    }
+
+    /**
+     * The (company, user) pivot set was locked before the write (OQ-1-162): an
+     * in-transaction `company_user` FOR UPDATE read ran after the invitation
+     * lock (the fixed invitations → company_user order) and before the event
+     * write — serializing the accept against the membership writers that lock
+     * the same rows. NOT self-sufficient: depth alone cannot distinguish one
+     * transaction from two sequential ones — pair with
+     * assertAcceptDecidedUnderInvitationLock, whose transactions === 1 assert
+     * closes that split.
+     *
+     * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}  $capture
+     */
+    protected function assertPivotSetLockedBeforeWrite(array $capture, string $companyId, string $userId): void
+    {
+        $invitationLockIndex = null;
+        $pivotLockIndex = null;
+        $writeIndex = null;
+
+        foreach ($capture['queries'] as $index => $query) {
+            if ($query['depth'] <= $capture['ambient']) {
+                continue;
+            }
+
+            if ($invitationLockIndex === null && str_starts_with($query['sql'], 'select')
+                && str_contains($query['sql'], 'from `invitations`') && str_contains($query['sql'], 'for update')) {
+                $invitationLockIndex = $index;
+            }
+
+            if ($pivotLockIndex === null && str_starts_with($query['sql'], 'select')
+                && str_contains($query['sql'], 'from `company_user`') && str_contains($query['sql'], 'for update')
+                && in_array($companyId, $query['bindings'], true) && in_array($userId, $query['bindings'], true)) {
+                $pivotLockIndex = $index;
+            }
+
+            if ($writeIndex === null && str_starts_with($query['sql'], 'insert')
+                && str_contains($query['sql'], '`stored_events`')) {
+                $writeIndex = $index;
+            }
+        }
+
+        $this->assertNotNull($invitationLockIndex, 'No locked in-transaction read of invitations was recorded.');
+        $this->assertNotNull($pivotLockIndex, 'No locked in-transaction read of company_user was recorded.');
+        $this->assertNotNull($writeIndex, 'No in-transaction event write was recorded.');
+        $this->assertGreaterThan($invitationLockIndex, $pivotLockIndex, 'The pivot lock must follow the invitation lock (fixed lock order).');
+        $this->assertGreaterThan($pivotLockIndex, $writeIndex, 'The write must follow the locked pivot read.');
     }
 
     /**
@@ -269,6 +366,70 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $membership = CompanyUser::withTrashed()->whereKey($membershipId)->sole();
 
         $this->assertNull($membership->deleted_at);
+    }
+
+    /**
+     * An accept interactor whose FIRST look returns $snapshot verbatim — the
+     * stale pre-transaction view a concurrent writer leaves behind. The
+     * in-transaction locked re-read stays production code; pair with
+     * assertLockedInvitationReadRecorded so the seam is proven engaged.
+     */
+    protected function staleSnapshotAccept(Invitation $snapshot): AcceptInvitationInteractor
+    {
+        $interactor = new class(app(SessionIssuer::class)) extends AcceptInvitationInteractor
+        {
+            public ?Invitation $staleSnapshot = null;
+
+            protected function livePendingInvitation(string $plaintextToken): Invitation
+            {
+                return $this->staleSnapshot ?? parent::livePendingInvitation($plaintextToken);
+            }
+        };
+        $interactor->staleSnapshot = $snapshot;
+
+        return $interactor;
+    }
+
+    /**
+     * The transaction's locked invitation re-read actually executed — the
+     * positive control proving a stale-snapshot refusal came from the
+     * production re-check, not from some earlier path.
+     *
+     * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}  $capture
+     */
+    protected function assertLockedInvitationReadRecorded(array $capture, string $invitationId): void
+    {
+        $locked = null;
+
+        foreach ($capture['queries'] as $query) {
+            if ($query['depth'] > $capture['ambient'] && str_starts_with($query['sql'], 'select')
+                && str_contains($query['sql'], 'from `invitations`') && str_contains($query['sql'], 'for update')
+                && in_array($invitationId, $query['bindings'], true)) {
+                $locked = $query;
+                break;
+            }
+        }
+
+        $this->assertNotNull($locked, 'No locked in-transaction invitations re-read was recorded — the seam did not engage the re-check.');
+    }
+
+    /**
+     * The refused accept left the removal intact: the invitation stays
+     * unconsumed, the member's original pivot remains soft-deleted, and no
+     * second row appeared in the (company, user) unique slot.
+     */
+    protected function assertRefusalLeftMemberRemoved(Company $company, string $email, string $membershipId): void
+    {
+        $this->assertNull(Invitation::query()
+            ->where('company_id', $company->getKey())
+            ->where('email', $email)
+            ->sole()
+            ->accepted_at);
+        $this->assertNotNull(CompanyUser::withTrashed()->whereKey($membershipId)->sole()->deleted_at);
+        $this->assertSame(1, CompanyUser::withTrashed()
+            ->where('company_id', $company->getKey())
+            ->whereIn('user_id', User::query()->where('email', $email)->pluck('id'))
+            ->count());
     }
 
     /**
