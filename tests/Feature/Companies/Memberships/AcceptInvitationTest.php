@@ -32,11 +32,11 @@ use App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand;
  */
 class AcceptInvitationTest extends MembershipsTestCase
 {
-    protected ?Company $company = null;
+    protected Company $company;
 
-    protected ?User $actor = null;
+    protected User $actor;
 
-    protected ?User $invitee = null;
+    protected User $invitee;
 
     #[Test]
     public function when_the_token_is_unknown_then_acceptance_is_refused(): void
@@ -223,6 +223,9 @@ class AcceptInvitationTest extends MembershipsTestCase
         $this->assertRefusalLeftMemberRemoved($company, 'ruwan@member.lk', $membershipId);
     }
 
+    /**
+     * @param  'consumed'|'revoked'|'expired'|'superseded'  $death
+     */
     #[Test, DataProvider('invitationDeathProvider')]
     public function when_the_invitation_died_after_the_first_look_then_the_late_accept_is_refused(string $death): void
     {
@@ -273,6 +276,8 @@ class AcceptInvitationTest extends MembershipsTestCase
     /**
      * Move the invitation past the stale snapshot the way a concurrent writer
      * would: consume it, revoke it, let it expire, or rotate its token.
+     *
+     * @param  'consumed'|'revoked'|'expired'|'superseded'  $death
      */
     protected function applyInvitationDeath(string $death, string $token): void
     {
