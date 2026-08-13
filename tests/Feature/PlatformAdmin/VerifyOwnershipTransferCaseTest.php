@@ -11,6 +11,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -207,6 +208,30 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'TARGET_NOT_MEMBER');
         $this->assertNothingVerified($case);
+    }
+
+    /**
+     * @param  array{sqlstate: string, code: int, message: string}  $failure
+     */
+    #[Test]
+    #[DataProvider('contentionProvider')]
+    public function when_the_verification_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
+    {
+        // Given an open case, a live member, and a write inside the locked
+        // transaction that dies the way the driver reports it
+        $company = Company::factory()->create();
+        $member = $this->aCompanyMember($company, 'employee');
+        $case = $this->anOpenCaseFor($company);
+        AuditEntry::created(fn () => throw $this->syntheticQueryException($failure));
+
+        // When the admin verifies the case
+        $response = $this->verifyCase($this->admin, $case->getKey(), $this->aValidVerificationPayload($member));
+
+        // Then contention answers as a conflict; anything else passes
+        // through (render only — a synthetic deadlock cannot model MySQL's
+        // server-side rollback; the audit-veto row below is the atomicity net)
+        $response->assertStatus($expected->status());
+        $response->assertJsonPath('error_code', $expected->value);
     }
 
     #[Test]
