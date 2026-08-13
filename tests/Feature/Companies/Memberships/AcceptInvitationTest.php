@@ -237,7 +237,7 @@ class AcceptInvitationTest extends MembershipsTestCase
             ->getKey();
         $plaintext = Str::random(40);
         UserMembership::retrieve((string) Str::uuid7())
-            ->invite(CreateInvitationCommand::from([
+            ->invite(CreateInvitationCommand::validateAndCreate([
                 'companyId' => $company->getKey(),
                 'email' => 'ruwan@member.lk',
                 'roleId' => $this->seededRole('employee')->getKey(),
