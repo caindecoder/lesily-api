@@ -4,7 +4,11 @@
         directories: ["app"],
         excludes: ["Console", "Exceptions", "Providers"]
     },
-    timeout: 30,
+    // 180s: at 30s every mutant covered only by ~10s-boot feature tests
+    // TIME-SKIPS locally (s164 class — skipped mutants leave the MSI
+    // denominator, a gate that stops looking; 50/56 skipped on the s178
+    // OQ-1-162 run). CI on Linux kills well inside either bound.
+    timeout: 180,
     logs: {
         text: "infection.log",
         html: "infection.html",
