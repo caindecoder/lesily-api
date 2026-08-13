@@ -105,6 +105,8 @@ class AcceptInvitationInteractor
     protected function join(Invitation $invitation, User $joiner): CompanyUser
     {
         DB::transaction(function () use ($invitation, $joiner): void {
+            $this->guardAgainstResurrectingARemovedMember($invitation, $joiner);
+
             UserMembership::retrieve($invitation->getKey())
                 ->acceptInvitation($joiner->getKey(), $invitation->role_id)
                 ->persist();
@@ -118,6 +120,27 @@ class AcceptInvitationInteractor
             ->where('user_id', $joiner->getKey())
             ->with(['user', 'role'])
             ->sole();
+    }
+
+    /**
+     * A leftover invitation (a different stream than the member's own pivot)
+     * must not re-admit a REMOVED member: their soft-deleted pivot still owns
+     * the (company, user) unique slot, and re-entry is the deliberate
+     * same-UUID re-invite (D5b), never a stale token — so the accept collapses
+     * to INVITE_INVALID (H4). A live sibling passes untouched (alt-4a).
+     */
+    protected function guardAgainstResurrectingARemovedMember(Invitation $invitation, User $joiner): void
+    {
+        $removedSiblingHoldsTheSlot = CompanyUser::withTrashed()
+            ->where('company_id', $invitation->company_id)
+            ->where('user_id', $joiner->getKey())
+            ->whereKeyNot($invitation->getKey())
+            ->whereNotNull('deleted_at')
+            ->exists();
+
+        if ($removedSiblingHoldsTheSlot) {
+            throw new InvalidInvitationException;
+        }
     }
 
     /**

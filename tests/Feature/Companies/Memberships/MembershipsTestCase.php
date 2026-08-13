@@ -272,6 +272,21 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
+     * The refused accept left the removal intact: the invitation stays
+     * unconsumed, the member's original pivot remains soft-deleted, and no
+     * second row appeared in the (company, user) unique slot.
+     */
+    protected function assertRefusalLeftMemberRemoved(Company $company, string $email, string $membershipId): void
+    {
+        $this->assertNull(Invitation::query()->where('email', $email)->sole()->accepted_at);
+        $this->assertNotNull(CompanyUser::withTrashed()->whereKey($membershipId)->sole()->deleted_at);
+        $this->assertSame(1, CompanyUser::withTrashed()
+            ->where('company_id', $company->getKey())
+            ->whereIn('user_id', User::query()->where('email', $email)->pluck('id'))
+            ->count());
+    }
+
+    /**
      * Exhaust the per-actor hourly invite allowance with $allowed valid invites
      * (unique emails, each accepted) — pinning the allowance at exactly $allowed,
      * per AuthTestCase::exhaustAuthLimit. Relies on the array cache resetting the

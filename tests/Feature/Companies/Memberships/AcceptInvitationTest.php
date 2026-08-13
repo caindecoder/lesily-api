@@ -262,6 +262,38 @@ class AcceptInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_a_removed_member_accepts_a_leftover_invitation_then_acceptance_is_refused(): void
+    {
+        // Given — a member removed from the company, plus a leftover pending
+        // invitation for their email on a DIFFERENT stream (the OQ-1-126 race
+        // artifact, seeded through the guardless aggregate); their trashed
+        // pivot still occupies the (company, user) unique slot
+        [$company, $actor] = $this->aCompanyWithMember();
+        $removed = User::factory()->withEmail('ruwan@member.lk')->create();
+        $membershipId = $this->aRemovedMembership($company, $removed);
+        $plaintext = Str::random(40);
+        UserMembership::retrieve((string) Str::uuid7())
+            ->invite(CreateInvitationCommand::validateAndCreate([
+                'companyId' => $company->getKey(),
+                'email' => 'ruwan@member.lk',
+                'roleId' => $this->seededRole('employee')->getKey(),
+                'invitedByUserId' => $actor->getKey(),
+                'plaintextToken' => $plaintext,
+            ]))
+            ->persist();
+
+        // When — the removed member accepts the leftover invitation while
+        // authenticated
+        $response = $this->acceptInvitation($plaintext, [], $removed);
+
+        // Then — refused with the collapsed envelope (H4; OQ-1-162): a leftover
+        // invitation cannot resurrect a removed member — re-entry is the
+        // deliberate same-UUID re-invite — and the removal stays intact
+        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertRefusalLeftMemberRemoved($company, 'ruwan@member.lk', $membershipId);
+    }
+
+    #[Test]
     public function when_a_new_user_accepts_then_their_account_is_created_and_they_are_logged_in(): void
     {
         // Given — a pending invitation for a brand-new email
