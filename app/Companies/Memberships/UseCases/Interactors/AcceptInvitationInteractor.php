@@ -71,17 +71,19 @@ class AcceptInvitationInteractor
         $userId = (string) Str::uuid7();
 
         DB::transaction(function () use ($invitation, $command, $userId): void {
+            $live = $this->lockedLivePendingInvitation($invitation);
+
             UserAggregate::retrieve($userId)
                 ->createFromInvitation(CreateUserFromInvitationCommand::validateAndCreate([
-                    'companyId' => $invitation->company_id,
-                    'email' => $invitation->email,
+                    'companyId' => $live->company_id,
+                    'email' => $live->email,
                     'passwordHash' => Hash::make((string) $command->password),
                     'name' => (string) $command->name,
                 ]))
                 ->persist();
 
-            UserMembership::retrieve($invitation->getKey())
-                ->acceptInvitation($userId, $invitation->role_id)
+            UserMembership::retrieve($live->getKey())
+                ->acceptInvitation($userId, $live->role_id)
                 ->persist();
         });
 

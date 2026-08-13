@@ -352,6 +352,23 @@ class AcceptInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_a_new_user_accepts_the_provisioning_decides_under_the_invitation_lock(): void
+    {
+        // Given — a pending invitation for a brand-new email
+        [$company, $actor] = $this->aCompanyWithMember();
+        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+
+        // When — the accept runs with every SQL statement recorded
+        $capture = $this->recordedQueriesDuring(
+            fn () => $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated()
+        );
+
+        // Then — the genesis + join decided under the invitation lock, in
+        // one transaction
+        $this->assertAcceptDecidedUnderInvitationLock($capture);
+    }
+
+    #[Test]
     public function when_a_provisioned_user_stream_is_asked_to_provision_again_then_it_refuses(): void
     {
         // Given — a user stream already born from an invitation genesis
