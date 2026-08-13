@@ -14,6 +14,7 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use App\Companies\Enums\RejectionReasonCode;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -144,6 +145,28 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // the already-inserted audit row together
         $this->assertFailedClosed($response);
         $this->assertNothingRejected($case, $company->owner_id);
+    }
+
+    /**
+     * @param  array{sqlstate: string, code: int, message: string}  $failure
+     */
+    #[Test]
+    #[DataProvider('contentionProvider')]
+    public function when_the_rejection_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
+    {
+        // Given an open case and a write inside the locked transaction that
+        // dies the way the driver reports it
+        $company = Company::factory()->create();
+        $case = $this->anOpenCaseFor($company);
+        AuditEntry::created(fn () => throw $this->syntheticQueryException($failure));
+
+        // When the admin rejects the case
+        $response = $this->rejectCase($this->admin, $case->getKey());
+
+        // Then contention answers as a conflict; anything else passes through
+        // (render only — the audit-veto row above is the atomicity net)
+        $response->assertStatus($expected->status());
+        $response->assertJsonPath('error_code', $expected->value);
     }
 
     #[Test]
