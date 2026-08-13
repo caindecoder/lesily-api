@@ -10,12 +10,15 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Companies\Memberships\Events\UserMembershipRoleChanged;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Companies\Memberships\Exceptions\MembershipContentionException;
 
 class ChangeMemberRoleTest extends MembershipsTestCase
 {
@@ -315,6 +318,30 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $this->assertRoleChangeEnvelope($response, $this->seededRole('hr_officer'), $membershipIdA);
         $this->assertMembershipRoleChanged($membershipIdA, $adminA, $this->seededRole('hr_officer'));
         $this->assertMembershipRoleUnchanged($membershipIdB, $this->seededRole('admin'));
+    }
+
+    #[Test]
+    public function when_the_role_change_loses_contention_then_the_cause_and_family_message_survive(): void
+    {
+        // Given — a member to re-role and a lock-wait death inside the
+        // locked transaction
+        Exceptions::fake();
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $this->induceProjectorFailureFor(UserMembershipRoleChanged::class, $this->syntheticQueryException(
+            ['sqlstate' => 'HY000', 'code' => 1205, 'message' => 'SQLSTATE[HY000]: General error: 1205'],
+        ));
+
+        // When — the admin changes the member's role
+        $response = $this->changeRole($admin, $company, $membershipId);
+
+        // Then — the conflict speaks with the MEMBERSHIP family's voice and
+        // the driver cause rides the reported exception into the log chain
+        $this->assertRefusedWith($response, ApiErrorCode::StateGuardViolation);
+        $response->assertJsonPath('message', 'The change lost to a concurrent membership update. Please retry.');
+        Exceptions::assertReported(
+            fn (MembershipContentionException $e): bool => $e->getPrevious() instanceof QueryException
+        );
     }
 
     /**

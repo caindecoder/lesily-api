@@ -3,12 +3,15 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Auth;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
@@ -21,6 +24,7 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 use App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand;
+use App\Companies\Memberships\Exceptions\InvitationAcceptContentionException;
 
 /**
  * UC-1-019 — Accept Company Invitation (membership slice #7, Task 3).
@@ -303,6 +307,49 @@ class AcceptInvitationTest extends MembershipsTestCase
         $invitationId = Invitation::query()->where('email', $this->invitee->email)->sole()->getKey();
         $this->postJson("/api/v1/invitations/{$invitationId}/resend", [], ['X-Company-Context' => $this->company->getKey()])
             ->assertSuccessful();
+    }
+
+    #[Test]
+    public function when_the_accept_loses_contention_then_the_cause_and_family_message_survive(): void
+    {
+        // Given — an existing account's invitation and a lock-wait death
+        // inside the accept transaction
+        Exceptions::fake();
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $this->induceProjectorFailureFor(UserJoinedCompany::class, $this->syntheticQueryException(
+            ['sqlstate' => 'HY000', 'code' => 1205, 'message' => 'SQLSTATE[HY000]: General error: 1205'],
+        ));
+
+        // When — the invitee accepts while authenticated
+        $response = $this->acceptInvitation($token, [], $invitee);
+
+        // Then — the conflict speaks with the INVITATION's voice (never a
+        // sibling family's) and the driver cause rides the reported exception
+        $this->assertRefusedWith($response, ApiErrorCode::StateGuardViolation);
+        $response->assertJsonPath('message', 'Your invitation is being processed by another request. Please retry.');
+        Exceptions::assertReported(
+            fn (InvitationAcceptContentionException $e): bool => $e->getPrevious() instanceof QueryException
+        );
+    }
+
+    #[Test]
+    public function when_the_join_write_fails_then_the_whole_accept_rolls_back(): void
+    {
+        // Given — an existing account's invitation and a write that fails
+        // AFTER the projector ran, inside the accept transaction
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $this->induceProjectorFailureFor(UserJoinedCompany::class, new RuntimeException('induced join failure'));
+
+        // When — the invitee accepts while authenticated
+        $response = $this->acceptInvitation($token, [], $invitee);
+
+        // Then — the whole accept rolls back: nothing consumed, no membership
+        $this->assertRefusedWith($response, ApiErrorCode::InternalError);
+        $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
     }
 
     #[Test]
