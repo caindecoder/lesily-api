@@ -7,6 +7,7 @@ use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\DeadlockException;
+use App\Foundation\Database\LockContention;
 use App\Companies\Exceptions\StaleOwnershipException;
 use App\Companies\Exceptions\TargetNotMemberException;
 use App\Companies\Aggregates\Company as CompanyAggregate;
@@ -27,10 +28,6 @@ use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
  */
 class TransferCompanyOwnershipInteractor
 {
-    private const int MYSQL_LOCK_WAIT_TIMEOUT = 1205;
-
-    private const int MYSQL_DEADLOCK = 1213;
-
     public function execute(Company $company, TransferCompanyOwnershipCommand $command, string $expectedOwnerUserId): CompanyUser
     {
         if ($command->newOwnerUserId === $expectedOwnerUserId) {
@@ -39,16 +36,14 @@ class TransferCompanyOwnershipInteractor
 
         try {
             return $this->executeLocked($company, $command, $expectedOwnerUserId);
-        } catch (DeadlockException) {
+        } catch (DeadlockException $exception) {
             // Laravel wraps a concurrency loser inside a nested transaction;
             // at top level the raw QueryException surfaces instead (below).
-            throw new OwnershipTransferContentionException;
+            throw new OwnershipTransferContentionException($exception);
         } catch (QueryException $exception) {
-            if (in_array($exception->errorInfo[1] ?? null, [self::MYSQL_LOCK_WAIT_TIMEOUT, self::MYSQL_DEADLOCK], true)) {
-                throw new OwnershipTransferContentionException;
-            }
-
-            throw $exception;
+            throw LockContention::caused($exception)
+                ? new OwnershipTransferContentionException($exception)
+                : $exception;
         }
     }
 

@@ -3,6 +3,7 @@
 namespace App\Companies\Exceptions;
 
 use Exception;
+use Throwable;
 
 /**
  * The transfer's locked transaction lost to concurrent lock contention —
@@ -11,8 +12,8 @@ use Exception;
  */
 class OwnershipTransferContentionException extends Exception
 {
-    public function __construct()
+    public function __construct(?Throwable $previous = null)
     {
-        parent::__construct('The transfer lost to a concurrent change. Please retry.');
+        parent::__construct('The transfer lost to a concurrent change. Please retry.', 0, $previous);
     }
 }
