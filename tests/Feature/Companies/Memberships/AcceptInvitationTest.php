@@ -8,13 +8,19 @@ use Illuminate\Support\Facades\Auth;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
+use App\Companies\Memberships\Events\UserJoinedCompany;
 use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\Auth\Exceptions\UserAlreadyRegisteredException;
+use App\Companies\Memberships\Exceptions\InvalidInvitationException;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 use App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand;
+use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
 
 /**
  * UC-1-019 — Accept Company Invitation (membership slice #7, Task 3).
@@ -349,6 +355,50 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Then — the consume decided under held locks, in one transaction
         $this->assertAcceptDecidedUnderInvitationLock($capture);
         $this->assertPivotSetLockedBeforeWrite($capture);
+    }
+
+    #[Test]
+    public function when_a_concurrent_consumer_won_the_invitation_then_the_late_accept_is_refused(): void
+    {
+        // Given — an invitation already consumed by its invitee, and an accept
+        // whose FIRST look reads an unfiltered snapshot — the stale view a
+        // concurrent winner leaves behind (P9: the race is simulated at the
+        // snapshot seam; the locked re-check under test is production code)
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $this->acceptInvitation($token, [], $invitee)->assertOk();
+        Auth::forgetGuards();
+        $staleSnapshotAccept = new class(app(SessionIssuer::class)) extends AcceptInvitationInteractor
+        {
+            protected function livePendingInvitation(string $plaintextToken): Invitation
+            {
+                return Invitation::query()->where('token_hash', hash('sha256', $plaintextToken))->sole();
+            }
+        };
+
+        // When — the stale accept reaches the transaction
+        try {
+            $staleSnapshotAccept->execute(
+                AcceptInvitationCommand::validateAndCreate(['token' => $token]),
+                $invitee,
+                'web',
+            );
+            $this->fail('The locked re-check must refuse a consumed invitation.');
+        } catch (InvalidInvitationException) {
+            // Then — the in-transaction locked re-check refused the late accept
+        }
+
+        // Then — the original join is the only one on the stream and the
+        // membership is unchanged
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserJoinedCompany::class)
+            ->where('event_properties->userId', $invitee->getKey())
+            ->count());
+        $this->assertSame(1, CompanyUser::withTrashed()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $invitee->getKey())
+            ->count());
     }
 
     #[Test]
