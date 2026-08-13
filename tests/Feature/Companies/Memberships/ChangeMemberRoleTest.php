@@ -317,6 +317,26 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $this->assertMembershipRoleUnchanged($membershipIdB, $this->seededRole('admin'));
     }
 
+    /**
+     * @param  array{sqlstate: string, code: int, message: string}  $failure
+     */
+    #[Test]
+    #[DataProvider('contentionProvider')]
+    public function when_the_role_change_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
+    {
+        // Given — a member to re-role and a write inside the locked
+        // transaction that dies the way the driver reports it
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $this->induceProjectorFailureFor(UserMembershipRoleChanged::class, $this->syntheticQueryException($failure));
+
+        // When — the admin changes the member's role
+        $response = $this->changeRole($admin, $company, $membershipId);
+
+        // Then — contention answers as a conflict; anything else passes through
+        $this->assertRefusedWith($response, $expected);
+    }
+
     #[Test]
     public function when_the_role_change_reads_the_membership_it_will_write_then_it_locks_it(): void
     {
