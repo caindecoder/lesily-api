@@ -105,10 +105,11 @@ class AcceptInvitationInteractor
     protected function join(Invitation $invitation, User $joiner): CompanyUser
     {
         DB::transaction(function () use ($invitation, $joiner): void {
-            $this->guardAgainstResurrectingARemovedMember($invitation, $joiner);
+            $live = $this->lockedLivePendingInvitation($invitation);
+            $this->guardAgainstResurrectingARemovedMember($live, $joiner);
 
-            UserMembership::retrieve($invitation->getKey())
-                ->acceptInvitation($joiner->getKey(), $invitation->role_id)
+            UserMembership::retrieve($live->getKey())
+                ->acceptInvitation($joiner->getKey(), $live->role_id)
                 ->persist();
         });
 
@@ -123,20 +124,50 @@ class AcceptInvitationInteractor
     }
 
     /**
+     * The invitation re-read under a held row lock (must run inside the accept
+     * transaction, after which the lock serializes concurrent consumers): the
+     * live-pending conditions re-checked here decide against committed state,
+     * so a concurrent accept's loser collapses to INVITE_INVALID instead of a
+     * duplicate stream append. Lock order is invitations → company_user.
+     */
+    protected function lockedLivePendingInvitation(Invitation $invitation): Invitation
+    {
+        $live = Invitation::query()
+            ->whereKey($invitation->getKey())
+            ->whereNull('accepted_at')
+            ->whereNull('revoked_at')
+            ->where('expires_at', '>', now())
+            ->lockForUpdate()
+            ->first();
+
+        if (! $live instanceof Invitation) {
+            throw new InvalidInvitationException;
+        }
+
+        return $live;
+    }
+
+    /**
      * A leftover invitation (a different stream than the member's own pivot)
      * must not re-admit a REMOVED member: their soft-deleted pivot still owns
      * the (company, user) unique slot, and re-entry is the deliberate
      * same-UUID re-invite (D5b), never a stale token — so the accept collapses
-     * to INVITE_INVALID (H4). A live sibling passes untouched (alt-4a).
+     * to INVITE_INVALID (H4). A live sibling passes untouched (alt-4a). The
+     * locked read serializes the decision against the membership writers that
+     * lock the same pivot rows (the OQ-1-158 convention).
      */
     protected function guardAgainstResurrectingARemovedMember(Invitation $invitation, User $joiner): void
     {
-        $removedSiblingHoldsTheSlot = CompanyUser::withTrashed()
+        $lockedSiblings = CompanyUser::withTrashed()
             ->where('company_id', $invitation->company_id)
             ->where('user_id', $joiner->getKey())
-            ->whereKeyNot($invitation->getKey())
+            ->lockForUpdate()
+            ->get();
+
+        $removedSiblingHoldsTheSlot = $lockedSiblings
             ->whereNotNull('deleted_at')
-            ->exists();
+            ->reject(fn (CompanyUser $pivot): bool => $pivot->getKey() === $invitation->getKey())
+            ->isNotEmpty();
 
         if ($removedSiblingHoldsTheSlot) {
             throw new InvalidInvitationException;

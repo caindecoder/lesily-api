@@ -334,6 +334,24 @@ class AcceptInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_accept_reads_the_invitation_it_will_consume_then_it_locks_it(): void
+    {
+        // Given — an existing account invited to a company it doesn't belong to
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+
+        // When — the accept runs with every SQL statement recorded
+        $capture = $this->recordedQueriesDuring(
+            fn () => $this->acceptInvitation($token, [], $invitee)->assertOk()
+        );
+
+        // Then — the consume decided under held locks, in one transaction
+        $this->assertAcceptDecidedUnderInvitationLock($capture);
+        $this->assertPivotSetLockedBeforeWrite($capture);
+    }
+
+    #[Test]
     public function when_a_provisioned_user_stream_is_asked_to_provision_again_then_it_refuses(): void
     {
         // Given — a user stream already born from an invitation genesis

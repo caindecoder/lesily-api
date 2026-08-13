@@ -12,6 +12,7 @@ use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
 use Spatie\EventSourcing\Projectionist;
@@ -24,6 +25,7 @@ use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Database\Events\TransactionBeginning;
 use Spatie\EventSourcing\StoredEvents\ShouldBeStored;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
@@ -164,13 +166,17 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      * moment it executed. DB::listen sees what getQueryLog cannot: the log
      * stores text only, and BEGIN/SAVEPOINT never enter it — so depth is the
      * only observable that distinguishes a held lock from an autocommit one.
+     * `transactions` counts only TOP-LEVEL begins (event-time level exactly one
+     * above ambient) — interior savepoints (e.g. createOrFirst's) are not a
+     * second transaction.
      *
-     * @return array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>}
+     * @return array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}
      */
     protected function recordedQueriesDuring(callable $act): array
     {
         $ambient = DB::transactionLevel();
         $queries = [];
+        $transactionsBegun = 0;
         DB::listen(function (QueryExecuted $query) use (&$queries): void {
             $queries[] = [
                 'sql' => strtolower($query->sql),
@@ -178,10 +184,15 @@ abstract class MembershipsTestCase extends CompaniesTestCase
                 'depth' => DB::transactionLevel(),
             ];
         });
+        Event::listen(TransactionBeginning::class, function () use (&$transactionsBegun, $ambient): void {
+            if (DB::transactionLevel() === $ambient + 1) {
+                $transactionsBegun++;
+            }
+        });
 
         $act();
 
-        return ['ambient' => $ambient, 'queries' => $queries];
+        return ['ambient' => $ambient, 'queries' => $queries, 'transactions' => $transactionsBegun];
     }
 
     /**
@@ -224,6 +235,84 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $this->assertNotNull($writeIndex, 'Expected an in-transaction write to follow the locked read.');
         $this->assertGreaterThan($lockIndex, $guardIndex, 'The owner-guard must decide AFTER the row is locked.');
         $this->assertGreaterThan($lockIndex, $writeIndex, 'The write must follow the locked read.');
+    }
+
+    /**
+     * The accept decided under the invitation row lock (OQ-1-162): exactly ONE
+     * top-level transaction spanned the write, the FIRST in-transaction read of
+     * `invitations` was the locked one (an unlocked pre-read inside the window
+     * would re-arm the TOCTOU), and the event write followed it in the same
+     * window. The pre-transaction fast-fail read is unlocked by design.
+     *
+     * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}  $capture
+     */
+    protected function assertAcceptDecidedUnderInvitationLock(array $capture): void
+    {
+        $lockIndex = null;
+        $writeIndex = null;
+
+        foreach ($capture['queries'] as $index => $query) {
+            $inTransaction = $query['depth'] > $capture['ambient'];
+
+            if ($lockIndex === null && $inTransaction && str_starts_with($query['sql'], 'select')
+                && str_contains($query['sql'], 'from `invitations`')) {
+                $this->assertStringContainsString('for update', $query['sql'], 'The FIRST in-transaction read of invitations must be the locked one.');
+                $lockIndex = $index;
+            }
+
+            if ($writeIndex === null && $inTransaction && str_starts_with($query['sql'], 'insert')
+                && str_contains($query['sql'], '`stored_events`')) {
+                $writeIndex = $index;
+            }
+        }
+
+        $this->assertNotNull($lockIndex, 'No locked in-transaction read of invitations was recorded.');
+        $this->assertNotNull($writeIndex, 'No in-transaction event write was recorded.');
+        $this->assertGreaterThan($lockIndex, $writeIndex, 'The event write must follow the locked read.');
+        $this->assertSame(1, $capture['transactions'], 'Expected exactly ONE top-level transaction to span the accept.');
+    }
+
+    /**
+     * The (company, user) pivot set was locked before the write (OQ-1-162): an
+     * in-transaction `company_user` FOR UPDATE read ran after the invitation
+     * lock (the fixed invitations → company_user order) and before the event
+     * write — serializing the accept against the membership writers that lock
+     * the same rows.
+     *
+     * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}  $capture
+     */
+    protected function assertPivotSetLockedBeforeWrite(array $capture): void
+    {
+        $invitationLockIndex = null;
+        $pivotLockIndex = null;
+        $writeIndex = null;
+
+        foreach ($capture['queries'] as $index => $query) {
+            if ($query['depth'] <= $capture['ambient']) {
+                continue;
+            }
+
+            if ($invitationLockIndex === null && str_starts_with($query['sql'], 'select')
+                && str_contains($query['sql'], 'from `invitations`') && str_contains($query['sql'], 'for update')) {
+                $invitationLockIndex = $index;
+            }
+
+            if ($pivotLockIndex === null && str_starts_with($query['sql'], 'select')
+                && str_contains($query['sql'], 'from `company_user`') && str_contains($query['sql'], 'for update')) {
+                $pivotLockIndex = $index;
+            }
+
+            if ($writeIndex === null && str_starts_with($query['sql'], 'insert')
+                && str_contains($query['sql'], '`stored_events`')) {
+                $writeIndex = $index;
+            }
+        }
+
+        $this->assertNotNull($invitationLockIndex, 'No locked in-transaction read of invitations was recorded.');
+        $this->assertNotNull($pivotLockIndex, 'No locked in-transaction read of company_user was recorded.');
+        $this->assertNotNull($writeIndex, 'No in-transaction event write was recorded.');
+        $this->assertGreaterThan($invitationLockIndex, $pivotLockIndex, 'The pivot lock must follow the invitation lock (fixed lock order).');
+        $this->assertGreaterThan($pivotLockIndex, $writeIndex, 'The write must follow the locked pivot read.');
     }
 
     /**
