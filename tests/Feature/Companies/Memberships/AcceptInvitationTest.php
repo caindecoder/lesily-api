@@ -305,6 +305,27 @@ class AcceptInvitationTest extends MembershipsTestCase
             ->assertSuccessful();
     }
 
+    /**
+     * @param  array{sqlstate: string, code: int, message: string}  $failure
+     */
+    #[Test]
+    #[DataProvider('contentionProvider')]
+    public function when_the_accept_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
+    {
+        // Given an existing account's invitation and a write inside the
+        // accept transaction that dies the way the driver reports it
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $this->induceProjectorFailureFor(UserJoinedCompany::class, $this->syntheticQueryException($failure));
+
+        // When — the invitee accepts while authenticated
+        $response = $this->acceptInvitation($token, [], $invitee);
+
+        // Then contention answers as a conflict; anything else passes through
+        $this->assertRefusedWith($response, $expected);
+    }
+
     #[Test]
     public function when_a_new_users_invitation_died_after_the_first_look_then_no_account_is_created(): void
     {

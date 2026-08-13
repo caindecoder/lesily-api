@@ -55,6 +55,7 @@ use App\Companies\Memberships\Exceptions\SelfRoleChangeBlockedException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 use App\Companies\Exceptions\OwnershipTransferCaseAlreadyClosedException;
+use App\Companies\Memberships\Exceptions\InvitationAcceptContentionException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -247,6 +248,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // The transfer's locked transaction lost to lock contention (MySQL
         // 1205/1213 — ruled s170: same 409 family as the stale-owner guard).
         $exceptions->render(fn (OwnershipTransferContentionException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // The invitation accept's locked transaction lost to lock contention
+        // (OQ-1-164 — the same 409 family; the link stays valid, retry wins).
+        $exceptions->render(fn (InvitationAcceptContentionException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));

@@ -7,6 +7,9 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use App\Companies\Entities\CompanyUser;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\DeadlockException;
+use App\Foundation\Database\LockContention;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Validation\ValidationException;
 use App\Foundation\Auth\UseCases\SessionIssuer;
@@ -19,6 +22,7 @@ use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
 use App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand;
+use App\Companies\Memberships\Exceptions\InvitationAcceptContentionException;
 
 /**
  * Accept a team invitation (UC-1-019). The emailed plaintext token is hashed
@@ -51,13 +55,21 @@ class AcceptInvitationInteractor
             throw new AuthenticationException;
         }
 
-        if (! $invitee instanceof User) {
-            $this->ensureRegistrationDetails($command);
+        try {
+            if (! $invitee instanceof User) {
+                $this->ensureRegistrationDetails($command);
 
-            return $this->provisionAndJoin($invitation, $command, $deviceName);
+                return $this->provisionAndJoin($invitation, $command, $deviceName);
+            }
+
+            return new ExistingUserJoined($this->join($invitation, $invitee));
+        } catch (DeadlockException $exception) {
+            throw new InvitationAcceptContentionException($exception);
+        } catch (QueryException $exception) {
+            throw LockContention::caused($exception)
+                ? new InvitationAcceptContentionException($exception)
+                : $exception;
         }
-
-        return new ExistingUserJoined($this->join($invitation, $invitee));
     }
 
     /**
