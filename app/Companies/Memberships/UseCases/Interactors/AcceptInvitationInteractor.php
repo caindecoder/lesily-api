@@ -69,15 +69,18 @@ class AcceptInvitationInteractor
     protected function provisionAndJoin(Invitation $invitation, AcceptInvitationCommand $command, string $deviceName): NewUserJoined
     {
         $userId = (string) Str::uuid7();
+        // Hashed BEFORE the transaction: bcrypt takes ~300ms at production
+        // rounds, and the invitation row lock must not be held through it.
+        $passwordHash = Hash::make((string) $command->password);
 
-        DB::transaction(function () use ($invitation, $command, $userId): void {
+        DB::transaction(function () use ($invitation, $command, $userId, $passwordHash): void {
             $live = $this->lockedLivePendingInvitation($invitation);
 
             UserAggregate::retrieve($userId)
                 ->createFromInvitation(CreateUserFromInvitationCommand::validateAndCreate([
                     'companyId' => $live->company_id,
                     'email' => $live->email,
-                    'passwordHash' => Hash::make((string) $command->password),
+                    'passwordHash' => $passwordHash,
                     'name' => (string) $command->name,
                 ]))
                 ->persist();
@@ -130,7 +133,8 @@ class AcceptInvitationInteractor
      * transaction, after which the lock serializes concurrent consumers): the
      * live-pending conditions re-checked here decide against committed state,
      * so a concurrent accept's loser collapses to INVITE_INVALID instead of a
-     * duplicate stream append. Lock order is invitations → company_user.
+     * duplicate stream append. The token_hash clause covers the one live-state
+     * mutation the other predicates miss — a resend rotating the token.
      */
     protected function lockedLivePendingInvitation(Invitation $invitation): Invitation
     {
@@ -153,26 +157,24 @@ class AcceptInvitationInteractor
     /**
      * A leftover invitation (a different stream than the member's own pivot)
      * must not re-admit a REMOVED member: their soft-deleted pivot still owns
-     * the (company, user) unique slot, and re-entry is the deliberate
-     * same-UUID re-invite (D5b), never a stale token — so the accept collapses
-     * to INVITE_INVALID (H4). A live sibling passes untouched (alt-4a). The
-     * locked read serializes the decision against the membership writers that
-     * lock the same pivot rows (the OQ-1-158 convention).
+     * the (company, user) unique slot — at most ONE row exists here — and
+     * re-entry is the deliberate same-UUID re-invite (D5b), never a stale
+     * token, so the accept collapses to INVITE_INVALID (H4). A live sibling
+     * passes untouched (alt-4a). The locked read serializes the decision
+     * against the membership writers that lock the same pivot row (the
+     * OQ-1-158 convention); lock order is invitations → company_user.
      */
-    protected function guardAgainstResurrectingARemovedMember(Invitation $invitation, User $joiner): void
+    protected function guardAgainstResurrectingARemovedMember(Invitation $lockedInvitation, User $joiner): void
     {
-        $lockedSiblings = CompanyUser::withTrashed()
-            ->where('company_id', $invitation->company_id)
+        $sibling = CompanyUser::withTrashed()
+            ->where('company_id', $lockedInvitation->company_id)
             ->where('user_id', $joiner->getKey())
             ->lockForUpdate()
-            ->get();
+            ->first();
 
-        $removedSiblingHoldsTheSlot = $lockedSiblings
-            ->whereNotNull('deleted_at')
-            ->reject(fn (CompanyUser $pivot): bool => $pivot->getKey() === $invitation->getKey())
-            ->isNotEmpty();
-
-        if ($removedSiblingHoldsTheSlot) {
+        if ($sibling instanceof CompanyUser
+            && $sibling->deleted_at !== null
+            && $sibling->getKey() !== $lockedInvitation->getKey()) {
             throw new InvalidInvitationException;
         }
     }

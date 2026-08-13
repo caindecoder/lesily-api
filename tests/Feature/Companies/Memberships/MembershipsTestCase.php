@@ -170,7 +170,8 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      * only observable that distinguishes a held lock from an autocommit one.
      * `transactions` counts only TOP-LEVEL begins (event-time level exactly one
      * above ambient) — interior savepoints (e.g. createOrFirst's) are not a
-     * second transaction.
+     * second transaction. The count is REQUEST-WIDE: every top-level begin
+     * during $act, not just the interactor under test.
      *
      * @return array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}
      */
@@ -204,7 +205,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      * owner-guard's roles read (the 'owner'-bound query) ran AFTER that locked
      * read, and the write followed it inside the same transaction window.
      *
-     * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>}  $capture
+     * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}  $capture
      */
     protected function assertOwnerGuardDecidedUnderLock(array $capture, string $table): void
     {
@@ -280,7 +281,10 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      * in-transaction `company_user` FOR UPDATE read ran after the invitation
      * lock (the fixed invitations → company_user order) and before the event
      * write — serializing the accept against the membership writers that lock
-     * the same rows.
+     * the same rows. NOT self-sufficient: depth alone cannot distinguish one
+     * transaction from two sequential ones — pair with
+     * assertAcceptDecidedUnderInvitationLock, whose transactions === 1 assert
+     * closes that split.
      *
      * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}  $capture
      */
