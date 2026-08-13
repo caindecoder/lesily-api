@@ -19,6 +19,7 @@ use Spatie\EventSourcing\Projectionist;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Events\QueryExecuted;
 use Tests\Feature\Companies\CompaniesTestCase;
+use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
@@ -34,6 +35,7 @@ use App\Companies\Memberships\Events\UserInvitationRevoked;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
 
 /**
  * Shared fixtures for the membership (team-invite) feature tests (§2.10). Callers
@@ -358,6 +360,50 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $membership = CompanyUser::withTrashed()->whereKey($membershipId)->sole();
 
         $this->assertNull($membership->deleted_at);
+    }
+
+    /**
+     * An accept interactor whose FIRST look returns $snapshot verbatim — the
+     * stale pre-transaction view a concurrent writer leaves behind. The
+     * in-transaction locked re-read stays production code; pair with
+     * assertLockedInvitationReadRecorded so the seam is proven engaged.
+     */
+    protected function staleSnapshotAccept(Invitation $snapshot): AcceptInvitationInteractor
+    {
+        $interactor = new class(app(SessionIssuer::class)) extends AcceptInvitationInteractor
+        {
+            public ?Invitation $staleSnapshot = null;
+
+            protected function livePendingInvitation(string $plaintextToken): Invitation
+            {
+                return $this->staleSnapshot ?? parent::livePendingInvitation($plaintextToken);
+            }
+        };
+        $interactor->staleSnapshot = $snapshot;
+
+        return $interactor;
+    }
+
+    /**
+     * The transaction's locked invitation re-read actually executed — the
+     * positive control proving a stale-snapshot refusal came from the
+     * production re-check, not from some earlier path.
+     *
+     * @param  array{ambient: int, queries: array<int, array{sql: string, bindings: array<int, mixed>, depth: int}>, transactions: int}  $capture
+     */
+    protected function assertLockedInvitationReadRecorded(array $capture): void
+    {
+        $locked = null;
+
+        foreach ($capture['queries'] as $query) {
+            if ($query['depth'] > $capture['ambient'] && str_starts_with($query['sql'], 'select')
+                && str_contains($query['sql'], 'from `invitations`') && str_contains($query['sql'], 'for update')) {
+                $locked = $query;
+                break;
+            }
+        }
+
+        $this->assertNotNull($locked, 'No locked in-transaction invitations re-read was recorded — the seam did not engage the re-check.');
     }
 
     /**

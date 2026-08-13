@@ -4,11 +4,12 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
+use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Auth;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
-use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Events\UserJoinedCompany;
@@ -20,7 +21,6 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 use App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand;
-use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
 
 /**
  * UC-1-019 — Accept Company Invitation (membership slice #7, Task 3).
@@ -32,6 +32,12 @@ use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
  */
 class AcceptInvitationTest extends MembershipsTestCase
 {
+    protected ?Company $company = null;
+
+    protected ?User $actor = null;
+
+    protected ?User $invitee = null;
+
     #[Test]
     public function when_the_token_is_unknown_then_acceptance_is_refused(): void
     {
@@ -357,48 +363,113 @@ class AcceptInvitationTest extends MembershipsTestCase
         $this->assertPivotSetLockedBeforeWrite($capture);
     }
 
-    #[Test]
-    public function when_a_concurrent_consumer_won_the_invitation_then_the_late_accept_is_refused(): void
+    #[Test, DataProvider('invitationDeathProvider')]
+    public function when_the_invitation_died_after_the_first_look_then_the_late_accept_is_refused(string $death): void
     {
-        // Given — an invitation already consumed by its invitee, and an accept
-        // whose FIRST look reads an unfiltered snapshot — the stale view a
-        // concurrent winner leaves behind (P9: the race is simulated at the
-        // snapshot seam; the locked re-check under test is production code)
-        [$company, $actor] = $this->aCompanyWithMember();
-        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
-        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
-        $this->acceptInvitation($token, [], $invitee)->assertOk();
-        Auth::forgetGuards();
-        $staleSnapshotAccept = new class(app(SessionIssuer::class)) extends AcceptInvitationInteractor
-        {
-            protected function livePendingInvitation(string $plaintextToken): Invitation
-            {
-                return Invitation::query()->where('token_hash', hash('sha256', $plaintextToken))->sole();
+        // Given — an accept holding a STALE snapshot of the invitation (its
+        // pre-transaction look) while the row moves on before the locked
+        // re-read; the seam feeds the snapshot, the re-check is production
+        [$this->company, $this->actor] = $this->aCompanyWithMember();
+        $this->invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($this->company, $this->actor, 'anushka@member.lk');
+        $staleSnapshot = Invitation::query()->where('email', 'anushka@member.lk')->sole();
+        $this->applyInvitationDeath($death, $token);
+        $joinsBefore = LesilyStoredEvent::query()->where('event_class', UserJoinedCompany::class)->count();
+        $pivotsBefore = CompanyUser::withTrashed()->where('company_id', $this->company->getKey())->count();
+
+        // When — the stale accept reaches the transaction, every statement recorded
+        $capture = $this->recordedQueriesDuring(function () use ($staleSnapshot, $token): void {
+            try {
+                $this->staleSnapshotAccept($staleSnapshot)->execute(
+                    AcceptInvitationCommand::validateAndCreate(['token' => $token]),
+                    $this->invitee,
+                    'web',
+                );
+                $this->fail('The locked re-check must refuse a dead invitation.');
+            } catch (InvalidInvitationException) {
+                // Then — the in-transaction locked re-check refused the late accept
             }
+        });
+
+        // Then — the re-check ran under the lock and nothing was written
+        $this->assertLockedInvitationReadRecorded($capture);
+        $this->assertSame($joinsBefore, LesilyStoredEvent::query()->where('event_class', UserJoinedCompany::class)->count());
+        $this->assertSame($pivotsBefore, CompanyUser::withTrashed()->where('company_id', $this->company->getKey())->count());
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function invitationDeathProvider(): array
+    {
+        return [
+            'consumed by a concurrent accept' => ['consumed'],
+            'revoked while the accept was in flight' => ['revoked'],
+            'expired while the accept was in flight' => ['expired'],
+            'superseded by a resend while the accept was in flight' => ['superseded'],
+        ];
+    }
+
+    /**
+     * Move the invitation past the stale snapshot the way a concurrent writer
+     * would: consume it, revoke it, let it expire, or rotate its token.
+     */
+    protected function applyInvitationDeath(string $death, string $token): void
+    {
+        match ($death) {
+            'consumed' => $this->acceptInvitation($token, [], $this->invitee)->assertOk(),
+            'revoked' => $this->revokeInvitation($this->actor, $this->company,
+                (string) Invitation::query()->where('email', $this->invitee->email)->sole()->getKey())->assertNoContent(),
+            'expired' => $this->travel(8)->days(),
+            'superseded' => $this->resendInvitationAsAdmin(),
         };
 
-        // When — the stale accept reaches the transaction
+        Auth::forgetGuards();
+    }
+
+    /**
+     * Rotate the invitation's token through the resend endpoint (UC-1-021) —
+     * the live-state mutation that leaves the ROW pending but the presented
+     * plaintext dead.
+     */
+    protected function resendInvitationAsAdmin(): void
+    {
+        Sanctum::actingAs($this->actor);
+        $invitationId = Invitation::query()->where('email', $this->invitee->email)->sole()->getKey();
+        $this->postJson("/api/v1/invitations/{$invitationId}/resend", [], ['X-Company-Context' => $this->company->getKey()])
+            ->assertSuccessful();
+    }
+
+    #[Test]
+    public function when_a_new_users_invitation_died_after_the_first_look_then_no_account_is_created(): void
+    {
+        // Given — a brand-new email's invitation, revoked after the accept's
+        // first look (the stale-snapshot seam on the genesis branch)
+        [$company, $actor] = $this->aCompanyWithMember();
+        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $staleSnapshot = Invitation::query()->where('email', 'kasun@newjoiner.lk')->sole();
+        $this->revokeInvitation($actor, $company, (string) $staleSnapshot->getKey())->assertNoContent();
+        Auth::forgetGuards();
+
+        // When — the stale genesis accept reaches the transaction
         try {
-            $staleSnapshotAccept->execute(
-                AcceptInvitationCommand::validateAndCreate(['token' => $token]),
-                $invitee,
+            $this->staleSnapshotAccept($staleSnapshot)->execute(
+                AcceptInvitationCommand::validateAndCreate([
+                    'token' => $token,
+                    'name' => 'Nimal Perera',
+                    'password' => 'Str0ng-Pass!',
+                ]),
+                null,
                 'web',
             );
-            $this->fail('The locked re-check must refuse a consumed invitation.');
+            $this->fail('The locked re-check must refuse the revoked invitation before provisioning.');
         } catch (InvalidInvitationException) {
-            // Then — the in-transaction locked re-check refused the late accept
+            // Then — refused inside the transaction, before any account write
         }
 
-        // Then — the original join is the only one on the stream and the
-        // membership is unchanged
-        $this->assertSame(1, LesilyStoredEvent::query()
-            ->where('event_class', UserJoinedCompany::class)
-            ->where('event_properties->userId', $invitee->getKey())
-            ->count());
-        $this->assertSame(1, CompanyUser::withTrashed()
-            ->where('company_id', $company->getKey())
-            ->where('user_id', $invitee->getKey())
-            ->count());
+        // Then — no account was provisioned and nothing was consumed
+        $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
+        $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
     }
 
     #[Test]

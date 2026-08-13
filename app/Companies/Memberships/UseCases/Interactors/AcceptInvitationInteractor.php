@@ -136,6 +136,7 @@ class AcceptInvitationInteractor
     {
         $live = Invitation::query()
             ->whereKey($invitation->getKey())
+            ->where('token_hash', $invitation->token_hash)
             ->whereNull('accepted_at')
             ->whereNull('revoked_at')
             ->where('expires_at', '>', now())
