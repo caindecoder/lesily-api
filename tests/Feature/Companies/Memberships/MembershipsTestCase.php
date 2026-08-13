@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
 use Spatie\EventSourcing\Projectionist;
+use Tests\Concerns\InducesDatabaseFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Events\QueryExecuted;
 use Tests\Feature\Companies\CompaniesTestCase;
@@ -45,6 +46,7 @@ use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
  */
 abstract class MembershipsTestCase extends CompaniesTestCase
 {
+    use InducesDatabaseFailures;
     use RefreshDatabase;
     use WithRolePermissionFixtures;
 
