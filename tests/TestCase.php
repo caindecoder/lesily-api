@@ -47,6 +47,10 @@ abstract class TestCase extends BaseTestCase
                 ['sqlstate' => 'HY000', 'code' => 1205, 'message' => 'SQLSTATE[HY000]: General error: 1205'],
                 ApiErrorCode::StateGuardViolation,
             ],
+            'a deadlock reported without the detector phrase' => [
+                ['sqlstate' => '40001', 'code' => 1213, 'message' => 'SQLSTATE[40001]: General error: 1213'],
+                ApiErrorCode::StateGuardViolation,
+            ],
             'a duplicate entry passes through unclassified' => [
                 ['sqlstate' => '23000', 'code' => 1062, 'message' => 'Duplicate entry'],
                 ApiErrorCode::InternalError,
