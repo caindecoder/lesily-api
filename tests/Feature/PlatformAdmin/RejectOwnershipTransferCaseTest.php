@@ -327,8 +327,14 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
                 'depth' => DB::transactionLevel(),
             ];
         });
-        Event::listen(TransactionBeginning::class, function () use (&$transactionsBegun): void {
-            $transactionsBegun++;
+        // Top-level begins only (level exactly one above ambient at event
+        // time) — the MembershipsTestCase semantics: interior savepoints are
+        // not a second transaction. Behavior-neutral here (the rejection
+        // opens no savepoints); aligned so the two same-named helpers agree.
+        Event::listen(TransactionBeginning::class, function () use (&$transactionsBegun, $ambient): void {
+            if (DB::transactionLevel() === $ambient + 1) {
+                $transactionsBegun++;
+            }
         });
 
         $act();
