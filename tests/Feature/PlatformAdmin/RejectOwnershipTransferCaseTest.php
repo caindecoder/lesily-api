@@ -164,7 +164,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response = $this->rejectCase($this->admin, $case->getKey());
 
         // Then contention answers as a conflict; anything else passes through
-        // (render only — the audit-veto row above is the atomicity net)
+        // (render only — the audit-veto row is the atomicity net)
         $response->assertStatus($expected->status());
         $response->assertJsonPath('error_code', $expected->value);
     }
@@ -308,7 +308,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
     /**
      * Record every SQL statement run during $act with the transaction depth
-     * it ran at, plus how many transactions BEGAN during the act (DB::listen
+     * it ran at, plus how many TOP-LEVEL transactions began during the act (DB::listen
      * + per-statement DB::transactionLevel() — the T2 oracle idiom: SQL text
      * alone cannot see transaction boundaries, and RefreshDatabase's ambient
      * wrapper supplies the depth baseline).
@@ -329,8 +329,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         });
         // Top-level begins only (level exactly one above ambient at event
         // time) — the MembershipsTestCase semantics: interior savepoints are
-        // not a second transaction. Behavior-neutral here (the rejection
-        // opens no savepoints); aligned so the two same-named helpers agree.
+        // not a second transaction.
         Event::listen(TransactionBeginning::class, function () use (&$transactionsBegun, $ambient): void {
             if (DB::transactionLevel() === $ambient + 1) {
                 $transactionsBegun++;
@@ -374,7 +373,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNotNull($lockIndex, 'No locked read of ownership_transfer_cases was recorded.');
         $this->assertNotNull($updateIndex, 'No closing update of ownership_transfer_cases was recorded.');
         $this->assertGreaterThan($lockIndex, $updateIndex);
-        $this->assertSame(1, $capture['transactions'], 'Expected exactly ONE transaction to span the whole rejection.');
+        $this->assertSame(1, $capture['transactions'], 'Expected exactly ONE top-level transaction to span the whole rejection.');
     }
 
     /**

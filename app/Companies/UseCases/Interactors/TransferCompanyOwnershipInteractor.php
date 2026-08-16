@@ -37,8 +37,6 @@ class TransferCompanyOwnershipInteractor
         try {
             return $this->executeLocked($company, $command, $expectedOwnerUserId);
         } catch (DeadlockException $exception) {
-            // Laravel wraps a concurrency loser inside a nested transaction;
-            // at top level the raw QueryException surfaces instead (below).
             throw new OwnershipTransferContentionException($exception);
         } catch (QueryException $exception) {
             throw LockContention::caused($exception)

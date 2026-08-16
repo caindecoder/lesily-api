@@ -9,6 +9,10 @@ use Illuminate\Database\QueryException;
  * lock-wait timeout or deadlock is "the world moved" — interactors translate
  * it to their domain's 409-family exception; every other QueryException must
  * pass through unclassified.
+ *
+ * Laravel promotes a detector-matched loser to DeadlockException only inside
+ * a nested transaction; at top level the raw QueryException surfaces — hence
+ * the paired catch arms at every site.
  */
 class LockContention
 {

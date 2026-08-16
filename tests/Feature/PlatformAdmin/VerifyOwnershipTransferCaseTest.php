@@ -232,7 +232,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then contention answers as a conflict; anything else passes
         // through (render only — a synthetic deadlock cannot model MySQL's
-        // server-side rollback; the audit-veto row below is the atomicity net)
+        // server-side rollback; the audit-veto row is the atomicity net)
         $response->assertStatus($expected->status());
         $response->assertJsonPath('error_code', $expected->value);
     }

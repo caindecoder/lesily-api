@@ -237,7 +237,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response = $this->executeCase($this->admin, $case->getKey());
 
         // Then contention answers as a conflict; anything else passes through
-        // (render only — the audit-veto row above is the atomicity net)
+        // (render only — the audit-veto row is the atomicity net)
         $response->assertStatus($expected->status());
         $response->assertJsonPath('error_code', $expected->value);
     }
