@@ -60,15 +60,16 @@ class MembershipFilters extends Data
      */
     public static function rules(ValidationContext $context): array
     {
+        // filled: an empty string skips every non-implicit rule (OQ-1-163) —
+        // only an implicit rule can refuse '' at this seam. Listed first so
+        // its removal stays test-visible and the empty-value message leads.
         return [
-            // filled: an empty string skips every non-implicit rule (OQ-1-163),
-            // so only an implicit rule can refuse '' at the DTO seam.
-            'role' => ['sometimes', 'filled', 'string'],
-            'status' => ['sometimes', 'filled', 'string', Rule::in(['active', 'invited'])],
-            'search' => ['sometimes', 'filled', 'string'],
-            'sort' => ['sometimes', 'filled', 'string', Rule::in(self::SORTABLE_FIELDS)],
-            'page' => ['sometimes', 'filled', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'filled', 'integer', 'min:1', 'max:100'],
+            'role' => ['filled', 'sometimes', 'string'],
+            'status' => ['filled', 'sometimes', 'string', Rule::in(['active', 'invited'])],
+            'search' => ['filled', 'sometimes', 'string'],
+            'sort' => ['filled', 'sometimes', 'string', Rule::in(self::SORTABLE_FIELDS)],
+            'page' => ['filled', 'sometimes', 'integer', 'min:1'],
+            'per_page' => ['filled', 'sometimes', 'integer', 'min:1', 'max:100'],
         ];
     }
 }

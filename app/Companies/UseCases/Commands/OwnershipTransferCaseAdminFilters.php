@@ -52,13 +52,14 @@ class OwnershipTransferCaseAdminFilters extends Data
      */
     public static function rules(ValidationContext $context): array
     {
+        // filled: an empty string skips every non-implicit rule (OQ-1-163) —
+        // only an implicit rule can refuse '' at this seam. Listed first so
+        // its removal stays test-visible and the empty-value message leads.
         return [
-            // filled: an empty string skips every non-implicit rule (OQ-1-163),
-            // so only an implicit rule can refuse '' at the DTO seam.
-            'status' => ['sometimes', 'filled', 'string', Rule::enum(OwnershipTransferCaseStatus::class)],
-            'company_id' => ['sometimes', 'filled', 'uuid'],
-            'page' => ['sometimes', 'filled', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'filled', 'integer', 'min:1', 'max:100'],
+            'status' => ['filled', 'sometimes', 'string', Rule::enum(OwnershipTransferCaseStatus::class)],
+            'company_id' => ['filled', 'sometimes', 'uuid'],
+            'page' => ['filled', 'sometimes', 'integer', 'min:1'],
+            'per_page' => ['filled', 'sometimes', 'integer', 'min:1', 'max:100'],
         ];
     }
 }

@@ -62,7 +62,7 @@ class ListInvoicesTest extends BillingTestCase
     public function when_an_invoice_filter_is_built_with_an_empty_value_then_it_is_rejected(string $field, string $value): void
     {
         // Given an empty value for a whitelisted filter key — reachable only at
-        // the DTO seam (ConvertEmptyStringsToNull nulls it before HTTP validation)
+        // the DTO seam (TrimStrings + ConvertEmptyStringsToNull neutralise it over HTTP)
 
         // When the filter is built directly, then construction is rejected on that field
         $this->assertEmptyFilterValueRejected(InvoiceFilters::class, $field, $value);
@@ -682,7 +682,8 @@ class ListInvoicesTest extends BillingTestCase
             'empty sort' => ['sort', ''],
             'empty page' => ['page', ''],
             'empty per_page' => ['per_page', ''],
-            'whitespace per_page' => ['per_page', ' '],
+            'ascii whitespace per_page' => ['per_page', ' '],
+            'ascii whitespace status' => ['status', ' '],
         ];
     }
 }
