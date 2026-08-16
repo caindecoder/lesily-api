@@ -11,9 +11,13 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
+use Tests\Concerns\AssertsFilterEmptyValueRejection;
+use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 
 class ViewMembershipsTest extends MembershipsTestCase
 {
+    use AssertsFilterEmptyValueRejection;
+
     // --- Sad ---
 
     #[Test]
@@ -100,6 +104,35 @@ class ViewMembershipsTest extends MembershipsTestCase
             'non-numeric page' => [['page' => 'abc'], 'page'],
             'status not whitelisted' => [['status' => 'pending'], 'status'],
             'page below minimum' => [['page' => 0], 'page'],
+            'empty role value' => [['role' => ''], 'role'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('provideEmptyFilterValues')]
+    public function when_a_membership_filter_is_built_with_an_empty_value_then_it_is_rejected(string $field, string $value): void
+    {
+        // Given an empty value for a whitelisted filter key — reachable only at
+        // the DTO seam (TrimStrings + ConvertEmptyStringsToNull neutralise it over HTTP)
+
+        // When the filter is built directly, then construction is rejected on that field
+        $this->assertEmptyFilterValueRejected(MembershipFilters::class, $field, $value);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function provideEmptyFilterValues(): array
+    {
+        return [
+            'empty role' => ['role', ''],
+            'empty status' => ['status', ''],
+            'empty search' => ['search', ''],
+            'empty sort' => ['sort', ''],
+            'empty page' => ['page', ''],
+            'empty per_page' => ['per_page', ''],
+            'ascii whitespace per_page' => ['per_page', ' '],
+            'ascii whitespace search' => ['search', ' '],
         ];
     }
 
@@ -579,5 +612,26 @@ class ViewMembershipsTest extends MembershipsTestCase
             ],
             'meta' => ['pagination' => ['page' => 1, 'per_page' => 15, 'total' => 1, 'last_page' => 1]],
         ]);
+    }
+
+    #[Test]
+    public function when_a_membership_filter_is_built_without_values_then_defaults_apply(): void
+    {
+        // Given no query values at all
+
+        // When the filter is built at the DTO seam (the roster echo path builds
+        // exactly this shape in production — EloquentCompanyUserRepository::findById)
+        $filters = MembershipFilters::validateAndCreate([]);
+
+        // Then it constructs with every property at its null default — the
+        // filled guard must never fire on an absent key
+        $this->assertSame([
+            'role' => null,
+            'status' => null,
+            'search' => null,
+            'sort' => null,
+            'page' => null,
+            'per_page' => null,
+        ], $filters->toArray());
     }
 }

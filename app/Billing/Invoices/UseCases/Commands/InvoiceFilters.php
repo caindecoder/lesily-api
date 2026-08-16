@@ -75,16 +75,19 @@ class InvoiceFilters extends Data
      */
     public static function rules(ValidationContext $context): array
     {
+        // filled: an empty string skips every non-implicit rule (OQ-1-163) —
+        // only an implicit rule can refuse '' at this seam. Listed first so
+        // its removal stays test-visible and the empty-value message leads.
         return [
-            'status' => ['sometimes', 'string', Rule::in(self::STATUS_TOKENS)],
+            'status' => ['filled', 'sometimes', 'string', Rule::in(self::STATUS_TOKENS)],
             // bail: the closure must never run on a non-string (an array
             // within[] would fatal on the string cast before the 422).
-            'within' => ['sometimes', 'bail', 'string', self::isoDateRangeRule()],
-            'min_amount' => ['sometimes', 'integer', 'min:0'],
-            'max_amount' => ['sometimes', 'integer', 'min:0'],
-            'sort' => ['sometimes', 'string', Rule::in(self::SORTABLE_FIELDS)],
-            'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'within' => ['filled', 'sometimes', 'bail', 'string', self::isoDateRangeRule()],
+            'min_amount' => ['filled', 'sometimes', 'integer', 'min:0'],
+            'max_amount' => ['filled', 'sometimes', 'integer', 'min:0'],
+            'sort' => ['filled', 'sometimes', 'string', Rule::in(self::SORTABLE_FIELDS)],
+            'page' => ['filled', 'sometimes', 'integer', 'min:1'],
+            'per_page' => ['filled', 'sometimes', 'integer', 'min:1', 'max:100'],
         ];
     }
 

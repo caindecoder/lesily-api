@@ -10,10 +10,13 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\AssertsFilterEmptyValueRejection;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
+use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
 
 class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCase
 {
+    use AssertsFilterEmptyValueRejection;
     use RefreshDatabase;
 
     #[Test]
@@ -57,6 +60,17 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
         // Then the read is refused naming the offending key and nothing is audited
         $this->assertValidationFailed($response, $field);
         $this->assertNoAuditRecorded();
+    }
+
+    #[Test]
+    #[DataProvider('emptyFilterValuesProvider')]
+    public function when_an_ownership_transfer_case_admin_filter_is_built_with_an_empty_value_then_it_is_rejected(string $field, string $value): void
+    {
+        // Given an empty value for a whitelisted filter key — reachable only at
+        // the DTO seam (TrimStrings + ConvertEmptyStringsToNull neutralise it over HTTP)
+
+        // When the filter is built directly, then construction is rejected on that field
+        $this->assertEmptyFilterValueRejected(OwnershipTransferCaseAdminFilters::class, $field, $value);
     }
 
     #[Test]
@@ -288,6 +302,24 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
         ]);
     }
 
+    #[Test]
+    public function when_an_ownership_transfer_case_admin_filter_is_built_without_values_then_defaults_apply(): void
+    {
+        // Given no query values at all
+
+        // When the filter is built at the DTO seam
+        $filters = OwnershipTransferCaseAdminFilters::validateAndCreate([]);
+
+        // Then it constructs with every property at its null default — the
+        // filled guard must never fire on an absent key
+        $this->assertSame([
+            'status' => null,
+            'company_id' => null,
+            'page' => null,
+            'per_page' => null,
+        ], $filters->toArray());
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -313,6 +345,22 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
             'page below floor' => [['page' => 0], 'page'],
             'array-valued status' => [['status' => ['open']], 'status'],
             'malformed company id' => [['company_id' => 'not-a-uuid'], 'company_id'],
+            'empty status value' => [['status' => ''], 'status'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function emptyFilterValuesProvider(): array
+    {
+        return [
+            'empty status' => ['status', ''],
+            'empty company_id' => ['company_id', ''],
+            'empty page' => ['page', ''],
+            'empty per_page' => ['per_page', ''],
+            'ascii whitespace per_page' => ['per_page', ' '],
+            'ascii whitespace company_id' => ['company_id', ' '],
         ];
     }
 }
