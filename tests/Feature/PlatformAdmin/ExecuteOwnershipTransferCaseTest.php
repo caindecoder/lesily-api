@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -215,6 +216,30 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // and the already-inserted audit row together
         $this->assertFailedClosed($response);
         $this->assertNothingExecuted($case, $company->owner_id);
+    }
+
+    /**
+     * @param  array{sqlstate: string, code: int, message: string}  $failure
+     */
+    #[Test]
+    #[DataProvider('contentionProvider')]
+    public function when_the_execution_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
+    {
+        // Given a verified case, a live incoming member, and a write inside
+        // the OUTER locked transaction — after the composed transfer — that
+        // dies the way the driver reports it
+        $company = Company::factory()->create();
+        $alex = $this->aCompanyMember($company, 'employee');
+        $case = $this->aVerifiedCaseFor($company, $alex);
+        AuditEntry::created(fn () => throw $this->syntheticQueryException($failure));
+
+        // When the admin executes the case
+        $response = $this->executeCase($this->admin, $case->getKey());
+
+        // Then contention answers as a conflict; anything else passes through
+        // (render only — the audit-veto row is the atomicity net)
+        $response->assertStatus($expected->status());
+        $response->assertJsonPath('error_code', $expected->value);
     }
 
     #[Test]

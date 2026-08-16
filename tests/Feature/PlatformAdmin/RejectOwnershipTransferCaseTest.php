@@ -14,6 +14,7 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use App\Companies\Enums\RejectionReasonCode;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -144,6 +145,28 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // the already-inserted audit row together
         $this->assertFailedClosed($response);
         $this->assertNothingRejected($case, $company->owner_id);
+    }
+
+    /**
+     * @param  array{sqlstate: string, code: int, message: string}  $failure
+     */
+    #[Test]
+    #[DataProvider('contentionProvider')]
+    public function when_the_rejection_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
+    {
+        // Given an open case and a write inside the locked transaction that
+        // dies the way the driver reports it
+        $company = Company::factory()->create();
+        $case = $this->anOpenCaseFor($company);
+        AuditEntry::created(fn () => throw $this->syntheticQueryException($failure));
+
+        // When the admin rejects the case
+        $response = $this->rejectCase($this->admin, $case->getKey());
+
+        // Then contention answers as a conflict; anything else passes through
+        // (render only — the audit-veto row is the atomicity net)
+        $response->assertStatus($expected->status());
+        $response->assertJsonPath('error_code', $expected->value);
     }
 
     #[Test]
@@ -285,7 +308,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
     /**
      * Record every SQL statement run during $act with the transaction depth
-     * it ran at, plus how many transactions BEGAN during the act (DB::listen
+     * it ran at, plus how many TOP-LEVEL transactions began during the act (DB::listen
      * + per-statement DB::transactionLevel() — the T2 oracle idiom: SQL text
      * alone cannot see transaction boundaries, and RefreshDatabase's ambient
      * wrapper supplies the depth baseline).
@@ -304,8 +327,13 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
                 'depth' => DB::transactionLevel(),
             ];
         });
-        Event::listen(TransactionBeginning::class, function () use (&$transactionsBegun): void {
-            $transactionsBegun++;
+        // Top-level begins only (level exactly one above ambient at event
+        // time) — the MembershipsTestCase semantics: interior savepoints are
+        // not a second transaction.
+        Event::listen(TransactionBeginning::class, function () use (&$transactionsBegun, $ambient): void {
+            if (DB::transactionLevel() === $ambient + 1) {
+                $transactionsBegun++;
+            }
         });
 
         $act();
@@ -345,7 +373,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNotNull($lockIndex, 'No locked read of ownership_transfer_cases was recorded.');
         $this->assertNotNull($updateIndex, 'No closing update of ownership_transfer_cases was recorded.');
         $this->assertGreaterThan($lockIndex, $updateIndex);
-        $this->assertSame(1, $capture['transactions'], 'Expected exactly ONE transaction to span the whole rejection.');
+        $this->assertSame(1, $capture['transactions'], 'Expected exactly ONE top-level transaction to span the whole rejection.');
     }
 
     /**

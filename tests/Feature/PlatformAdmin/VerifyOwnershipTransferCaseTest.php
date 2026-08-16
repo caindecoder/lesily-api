@@ -10,12 +10,16 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
+use App\Companies\Exceptions\OwnershipTransferContentionException;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
@@ -207,6 +211,55 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'TARGET_NOT_MEMBER');
         $this->assertNothingVerified($case);
+    }
+
+    /**
+     * @param  array{sqlstate: string, code: int, message: string}  $failure
+     */
+    #[Test]
+    #[DataProvider('contentionProvider')]
+    public function when_the_verification_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
+    {
+        // Given an open case, a live member, and a write inside the locked
+        // transaction that dies the way the driver reports it
+        $company = Company::factory()->create();
+        $member = $this->aCompanyMember($company, 'employee');
+        $case = $this->anOpenCaseFor($company);
+        AuditEntry::created(fn () => throw $this->syntheticQueryException($failure));
+
+        // When the admin verifies the case
+        $response = $this->verifyCase($this->admin, $case->getKey(), $this->aValidVerificationPayload($member));
+
+        // Then contention answers as a conflict; anything else passes
+        // through (render only — a synthetic deadlock cannot model MySQL's
+        // server-side rollback; the audit-veto row is the atomicity net)
+        $response->assertStatus($expected->status());
+        $response->assertJsonPath('error_code', $expected->value);
+    }
+
+    #[Test]
+    public function when_the_verification_loses_contention_then_the_cause_and_family_message_survive(): void
+    {
+        // Given an open case, a live member, and a lock-wait death inside
+        // the locked transaction
+        Exceptions::fake();
+        $company = Company::factory()->create();
+        $member = $this->aCompanyMember($company, 'employee');
+        $case = $this->anOpenCaseFor($company);
+        AuditEntry::created(fn () => throw $this->syntheticQueryException(
+            ['sqlstate' => 'HY000', 'code' => 1205, 'message' => 'SQLSTATE[HY000]: General error: 1205'],
+        ));
+
+        // When the admin verifies the case
+        $response = $this->verifyCase($this->admin, $case->getKey(), $this->aValidVerificationPayload($member));
+
+        // Then the conflict speaks with THIS family's voice and the driver
+        // cause rides the reported exception into the log chain
+        $response->assertStatus(409);
+        $response->assertJsonPath('message', 'The transfer lost to a concurrent change. Please retry.');
+        Exceptions::assertReported(
+            fn (OwnershipTransferContentionException $e): bool => $e->getPrevious() instanceof QueryException
+        );
     }
 
     #[Test]

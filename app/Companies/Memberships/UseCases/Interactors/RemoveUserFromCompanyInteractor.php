@@ -5,10 +5,14 @@ namespace App\Companies\Memberships\UseCases\Interactors;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\DeadlockException;
+use App\Foundation\Database\LockContention;
 use App\Foundation\Auth\UseCases\TokenRevoker;
 use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Companies\Memberships\Exceptions\SelfRemovalBlockedException;
 use App\Companies\Memberships\Exceptions\OwnerRemovalBlockedException;
+use App\Companies\Memberships\Exceptions\MembershipContentionException;
 use App\Companies\Memberships\UseCases\Commands\RemoveUserFromCompanyCommand;
 
 /**
@@ -23,6 +27,19 @@ class RemoveUserFromCompanyInteractor
     public function __construct(private TokenRevoker $tokenRevoker) {}
 
     public function execute(Company $company, RemoveUserFromCompanyCommand $command, string $membershipId): void
+    {
+        try {
+            $this->executeLocked($company, $command, $membershipId);
+        } catch (DeadlockException $exception) {
+            throw new MembershipContentionException($exception);
+        } catch (QueryException $exception) {
+            throw LockContention::caused($exception)
+                ? new MembershipContentionException($exception)
+                : $exception;
+        }
+    }
+
+    private function executeLocked(Company $company, RemoveUserFromCompanyCommand $command, string $membershipId): void
     {
         DB::transaction(function () use ($company, $command, $membershipId): void {
             $membership = CompanyUser::query()

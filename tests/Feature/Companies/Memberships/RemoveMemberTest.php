@@ -220,6 +220,26 @@ class RemoveMemberTest extends MembershipsTestCase
         $this->assertRosterExcludes($this->viewMemberships($actor, $company), $target);
     }
 
+    /**
+     * @param  array{sqlstate: string, code: int, message: string}  $failure
+     */
+    #[Test]
+    #[DataProvider('contentionProvider')]
+    public function when_the_removal_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
+    {
+        // Given — a member to remove and a write inside the locked
+        // transaction that dies the way the driver reports it
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $this->induceProjectorFailureFor(UserRemovedFromCompany::class, $this->syntheticQueryException($failure));
+
+        // When — the admin removes the member
+        $response = $this->removeMember($admin, $company, $membershipId);
+
+        // Then — contention answers as a conflict; anything else passes through
+        $this->assertRefusedWith($response, $expected);
+    }
+
     #[Test]
     public function when_the_removal_reads_the_membership_it_will_write_then_it_locks_it(): void
     {

@@ -11,6 +11,7 @@ use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Database\QueryException;
+use Tests\Concerns\InducesDatabaseFailures;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -27,6 +28,8 @@ use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 abstract class PlatformAdminTestCase extends TestCase
 {
+    use InducesDatabaseFailures;
+
     /**
      * Set the platform-admin allowlist exactly as the middleware will see it —
      * raw post-explode shapes (config/platform.php does the bare env split;

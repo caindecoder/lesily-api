@@ -4,11 +4,15 @@ namespace App\Companies\UseCases\Interactors;
 
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\DeadlockException;
+use App\Foundation\Database\LockContention;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
+use App\Companies\Exceptions\OwnershipTransferContentionException;
 use App\Companies\UseCases\Commands\RejectOwnershipTransferCaseCommand;
 use App\Companies\Exceptions\OwnershipTransferCaseAlreadyClosedException;
 
@@ -20,6 +24,19 @@ use App\Companies\Exceptions\OwnershipTransferCaseAlreadyClosedException;
 class RejectOwnershipTransferCaseInteractor
 {
     public function execute(RejectOwnershipTransferCaseCommand $command, User $admin, AdminRequestContext $context): OwnershipTransferCase
+    {
+        try {
+            return $this->executeLocked($command, $admin, $context);
+        } catch (DeadlockException $exception) {
+            throw new OwnershipTransferContentionException($exception);
+        } catch (QueryException $exception) {
+            throw LockContention::caused($exception)
+                ? new OwnershipTransferContentionException($exception)
+                : $exception;
+        }
+    }
+
+    private function executeLocked(RejectOwnershipTransferCaseCommand $command, User $admin, AdminRequestContext $context): OwnershipTransferCase
     {
         return DB::transaction(function () use ($command, $admin, $context): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()

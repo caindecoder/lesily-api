@@ -7,6 +7,9 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use App\Companies\Entities\CompanyUser;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\DeadlockException;
+use App\Foundation\Database\LockContention;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Validation\ValidationException;
 use App\Foundation\Auth\UseCases\SessionIssuer;
@@ -19,6 +22,7 @@ use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
 use App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand;
+use App\Companies\Memberships\Exceptions\InvitationAcceptContentionException;
 
 /**
  * Accept a team invitation (UC-1-019). The emailed plaintext token is hashed
@@ -61,6 +65,30 @@ class AcceptInvitationInteractor
     }
 
     /**
+     * Classify lock contention from THIS accept's transaction only — the
+     * post-commit tail (read-model reads, last_logged_at, session mint) is
+     * deliberately non-atomic and must never answer "retry": the membership
+     * is already durable, so a retry would find the link consumed.
+     *
+     * @template TReturn
+     *
+     * @param  callable(): TReturn  $transaction
+     * @return TReturn
+     */
+    protected function classifyingContention(callable $transaction): mixed
+    {
+        try {
+            return $transaction();
+        } catch (DeadlockException $exception) {
+            throw new InvitationAcceptContentionException($exception);
+        } catch (QueryException $exception) {
+            throw LockContention::caused($exception)
+                ? new InvitationAcceptContentionException($exception)
+                : $exception;
+        }
+    }
+
+    /**
      * The new-email main flow: genesis + join in ONE transaction (UC minimal
      * guarantee), then — mirroring RegisterOwnerInteractor — materialise the
      * read model, stamp last_logged_at, and mint the session OUTSIDE the
@@ -73,7 +101,7 @@ class AcceptInvitationInteractor
         // rounds, and the invitation row lock must not be held through it.
         $passwordHash = Hash::make((string) $command->password);
 
-        DB::transaction(function () use ($invitation, $command, $userId, $passwordHash): void {
+        $this->classifyingContention(fn () => DB::transaction(function () use ($invitation, $command, $userId, $passwordHash): void {
             $live = $this->lockedLivePendingInvitation($invitation);
 
             UserAggregate::retrieve($userId)
@@ -88,7 +116,7 @@ class AcceptInvitationInteractor
             UserMembership::retrieve($live->getKey())
                 ->acceptInvitation($userId, $live->role_id)
                 ->persist();
-        });
+        }));
 
         $user = User::query()->findOrFail($userId);
         $user->last_logged_at = now();
@@ -109,14 +137,14 @@ class AcceptInvitationInteractor
      */
     protected function join(Invitation $invitation, User $joiner): CompanyUser
     {
-        DB::transaction(function () use ($invitation, $joiner): void {
+        $this->classifyingContention(fn () => DB::transaction(function () use ($invitation, $joiner): void {
             $live = $this->lockedLivePendingInvitation($invitation);
             $this->guardAgainstResurrectingARemovedMember($live, $joiner);
 
             UserMembership::retrieve($live->getKey())
                 ->acceptInvitation($joiner->getKey(), $live->role_id)
                 ->persist();
-        });
+        }));
 
         // The live pivot for (company, joiner) — normally the invitation's own
         // UUID (D5b); on an idempotent alt-4a accept, the earlier membership
