@@ -76,15 +76,17 @@ class InvoiceFilters extends Data
     public static function rules(ValidationContext $context): array
     {
         return [
-            'status' => ['sometimes', 'string', Rule::in(self::STATUS_TOKENS)],
+            // filled: an empty string skips every non-implicit rule (OQ-1-163),
+            // so only an implicit rule can refuse '' at the DTO seam.
+            'status' => ['sometimes', 'filled', 'string', Rule::in(self::STATUS_TOKENS)],
             // bail: the closure must never run on a non-string (an array
             // within[] would fatal on the string cast before the 422).
-            'within' => ['sometimes', 'bail', 'string', self::isoDateRangeRule()],
-            'min_amount' => ['sometimes', 'integer', 'min:0'],
-            'max_amount' => ['sometimes', 'integer', 'min:0'],
-            'sort' => ['sometimes', 'string', Rule::in(self::SORTABLE_FIELDS)],
-            'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'within' => ['sometimes', 'filled', 'bail', 'string', self::isoDateRangeRule()],
+            'min_amount' => ['sometimes', 'filled', 'integer', 'min:0'],
+            'max_amount' => ['sometimes', 'filled', 'integer', 'min:0'],
+            'sort' => ['sometimes', 'filled', 'string', Rule::in(self::SORTABLE_FIELDS)],
+            'page' => ['sometimes', 'filled', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'filled', 'integer', 'min:1', 'max:100'],
         ];
     }
 

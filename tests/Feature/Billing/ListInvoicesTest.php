@@ -9,6 +9,8 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\AssertsFilterEmptyValueRejection;
+use App\Billing\Invoices\UseCases\Commands\InvoiceFilters;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
@@ -21,6 +23,7 @@ use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
  */
 class ListInvoicesTest extends BillingTestCase
 {
+    use AssertsFilterEmptyValueRejection;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -52,6 +55,17 @@ class ListInvoicesTest extends BillingTestCase
         // per-endpoint whitelist; unknown params 422 per the s134 F-a ruling —
         // includes the company_id tenant-override attempt)
         $this->assertValidationRejected($response, $invalidField);
+    }
+
+    #[Test]
+    #[DataProvider('provideEmptyFilterValues')]
+    public function when_an_invoice_filter_is_built_with_an_empty_value_then_it_is_rejected(string $field, string $value): void
+    {
+        // Given an empty value for a whitelisted filter key — reachable only at
+        // the DTO seam (ConvertEmptyStringsToNull nulls it before HTTP validation)
+
+        // When the filter is built directly, then construction is rejected on that field
+        $this->assertEmptyFilterValueRejected(InvoiceFilters::class, $field, $value);
     }
 
     #[Test]
@@ -548,6 +562,27 @@ class ListInvoicesTest extends BillingTestCase
         );
     }
 
+    #[Test]
+    public function when_an_invoice_filter_is_built_without_values_then_defaults_apply(): void
+    {
+        // Given no query values at all
+
+        // When the filter is built at the DTO seam
+        $filters = InvoiceFilters::validateAndCreate([]);
+
+        // Then it constructs with every property at its null default — the
+        // filled guard must never fire on an absent key
+        $this->assertSame([
+            'status' => null,
+            'within' => null,
+            'min_amount' => null,
+            'max_amount' => null,
+            'sort' => null,
+            'page' => null,
+            'per_page' => null,
+        ], $filters->toArray());
+    }
+
     /**
      * The drift-sensitive shape of an invoices row: every column's filled/null
      * state plus the status discriminator by value — identity, tenant, and
@@ -631,6 +666,23 @@ class ListInvoicesTest extends BillingTestCase
             'multi-value status list' => [['status' => 'paid,pending'], 'status'],
             'empty status value' => [['status' => ''], 'status'],
             'within given as an array' => [['within' => ['2026-01-01', '2026-06-30']], 'within'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function provideEmptyFilterValues(): array
+    {
+        return [
+            'empty status' => ['status', ''],
+            'empty within' => ['within', ''],
+            'empty min_amount' => ['min_amount', ''],
+            'empty max_amount' => ['max_amount', ''],
+            'empty sort' => ['sort', ''],
+            'empty page' => ['page', ''],
+            'empty per_page' => ['per_page', ''],
+            'whitespace per_page' => ['per_page', ' '],
         ];
     }
 }
