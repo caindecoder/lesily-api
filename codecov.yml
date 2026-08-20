@@ -1,14 +1,14 @@
 # Coverage gate policy per coding-conventions-plan.md Decision 4 + Section 4.4
-# Phase 1 (chunk-1 ramp-up): project gate disabled (target: auto); patch gate active (target: 100%)
-# Phase 2 (baseline reached): MANUALLY flip project.target from `auto` to `80%`
-#   Activation criterion: >=80% project coverage reported in 3 consecutive main merges.
-#   When flipped, update this comment with activation date.
+# Phase 1 (chunk-1 ramp-up, 2026-05-13 -> 2026-08-20): project gate disabled (target: auto); patch gate active (target: 100%)
+# Phase 2 ACTIVATED 2026-08-20 (s186, V5 of the post-OQ verification program): project.target flipped auto -> 80%.
+#   Activation criterion (>=80% project coverage in 3 consecutive main merges) met with margin: clover statement coverage
+#   over app/ on 4 consecutive main merges = 92eb4b4 99.52%, fc2f4f7 99.53%, 4bbc1e3 99.53%, ced45ba 99.53% (CI artifacts).
 
 coverage:
     status:
         project:
             default:
-                target: auto  # FLIP TO 80% AFTER BASELINE REACHED
+                target: 80%  # ACTIVATED 2026-08-20 (s186, V5) — see header
                 threshold: 1%
                 informational: false
         patch:
