@@ -217,6 +217,12 @@ jobs:
         # errors/aborts still fail. Deliberately CLI-only, NOT infection.json5 —
         # the nightly full run must NEVER inherit it: 0 mutants across all of
         # app/ is the s135 catastrophic-abort signal and must stay loud.
+        # --threads=1 (was 4): Infection's threads share one un-tokenised
+        # lesily_test (it sets TEST_TOKEN but not LARAVEL_PARALLEL_TESTING, so
+        # Laravel never switches DB), so parallel RefreshDatabase migrations
+        # collide -> SQLSTATE -> the errored test is mis-counted as a KILL,
+        # inflating MSI and masking real escapees (OQ-1-167). Single-threaded
+        # removes the race; the diff-scoped PR run is tiny (~24 mutants).
         run: |
           CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'app/*.php')
           if [ -z "$CHANGED" ]; then
@@ -228,7 +234,13 @@ jobs:
             echo "No *Test.php files (excluding abstract *TestCase.php bases) found in tests/ — skipping Infection."
             exit 0
           fi
-          vendor/bin/infection --git-diff-lines --git-diff-base=origin/${{ github.base_ref }} --logger-github --threads=4 --min-msi=80 --min-covered-msi=85 --ignore-msi-with-no-mutations
+          vendor/bin/infection --git-diff-lines --git-diff-base=origin/${{ github.base_ref }} --logger-github --threads=1 --min-msi=80 --min-covered-msi=85 --ignore-msi-with-no-mutations
+      - name: Assert every mutation kill was earned by an assertion (OQ-1-167)
+        # Backstop for the kill-verdict topology above: fail if any recorded
+        # "kill" carries positive evidence it was a DB-race SQLSTATE error or a
+        # masked surviving mutant rather than an assertion failure. Skips cleanly
+        # when Infection was skipped (no infection.json). Replaces the R-12 rule.
+        run: php scripts/check-mutation-kills.php infection.json
 
   sonarcloud:
     needs: test
