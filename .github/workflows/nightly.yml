@@ -67,7 +67,18 @@ jobs:
         # The nightly full run is the latent-escape detector for diff-scoped PR runs
         # (/tdd-red amendment Q; R-053 finding 3.2) — it MUST fail loudly, never
         # `|| true` (Rule #13: that masked a total failure while reporting green).
-        run: vendor/bin/infection --threads=4
+        # --threads=1 (was 4): Infection's threads share one un-tokenised
+        # lesily_test, so parallel RefreshDatabase migrations collide -> SQLSTATE
+        # -> the errored test is mis-counted as a KILL, inflating MSI and masking
+        # real escapees (OQ-1-167). Single-threaded removes the race; the full run
+        # is ~4x slower (~80 min for ~1900 mutants) which an overnight cron absorbs.
+        run: vendor/bin/infection --threads=1
+      - name: Assert every mutation kill was earned by an assertion (OQ-1-167)
+        # Backstop for the kill-verdict topology above: fail if any recorded
+        # "kill" carries positive evidence it was a DB-race SQLSTATE error or a
+        # masked surviving mutant rather than an assertion failure. Replaces the
+        # R-12 interim rule (classify kill mechanisms by hand).
+        run: php scripts/check-mutation-kills.php infection.json
       - uses: actions/upload-artifact@v7
         if: always()
         with:
