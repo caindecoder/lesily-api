@@ -122,12 +122,7 @@ class AcceptInvitationInteractor
         $user->last_logged_at = now();
         $user->save();
 
-        $membership = CompanyUser::query()
-            ->whereKey($invitation->getKey())
-            ->with(['user', 'role'])
-            ->sole();
-
-        return new NewUserJoined($membership, $user, $this->sessionIssuer->issue($user, $deviceName));
+        return new NewUserJoined($user, $this->sessionIssuer->issue($user, $deviceName));
     }
 
     /**
@@ -152,7 +147,6 @@ class AcceptInvitationInteractor
         return CompanyUser::query()
             ->where('company_id', $invitation->company_id)
             ->where('user_id', $joiner->getKey())
-            ->with(['user', 'role'])
             ->sole();
     }
 

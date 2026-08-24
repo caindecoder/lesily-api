@@ -3,7 +3,6 @@
 namespace App\Companies\Memberships\UseCases\Results;
 
 use App\Models\User;
-use App\Companies\Entities\CompanyUser;
 use App\Foundation\Auth\UseCases\Results\IssuedSession;
 
 /**
@@ -15,7 +14,6 @@ use App\Foundation\Auth\UseCases\Results\IssuedSession;
 class NewUserJoined
 {
     public function __construct(
-        public readonly CompanyUser $membership,
         public readonly User $user,
         public readonly IssuedSession $session,
     ) {}
