@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Database\QueryException;
@@ -449,6 +450,55 @@ class AcceptInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_an_existing_user_accepts_then_their_membership_is_returned_in_full(): void
+    {
+        // Given — an account already on the platform, invited to a company it
+        // doesn't belong to
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+
+        // When — they accept while authenticated
+        $response = $this->acceptInvitation($token, [], $invitee);
+
+        // Then — the 200 body carries the full roster-shaped membership,
+        // keyed by the (company, invitee) canonical pivot (findById's scope)
+        $this->assertMembershipReturned($response, $invitee, 'employee');
+        $response->assertJsonPath('data.id', CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $invitee->getKey())
+            ->sole()
+            ->getKey());
+    }
+
+    /**
+     * The accept 200 carries the roster-shaped membership in the {data}
+     * envelope: 200 status, exact 6-key arity, member identity, role,
+     * active status, and the null timestamp pair (no writers this phase).
+     */
+    protected function assertMembershipReturned(TestResponse $response, User $member, string $roleCode): void
+    {
+        $response->assertOk();
+        $response->assertJsonCount(6, 'data');
+        $response->assertJson([
+            'data' => [
+                'user' => [
+                    'id' => $member->getKey(),
+                    'name' => $member->name,
+                    'email' => $member->email,
+                ],
+                'role' => [
+                    'code' => $roleCode,
+                    'name' => $this->seededRole($roleCode)->name,
+                ],
+                'status' => 'active',
+                'invited_at' => null,
+                'last_active_at' => null,
+            ],
+        ]);
+    }
+
+    #[Test]
     public function when_a_removed_member_accepts_a_reinvite_then_the_same_membership_is_restored(): void
     {
         // Given — a member removed from the company (soft-deleted pivot),
@@ -500,6 +550,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // ONE membership row exists, and it is their ORIGINAL membership (the
         // leftover invitation's UUID never becomes a row)
         $response->assertOk();
+        $response->assertJsonPath('data.id', $originalMembershipId);
         $this->assertNotNull(Invitation::query()->where('email', 'ruwan@member.lk')->sole()->accepted_at);
         $this->assertSame(1, CompanyUser::withTrashed()
             ->where('company_id', $company->getKey())

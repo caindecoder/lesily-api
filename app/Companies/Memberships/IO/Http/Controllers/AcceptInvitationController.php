@@ -10,6 +10,7 @@ use App\Companies\Memberships\UseCases\Results\NewUserJoined;
 use App\Companies\Memberships\IO\Http\Resources\MembershipResource;
 use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
 use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
+use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterface;
 
 /**
  * Accept a team invitation via its emailed single-use token (UC-1-019).
@@ -21,6 +22,8 @@ use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
  */
 class AcceptInvitationController
 {
+    public function __construct(private readonly CompanyUserRepositoryInterface $memberships) {}
+
     public function __invoke(Request $request, string $token, AcceptInvitationInteractor $interactor): JsonResponse
     {
         // The token is a route param, not body input (H6) — fold it into the
@@ -34,11 +37,16 @@ class AcceptInvitationController
             DeviceName::resolve(null, $request),
         );
 
-        // New user: 201 auto-login. Existing user: 200 with the activated
-        // membership — their current session stays, no token minted (H5).
-        return $outcome instanceof NewUserJoined
-            ? (new LoginResource($outcome->user, $outcome->session->token, $outcome->session->expiresAt))
-                ->response($request)->setStatusCode(201)
-            : (new MembershipResource($outcome->membership))->response($request)->setStatusCode(200);
+        // New user: 201 auto-login (H5) — their session was just minted.
+        if ($outcome instanceof NewUserJoined) {
+            return (new LoginResource($outcome->user, $outcome->session->token, $outcome->session->expiresAt))
+                ->response($request)->setStatusCode(201);
+        }
+
+        // Existing user: 200, no token minted (H5). The envelope echoes the
+        // activated roster row — the change-role echo's shape (R-E s112).
+        $row = $this->memberships->findById($outcome->membership->company_id, $outcome->membership->getKey());
+
+        return (new MembershipResource($row))->response($request)->setStatusCode(200);
     }
 }
