@@ -461,13 +461,20 @@ class AcceptInvitationTest extends MembershipsTestCase
         // When — they accept while authenticated
         $response = $this->acceptInvitation($token, [], $invitee);
 
-        // Then — the 200 body carries the full roster-shaped membership
+        // Then — the 200 body carries the full roster-shaped membership,
+        // keyed by the (company, invitee) canonical pivot (findById's scope)
         $this->assertMembershipReturned($response, $invitee, 'employee');
+        $response->assertJsonPath('data.id', CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $invitee->getKey())
+            ->sole()
+            ->getKey());
     }
 
     /**
-     * The accept 200 carries the full roster-shaped membership: member
-     * identity, role, and active status inside the {data} envelope.
+     * The accept 200 carries the roster-shaped membership in the {data}
+     * envelope: 200 status, exact 6-key arity, member identity, role,
+     * active status, and the null timestamp pair (no writers this phase).
      */
     protected function assertMembershipReturned(TestResponse $response, User $member, string $roleCode): void
     {
@@ -485,6 +492,8 @@ class AcceptInvitationTest extends MembershipsTestCase
                     'name' => $this->seededRole($roleCode)->name,
                 ],
                 'status' => 'active',
+                'invited_at' => null,
+                'last_active_at' => null,
             ],
         ]);
     }
@@ -541,6 +550,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // ONE membership row exists, and it is their ORIGINAL membership (the
         // leftover invitation's UUID never becomes a row)
         $response->assertOk();
+        $response->assertJsonPath('data.id', $originalMembershipId);
         $this->assertNotNull(Invitation::query()->where('email', 'ruwan@member.lk')->sole()->accepted_at);
         $this->assertSame(1, CompanyUser::withTrashed()
             ->where('company_id', $company->getKey())
