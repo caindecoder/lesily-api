@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Database\QueryException;
@@ -446,6 +447,46 @@ class AcceptInvitationTest extends MembershipsTestCase
         $this->assertMembershipActivated($company, 'Anushka@Member.LK');
         $this->assertSame($accountsBefore, User::query()->count());
         $this->assertTeamWelcomeQueued('anushka@member.lk', $company);
+    }
+
+    #[Test]
+    public function when_an_existing_user_accepts_then_their_membership_is_returned_in_full(): void
+    {
+        // Given — an account already on the platform, invited to a company it
+        // doesn't belong to
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+
+        // When — they accept while authenticated
+        $response = $this->acceptInvitation($token, [], $invitee);
+
+        // Then — the 200 body carries the full roster-shaped membership
+        $this->assertMembershipReturned($response, $invitee, 'employee');
+    }
+
+    /**
+     * The accept 200 carries the full roster-shaped membership: member
+     * identity, role, and active status inside the {data} envelope.
+     */
+    protected function assertMembershipReturned(TestResponse $response, User $member, string $roleCode): void
+    {
+        $response->assertOk();
+        $response->assertJsonCount(6, 'data');
+        $response->assertJson([
+            'data' => [
+                'user' => [
+                    'id' => $member->getKey(),
+                    'name' => $member->name,
+                    'email' => $member->email,
+                ],
+                'role' => [
+                    'code' => $roleCode,
+                    'name' => $this->seededRole($roleCode)->name,
+                ],
+                'status' => 'active',
+            ],
+        ]);
     }
 
     #[Test]
