@@ -90,6 +90,41 @@
                 "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoiceRefunded",
                 "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoiceVoided",
                 "App\\Billing\\Invoices\\Projectors\\InvoiceProjector::onInvoiceDisputeFiled",
+                // OQ-1-172 PR-0 (s189) L-HANDLERS: the 17 remaining spatie on* handlers -
+                // same discovery-equivalent class (HandlesEvents::getEventHandlingMethods
+                // ->public()->protected(), vendor HandlesEvents.php:47-49). Design P4:
+                // individual entries, no wildcard.
+                "App\\Companies\\Memberships\\Projectors\\MembershipProjector::onUserInvited",
+                "App\\Companies\\Memberships\\Projectors\\MembershipProjector::onUserInvitationResent",
+                "App\\Companies\\Memberships\\Projectors\\MembershipProjector::onUserInvitationExpired",
+                "App\\Companies\\Memberships\\Projectors\\MembershipProjector::onUserJoinedCompany",
+                "App\\Companies\\Memberships\\Reactors\\TeamWelcomeReactor::onUserJoinedCompany",
+                "App\\Companies\\Projectors\\CompanyProjector::onCompanyDetailsUpdated",
+                "App\\Companies\\Projectors\\CompanyProjector::onCompanyOwnershipTransferred",
+                "App\\Companies\\Projectors\\CompanySettingsProjector::onCompanySettingsCreated",
+                "App\\Companies\\Projectors\\CompanySettingsProjector::onCompanySettingsUpdated",
+                "App\\Companies\\Reactors\\NewOwnerNotificationReactor::onCompanyOwnershipTransferred",
+                "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserSignedUpAsOwner",
+                "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserCreatedFromInvitation",
+                "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserEmailVerified",
+                "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserProfileUpdated",
+                "App\\Foundation\\Auth\\Projectors\\UserProjector::onUser2FAEnabled",
+                "App\\Foundation\\Auth\\Projectors\\UserProjector::onUser2FADisabled",
+                "App\\Foundation\\Auth\\Reactors\\EmailVerificationReactor::onUserSignedUpAsOwner",
+                // OQ-1-172 PR-0 L-RELATIONS: lazy relations resolved from Model scope
+                // (Model::getRelationValue calls $this->company() / $this->settings() from
+                // inside the class, so protected still resolves); no with()/load() names
+                // either relation anywhere in app/ today. REMOVE WHEN an eager-load lands:
+                // Builder::with() calls the method from outside the class and the mutant
+                // becomes a real, killable regression.
+                "App\\Billing\\Invoices\\Entities\\Invoice::company",
+                "App\\Companies\\Entities\\Company::settings",
+                // OQ-1-172 PR-0 L-SCOPE: each is invoked from a scope that reaches
+                // protected - envelope() by the parent Mailable, forCompany() by the
+                // AggregateRoot subclasses, scopeWhereForCompany() via Model::callNamedScope.
+                "App\\Companies\\Memberships\\Mail\\InvitationMail::envelope",
+                "App\\Foundation\\EventStore\\AggregateRoot::forCompany",
+                "App\\Foundation\\EventStore\\StoredEvents\\Models\\LesilyStoredEvent::scopeWhereForCompany",
             ],
         },
         // SpreadOneItem on BillingPlan::features() is an equivalent mutant: the only
@@ -102,6 +137,136 @@
         "SpreadOneItem": {
             ignore: [
                 "App\\Foundation\\Billing\\Enums\\BillingPlan::features",
+            ],
+        },
+        // ---- OQ-1-172 PR-0 (s189): the 61 ledgered escapes of the first honest nightly
+        // (baseline run 32389214088: 277; 275 after T2 in run 32776584593, the run every
+        // entry below was measured against). Design P4/P5/P8, Appendix A L-*. Entries
+        // are individual; a "::<line>" suffix pins ONE construct wherever the method also
+        // carries real, killable mutants of the same mutator (a method-level entry would
+        // silence 7 rows owned by T4-T6 plus 18 mutants the suite kills today). If a
+        // pinned method moves, the entry goes inert and the row re-escapes: the nightly
+        // ladder check detects that. It does NOT detect over-reach - a method-level entry
+        // also silences mutants added to that method LATER - so a method-level entry is
+        // re-read whenever its method changes (same caveat as the entries above).
+        //
+        // L-OUTER-EQ: ArrayItemRemoval on the OUTER rules() array (the `return [` line).
+        // Dropping the first key's entry is byte-equivalent because Spatie re-infers the
+        // same required+type rules from the non-nullable typed property
+        // (DataValidationRulesResolver per-key fallback); all nine first keys are
+        // ['required', 'string'] on a `public string` property. Inner-key removals in
+        // the same methods stay live - they ARE killable (T5/T6 kills). REMOVE an entry
+        // WHEN its command's FIRST key gains a rule beyond required+type, or the keys are
+        // reordered so such a key comes first: the `return [` line does not move, but the
+        // outer removal then drops a real constraint and becomes killable.
+        "ArrayItemRemoval": {
+            ignore: [
+                "App\\Billing\\Invoices\\UseCases\\Commands\\DownloadInvoiceReceiptCommand::rules::26",
+                "App\\Companies\\Memberships\\UseCases\\Commands\\AcceptInvitationCommand::rules::28",
+                "App\\Foundation\\Auth\\UseCases\\Commands\\ChangePasswordCommand::rules::19",
+                "App\\Foundation\\Auth\\UseCases\\Commands\\ConfirmTwoFactorCommand::rules::22",
+                "App\\Foundation\\Auth\\UseCases\\Commands\\DisableTwoFactorCommand::rules::23",
+                "App\\Foundation\\Auth\\UseCases\\Commands\\LogoutAllCommand::rules::23",
+                "App\\Foundation\\Auth\\UseCases\\Commands\\RegenerateRecoveryCodesCommand::rules::23",
+                "App\\Foundation\\Auth\\UseCases\\Commands\\ResetPasswordCommand::rules::21",
+                "App\\Foundation\\Auth\\UseCases\\Commands\\VerifyTwoFactorCommand::rules::30",
+                // L-CHROMIUM: addChromiumArguments(['disable-dev-shm-usage']) is container
+                // tuning (cd-invoices.md:34 names it as config); the rendered PDF bytes are
+                // identical either way. Pinned so loadMissing('lineItems') at :24 stays killable.
+                "App\\Billing\\Invoices\\IO\\Pdf\\ChromiumReceiptPdfRenderer::render::32",
+                // L-VERIFY-BODY: the verify-email response message literal -
+                // api-1-auth-onboarding.md:190 leaves the body unpinned (P5 tuning).
+                "App\\Foundation\\Auth\\IO\\Http\\Controllers\\EmailVerificationController::__invoke",
+            ],
+        },
+        // L-LOCKS: Cache::lock lease/wait seconds (5 -> 4/6) - array cache + a single
+        // process cannot observe the difference; OQ-1-119 prescribes the lock, not a
+        // count (P5 tuning). recordFailure is pinned to :53 so the attemptsRemaining
+        // decrement at :60 stays killable.
+        // L-TOKEN: Str::random(40) invite/resend token length - no design surface pins
+        // 40 (P5 tuning; LeaveDates never pins Str::random lengths).
+        "IncrementInteger": {
+            ignore: [
+                "App\\Foundation\\Auth\\Totp\\CacheLoginChallengeStore::recordFailure::53",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\RegenerateRecoveryCodesInteractor::execute",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode",
+                "App\\Companies\\Memberships\\UseCases\\Interactors\\InviteUserInteractor::execute",
+                "App\\Companies\\Memberships\\UseCases\\Interactors\\ResendInvitationInteractor::execute",
+            ],
+        },
+        "DecrementInteger": {
+            ignore: [
+                "App\\Foundation\\Auth\\Totp\\CacheLoginChallengeStore::recordFailure::53",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\RegenerateRecoveryCodesInteractor::execute",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode",
+            ],
+        },
+        // L-SCHEMA (P8): SubscriptionResource trial_ends_at?-> is equivalent while no
+        // writer nulls trial_ends_at (the projector copies a non-nullable CarbonImmutable).
+        // Pinned to :31 so the sibling cancelled_at?-> at :36 stays killed. REMOVE WHEN a
+        // post-trial subscription writer lands (chunk-2 UC-1-042 / reactivation).
+        // L-EQUIV-MISC: compositeKey() and isCurrentSession() run behind auth:sanctum -
+        // user() is never null in flight. REMOVE WHEN either is mounted on a route
+        // without auth:sanctum.
+        "NullSafeMethodCall": {
+            ignore: [
+                "App\\Billing\\Subscriptions\\IO\\Http\\Resources\\SubscriptionResource::toArray::31",
+                "App\\Foundation\\Http\\Middleware\\EnsureIdempotencyKey::compositeKey",
+                "App\\Foundation\\Auth\\IO\\Http\\Resources\\SessionResource::isCurrentSession",
+            ],
+        },
+        // L-EQUIV-MISC: invitations.role_id is NOT NULL + FK (the role always resolves);
+        // the seeded owner role is a schema invariant (Company::owner). REMOVE WHEN a
+        // migration makes role_id nullable / drops the FK, or an owner-less company
+        // state is introduced.
+        "NullSafePropertyCall": {
+            ignore: [
+                "App\\Companies\\Memberships\\IO\\Http\\Resources\\InvitationResource::toArray",
+                "App\\Companies\\Entities\\Company::owner",
+            ],
+        },
+        // L-EQUIV-MISC: whereKey(null) yields IS NULL on a PK (the same empty result);
+        // where('user_id', null) matches nothing; the recovery loop's early `return;`
+        // (:99) only skips later iterations - $matched cannot change once true, and a
+        // second iteration could consume another code only if two stored hashes matched
+        // the same plaintext (bcrypt makes that unreachable).
+        "ReturnRemoval": {
+            ignore: [
+                "App\\Models\\User::liveDefaultCompanyId",
+                "App\\Companies\\Memberships\\UseCases\\Interactors\\InviteUserInteractor::removedMembershipId",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode",
+            ],
+        },
+        // L-EQUIV-MISC: $user->refresh() at :92 matters only across concurrent requests
+        // (code review guards it; no single-process test can); $user->save() at :120 is
+        // masked by issueSession()'s later save on the same instance - equivalent only
+        // for THIS caller, and the mutant does move the column write outside the
+        // DB::transaction, so the call is a review-guarded invariant, not dead code
+        // (never delete it under amendment Q). REMOVE WHEN consumeRecoveryCode() gains
+        // a caller that does not save the user afterwards. Pinned so the Cache::lock
+        // (:91), consumeRecoveryCode() (:96), DB::transaction (:118) and ->persist()
+        // (:122) calls stay killable.
+        "MethodCallRemoval": {
+            ignore: [
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode::92",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeRecoveryCode::120",
+            ],
+        },
+        // L-EQUIV-MISC: array_values() re-indexes the remaining codes for readers that
+        // never look at the keys.
+        "UnwrapArrayValues": {
+            ignore: [
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeRecoveryCode",
+            ],
+        },
+        // L-EQUIV-MISC: snapshot() - the declared array shape (body: string,
+        // content_type: string) vs getContent(): string|false and headers->get(): ?string;
+        // the PHPDoc demands the casts. execute() - the TOTP secret is never null for an
+        // enrolled user.
+        "CastString": {
+            ignore: [
+                "App\\Foundation\\Http\\Middleware\\EnsureIdempotencyKey::snapshot",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::execute",
             ],
         },
     },
