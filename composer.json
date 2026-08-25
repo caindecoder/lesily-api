@@ -69,6 +69,11 @@
         "format": "vendor/bin/pint",
         "analyze": "vendor/bin/phpstan analyse",
         "mutate": "vendor/bin/infection",
+        "mutate:local": [
+            "Composer\\Config::disableProcessTimeout",
+            "@putenv PAO_DISABLE=1",
+            "vendor/bin/infection --threads=1"
+        ],
         "quality": [
             "@lint",
             "@analyze",
