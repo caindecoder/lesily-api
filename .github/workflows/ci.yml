@@ -148,6 +148,22 @@ jobs:
           if grep -rnE 'DB::transaction\s*\(' app/ --include='*.php' | grep -v 'UseCases/Interactors' | grep -vE ':[0-9]+:\s*(\*|//)'; then
             echo "sec-2.15: DB::transaction outside interactors"; VIOLATIONS=1; fi
           exit $VIOLATIONS
+      - name: Command validation placement (amendment AQ, OQ-1-172) - report-only until T7
+        # Amendment AQ: validateAndCreate only at the HTTP boundary, ::from() internally,
+        # internal-only commands carry no rules(). Report-only is a dated window with a
+        # named flip point, NOT a tolerated-failure gate (Rule #13 / s144): the 8 legacy
+        # internal validateAndCreate sites (design sec 6.1.1 table B) are cleared by
+        # OQ-1-172 T4-T6, and T7 replaces the warning line with `exit $status`. The grep
+        # on the summary line is the liveness proof - a script that never ran, or died
+        # before its summary, fails this step even inside the report-only window.
+        run: |
+          set +e
+          sh scripts/check-command-validation-placement.sh > aq-placement.txt
+          status=$?
+          set -e
+          cat aq-placement.txt
+          grep -q '^AQ placement check:' aq-placement.txt
+          [ "$status" -eq 0 ] || echo "::warning::AQ violations present (8 legacy internal validateAndCreate sites, expected until OQ-1-172 T7)"
       - name: Mutation kill-verdict classifier self-test (OQ-1-167)
         # The kill-integrity gate's steady state is always-PASS, so a rotted
         # classifier would be invisible on every clean infection.json. This
