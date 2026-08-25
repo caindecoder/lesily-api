@@ -23,9 +23,10 @@ violation() {
 
 # Prints the offending lines and reports one violation per site.
 violation_per_site() {
-  hits=$1
-  echo "$hits"
-  violation "$2 ($(echo "$hits" | wc -l | tr -d ' ') site(s))" "$(echo "$hits" | wc -l | tr -d ' ')"
+  sites=$1
+  site_count=$(echo "$sites" | wc -l | tr -d ' ')
+  echo "$sites"
+  violation "$2 ($site_count site(s))" "$site_count"
 }
 
 check_controller_commands_define_rules() {
