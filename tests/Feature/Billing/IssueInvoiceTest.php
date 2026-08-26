@@ -149,8 +149,9 @@ class IssueInvoiceTest extends BillingTestCase
                 ->persist();
 
             $this->fail('Expected InvoiceLineItemsMismatchException was not thrown.');
-        } catch (InvoiceLineItemsMismatchException) {
-            // Then the issue is refused as an integer-cents mismatch and no event is stored
+        } catch (InvoiceLineItemsMismatchException $exception) {
+            // Then the issue is refused naming the fractional total and no event is stored
+            $this->assertStringContainsString('60000.0', $exception->getMessage());
             $this->assertNoNewInvoiceEvents($invoiceId, 0);
         }
     }
