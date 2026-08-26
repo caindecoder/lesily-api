@@ -35,7 +35,7 @@ class DisableTwoFactorTest extends AuthTestCase
 
     #[Test]
     #[DataProvider('provideInvalidDisablePayloads')]
-    public function when_the_password_is_missing_then_the_request_is_rejected(array $payload): void
+    public function when_the_password_is_missing_then_the_request_is_rejected(array $payload, string $expectedMessage): void
     {
         // Given an authenticated 2FA user
         Sanctum::actingAs($this->aTwoFactorUser());
@@ -44,7 +44,7 @@ class DisableTwoFactorTest extends AuthTestCase
         $response = $this->deleteJson('/api/v1/auth/2fa', $payload);
 
         // Then the request is rejected as a validation error naming the password
-        $this->assertValidationRejected($response, 'password');
+        $this->assertValidationRejected($response, 'password', $expectedMessage);
     }
 
     #[Test]
@@ -167,13 +167,13 @@ class DisableTwoFactorTest extends AuthTestCase
     }
 
     /**
-     * @return array<string, array{array<string, mixed>}>
+     * @return array<string, array{array<string, mixed>, string}>
      */
     public static function provideInvalidDisablePayloads(): array
     {
         return [
-            'missing password' => [[]],
-            'blank password' => [['password' => '']],
+            'missing password' => [[], 'The password field is required.'],
+            'blank password' => [['password' => ''], 'The password field is required.'],
         ];
     }
 

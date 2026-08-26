@@ -35,14 +35,14 @@ class ResetPasswordTest extends AuthTestCase
 
     #[Test]
     #[DataProvider('provideInvalidResetPayloads')]
-    public function when_the_submission_is_invalid_then_it_is_rejected(array $payload, string $invalidField): void
+    public function when_the_submission_is_invalid_then_it_is_rejected(array $payload, string $invalidField, string $expectedMessage): void
     {
         // Given an invalid reset-password submission
         // When it is submitted
         $response = $this->resetPassword($payload);
 
         // Then it is rejected as a validation error naming the offending field
-        $this->assertValidationRejected($response, $invalidField);
+        $this->assertValidationRejected($response, $invalidField, $expectedMessage);
     }
 
     #[Test]
@@ -187,17 +187,17 @@ class ResetPasswordTest extends AuthTestCase
     }
 
     /**
-     * @return array<string, array{array<string, string>, string}>
+     * @return array<string, array{array<string, string>, string, string}>
      */
     public static function provideInvalidResetPayloads(): array
     {
         return [
-            'missing token' => [['email' => 'alice@contoso.lk', 'password' => self::NEW_PASSWORD], 'token'],
-            'missing email' => [['token' => 'a-token', 'password' => self::NEW_PASSWORD], 'email'],
-            'malformed email' => [['token' => 'a-token', 'email' => 'not-an-email', 'password' => self::NEW_PASSWORD], 'email'],
-            'missing password' => [['token' => 'a-token', 'email' => 'alice@contoso.lk'], 'password'],
-            'password one below the minimum' => [['token' => 'a-token', 'email' => 'alice@contoso.lk', 'password' => 'Sh0rt!x'], 'password'],
-            'password over the length cap' => [['token' => 'a-token', 'email' => 'alice@contoso.lk', 'password' => str_repeat('a', 256)], 'password'],
+            'missing token' => [['email' => 'alice@contoso.lk', 'password' => self::NEW_PASSWORD], 'token', 'The token field is required.'],
+            'missing email' => [['token' => 'a-token', 'password' => self::NEW_PASSWORD], 'email', 'The email field is required.'],
+            'malformed email' => [['token' => 'a-token', 'email' => 'not-an-email', 'password' => self::NEW_PASSWORD], 'email', 'The email field must be a valid email address.'],
+            'missing password' => [['token' => 'a-token', 'email' => 'alice@contoso.lk'], 'password', 'The password field is required.'],
+            'password one below the minimum' => [['token' => 'a-token', 'email' => 'alice@contoso.lk', 'password' => 'Sh0rt!x'], 'password', 'The password field must be at least 8 characters.'],
+            'password over the length cap' => [['token' => 'a-token', 'email' => 'alice@contoso.lk', 'password' => str_repeat('a', 256)], 'password', 'The password field must not be greater than 255 characters.'],
         ];
     }
 

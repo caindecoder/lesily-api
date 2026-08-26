@@ -46,7 +46,7 @@ class RegisterOwnerTest extends AuthTestCase
     // Sad (validation) — a malformed payload is rejected before any aggregate runs.
     #[Test]
     #[DataProvider('invalidPayloadProvider')]
-    public function when_the_registration_payload_is_invalid_then_it_is_rejected(array $override, string $invalidField): void
+    public function when_the_registration_payload_is_invalid_then_it_is_rejected(array $override, string $invalidField, string $expectedMessage): void
     {
         // Given an otherwise-valid signup with one invalid field
         $payload = [...$this->validRegistrationPayload(), ...$override];
@@ -55,36 +55,32 @@ class RegisterOwnerTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/register', $payload);
 
         // Then registration is rejected and the offending field is reported
-        $this->assertValidationRejected($response, $invalidField);
+        $this->assertValidationRejected($response, $invalidField, $expectedMessage);
     }
 
     /**
-     * Each row blanks or corrupts one field of an otherwise-valid payload. The
-     * weak-password + unaccepted-ToS rows are #05's new rules.
+     * Each row blanks, omits or corrupts one field of an otherwise-valid payload and
+     * pins the verbatim message: a dropped `required` leaves `string`/`accepted` to
+     * reject the null with a different message, so the pin catches it.
      *
-     * NOTE (verified s142, full matrix): the empty-field rows guard NEITHER
-     * `required` NOR `string` individually — they detect only the removal of the
-     * PAIR. `ConvertEmptyStringsToNull` maps '' to null and both rules reject null
-     * independently, so dropping either alone leaves every row green; only dropping
-     * both REDs them. `rules()` fully OVERRIDES Spatie's type-inferred rules per
-     * field, so the non-nullable property is no back-stop either. The individually
-     * unguarded arms are OQ-1-138, deferred.
-     *
-     * @return array<string, array{0: array<string, mixed>, 1: string}>
+     * @return array<string, array{0: array<string, mixed>, 1: string, 2: string}>
      */
     public static function invalidPayloadProvider(): array
     {
         return [
-            'weak password' => [['password' => 'short'], 'password'],
-            'terms not accepted' => [['acceptedTos' => false], 'acceptedTos'],
-            'missing name' => [['name' => ''], 'name'],
-            'missing email' => [['email' => ''], 'email'],
-            'missing company name' => [['companyName' => ''], 'companyName'],
-            'missing BR number' => [['brNumber' => ''], 'brNumber'],
-            'missing EPF number' => [['epfNumber' => ''], 'epfNumber'],
-            'missing country' => [['country' => ''], 'country'],
-            'missing emergency contact name' => [['emergencyContactName' => ''], 'emergencyContactName'],
-            'missing emergency contact phone' => [['emergencyContactPhone' => ''], 'emergencyContactPhone'],
+            'missing password' => [['password' => ''], 'password', 'The password field is required.'],
+            'weak password' => [['password' => 'short'], 'password', 'The password field must be at least 8 characters.'],
+            'terms omitted' => [['acceptedTos' => null], 'acceptedTos', 'The accepted tos field is required.'],
+            'terms not accepted' => [['acceptedTos' => false], 'acceptedTos', 'The accepted tos field must be accepted.'],
+            'missing name' => [['name' => ''], 'name', 'The name field is required.'],
+            'over-long name' => [['name' => str_repeat('a', 256)], 'name', 'The name field must not be greater than 255 characters.'],
+            'missing email' => [['email' => ''], 'email', 'The email field is required.'],
+            'missing company name' => [['companyName' => ''], 'companyName', 'The company name field is required.'],
+            'missing BR number' => [['brNumber' => ''], 'brNumber', 'The br number field is required.'],
+            'missing EPF number' => [['epfNumber' => ''], 'epfNumber', 'The epf number field is required.'],
+            'missing country' => [['country' => ''], 'country', 'The country field is required.'],
+            'missing emergency contact name' => [['emergencyContactName' => ''], 'emergencyContactName', 'The emergency contact name field is required.'],
+            'missing emergency contact phone' => [['emergencyContactPhone' => ''], 'emergencyContactPhone', 'The emergency contact phone field is required.'],
         ];
     }
 
@@ -133,7 +129,7 @@ class RegisterOwnerTest extends AuthTestCase
             ->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
 
         // Then it is rejected as a validation error (a clean 4xx), not a server crash
-        $this->assertValidationRejected($response, 'ip');
+        $this->assertValidationRejected($response, 'ip', 'The ip field is required.');
     }
 
     // Edge (race backstop) — two concurrent signups can both pass the pre-tx

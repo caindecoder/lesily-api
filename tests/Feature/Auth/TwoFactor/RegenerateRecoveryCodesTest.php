@@ -32,7 +32,7 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
 
     #[Test]
     #[DataProvider('provideInvalidRegeneratePayloads')]
-    public function when_the_password_is_missing_then_the_request_is_rejected(array $payload): void
+    public function when_the_password_is_missing_then_the_request_is_rejected(array $payload, string $expectedMessage): void
     {
         // Given an authenticated 2FA user
         Sanctum::actingAs($this->aTwoFactorUser());
@@ -41,7 +41,7 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/2fa/recovery-codes', $payload);
 
         // Then the request is rejected as a validation error naming the password
-        $this->assertValidationRejected($response, 'password');
+        $this->assertValidationRejected($response, 'password', $expectedMessage);
     }
 
     #[Test]
@@ -126,13 +126,13 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
     }
 
     /**
-     * @return array<string, array{array<string, mixed>}>
+     * @return array<string, array{array<string, mixed>, string}>
      */
     public static function provideInvalidRegeneratePayloads(): array
     {
         return [
-            'missing password' => [[]],
-            'blank password' => [['password' => '']],
+            'missing password' => [[], 'The password field is required.'],
+            'blank password' => [['password' => ''], 'The password field is required.'],
         ];
     }
 

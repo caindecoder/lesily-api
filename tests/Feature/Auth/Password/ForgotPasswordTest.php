@@ -31,14 +31,14 @@ class ForgotPasswordTest extends AuthTestCase
 
     #[Test]
     #[DataProvider('invalidEmailProvider')]
-    public function when_the_email_is_invalid_then_the_request_is_rejected(array $payload): void
+    public function when_the_email_is_invalid_then_the_request_is_rejected(array $payload, string $expectedMessage): void
     {
         // Given an invalid forgot-password payload
         // When it is submitted
         $response = $this->forgotPassword($payload);
 
         // Then it is rejected as a validation error
-        $this->assertValidationRejected($response, 'email');
+        $this->assertValidationRejected($response, 'email', $expectedMessage);
     }
 
     #[Test]
@@ -104,14 +104,14 @@ class ForgotPasswordTest extends AuthTestCase
     }
 
     /**
-     * @return array<string, array{array<string, string>}>
+     * @return array<string, array{array<string, string>, string}>
      */
     public static function invalidEmailProvider(): array
     {
         return [
-            'missing email' => [[]],
-            'empty email' => [['email' => '']],
-            'malformed email' => [['email' => 'not-an-email']],
+            'missing email' => [[], 'The email field is required.'],
+            'empty email' => [['email' => ''], 'The email field is required.'],
+            'malformed email' => [['email' => 'not-an-email'], 'The email field must be a valid email address.'],
         ];
     }
 

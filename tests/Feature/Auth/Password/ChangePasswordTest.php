@@ -80,13 +80,13 @@ class ChangePasswordTest extends AuthTestCase
         ]);
 
         // Then it is rejected as a validation error naming the new password, and nothing changes
-        $this->assertValidationRejected($response, 'newPassword');
+        $this->assertValidationRejected($response, 'newPassword', 'The new password field and current password must be different.');
         $this->assertPasswordUnchanged($user, 1);
     }
 
     #[Test]
     #[DataProvider('provideInvalidChangePasswordPayloads')]
-    public function when_the_new_password_is_invalid_then_it_is_rejected(array $payload, string $invalidField): void
+    public function when_the_new_password_is_invalid_then_it_is_rejected(array $payload, string $invalidField, string $expectedMessage): void
     {
         // Given an authenticated user
         $current = $this->aSessionFor($this->aRegisteredUser());
@@ -95,7 +95,7 @@ class ChangePasswordTest extends AuthTestCase
         $response = $this->changePassword($current->plainTextToken, $payload);
 
         // Then the request is rejected as a validation error naming the offending field
-        $this->assertValidationRejected($response, $invalidField);
+        $this->assertValidationRejected($response, $invalidField, $expectedMessage);
     }
 
     // --- Edge ---
@@ -195,15 +195,15 @@ class ChangePasswordTest extends AuthTestCase
     }
 
     /**
-     * @return array<string, array{array<string, string>, string}>
+     * @return array<string, array{array<string, string>, string, string}>
      */
     public static function provideInvalidChangePasswordPayloads(): array
     {
         return [
-            'missing new password' => [['currentPassword' => self::LOGIN_PASSWORD], 'newPassword'],
-            'new password under eight characters' => [['currentPassword' => self::LOGIN_PASSWORD, 'newPassword' => 'Sh0rt!'], 'newPassword'],
-            'new password over the length cap' => [['currentPassword' => self::LOGIN_PASSWORD, 'newPassword' => str_repeat('a', 256)], 'newPassword'],
-            'missing current password' => [['newPassword' => self::NEW_PASSWORD], 'currentPassword'],
+            'missing new password' => [['currentPassword' => self::LOGIN_PASSWORD], 'newPassword', 'The new password field is required.'],
+            'new password under eight characters' => [['currentPassword' => self::LOGIN_PASSWORD, 'newPassword' => 'Sh0rt!'], 'newPassword', 'The new password field must be at least 8 characters.'],
+            'new password over the length cap' => [['currentPassword' => self::LOGIN_PASSWORD, 'newPassword' => str_repeat('a', 256)], 'newPassword', 'The new password field must not be greater than 255 characters.'],
+            'missing current password' => [['newPassword' => self::NEW_PASSWORD], 'currentPassword', 'The current password field is required.'],
         ];
     }
 

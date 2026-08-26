@@ -135,11 +135,11 @@ abstract class AuthTestCase extends TestCase
         $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
     }
 
-    protected function assertValidationRejected(TestResponse $response, string $invalidField): void
+    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
     {
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
-        $response->assertJsonValidationErrors($invalidField);
+        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
     }
 
     protected function assertUnauthenticated(TestResponse $response): void

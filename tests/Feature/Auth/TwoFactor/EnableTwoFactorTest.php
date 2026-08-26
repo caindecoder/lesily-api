@@ -27,6 +27,22 @@ class EnableTwoFactorTest extends AuthTestCase
     use WithRolePermissionFixtures;
 
     #[Test]
+    public function when_enrollment_is_confirmed_without_a_code_then_the_request_is_rejected_as_invalid(): void
+    {
+        // Given (a Pro member mid-enrollment)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = $this->aMemberOf($company);
+        $this->fakeTotpVerifier(verifies: true);
+        $this->enable($user, $company);
+
+        // When they confirm with no code at all
+        $response = $this->confirmWith($user, $company, []);
+
+        // Then the request is rejected as a validation error naming the code
+        $this->assertValidationRejected($response, 'code', 'The code field is required.');
+    }
+
+    #[Test]
     #[DataProvider('provideSubProPlans')]
     public function when_a_sub_pro_user_starts_enrollment_then_two_factor_is_unavailable(BillingPlan $plan): void
     {
@@ -220,11 +236,19 @@ class EnableTwoFactorTest extends AuthTestCase
 
     protected function confirm(User $user, Company $company, string $code): TestResponse
     {
+        return $this->confirmWith($user, $company, ['code' => $code]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function confirmWith(User $user, Company $company, array $payload): TestResponse
+    {
         Sanctum::actingAs($user);
 
         return $this->postJson(
             '/api/v1/auth/2fa/confirm',
-            ['code' => $code],
+            $payload,
             ['X-Company-Context' => $company->getKey()],
         );
     }

@@ -22,14 +22,14 @@ class VerifyTwoFactorTest extends AuthTestCase
 
     #[Test]
     #[DataProvider('provideInvalidVerifyPayloads')]
-    public function when_required_fields_are_missing_then_the_request_is_rejected(array $payload, string $invalidField): void
+    public function when_required_fields_are_missing_then_the_request_is_rejected(array $payload, string $invalidField, string $expectedMessage): void
     {
         // Given an invalid verify payload (a required field missing or blank)
         // When it is submitted to the verify endpoint
         $response = $this->postJson('/api/v1/auth/2fa/verify', $payload);
 
         // Then the request is rejected as a validation error naming the field
-        $this->assertValidationRejected($response, $invalidField);
+        $this->assertValidationRejected($response, $invalidField, $expectedMessage);
     }
 
     #[Test]
@@ -262,14 +262,14 @@ class VerifyTwoFactorTest extends AuthTestCase
     }
 
     /**
-     * @return array<string, array{array<string, mixed>, string}>
+     * @return array<string, array{array<string, mixed>, string, string}>
      */
     public static function provideInvalidVerifyPayloads(): array
     {
         return [
-            'missing challenge id' => [['code' => '123456'], 'challenge_id'],
-            'missing code' => [['challenge_id' => 'a-challenge-id'], 'code'],
-            'blank code' => [['challenge_id' => 'a-challenge-id', 'code' => ''], 'code'],
+            'missing challenge id' => [['code' => '123456'], 'challenge_id', 'The challenge id field is required.'],
+            'missing code' => [['challenge_id' => 'a-challenge-id'], 'code', 'The code field is required.'],
+            'blank code' => [['challenge_id' => 'a-challenge-id', 'code' => ''], 'code', 'The code field is required.'],
         ];
     }
 

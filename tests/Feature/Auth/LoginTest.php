@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Auth\Totp\LoginChallengeStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class LoginTest extends AuthTestCase
@@ -70,7 +71,7 @@ class LoginTest extends AuthTestCase
     // password policy is surfaced here — a too-short password is a 401, not a 422).
     #[Test]
     #[DataProvider('invalidCredentialPayloadProvider')]
-    public function when_a_required_credential_field_is_missing_or_malformed_then_the_request_is_rejected_as_invalid(array $override, string $invalidField): void
+    public function when_a_required_credential_field_is_missing_or_malformed_then_the_request_is_rejected_as_invalid(array $override, string $invalidField, string $expectedMessage): void
     {
         // Given an otherwise-valid login with one missing or malformed field
         $payload = [
@@ -83,22 +84,22 @@ class LoginTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/login', $payload);
 
         // Then login is rejected by validation and the offending field is reported
-        $this->assertValidationRejected($response, $invalidField);
+        $this->assertValidationRejected($response, $invalidField, $expectedMessage);
     }
 
     /**
-     * Each row blanks or corrupts one field of an otherwise-valid login. The blank
-     * rows are regression guards over the `required` rules; the malformed-email row
-     * drives the `email` format rule (a non-email string must not reach the lookup).
+     * Each row blanks or corrupts one field of an otherwise-valid login and pins the
+     * verbatim message, so a dropped `required` (which leaves `string` to reject the
+     * null with a different message) is caught.
      *
-     * @return array<string, array{0: array<string, mixed>, 1: string}>
+     * @return array<string, array{0: array<string, mixed>, 1: string, 2: string}>
      */
     public static function invalidCredentialPayloadProvider(): array
     {
         return [
-            'blank email' => [['email' => ''], 'email'],
-            'blank password' => [['password' => ''], 'password'],
-            'malformed email' => [['email' => 'not-an-email'], 'email'],
+            'blank email' => [['email' => ''], 'email', 'The email field is required.'],
+            'blank password' => [['password' => ''], 'password', 'The password field is required.'],
+            'malformed email' => [['email' => 'not-an-email'], 'email', 'The email field must be a valid email address.'],
         ];
     }
 
@@ -115,6 +116,44 @@ class LoginTest extends AuthTestCase
 
         // Then it is throttled with retry guidance
         $this->assertThrottled($response);
+    }
+
+    // Sad — a Pro/Enterprise account already at its three active-device limit is refused
+    // a fourth session at login (UC-1-002 alt-5a); the cap is enforced before the mint.
+    #[Test]
+    #[DataProvider('provideDeviceCappedPlans')]
+    public function when_a_capped_account_at_the_limit_logs_in_then_it_is_rejected(BillingPlan $plan): void
+    {
+        // Given a user on a device-capped plan already holding three active sessions
+        $user = $this->aRegisteredUser();
+        $this->memberOfCompanyOnPlan($user, $plan);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->aSessionFor($user, 'tablet');
+
+        // When they log in from a fourth device
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then it is rejected, no fourth session is minted, and "last seen" is not bumped
+        $this->assertDeviceLimitRejected($response, $user, 3);
+        $this->assertNull($user->refresh()->last_logged_at, 'A capped login must not stamp last_logged_at.');
+    }
+
+    /**
+     * The two device-capped tiers — Pro and Enterprise both enforce the 3-device
+     * concurrent limit (S14); Free and Starter are uncapped.
+     *
+     * @return array<string, array{BillingPlan}>
+     */
+    public static function provideDeviceCappedPlans(): array
+    {
+        return [
+            'pro' => [BillingPlan::Pro],
+            'enterprise' => [BillingPlan::Enterprise],
+        ];
     }
 
     // Edge — the issued token is a real credential: it authenticates a Sanctum-guarded
@@ -239,69 +278,6 @@ class LoginTest extends AuthTestCase
         $this->assertLastLoggedAtStamped($user);
     }
 
-    // Happy — valid credentials return a Sanctum token and the user record.
-    #[Test]
-    public function when_valid_credentials_are_submitted_then_the_token_and_user_are_returned(): void
-    {
-        // Given a registered user
-        $user = $this->aRegisteredUser();
-
-        // When they submit valid credentials
-        $response = $this->postJson('/api/v1/auth/login', [
-            'email' => self::LOGIN_EMAIL,
-            'password' => self::LOGIN_PASSWORD,
-        ]);
-
-        // Then a token and their user record are returned
-        $this->assertLoginSucceeded($response, $user);
-    }
-
-    // Happy — an unverified user can still log in: email verification is NOT enforced
-    // this slice (slice-auth-login C4). Guards against a verification gate creeping in.
-    #[Test]
-    public function when_an_unverified_user_submits_valid_credentials_then_login_still_succeeds(): void
-    {
-        // Given a registered but unverified user
-        $user = User::factory()
-            ->withEmail(self::LOGIN_EMAIL)
-            ->withPassword(self::LOGIN_PASSWORD)
-            ->unverified()
-            ->create();
-
-        // When they submit valid credentials
-        $response = $this->postJson('/api/v1/auth/login', [
-            'email' => self::LOGIN_EMAIL,
-            'password' => self::LOGIN_PASSWORD,
-        ]);
-
-        // Then login still succeeds (no email-verification gate)
-        $this->assertLoginSucceeded($response, $user);
-    }
-
-    // Sad — a Pro/Enterprise account already at its three active-device limit is refused
-    // a fourth session at login (UC-1-002 alt-5a); the cap is enforced before the mint.
-    #[Test]
-    #[DataProvider('provideDeviceCappedPlans')]
-    public function when_a_capped_account_at_the_limit_logs_in_then_it_is_rejected(BillingPlan $plan): void
-    {
-        // Given a user on a device-capped plan already holding three active sessions
-        $user = $this->aRegisteredUser();
-        $this->memberOfCompanyOnPlan($user, $plan);
-        $this->aSessionFor($user, 'web');
-        $this->aSessionFor($user, 'mobile');
-        $this->aSessionFor($user, 'tablet');
-
-        // When they log in from a fourth device
-        $response = $this->postJson('/api/v1/auth/login', [
-            'email' => self::LOGIN_EMAIL,
-            'password' => self::LOGIN_PASSWORD,
-        ]);
-
-        // Then it is rejected, no fourth session is minted, and "last seen" is not bumped
-        $this->assertDeviceLimitRejected($response, $user, 3);
-        $this->assertNull($user->refresh()->last_logged_at, 'A capped login must not stamp last_logged_at.');
-    }
-
     // Edge — a member removed from their device-capped company (soft-deleted pivot) is
     // no longer capped: the trashed pivot must not count toward the per-account device
     // limit. UC-1-024 is the first path that soft-deletes a pivot, so it activates this
@@ -325,20 +301,6 @@ class LoginTest extends AuthTestCase
 
         // Then the removed membership no longer caps them — the login succeeds
         $response->assertOk();
-    }
-
-    /**
-     * The two device-capped tiers — Pro and Enterprise both enforce the 3-device
-     * concurrent limit (S14); Free and Starter are uncapped.
-     *
-     * @return array<string, array{BillingPlan}>
-     */
-    public static function provideDeviceCappedPlans(): array
-    {
-        return [
-            'pro' => [BillingPlan::Pro],
-            'enterprise' => [BillingPlan::Enterprise],
-        ];
     }
 
     // Edge — Free and Starter accounts are uncapped: a fourth concurrent device logs in
@@ -398,27 +360,6 @@ class LoginTest extends AuthTestCase
 
         // Then login succeeds — the expired row was not counted (else they'd be at the cap)
         $this->assertSessionIssued($response, $user, 4);
-    }
-
-    // Happy — the cap permits a legitimate login: a Pro member below the limit (two active
-    // devices) logs in on a third device and the session is issued (UC-1-002 alt-5a).
-    #[Test]
-    public function when_a_pro_member_below_the_device_limit_logs_in_then_a_session_is_issued(): void
-    {
-        // Given a Pro member with two active sessions (under the cap)
-        $user = $this->aRegisteredUser();
-        $this->memberOfCompanyOnPlan($user, BillingPlan::Pro);
-        $this->aSessionFor($user, 'web');
-        $this->aSessionFor($user, 'mobile');
-
-        // When they log in from a third device
-        $response = $this->postJson('/api/v1/auth/login', [
-            'email' => self::LOGIN_EMAIL,
-            'password' => self::LOGIN_PASSWORD,
-        ]);
-
-        // Then the cap allows it and the third session is issued
-        $this->assertSessionIssued($response, $user, 3);
     }
 
     // Edge — a member of a planless (trial) company is uncapped: an absent plan enforces no
@@ -489,6 +430,103 @@ class LoginTest extends AuthTestCase
         $response->assertStatus(202);
         $this->assertNotEmpty($response->json('data.challenge_id'), 'A 2FA login must return a challenge, not the device-cap error.');
         $this->assertSame(3, $user->tokens()->count(), 'No token is minted at the challenge step.');
+    }
+
+    // Edge — a 2FA-enrolled user gets a challenge instead of a token: the challenge
+    // resolves to that user and advertises its real expiry (the clock is frozen in setUp).
+    #[Test]
+    public function when_a_two_factor_user_submits_valid_credentials_then_a_challenge_is_issued_without_a_token(): void
+    {
+        // Given a registered user with 2FA enabled
+        $user = $this->aTwoFactorUser();
+
+        // When they submit valid credentials
+        $response = $this->login();
+
+        // Then a 2FA challenge is issued instead of a token, and it resolves to that user
+        $this->assertChallengeIssued($response, $user);
+    }
+
+    // Happy — valid credentials return a Sanctum token and the user record.
+    #[Test]
+    public function when_valid_credentials_are_submitted_then_the_token_and_user_are_returned(): void
+    {
+        // Given a registered user
+        $user = $this->aRegisteredUser();
+
+        // When they submit valid credentials
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then a token and their user record are returned
+        $this->assertLoginSucceeded($response, $user);
+    }
+
+    // Happy — an unverified user can still log in: email verification is NOT enforced
+    // this slice (slice-auth-login C4). Guards against a verification gate creeping in.
+    #[Test]
+    public function when_an_unverified_user_submits_valid_credentials_then_login_still_succeeds(): void
+    {
+        // Given a registered but unverified user
+        $user = User::factory()
+            ->withEmail(self::LOGIN_EMAIL)
+            ->withPassword(self::LOGIN_PASSWORD)
+            ->unverified()
+            ->create();
+
+        // When they submit valid credentials
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then login still succeeds (no email-verification gate)
+        $this->assertLoginSucceeded($response, $user);
+    }
+
+    // Happy — the cap permits a legitimate login: a Pro member below the limit (two active
+    // devices) logs in on a third device and the session is issued (UC-1-002 alt-5a).
+    #[Test]
+    public function when_a_pro_member_below_the_device_limit_logs_in_then_a_session_is_issued(): void
+    {
+        // Given a Pro member with two active sessions (under the cap)
+        $user = $this->aRegisteredUser();
+        $this->memberOfCompanyOnPlan($user, BillingPlan::Pro);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+
+        // When they log in from a third device
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then the cap allows it and the third session is issued
+        $this->assertSessionIssued($response, $user, 3);
+    }
+
+    protected function login(): TestResponse
+    {
+        return $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+    }
+
+    protected function assertChallengeIssued(TestResponse $response, User $user): void
+    {
+        $response->assertStatus(202);
+        $response->assertJsonMissingPath('data.token');
+        $this->assertSame(0, $user->tokens()->count(), 'No Sanctum token may be minted until 2FA verification.');
+        $challengeId = (string) $response->json('data.challenge_id');
+        $this->assertNotEmpty($challengeId, 'A challenge id must be returned.');
+        $this->assertTrue(
+            now()->addMinutes(LoginChallengeStore::TTL_MINUTES)->equalTo($response->json('data.expires_at')),
+            'The challenge must advertise its real 5-minute expiry.',
+        );
+        $this->assertSame($user->id, app(LoginChallengeStore::class)->find($challengeId)?->userId);
     }
 
     protected function assertLoginSucceeded(TestResponse $response, User $user): void
