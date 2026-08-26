@@ -153,7 +153,7 @@ jobs:
         # internal-only commands carry no rules(). Report-only is a dated window with a
         # named flip point, NOT a tolerated-failure gate (Rule #13 / s144): the legacy
         # internal validateAndCreate sites (design sec 6.1.1 table B) are cleared by
-        # OQ-1-172 T4-T6 (8 at T3, 6 after T4); the tolerated count is BOUNDED at the current baseline so a new
+        # OQ-1-172 T4-T6 (8 at T3, 6 after T4, 5 after T5); the tolerated count is BOUNDED at the current baseline so a new
         # violation of any check fails here even inside the window, and T7 replaces the
         # last two lines with `exit $status`. Liveness proof: the summary line must exist
         # and check 1 must have inspected at least one command - a script that never ran,

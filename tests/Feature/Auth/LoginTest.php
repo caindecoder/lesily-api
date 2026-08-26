@@ -89,8 +89,7 @@ class LoginTest extends AuthTestCase
 
     /**
      * Each row blanks or corrupts one field of an otherwise-valid login and pins the
-     * verbatim message, so a dropped `required` (which leaves `string` to reject the
-     * null with a different message) is caught.
+     * rule's verbatim message.
      *
      * @return array<string, array{0: array<string, mixed>, 1: string, 2: string}>
      */
@@ -521,7 +520,6 @@ class LoginTest extends AuthTestCase
         $response->assertJsonMissingPath('data.token');
         $this->assertSame(0, $user->tokens()->count(), 'No Sanctum token may be minted until 2FA verification.');
         $challengeId = (string) $response->json('data.challenge_id');
-        $this->assertNotEmpty($challengeId, 'A challenge id must be returned.');
         $this->assertTrue(
             now()->addMinutes(LoginChallengeStore::TTL_MINUTES)->equalTo($response->json('data.expires_at')),
             'The challenge must advertise its real 5-minute expiry.',

@@ -19,9 +19,7 @@ class LoginResource extends JsonResource
         private readonly User $user,
         private readonly string $token,
         private readonly ?DateTimeInterface $expiresAt,
-    ) {
-        parent::__construct($user);
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>

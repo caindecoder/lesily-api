@@ -59,9 +59,8 @@ class RegisterOwnerTest extends AuthTestCase
     }
 
     /**
-     * Each row blanks, omits or corrupts one field of an otherwise-valid payload and
-     * pins the verbatim message: a dropped `required` leaves `string`/`accepted` to
-     * reject the null with a different message, so the pin catches it.
+     * Each row blanks, nulls or corrupts one field of an otherwise-valid payload and
+     * pins the rule's verbatim message.
      *
      * @return array<string, array{0: array<string, mixed>, 1: string, 2: string}>
      */
@@ -70,7 +69,7 @@ class RegisterOwnerTest extends AuthTestCase
         return [
             'missing password' => [['password' => ''], 'password', 'The password field is required.'],
             'weak password' => [['password' => 'short'], 'password', 'The password field must be at least 8 characters.'],
-            'terms omitted' => [['acceptedTos' => null], 'acceptedTos', 'The accepted tos field is required.'],
+            'terms null' => [['acceptedTos' => null], 'acceptedTos', 'The accepted tos field is required.'],
             'terms not accepted' => [['acceptedTos' => false], 'acceptedTos', 'The accepted tos field must be accepted.'],
             'missing name' => [['name' => ''], 'name', 'The name field is required.'],
             'over-long name' => [['name' => str_repeat('a', 256)], 'name', 'The name field must not be greater than 255 characters.'],

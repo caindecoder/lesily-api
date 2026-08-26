@@ -16,9 +16,7 @@ class RegisterSuccessResource extends JsonResource
         private readonly User $owner,
         private readonly string $token,
         private readonly string $companyId,
-    ) {
-        parent::__construct($owner);
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>

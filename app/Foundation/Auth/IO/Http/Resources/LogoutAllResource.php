@@ -12,10 +12,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class LogoutAllResource extends JsonResource
 {
-    public function __construct(private readonly int $tokensRevoked)
-    {
-        parent::__construct($tokensRevoked);
-    }
+    public function __construct(private readonly int $tokensRevoked) {}
 
     /**
      * @return array<string, int>

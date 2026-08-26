@@ -76,7 +76,7 @@ class DefaultCompanyTest extends AuthTestCase
     {
         return [
             'missing' => [[], 'The company id field is required.'],
-            'not a string' => [['companyId' => 123], 'The company id field must be a valid UUID.'],
+            'numeric' => [['companyId' => 123], 'The company id field must be a valid UUID.'],
             'not a uuid' => [['companyId' => 'not-a-uuid'], 'The company id field must be a valid UUID.'],
         ];
     }
