@@ -156,6 +156,35 @@ class IssueInvoiceTest extends BillingTestCase
     }
 
     #[Test]
+    public function when_an_invoice_is_issued_for_the_minimum_one_cent_then_it_is_accepted(): void
+    {
+        // Given a company with a trial subscription
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoiceId = (string) Str::uuid();
+
+        // When a one-cent invoice is issued at the domain seam (SM-1-04 T1: amount > 0, boundary)
+        Invoice::retrieve($invoiceId)
+            ->issue($this->issueInvoiceCommand($company, $subscription, [
+                'amountCents' => 1,
+                'lineItems' => [
+                    [
+                        'description' => 'Pro Plan — Monthly',
+                        'quantity' => 1,
+                        'unitPriceCents' => 1,
+                        'amountCents' => 1,
+                        'lineType' => 'plan_subscription',
+                        'sortOrder' => 0,
+                    ],
+                ],
+            ]))
+            ->persist();
+
+        // Then the pending invoice is projected with the one-cent amount
+        $this->assertInvoiceRowState($invoiceId, ['status' => 'pending', 'amount_cents' => 1]);
+    }
+
+    #[Test]
     public function when_an_invoice_is_issued_in_a_non_default_currency_then_both_projections_carry_it(): void
     {
         // Given a company with a trial subscription
