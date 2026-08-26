@@ -180,9 +180,10 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
-     * The input was refused as invalid on $invalidField with exactly
-     * $expectedMessage — 422 VALIDATION_FAILED with the verbatim field-level
-     * message (§S21; conv-plan §2.2 Rule 10).
+     * The input was refused as invalid on $invalidField — 422 VALIDATION_FAILED
+     * whose field-level errors contain $expectedMessage (§S21; conv-plan §2.2
+     * Rule 10 — assertJsonValidationErrors matches by containment, so the pin
+     * fails when the rule behind the message is dropped).
      */
     protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
     {

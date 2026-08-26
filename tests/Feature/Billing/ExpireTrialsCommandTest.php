@@ -204,7 +204,7 @@ class ExpireTrialsCommandTest extends BillingTestCase
     protected function givenTrialEndingAt(string $companyId, string $subscriptionId, CarbonInterface $trialEndsAt): void
     {
         $this->createCompanyOnTrial($companyId);
-        $command = StartTrialCommand::validateAndCreate([
+        $command = StartTrialCommand::from([
             'companyId' => $companyId,
             'trialEndsAt' => $trialEndsAt,
         ]);

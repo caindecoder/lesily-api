@@ -109,8 +109,9 @@ class IssueInvoiceTest extends BillingTestCase
                 ->persist();
 
             $this->fail('Expected InvoiceAmountNotPositiveException was not thrown.');
-        } catch (InvoiceAmountNotPositiveException) {
-            // Then the issue is rejected by the aggregate and no event is stored
+        } catch (InvoiceAmountNotPositiveException $exception) {
+            // Then the issue is rejected naming the non-positive amount and no event is stored
+            $this->assertStringContainsString('for 0 cents', $exception->getMessage());
             $this->assertNoNewInvoiceEvents($invoiceId, 0);
         }
     }

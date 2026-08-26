@@ -73,8 +73,9 @@ class RecordInvoicePaymentTest extends BillingTestCase
                 ->persist();
 
             $this->fail('Expected InvoiceNotPayableException was not thrown.');
-        } catch (InvoiceNotPayableException) {
-            // Then the payment is rejected and no orphan stream is genesised
+        } catch (InvoiceNotPayableException $exception) {
+            // Then the payment is rejected as unissued and no orphan stream is genesised
+            $this->assertStringContainsString('while unissued', $exception->getMessage());
             $this->assertNoNewInvoiceEvents($orphanInvoiceId, 0);
         }
     }
