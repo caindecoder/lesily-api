@@ -180,15 +180,15 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
-     * The query input was refused as invalid on $field — 422 VALIDATION_FAILED
-     * with a field-level error (§S21). Duplicated from MembershipsTestCase
-     * (module bases are independent — established precedent).
+     * The input was refused as invalid on $invalidField with exactly
+     * $expectedMessage — 422 VALIDATION_FAILED with the verbatim field-level
+     * message (§S21; conv-plan §2.2 Rule 10).
      */
-    protected function assertValidationRejected(TestResponse $response, string $field): void
+    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
     {
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
-        $response->assertJsonValidationErrors($field);
+        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
     }
 
     /**

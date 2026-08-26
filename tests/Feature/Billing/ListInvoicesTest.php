@@ -43,7 +43,7 @@ class ListInvoicesTest extends BillingTestCase
      */
     #[Test]
     #[DataProvider('provideInvalidQueryInputs')]
-    public function when_invalid_filter_given_then_validation_error_occurs(array $query, string $invalidField): void
+    public function when_invalid_filter_given_then_validation_error_occurs(array $query, string $invalidField, string $expectedMessage): void
     {
         // Given an owner of a company
         [$company, $owner] = $this->aCompanyWithMember('owner');
@@ -51,10 +51,10 @@ class ListInvoicesTest extends BillingTestCase
         // When they request the invoice list with invalid query input
         $response = $this->listInvoicesAs($owner, $company, $query);
 
-        // Then the input is refused as invalid on that field (api-conventions §10.1
-        // per-endpoint whitelist; unknown params 422 per the s134 F-a ruling —
-        // includes the company_id tenant-override attempt)
-        $this->assertValidationRejected($response, $invalidField);
+        // Then the input is refused as invalid on that field with the verbatim
+        // message (api-conventions §10.1 per-endpoint whitelist; unknown params
+        // 422 per the s134 F-a ruling — includes the company_id tenant-override attempt)
+        $this->assertValidationRejected($response, $invalidField, $expectedMessage);
     }
 
     #[Test]
@@ -646,26 +646,30 @@ class ListInvoicesTest extends BillingTestCase
     }
 
     /**
-     * @return array<string, array{array<string, mixed>, string}>
+     * @return array<string, array{array<string, mixed>, string, string}>
      */
     public static function provideInvalidQueryInputs(): array
     {
+        $withinMessage = 'The within filter must be two ISO-8601 (YYYY-MM-DD) dates separated by a comma.';
+
         return [
-            'status not whitelisted' => [['status' => 'archived'], 'status'],
-            'dropped pre-R4 status token' => [['status' => 'draft'], 'status'],
-            'non-whitelisted sort field' => [['sort' => 'customer_name'], 'sort'],
-            'column name as sort token' => [['sort' => 'amount_cents'], 'sort'],
-            'within date not ISO-8601' => [['within' => '2026/01/01,bad-date'], 'within'],
-            'within missing second date' => [['within' => '2026-01-01'], 'within'],
-            'non-integer min_amount' => [['min_amount' => 'abc'], 'min_amount'],
-            'per_page over max' => [['per_page' => 101], 'per_page'],
-            'per_page below minimum' => [['per_page' => 0], 'per_page'],
-            'page below minimum' => [['page' => 0], 'page'],
-            'unknown filter key' => [['foo' => 'bar'], 'foo'],
-            'tenant override attempt rejected' => [['company_id' => 'ACME'], 'company_id'],
-            'multi-value status list' => [['status' => 'paid,pending'], 'status'],
-            'empty status value' => [['status' => ''], 'status'],
-            'within given as an array' => [['within' => ['2026-01-01', '2026-06-30']], 'within'],
+            'status not whitelisted' => [['status' => 'archived'], 'status', 'The selected status is invalid.'],
+            'dropped pre-R4 status token' => [['status' => 'draft'], 'status', 'The selected status is invalid.'],
+            'non-whitelisted sort field' => [['sort' => 'customer_name'], 'sort', 'The selected sort is invalid.'],
+            'column name as sort token' => [['sort' => 'amount_cents'], 'sort', 'The selected sort is invalid.'],
+            'within date not ISO-8601' => [['within' => '2026/01/01,bad-date'], 'within', $withinMessage],
+            'within first date malformed' => [['within' => 'bad-date,2026-01-01'], 'within', $withinMessage],
+            'within second date malformed' => [['within' => '2026-01-01,bad-date'], 'within', $withinMessage],
+            'within missing second date' => [['within' => '2026-01-01'], 'within', $withinMessage],
+            'non-integer min_amount' => [['min_amount' => 'abc'], 'min_amount', 'The min amount field must be an integer.'],
+            'per_page over max' => [['per_page' => 101], 'per_page', 'The per page field must not be greater than 100.'],
+            'per_page below minimum' => [['per_page' => 0], 'per_page', 'The per page field must be at least 1.'],
+            'page below minimum' => [['page' => 0], 'page', 'The page field must be at least 1.'],
+            'unknown filter key' => [['foo' => 'bar'], 'foo', 'This filter is not supported.'],
+            'tenant override attempt rejected' => [['company_id' => 'ACME'], 'company_id', 'This filter is not supported.'],
+            'multi-value status list' => [['status' => 'paid,pending'], 'status', 'The selected status is invalid.'],
+            'empty status value' => [['status' => ''], 'status', 'The status field must have a value.'],
+            'within given as an array' => [['within' => ['2026-01-01', '2026-06-30']], 'within', 'The within field must be a string.'],
         ];
     }
 
