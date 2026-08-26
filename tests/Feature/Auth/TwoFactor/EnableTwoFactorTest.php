@@ -300,6 +300,7 @@ class EnableTwoFactorTest extends AuthTestCase
         $this->assertCount(10, array_unique($returnedCodes), 'Recovery codes must be distinct.');
         $this->assertSame([], array_intersect($returnedCodes, $stored), 'No plaintext code may appear in storage.');
         foreach ($returnedCodes as $index => $code) {
+            $this->assertMatchesRegularExpression('/^[A-Z0-9]{4}-[A-Z0-9]{4}$/', $code, 'Every recovery code takes the XXXX-XXXX shape.');
             $this->assertTrue(Hash::check($code, $stored[$index]), 'Every returned code must verify against its stored hash.');
         }
     }
