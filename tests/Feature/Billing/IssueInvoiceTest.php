@@ -116,6 +116,27 @@ class IssueInvoiceTest extends BillingTestCase
     }
 
     #[Test]
+    public function when_an_invoice_is_issued_in_a_non_default_currency_then_both_projections_carry_it(): void
+    {
+        // Given a company with a trial subscription
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoiceId = (string) Str::uuid();
+
+        // When an invoice is issued in USD at the domain seam
+        Invoice::retrieve($invoiceId)
+            ->issue($this->issueInvoiceCommand($company, $subscription, ['currency' => 'USD']))
+            ->persist();
+
+        // Then the invoice row and every line item carry USD rather than the column default
+        $this->assertInvoiceRowState($invoiceId, ['currency' => 'USD']);
+        $this->assertLineItemsProjected($invoiceId, [
+            ['sort_order' => 0, 'currency' => 'USD'],
+            ['sort_order' => 1, 'currency' => 'USD'],
+        ]);
+    }
+
+    #[Test]
     public function when_an_invoice_is_issued_then_the_pending_invoice_and_its_line_items_are_projected(): void
     {
         // Given a company with a trial subscription and an acting owner with a billing address
