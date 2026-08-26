@@ -174,7 +174,7 @@ class Invoice extends AggregateRoot
 
         return $this->recordThat(new InvoiceDisputeFiled(
             invoiceId: $this->uuid(),
-            disputeId: (string) Str::uuid(),
+            disputeId: Str::uuid()->toString(),
             filedAt: CarbonImmutable::now(),
             reason: $command->reason,
             filedBy: $command->filedBy,

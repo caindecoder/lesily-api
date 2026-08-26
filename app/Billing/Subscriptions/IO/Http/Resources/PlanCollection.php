@@ -4,7 +4,6 @@ namespace App\Billing\Subscriptions\IO\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Http\Resources\Json\ResourceCollection;
 
@@ -27,7 +26,7 @@ class PlanCollection extends ResourceCollection
             ->map(fn (BillingPlan $plan): array => [
                 'code' => $plan->value,
                 'label' => $plan->label(),
-                'features' => array_map(fn (Feature $feature): string => $feature->value, $plan->features()),
+                'features' => $plan->features(),
                 'monthly_price_cents' => $plan->monthlyPriceCents(),
                 'annual_price_cents' => $plan->annualPriceCents(),
                 'currency' => 'LKR',

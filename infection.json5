@@ -159,9 +159,18 @@
         // WHEN its command's FIRST key gains a rule beyond required+type, or the keys are
         // reordered so such a key comes first: the `return [` line does not move, but the
         // outer removal then drops a real constraint and becomes killable.
+        // K-BILL-DOWNLOAD (OQ-1-172 T4, s190): DownloadInvoiceReceiptCommand is an
+        // HTTP-boundary command (InvoicesController) whose two keys are BOTH server-
+        // supplied (auth.company + the route parameter), so under the amendment-AQ
+        // corollary they carry no rule of their own and the receipt contract has no
+        // 422 (api-1-invoices s2). rules() stays only because the AQ guard's clause 1
+        // requires one on every controller-referenced command; every item removal in
+        // it is therefore equivalent - method-level, not line-pinned (the method holds
+        // nothing else). REMOVE WHEN a client-supplied key lands on this command, or
+        // the guard learns the server-key corollary and rules() can go.
         "ArrayItemRemoval": {
             ignore: [
-                "App\\Billing\\Invoices\\UseCases\\Commands\\DownloadInvoiceReceiptCommand::rules::26",
+                "App\\Billing\\Invoices\\UseCases\\Commands\\DownloadInvoiceReceiptCommand::rules",
                 "App\\Companies\\Memberships\\UseCases\\Commands\\AcceptInvitationCommand::rules::28",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ChangePasswordCommand::rules::19",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ConfirmTwoFactorCommand::rules::22",
