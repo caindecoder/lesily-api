@@ -319,6 +319,7 @@ class EnableTwoFactorTest extends AuthTestCase
         $reloaded = User::query()->whereKey($user->getKey())->firstOrFail();
         $this->assertNotNull($reloaded->two_factor_confirmed_at, '2FA must be marked enabled at confirm.');
         $this->assertNotEmpty($response->json('data.recovery_codes'), 'Recovery codes are shown once at confirm.');
+        $this->assertNull(Cache::get("2fa-setup:{$user->getKey()}"), 'The staged secret is cleared once confirmed.');
         $this->assertSecretStoredEncrypted($user, $stagedSecret);
     }
 

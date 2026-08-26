@@ -113,7 +113,7 @@ class VerifyTwoFactorTest extends AuthTestCase
         $response = $this->verify($challengeId, '123456');
 
         // Then a working session token is issued and no domain event is recorded (token-only)
-        $this->assertSessionTokenIssued($response, $user);
+        $this->assertSessionTokenIssued($response, $user, $challengeId);
         $this->assertNoEventRecorded();
     }
 
@@ -179,7 +179,7 @@ class VerifyTwoFactorTest extends AuthTestCase
         $response = $this->verify($challengeId, 'HAPY-CODE');
 
         // Then a token is issued, that code is consumed (single-use), and a marker is recorded
-        $this->assertSessionTokenIssued($response, $user);
+        $this->assertSessionTokenIssued($response, $user, $challengeId);
         $this->assertRecoveryCodeConsumed($user, 'HAPY-CODE', expectedRemaining: 1);
         $this->assertRecoveryCodeUsedRecorded($user, remaining: 1);
     }
@@ -279,11 +279,12 @@ class VerifyTwoFactorTest extends AuthTestCase
         $this->assertSame(0, $user->tokens()->count(), 'No token may be minted on a failed verify.');
     }
 
-    protected function assertSessionTokenIssued(TestResponse $response, User $user): void
+    protected function assertSessionTokenIssued(TestResponse $response, User $user, string $challengeId): void
     {
         $response->assertOk();
         $token = (string) $response->json('data.token');
         $this->assertNotEmpty($token, 'A completed 2FA verify must issue a session token.');
+        $this->assertNull(app(LoginChallengeStore::class)->find($challengeId), 'A verified challenge must be consumed.');
 
         // forgetGuards so the probe re-resolves the new token from scratch — the
         // container-cached guard would otherwise answer from the test's prior state.
