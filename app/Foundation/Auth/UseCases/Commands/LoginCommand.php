@@ -14,7 +14,8 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  * `deviceName` names the issued token for the Active Sessions list (sessions slice). It is
  * always present on the command: the controller resolves it (supplied name → User-Agent →
  * "Unknown device") before validating, so a too-long or absent client value never reaches a
- * 422 — the request-body field stays optional while the command field is authoritative.
+ * 422 — the request-body field stays optional while the command field is authoritative, and
+ * the server-resolved key carries no rule of its own.
  */
 class LoginCommand extends Data
 {
@@ -32,7 +33,6 @@ class LoginCommand extends Data
         return [
             'email' => ['required', 'string', 'email', 'max:255'],
             'password' => ['required', 'string', 'max:255'],
-            'deviceName' => ['required', 'string'],
         ];
     }
 }
