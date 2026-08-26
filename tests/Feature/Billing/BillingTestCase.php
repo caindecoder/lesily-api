@@ -282,7 +282,7 @@ abstract class BillingTestCase extends TestCase
         $subscriptionId = (string) Str::uuid();
 
         Subscription::retrieve($subscriptionId)
-            ->startTrial(StartTrialCommand::validateAndCreate([
+            ->startTrial(StartTrialCommand::from([
                 'companyId' => $company->getKey(),
                 'trialEndsAt' => $trialEndsAt,
             ]))

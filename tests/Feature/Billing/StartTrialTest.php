@@ -76,7 +76,7 @@ class StartTrialTest extends BillingTestCase
 
     protected function startTrial(): void
     {
-        $command = StartTrialCommand::validateAndCreate([
+        $command = StartTrialCommand::from([
             'companyId' => $this->companyId,
             'trialEndsAt' => CarbonImmutable::now()->addDays(30),
         ]);
