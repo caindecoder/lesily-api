@@ -45,8 +45,9 @@ class RecordInvoicePaymentFailureTest extends BillingTestCase
                 ->persist();
 
             $this->fail('Expected InvoiceNotPayableException was not thrown.');
-        } catch (InvoiceNotPayableException) {
-            // Then the failure is rejected and no new event is stored
+        } catch (InvoiceNotPayableException $exception) {
+            // Then the failure is rejected naming the blocking state and no new event is stored
+            $this->assertStringContainsString("while {$state}", $exception->getMessage());
             $this->assertNoNewInvoiceEvents($invoice->getKey(), $storedEventCount);
         }
     }

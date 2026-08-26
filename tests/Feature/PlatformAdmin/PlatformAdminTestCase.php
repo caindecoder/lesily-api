@@ -116,7 +116,7 @@ abstract class PlatformAdminTestCase extends TestCase
         $subscriptionId = (string) Str::uuid();
 
         Subscription::retrieve($subscriptionId)
-            ->startTrial(StartTrialCommand::validateAndCreate([
+            ->startTrial(StartTrialCommand::from([
                 'companyId' => $company->getKey(),
                 'trialEndsAt' => $trialEndsAt,
             ]))
@@ -132,7 +132,7 @@ abstract class PlatformAdminTestCase extends TestCase
      */
     protected function issueInvoiceCommand(Company $company, SubscriptionReadModel $subscription, array $overrides = []): IssueInvoiceCommand
     {
-        return IssueInvoiceCommand::validateAndCreate([
+        return IssueInvoiceCommand::from([
             'invoiceNumber' => 'INV-2026-000001',
             'subscriptionId' => $subscription->getKey(),
             'companyId' => $company->getKey(),
@@ -200,7 +200,7 @@ abstract class PlatformAdminTestCase extends TestCase
      */
     protected function recordPaymentSucceededCommand(InvoiceReadModel $invoice, array $overrides = []): RecordPaymentSucceededCommand
     {
-        return RecordPaymentSucceededCommand::validateAndCreate([
+        return RecordPaymentSucceededCommand::from([
             'invoiceId' => $invoice->getKey(),
             'payHereEventId' => 'evt_'.$invoice->getKey(),
             'payHereTransactionId' => 'txn_'.$invoice->getKey(),
@@ -218,7 +218,7 @@ abstract class PlatformAdminTestCase extends TestCase
         $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
 
         Invoice::retrieve($invoice->getKey())
-            ->void(VoidInvoiceCommand::validateAndCreate([
+            ->void(VoidInvoiceCommand::from([
                 'invoiceId' => $invoice->getKey(),
                 'voidedBy' => User::factory()->create()->getKey(),
                 'reason' => 'Issued in error - admin correction.',
@@ -238,7 +238,7 @@ abstract class PlatformAdminTestCase extends TestCase
         $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
 
         Invoice::retrieve($invoice->getKey())
-            ->recordPaymentFailed(RecordPaymentFailedCommand::validateAndCreate([
+            ->recordPaymentFailed(RecordPaymentFailedCommand::from([
                 'invoiceId' => $invoice->getKey(),
                 'payHereEventId' => 'evt_fail_'.$invoice->getKey(),
                 'failureCode' => 'insufficient_funds',
@@ -259,7 +259,7 @@ abstract class PlatformAdminTestCase extends TestCase
         $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
 
         Invoice::retrieve($invoice->getKey())
-            ->fileDispute(FileInvoiceDisputeCommand::validateAndCreate([
+            ->fileDispute(FileInvoiceDisputeCommand::from([
                 'invoiceId' => $invoice->getKey(),
                 'reason' => 'This charge does not match our agreed plan.',
                 'filedBy' => User::factory()->create()->getKey(),

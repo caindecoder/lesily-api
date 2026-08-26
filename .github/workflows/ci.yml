@@ -151,9 +151,9 @@ jobs:
       - name: Command validation placement (amendment AQ, OQ-1-172) - report-only until T7
         # Amendment AQ: validateAndCreate only at the HTTP boundary, ::from() internally,
         # internal-only commands carry no rules(). Report-only is a dated window with a
-        # named flip point, NOT a tolerated-failure gate (Rule #13 / s144): the 8 legacy
+        # named flip point, NOT a tolerated-failure gate (Rule #13 / s144): the legacy
         # internal validateAndCreate sites (design sec 6.1.1 table B) are cleared by
-        # OQ-1-172 T4-T6; the tolerated count is BOUNDED at that baseline so a new
+        # OQ-1-172 T4-T6 (8 at T3, 6 after T4); the tolerated count is BOUNDED at the current baseline so a new
         # violation of any check fails here even inside the window, and T7 replaces the
         # last two lines with `exit $status`. Liveness proof: the summary line must exist
         # and check 1 must have inspected at least one command - a script that never ran,
@@ -168,8 +168,8 @@ jobs:
           violations=$(echo "$summary" | sed -E 's/^AQ placement check: ([0-9]+) violation.*/\1/')
           checked=$(echo "$summary" | sed -E 's/.*; ([0-9]+) controller-referenced.*/\1/')
           [ "$checked" -ge 1 ]
-          [ "$violations" -le 8 ]
-          [ "$status" -eq 0 ] || echo "::warning::AQ violations present ($violations of the 8 legacy internal validateAndCreate sites remain, expected until OQ-1-172 T7)"
+          [ "$violations" -le 6 ]
+          [ "$status" -eq 0 ] || echo "::warning::AQ violations present ($violations of the 6 legacy internal validateAndCreate sites remain after T4, expected until OQ-1-172 T7)"
       - name: Mutation kill-verdict classifier self-test (OQ-1-167)
         # The kill-integrity gate's steady state is always-PASS, so a rotted
         # classifier would be invisible on every clean infection.json. This

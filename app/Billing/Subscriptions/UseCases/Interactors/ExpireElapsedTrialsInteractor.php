@@ -23,7 +23,7 @@ class ExpireElapsedTrialsInteractor
         $expiringTrials = $this->subscriptions->listExpiringTrials($asOf);
 
         foreach ($expiringTrials as $expiringTrial) {
-            $this->applyExpiry->execute(ApplyTrialExpirationCommand::validateAndCreate($expiringTrial));
+            $this->applyExpiry->execute(ApplyTrialExpirationCommand::from($expiringTrial));
         }
 
         return count($expiringTrials);

@@ -65,8 +65,9 @@ class FileInvoiceDisputeTest extends BillingTestCase
                 ->persist();
 
             $this->fail('Expected InvoiceDisputeNotAllowedException was not thrown.');
-        } catch (InvoiceDisputeNotAllowedException) {
-            // Then the filing is rejected and no new event is stored
+        } catch (InvoiceDisputeNotAllowedException $exception) {
+            // Then the filing is rejected naming the blocking state and no new event is stored
+            $this->assertStringContainsString("while {$state}", $exception->getMessage());
             $this->assertNoNewInvoiceEvents($invoice->getKey(), $storedEventCount);
         }
     }

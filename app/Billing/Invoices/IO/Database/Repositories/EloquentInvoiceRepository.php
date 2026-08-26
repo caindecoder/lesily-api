@@ -21,14 +21,21 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
      */
     public function listForCompany(string $companyId, InvoiceFilters $filters): LengthAwarePaginator
     {
-        return Invoice::query()
-            ->where('company_id', $companyId)
-            ->when($filters->status !== null, fn (Builder $query) => $this->applyStatusToken($query, (string) $filters->status))
-            ->when($filters->within !== null, fn (Builder $query) => $this->applyIssuedWithin($query, (string) $filters->within))
+        $query = Invoice::query()->where('company_id', $companyId);
+
+        if ($filters->status !== null) {
+            $this->applyStatusToken($query, $filters->status);
+        }
+
+        if ($filters->within !== null) {
+            $this->applyIssuedWithin($query, $filters->within);
+        }
+
+        return $query
             ->when($filters->min_amount !== null, fn (Builder $query) => $query->where('amount_cents', '>=', $filters->min_amount))
             ->when($filters->max_amount !== null, fn (Builder $query) => $query->where('amount_cents', '<=', $filters->max_amount))
             ->tap(fn (Builder $query) => $this->applySort($query, $filters->sort))
-            ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
+            ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page);
     }
 
     public function findForCompany(string $companyId, string $invoiceId): ?Invoice

@@ -20,6 +20,7 @@ use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
 use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
 use App\Billing\Invoices\Exceptions\InvoiceNotRefundableException;
 use App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand;
+use App\Billing\Invoices\Exceptions\InvoiceAmountNotPositiveException;
 use App\Billing\Invoices\Exceptions\InvoiceDisputeNotAllowedException;
 use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand;
@@ -44,7 +45,12 @@ class Invoice extends AggregateRoot
             throw InvoiceAlreadyIssuedException::withId($this->uuid());
         }
 
-        $lineItemsTotalCents = (int) collect($command->lineItems)->sum('amountCents');
+        // SM-1-04 T1: an invoice is only ever issued for a positive amount.
+        if ($command->amountCents < 1) {
+            throw InvoiceAmountNotPositiveException::forInvoice($this->uuid(), $command->amountCents);
+        }
+
+        $lineItemsTotalCents = collect($command->lineItems)->sum('amountCents');
         if ($lineItemsTotalCents !== $command->amountCents) {
             throw InvoiceLineItemsMismatchException::forInvoice($this->uuid(), $command->amountCents, $lineItemsTotalCents);
         }
@@ -168,7 +174,7 @@ class Invoice extends AggregateRoot
 
         return $this->recordThat(new InvoiceDisputeFiled(
             invoiceId: $this->uuid(),
-            disputeId: (string) Str::uuid(),
+            disputeId: Str::uuid()->toString(),
             filedAt: CarbonImmutable::now(),
             reason: $command->reason,
             filedBy: $command->filedBy,

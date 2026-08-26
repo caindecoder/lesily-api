@@ -98,7 +98,8 @@ class InvoiceFilters extends Data
     private static function isoDateRangeRule(): Closure
     {
         return function (string $attribute, mixed $value, Closure $fail): void {
-            $dates = explode(',', (string) $value);
+            /** @var string $value bail + string precede this rule */
+            $dates = explode(',', $value);
 
             if (count($dates) !== 2 || ! CarbonImmutable::hasFormat($dates[0], 'Y-m-d') || ! CarbonImmutable::hasFormat($dates[1], 'Y-m-d')) {
                 $fail("The {$attribute} filter must be two ISO-8601 (YYYY-MM-DD) dates separated by a comma.");

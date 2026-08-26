@@ -43,8 +43,9 @@ class VoidInvoiceTest extends BillingTestCase
                 ->persist();
 
             $this->fail('Expected InvoiceNotVoidableException was not thrown.');
-        } catch (InvoiceNotVoidableException) {
-            // Then the void is rejected and no new event is stored
+        } catch (InvoiceNotVoidableException $exception) {
+            // Then the void is rejected naming the blocking state and no new event is stored
+            $this->assertStringContainsString("while {$state}", $exception->getMessage());
             $this->assertNoNewInvoiceEvents($invoice->getKey(), $storedEventCount);
         }
     }

@@ -9,11 +9,11 @@ use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
-use Illuminate\Validation\ValidationException;
 use App\Billing\Invoices\Events\InvoiceCreated;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
 use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
+use App\Billing\Invoices\Exceptions\InvoiceAmountNotPositiveException;
 use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
 
 /**
@@ -108,11 +108,103 @@ class IssueInvoiceTest extends BillingTestCase
                 ]))
                 ->persist();
 
-            $this->fail('Expected ValidationException was not thrown.');
-        } catch (ValidationException) {
-            // Then the issue is rejected at the command boundary and no event is stored
+            $this->fail('Expected InvoiceAmountNotPositiveException was not thrown.');
+        } catch (InvoiceAmountNotPositiveException $exception) {
+            // Then the issue is rejected naming the non-positive amount and no event is stored
+            $this->assertStringContainsString('for 0 cents', $exception->getMessage());
             $this->assertNoNewInvoiceEvents($invoiceId, 0);
         }
+    }
+
+    #[Test]
+    public function when_a_line_item_amount_is_not_an_integer_then_issuing_is_refused(): void
+    {
+        // Given a company with a trial subscription
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoiceId = (string) Str::uuid();
+
+        // When an invoice is issued whose line items carry a fractional-cents amount that sums to the invoice amount
+        try {
+            Invoice::retrieve($invoiceId)
+                ->issue($this->issueInvoiceCommand($company, $subscription, [
+                    'lineItems' => [
+                        [
+                            'description' => 'Pro Plan — Monthly',
+                            'quantity' => 1,
+                            'unitPriceCents' => 75000,
+                            'amountCents' => 75000.0,
+                            'lineType' => 'plan_subscription',
+                            'sortOrder' => 0,
+                        ],
+                        [
+                            'description' => 'Proration credit — unused Starter days',
+                            'quantity' => -1,
+                            'unitPriceCents' => 15000,
+                            'amountCents' => -15000,
+                            'lineType' => 'proration_credit',
+                            'sortOrder' => 1,
+                        ],
+                    ],
+                ]))
+                ->persist();
+
+            $this->fail('Expected InvoiceLineItemsMismatchException was not thrown.');
+        } catch (InvoiceLineItemsMismatchException $exception) {
+            // Then the issue is refused naming the fractional total and no event is stored
+            $this->assertStringContainsString('60000.0', $exception->getMessage());
+            $this->assertNoNewInvoiceEvents($invoiceId, 0);
+        }
+    }
+
+    #[Test]
+    public function when_an_invoice_is_issued_for_the_minimum_one_cent_then_it_is_accepted(): void
+    {
+        // Given a company with a trial subscription
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoiceId = (string) Str::uuid();
+
+        // When a one-cent invoice is issued at the domain seam (SM-1-04 T1: amount > 0, boundary)
+        Invoice::retrieve($invoiceId)
+            ->issue($this->issueInvoiceCommand($company, $subscription, [
+                'amountCents' => 1,
+                'lineItems' => [
+                    [
+                        'description' => 'Pro Plan — Monthly',
+                        'quantity' => 1,
+                        'unitPriceCents' => 1,
+                        'amountCents' => 1,
+                        'lineType' => 'plan_subscription',
+                        'sortOrder' => 0,
+                    ],
+                ],
+            ]))
+            ->persist();
+
+        // Then the pending invoice is projected with the one-cent amount
+        $this->assertInvoiceRowState($invoiceId, ['status' => 'pending', 'amount_cents' => 1]);
+    }
+
+    #[Test]
+    public function when_an_invoice_is_issued_in_a_non_default_currency_then_both_projections_carry_it(): void
+    {
+        // Given a company with a trial subscription
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoiceId = (string) Str::uuid();
+
+        // When an invoice is issued in USD at the domain seam
+        Invoice::retrieve($invoiceId)
+            ->issue($this->issueInvoiceCommand($company, $subscription, ['currency' => 'USD']))
+            ->persist();
+
+        // Then the invoice row and every line item carry USD rather than the column default
+        $this->assertInvoiceRowState($invoiceId, ['currency' => 'USD']);
+        $this->assertLineItemsProjected($invoiceId, [
+            ['sort_order' => 0, 'currency' => 'USD'],
+            ['sort_order' => 1, 'currency' => 'USD'],
+        ]);
     }
 
     #[Test]

@@ -44,8 +44,9 @@ class RefundInvoiceTest extends BillingTestCase
                 ->persist();
 
             $this->fail('Expected InvoiceNotRefundableException was not thrown.');
-        } catch (InvoiceNotRefundableException) {
-            // Then the refund is rejected and no new event is stored
+        } catch (InvoiceNotRefundableException $exception) {
+            // Then the refund is rejected naming the blocking state and no new event is stored
+            $this->assertStringContainsString("while {$state}", $exception->getMessage());
             $this->assertNoNewInvoiceEvents($invoice->getKey(), $storedEventCount);
         }
     }

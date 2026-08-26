@@ -41,7 +41,7 @@ class InvoiceFactory extends Factory
                 $subscriptionId = (string) Str::uuid();
 
                 Subscription::retrieve($subscriptionId)
-                    ->startTrial(StartTrialCommand::validateAndCreate([
+                    ->startTrial(StartTrialCommand::from([
                         'companyId' => $attributes['company_id'],
                         'trialEndsAt' => CarbonImmutable::now()->addDays(30),
                     ]))

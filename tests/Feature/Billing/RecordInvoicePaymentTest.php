@@ -48,8 +48,9 @@ class RecordInvoicePaymentTest extends BillingTestCase
                 ->persist();
 
             $this->fail('Expected InvoiceNotPayableException was not thrown.');
-        } catch (InvoiceNotPayableException) {
-            // Then the payment is rejected and no new event is stored
+        } catch (InvoiceNotPayableException $exception) {
+            // Then the payment is rejected naming the blocking state and no new event is stored
+            $this->assertStringContainsString("while {$state}", $exception->getMessage());
             $this->assertNoNewInvoiceEvents($invoice->getKey(), $storedEventCount);
         }
     }
@@ -63,7 +64,7 @@ class RecordInvoicePaymentTest extends BillingTestCase
         // When a payment webhook targets the unknown invoice
         try {
             Invoice::retrieve($orphanInvoiceId)
-                ->recordPaymentSucceeded(RecordPaymentSucceededCommand::validateAndCreate([
+                ->recordPaymentSucceeded(RecordPaymentSucceededCommand::from([
                     'invoiceId' => $orphanInvoiceId,
                     'payHereEventId' => 'evt_orphan_stream_guard',
                     'payHereTransactionId' => 'txn_orphan',
@@ -72,8 +73,9 @@ class RecordInvoicePaymentTest extends BillingTestCase
                 ->persist();
 
             $this->fail('Expected InvoiceNotPayableException was not thrown.');
-        } catch (InvoiceNotPayableException) {
-            // Then the payment is rejected and no orphan stream is genesised
+        } catch (InvoiceNotPayableException $exception) {
+            // Then the payment is rejected as unissued and no orphan stream is genesised
+            $this->assertStringContainsString('while unissued', $exception->getMessage());
             $this->assertNoNewInvoiceEvents($orphanInvoiceId, 0);
         }
     }

@@ -4,7 +4,6 @@ namespace App\Billing\Subscriptions\UseCases\Commands;
 
 use Carbon\CarbonImmutable;
 use Spatie\LaravelData\Data;
-use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
  * Start a company's 30-day trial subscription. trialEndsAt is supplied by the
@@ -12,25 +11,14 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  * genesis it accompanies (the subscription date drives the trials:expire scan;
  * the company date is pinned equal in the register acceptance test).
  *
- * A Spatie\LaravelData command (reference_architecture-patterns.md §Commands —
- * aggregate-takes-Command standing convention, locked company-onboarding #02) —
- * constructed via ::validateAndCreate() so inputs are validated at the use-case
- * boundary.
+ * An internal Spatie\LaravelData command (reference_architecture-patterns.md
+ * §Commands — aggregate-takes-Command standing convention, locked
+ * company-onboarding #02): built via ::from() by the interactor with
+ * server-minted values, so it carries no rules() (conv-plan §2.15.B.2).
  */
 class StartTrialCommand extends Data
 {
     public string $companyId;
 
     public CarbonImmutable $trialEndsAt;
-
-    /**
-     * @return array<string, array<int, string>>
-     */
-    public static function rules(ValidationContext $context): array
-    {
-        return [
-            'companyId' => ['uuid'],
-            'trialEndsAt' => ['date'],
-        ];
-    }
 }

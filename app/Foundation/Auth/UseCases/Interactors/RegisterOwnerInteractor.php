@@ -90,7 +90,7 @@ class RegisterOwnerInteractor
                     ->persist();
 
                 Subscription::retrieve((string) Str::uuid7())
-                    ->startTrial(StartTrialCommand::validateAndCreate([
+                    ->startTrial(StartTrialCommand::from([
                         'companyId' => $companyId,
                         'trialEndsAt' => CarbonImmutable::now()->addDays(Company::TRIAL_DAYS),
                     ]))
