@@ -116,6 +116,46 @@ class IssueInvoiceTest extends BillingTestCase
     }
 
     #[Test]
+    public function when_a_line_item_amount_is_not_an_integer_then_issuing_is_refused(): void
+    {
+        // Given a company with a trial subscription
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $invoiceId = (string) Str::uuid();
+
+        // When an invoice is issued whose line items carry a fractional-cents amount that sums to the invoice amount
+        try {
+            Invoice::retrieve($invoiceId)
+                ->issue($this->issueInvoiceCommand($company, $subscription, [
+                    'lineItems' => [
+                        [
+                            'description' => 'Pro Plan — Monthly',
+                            'quantity' => 1,
+                            'unitPriceCents' => 75000,
+                            'amountCents' => 75000.0,
+                            'lineType' => 'plan_subscription',
+                            'sortOrder' => 0,
+                        ],
+                        [
+                            'description' => 'Proration credit — unused Starter days',
+                            'quantity' => -1,
+                            'unitPriceCents' => 15000,
+                            'amountCents' => -15000,
+                            'lineType' => 'proration_credit',
+                            'sortOrder' => 1,
+                        ],
+                    ],
+                ]))
+                ->persist();
+
+            $this->fail('Expected InvoiceLineItemsMismatchException was not thrown.');
+        } catch (InvoiceLineItemsMismatchException) {
+            // Then the issue is refused as an integer-cents mismatch and no event is stored
+            $this->assertNoNewInvoiceEvents($invoiceId, 0);
+        }
+    }
+
+    #[Test]
     public function when_an_invoice_is_issued_in_a_non_default_currency_then_both_projections_carry_it(): void
     {
         // Given a company with a trial subscription

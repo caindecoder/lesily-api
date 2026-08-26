@@ -44,7 +44,7 @@ class Invoice extends AggregateRoot
             throw InvoiceAlreadyIssuedException::withId($this->uuid());
         }
 
-        $lineItemsTotalCents = (int) collect($command->lineItems)->sum('amountCents');
+        $lineItemsTotalCents = collect($command->lineItems)->sum('amountCents');
         if ($lineItemsTotalCents !== $command->amountCents) {
             throw InvoiceLineItemsMismatchException::forInvoice($this->uuid(), $command->amountCents, $lineItemsTotalCents);
         }
