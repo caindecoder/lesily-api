@@ -9,11 +9,11 @@ use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
-use Illuminate\Validation\ValidationException;
 use App\Billing\Invoices\Events\InvoiceCreated;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
 use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
+use App\Billing\Invoices\Exceptions\InvoiceAmountNotPositiveException;
 use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
 
 /**
@@ -108,9 +108,9 @@ class IssueInvoiceTest extends BillingTestCase
                 ]))
                 ->persist();
 
-            $this->fail('Expected ValidationException was not thrown.');
-        } catch (ValidationException) {
-            // Then the issue is rejected at the command boundary and no event is stored
+            $this->fail('Expected InvoiceAmountNotPositiveException was not thrown.');
+        } catch (InvoiceAmountNotPositiveException) {
+            // Then the issue is rejected by the aggregate and no event is stored
             $this->assertNoNewInvoiceEvents($invoiceId, 0);
         }
     }

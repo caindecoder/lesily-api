@@ -20,6 +20,7 @@ use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
 use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
 use App\Billing\Invoices\Exceptions\InvoiceNotRefundableException;
 use App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand;
+use App\Billing\Invoices\Exceptions\InvoiceAmountNotPositiveException;
 use App\Billing\Invoices\Exceptions\InvoiceDisputeNotAllowedException;
 use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand;
@@ -42,6 +43,11 @@ class Invoice extends AggregateRoot
     {
         if ($this->status !== null) {
             throw InvoiceAlreadyIssuedException::withId($this->uuid());
+        }
+
+        // SM-1-04 T1: an invoice is only ever issued for a positive amount.
+        if ($command->amountCents < 1) {
+            throw InvoiceAmountNotPositiveException::forInvoice($this->uuid(), $command->amountCents);
         }
 
         $lineItemsTotalCents = collect($command->lineItems)->sum('amountCents');

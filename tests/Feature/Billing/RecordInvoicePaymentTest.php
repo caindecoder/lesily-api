@@ -64,7 +64,7 @@ class RecordInvoicePaymentTest extends BillingTestCase
         // When a payment webhook targets the unknown invoice
         try {
             Invoice::retrieve($orphanInvoiceId)
-                ->recordPaymentSucceeded(RecordPaymentSucceededCommand::validateAndCreate([
+                ->recordPaymentSucceeded(RecordPaymentSucceededCommand::from([
                     'invoiceId' => $orphanInvoiceId,
                     'payHereEventId' => 'evt_orphan_stream_guard',
                     'payHereTransactionId' => 'txn_orphan',

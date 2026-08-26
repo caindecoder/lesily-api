@@ -3,7 +3,6 @@
 namespace App\Billing\Invoices\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
-use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
  * Record a verified PayHere payment-failure webhook against an invoice
@@ -11,8 +10,9 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  * recorded without re-firing the transition). payHereEventId is the webhook
  * idempotency key.
  *
- * A Spatie\LaravelData command (aggregate-takes-Command, s071) — constructed via
- * ::validateAndCreate() so inputs are validated at the use-case boundary.
+ * An internal Spatie\LaravelData command (aggregate-takes-Command, s071) — built
+ * via ::from() from server-minted values, so it carries no rules() (conv-plan
+ * §2.15.B.2, amendment AQ).
  */
 class RecordPaymentFailedCommand extends Data
 {
@@ -25,18 +25,4 @@ class RecordPaymentFailedCommand extends Data
     public ?string $failureMessage = null;
 
     public int $attemptNumber;
-
-    /**
-     * @return array<string, array<int, string>>
-     */
-    public static function rules(ValidationContext $context): array
-    {
-        return [
-            'invoiceId' => ['uuid'],
-            'payHereEventId' => ['string', 'max:191'],
-            'failureCode' => ['string', 'max:191'],
-            'failureMessage' => ['nullable', 'string'],
-            'attemptNumber' => ['integer', 'min:1'],
-        ];
-    }
 }
