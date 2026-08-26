@@ -40,7 +40,7 @@ class MyCompanyResource extends JsonResource
             ],
             // Always present: company_user carries withTimestamps, so created_at
             // is stamped on every attach — no null branch to guard.
-            'joined_at' => CarbonImmutable::parse((string) $this->resource->joined_at),
+            'joined_at' => CarbonImmutable::parse($this->resource->joined_at),
         ];
     }
 }

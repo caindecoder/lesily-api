@@ -29,7 +29,7 @@ class LogoutAllController extends Controller
         /** @var PersonalAccessToken $current */
         $current = $user->currentAccessToken();
 
-        $tokensRevoked = $interactor->execute($user, $command, (string) $current->getKey());
+        $tokensRevoked = $interactor->execute($user, $command, $current->getKey());
 
         return LogoutAllResource::make($tokensRevoked)->response();
     }
