@@ -99,9 +99,9 @@ class RegisterOwnerTest extends AuthTestCase
         // When a guest registers colliding on one of them
         $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), ...$override]);
 
-        // Then the registration conflicts and creates nothing new
+        // Then the registration conflicts, creates nothing new and welcomes nobody
         $this->assertConflict($response, $expectedCode);
-        $this->assertNoNewAccounts($usersBefore, $companiesBefore);
+        $this->assertNothingCreatedOrSent($usersBefore, $companiesBefore);
     }
 
     /**
@@ -113,6 +113,36 @@ class RegisterOwnerTest extends AuthTestCase
             'email' => [['email' => self::EXISTING_EMAIL], 'EMAIL_REGISTERED'],
             'business registration number' => [['brNumber' => self::EXISTING_BR], 'BR_NUMBER_REGISTERED'],
             'employer provident fund number' => [['epfNumber' => self::EXISTING_EPF], 'EPF_NUMBER_REGISTERED'],
+        ];
+    }
+
+    // Sad (conflict precedence) — when several identifiers collide at once, the
+    // guard reports the first in its own order (email, then BR, then EPF).
+    #[Test]
+    #[DataProvider('collidingFieldsProvider')]
+    public function when_several_registration_fields_are_already_registered_then_the_first_conflict_in_guard_order_is_reported(array $override, string $expectedCode): void
+    {
+        // Given an account already holds these identifiers
+        $this->givenAnExistingOwnerAccount();
+        $usersBefore = User::query()->count();
+        $companiesBefore = Company::query()->count();
+
+        // When a guest registers colliding on two of them at once
+        $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), ...$override]);
+
+        // Then the first conflict in guard order is reported and nothing is created or sent
+        $this->assertConflict($response, $expectedCode);
+        $this->assertNothingCreatedOrSent($usersBefore, $companiesBefore);
+    }
+
+    /**
+     * @return array<string, array{0: array<string, mixed>, 1: string}>
+     */
+    public static function collidingFieldsProvider(): array
+    {
+        return [
+            'email and BR both taken' => [['email' => self::EXISTING_EMAIL, 'brNumber' => self::EXISTING_BR], 'EMAIL_REGISTERED'],
+            'BR and EPF both taken' => [['brNumber' => self::EXISTING_BR, 'epfNumber' => self::EXISTING_EPF], 'BR_NUMBER_REGISTERED'],
         ];
     }
 
@@ -419,6 +449,12 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertSame($usersBefore, User::query()->count(), 'No user may be created on a conflict.');
         $this->assertSame($companiesBefore, Company::query()->count(), 'No company may be created on a conflict.');
         $this->assertDatabaseCount('stored_events', 0);
+    }
+
+    protected function assertNothingCreatedOrSent(int $usersBefore, int $companiesBefore): void
+    {
+        $this->assertNoNewAccounts($usersBefore, $companiesBefore);
+        Notification::assertNothingSent();
     }
 
     protected function bypassUniquenessGuard(): void
