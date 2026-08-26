@@ -27,6 +27,22 @@ class EnableTwoFactorTest extends AuthTestCase
     use WithRolePermissionFixtures;
 
     #[Test]
+    public function when_enrollment_is_confirmed_without_a_code_then_the_request_is_rejected_as_invalid(): void
+    {
+        // Given (a Pro member mid-enrollment)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = $this->aMemberOf($company);
+        $this->fakeTotpVerifier(verifies: true);
+        $this->enable($user, $company);
+
+        // When they confirm with no code at all
+        $response = $this->confirmWith($user, $company, []);
+
+        // Then the request is rejected as a validation error naming the code
+        $this->assertValidationRejected($response, 'code', 'The code field is required.');
+    }
+
+    #[Test]
     #[DataProvider('provideSubProPlans')]
     public function when_a_sub_pro_user_starts_enrollment_then_two_factor_is_unavailable(BillingPlan $plan): void
     {
@@ -55,6 +71,23 @@ class EnableTwoFactorTest extends AuthTestCase
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'TWO_FACTOR_SETUP_NOT_STARTED');
         $this->assertNoTwoFactorPersisted($user);
+    }
+
+    #[Test]
+    public function when_the_staged_secret_is_confirmed_just_outside_the_ten_minute_window_then_it_is_rejected(): void
+    {
+        // Given (a Pro member who started enrollment and let the staged secret age past its window)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = $this->aMemberOf($company);
+        $this->fakeTotpVerifier(verifies: true);
+        $this->enable($user, $company);
+        $this->travel(10 * 60 + 30)->seconds();
+
+        // When they confirm with a valid code
+        $response = $this->confirm($user, $company, '123456');
+
+        // Then the setup has expired and nothing is enabled
+        $this->assertSetupExpired($response, $user);
     }
 
     #[Test]
@@ -122,6 +155,23 @@ class EnableTwoFactorTest extends AuthTestCase
 
         // Then the over-limit attempt is throttled
         $this->assertThrottled($response);
+    }
+
+    #[Test]
+    public function when_the_staged_secret_is_confirmed_just_inside_the_ten_minute_window_then_it_is_accepted(): void
+    {
+        // Given (a Pro member who started enrollment and returns just inside the window)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = $this->aMemberOf($company);
+        $this->fakeTotpVerifier(verifies: true);
+        $stagedSecret = (string) $this->enable($user, $company)->json('data.secret');
+        $this->travel(9 * 60 + 30)->seconds();
+
+        // When they confirm with a valid code
+        $response = $this->confirm($user, $company, '123456');
+
+        // Then 2FA is enabled from the still-staged secret
+        $this->assertTwoFactorEnabled($response, $user, $stagedSecret);
     }
 
     #[Test]
@@ -220,13 +270,28 @@ class EnableTwoFactorTest extends AuthTestCase
 
     protected function confirm(User $user, Company $company, string $code): TestResponse
     {
+        return $this->confirmWith($user, $company, ['code' => $code]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function confirmWith(User $user, Company $company, array $payload): TestResponse
+    {
         Sanctum::actingAs($user);
 
         return $this->postJson(
             '/api/v1/auth/2fa/confirm',
-            ['code' => $code],
+            $payload,
             ['X-Company-Context' => $company->getKey()],
         );
+    }
+
+    protected function assertSetupExpired(TestResponse $response, User $user): void
+    {
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'TWO_FACTOR_SETUP_NOT_STARTED');
+        $this->assertNoTwoFactorPersisted($user);
     }
 
     protected function assertFeatureUnavailable(TestResponse $response, User $user): void
@@ -254,6 +319,7 @@ class EnableTwoFactorTest extends AuthTestCase
         $reloaded = User::query()->whereKey($user->getKey())->firstOrFail();
         $this->assertNotNull($reloaded->two_factor_confirmed_at, '2FA must be marked enabled at confirm.');
         $this->assertNotEmpty($response->json('data.recovery_codes'), 'Recovery codes are shown once at confirm.');
+        $this->assertNull(Cache::get("2fa-setup:{$user->getKey()}"), 'The staged secret is cleared once confirmed.');
         $this->assertSecretStoredEncrypted($user, $stagedSecret);
     }
 
@@ -276,6 +342,7 @@ class EnableTwoFactorTest extends AuthTestCase
         $this->assertCount(10, array_unique($returnedCodes), 'Recovery codes must be distinct.');
         $this->assertSame([], array_intersect($returnedCodes, $stored), 'No plaintext code may appear in storage.');
         foreach ($returnedCodes as $index => $code) {
+            $this->assertMatchesRegularExpression('/^[A-Z0-9]{4}-[A-Z0-9]{4}$/', $code, 'Every recovery code takes the XXXX-XXXX shape.');
             $this->assertTrue(Hash::check($code, $stored[$index]), 'Every returned code must verify against its stored hash.');
         }
     }

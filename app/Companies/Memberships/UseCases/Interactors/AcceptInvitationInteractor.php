@@ -105,7 +105,7 @@ class AcceptInvitationInteractor
             $live = $this->lockedLivePendingInvitation($invitation);
 
             UserAggregate::retrieve($userId)
-                ->createFromInvitation(CreateUserFromInvitationCommand::validateAndCreate([
+                ->createFromInvitation(CreateUserFromInvitationCommand::from([
                     'companyId' => $live->company_id,
                     'email' => $live->email,
                     'passwordHash' => $passwordHash,

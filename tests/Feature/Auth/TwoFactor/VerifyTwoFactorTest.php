@@ -22,14 +22,14 @@ class VerifyTwoFactorTest extends AuthTestCase
 
     #[Test]
     #[DataProvider('provideInvalidVerifyPayloads')]
-    public function when_required_fields_are_missing_then_the_request_is_rejected(array $payload, string $invalidField): void
+    public function when_required_fields_are_missing_then_the_request_is_rejected(array $payload, string $invalidField, string $expectedMessage): void
     {
         // Given an invalid verify payload (a required field missing or blank)
         // When it is submitted to the verify endpoint
         $response = $this->postJson('/api/v1/auth/2fa/verify', $payload);
 
         // Then the request is rejected as a validation error naming the field
-        $this->assertValidationRejected($response, $invalidField);
+        $this->assertValidationRejected($response, $invalidField, $expectedMessage);
     }
 
     #[Test]
@@ -113,7 +113,7 @@ class VerifyTwoFactorTest extends AuthTestCase
         $response = $this->verify($challengeId, '123456');
 
         // Then a working session token is issued and no domain event is recorded (token-only)
-        $this->assertSessionTokenIssued($response, $user);
+        $this->assertSessionTokenIssued($response, $user, $challengeId);
         $this->assertNoEventRecorded();
     }
 
@@ -179,7 +179,7 @@ class VerifyTwoFactorTest extends AuthTestCase
         $response = $this->verify($challengeId, 'HAPY-CODE');
 
         // Then a token is issued, that code is consumed (single-use), and a marker is recorded
-        $this->assertSessionTokenIssued($response, $user);
+        $this->assertSessionTokenIssued($response, $user, $challengeId);
         $this->assertRecoveryCodeConsumed($user, 'HAPY-CODE', expectedRemaining: 1);
         $this->assertRecoveryCodeUsedRecorded($user, remaining: 1);
     }
@@ -262,14 +262,14 @@ class VerifyTwoFactorTest extends AuthTestCase
     }
 
     /**
-     * @return array<string, array{array<string, mixed>, string}>
+     * @return array<string, array{array<string, mixed>, string, string}>
      */
     public static function provideInvalidVerifyPayloads(): array
     {
         return [
-            'missing challenge id' => [['code' => '123456'], 'challenge_id'],
-            'missing code' => [['challenge_id' => 'a-challenge-id'], 'code'],
-            'blank code' => [['challenge_id' => 'a-challenge-id', 'code' => ''], 'code'],
+            'missing challenge id' => [['code' => '123456'], 'challenge_id', 'The challenge id field is required.'],
+            'missing code' => [['challenge_id' => 'a-challenge-id'], 'code', 'The code field is required.'],
+            'blank code' => [['challenge_id' => 'a-challenge-id', 'code' => ''], 'code', 'The code field is required.'],
         ];
     }
 
@@ -279,11 +279,12 @@ class VerifyTwoFactorTest extends AuthTestCase
         $this->assertSame(0, $user->tokens()->count(), 'No token may be minted on a failed verify.');
     }
 
-    protected function assertSessionTokenIssued(TestResponse $response, User $user): void
+    protected function assertSessionTokenIssued(TestResponse $response, User $user, string $challengeId): void
     {
         $response->assertOk();
         $token = (string) $response->json('data.token');
         $this->assertNotEmpty($token, 'A completed 2FA verify must issue a session token.');
+        $this->assertNull(app(LoginChallengeStore::class)->find($challengeId), 'A verified challenge must be consumed.');
 
         // forgetGuards so the probe re-resolves the new token from scratch — the
         // container-cached guard would otherwise answer from the test's prior state.

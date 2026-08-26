@@ -17,9 +17,7 @@ class TwoFactorChallengeResource extends JsonResource
     public function __construct(
         private readonly string $challengeId,
         private readonly DateTimeInterface $expiresAt,
-    ) {
-        parent::__construct($challengeId);
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>

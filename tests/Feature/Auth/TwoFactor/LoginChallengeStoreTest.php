@@ -4,16 +4,31 @@ namespace Tests\Feature\Auth\TwoFactor;
 
 use Tests\TestCase;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Cache;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 
 /**
- * @testclass-carveout: infra-primitive — cache-seam TTL/attempt mechanics of the
- * 2FA challenge port, provable only with time-travel at the store seam; no HTTP
- * walk can pin expiry/decrement timing deterministically.
+ * @testclass-carveout: infra-primitive — cache-seam TTL/attempt/payload-shape
+ * mechanics of the 2FA challenge port, provable only at the store seam; no HTTP
+ * walk can pin expiry/decrement timing or a half-shaped cache entry deterministically.
  */
 class LoginChallengeStoreTest extends TestCase
 {
+    #[Test]
+    public function when_a_cached_challenge_payload_is_incomplete_then_it_does_not_resolve(): void
+    {
+        // Given a cache entry under a challenge key that carries only part of the payload
+        $challengeId = (string) Str::uuid();
+        Cache::put("2fa-challenge:{$challengeId}", ['userId' => (string) Str::uuid()]);
+
+        // When the challenge is resolved
+        $challenge = $this->store()->find($challengeId);
+
+        // Then it does not resolve
+        $this->assertNull($challenge, 'A half-shaped challenge payload must not resolve.');
+    }
+
     #[Test]
     public function when_a_challenge_has_expired_then_it_no_longer_resolves(): void
     {

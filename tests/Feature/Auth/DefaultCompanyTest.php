@@ -56,7 +56,7 @@ class DefaultCompanyTest extends AuthTestCase
     }
 
     #[Test, DataProvider('malformedCompanyIdProvider')]
-    public function when_company_id_is_missing_or_malformed_then_set_refused(array $payload): void
+    public function when_company_id_is_missing_or_malformed_then_set_refused(array $payload, string $expectedMessage): void
     {
         // Given a member with a live membership (the guard must never be reached)
         $user = $this->aRegisteredUser();
@@ -66,18 +66,18 @@ class DefaultCompanyTest extends AuthTestCase
         $response = $this->setDefaultCompany($user, $payload);
 
         // Then
-        $this->assertSetRefusedLeavingDefault($response, $user, null);
+        $this->assertSetRefusedAsInvalid($response, $user, $expectedMessage);
     }
 
     /**
-     * @return array<string, array{array<string, mixed>}>
+     * @return array<string, array{array<string, mixed>, string}>
      */
     public static function malformedCompanyIdProvider(): array
     {
         return [
-            'missing' => [[]],
-            'not a string' => [['companyId' => 123]],
-            'not a uuid' => [['companyId' => 'not-a-uuid']],
+            'missing' => [[], 'The company id field is required.'],
+            'numeric' => [['companyId' => 123], 'The company id field must be a valid UUID.'],
+            'not a uuid' => [['companyId' => 'not-a-uuid'], 'The company id field must be a valid UUID.'],
         ];
     }
 
@@ -283,13 +283,24 @@ class DefaultCompanyTest extends AuthTestCase
     }
 
     /**
-     * The refused set: the §S21 422 VALIDATION_FAILED envelope keyed on companyId
-     * (collapsed — no company-id-existence leak) AND the stored default untouched
-     * (UC-1-139 Minimal Guarantee).
+     * The shape-refused set: the §S21 422 VALIDATION_FAILED envelope keyed on
+     * companyId with the rule's verbatim message AND no default written.
+     */
+    protected function assertSetRefusedAsInvalid(TestResponse $response, User $user, string $expectedMessage): void
+    {
+        $this->assertValidationRejected($response, 'companyId', $expectedMessage);
+        $this->assertNull($user->refresh()->default_company_id);
+    }
+
+    /**
+     * The membership-refused set: the §S21 422 VALIDATION_FAILED envelope keyed on
+     * companyId, collapsed to one message for every non-live target (no
+     * company-id-existence leak) AND the stored default untouched (UC-1-139
+     * Minimal Guarantee).
      */
     protected function assertSetRefusedLeavingDefault(TestResponse $response, User $user, ?string $expectedDefault): void
     {
-        $this->assertValidationRejected($response, 'companyId');
+        $this->assertValidationRejected($response, 'companyId', 'The selected company is invalid.');
         $this->assertSame($expectedDefault, $user->refresh()->default_company_id);
     }
 }

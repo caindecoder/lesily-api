@@ -17,7 +17,7 @@ class CacheLoginChallengeStore implements LoginChallengeStore
 {
     public function create(string $userId): string
     {
-        $challengeId = (string) Str::uuid7();
+        $challengeId = Str::uuid7()->toString();
         $expiresAt = now()->addMinutes(self::TTL_MINUTES);
 
         Cache::put($this->key($challengeId), [
@@ -89,10 +89,11 @@ class CacheLoginChallengeStore implements LoginChallengeStore
             return null;
         }
 
+        /** @var array{userId: string, attemptsRemaining: int, expiresAt: int} $data */
         return [
-            'userId' => (string) $data['userId'],
-            'attemptsRemaining' => (int) $data['attemptsRemaining'],
-            'expiresAt' => (int) $data['expiresAt'],
+            'userId' => $data['userId'],
+            'attemptsRemaining' => $data['attemptsRemaining'],
+            'expiresAt' => $data['expiresAt'],
         ];
     }
 

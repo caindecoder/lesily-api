@@ -30,7 +30,6 @@ class VerifyTwoFactorCommand extends Data
         return [
             'challenge_id' => ['required', 'string'],
             'code' => ['required', 'string'],
-            'deviceName' => ['required', 'string'],
         ];
     }
 }

@@ -80,7 +80,7 @@ class RegisterOwnerInteractor
 
                 $owner->setEmergencyContact($companyId, $command)->persist();
 
-                Consent::retrieve((string) Str::uuid7())
+                Consent::retrieve(Str::uuid7()->toString())
                     ->record(RecordConsentCommand::validateAndCreate([
                         'userId' => $userId,
                         'companyId' => $companyId,
@@ -89,7 +89,7 @@ class RegisterOwnerInteractor
                     ]))
                     ->persist();
 
-                Subscription::retrieve((string) Str::uuid7())
+                Subscription::retrieve(Str::uuid7()->toString())
                     ->startTrial(StartTrialCommand::from([
                         'companyId' => $companyId,
                         'trialEndsAt' => CarbonImmutable::now()->addDays(Company::TRIAL_DAYS),

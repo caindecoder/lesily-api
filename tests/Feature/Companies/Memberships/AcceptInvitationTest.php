@@ -665,7 +665,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // (unreachable over HTTP — the interactor mints a fresh uuid per accept —
         // so the re-fire guard is proven at the aggregate seam, mirroring the
         // Company::create re-create guard precedent)
-        $genesis = CreateUserFromInvitationCommand::validateAndCreate([
+        $genesis = CreateUserFromInvitationCommand::from([
             'companyId' => (string) Str::uuid7(),
             'email' => 'kasun@newjoiner.lk',
             'passwordHash' => 'a-bcrypt-hash-stand-in',

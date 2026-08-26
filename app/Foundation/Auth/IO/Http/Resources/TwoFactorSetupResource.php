@@ -13,10 +13,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class TwoFactorSetupResource extends JsonResource
 {
-    public function __construct(private readonly TwoFactorSetup $setup)
-    {
-        parent::__construct($setup);
-    }
+    public function __construct(private readonly TwoFactorSetup $setup) {}
 
     /**
      * @return array<string, string>

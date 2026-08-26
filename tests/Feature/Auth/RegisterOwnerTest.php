@@ -46,7 +46,7 @@ class RegisterOwnerTest extends AuthTestCase
     // Sad (validation) — a malformed payload is rejected before any aggregate runs.
     #[Test]
     #[DataProvider('invalidPayloadProvider')]
-    public function when_the_registration_payload_is_invalid_then_it_is_rejected(array $override, string $invalidField): void
+    public function when_the_registration_payload_is_invalid_then_it_is_rejected(array $override, string $invalidField, string $expectedMessage): void
     {
         // Given an otherwise-valid signup with one invalid field
         $payload = [...$this->validRegistrationPayload(), ...$override];
@@ -55,36 +55,31 @@ class RegisterOwnerTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/register', $payload);
 
         // Then registration is rejected and the offending field is reported
-        $this->assertValidationRejected($response, $invalidField);
+        $this->assertValidationRejected($response, $invalidField, $expectedMessage);
     }
 
     /**
-     * Each row blanks or corrupts one field of an otherwise-valid payload. The
-     * weak-password + unaccepted-ToS rows are #05's new rules.
+     * Each row blanks, nulls or corrupts one field of an otherwise-valid payload and
+     * pins the rule's verbatim message.
      *
-     * NOTE (verified s142, full matrix): the empty-field rows guard NEITHER
-     * `required` NOR `string` individually — they detect only the removal of the
-     * PAIR. `ConvertEmptyStringsToNull` maps '' to null and both rules reject null
-     * independently, so dropping either alone leaves every row green; only dropping
-     * both REDs them. `rules()` fully OVERRIDES Spatie's type-inferred rules per
-     * field, so the non-nullable property is no back-stop either. The individually
-     * unguarded arms are OQ-1-138, deferred.
-     *
-     * @return array<string, array{0: array<string, mixed>, 1: string}>
+     * @return array<string, array{0: array<string, mixed>, 1: string, 2: string}>
      */
     public static function invalidPayloadProvider(): array
     {
         return [
-            'weak password' => [['password' => 'short'], 'password'],
-            'terms not accepted' => [['acceptedTos' => false], 'acceptedTos'],
-            'missing name' => [['name' => ''], 'name'],
-            'missing email' => [['email' => ''], 'email'],
-            'missing company name' => [['companyName' => ''], 'companyName'],
-            'missing BR number' => [['brNumber' => ''], 'brNumber'],
-            'missing EPF number' => [['epfNumber' => ''], 'epfNumber'],
-            'missing country' => [['country' => ''], 'country'],
-            'missing emergency contact name' => [['emergencyContactName' => ''], 'emergencyContactName'],
-            'missing emergency contact phone' => [['emergencyContactPhone' => ''], 'emergencyContactPhone'],
+            'missing password' => [['password' => ''], 'password', 'The password field is required.'],
+            'weak password' => [['password' => 'short'], 'password', 'The password field must be at least 8 characters.'],
+            'terms null' => [['acceptedTos' => null], 'acceptedTos', 'The accepted tos field is required.'],
+            'terms not accepted' => [['acceptedTos' => false], 'acceptedTos', 'The accepted tos field must be accepted.'],
+            'missing name' => [['name' => ''], 'name', 'The name field is required.'],
+            'over-long name' => [['name' => str_repeat('a', 256)], 'name', 'The name field must not be greater than 255 characters.'],
+            'missing email' => [['email' => ''], 'email', 'The email field is required.'],
+            'missing company name' => [['companyName' => ''], 'companyName', 'The company name field is required.'],
+            'missing BR number' => [['brNumber' => ''], 'brNumber', 'The br number field is required.'],
+            'missing EPF number' => [['epfNumber' => ''], 'epfNumber', 'The epf number field is required.'],
+            'missing country' => [['country' => ''], 'country', 'The country field is required.'],
+            'missing emergency contact name' => [['emergencyContactName' => ''], 'emergencyContactName', 'The emergency contact name field is required.'],
+            'missing emergency contact phone' => [['emergencyContactPhone' => ''], 'emergencyContactPhone', 'The emergency contact phone field is required.'],
         ];
     }
 
@@ -103,9 +98,9 @@ class RegisterOwnerTest extends AuthTestCase
         // When a guest registers colliding on one of them
         $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), ...$override]);
 
-        // Then the registration conflicts and creates nothing new
+        // Then the registration conflicts, creates nothing new and welcomes nobody
         $this->assertConflict($response, $expectedCode);
-        $this->assertNoNewAccounts($usersBefore, $companiesBefore);
+        $this->assertNothingCreatedOrSent($usersBefore, $companiesBefore);
     }
 
     /**
@@ -117,6 +112,36 @@ class RegisterOwnerTest extends AuthTestCase
             'email' => [['email' => self::EXISTING_EMAIL], 'EMAIL_REGISTERED'],
             'business registration number' => [['brNumber' => self::EXISTING_BR], 'BR_NUMBER_REGISTERED'],
             'employer provident fund number' => [['epfNumber' => self::EXISTING_EPF], 'EPF_NUMBER_REGISTERED'],
+        ];
+    }
+
+    // Sad (conflict precedence) — when several identifiers collide at once, the
+    // guard reports the first in its own order (email, then BR, then EPF).
+    #[Test]
+    #[DataProvider('collidingFieldsProvider')]
+    public function when_several_registration_fields_are_already_registered_then_the_first_conflict_in_guard_order_is_reported(array $override, string $expectedCode): void
+    {
+        // Given an account already holds these identifiers
+        $this->givenAnExistingOwnerAccount();
+        $usersBefore = User::query()->count();
+        $companiesBefore = Company::query()->count();
+
+        // When a guest registers colliding on two of them at once
+        $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), ...$override]);
+
+        // Then the first conflict in guard order is reported and nothing is created or sent
+        $this->assertConflict($response, $expectedCode);
+        $this->assertNothingCreatedOrSent($usersBefore, $companiesBefore);
+    }
+
+    /**
+     * @return array<string, array{0: array<string, mixed>, 1: string}>
+     */
+    public static function collidingFieldsProvider(): array
+    {
+        return [
+            'email and BR both taken' => [['email' => self::EXISTING_EMAIL, 'brNumber' => self::EXISTING_BR], 'EMAIL_REGISTERED'],
+            'BR and EPF both taken' => [['brNumber' => self::EXISTING_BR, 'epfNumber' => self::EXISTING_EPF], 'BR_NUMBER_REGISTERED'],
         ];
     }
 
@@ -133,7 +158,7 @@ class RegisterOwnerTest extends AuthTestCase
             ->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
 
         // Then it is rejected as a validation error (a clean 4xx), not a server crash
-        $this->assertValidationRejected($response, 'ip');
+        $this->assertValidationRejected($response, 'ip', 'The ip field is required.');
     }
 
     // Edge (race backstop) — two concurrent signups can both pass the pre-tx
@@ -423,6 +448,12 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertSame($usersBefore, User::query()->count(), 'No user may be created on a conflict.');
         $this->assertSame($companiesBefore, Company::query()->count(), 'No company may be created on a conflict.');
         $this->assertDatabaseCount('stored_events', 0);
+    }
+
+    protected function assertNothingCreatedOrSent(int $usersBefore, int $companiesBefore): void
+    {
+        $this->assertNoNewAccounts($usersBefore, $companiesBefore);
+        Notification::assertNothingSent();
     }
 
     protected function bypassUniquenessGuard(): void

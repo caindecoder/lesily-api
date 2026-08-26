@@ -28,7 +28,7 @@ class DisableTwoFactorController extends Controller
         /** @var PersonalAccessToken $current */
         $current = $user->currentAccessToken();
 
-        $interactor->execute($user, $command, (string) $current->getKey());
+        $interactor->execute($user, $command, $current->getKey());
 
         return response()->noContent();
     }

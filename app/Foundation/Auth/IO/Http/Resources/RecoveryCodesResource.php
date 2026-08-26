@@ -15,10 +15,7 @@ class RecoveryCodesResource extends JsonResource
     /**
      * @param  list<string>  $codes
      */
-    public function __construct(private readonly array $codes)
-    {
-        parent::__construct($codes);
-    }
+    public function __construct(private readonly array $codes) {}
 
     /**
      * @return array<string, list<string>>
