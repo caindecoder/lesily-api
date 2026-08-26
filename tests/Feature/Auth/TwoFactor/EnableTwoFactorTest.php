@@ -74,6 +74,23 @@ class EnableTwoFactorTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_staged_secret_is_confirmed_just_outside_the_ten_minute_window_then_it_is_rejected(): void
+    {
+        // Given (a Pro member who started enrollment and let the staged secret age past its window)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = $this->aMemberOf($company);
+        $this->fakeTotpVerifier(verifies: true);
+        $this->enable($user, $company);
+        $this->travel(10 * 60 + 30)->seconds();
+
+        // When they confirm with a valid code
+        $response = $this->confirm($user, $company, '123456');
+
+        // Then the setup has expired and nothing is enabled
+        $this->assertSetupExpired($response, $user);
+    }
+
+    #[Test]
     public function when_enrollment_is_confirmed_with_an_invalid_code_then_nothing_is_persisted(): void
     {
         // Given (a Pro member mid-enrollment whose authenticator code will not verify)
@@ -138,6 +155,23 @@ class EnableTwoFactorTest extends AuthTestCase
 
         // Then the over-limit attempt is throttled
         $this->assertThrottled($response);
+    }
+
+    #[Test]
+    public function when_the_staged_secret_is_confirmed_just_inside_the_ten_minute_window_then_it_is_accepted(): void
+    {
+        // Given (a Pro member who started enrollment and returns just inside the window)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = $this->aMemberOf($company);
+        $this->fakeTotpVerifier(verifies: true);
+        $stagedSecret = (string) $this->enable($user, $company)->json('data.secret');
+        $this->travel(9 * 60 + 30)->seconds();
+
+        // When they confirm with a valid code
+        $response = $this->confirm($user, $company, '123456');
+
+        // Then 2FA is enabled from the still-staged secret
+        $this->assertTwoFactorEnabled($response, $user, $stagedSecret);
     }
 
     #[Test]
@@ -251,6 +285,13 @@ class EnableTwoFactorTest extends AuthTestCase
             $payload,
             ['X-Company-Context' => $company->getKey()],
         );
+    }
+
+    protected function assertSetupExpired(TestResponse $response, User $user): void
+    {
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'TWO_FACTOR_SETUP_NOT_STARTED');
+        $this->assertNoTwoFactorPersisted($user);
     }
 
     protected function assertFeatureUnavailable(TestResponse $response, User $user): void
