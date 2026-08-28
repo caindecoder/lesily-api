@@ -45,7 +45,7 @@ class Company extends AggregateRoot
             ))
             ->recordThat(new CompanySettingsCreated(
                 companyId: $this->uuid(),
-                settingsId: (string) Str::uuid7(),
+                settingsId: Str::uuid7()->toString(),
                 timezone: $defaults['timezone'],
                 currency: $defaults['currency'],
                 localeDefault: $defaults['localeDefault'],

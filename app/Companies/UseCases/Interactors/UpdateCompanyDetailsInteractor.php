@@ -17,8 +17,11 @@ class UpdateCompanyDetailsInteractor
 {
     public function execute(Company $company, User $actor, UpdateCompanyCommand $command): Company
     {
+        /** @var string $actorId users are UUID-keyed (HasUuids) */
+        $actorId = $actor->getKey();
+
         CompanyAggregate::retrieve($company->getKey())
-            ->updateDetails($command, (string) $actor->getKey())
+            ->updateDetails($command, $actorId)
             ->persist();
 
         return $company->refresh();

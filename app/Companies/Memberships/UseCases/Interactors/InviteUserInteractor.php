@@ -51,7 +51,7 @@ class InviteUserInteractor
 
         // A removed member's re-invite resumes their membership stream (stable
         // UUID = the soft-deleted pivot's id — D5b); a fresh invite opens a new one.
-        $membershipId = $this->removedMembershipId($company, $userId) ?? (string) Str::uuid7();
+        $membershipId = $this->removedMembershipId($company, $userId) ?? Str::uuid7()->toString();
         $plaintextToken = Str::random(40);
 
         UserMembership::retrieve($membershipId)
@@ -82,11 +82,12 @@ class InviteUserInteractor
             return null;
         }
 
+        /** @var ?string $membershipId the pivot is UUID-keyed (HasUuids) */
         $membershipId = CompanyUser::onlyTrashed()
             ->where('company_id', $company->getKey())
             ->where('user_id', $userId)
             ->value('id');
 
-        return $membershipId === null ? null : (string) $membershipId;
+        return $membershipId;
     }
 }

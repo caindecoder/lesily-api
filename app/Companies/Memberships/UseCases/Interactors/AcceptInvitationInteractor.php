@@ -96,12 +96,16 @@ class AcceptInvitationInteractor
      */
     protected function provisionAndJoin(Invitation $invitation, AcceptInvitationCommand $command, string $deviceName): NewUserJoined
     {
-        $userId = (string) Str::uuid7();
+        $userId = Str::uuid7()->toString();
+        /** @var string $password ensured by ensureRegistrationDetails */
+        $password = $command->password;
+        /** @var string $name ensured by ensureRegistrationDetails */
+        $name = $command->name;
         // Hashed BEFORE the transaction: bcrypt takes ~300ms at production
         // rounds, and the invitation row lock must not be held through it.
-        $passwordHash = Hash::make((string) $command->password);
+        $passwordHash = Hash::make($password);
 
-        $this->classifyingContention(fn () => DB::transaction(function () use ($invitation, $command, $userId, $passwordHash): void {
+        $this->classifyingContention(fn () => DB::transaction(function () use ($invitation, $userId, $passwordHash, $name): void {
             $live = $this->lockedLivePendingInvitation($invitation);
 
             UserAggregate::retrieve($userId)
@@ -109,7 +113,7 @@ class AcceptInvitationInteractor
                     'companyId' => $live->company_id,
                     'email' => $live->email,
                     'passwordHash' => $passwordHash,
-                    'name' => (string) $command->name,
+                    'name' => $name,
                 ]))
                 ->persist();
 

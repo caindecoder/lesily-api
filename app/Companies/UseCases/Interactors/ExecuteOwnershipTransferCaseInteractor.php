@@ -87,7 +87,7 @@ class ExecuteOwnershipTransferCaseInteractor
      */
     private function transferEventIdFor(OwnershipTransferCase $case): int
     {
-        return (int) LesilyStoredEvent::query()
+        return LesilyStoredEvent::query()
             ->where('aggregate_uuid', $case->company_id)
             ->where('event_class', CompanyOwnershipTransferred::class)
             ->where('event_properties->caseId', $case->getKey())

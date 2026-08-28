@@ -105,7 +105,7 @@ class VerifyOwnershipTransferCaseInteractor
      */
     private function verificationEventIdFor(OwnershipTransferCase $case): int
     {
-        return (int) LesilyStoredEvent::query()
+        return LesilyStoredEvent::query()
             ->where('aggregate_uuid', $case->company_id)
             ->where('event_class', CompanyOwnershipVerificationRecorded::class)
             ->where('event_properties->caseId', $case->getKey())

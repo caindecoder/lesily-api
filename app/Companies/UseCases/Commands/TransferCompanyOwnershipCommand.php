@@ -8,10 +8,10 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
  * Ownership-transfer payload for the Company aggregate (slice-11R spec §2/§4).
- * Built via ::validateAndCreate only — never ::from (amendment U). The routine
- * controller fixes source=self_service and server-sources transferredBy from
- * the actor; the admin execute path (Task 7) dispatches the SAME command with
- * source=admin and a caseId.
+ * Built via ::validateAndCreate at the routine controller, which fixes
+ * source=self_service and server-sources transferredBy from the actor, and via
+ * ::from() by the admin execute path (Task 7), which dispatches the SAME command
+ * with source=admin and a caseId (amendment AQ — a dual-use command).
  */
 class TransferCompanyOwnershipCommand extends Data
 {
