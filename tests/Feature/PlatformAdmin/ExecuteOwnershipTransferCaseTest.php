@@ -424,6 +424,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         $event = LesilyStoredEvent::query()
             ->where('aggregate_uuid', $case->company_id)
+            ->where('meta_data->company_id', $case->company_id)
             ->where('event_class', CompanyOwnershipTransferred::class)
             ->where('event_properties->caseId', $case->getKey())
             ->sole();
