@@ -84,6 +84,20 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     #[Test]
+    public function when_the_case_id_is_not_a_uuid_then_verification_is_refused_as_invalid(): void
+    {
+        // Given an allowlisted admin, a case reference that is not a UUID, and an otherwise valid payload
+        $stranger = User::factory()->create();
+
+        // When they verify it
+        $response = $this->verifyCase($this->admin, 'not-a-uuid', $this->aValidVerificationPayload($stranger));
+
+        // Then the reference is refused as invalid and nothing is audited
+        $this->assertValidationRejected($response, 'caseId', 'The case id field must be a valid UUID.');
+        $this->assertNoAuditRecorded();
+    }
+
+    #[Test]
     #[DataProvider('invalidVerificationPayloadProvider')]
     public function when_the_verification_payload_is_invalid_then_the_verification_is_refused(array $overrides, string $field, string $message): void
     {

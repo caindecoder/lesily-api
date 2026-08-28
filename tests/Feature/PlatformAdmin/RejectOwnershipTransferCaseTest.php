@@ -68,6 +68,18 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     #[Test]
+    public function when_the_case_id_is_not_a_uuid_then_the_rejection_is_refused_as_invalid(): void
+    {
+        // Given an allowlisted admin and a case reference that is not a UUID
+        // When they reject it
+        $response = $this->rejectCase($this->admin, 'not-a-uuid');
+
+        // Then the reference is refused as invalid and nothing is audited
+        $this->assertValidationRejected($response, 'caseId', 'The case id field must be a valid UUID.');
+        $this->assertNoAuditRecorded();
+    }
+
+    #[Test]
     #[DataProvider('invalidRejectionProvider')]
     public function when_the_rejection_reason_or_code_is_invalid_then_the_rejection_is_refused(array $payload, string $field, string $message): void
     {
