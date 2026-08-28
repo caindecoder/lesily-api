@@ -218,7 +218,7 @@ class AcceptInvitationInteractor
             $errors['password'] = 'A password is required to create your account.';
         }
 
-        if (! is_string($command->name) || trim($command->name) === '') {
+        if (! is_string($command->name)) {
             $errors['name'] = 'Your name is required to create your account.';
         }
 

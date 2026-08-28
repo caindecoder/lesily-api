@@ -32,7 +32,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
                 ->when($filters->status, fn ($query, string $status) => $query->withStatus(OwnershipTransferCaseStatus::from($status)))
                 ->when($filters->company_id, fn ($query, string $companyId) => $query->forCompanyId($companyId))
                 ->newestFirst()
-                ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
+                ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page);
 
             $this->recordQueueRead($this->queryContextOf($filters, $page), $admin, $context);
 
@@ -62,7 +62,6 @@ class ReviewOwnershipTransferCaseQueueInteractor
     private function recordQueueRead(array $queryContext, User $admin, AdminRequestContext $context): void
     {
         AuditEntry::query()->create([
-            'company_id' => null,
             'stored_event_id' => null,
             'event_class' => 'OwnershipTransferCaseQueueViewed',
             'subject_type' => 'ownership_transfer_case_queue',
