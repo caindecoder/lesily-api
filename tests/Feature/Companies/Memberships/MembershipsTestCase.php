@@ -145,14 +145,16 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
-     * The request was refused as shape-invalid — the validation envelope
-     * (error_code VALIDATION_FAILED) with an error on $field.
+     * The input was refused as invalid on $invalidField — 422 VALIDATION_FAILED
+     * whose field-level errors contain $expectedMessage (§S21; conv-plan §2.2
+     * Rule 10 — assertJsonValidationErrors matches by containment, so the pin
+     * fails when the rule behind the message is dropped).
      */
-    protected function assertValidationRejected(TestResponse $response, string $field): void
+    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
     {
         $response->assertStatus(422);
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
-        $response->assertJsonValidationErrors($field);
+        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
     }
 
     /**

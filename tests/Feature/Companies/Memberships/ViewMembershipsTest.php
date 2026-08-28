@@ -79,7 +79,7 @@ class ViewMembershipsTest extends MembershipsTestCase
      */
     #[Test]
     #[DataProvider('provideInvalidQueryInputs')]
-    public function when_query_input_is_invalid_then_invalid(array $query, string $invalidField): void
+    public function when_query_input_is_invalid_then_invalid(array $query, string $invalidField, string $message): void
     {
         // Given an owner of a company
         [$company, $owner] = $this->aCompanyWithMember('owner');
@@ -89,22 +89,22 @@ class ViewMembershipsTest extends MembershipsTestCase
 
         // Then the input is refused as invalid on that field (api-conventions §10 —
         // per-endpoint filter/sort whitelist, unknown params 422)
-        $this->assertValidationRejected($response, $invalidField);
+        $this->assertValidationRejected($response, $invalidField, $message);
     }
 
     /**
-     * @return array<string, array{array<string, mixed>, string}>
+     * @return array<string, array{array<string, mixed>, string, string}>
      */
     public static function provideInvalidQueryInputs(): array
     {
         return [
-            'unknown filter key' => [['team' => 'x'], 'team'],
-            'non-whitelisted sort' => [['sort' => 'email'], 'sort'],
-            'per_page over max' => [['per_page' => 101], 'per_page'],
-            'non-numeric page' => [['page' => 'abc'], 'page'],
-            'status not whitelisted' => [['status' => 'pending'], 'status'],
-            'page below minimum' => [['page' => 0], 'page'],
-            'empty role value' => [['role' => ''], 'role'],
+            'unknown filter key' => [['team' => 'x'], 'team', 'This filter is not supported.'],
+            'non-whitelisted sort' => [['sort' => 'email'], 'sort', 'The selected sort is invalid.'],
+            'per_page over max' => [['per_page' => 101], 'per_page', 'The per page field must not be greater than 100.'],
+            'non-numeric page' => [['page' => 'abc'], 'page', 'The page field must be an integer.'],
+            'status not whitelisted' => [['status' => 'pending'], 'status', 'The selected status is invalid.'],
+            'page below minimum' => [['page' => 0], 'page', 'The page field must be at least 1.'],
+            'empty role value' => [['role' => ''], 'role', 'The role field must have a value.'],
         ];
     }
 

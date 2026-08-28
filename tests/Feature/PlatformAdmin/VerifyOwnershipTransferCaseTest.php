@@ -85,7 +85,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
     #[Test]
     #[DataProvider('invalidVerificationPayloadProvider')]
-    public function when_the_verification_payload_is_invalid_then_the_verification_is_refused(array $overrides, string $field): void
+    public function when_the_verification_payload_is_invalid_then_the_verification_is_refused(array $overrides, string $field, string $message): void
     {
         // Given an open case and a payload carrying this row's defect
         $company = Company::factory()->create();
@@ -100,7 +100,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         );
 
         // Then the verification is refused naming the offending field and nothing is written
-        $this->assertValidationFailed($response, $field);
+        $this->assertValidationRejected($response, $field, $message);
         $this->assertNothingVerified($case);
     }
 
@@ -364,7 +364,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     /**
-     * @return array<string, array{array<string, mixed>, string}>
+     * @return array<string, array{array<string, mixed>, string, string}>
      */
     public static function invalidVerificationPayloadProvider(): array
     {
@@ -372,41 +372,54 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $artefact = ['type' => 'id_document', 'reference' => 'NIC sighted', 'capturedAt' => $capturedAt];
 
         return [
-            'empty notes' => [['notes' => ''], 'notes'],
-            'whitespace notes' => [['notes' => '   '], 'notes'],
-            'overlong notes' => [['notes' => str_repeat('a', 1001)], 'notes'],
-            'missing artefacts' => [['artefacts' => null], 'artefacts'],
-            'empty artefacts' => [['artefacts' => []], 'artefacts'],
+            'empty notes' => [['notes' => ''], 'notes', 'The notes field is required.'],
+            'whitespace notes' => [['notes' => '   '], 'notes', 'The notes field is required.'],
+            'overlong notes' => [['notes' => str_repeat('a', 1001)], 'notes', 'The notes field must not be greater than 1000 characters.'],
+            'missing artefacts' => [['artefacts' => null], 'artefacts', 'The artefacts field is required.'],
+            'empty artefacts' => [['artefacts' => []], 'artefacts', 'The artefacts field is required.'],
+            'artefacts not arrays' => [['artefacts' => ['not-an-array']], 'artefacts.0', 'The artefacts.0 field must be an array.'],
+            'artefact without type' => [
+                ['artefacts' => [['reference' => 'NIC sighted', 'capturedAt' => $capturedAt]]],
+                'artefacts.0.type',
+                'The artefacts.0.type field is required.',
+            ],
             'artefact type outside the seven' => [
                 ['artefacts' => [['type' => 'hearsay', 'reference' => 'sworn statement', 'capturedAt' => $capturedAt]]],
                 'artefacts.0.type',
+                'The selected artefacts.0.type is invalid.',
             ],
             'artefact missing reference' => [
                 ['artefacts' => [['type' => 'id_document', 'capturedAt' => $capturedAt]]],
                 'artefacts.0.reference',
+                'The artefacts.0.reference field is required.',
             ],
             'artefact missing capturedAt' => [
                 ['artefacts' => [['type' => 'id_document', 'reference' => 'NIC sighted']]],
                 'artefacts.0.capturedAt',
+                'The artefacts.0.capturedAt field is required.',
             ],
             'artefact relative capturedAt' => [
                 ['artefacts' => [[...$artefact, 'capturedAt' => 'tomorrow']]],
                 'artefacts.0.capturedAt',
+                'The artefacts.0.capturedAt field must match the format Y-m-d\TH:i:sp.',
             ],
             'artefact future capturedAt' => [
                 ['artefacts' => [[...$artefact, 'capturedAt' => '2027-01-01T00:00:00Z']]],
                 'artefacts.0.capturedAt',
+                'The artefacts.0.capturedAt field must be a date before or equal to now.',
             ],
             'artefacts keyed as a map' => [
                 ['artefacts' => ['a' => $artefact]],
                 'artefacts',
+                'The artefacts field must be a list.',
             ],
             'twenty-one artefacts' => [
                 ['artefacts' => array_fill(0, 21, $artefact)],
                 'artefacts',
+                'The artefacts field must not have more than 20 items.',
             ],
-            'missing newOwnerUserId' => [['newOwnerUserId' => null], 'newOwnerUserId'],
-            'non-uuid newOwnerUserId' => [['newOwnerUserId' => 'not-a-uuid'], 'newOwnerUserId'],
+            'missing newOwnerUserId' => [['newOwnerUserId' => null], 'newOwnerUserId', 'The new owner user id field is required.'],
+            'non-uuid newOwnerUserId' => [['newOwnerUserId' => 'not-a-uuid'], 'newOwnerUserId', 'The new owner user id field must be a valid UUID.'],
         ];
     }
 

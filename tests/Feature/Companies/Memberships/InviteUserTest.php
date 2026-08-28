@@ -78,7 +78,7 @@ class InviteUserTest extends MembershipsTestCase
         ]);
 
         // Then the owner role is refused as not invitable and nothing is created
-        $this->assertValidationRejected($response, 'roleCode');
+        $this->assertValidationRejected($response, 'roleCode', 'The selected role code is invalid.');
         $this->assertNoInvitationCreated();
     }
 
@@ -87,7 +87,7 @@ class InviteUserTest extends MembershipsTestCase
      */
     #[Test]
     #[DataProvider('provideInvalidInviteInputs')]
-    public function when_the_invite_input_is_invalid_then_the_invite_is_rejected(array $body, string $invalidField): void
+    public function when_the_invite_input_is_invalid_then_the_invite_is_rejected(array $body, string $invalidField, string $message): void
     {
         // Given an admin of a company
         [$company, $admin] = $this->aCompanyWithMember('admin');
@@ -96,21 +96,21 @@ class InviteUserTest extends MembershipsTestCase
         $response = $this->invite($admin, $company, $body);
 
         // Then the input is refused as invalid and nothing is created
-        $this->assertValidationRejected($response, $invalidField);
+        $this->assertValidationRejected($response, $invalidField, $message);
         $this->assertNoInvitationCreated();
     }
 
     /**
-     * @return array<string, array{array<string, string>, string}>
+     * @return array<string, array{array<string, string>, string, string}>
      */
     public static function provideInvalidInviteInputs(): array
     {
         return [
-            'malformed email' => [['email' => 'not-an-email', 'roleCode' => 'employee'], 'email'],
-            'empty email' => [['email' => '', 'roleCode' => 'employee'], 'email'],
-            'over-long email' => [['email' => str_repeat('a', 64).'@'.str_repeat('b', 60).'.'.str_repeat('c', 60).'.'.str_repeat('d', 60).'.'.str_repeat('e', 60).'.lk', 'roleCode' => 'employee'], 'email'],
-            'missing role code' => [['email' => 'newuser@contoso.lk'], 'roleCode'],
-            'unknown role code' => [['email' => 'newuser@contoso.lk', 'roleCode' => 'super_admin'], 'roleCode'],
+            'malformed email' => [['email' => 'not-an-email', 'roleCode' => 'employee'], 'email', 'The email field must be a valid email address.'],
+            'empty email' => [['email' => '', 'roleCode' => 'employee'], 'email', 'The email field is required.'],
+            'over-long email' => [['email' => str_repeat('a', 64).'@'.str_repeat('b', 60).'.'.str_repeat('c', 60).'.'.str_repeat('d', 60).'.'.str_repeat('e', 60).'.lk', 'roleCode' => 'employee'], 'email', 'The email field must not be greater than 255 characters.'],
+            'missing role code' => [['email' => 'newuser@contoso.lk'], 'roleCode', 'The role code field is required.'],
+            'unknown role code' => [['email' => 'newuser@contoso.lk', 'roleCode' => 'super_admin'], 'roleCode', 'The selected role code is invalid.'],
         ];
     }
 
@@ -142,6 +142,23 @@ class InviteUserTest extends MembershipsTestCase
             'employee' => ['employee'],
             'auditor' => ['auditor'],
         ];
+    }
+
+    #[Test]
+    public function when_the_hourly_invite_allowance_is_spent_then_the_next_invite_is_throttled(): void
+    {
+        // Given an admin who has spent the full hourly invite allowance
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->exhaustInviteLimit($admin, $company);
+
+        // When they attempt one more invite within the hour
+        $response = $this->invite($admin, $company, [
+            'email' => 'one-too-many@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then the invite is throttled
+        $this->assertThrottled($response);
     }
 
     // --- Edge ---
@@ -270,23 +287,6 @@ class InviteUserTest extends MembershipsTestCase
         $response->assertOk();
         $this->assertMemberStillActive($membershipId);
         $this->assertNotNull(Invitation::query()->whereKey($membershipId)->sole()->accepted_at);
-    }
-
-    #[Test]
-    public function when_the_hourly_invite_allowance_is_spent_then_the_next_invite_is_throttled(): void
-    {
-        // Given an admin who has spent the full hourly invite allowance
-        [$company, $admin] = $this->aCompanyWithMember('admin');
-        $this->exhaustInviteLimit($admin, $company);
-
-        // When they attempt one more invite within the hour
-        $response = $this->invite($admin, $company, [
-            'email' => 'one-too-many@contoso.lk',
-            'roleCode' => 'employee',
-        ]);
-
-        // Then the invite is throttled
-        $this->assertThrottled($response);
     }
 
     // --- Happy ---
