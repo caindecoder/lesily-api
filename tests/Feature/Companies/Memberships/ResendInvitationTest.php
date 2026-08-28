@@ -186,10 +186,13 @@ class ResendInvitationTest extends MembershipsTestCase
     #[DataProvider('provideAllowedResendRoles')]
     public function when_pending_invitation_resent_then_token_rotated_and_mail_requeued(string $roleCode): void
     {
-        // Given
+        // Given a pending invitation whose 7-day window started two days ago —
+        // the clock must move, or the rotation reissues the same expiry to the
+        // second and nothing can observe that it happened
         [$company, $actor] = $this->aCompanyWithMember($roleCode);
         $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
         $before = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->travel(2)->days();
 
         // When
         $response = $this->resendInvitation($actor, $company, $before->getKey());

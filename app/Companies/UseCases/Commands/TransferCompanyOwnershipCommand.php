@@ -3,7 +3,6 @@
 namespace App\Companies\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
-use Illuminate\Validation\Rule;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**

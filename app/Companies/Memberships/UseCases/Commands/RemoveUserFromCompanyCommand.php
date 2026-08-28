@@ -15,12 +15,14 @@ class RemoveUserFromCompanyCommand extends Data
     public string $removedBy;
 
     /**
+     * removedBy is server-sourced from the authenticated actor and carries no
+     * rule (amendment AQ); the method stays because the AQ guard's clause 1
+     * requires one on every controller-referenced command.
+     *
      * @return array<string, array<int, string>>
      */
     public static function rules(): array
     {
-        return [
-            'removedBy' => ['required', 'uuid'],
-        ];
+        return [];
     }
 }

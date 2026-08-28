@@ -162,15 +162,6 @@
         // the AcceptInvitationCommand entry was removed on exactly that clause - its
         // route-sourced token entry went, so password [nullable, string, min:8] became
         // the first key and the outer removal is now killed by the min-8 row.)
-        // K-COMP server-key corollary (OQ-1-172 T6, s192): RemoveUserFromCompanyCommand
-        // is an HTTP-boundary command (MembershipsController::destroy) whose ONLY key,
-        // removedBy, is server-sourced from the actor - under the amendment-AQ corollary
-        // it carries no rule of its own; rules() stays only because the AQ guard's
-        // clause 1 requires one on every controller-referenced command (the
-        // DownloadInvoiceReceiptCommand precedent), so removing the outer array or the
-        // key's entry is equivalent (Spatie re-infers required+string from the typed
-        // property) - method-level. REMOVE WHEN a client-supplied key lands on this
-        // command or the guard learns the server-key corollary and rules() can go.
         // K-BILL-DOWNLOAD (OQ-1-172 T4, s190): DownloadInvoiceReceiptCommand is an
         // HTTP-boundary command (InvoicesController) whose two keys are BOTH server-
         // supplied (auth.company + the route parameter), so under the amendment-AQ
@@ -185,7 +176,6 @@
         "ArrayItemRemoval": {
             ignore: [
                 "App\\Billing\\Invoices\\UseCases\\Commands\\DownloadInvoiceReceiptCommand::rules",
-                "App\\Companies\\Memberships\\UseCases\\Commands\\RemoveUserFromCompanyCommand::rules",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ChangePasswordCommand::rules::19",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ConfirmTwoFactorCommand::rules::22",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\DisableTwoFactorCommand::rules::23",
@@ -217,11 +207,19 @@
                 "App\\Companies\\Memberships\\UseCases\\Interactors\\ResendInvitationInteractor::execute",
             ],
         },
+        // L-TOKEN (resend side, added OQ-1-172 T6 s192): until T6 the 39-char mutant
+        // was killed by ResendInvitationCommand's own min:40 rule, not by a behaviour -
+        // that internal command is now rule-less (amendment AQ), so the length is once
+        // again pure P5 tuning, exactly as its IncrementInteger twin already was. The
+        // INVITE side is deliberately NOT listed: its DecrementInteger is still killed,
+        // and ledgering a killable mutant is forbidden (P4 / Rule #13). REMOVE WHEN a
+        // design surface pins the token length, or the invite/resend paths diverge.
         "DecrementInteger": {
             ignore: [
                 "App\\Foundation\\Auth\\Totp\\CacheLoginChallengeStore::recordFailure::53",
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\RegenerateRecoveryCodesInteractor::execute",
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode",
+                "App\\Companies\\Memberships\\UseCases\\Interactors\\ResendInvitationInteractor::execute",
             ],
         },
         // L-SCHEMA (P8): SubscriptionResource trial_ends_at?-> is equivalent while no
