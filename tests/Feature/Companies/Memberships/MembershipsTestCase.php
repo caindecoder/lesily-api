@@ -145,19 +145,6 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
-     * The input was refused as invalid on $invalidField — 422 VALIDATION_FAILED
-     * whose field-level errors contain $expectedMessage (§S21; conv-plan §2.2
-     * Rule 10 — assertJsonValidationErrors matches by containment, so the pin
-     * fails when the rule behind the message is dropped).
-     */
-    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
-    {
-        $response->assertStatus(422);
-        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
-        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
-    }
-
-    /**
      * Assert a request was refused with the §S21 envelope for $code (status +
      * error_code). Mirrors AuthTestCase's helper (§2.10).
      */

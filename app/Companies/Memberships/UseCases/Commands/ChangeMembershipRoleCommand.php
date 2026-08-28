@@ -9,7 +9,7 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
  * Role-change payload for the UserMembership aggregate (R-C/R-D s112). Built at
- * the controller boundary via ::validateAndCreate — never ::from (amendment U):
+ * the HTTP boundary via ::validateAndCreate (amendment AQ):
  * roleCode from the request body, changedBy server-sourced from the actor.
  */
 class ChangeMembershipRoleCommand extends Data

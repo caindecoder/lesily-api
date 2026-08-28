@@ -75,9 +75,13 @@ class RegisterOwnerTest extends AuthTestCase
             'over-long name' => [['name' => str_repeat('a', 256)], 'name', 'The name field must not be greater than 255 characters.'],
             'missing email' => [['email' => ''], 'email', 'The email field is required.'],
             'missing company name' => [['companyName' => ''], 'companyName', 'The company name field is required.'],
+            'over-long company name' => [['companyName' => str_repeat('a', 256)], 'companyName', 'The company name field must not be greater than 255 characters.'],
             'missing BR number' => [['brNumber' => ''], 'brNumber', 'The br number field is required.'],
+            'over-long BR number' => [['brNumber' => str_repeat('b', 256)], 'brNumber', 'The br number field must not be greater than 255 characters.'],
             'missing EPF number' => [['epfNumber' => ''], 'epfNumber', 'The epf number field is required.'],
+            'over-long EPF number' => [['epfNumber' => str_repeat('e', 256)], 'epfNumber', 'The epf number field must not be greater than 255 characters.'],
             'missing country' => [['country' => ''], 'country', 'The country field is required.'],
+            'country beyond two characters' => [['country' => 'LKA'], 'country', 'The country field must be 2 characters.'],
             'missing emergency contact name' => [['emergencyContactName' => ''], 'emergencyContactName', 'The emergency contact name field is required.'],
             'missing emergency contact phone' => [['emergencyContactPhone' => ''], 'emergencyContactPhone', 'The emergency contact phone field is required.'],
         ];
@@ -155,8 +159,11 @@ class RegisterOwnerTest extends AuthTestCase
         $response = $this->withServerVariables(['REMOTE_ADDR' => null])
             ->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
 
-        // Then it is rejected as a validation error (a clean 4xx), not a server crash
+        // Then it is rejected as a validation error (a clean 4xx), not a server crash,
+        // and the refusal happens before anything is written — the guard sits ahead of
+        // the transaction, so a relocation below it would leave an orphan account
         $this->assertValidationRejected($response, 'ip', 'The ip field is required.');
+        $this->assertNothingPersisted();
     }
 
     // Edge (race backstop) — two concurrent signups can both pass the pre-tx

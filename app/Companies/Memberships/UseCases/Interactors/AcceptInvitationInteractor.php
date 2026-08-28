@@ -218,6 +218,8 @@ class AcceptInvitationInteractor
             $errors['password'] = 'A password is required to create your account.';
         }
 
+        // A blank or whitespace-only name never arrives as a string: the global
+        // TrimStrings + ConvertEmptyStringsToNull pair turns it into null first.
         if (! is_string($command->name)) {
             $errors['name'] = 'Your name is required to create your account.';
         }

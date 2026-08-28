@@ -207,19 +207,11 @@
                 "App\\Companies\\Memberships\\UseCases\\Interactors\\ResendInvitationInteractor::execute",
             ],
         },
-        // L-TOKEN (resend side, added OQ-1-172 T6 s192): until T6 the 39-char mutant
-        // was killed by ResendInvitationCommand's own min:40 rule, not by a behaviour -
-        // that internal command is now rule-less (amendment AQ), so the length is once
-        // again pure P5 tuning, exactly as its IncrementInteger twin already was. The
-        // INVITE side is deliberately NOT listed: its DecrementInteger is still killed,
-        // and ledgering a killable mutant is forbidden (P4 / Rule #13). REMOVE WHEN a
-        // design surface pins the token length, or the invite/resend paths diverge.
         "DecrementInteger": {
             ignore: [
                 "App\\Foundation\\Auth\\Totp\\CacheLoginChallengeStore::recordFailure::53",
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\RegenerateRecoveryCodesInteractor::execute",
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode",
-                "App\\Companies\\Memberships\\UseCases\\Interactors\\ResendInvitationInteractor::execute",
             ],
         },
         // L-SCHEMA (P8): SubscriptionResource trial_ends_at?-> is equivalent while no

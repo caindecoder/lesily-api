@@ -4,6 +4,7 @@ namespace Tests\Feature\PlatformAdmin;
 
 use RuntimeException;
 use Carbon\CarbonImmutable;
+use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -226,6 +227,23 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
             'result_count' => 1,
             'page' => 1,
         ]);
+    }
+
+    #[Test]
+    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
+    {
+        // Given sixteen cases — one more than a default page
+        OwnershipTransferCase::factory()->count(16)->forCompany(Company::factory()->create())->create();
+        Sanctum::actingAs($this->admin);
+
+        // When a second page is asked for in the BODY rather than the query string
+        $response = $this->json('GET', '/api/v1/admin/ownership-transfer-cases', ['page' => 2]);
+
+        // Then it is ignored: paging is driven only by the whitelisted, validated
+        // query DTO, so the first full page comes back (api-conventions §10.1)
+        $response->assertOk();
+        $response->assertJsonCount(15, 'data');
+        $this->assertCasePage($response, ['page' => 1, 'per_page' => 15, 'total' => 16, 'last_page' => 2]);
     }
 
     #[Test]

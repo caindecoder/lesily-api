@@ -52,7 +52,10 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             // Stable tie-breaker: equal sort keys must not shuffle rows between
             // page requests of a paginated union.
             ->orderBy('id')
-            ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page);
+            // page defaults HERE, never by falling through to Laravel's resolver:
+            // that reads $request->input('page'), which would honour a body-supplied
+            // page and bypass the whitelisted, validated query DTO (api-conventions §10.1).
+            ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
     }
 
     /**

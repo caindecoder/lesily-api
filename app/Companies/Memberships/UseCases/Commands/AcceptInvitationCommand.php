@@ -25,7 +25,9 @@ class AcceptInvitationCommand extends Data
      */
     public static function rules(): array
     {
-        // token rides the route and carries no rule (amendment AQ).
+        // token rides the route: the required|string Spatie infers from the typed
+        // property is the whole contract, so only FORMAT rules belong here
+        // (cf. caseId => ['uuid'] on the case commands). Amendment AQ.
         return [
             'password' => ['nullable', 'string', 'min:8'],
             // max:255 bounds the varchar-backed users.name at the HTTP boundary —

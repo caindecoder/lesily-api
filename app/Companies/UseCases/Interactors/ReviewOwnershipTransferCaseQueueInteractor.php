@@ -32,7 +32,10 @@ class ReviewOwnershipTransferCaseQueueInteractor
                 ->when($filters->status, fn ($query, string $status) => $query->withStatus(OwnershipTransferCaseStatus::from($status)))
                 ->when($filters->company_id, fn ($query, string $companyId) => $query->forCompanyId($companyId))
                 ->newestFirst()
-                ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page);
+                // page defaults HERE, never by falling through to Laravel's resolver:
+                // that reads $request->input('page'), which would honour a body-supplied
+                // page and bypass the whitelisted, validated query DTO (api-conventions §10.1).
+                ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
 
             $this->recordQueueRead($this->queryContextOf($filters, $page), $admin, $context);
 
@@ -61,9 +64,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
      */
     private function recordQueueRead(array $queryContext, User $admin, AdminRequestContext $context): void
     {
-        // The queue read points at a PAGE, not a record: stored_event_id,
-        // subject_id and subject_label stay at their NULL column defaults
-        // rather than being written explicitly.
+        // The queue read points at a PAGE, not a record.
         AuditEntry::query()->create([
             'event_class' => 'OwnershipTransferCaseQueueViewed',
             'subject_type' => 'ownership_transfer_case_queue',

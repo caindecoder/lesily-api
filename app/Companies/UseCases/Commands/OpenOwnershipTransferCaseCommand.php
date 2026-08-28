@@ -8,8 +8,8 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
  * Open-case payload for the support-assisted ownership-transfer workflow
- * (UC-1-140; slice-11R spec §4). Built via ::validateAndCreate only — never
- * ::from (amendment U). newOwnerUserId is optional here and becomes mandatory
+ * (UC-1-140; slice-11R spec §4). Built at the HTTP boundary via
+ * ::validateAndCreate (amendment AQ). newOwnerUserId is optional here and becomes mandatory
  * at verify (UC-1-113); when supplied it must name a live member of the named
  * company — case-open is advisory intake, so the membership check is a
  * validation rule, not a locked guard (the transfer itself re-validates under

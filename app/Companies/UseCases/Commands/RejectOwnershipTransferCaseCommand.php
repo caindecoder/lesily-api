@@ -9,7 +9,7 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
  * Reject payload for an ownership-transfer case (UC-1-128; slice-11R spec
- * §5/§6). Built via ::validateAndCreate only — never ::from (amendment U).
+ * §5/§6). Built at the HTTP boundary via ::validateAndCreate (amendment AQ).
  * caseId is server-sourced from the route; no exists rule on it — the
  * interactor's locked find owns 404.
  */

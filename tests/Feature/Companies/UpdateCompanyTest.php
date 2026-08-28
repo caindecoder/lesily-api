@@ -96,7 +96,7 @@ class UpdateCompanyTest extends CompaniesTestCase
     }
 
     /**
-     * @return array<string, array{array<string, mixed>, string}>
+     * @return array<string, array{array<string, mixed>, string, string}>
      */
     public static function provideInvalidEditableFields(): array
     {

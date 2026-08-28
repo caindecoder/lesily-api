@@ -17,7 +17,8 @@ use App\Companies\Memberships\Mail\InvitationMail;
  * only surface as a failed queue job in production. These render tests close
  * that blind spot (SystemNotificationMailRenderTest precedent, OQ-1-113 family).
  *
- * @testclass-carveout: mail-render
+ * @testclass-carveout: mail-render — the class under test IS the behaviour: a
+ * Mailable has no HTTP seam, so its rendering can only be proven directly.
  */
 class InvitationMailRenderTest extends MembershipsTestCase
 {

@@ -347,6 +347,7 @@ class ResendInvitationTest extends MembershipsTestCase
         $plaintexts = [];
         Mail::assertQueued(InvitationMail::class, function (InvitationMail $mail) use ($email, &$plaintexts): bool {
             $this->assertTrue($mail->hasTo($email));
+            $this->assertMatchesRegularExpression('/token=[A-Za-z0-9]{40}/', $mail->acceptUrl());
             $plaintexts[] = $mail->plaintextToken;
 
             return true;
