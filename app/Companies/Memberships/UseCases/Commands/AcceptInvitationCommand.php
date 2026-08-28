@@ -25,8 +25,8 @@ class AcceptInvitationCommand extends Data
      */
     public static function rules(): array
     {
+        // token rides the route and carries no rule (amendment AQ).
         return [
-            'token' => ['required', 'string'],
             'password' => ['nullable', 'string', 'min:8'],
             // max:255 bounds the varchar-backed users.name at the HTTP boundary —
             // beyond it the genesis projection can never succeed (review pass).

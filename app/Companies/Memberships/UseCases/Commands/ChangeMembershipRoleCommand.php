@@ -34,10 +34,10 @@ class ChangeMembershipRoleCommand extends Data
     public static function rules(ValidationContext $context): array
     {
         // No id field: the aggregate is retrieved BY the membership UUID from
-        // the route (M1 parity — RevokeInvitationCommand precedent).
+        // the route (M1 parity — RevokeInvitationCommand precedent). changedBy is
+        // server-sourced from the actor and carries no rule (amendment AQ).
         return [
             'roleCode' => ['required', 'string', Rule::in(self::ASSIGNABLE_ROLE_CODES)],
-            'changedBy' => ['required', 'uuid'],
         ];
     }
 }

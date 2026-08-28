@@ -55,7 +55,7 @@ class InviteUserInteractor
         $plaintextToken = Str::random(40);
 
         UserMembership::retrieve($membershipId)
-            ->invite(CreateInvitationCommand::validateAndCreate([
+            ->invite(CreateInvitationCommand::from([
                 'companyId' => $company->getKey(),
                 'email' => $command->email,
                 'roleId' => Role::query()->where('code', $command->roleCode)->sole()->getKey(),

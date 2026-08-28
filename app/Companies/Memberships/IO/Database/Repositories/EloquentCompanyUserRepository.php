@@ -85,7 +85,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
 
     public function findById(string $companyId, string $membershipId): ?stdClass
     {
-        return $this->activeMembers($companyId, MembershipFilters::validateAndCreate([]))
+        return $this->activeMembers($companyId, MembershipFilters::from([]))
             ->where('company_user.id', $membershipId)
             ->first();
     }

@@ -153,12 +153,24 @@
         // L-OUTER-EQ: ArrayItemRemoval on the OUTER rules() array (the `return [` line).
         // Dropping the first key's entry is byte-equivalent because Spatie re-infers the
         // same required+type rules from the non-nullable typed property
-        // (DataValidationRulesResolver per-key fallback); all nine first keys are
+        // (DataValidationRulesResolver per-key fallback); every listed first key is
         // ['required', 'string'] on a `public string` property. Inner-key removals in
         // the same methods stay live - they ARE killable (T5/T6 kills). REMOVE an entry
         // WHEN its command's FIRST key gains a rule beyond required+type, or the keys are
         // reordered so such a key comes first: the `return [` line does not move, but the
-        // outer removal then drops a real constraint and becomes killable.
+        // outer removal then drops a real constraint and becomes killable. (T6, s192:
+        // the AcceptInvitationCommand entry was removed on exactly that clause - its
+        // route-sourced token entry went, so password [nullable, string, min:8] became
+        // the first key and the outer removal is now killed by the min-8 row.)
+        // K-COMP server-key corollary (OQ-1-172 T6, s192): RemoveUserFromCompanyCommand
+        // is an HTTP-boundary command (MembershipsController::destroy) whose ONLY key,
+        // removedBy, is server-sourced from the actor - under the amendment-AQ corollary
+        // it carries no rule of its own; rules() stays only because the AQ guard's
+        // clause 1 requires one on every controller-referenced command (the
+        // DownloadInvoiceReceiptCommand precedent), so removing the outer array or the
+        // key's entry is equivalent (Spatie re-infers required+string from the typed
+        // property) - method-level. REMOVE WHEN a client-supplied key lands on this
+        // command or the guard learns the server-key corollary and rules() can go.
         // K-BILL-DOWNLOAD (OQ-1-172 T4, s190): DownloadInvoiceReceiptCommand is an
         // HTTP-boundary command (InvoicesController) whose two keys are BOTH server-
         // supplied (auth.company + the route parameter), so under the amendment-AQ
@@ -173,7 +185,7 @@
         "ArrayItemRemoval": {
             ignore: [
                 "App\\Billing\\Invoices\\UseCases\\Commands\\DownloadInvoiceReceiptCommand::rules",
-                "App\\Companies\\Memberships\\UseCases\\Commands\\AcceptInvitationCommand::rules::28",
+                "App\\Companies\\Memberships\\UseCases\\Commands\\RemoveUserFromCompanyCommand::rules",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ChangePasswordCommand::rules::19",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ConfirmTwoFactorCommand::rules::22",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\DisableTwoFactorCommand::rules::23",
