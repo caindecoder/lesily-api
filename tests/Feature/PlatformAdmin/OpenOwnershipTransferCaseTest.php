@@ -140,6 +140,18 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     #[Test]
+    public function when_a_case_is_opened_with_a_blank_new_owner_then_it_opens_without_a_designated_successor(): void
+    {
+        // Given the incoming owner is sent as a blank value rather than omitted
+        // When the admin opens the case
+        $response = $this->openCase($this->admin, $this->validPayload(['newOwnerUserId' => '']));
+
+        // Then the case is open with no incoming owner and the audit row is present
+        $this->assertCaseOpened($response, ['new_owner_user_id' => null]);
+        $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'), $response);
+    }
+
+    #[Test]
     public function when_a_platform_admin_opens_a_case_for_a_company_then_the_case_is_on_the_record(): void
     {
         // Given company Contoso and Alex, a live member proposed as incoming owner

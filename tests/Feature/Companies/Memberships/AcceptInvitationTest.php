@@ -428,6 +428,23 @@ class AcceptInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_an_existing_user_accepts_with_blank_optional_fields_then_their_membership_activates(): void
+    {
+        // Given — an account already on the platform, invited to a company it
+        // doesn't belong to, whose client sends the new-user fields blank
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+
+        // When — they accept while authenticated, with a blank name and password
+        $response = $this->acceptInvitation($token, ['name' => '', 'password' => ''], $invitee);
+
+        // Then — the blanks are optional on this branch: the membership activates and is returned
+        $this->assertMembershipReturned($response, $invitee, 'employee');
+        $this->assertMembershipActivated($company, 'anushka@member.lk');
+    }
+
+    #[Test]
     public function when_an_authenticated_existing_user_accepts_then_they_join_the_new_company(): void
     {
         // Given — an account already on the platform, invited to a company it
