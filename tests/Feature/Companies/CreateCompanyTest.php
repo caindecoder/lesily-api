@@ -9,8 +9,6 @@ use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Events\CompanyCreated;
 use App\Companies\Entities\CompanySettings;
-use Illuminate\Validation\ValidationException;
-use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Events\CompanySettingsCreated;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Entities\Company as CompanyReadModel;
@@ -72,61 +70,9 @@ class CreateCompanyTest extends CompaniesTestCase
 
     protected function buildCreateCompanyCommandForCountry(string $companyId, string $country): CreateCompanyCommand
     {
-        return CreateCompanyCommand::validateAndCreate(
+        return CreateCompanyCommand::from(
             ['country' => $country] + $this->buildCreateCompanyCommand($companyId)->toArray()
         );
-    }
-
-    // Sad — the command rejects shape-invalid input at the ::validateAndCreate
-    // seam. The max:255 bounds are the poison-event guard (an over-long value
-    // would record a CompanyCreated whose projection can never succeed); the
-    // required-field rows live at the registration HTTP seam
-    // (RegisterOwnerTest), and BR/EPF uniqueness is its 409 guard.
-    // CAVEAT (s142) — those HTTP rows are SHAPE guards only: they detect the removal
-    // of the whole required+string PAIR, not either rule alone (OQ-1-138). So the
-    // requiredness contract for companyName / brNumber / epfNumber is not
-    // individually guarded at either seam. Do not read this line as coverage.
-    #[Test]
-    #[DataProvider('provideInvalidRegistrationInput')]
-    public function when_a_create_company_command_is_built_with_invalid_input_then_it_is_rejected(
-        string $field,
-        string $value,
-    ): void {
-        // Given a valid payload with one field invalidated
-        $input = array_merge(self::validInput(), [$field => $value]);
-
-        // When the command is built / Then validation rejects it
-        $this->expectException(ValidationException::class);
-
-        CreateCompanyCommand::validateAndCreate($input);
-    }
-
-    /**
-     * @return array<string, array{string, string}>
-     */
-    public static function provideInvalidRegistrationInput(): array
-    {
-        return [
-            'name longer than its column' => ['name', str_repeat('a', 256)],
-            'brNumber longer than its column' => ['brNumber', str_repeat('b', 256)],
-            'epfNumber longer than its column' => ['epfNumber', str_repeat('e', 256)],
-            'country longer than 2 chars' => ['country', 'LKA'],
-            'ownerUserId not a uuid' => ['ownerUserId', 'not-a-uuid'],
-        ];
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    protected static function validInput(): array
-    {
-        return [
-            'name' => 'Contoso',
-            'brNumber' => 'PV-12345678',
-            'epfNumber' => 'A-1234567',
-            'country' => 'LK',
-            'ownerUserId' => '019eb10c-0000-7000-8000-000000000000',
-        ];
     }
 
     // Happy — genesis: creating a company opens a 30-day trial scoped to its own

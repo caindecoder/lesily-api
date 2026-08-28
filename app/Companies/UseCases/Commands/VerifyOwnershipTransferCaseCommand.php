@@ -35,7 +35,7 @@ class VerifyOwnershipTransferCaseCommand extends Data
     public static function rules(ValidationContext $context): array
     {
         return [
-            'caseId' => ['required', 'uuid'],
+            'caseId' => ['uuid'],
             'newOwnerUserId' => ['required', 'uuid'],
             'notes' => ['required', 'string', 'max:1000'],
             'artefacts' => ['required', 'array', 'list', 'min:1', 'max:20'],

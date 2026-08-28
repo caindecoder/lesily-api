@@ -57,7 +57,7 @@ class ExecuteOwnershipTransferCaseInteractor
 
             $company = Company::query()->findOrFail($case->company_id);
 
-            $this->transferInteractor->execute($company, TransferCompanyOwnershipCommand::validateAndCreate([
+            $this->transferInteractor->execute($company, TransferCompanyOwnershipCommand::from([
                 'newOwnerUserId' => $case->new_owner_user_id,
                 'transferredBy' => $admin->id,
                 'source' => TransferCompanyOwnershipCommand::SOURCE_ADMIN,

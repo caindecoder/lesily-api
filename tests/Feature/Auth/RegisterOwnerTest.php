@@ -146,9 +146,7 @@ class RegisterOwnerTest extends AuthTestCase
     }
 
     // Sad — a registration whose client IP can't be resolved (no REMOTE_ADDR) is rejected
-    // with a clean 422, NOT a 500: the controller casts $request->ip() to string, so a null
-    // IP becomes '' and fails the consent record's `required` ip rule (a validation error).
-    // Without the cast a null reaches the interactor's `string $clientIp` and TypeErrors -> 500.
+    // with a clean 422, NOT a 500, and no consent record is minted without its IP.
     #[Test]
     public function when_the_client_ip_is_undeterminable_then_registration_is_rejected_as_invalid(): void
     {

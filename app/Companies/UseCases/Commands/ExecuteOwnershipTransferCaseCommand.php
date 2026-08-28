@@ -22,7 +22,7 @@ class ExecuteOwnershipTransferCaseCommand extends Data
     public static function rules(ValidationContext $context): array
     {
         return [
-            'caseId' => ['required', 'uuid'],
+            'caseId' => ['uuid'],
         ];
     }
 }

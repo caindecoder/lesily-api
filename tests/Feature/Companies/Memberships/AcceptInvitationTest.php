@@ -208,7 +208,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         $membershipId = $this->aRemovedMembership($company, $removed);
         $plaintext = Str::random(40);
         UserMembership::retrieve((string) Str::uuid7())
-            ->invite(CreateInvitationCommand::validateAndCreate([
+            ->invite(CreateInvitationCommand::from([
                 'companyId' => $company->getKey(),
                 'email' => 'ruwan@member.lk',
                 'roleId' => $this->seededRole('employee')->getKey(),
@@ -551,7 +551,7 @@ class AcceptInvitationTest extends MembershipsTestCase
             ->getKey();
         $plaintext = Str::random(40);
         UserMembership::retrieve((string) Str::uuid7())
-            ->invite(CreateInvitationCommand::validateAndCreate([
+            ->invite(CreateInvitationCommand::from([
                 'companyId' => $company->getKey(),
                 'email' => 'ruwan@member.lk',
                 'roleId' => $this->seededRole('employee')->getKey(),

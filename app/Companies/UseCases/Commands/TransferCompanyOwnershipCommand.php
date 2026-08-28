@@ -4,7 +4,6 @@ namespace App\Companies\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\In;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -29,15 +28,15 @@ class TransferCompanyOwnershipCommand extends Data
     public ?string $caseId = null;
 
     /**
-     * @return array<string, array<int, string|In>>
+     * transferredBy, source and caseId are server-sourced (the actor, the
+     * calling path, the admin case) and carry no rule (amendment AQ).
+     *
+     * @return array<string, array<int, string>>
      */
     public static function rules(ValidationContext $context): array
     {
         return [
             'newOwnerUserId' => ['required', 'uuid'],
-            'transferredBy' => ['required', 'uuid'],
-            'source' => ['required', Rule::in([self::SOURCE_SELF_SERVICE, self::SOURCE_ADMIN])],
-            'caseId' => ['nullable', 'uuid'],
         ];
     }
 }

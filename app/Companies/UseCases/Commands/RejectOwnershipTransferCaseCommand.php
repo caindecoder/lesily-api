@@ -27,7 +27,7 @@ class RejectOwnershipTransferCaseCommand extends Data
     public static function rules(ValidationContext $context): array
     {
         return [
-            'caseId' => ['required', 'uuid'],
+            'caseId' => ['uuid'],
             'reason' => ['required', 'string', 'max:1000'],
             'reasonCode' => ['required', Rule::enum(RejectionReasonCode::class)],
         ];

@@ -9,6 +9,7 @@ use App\Consent\Aggregates\Consent;
 use App\Companies\Aggregates\Company;
 use App\Models\User as UserReadModel;
 use App\Foundation\Auth\Aggregates\User;
+use Illuminate\Validation\ValidationException;
 use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
@@ -33,6 +34,12 @@ class RegisterOwnerInteractor
 
     public function execute(RegisterOwnerCommand $command, string $clientIp, string $deviceName): RegisterResult
     {
+        // A consent record is evidence and is never minted without the client IP
+        // it was given from (UC-1-069); an unresolvable IP is refused up front.
+        if ($clientIp === '') {
+            throw ValidationException::withMessages(['ip' => 'The ip field is required.']);
+        }
+
         // Reject a taken email / BR / EPF before opening the transaction, so a
         // conflict never leaves a partial account behind (E04 §13 — do something
         // or handle errors, not both).
@@ -81,7 +88,7 @@ class RegisterOwnerInteractor
                 $owner->setEmergencyContact($companyId, $command)->persist();
 
                 Consent::retrieve(Str::uuid7()->toString())
-                    ->record(RecordConsentCommand::validateAndCreate([
+                    ->record(RecordConsentCommand::from([
                         'userId' => $userId,
                         'companyId' => $companyId,
                         'policyVersions' => config('lesily.policies'),
@@ -108,7 +115,7 @@ class RegisterOwnerInteractor
 
     protected function buildCreateCompanyCommand(RegisterOwnerCommand $command, string $ownerUserId): CreateCompanyCommand
     {
-        return CreateCompanyCommand::validateAndCreate([
+        return CreateCompanyCommand::from([
             'name' => $command->companyName,
             'brNumber' => $command->brNumber,
             'epfNumber' => $command->epfNumber,
