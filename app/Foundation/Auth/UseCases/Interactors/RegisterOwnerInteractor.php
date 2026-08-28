@@ -70,8 +70,8 @@ class RegisterOwnerInteractor
     {
         try {
             return DB::transaction(function () use ($command, $clientIp): array {
-                $userId = (string) Str::uuid7();
-                $companyId = (string) Str::uuid7();
+                $userId = Str::uuid7()->toString();
+                $companyId = Str::uuid7()->toString();
 
                 // Persist order follows the FK chain (users → companies → company_user;
                 // owner_id is a RESTRICT FK per #02): the owner user first, then the

@@ -61,12 +61,12 @@ class ReviewOwnershipTransferCaseQueueInteractor
      */
     private function recordQueueRead(array $queryContext, User $admin, AdminRequestContext $context): void
     {
+        // The queue read points at a PAGE, not a record: stored_event_id,
+        // subject_id and subject_label stay at their NULL column defaults
+        // rather than being written explicitly.
         AuditEntry::query()->create([
-            'stored_event_id' => null,
             'event_class' => 'OwnershipTransferCaseQueueViewed',
             'subject_type' => 'ownership_transfer_case_queue',
-            'subject_id' => null,
-            'subject_label' => null,
             'action' => 'case_queue_viewed',
             'description' => 'Platform admin viewed a page of the ownership-transfer case queue.',
             'actor_user_id' => $admin->id,
