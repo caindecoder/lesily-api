@@ -295,12 +295,15 @@ class ResendInvitationTest extends MembershipsTestCase
     /**
      * The resend returned the invitation resource: 200 carrying the SAME
      * invitation UUID as the row id — the rotation happens in place, never
-     * via a new invitation.
+     * via a new invitation — and the expiry it echoes is the rotated one.
      */
     protected function assertInvitationResourceReturned(TestResponse $response, string $invitationId): void
     {
+        $rotated = Invitation::query()->whereKey($invitationId)->sole();
+
         $response->assertOk();
         $response->assertJsonPath('data.id', $invitationId);
+        $response->assertJsonPath('data.expires_at', $rotated->expires_at->toJSON());
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Companies\Aggregates\Company;
 use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Events\CompanyCreated;
+use App\Companies\Entities\CompanySettings;
 use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Events\CompanySettingsCreated;
@@ -188,6 +189,10 @@ class CreateCompanyTest extends CompaniesTestCase
         $this->assertSame('LKR', $event->event_properties['currency']);
         $this->assertSame('Asia/Colombo', $event->event_properties['timezone']);
         $this->assertSame('en', $event->event_properties['localeDefault']);
+        $this->assertSame(
+            $event->event_properties['settingsId'],
+            CompanySettings::query()->where('company_id', $event->event_properties['companyId'])->sole()->getKey(),
+        );
     }
 
     protected function assertCompanyOnTrial(CompanyReadModel $row, string $name, string $trialEndsAt): void

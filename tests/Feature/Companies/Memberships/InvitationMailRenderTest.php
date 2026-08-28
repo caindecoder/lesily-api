@@ -5,7 +5,9 @@ namespace Tests\Feature\Companies\Memberships;
 use RuntimeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
+use Illuminate\Mail\Mailables\Address;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Support\Facades\Exceptions;
 use App\Companies\Memberships\Mail\InvitationMail;
 
@@ -14,9 +16,28 @@ use App\Companies\Memberships\Mail\InvitationMail;
  * invitation template — an undefined variable or broken component there would
  * only surface as a failed queue job in production. These render tests close
  * that blind spot (SystemNotificationMailRenderTest precedent, OQ-1-113 family).
+ *
+ * @testclass-carveout: mail-render
  */
 class InvitationMailRenderTest extends MembershipsTestCase
 {
+    #[Test]
+    public function when_the_invite_email_delivery_fails_then_the_failure_is_logged_without_alerting_the_inviter(): void
+    {
+        // Given
+        Exceptions::fake();
+        $mail = $this->anInvitationMail();
+
+        // When the queued mail exhausts its retries
+        $mail->failed(new RuntimeException('Mail server unavailable'));
+
+        // Then the failure is reported for ops with the retry config intact — the
+        // inviter is never alerted (the pending invitation stays resendable, UC-1-021)
+        Exceptions::assertReported(RuntimeException::class);
+        $this->assertSame(3, $mail->tries);
+        $this->assertSame([1, 5, 15], $mail->backoff);
+    }
+
     #[Test]
     public function when_built_then_it_renders_from_the_markdown_template(): void
     {
@@ -40,7 +61,7 @@ class InvitationMailRenderTest extends MembershipsTestCase
         $rendered = $mail->render();
 
         // Then
-        $this->assertStringContainsString($mail->plaintextToken, $rendered);
+        $this->assertAcceptLinkRendered($mail, $rendered);
         $this->assertStringContainsString('Contoso', $rendered);
         $this->assertStringContainsString($mail->expiresAt->toFormattedDateString(), $rendered);
     }
@@ -56,20 +77,37 @@ class InvitationMailRenderTest extends MembershipsTestCase
     }
 
     #[Test]
-    public function when_the_invite_email_delivery_fails_then_the_failure_is_logged_without_alerting_the_inviter(): void
+    public function when_built_then_replies_route_to_the_platform_sender(): void
     {
         // Given
-        Exceptions::fake();
         $mail = $this->anInvitationMail();
 
-        // When the queued mail exhausts its retries
-        $mail->failed(new RuntimeException('Mail server unavailable'));
+        // When
+        $envelope = $mail->envelope();
 
-        // Then the failure is reported for ops with the retry config intact — the
-        // inviter is never alerted (the pending invitation stays resendable, UC-1-021)
-        Exceptions::assertReported(RuntimeException::class);
-        $this->assertSame(3, $mail->tries);
-        $this->assertSame([1, 5, 15], $mail->backoff);
+        // Then
+        $this->assertRepliesRouteToPlatformSender($envelope);
+    }
+
+    /**
+     * The accept link points at the web app's invitation page and carries the
+     * single-use plaintext token into the rendered body.
+     */
+    protected function assertAcceptLinkRendered(InvitationMail $mail, string $rendered): void
+    {
+        $this->assertStringStartsWith(config('client.invitation_url'), $mail->acceptUrl());
+        $this->assertStringContainsString($mail->plaintextToken, $rendered);
+    }
+
+    /**
+     * A reply to the invitation reaches the platform sender: exactly one
+     * reply-to Address, and it is the configured from-address.
+     */
+    protected function assertRepliesRouteToPlatformSender(Envelope $envelope): void
+    {
+        $this->assertCount(1, $envelope->replyTo);
+        $this->assertInstanceOf(Address::class, $envelope->replyTo[0]);
+        $this->assertSame(config('mail.from.address'), $envelope->replyTo[0]->address);
     }
 
     private function anInvitationMail(): InvitationMail

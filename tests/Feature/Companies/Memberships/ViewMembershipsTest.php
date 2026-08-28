@@ -518,10 +518,12 @@ class ViewMembershipsTest extends MembershipsTestCase
     #[Test]
     public function when_searched_by_invitee_email_then_invited_row_listed(): void
     {
-        // Given a member whose identity never matches the term + a pending invitation
+        // Given a member whose identity never matches the term + two pending
+        // invitations, only one of which carries the term
         [$company, $owner] = $this->aCompanyWithMember('owner');
         $owner->update(['name' => 'Bhanu Fernando', 'email' => 'bhanu@octane.lk']);
         $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
+        $this->aPendingInvitation($company, $owner, 'nimal@contoso.lk');
 
         // When the owner searches by the invitee's email fragment
         $response = $this->viewMemberships($owner, $company, ['search' => 'kasun@']);
