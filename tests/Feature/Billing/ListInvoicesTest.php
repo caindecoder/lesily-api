@@ -3,6 +3,7 @@
 namespace Tests\Feature\Billing;
 
 use Carbon\CarbonImmutable;
+use Laravel\Sanctum\Sanctum;
 use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
@@ -437,6 +438,26 @@ class ListInvoicesTest extends BillingTestCase
 
         // Then one page serves all twenty rows under the raised size
         $this->assertInvoicePage($response, 20, ['page' => 1, 'per_page' => 100, 'total' => 20, 'last_page' => 1]);
+    }
+
+    #[Test]
+    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
+    {
+        // Given twenty invoices — one through the event seam, nineteen bulk
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $this->anIssuedInvoiceFor($company, $subscription);
+        InvoiceReadModel::factory()->count(19)->forCompany($company)->create();
+        Sanctum::actingAs($owner);
+
+        // When a second page is asked for in the BODY rather than the query string
+        $response = $this->json('GET', '/api/v1/invoices', ['page' => 2], [
+            'X-Company-Context' => $company->getKey(),
+        ]);
+
+        // Then it is ignored: paging is driven only by the whitelisted, validated
+        // query DTO, so the first page comes back (api-conventions §10.1)
+        $this->assertInvoicePage($response, 15, ['page' => 1, 'per_page' => 15, 'total' => 20, 'last_page' => 2]);
     }
 
     #[Test]
