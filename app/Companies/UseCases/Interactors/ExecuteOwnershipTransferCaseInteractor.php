@@ -57,7 +57,7 @@ class ExecuteOwnershipTransferCaseInteractor
 
             $company = Company::query()->findOrFail($case->company_id);
 
-            $this->transferInteractor->execute($company, TransferCompanyOwnershipCommand::validateAndCreate([
+            $this->transferInteractor->execute($company, TransferCompanyOwnershipCommand::from([
                 'newOwnerUserId' => $case->new_owner_user_id,
                 'transferredBy' => $admin->id,
                 'source' => TransferCompanyOwnershipCommand::SOURCE_ADMIN,
@@ -87,7 +87,7 @@ class ExecuteOwnershipTransferCaseInteractor
      */
     private function transferEventIdFor(OwnershipTransferCase $case): int
     {
-        return (int) LesilyStoredEvent::query()
+        return LesilyStoredEvent::query()
             ->where('aggregate_uuid', $case->company_id)
             ->where('event_class', CompanyOwnershipTransferred::class)
             ->where('event_properties->caseId', $case->getKey())

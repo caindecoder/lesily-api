@@ -9,8 +9,8 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
  * Verify-identity payload for an ownership-transfer case (UC-1-113; slice-11R
- * spec §2/§6). Built via ::validateAndCreate only — never ::from (amendment
- * U). caseId is server-sourced from the route; no exists rule on it — the
+ * spec §2/§6). Built at the HTTP boundary via ::validateAndCreate (amendment
+ * AQ). caseId is server-sourced from the route; no exists rule on it — the
  * interactor's find owns 404. newOwnerUserId is shape-validated here; the
  * live-membership check runs inside the interactor's transaction against the
  * CASE's company. Notes are mandatory-at-write (§10b keeper) and live only on
@@ -35,7 +35,7 @@ class VerifyOwnershipTransferCaseCommand extends Data
     public static function rules(ValidationContext $context): array
     {
         return [
-            'caseId' => ['required', 'uuid'],
+            'caseId' => ['uuid'],
             'newOwnerUserId' => ['required', 'uuid'],
             'notes' => ['required', 'string', 'max:1000'],
             'artefacts' => ['required', 'array', 'list', 'min:1', 'max:20'],

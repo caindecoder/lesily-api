@@ -3,14 +3,15 @@
 namespace App\Consent\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
-use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
  * One consent recording — the user, the company scope, the policy versions being
  * agreed to, and the client IP captured atomically with the record (UC-1-069).
  *
  * A Spatie\LaravelData command (aggregate-takes-Command standing convention,
- * locked company-onboarding #02) — constructed via ::validateAndCreate().
+ * locked company-onboarding #02), built via ::from() by RegisterOwnerInteractor
+ * from server-minted ids, config-sourced policy versions and the resolved
+ * client IP — the interactor guards the IP before opening the transaction.
  */
 class RecordConsentCommand extends Data
 {
@@ -22,18 +23,4 @@ class RecordConsentCommand extends Data
     public array $policyVersions;
 
     public string $ip;
-
-    /**
-     * @return array<string, array<int, string>>
-     */
-    public static function rules(ValidationContext $context): array
-    {
-        return [
-            'userId' => ['uuid'],
-            'companyId' => ['uuid'],
-            'policyVersions' => ['required', 'array'],
-            'policyVersions.*' => ['required', 'string', 'max:255'],
-            'ip' => ['required', 'string', 'max:255'],
-        ];
-    }
 }

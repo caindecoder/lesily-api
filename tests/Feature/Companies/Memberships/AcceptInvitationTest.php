@@ -150,7 +150,7 @@ class AcceptInvitationTest extends MembershipsTestCase
      * @param  array<string, string>  $body
      */
     #[Test, DataProvider('invalidNewUserDetailsProvider')]
-    public function when_a_new_users_registration_details_are_invalid_then_no_account_is_created(array $body, string $field): void
+    public function when_a_new_users_registration_details_are_invalid_then_no_account_is_created(array $body, string $field, string $message): void
     {
         // Given — a pending invitation for a brand-new email
         [$company, $actor] = $this->aCompanyWithMember();
@@ -160,23 +160,23 @@ class AcceptInvitationTest extends MembershipsTestCase
         $response = $this->acceptInvitation($token, $body);
 
         // Then — shape-rejected on the offending field; nothing was created
-        $this->assertValidationRejected($response, $field);
+        $this->assertValidationRejected($response, $field, $message);
         $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
         $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
     }
 
     /**
-     * @return array<string, array{0: array<string, string>, 1: string}>
+     * @return array<string, array{0: array<string, string>, 1: string, 2: string}>
      */
     public static function invalidNewUserDetailsProvider(): array
     {
         return [
-            'password missing' => [['name' => 'Nimal Perera'], 'password'],
-            'password empty' => [['name' => 'Nimal Perera', 'password' => ''], 'password'],
-            'password below the 8-char minimum' => [['name' => 'Nimal Perera', 'password' => 'Short7!'], 'password'],
-            'name missing' => [['password' => 'Str0ng-Pass!'], 'name'],
-            'name whitespace only' => [['name' => '   ', 'password' => 'Str0ng-Pass!'], 'name'],
-            'name beyond the 255-char column' => [['name' => str_repeat('a', 256), 'password' => 'Str0ng-Pass!'], 'name'],
+            'password missing' => [['name' => 'Nimal Perera'], 'password', 'A password is required to create your account.'],
+            'password empty' => [['name' => 'Nimal Perera', 'password' => ''], 'password', 'A password is required to create your account.'],
+            'password below the 8-char minimum' => [['name' => 'Nimal Perera', 'password' => 'Short7!'], 'password', 'The password field must be at least 8 characters.'],
+            'name missing' => [['password' => 'Str0ng-Pass!'], 'name', 'Your name is required to create your account.'],
+            'name whitespace only' => [['name' => '   ', 'password' => 'Str0ng-Pass!'], 'name', 'Your name is required to create your account.'],
+            'name beyond the 255-char column' => [['name' => str_repeat('a', 256), 'password' => 'Str0ng-Pass!'], 'name', 'The name field must not be greater than 255 characters.'],
         ];
     }
 
@@ -208,7 +208,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         $membershipId = $this->aRemovedMembership($company, $removed);
         $plaintext = Str::random(40);
         UserMembership::retrieve((string) Str::uuid7())
-            ->invite(CreateInvitationCommand::validateAndCreate([
+            ->invite(CreateInvitationCommand::from([
                 'companyId' => $company->getKey(),
                 'email' => 'ruwan@member.lk',
                 'roleId' => $this->seededRole('employee')->getKey(),
@@ -428,6 +428,23 @@ class AcceptInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_an_existing_user_accepts_with_blank_optional_fields_then_their_membership_activates(): void
+    {
+        // Given — an account already on the platform, invited to a company it
+        // doesn't belong to, whose client sends the new-user fields blank
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+
+        // When — they accept while authenticated, with a blank name and password
+        $response = $this->acceptInvitation($token, ['name' => '', 'password' => ''], $invitee);
+
+        // Then — the blanks are optional on this branch: the membership activates and is returned
+        $this->assertMembershipReturned($response, $invitee, 'employee');
+        $this->assertMembershipActivated($company, 'anushka@member.lk');
+    }
+
+    #[Test]
     public function when_an_authenticated_existing_user_accepts_then_they_join_the_new_company(): void
     {
         // Given — an account already on the platform, invited to a company it
@@ -534,7 +551,7 @@ class AcceptInvitationTest extends MembershipsTestCase
             ->getKey();
         $plaintext = Str::random(40);
         UserMembership::retrieve((string) Str::uuid7())
-            ->invite(CreateInvitationCommand::validateAndCreate([
+            ->invite(CreateInvitationCommand::from([
                 'companyId' => $company->getKey(),
                 'email' => 'ruwan@member.lk',
                 'roleId' => $this->seededRole('employee')->getKey(),

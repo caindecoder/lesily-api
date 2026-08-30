@@ -93,7 +93,7 @@ class RevokeInvitationTest extends MembershipsTestCase
         $response = $this->revokeInvitationWithReason($admin, $company, $invitation->getKey());
 
         // Then
-        $this->assertValidationRejected($response, 'reason');
+        $this->assertValidationRejected($response, 'reason', 'The reason field must not be greater than 255 characters.');
         $this->assertInvitationNotRevoked($company, 'invitee@contoso.lk');
     }
 

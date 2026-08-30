@@ -53,6 +53,21 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_target_reference_is_missing_then_the_transfer_is_refused_as_invalid(): void
+    {
+        // Given
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+
+        // When
+        $response = $this->transferOwnership($owner, $company, []);
+
+        // Then
+        $this->assertValidationRejected($response, 'newOwnerUserId', 'The new owner user id field is required.');
+        $this->assertNothingTransferred($company, $owner);
+    }
+
+    #[Test]
     public function when_the_target_reference_is_malformed_then_the_transfer_is_refused_as_invalid(): void
     {
         // Given
@@ -62,9 +77,9 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         // When
         $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => 'not-a-uuid']);
 
-        // Then — the command boundary enforces its rules() (amendment U: a
-        // ::from swap leaves them dead; this row REDs on that swap)
-        $this->assertValidationRejected($response, 'newOwnerUserId');
+        // Then — the HTTP command boundary enforces its rules() (amendment AQ:
+        // a ::from swap at the controller leaves them dead; this row REDs on it)
+        $this->assertValidationRejected($response, 'newOwnerUserId', 'The new owner user id field must be a valid UUID.');
         $this->assertNothingTransferred($company, $owner);
     }
 

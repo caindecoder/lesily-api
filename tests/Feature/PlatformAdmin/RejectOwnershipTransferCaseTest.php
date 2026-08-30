@@ -68,8 +68,20 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     #[Test]
+    public function when_the_case_id_is_not_a_uuid_then_the_rejection_is_refused_as_invalid(): void
+    {
+        // Given an allowlisted admin and a case reference that is not a UUID
+        // When they reject it
+        $response = $this->rejectCase($this->admin, 'not-a-uuid');
+
+        // Then the reference is refused as invalid and nothing is audited
+        $this->assertValidationRejected($response, 'caseId', 'The case id field must be a valid UUID.');
+        $this->assertNoAuditRecorded();
+    }
+
+    #[Test]
     #[DataProvider('invalidRejectionProvider')]
-    public function when_the_rejection_reason_or_code_is_invalid_then_the_rejection_is_refused(array $payload, string $field): void
+    public function when_the_rejection_reason_or_code_is_invalid_then_the_rejection_is_refused(array $payload, string $field, string $message): void
     {
         // Given an open case an allowlisted admin could otherwise reject
         $company = Company::factory()->create();
@@ -79,22 +91,22 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response = $this->rejectCase($this->admin, $case->getKey(), $payload);
 
         // Then the rejection is refused on the offending field and nothing was written
-        $this->assertValidationFailed($response, $field);
+        $this->assertValidationRejected($response, $field, $message);
         $this->assertNothingRejected($case, $company->owner_id);
     }
 
     /**
-     * @return array<string, array{array<string, string>, string}>
+     * @return array<string, array{array<string, string>, string, string}>
      */
     public static function invalidRejectionProvider(): array
     {
         return [
-            'missing reason' => [['reasonCode' => 'identity_failed'], 'reason'],
-            'empty reason' => [['reason' => '', 'reasonCode' => 'identity_failed'], 'reason'],
-            'whitespace-only reason' => [['reason' => '   ', 'reasonCode' => 'identity_failed'], 'reason'],
-            'overlong reason' => [['reason' => str_repeat('a', 1001), 'reasonCode' => 'identity_failed'], 'reason'],
-            'missing reason code' => [['reason' => 'Requester could not evidence the claimed relationship'], 'reasonCode'],
-            'unknown reason code' => [['reason' => 'Requester could not evidence the claimed relationship', 'reasonCode' => 'because'], 'reasonCode'],
+            'missing reason' => [['reasonCode' => 'identity_failed'], 'reason', 'The reason field is required.'],
+            'empty reason' => [['reason' => '', 'reasonCode' => 'identity_failed'], 'reason', 'The reason field is required.'],
+            'whitespace-only reason' => [['reason' => '   ', 'reasonCode' => 'identity_failed'], 'reason', 'The reason field is required.'],
+            'overlong reason' => [['reason' => str_repeat('a', 1001), 'reasonCode' => 'identity_failed'], 'reason', 'The reason field must not be greater than 1000 characters.'],
+            'missing reason code' => [['reason' => 'Requester could not evidence the claimed relationship'], 'reasonCode', 'The reason code field is required.'],
+            'unknown reason code' => [['reason' => 'Requester could not evidence the claimed relationship', 'reasonCode' => 'because'], 'reasonCode', 'The selected reason code is invalid.'],
         ];
     }
 

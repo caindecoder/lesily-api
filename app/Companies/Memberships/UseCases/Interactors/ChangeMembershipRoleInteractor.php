@@ -57,9 +57,11 @@ class ChangeMembershipRoleInteractor
             }
 
             $toRole = Role::query()->where('code', $command->roleCode)->sole();
+            /** @var string $toRoleId roles are UUID-keyed (HasUuids) */
+            $toRoleId = $toRole->getKey();
 
             UserMembership::retrieve($membership->getKey())
-                ->changeRole($command, (string) $membership->role_id, (string) $toRole->getKey())
+                ->changeRole($command, $membership->role_id, $toRoleId)
                 ->persist();
 
             return $membership;

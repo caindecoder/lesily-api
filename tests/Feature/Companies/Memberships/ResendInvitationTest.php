@@ -186,10 +186,13 @@ class ResendInvitationTest extends MembershipsTestCase
     #[DataProvider('provideAllowedResendRoles')]
     public function when_pending_invitation_resent_then_token_rotated_and_mail_requeued(string $roleCode): void
     {
-        // Given
+        // Given a pending invitation whose 7-day window started two days ago —
+        // the clock must move, or the rotation reissues the same expiry to the
+        // second and nothing can observe that it happened
         [$company, $actor] = $this->aCompanyWithMember($roleCode);
         $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
         $before = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->travel(2)->days();
 
         // When
         $response = $this->resendInvitation($actor, $company, $before->getKey());
@@ -295,12 +298,15 @@ class ResendInvitationTest extends MembershipsTestCase
     /**
      * The resend returned the invitation resource: 200 carrying the SAME
      * invitation UUID as the row id — the rotation happens in place, never
-     * via a new invitation.
+     * via a new invitation — and the expiry it echoes is the rotated one.
      */
     protected function assertInvitationResourceReturned(TestResponse $response, string $invitationId): void
     {
+        $rotated = Invitation::query()->whereKey($invitationId)->sole();
+
         $response->assertOk();
         $response->assertJsonPath('data.id', $invitationId);
+        $response->assertJsonPath('data.expires_at', $rotated->expires_at->toJSON());
     }
 
     /**
@@ -341,6 +347,7 @@ class ResendInvitationTest extends MembershipsTestCase
         $plaintexts = [];
         Mail::assertQueued(InvitationMail::class, function (InvitationMail $mail) use ($email, &$plaintexts): bool {
             $this->assertTrue($mail->hasTo($email));
+            $this->assertMatchesRegularExpression('/token=[A-Za-z0-9]{40}/', $mail->acceptUrl());
             $plaintexts[] = $mail->plaintextToken;
 
             return true;

@@ -72,6 +72,18 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     #[Test]
+    public function when_the_case_id_is_not_a_uuid_then_execution_is_refused_as_invalid(): void
+    {
+        // Given an allowlisted admin and a case reference that is not a UUID
+        // When they execute it
+        $response = $this->executeCase($this->admin, 'not-a-uuid');
+
+        // Then the reference is refused as invalid and nothing is audited
+        $this->assertValidationRejected($response, 'caseId', 'The case id field must be a valid UUID.');
+        $this->assertNoAuditRecorded();
+    }
+
+    #[Test]
     public function when_the_idempotency_key_is_missing_then_the_execution_is_refused(): void
     {
         // Given a verified case an allowlisted admin could otherwise execute
@@ -412,6 +424,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         $event = LesilyStoredEvent::query()
             ->where('aggregate_uuid', $case->company_id)
+            ->where('meta_data->company_id', $case->company_id)
             ->where('event_class', CompanyOwnershipTransferred::class)
             ->where('event_properties->caseId', $case->getKey())
             ->sole();

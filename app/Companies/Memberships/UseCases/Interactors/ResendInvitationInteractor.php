@@ -40,7 +40,7 @@ class ResendInvitationInteractor
         $plaintextToken = Str::random(40);
 
         UserMembership::retrieve($invitation->getKey())
-            ->resendInvitation(ResendInvitationCommand::validateAndCreate([
+            ->resendInvitation(ResendInvitationCommand::from([
                 'plaintextToken' => $plaintextToken,
                 'resentBy' => $actor->getKey(),
             ]))

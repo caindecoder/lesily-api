@@ -153,9 +153,9 @@ jobs:
         # internal-only commands carry no rules(). Report-only is a dated window with a
         # named flip point, NOT a tolerated-failure gate (Rule #13 / s144): the legacy
         # internal validateAndCreate sites (design sec 6.1.1 table B) are cleared by
-        # OQ-1-172 T4-T6 (8 at T3, 6 after T4, 5 after T5); the tolerated count is BOUNDED at the current baseline so a new
-        # violation of any check fails here even inside the window, and T7 replaces the
-        # last two lines with `exit $status`. Liveness proof: the summary line must exist
+        # OQ-1-172 T4-T6 (8 at T3, 6 after T4, 5 after T5, 0 after T6); the tolerated count
+        # is now ZERO, so any violation of any check fails here, and T7 replaces the
+        # bound with `exit $status` to catch the checks this step cannot see. Liveness proof: the summary line must exist
         # and check 1 must have inspected at least one command - a script that never ran,
         # died before its summary, or scanned nothing fails this step.
         run: |
@@ -168,8 +168,7 @@ jobs:
           violations=$(echo "$summary" | sed -E 's/^AQ placement check: ([0-9]+) violation.*/\1/')
           checked=$(echo "$summary" | sed -E 's/.*; ([0-9]+) controller-referenced.*/\1/')
           [ "$checked" -ge 1 ]
-          [ "$violations" -le 5 ]
-          [ "$status" -eq 0 ] || echo "::warning::AQ violations present ($violations of the 5 legacy internal validateAndCreate sites remain after T5, expected until OQ-1-172 T7)"
+          [ "$violations" -eq 0 ]
       - name: Mutation kill-verdict classifier self-test (OQ-1-167)
         # The kill-integrity gate's steady state is always-PASS, so a rotted
         # classifier would be invisible on every clean infection.json. This

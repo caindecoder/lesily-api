@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
+use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -79,7 +80,7 @@ class ViewMembershipsTest extends MembershipsTestCase
      */
     #[Test]
     #[DataProvider('provideInvalidQueryInputs')]
-    public function when_query_input_is_invalid_then_invalid(array $query, string $invalidField): void
+    public function when_query_input_is_invalid_then_invalid(array $query, string $invalidField, string $message): void
     {
         // Given an owner of a company
         [$company, $owner] = $this->aCompanyWithMember('owner');
@@ -89,22 +90,22 @@ class ViewMembershipsTest extends MembershipsTestCase
 
         // Then the input is refused as invalid on that field (api-conventions §10 —
         // per-endpoint filter/sort whitelist, unknown params 422)
-        $this->assertValidationRejected($response, $invalidField);
+        $this->assertValidationRejected($response, $invalidField, $message);
     }
 
     /**
-     * @return array<string, array{array<string, mixed>, string}>
+     * @return array<string, array{array<string, mixed>, string, string}>
      */
     public static function provideInvalidQueryInputs(): array
     {
         return [
-            'unknown filter key' => [['team' => 'x'], 'team'],
-            'non-whitelisted sort' => [['sort' => 'email'], 'sort'],
-            'per_page over max' => [['per_page' => 101], 'per_page'],
-            'non-numeric page' => [['page' => 'abc'], 'page'],
-            'status not whitelisted' => [['status' => 'pending'], 'status'],
-            'page below minimum' => [['page' => 0], 'page'],
-            'empty role value' => [['role' => ''], 'role'],
+            'unknown filter key' => [['team' => 'x'], 'team', 'This filter is not supported.'],
+            'non-whitelisted sort' => [['sort' => 'email'], 'sort', 'The selected sort is invalid.'],
+            'per_page over max' => [['per_page' => 101], 'per_page', 'The per page field must not be greater than 100.'],
+            'non-numeric page' => [['page' => 'abc'], 'page', 'The page field must be an integer.'],
+            'status not whitelisted' => [['status' => 'pending'], 'status', 'The selected status is invalid.'],
+            'page below minimum' => [['page' => 0], 'page', 'The page field must be at least 1.'],
+            'empty role value' => [['role' => ''], 'role', 'The role field must have a value.'],
         ];
     }
 
@@ -378,6 +379,29 @@ class ViewMembershipsTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
+    {
+        // Given a three-member roster paged two at a time (name order: Anna, Bhanu | Chamil)
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Bhanu Fernando']);
+        $anna = User::factory()->named('Anna Perera')->create();
+        $chamil = User::factory()->named('Chamil Silva')->create();
+        $this->attachMember($company, $anna, $this->seededRole('employee'));
+        $this->attachMember($company, $chamil, $this->seededRole('employee'));
+        Sanctum::actingAs($owner);
+
+        // When a second page is asked for in the BODY rather than the query string
+        $response = $this->json('GET', '/api/v1/memberships?per_page=2', ['page' => 2], [
+            'X-Company-Context' => $company->getKey(),
+        ]);
+
+        // Then it is ignored: paging is driven only by the whitelisted, validated
+        // query DTO, so the first page comes back (api-conventions §10.1)
+        $this->assertRosterOrder($response, ['Anna Perera', 'Bhanu Fernando']);
+        $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 2, 'total' => 3, 'last_page' => 2]);
+    }
+
+    #[Test]
     public function when_results_exceed_per_page_then_page_two_returns_remainder(): void
     {
         // Given a three-member roster paged two at a time (name order: Anna, Bhanu | Chamil)
@@ -518,10 +542,12 @@ class ViewMembershipsTest extends MembershipsTestCase
     #[Test]
     public function when_searched_by_invitee_email_then_invited_row_listed(): void
     {
-        // Given a member whose identity never matches the term + a pending invitation
+        // Given a member whose identity never matches the term + two pending
+        // invitations, only one of which carries the term
         [$company, $owner] = $this->aCompanyWithMember('owner');
         $owner->update(['name' => 'Bhanu Fernando', 'email' => 'bhanu@octane.lk']);
         $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
+        $this->aPendingInvitation($company, $owner, 'nimal@contoso.lk');
 
         // When the owner searches by the invitee's email fragment
         $response = $this->viewMemberships($owner, $company, ['search' => 'kasun@']);

@@ -8,8 +8,9 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
 /**
  * Revocation payload for the UserMembership aggregate (R-C s111). The reason is
  * the only client-supplied value — an optional {reason} body (R-A) bounded at
- * the boundary so an overlong string 422s instead of overflowing the column
- * in-transaction (amendment U — ::validateAndCreate, never ::from).
+ * the HTTP boundary so an overlong string 422s instead of overflowing the
+ * column in-transaction (amendment AQ); revokedBy is server-sourced from the
+ * actor and carries no rule.
  */
 class RevokeInvitationCommand extends Data
 {
@@ -25,7 +26,6 @@ class RevokeInvitationCommand extends Data
         // No id field: the aggregate is retrieved BY the invitation UUID and
         // stamps membershipId from $this->uuid() — ResendInvitationCommand parity.
         return [
-            'revokedBy' => ['required', 'uuid'],
             'reason' => ['nullable', 'string', 'max:255'],
         ];
     }

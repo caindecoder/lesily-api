@@ -93,7 +93,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
 
     #[Test]
     #[DataProvider('provideNonAssignableRoleCodes')]
-    public function when_role_code_is_not_assignable_then_change_is_rejected(?string $roleCode): void
+    public function when_role_code_is_not_assignable_then_change_is_rejected(?string $roleCode, string $message): void
     {
         // Given
         [$company, $admin] = $this->aCompanyWithMember();
@@ -104,7 +104,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $response = $this->changeRole($admin, $company, $membershipId);
 
         // Then
-        $this->assertValidationRejected($response, 'roleCode');
+        $this->assertValidationRejected($response, 'roleCode', $message);
         $this->assertMembershipRoleUnchanged($membershipId, $this->seededRole('employee'));
     }
 
@@ -115,16 +115,16 @@ class ChangeMemberRoleTest extends MembershipsTestCase
      * a missing field fails required. The chunk-1 Enterprise custom-role gate is a
      * declared deferral (R-F s112) — this whitelist IS today's buildable edge.
      *
-     * @return array<string, array{0: ?string}>
+     * @return array<string, array{0: ?string, 1: string}>
      */
     public static function provideNonAssignableRoleCodes(): array
     {
         return [
-            'owner' => ['owner'],
-            'platform super admin' => ['platform_super_admin'],
-            'manager' => ['manager'],
-            'unknown code' => ['ninja'],
-            'missing' => [null],
+            'owner' => ['owner', 'The selected role code is invalid.'],
+            'platform super admin' => ['platform_super_admin', 'The selected role code is invalid.'],
+            'manager' => ['manager', 'The selected role code is invalid.'],
+            'unknown code' => ['ninja', 'The selected role code is invalid.'],
+            'missing' => [null, 'The role code field is required.'],
         ];
     }
 
@@ -231,6 +231,50 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_role_change_loses_contention_then_the_cause_and_family_message_survive(): void
+    {
+        // Given — a member to re-role and a lock-wait death inside the
+        // locked transaction
+        Exceptions::fake();
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $this->induceProjectorFailureFor(UserMembershipRoleChanged::class, $this->syntheticQueryException(
+            ['sqlstate' => 'HY000', 'code' => 1205, 'message' => 'SQLSTATE[HY000]: General error: 1205'],
+        ));
+
+        // When — the admin changes the member's role
+        $response = $this->changeRole($admin, $company, $membershipId);
+
+        // Then — the conflict speaks with the MEMBERSHIP family's voice and
+        // the driver cause rides the reported exception into the log chain
+        $this->assertRefusedWith($response, ApiErrorCode::StateGuardViolation);
+        $response->assertJsonPath('message', 'The change lost to a concurrent membership update. Please retry.');
+        Exceptions::assertReported(
+            fn (MembershipContentionException $e): bool => $e->getPrevious() instanceof QueryException
+        );
+    }
+
+    /**
+     * @param  array{sqlstate: string, code: int, message: string}  $failure
+     */
+    #[Test]
+    #[DataProvider('contentionProvider')]
+    public function when_the_role_change_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
+    {
+        // Given — a member to re-role and a write inside the locked
+        // transaction that dies the way the driver reports it
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $this->induceProjectorFailureFor(UserMembershipRoleChanged::class, $this->syntheticQueryException($failure));
+
+        // When — the admin changes the member's role
+        $response = $this->changeRole($admin, $company, $membershipId);
+
+        // Then — contention answers as a conflict; anything else passes through
+        $this->assertRefusedWith($response, $expected);
+    }
+
+    #[Test]
     public function when_new_role_equals_current_role_then_change_succeeds(): void
     {
         // Given
@@ -318,50 +362,6 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $this->assertRoleChangeEnvelope($response, $this->seededRole('hr_officer'), $membershipIdA);
         $this->assertMembershipRoleChanged($membershipIdA, $adminA, $this->seededRole('hr_officer'));
         $this->assertMembershipRoleUnchanged($membershipIdB, $this->seededRole('admin'));
-    }
-
-    #[Test]
-    public function when_the_role_change_loses_contention_then_the_cause_and_family_message_survive(): void
-    {
-        // Given — a member to re-role and a lock-wait death inside the
-        // locked transaction
-        Exceptions::fake();
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
-        $this->induceProjectorFailureFor(UserMembershipRoleChanged::class, $this->syntheticQueryException(
-            ['sqlstate' => 'HY000', 'code' => 1205, 'message' => 'SQLSTATE[HY000]: General error: 1205'],
-        ));
-
-        // When — the admin changes the member's role
-        $response = $this->changeRole($admin, $company, $membershipId);
-
-        // Then — the conflict speaks with the MEMBERSHIP family's voice and
-        // the driver cause rides the reported exception into the log chain
-        $this->assertRefusedWith($response, ApiErrorCode::StateGuardViolation);
-        $response->assertJsonPath('message', 'The change lost to a concurrent membership update. Please retry.');
-        Exceptions::assertReported(
-            fn (MembershipContentionException $e): bool => $e->getPrevious() instanceof QueryException
-        );
-    }
-
-    /**
-     * @param  array{sqlstate: string, code: int, message: string}  $failure
-     */
-    #[Test]
-    #[DataProvider('contentionProvider')]
-    public function when_the_role_change_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
-    {
-        // Given — a member to re-role and a write inside the locked
-        // transaction that dies the way the driver reports it
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
-        $this->induceProjectorFailureFor(UserMembershipRoleChanged::class, $this->syntheticQueryException($failure));
-
-        // When — the admin changes the member's role
-        $response = $this->changeRole($admin, $company, $membershipId);
-
-        // Then — contention answers as a conflict; anything else passes through
-        $this->assertRefusedWith($response, $expected);
     }
 
     #[Test]

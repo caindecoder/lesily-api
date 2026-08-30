@@ -49,7 +49,7 @@ class UpdateCompanyTest extends CompaniesTestCase
     // write. Any key outside the editable set — including an unknown one — is a 422.
     #[Test]
     #[DataProvider('provideImmutableFields')]
-    public function when_immutable_field_submitted_then_update_rejected(array $payload, string $field): void
+    public function when_immutable_field_submitted_then_update_rejected(array $payload, string $field, string $message): void
     {
         // Given the owner of a company
         $company = Company::factory()->withSettings()->create();
@@ -59,21 +59,21 @@ class UpdateCompanyTest extends CompaniesTestCase
         $response = $this->updateCompanyDetails($owner, $company->getKey(), $payload);
 
         // Then the update is rejected with an error naming that field
-        $this->assertValidationFailed($response, $field);
+        $this->assertValidationRejected($response, $field, $message);
     }
 
     /**
-     * @return array<string, array{array<string, mixed>, string}>
+     * @return array<string, array{array<string, mixed>, string, string}>
      */
     public static function provideImmutableFields(): array
     {
         return [
-            'br_number' => [['br_number' => 'PV-99999999'], 'br_number'],
-            'epf_number' => [['epf_number' => 'EPF-9999999'], 'epf_number'],
-            'country' => [['country' => 'IN'], 'country'],
-            'current_billing_plan' => [['current_billing_plan' => 'pro'], 'current_billing_plan'],
-            'owner_id' => [['owner_id' => '0193abcd-0000-7000-8000-000000000000'], 'owner_id'],
-            'unknown key' => [['nonsense' => 'x'], 'nonsense'],
+            'br_number' => [['br_number' => 'PV-99999999'], 'br_number', 'This field cannot be updated.'],
+            'epf_number' => [['epf_number' => 'EPF-9999999'], 'epf_number', 'This field cannot be updated.'],
+            'country' => [['country' => 'IN'], 'country', 'This field cannot be updated.'],
+            'current_billing_plan' => [['current_billing_plan' => 'pro'], 'current_billing_plan', 'This field cannot be updated.'],
+            'owner_id' => [['owner_id' => '0193abcd-0000-7000-8000-000000000000'], 'owner_id', 'This field cannot be updated.'],
+            'unknown key' => [['nonsense' => 'x'], 'nonsense', 'This field cannot be updated.'],
         ];
     }
 
@@ -82,7 +82,7 @@ class UpdateCompanyTest extends CompaniesTestCase
     // month / working days / work hours sit within their domain bounds.
     #[Test]
     #[DataProvider('provideInvalidEditableFields')]
-    public function when_editable_field_is_invalid_then_update_rejected(array $payload, string $field): void
+    public function when_editable_field_is_invalid_then_update_rejected(array $payload, string $field, string $message): void
     {
         // Given the owner of a company
         $company = Company::factory()->withSettings()->create();
@@ -92,23 +92,23 @@ class UpdateCompanyTest extends CompaniesTestCase
         $response = $this->updateCompanyDetails($owner, $company->getKey(), $payload);
 
         // Then the update is rejected with an error naming that field
-        $this->assertValidationFailed($response, $field);
+        $this->assertValidationRejected($response, $field, $message);
     }
 
     /**
-     * @return array<string, array{array<string, mixed>, string}>
+     * @return array<string, array{array<string, mixed>, string, string}>
      */
     public static function provideInvalidEditableFields(): array
     {
         return [
-            'name too long' => [['name' => str_repeat('a', 256)], 'name'],
-            'timezone not real' => [['timezone' => 'Mars/Phobos'], 'timezone'],
-            'fiscal month below one' => [['fiscalYearStartMonth' => 0], 'fiscalYearStartMonth'],
-            'fiscal month above twelve' => [['fiscalYearStartMonth' => 13], 'fiscalYearStartMonth'],
-            'working days below one' => [['workingDaysPerWeek' => 0], 'workingDaysPerWeek'],
-            'working days above seven' => [['workingDaysPerWeek' => 8], 'workingDaysPerWeek'],
-            'work hours below zero' => [['defaultWorkHoursPerDay' => -1], 'defaultWorkHoursPerDay'],
-            'work hours above twenty four' => [['defaultWorkHoursPerDay' => 25], 'defaultWorkHoursPerDay'],
+            'name too long' => [['name' => str_repeat('a', 256)], 'name', 'The name field must not be greater than 255 characters.'],
+            'timezone not real' => [['timezone' => 'Mars/Phobos'], 'timezone', 'The timezone field must be a valid timezone.'],
+            'fiscal month below one' => [['fiscalYearStartMonth' => 0], 'fiscalYearStartMonth', 'The fiscal year start month field must be between 1 and 12.'],
+            'fiscal month above twelve' => [['fiscalYearStartMonth' => 13], 'fiscalYearStartMonth', 'The fiscal year start month field must be between 1 and 12.'],
+            'working days below one' => [['workingDaysPerWeek' => 0], 'workingDaysPerWeek', 'The working days per week field must be between 1 and 7.'],
+            'working days above seven' => [['workingDaysPerWeek' => 8], 'workingDaysPerWeek', 'The working days per week field must be between 1 and 7.'],
+            'work hours below zero' => [['defaultWorkHoursPerDay' => -1], 'defaultWorkHoursPerDay', 'The default work hours per day field must be between 0 and 24.'],
+            'work hours above twenty four' => [['defaultWorkHoursPerDay' => 25], 'defaultWorkHoursPerDay', 'The default work hours per day field must be between 0 and 24.'],
         ];
     }
 
@@ -126,7 +126,7 @@ class UpdateCompanyTest extends CompaniesTestCase
         $response = $this->updateCompanyDetails($owner, $company->getKey(), ['name' => '']);
 
         // Then the update is rejected and the company is untouched
-        $this->assertValidationFailed($response, 'name');
+        $this->assertValidationRejected($response, 'name', 'The name field is required.');
         $this->assertCompanyUnchanged($company, 'Contoso');
     }
 

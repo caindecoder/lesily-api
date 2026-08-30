@@ -56,14 +56,14 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
     #[Test]
     #[DataProvider('invalidCasePayloadProvider')]
-    public function when_the_case_payload_is_invalid_then_the_case_is_refused(array $overrides, string $field): void
+    public function when_the_case_payload_is_invalid_then_the_case_is_refused(array $overrides, string $field, string $message): void
     {
         // Given an allowlisted platform admin
         // When they submit a payload carrying this row's defect
         $response = $this->openCase($this->admin, $this->validPayload($overrides));
 
         // Then the case is refused naming the offending field and nothing is written
-        $this->assertValidationFailed($response, $field);
+        $this->assertValidationRejected($response, $field, $message);
         $this->assertNoCaseOpened();
     }
 
@@ -81,7 +81,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         ]));
 
         // Then the case is refused on the proposed owner and nothing is written
-        $this->assertValidationFailed($response, 'newOwnerUserId');
+        $this->assertValidationRejected($response, 'newOwnerUserId', 'The selected new owner user id is invalid.');
         $this->assertNoCaseOpened();
     }
 
@@ -98,7 +98,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         ]));
 
         // Then the case is refused — an active member means a live pivot
-        $this->assertValidationFailed($response, 'newOwnerUserId');
+        $this->assertValidationRejected($response, 'newOwnerUserId', 'The selected new owner user id is invalid.');
         $this->assertNoCaseOpened();
     }
 
@@ -140,6 +140,18 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     #[Test]
+    public function when_a_case_is_opened_with_a_blank_new_owner_then_it_opens_without_a_designated_successor(): void
+    {
+        // Given the incoming owner is sent as a blank value rather than omitted
+        // When the admin opens the case
+        $response = $this->openCase($this->admin, $this->validPayload(['newOwnerUserId' => '']));
+
+        // Then the case is open with no incoming owner and the audit row is present
+        $this->assertCaseOpened($response, ['new_owner_user_id' => null]);
+        $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'), $response);
+    }
+
+    #[Test]
     public function when_a_platform_admin_opens_a_case_for_a_company_then_the_case_is_on_the_record(): void
     {
         // Given company Contoso and Alex, a live member proposed as incoming owner
@@ -158,16 +170,16 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     /**
-     * @return array<string, array{array<string, mixed>, string}>
+     * @return array<string, array{array<string, mixed>, string, string}>
      */
     public static function invalidCasePayloadProvider(): array
     {
         return [
-            'null companyId' => [['companyId' => null], 'companyId'],
-            'unknown companyId' => [['companyId' => '01980000-0000-7000-8000-000000000000'], 'companyId'],
-            'empty requestedContext' => [['requestedContext' => ''], 'requestedContext'],
-            'overlong requestedContext' => [['requestedContext' => str_repeat('a', 1001)], 'requestedContext'],
-            'malformed newOwnerUserId' => [['newOwnerUserId' => 'not-a-uuid'], 'newOwnerUserId'],
+            'null companyId' => [['companyId' => null], 'companyId', 'The company id field is required.'],
+            'unknown companyId' => [['companyId' => '01980000-0000-7000-8000-000000000000'], 'companyId', 'The selected company id is invalid.'],
+            'empty requestedContext' => [['requestedContext' => ''], 'requestedContext', 'The requested context field is required.'],
+            'overlong requestedContext' => [['requestedContext' => str_repeat('a', 1001)], 'requestedContext', 'The requested context field must not be greater than 1000 characters.'],
+            'malformed newOwnerUserId' => [['newOwnerUserId' => 'not-a-uuid'], 'newOwnerUserId', 'The new owner user id field must be a valid UUID.'],
         ];
     }
 

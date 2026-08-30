@@ -26,7 +26,7 @@ trait CreatesTrialCompanies
         // role (CompanyProjector) — the catalog is part of the genesis fixture.
         $this->seedRbacCatalog();
 
-        return CreateCompanyCommand::validateAndCreate([
+        return CreateCompanyCommand::from([
             'name' => $name,
             'brNumber' => "BR-{$companyId}",
             'epfNumber' => "EPF-{$companyId}",

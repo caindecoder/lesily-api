@@ -52,6 +52,9 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             // Stable tie-breaker: equal sort keys must not shuffle rows between
             // page requests of a paginated union.
             ->orderBy('id')
+            // page defaults HERE, never by falling through to Laravel's resolver:
+            // that reads $request->input('page'), which would honour a body-supplied
+            // page and bypass the whitelisted, validated query DTO (api-conventions §10.1).
             ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
     }
 
@@ -85,7 +88,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
 
     public function findById(string $companyId, string $membershipId): ?stdClass
     {
-        return $this->activeMembers($companyId, MembershipFilters::validateAndCreate([]))
+        return $this->activeMembers($companyId, MembershipFilters::from([]))
             ->where('company_user.id', $membershipId)
             ->first();
     }
@@ -100,13 +103,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             // excluded here explicitly (UC-1-024 D5).
             ->whereNull('company_user.deleted_at')
             ->when($filters->role !== null, fn (Builder $query) => $query->where('roles.code', $filters->role))
-            ->when($filters->search !== null, function (Builder $query) use ($filters): Builder {
-                $term = $this->literalLikeTerm((string) $filters->search);
-
-                return $query->where(fn (Builder $match) => $match
-                    ->where('users.name', 'like', "%{$term}%")
-                    ->orWhere('users.email', 'like', "%{$term}%"));
-            })
+            ->tap(fn (Builder $query) => $this->applyMemberSearch($query, $filters->search))
             ->select([
                 'company_user.id as id',
                 'users.id as user_id',
@@ -133,11 +130,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             ->whereNull('invitations.revoked_at')
             ->where('invitations.expires_at', '>', now())
             ->when($filters->role !== null, fn (Builder $query) => $query->where('roles.code', $filters->role))
-            ->when($filters->search !== null, function (Builder $query) use ($filters): Builder {
-                $term = $this->literalLikeTerm((string) $filters->search);
-
-                return $query->where('invitations.email', 'like', "%{$term}%");
-            })
+            ->tap(fn (Builder $query) => $this->applyInvitationSearch($query, $filters->search))
             ->select([
                 'invitations.id as id',
                 DB::raw('null as user_id'),
@@ -150,6 +143,30 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
                 'invitations.email as sort_name',
                 'invitations.created_at as created_at',
             ]);
+    }
+
+    private function applyMemberSearch(Builder $query, ?string $search): void
+    {
+        if ($search === null) {
+            return;
+        }
+
+        $term = $this->literalLikeTerm($search);
+
+        $query->where(fn (Builder $match) => $match
+            ->where('users.name', 'like', "%{$term}%")
+            ->orWhere('users.email', 'like', "%{$term}%"));
+    }
+
+    private function applyInvitationSearch(Builder $query, ?string $search): void
+    {
+        if ($search === null) {
+            return;
+        }
+
+        $term = $this->literalLikeTerm($search);
+
+        $query->where('invitations.email', 'like', "%{$term}%");
     }
 
     /**

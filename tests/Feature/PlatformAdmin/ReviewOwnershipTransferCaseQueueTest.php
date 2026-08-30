@@ -4,6 +4,7 @@ namespace Tests\Feature\PlatformAdmin;
 
 use RuntimeException;
 use Carbon\CarbonImmutable;
+use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -49,7 +50,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
 
     #[Test]
     #[DataProvider('invalidQueryProvider')]
-    public function when_the_queue_query_is_invalid_then_the_read_is_refused(array $query, string $field): void
+    public function when_the_queue_query_is_invalid_then_the_read_is_refused(array $query, string $field, string $message): void
     {
         // Given an allowlisted platform admin and an existing case
         $this->anOpenCaseFor(Company::factory()->create());
@@ -58,7 +59,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
         $response = $this->listCases($this->admin, $query);
 
         // Then the read is refused naming the offending key and nothing is audited
-        $this->assertValidationFailed($response, $field);
+        $this->assertValidationRejected($response, $field, $message);
         $this->assertNoAuditRecorded();
     }
 
@@ -229,6 +230,23 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     }
 
     #[Test]
+    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
+    {
+        // Given sixteen cases — one more than a default page
+        OwnershipTransferCase::factory()->count(16)->forCompany(Company::factory()->create())->create();
+        Sanctum::actingAs($this->admin);
+
+        // When a second page is asked for in the BODY rather than the query string
+        $response = $this->json('GET', '/api/v1/admin/ownership-transfer-cases', ['page' => 2]);
+
+        // Then it is ignored: paging is driven only by the whitelisted, validated
+        // query DTO, so the first full page comes back (api-conventions §10.1)
+        $response->assertOk();
+        $response->assertJsonCount(15, 'data');
+        $this->assertCasePage($response, ['page' => 1, 'per_page' => 15, 'total' => 16, 'last_page' => 2]);
+    }
+
+    #[Test]
     public function when_the_queue_spans_multiple_pages_then_the_requested_page_is_returned_with_its_own_audit_row(): void
     {
         // Given sixteen cases — one more than a default page
@@ -333,19 +351,19 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     }
 
     /**
-     * @return array<string, array{array<string, mixed>, string}>
+     * @return array<string, array{array<string, mixed>, string, string}>
      */
     public static function invalidQueryProvider(): array
     {
         return [
-            'plausible but unknown status' => [['status' => 'pending'], 'status'],
-            'unknown sort key' => [['sort' => 'created_at'], 'sort'],
-            'per_page below floor' => [['per_page' => 0], 'per_page'],
-            'per_page above cap' => [['per_page' => 101], 'per_page'],
-            'page below floor' => [['page' => 0], 'page'],
-            'array-valued status' => [['status' => ['open']], 'status'],
-            'malformed company id' => [['company_id' => 'not-a-uuid'], 'company_id'],
-            'empty status value' => [['status' => ''], 'status'],
+            'plausible but unknown status' => [['status' => 'pending'], 'status', 'The selected status is invalid.'],
+            'unknown sort key' => [['sort' => 'created_at'], 'sort', 'This filter is not supported.'],
+            'per_page below floor' => [['per_page' => 0], 'per_page', 'The per page field must be at least 1.'],
+            'per_page above cap' => [['per_page' => 101], 'per_page', 'The per page field must not be greater than 100.'],
+            'page below floor' => [['page' => 0], 'page', 'The page field must be at least 1.'],
+            'array-valued status' => [['status' => ['open']], 'status', 'The status field must be a string.'],
+            'malformed company id' => [['company_id' => 'not-a-uuid'], 'company_id', 'The company id field must be a valid UUID.'],
+            'empty status value' => [['status' => ''], 'status', 'The status field must have a value.'],
         ];
     }
 

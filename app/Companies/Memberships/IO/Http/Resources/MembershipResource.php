@@ -44,8 +44,8 @@ class MembershipResource extends JsonResource
         ];
     }
 
-    private function parsedTimestamp(mixed $value): ?CarbonImmutable
+    private function parsedTimestamp(?string $value): ?CarbonImmutable
     {
-        return $value === null ? null : CarbonImmutable::parse((string) $value);
+        return $value === null ? null : CarbonImmutable::parse($value);
     }
 }

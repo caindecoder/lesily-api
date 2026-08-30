@@ -12,8 +12,8 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  * only name + the four editable settings may change. Immutable columns
  * (br_number, epf_number, country, owner_id, current_billing_plan) and any
  * unknown key are refused with a 422 (MembershipFilters guard precedent),
- * because Spatie Data would otherwise silently drop them. Built via
- * ::validateAndCreate — never ::from (amendment U).
+ * because Spatie Data would otherwise silently drop them. Built at the HTTP
+ * boundary via ::validateAndCreate (amendment AQ).
  */
 class UpdateCompanyCommand extends Data
 {

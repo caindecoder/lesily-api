@@ -33,7 +33,7 @@ class InviteUserCommand extends Data
     public static function rules(ValidationContext $context): array
     {
         return [
-            'email' => ['required', 'email'],
+            'email' => ['required', 'email', 'max:255'],
             'roleCode' => ['required', 'string', Rule::in(self::INVITABLE_ROLE_CODES)],
         ];
     }
