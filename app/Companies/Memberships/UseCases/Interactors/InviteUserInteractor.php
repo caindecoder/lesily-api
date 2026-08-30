@@ -82,12 +82,10 @@ class InviteUserInteractor
             return null;
         }
 
-        /** @var ?string $membershipId the pivot is UUID-keyed (HasUuids) */
-        $membershipId = CompanyUser::onlyTrashed()
+        // The pivot is UUID-keyed (HasUuids), so the column yields ?string.
+        return CompanyUser::onlyTrashed()
             ->where('company_id', $company->getKey())
             ->where('user_id', $userId)
             ->value('id');
-
-        return $membershipId;
     }
 }
