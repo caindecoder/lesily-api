@@ -94,13 +94,13 @@ class EnsureIdempotencyKey
             $key,
             $request->method(),
             $request->path(),
-            (string) $request->user()?->getAuthIdentifier(),
+            $request->user()?->getAuthIdentifier(),
         );
     }
 
     private function requestHash(Request $request): string
     {
-        return hash('sha256', (string) $request->getQueryString().'|'.$request->getContent());
+        return hash('sha256', $request->getQueryString().'|'.$request->getContent());
     }
 
     /**
