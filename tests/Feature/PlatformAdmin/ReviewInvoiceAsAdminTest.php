@@ -331,8 +331,8 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $response->assertOk();
         $this->assertDatabaseCount('audit_trail', 1);
         $entry = AuditEntry::query()->sole();
-        $this->assertLessThanOrEqual(255, strlen((string) $entry->user_agent));
-        $this->assertLessThanOrEqual(255, strlen((string) $entry->request_id));
+        $this->assertSame(255, strlen((string) $entry->user_agent));
+        $this->assertSame(255, strlen((string) $entry->request_id));
     }
 
     // Happy — the read is recorded: ONE append-only audit_trail row in the

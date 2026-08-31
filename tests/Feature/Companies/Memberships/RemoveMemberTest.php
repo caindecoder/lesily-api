@@ -109,6 +109,7 @@ class RemoveMemberTest extends MembershipsTestCase
         $response = $this->removeMember($admin, $company, $ownMembershipId);
 
         // Then
+        $response->assertStatus(422);
         $this->assertRefusedWith($response, ApiErrorCode::SelfRemovalBlocked);
         $response->assertJsonPath('message', 'You cannot remove yourself. Ask another Owner/Admin.');
         $this->assertMemberStillActive($ownMembershipId);
@@ -125,6 +126,7 @@ class RemoveMemberTest extends MembershipsTestCase
         $response = $this->removeMember($admin, $company, $ownerMembershipId);
 
         // Then the Owner is un-removable — ownership transfer required (R-A parity)
+        $response->assertStatus(422);
         $this->assertRefusedWith($response, ApiErrorCode::OwnerTransferRequired);
         $response->assertJsonPath('message', 'The company owner cannot be removed. Transfer ownership first.');
         $this->assertMemberStillActive($ownerMembershipId);

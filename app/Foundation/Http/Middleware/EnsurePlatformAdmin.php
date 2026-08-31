@@ -39,9 +39,12 @@ class EnsurePlatformAdmin
      */
     private function isAllowlisted(Request $request): bool
     {
-        return collect((array) config('platform.admin_user_ids', []))
-            ->map(fn ($id): string => trim((string) $id))
+        /** @var array<int, string> $adminUserIds raw env explode (config/platform.php) */
+        $adminUserIds = config('platform.admin_user_ids', []);
+
+        return collect($adminUserIds)
+            ->map(fn (string $id): string => trim($id))
             ->reject(fn (string $id): bool => $id === '')
-            ->containsStrict((string) $request->user()?->getKey());
+            ->containsStrict($request->user()?->getKey() ?? '');
     }
 }

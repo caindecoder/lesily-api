@@ -18,7 +18,7 @@ use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
  * Reserve-first (atomic put-if-absent) closes the concurrent check-then-act race:
  * - Required route, no `Idempotency-Key` header → IdempotencyKeyRequiredException (422)
  * - Store unreachable                           → IdempotencyCacheUnavailableException (503, fail closed)
- * - Reservation won (winner)                    → process, then remember the response (pending → done)
+ * - Reservation won (winner)                    → process, then remember the response snapshot
  * - Reservation lost, first still in flight     → IdempotencyKeyProcessingException (409 + Retry-After)
  * - Reservation lost, completed, same body      → replay the remembered response
  * - Reservation lost, completed, different body → IdempotencyKeyConflictException (409)
@@ -82,7 +82,7 @@ class EnsureIdempotencyKey
         }
 
         // The cache seam returns array<string, mixed>; a completed entry is
-        // `state` plus the snapshot() shape, so narrow it here for replay().
+        // the snapshot() shape, so narrow it here for replay().
         /** @var array{request_hash: string, status: int, body: string, content_type: string} $entry */
         return $this->replay($entry);
     }
@@ -94,13 +94,13 @@ class EnsureIdempotencyKey
             $key,
             $request->method(),
             $request->path(),
-            (string) $request->user()?->getAuthIdentifier(),
+            $request->user()?->getAuthIdentifier(),
         );
     }
 
     private function requestHash(Request $request): string
     {
-        return hash('sha256', (string) $request->getQueryString().'|'.$request->getContent());
+        return hash('sha256', $request->getQueryString().'|'.$request->getContent());
     }
 
     /**

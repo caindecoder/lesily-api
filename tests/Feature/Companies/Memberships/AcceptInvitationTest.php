@@ -18,7 +18,9 @@ use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use App\Companies\Memberships\Aggregates\UserMembership;
+use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
+use App\Foundation\Notifications\Entities\NotificationPreference;
 use App\Foundation\Auth\Exceptions\UserAlreadyRegisteredException;
 use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -142,6 +144,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         $response = $this->acceptInvitation($token, [], $someoneElse);
 
         // Then — only the invited email may accept (UC alt-4b); nothing joined
+        $response->assertStatus(403);
         $this->assertRefusedWith($response, ApiErrorCode::InviteEmailMismatch);
         $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
     }
@@ -442,6 +445,25 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Then — the blanks are optional on this branch: the membership activates and is returned
         $this->assertMembershipReturned($response, $invitee, 'employee');
         $this->assertMembershipActivated($company, 'anushka@member.lk');
+    }
+
+    #[Test]
+    public function when_the_invitee_has_opted_out_of_mail_then_the_team_welcome_is_not_sent(): void
+    {
+        // Given — an existing account that opted its email out of team-welcome
+        // notices (non-critical, so the opt-out binds; questionnaire S16)
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        NotificationPreference::factory()->mailDisabled($invitee, NotificationType::TeamWelcome)->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+
+        // When — they accept
+        $response = $this->acceptInvitation($token, [], $invitee);
+
+        // Then — the join succeeds; the welcome mail is suppressed while the
+        // in-app notification survives
+        $response->assertOk();
+        $this->assertTeamWelcomeSuppressed('anushka@member.lk', $company);
     }
 
     #[Test]

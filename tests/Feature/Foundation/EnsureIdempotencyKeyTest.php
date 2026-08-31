@@ -86,6 +86,52 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_the_same_key_is_reused_with_a_different_query_string_then_it_is_rejected_as_a_key_conflict(): void
+    {
+        // Given a mutation already succeeded under an Idempotency-Key with one query string
+        Event::fake();
+        $key = 'a1b2c3d4-query-conflict';
+        $this->sendRequiredMutationWithQuery($key, 'a=1')->assertCreated();
+
+        // When the same key is reused with a different query string and the same body
+        $response = $this->sendRequiredMutationWithQuery($key, 'a=2');
+
+        // Then the request is rejected and the original side-effect is not repeated
+        $this->assertRejectedAsKeyConflict($response);
+    }
+
+    #[Test]
+    public function when_the_same_key_moves_its_input_from_query_to_body_then_it_is_rejected_as_a_key_conflict(): void
+    {
+        // Given a mutation already succeeded with its input in the query string and an empty body
+        Event::fake();
+        $key = 'a1b2c3d4-alias';
+        $this->sendRawMutation($key, 'a=1', null)->assertCreated();
+
+        // When the same key is reused with the identical bytes moved into the raw body
+        $response = $this->sendRawMutation($key, '', 'a=1');
+
+        // Then the two requests are distinguished and the reuse is rejected
+        $this->assertRejectedAsKeyConflict($response);
+    }
+
+    #[Test]
+    public function when_a_concurrent_duplicate_arrives_while_the_first_is_in_flight_then_it_is_rejected_as_already_processing(): void
+    {
+        // Given a first request already holds the reservation and is still in flight
+        Event::fake();
+        $key = 'a1b2c3d4-in-flight';
+        $this->assertTrue(app(IdempotencyCache::class)->reserve($this->compositeKeyFor($key)));
+
+        // When a concurrent request reuses the same key before the first completes
+        $response = $this->sendRequiredMutation(key: $key);
+
+        // Then it is rejected as already processing, without re-running the mutation
+        $this->assertRejectedAsProcessing($response);
+        Event::assertNotDispatched('probe.idempotent.executed');
+    }
+
+    #[Test]
     public function when_an_optional_route_is_called_without_a_key_then_the_request_is_processed_without_caching(): void
     {
         // Given a route where the Idempotency-Key is optional and the client omits it
@@ -184,21 +230,6 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
     }
 
     #[Test]
-    public function when_a_concurrent_duplicate_arrives_while_the_first_is_in_flight_then_it_is_rejected_as_already_processing(): void
-    {
-        // Given a first request already holds the reservation and is still in flight
-        Event::fake();
-        $this->mockStoreReservationHeld();
-
-        // When a concurrent request reuses the same key before the first completes
-        $response = $this->sendRequiredMutation(key: 'a1b2c3d4-in-flight');
-
-        // Then it is rejected as already processing, without re-running the mutation
-        $this->assertRejectedAsProcessing($response);
-        Event::assertNotDispatched('probe.idempotent.executed');
-    }
-
-    #[Test]
     public function when_the_first_attempt_fails_then_the_reservation_is_released_so_the_key_can_be_retried(): void
     {
         // Given a mutation that fails under an Idempotency-Key
@@ -235,6 +266,23 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $headers = $key === null ? [] : ['Idempotency-Key' => $key];
 
         return $this->postJson('/api/_test/idempotent-required', $body, $headers);
+    }
+
+    protected function sendRequiredMutationWithQuery(string $key, string $query): TestResponse
+    {
+        Sanctum::actingAs($this->user);
+
+        return $this->postJson('/api/_test/idempotent-required?'.$query, [], ['Idempotency-Key' => $key]);
+    }
+
+    protected function sendRawMutation(string $key, string $query, ?string $content): TestResponse
+    {
+        Sanctum::actingAs($this->user);
+
+        $uri = '/api/_test/idempotent-required'.($query === '' ? '' : '?'.$query);
+        $server = $this->transformHeadersToServerVars(['Idempotency-Key' => $key]);
+
+        return $this->call('POST', $uri, [], [], [], $server, $content);
     }
 
     protected function sendOptionalMutation(?string $key = null): TestResponse
@@ -295,22 +343,18 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
     }
 
-    protected function mockStoreReservationHeld(): void
+    /**
+     * The composite key the middleware computes for the required probe route —
+     * reserving it through the real store is how a test occupies the
+     * in-flight slot (the winner of the reservation race).
+     */
+    protected function compositeKeyFor(string $key): string
     {
-        /** @var Repository&MockInterface $store */
-        $store = Mockery::mock(Repository::class);
-
-        // Another request won the reservation race — the atomic add fails and the
-        // entry is still PENDING (the winner has not completed yet).
-        /** @var Expectation $add */
-        $add = $store->shouldReceive('add');
-        $add->andReturnFalse();
-
-        /** @var Expectation $get */
-        $get = $store->shouldReceive('get');
-        $get->andReturn(['state' => 'pending']);
-
-        $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
+        return sprintf(
+            'idempotency:%s:POST:api/_test/idempotent-required:%s',
+            $key,
+            $this->user->getKey(),
+        );
     }
 
     protected function assertRejectedAsMissingKey(TestResponse $response): void

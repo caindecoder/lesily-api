@@ -139,6 +139,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $response = $this->changeRole($admin, $company, $ownerMembershipId);
 
         // Then
+        $response->assertStatus(422);
         $this->assertRefusedWith($response, ApiErrorCode::OwnerTransferRequired);
         $response->assertJsonPath('message', "The Owner's role can only be changed through an ownership transfer.");
         $this->assertMembershipRoleUnchanged($ownerMembershipId, $this->seededRole('owner'));
@@ -155,6 +156,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $response = $this->changeRole($admin, $company, $ownMembershipId);
 
         // Then
+        $response->assertStatus(422);
         $this->assertRefusedWith($response, ApiErrorCode::SelfRoleChangeBlocked);
         $response->assertJsonPath('message', 'You cannot change your own role. Ask another Owner/Admin.');
         $this->assertMembershipRoleUnchanged($ownMembershipId, $this->seededRole('admin'));

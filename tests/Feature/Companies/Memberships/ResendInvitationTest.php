@@ -315,6 +315,7 @@ class ResendInvitationTest extends MembershipsTestCase
      */
     protected function assertResendRefusedAsNotPending(TestResponse $response, string $oldTokenHash): void
     {
+        $response->assertStatus(422);
         $this->assertInvitationNotResent($response, ApiErrorCode::InviteNotPending, $oldTokenHash);
         $response->assertJsonPath('message', 'This invitation is no longer pending.');
     }

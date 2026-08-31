@@ -228,6 +228,7 @@ class RevokeInvitationTest extends MembershipsTestCase
      */
     protected function assertRevokeRefusedAsNotPending(TestResponse $response): void
     {
+        $response->assertStatus(422);
         $this->assertRefusedWith($response, ApiErrorCode::InviteNotPending);
         $response->assertJsonPath('message', 'This invitation is no longer pending.');
     }
