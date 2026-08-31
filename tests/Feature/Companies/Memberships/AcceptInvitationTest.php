@@ -142,6 +142,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         $response = $this->acceptInvitation($token, [], $someoneElse);
 
         // Then — only the invited email may accept (UC alt-4b); nothing joined
+        $response->assertStatus(403);
         $this->assertRefusedWith($response, ApiErrorCode::InviteEmailMismatch);
         $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
     }
