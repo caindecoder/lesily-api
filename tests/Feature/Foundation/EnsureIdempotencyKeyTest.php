@@ -116,6 +116,22 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_a_concurrent_duplicate_arrives_while_the_first_is_in_flight_then_it_is_rejected_as_already_processing(): void
+    {
+        // Given a first request already holds the reservation and is still in flight
+        Event::fake();
+        $key = 'a1b2c3d4-in-flight';
+        $this->assertTrue(app(IdempotencyCache::class)->reserve($this->compositeKeyFor($key)));
+
+        // When a concurrent request reuses the same key before the first completes
+        $response = $this->sendRequiredMutation(key: $key);
+
+        // Then it is rejected as already processing, without re-running the mutation
+        $this->assertRejectedAsProcessing($response);
+        Event::assertNotDispatched('probe.idempotent.executed');
+    }
+
+    #[Test]
     public function when_an_optional_route_is_called_without_a_key_then_the_request_is_processed_without_caching(): void
     {
         // Given a route where the Idempotency-Key is optional and the client omits it
@@ -214,22 +230,6 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
     }
 
     #[Test]
-    public function when_a_concurrent_duplicate_arrives_while_the_first_is_in_flight_then_it_is_rejected_as_already_processing(): void
-    {
-        // Given a first request already holds the reservation and is still in flight
-        Event::fake();
-        $key = 'a1b2c3d4-in-flight';
-        app(IdempotencyCache::class)->reserve($this->compositeKeyFor($key));
-
-        // When a concurrent request reuses the same key before the first completes
-        $response = $this->sendRequiredMutation(key: $key);
-
-        // Then it is rejected as already processing, without re-running the mutation
-        $this->assertRejectedAsProcessing($response);
-        Event::assertNotDispatched('probe.idempotent.executed');
-    }
-
-    #[Test]
     public function when_the_first_attempt_fails_then_the_reservation_is_released_so_the_key_can_be_retried(): void
     {
         // Given a mutation that fails under an Idempotency-Key
@@ -268,11 +268,11 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         return $this->postJson('/api/_test/idempotent-required', $body, $headers);
     }
 
-    protected function sendRequiredMutationWithQuery(string $key, string $query, array $body = []): TestResponse
+    protected function sendRequiredMutationWithQuery(string $key, string $query): TestResponse
     {
         Sanctum::actingAs($this->user);
 
-        return $this->postJson('/api/_test/idempotent-required?'.$query, $body, ['Idempotency-Key' => $key]);
+        return $this->postJson('/api/_test/idempotent-required?'.$query, [], ['Idempotency-Key' => $key]);
     }
 
     protected function sendRawMutation(string $key, string $query, ?string $content): TestResponse

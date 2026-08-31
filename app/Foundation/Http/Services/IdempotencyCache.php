@@ -15,9 +15,10 @@ use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
  * One entry per key: a short-lived `state: pending` reservation (PROCESSING for
  * concurrent duplicates) replaced by the remembered result snapshot held for the
  * 24h dedup window — only the reservation carries a `state` key. reserve() is
- * atomic put-if-absent — exactly one concurrent caller wins. The READ + reserve paths fail closed (an unreachable store throws
- * so the middleware rejects rather than risk a duplicate); complete() is
- * best-effort (the mutation already ran, so a failed write must not error).
+ * atomic put-if-absent — exactly one concurrent caller wins. The READ + reserve
+ * paths fail closed (an unreachable store throws so the middleware rejects
+ * rather than risk a duplicate); complete() is best-effort (the mutation
+ * already ran, so a failed write must not error).
  */
 class IdempotencyCache
 {

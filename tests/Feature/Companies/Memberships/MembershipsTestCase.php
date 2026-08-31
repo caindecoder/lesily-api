@@ -770,13 +770,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      */
     protected function assertTeamWelcomeQueued(string $email, Company $company): void
     {
-        $joiner = User::query()->where('email', $email)->sole();
-
-        $this->assertDatabaseHas('notifications', [
-            'notifiable_id' => $joiner->getKey(),
-            'data->notification_type' => 'team_welcome',
-            'data->company_name' => $company->name,
-        ]);
+        $this->assertTeamWelcomeRecorded($email, $company);
         // The mail leg is queued too (TeamWelcome is non-critical; the caller
         // arranges no opt-out) — pins the QueuedMailChannel wiring.
         Mail::assertQueued(SystemNotificationMail::class, fn (SystemNotificationMail $mail): bool => $mail->hasTo($email));
@@ -788,6 +782,12 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      */
     protected function assertTeamWelcomeSuppressed(string $email, Company $company): void
     {
+        $this->assertTeamWelcomeRecorded($email, $company);
+        Mail::assertNotQueued(SystemNotificationMail::class, fn (SystemNotificationMail $mail): bool => $mail->hasTo($email));
+    }
+
+    protected function assertTeamWelcomeRecorded(string $email, Company $company): void
+    {
         $joiner = User::query()->where('email', $email)->sole();
 
         $this->assertDatabaseHas('notifications', [
@@ -795,7 +795,6 @@ abstract class MembershipsTestCase extends CompaniesTestCase
             'data->notification_type' => 'team_welcome',
             'data->company_name' => $company->name,
         ]);
-        Mail::assertNotQueued(SystemNotificationMail::class, fn (SystemNotificationMail $mail): bool => $mail->hasTo($email));
     }
 
     /**

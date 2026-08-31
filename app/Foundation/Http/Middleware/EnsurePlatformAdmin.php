@@ -45,6 +45,6 @@ class EnsurePlatformAdmin
         return collect($adminUserIds)
             ->map(fn (string $id): string => trim($id))
             ->reject(fn (string $id): bool => $id === '')
-            ->containsStrict($request->user()?->getKey());
+            ->containsStrict($request->user()?->getKey() ?? '');
     }
 }

@@ -448,6 +448,25 @@ class AcceptInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_invitee_has_opted_out_of_mail_then_the_team_welcome_is_not_sent(): void
+    {
+        // Given — an existing account that opted its email out of team-welcome
+        // notices (non-critical, so the opt-out binds; questionnaire S16)
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        NotificationPreference::factory()->mailDisabled($invitee, NotificationType::TeamWelcome)->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+
+        // When — they accept
+        $response = $this->acceptInvitation($token, [], $invitee);
+
+        // Then — the join succeeds; the welcome mail is suppressed while the
+        // in-app notification survives
+        $response->assertOk();
+        $this->assertTeamWelcomeSuppressed('anushka@member.lk', $company);
+    }
+
+    #[Test]
     public function when_an_authenticated_existing_user_accepts_then_they_join_the_new_company(): void
     {
         // Given — an account already on the platform, invited to a company it
@@ -467,25 +486,6 @@ class AcceptInvitationTest extends MembershipsTestCase
         $this->assertMembershipActivated($company, 'Anushka@Member.LK');
         $this->assertSame($accountsBefore, User::query()->count());
         $this->assertTeamWelcomeQueued('anushka@member.lk', $company);
-    }
-
-    #[Test]
-    public function when_the_invitee_has_opted_out_of_mail_then_the_team_welcome_is_not_sent(): void
-    {
-        // Given — an existing account that opted its email out of team-welcome
-        // notices (non-critical, so the opt-out binds; questionnaire S16)
-        [$company, $actor] = $this->aCompanyWithMember();
-        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
-        NotificationPreference::factory()->mailDisabled($invitee, NotificationType::TeamWelcome)->create();
-        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
-
-        // When — they accept
-        $response = $this->acceptInvitation($token, [], $invitee);
-
-        // Then — the join succeeds; the welcome mail is suppressed while the
-        // in-app notification survives
-        $response->assertOk();
-        $this->assertTeamWelcomeSuppressed('anushka@member.lk', $company);
     }
 
     #[Test]

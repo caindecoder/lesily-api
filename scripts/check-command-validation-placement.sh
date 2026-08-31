@@ -9,8 +9,8 @@
 # a command whose source file is missing or ambiguous is SKIPPED loudly and counted.
 # The CI quality job runs this GATING (since OQ-1-172 T7): the legacy internal
 # validateAndCreate sites check 3 fired on (design sec 6.1.1 table B) were cleared
-# by T4-T6 (8 at T3, 6 after T4, 5 after T5, 0 after T6); any violation of any
-# check fails the step. Scope is app/ only - factories and tests are convention
+# by OQ-1-172 T4-T6; any violation of any check - and any skipped command -
+# fails the step. Scope is app/ only - factories and tests are convention
 # territory for the review, not this guard.
 # The script ALWAYS ends with the summary line "AQ placement check: ..." - CI parses it
 # as the liveness proof (s144 rule 2) and asserts that check 1 inspected something.
@@ -46,7 +46,7 @@ skip() {
 check_controller_commands_define_rules() {
   IFS=$newline
   for controller in $(find app -path '*/IO/Http/Controllers/*' -name '*Controller.php'); do
-    for cls in $(grep -oE '\b[A-Z][A-Za-z]*Command\b' "$controller" | sort -u); do
+    for cls in $(grep -oE '\b[A-Z][A-Za-z0-9_]*Command\b' "$controller" | sort -u); do
       src=$(find app -name "$cls.php")
       case "$src" in
         '') skip "no source file for $cls (referenced from $controller)"; continue ;;
