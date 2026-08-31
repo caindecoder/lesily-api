@@ -86,6 +86,36 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_the_same_key_is_reused_with_a_different_query_string_then_it_is_rejected_as_a_key_conflict(): void
+    {
+        // Given a mutation already succeeded under an Idempotency-Key with one query string
+        Event::fake();
+        $key = 'a1b2c3d4-query-conflict';
+        $this->sendRequiredMutationWithQuery($key, 'a=1')->assertCreated();
+
+        // When the same key is reused with a different query string and the same body
+        $response = $this->sendRequiredMutationWithQuery($key, 'a=2');
+
+        // Then the request is rejected and the original side-effect is not repeated
+        $this->assertRejectedAsKeyConflict($response);
+    }
+
+    #[Test]
+    public function when_the_same_key_moves_its_input_from_query_to_body_then_it_is_rejected_as_a_key_conflict(): void
+    {
+        // Given a mutation already succeeded with its input in the query string and an empty body
+        Event::fake();
+        $key = 'a1b2c3d4-alias';
+        $this->sendRawMutation($key, 'a=1', null)->assertCreated();
+
+        // When the same key is reused with the identical bytes moved into the raw body
+        $response = $this->sendRawMutation($key, '', 'a=1');
+
+        // Then the two requests are distinguished and the reuse is rejected
+        $this->assertRejectedAsKeyConflict($response);
+    }
+
+    #[Test]
     public function when_an_optional_route_is_called_without_a_key_then_the_request_is_processed_without_caching(): void
     {
         // Given a route where the Idempotency-Key is optional and the client omits it
@@ -235,6 +265,23 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $headers = $key === null ? [] : ['Idempotency-Key' => $key];
 
         return $this->postJson('/api/_test/idempotent-required', $body, $headers);
+    }
+
+    protected function sendRequiredMutationWithQuery(string $key, string $query, array $body = []): TestResponse
+    {
+        Sanctum::actingAs($this->user);
+
+        return $this->postJson('/api/_test/idempotent-required?'.$query, $body, ['Idempotency-Key' => $key]);
+    }
+
+    protected function sendRawMutation(string $key, string $query, ?string $content): TestResponse
+    {
+        Sanctum::actingAs($this->user);
+
+        $uri = '/api/_test/idempotent-required'.($query === '' ? '' : '?'.$query);
+        $server = $this->transformHeadersToServerVars(['Idempotency-Key' => $key]);
+
+        return $this->call('POST', $uri, [], [], [], $server, $content);
     }
 
     protected function sendOptionalMutation(?string $key = null): TestResponse
