@@ -218,10 +218,11 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
     {
         // Given a first request already holds the reservation and is still in flight
         Event::fake();
-        $this->mockStoreReservationHeld();
+        $key = 'a1b2c3d4-in-flight';
+        app(IdempotencyCache::class)->reserve($this->compositeKeyFor($key));
 
         // When a concurrent request reuses the same key before the first completes
-        $response = $this->sendRequiredMutation(key: 'a1b2c3d4-in-flight');
+        $response = $this->sendRequiredMutation(key: $key);
 
         // Then it is rejected as already processing, without re-running the mutation
         $this->assertRejectedAsProcessing($response);
@@ -342,22 +343,18 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
     }
 
-    protected function mockStoreReservationHeld(): void
+    /**
+     * The composite key the middleware computes for the required probe route —
+     * reserving it through the real store is how a test occupies the
+     * in-flight slot (the winner of the reservation race).
+     */
+    protected function compositeKeyFor(string $key): string
     {
-        /** @var Repository&MockInterface $store */
-        $store = Mockery::mock(Repository::class);
-
-        // Another request won the reservation race — the atomic add fails and the
-        // entry is still PENDING (the winner has not completed yet).
-        /** @var Expectation $add */
-        $add = $store->shouldReceive('add');
-        $add->andReturnFalse();
-
-        /** @var Expectation $get */
-        $get = $store->shouldReceive('get');
-        $get->andReturn(['state' => 'pending']);
-
-        $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
+        return sprintf(
+            'idempotency:%s:POST:api/_test/idempotent-required:%s',
+            $key,
+            $this->user->getKey(),
+        );
     }
 
     protected function assertRejectedAsMissingKey(TestResponse $response): void
