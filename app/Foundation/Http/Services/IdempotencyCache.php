@@ -12,10 +12,10 @@ use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
  * the application's configured cache store. Production should point that store at
  * an atomic backend (e.g. Redis) per the design (OQ-1-115).
  *
- * One entry per key carries a `state`: a short-lived `pending` reservation
- * (PROCESSING for concurrent duplicates) promoted to a `done` result held for the
- * 24h dedup window. reserve() is atomic put-if-absent — exactly one concurrent
- * caller wins. The READ + reserve paths fail closed (an unreachable store throws
+ * One entry per key: a short-lived `state: pending` reservation (PROCESSING for
+ * concurrent duplicates) replaced by the remembered result snapshot held for the
+ * 24h dedup window — only the reservation carries a `state` key. reserve() is
+ * atomic put-if-absent — exactly one concurrent caller wins. The READ + reserve paths fail closed (an unreachable store throws
  * so the middleware rejects rather than risk a duplicate); complete() is
  * best-effort (the mutation already ran, so a failed write must not error).
  */
@@ -63,8 +63,8 @@ class IdempotencyCache
     }
 
     /**
-     * Promote the winner's reservation to the remembered result (pending → done),
-     * held for the 24h dedup window. Best-effort: the mutation already succeeded,
+     * Replace the winner's reservation with the remembered result, held for the
+     * 24h dedup window. Best-effort: the mutation already succeeded,
      * so a failed cache write must not surface as an error — a later retry may
      * re-execute (no worse than having no idempotency) rather than be rejected.
      *
@@ -73,7 +73,7 @@ class IdempotencyCache
     public function complete(string $compositeKey, array $snapshot): void
     {
         try {
-            $this->store->put($compositeKey, ['state' => 'done', ...$snapshot], self::RESULT_TTL_SECONDS);
+            $this->store->put($compositeKey, $snapshot, self::RESULT_TTL_SECONDS);
         } catch (Throwable) {
             // Best effort (see the reserve() docblock).
         }
