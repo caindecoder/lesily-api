@@ -173,6 +173,29 @@ class ViewMembershipsTest extends MembershipsTestCase
         $this->assertRosterUserIds($response, [$shared->getKey()]);
     }
 
+    #[Test]
+    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
+    {
+        // Given a three-member roster paged two at a time (name order: Anna, Bhanu | Chamil)
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Bhanu Fernando']);
+        $anna = User::factory()->named('Anna Perera')->create();
+        $chamil = User::factory()->named('Chamil Silva')->create();
+        $this->attachMember($company, $anna, $this->seededRole('employee'));
+        $this->attachMember($company, $chamil, $this->seededRole('employee'));
+        Sanctum::actingAs($owner);
+
+        // When a second page is asked for in the BODY rather than the query string
+        $response = $this->json('GET', '/api/v1/memberships?per_page=2', ['page' => 2], [
+            'X-Company-Context' => $company->getKey(),
+        ]);
+
+        // Then it is ignored: paging is driven only by the whitelisted, validated
+        // query DTO, so the first page comes back (api-conventions §10.1)
+        $this->assertRosterOrder($response, ['Anna Perera', 'Bhanu Fernando']);
+        $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 2, 'total' => 3, 'last_page' => 2]);
+    }
+
     // --- Happy ---
 
     #[Test]
@@ -376,29 +399,6 @@ class ViewMembershipsTest extends MembershipsTestCase
 
         // Then the most recently joined member leads
         $this->assertRosterOrder($response, ['Chamil Silva', 'Anna Perera', 'Bhanu Fernando']);
-    }
-
-    #[Test]
-    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
-    {
-        // Given a three-member roster paged two at a time (name order: Anna, Bhanu | Chamil)
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $owner->update(['name' => 'Bhanu Fernando']);
-        $anna = User::factory()->named('Anna Perera')->create();
-        $chamil = User::factory()->named('Chamil Silva')->create();
-        $this->attachMember($company, $anna, $this->seededRole('employee'));
-        $this->attachMember($company, $chamil, $this->seededRole('employee'));
-        Sanctum::actingAs($owner);
-
-        // When a second page is asked for in the BODY rather than the query string
-        $response = $this->json('GET', '/api/v1/memberships?per_page=2', ['page' => 2], [
-            'X-Company-Context' => $company->getKey(),
-        ]);
-
-        // Then it is ignored: paging is driven only by the whitelisted, validated
-        // query DTO, so the first page comes back (api-conventions §10.1)
-        $this->assertRosterOrder($response, ['Anna Perera', 'Bhanu Fernando']);
-        $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 2, 'total' => 3, 'last_page' => 2]);
     }
 
     #[Test]

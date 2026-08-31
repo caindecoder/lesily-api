@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent as BaseEloquentStoredEvent;
 
 /**
- * @property int $id
  * @property string $event_class
  * @property string|null $company_id
  */

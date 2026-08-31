@@ -7,10 +7,10 @@
 #     ::from(); internal-only commands carry no rules())
 # Comment lines are excluded from checks 2 and 3 (the ci.yml sec-2.15 house filter);
 # a command whose source file is missing or ambiguous is SKIPPED loudly and counted.
-# The CI quality job runs this REPORT-ONLY until OQ-1-172 T7: check 3 fired on the
-# legacy internal validateAndCreate sites (design sec 6.1.1 table B - 8 at T3, 6 after
-# T4, 5 after T5, 0 after T6) that T4-T6 cleared; CI bounds the tolerated count at 0 and T7
-# flips the step to gating. Scope is app/ only - factories and tests are convention
+# The CI quality job runs this GATING (since OQ-1-172 T7): the legacy internal
+# validateAndCreate sites check 3 fired on (design sec 6.1.1 table B) were cleared
+# by T4-T6 (8 at T3, 6 after T4, 5 after T5, 0 after T6); any violation of any
+# check fails the step. Scope is app/ only - factories and tests are convention
 # territory for the review, not this guard.
 # The script ALWAYS ends with the summary line "AQ placement check: ..." - CI parses it
 # as the liveness proof (s144 rule 2) and asserts that check 1 inspected something.
