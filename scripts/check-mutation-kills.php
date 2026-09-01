@@ -11,7 +11,9 @@
  *       LARAVEL_PARALLEL_TESTING, so Laravel never switches DB and every thread
  *       migrates the same test database. Concurrent RefreshDatabase migrations
  *       collide -> the test errors during DB setup -> counted as a kill.
- *       (Fixed by --threads=1 on the mutation jobs; this gate is the backstop.)
+ *       (Fixed by --threads=1 on the per-PR diff job, and on the full run by
+ *       LARAVEL_PARALLEL_TESTING=1 per-thread token DBs — OQ-1-173; this gate
+ *       is the backstop either way.)
  *
  *   (A) Agent output rewriting: laravel/pao rewrites PHPUnit's output to JSON in
  *       coding-agent sessions (CLAUDECODE etc.). The JSON matches neither `OK (`
