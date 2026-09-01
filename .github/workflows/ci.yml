@@ -230,7 +230,7 @@ jobs:
       - name: Infection (changed lines only)
         # Native line-level diff scope (R-053 finding 3.1): --git-diff-lines mutates
         # ONLY added/modified lines — strictly narrower than the old hand-rolled file
-        # filter; the nightly full run (nightly.yml) is the latent-escape safety net
+        # filter; the full run (mutation.yml) is the latent-escape safety net
         # for everything outside the diff (/tdd-red amendment Q). --logger-github
         # annotates escaped mutants inline in the PR diff.
         # NOTE: --map-source-class-to-test deliberately NOT used — our behavior-named
@@ -245,14 +245,14 @@ jobs:
         # reports an empty mutation set as MSI 0%, tripping --min-msi vacuously).
         # The 80/85 gates still enforce whenever ≥1 mutant exists, and Infection
         # errors/aborts still fail. Deliberately CLI-only, NOT infection.json5 —
-        # the nightly full run must NEVER inherit it: 0 mutants across all of
-        # app/ is the s135 catastrophic-abort signal and must stay loud.
-        # --threads=1 (was 4): Infection's threads share one un-tokenised
-        # lesily_test (it sets TEST_TOKEN but not LARAVEL_PARALLEL_TESTING, so
-        # Laravel never switches DB), so parallel RefreshDatabase migrations
-        # collide -> SQLSTATE -> the errored test is mis-counted as a KILL,
-        # inflating MSI and masking real escapees (OQ-1-167). Single-threaded
-        # removes the race; the diff-scoped PR run is tiny (~24 mutants).
+        # the mutation.yml full run must NEVER inherit it: 0 mutants across all
+        # of app/ is the s135 catastrophic-abort signal and must stay loud.
+        # --threads=1 kept deliberately: the diff-scoped run is tiny (~24
+        # mutants), not worth the token-DB setup. Un-tokenised threads>1 would
+        # race (OQ-1-167 mechanism C: TEST_TOKEN without LARAVEL_PARALLEL_TESTING
+        # never switches DB, and colliding RefreshDatabase migrations are
+        # mis-counted as kills); the full run solves that with per-thread token
+        # DBs instead (mutation.yml, OQ-1-173).
         run: |
           CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'app/*.php')
           if [ -z "$CHANGED" ]; then
@@ -270,6 +270,9 @@ jobs:
         # "kill" carries positive evidence it was a DB-race SQLSTATE error or a
         # masked surviving mutant rather than an assertion failure. Skips cleanly
         # when Infection was skipped (no infection.json). Replaces the R-12 rule.
+        # Runs unless the job was cancelled (OQ-1-173 F8) — a red Infection step
+        # is exactly when the verdict audit matters most.
+        if: ${{ !cancelled() }}
         run: php scripts/check-mutation-kills.php infection.json
 
   sonarcloud:

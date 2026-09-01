@@ -113,7 +113,7 @@ fwrite(STDERR, 'check-mutation-kills: '.count($offenders)." kill(s) NOT caused b
 foreach ($offenders as $offender) {
     fwrite(STDERR, "  - {$offender}\n");
 }
-fwrite(STDERR, "Fix the topology (mutation jobs run --threads=1; run local Infection with PAO_DISABLE=1), then re-run. See OQ-1-167.\n");
+fwrite(STDERR, "Fix the topology (the full run needs LARAVEL_PARALLEL_TESTING=1 beside --threads>1 - a mech-C hit there means the token DBs are not engaging; the PR diff job runs --threads=1; local runs go through composer mutate:local with PAO_DISABLE=1), then re-run. See OQ-1-167 + OQ-1-173.\n");
 exit(1);
 
 /**
@@ -185,7 +185,8 @@ function runSelfTest(): int
         // [processOutput, mustFlag, label]
         ["SQLSTATE[42S01]: Base table or view already exists: 1050 Table 'roles' already exists", true, 'mech-C 42S01 already-exists'],
         ["SQLSTATE[42S02]: Base table or view not found: 1109 Unknown table 'lesily_test.cache,lesily_test.cache_locks'", true, 'mech-C multi-table cache artifact'],
-        ["SQLSTATE[42S02]: Base table or view not found: 1146 Table 'lesily_test.migrations' doesn't exist", true, 'mech-C migrations table'],
+        // Tokenised DB name (OQ-1-173): asserts the matchers stay DB-name-agnostic.
+        ["SQLSTATE[42S02]: Base table or view not found: 1146 Table 'lesily_test_test_3.migrations' doesn't exist", true, 'mech-C migrations table'],
         ['SQLSTATE[HY000]: Failed to open the referenced table \'telescope_entries\'', true, 'mech-C FK-open race'],
         ['{"tool":"phpunit","result":"passed","tests":1,"passed":1}', true, 'mech-A masked survivor (pao json)'],
         ['OK (5 tests, 12 assertions)', true, 'mech-A masked survivor (plain OK)'],
