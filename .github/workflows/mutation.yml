@@ -1,0 +1,117 @@
+name: Mutation
+
+on:
+  push:
+    branches: [main]
+    # Fail-safe filter (OQ-1-173, battery F3): fire on every merge EXCEPT
+    # markdown-only ones. The original allow-list missed verdict-moving
+    # surfaces (bootstrap/, lang/, resources/, .env.github) on its very first
+    # audit — an ignore-list never needs re-auditing when directories appear.
+    paths-ignore:
+      - '**.md'
+  schedule:
+    # Weekly backstop (Sat 20:30 UTC = 02:00 SLT Sunday): catches environment
+    # drift (runner image / PHP patch bumps) that no merge would trigger.
+    - cron: '30 20 * * 6'
+  workflow_dispatch:
+
+# Only the tip SHA matters for latent-escape detection — cancel a superseded
+# run instead of stacking multi-hour full runs (billing exposure, #120).
+concurrency:
+  group: mutation-main
+  cancel-in-progress: true
+
+jobs:
+  mutation-full:
+    runs-on: ubuntu-latest
+    # Observed --threads=1 spread: 2h41m–4h12m (API-measured over the
+    # s189–s195 runs). 300 keeps the first threaded run alive even if the
+    # speed-up underdelivers; tighten toward ~120 once threads=4 is measured.
+    timeout-minutes: 300
+    services:
+      mysql:
+        image: mysql:8.0
+        env: { MYSQL_ROOT_PASSWORD: '', MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: lesily_test }
+        ports: ['3306:3306']
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        # pcov: recommended Infection initial-coverage driver — 2-5x faster than
+        # Xdebug, no kill-verdict accuracy loss (verdicts come from test re-runs,
+        # not the driver). R-053 finding 3.4.
+        with: { php-version: '8.4', coverage: pcov }
+      - run: composer install --no-interaction --prefer-dist
+      # puppeteer block mirrors ci.yml test job (s135 5-layer onboarding): the
+      # suite includes Browsershot receipt tests (UC-1-121) — without these steps
+      # Infection's initial run fails. The old report-only `|| true` masked exactly
+      # that failure nightly since s135 while the job reported success (R-053, s144).
+      - uses: actions/setup-node@v7
+        with: { node-version: '24', cache: 'npm' }
+      - name: Cache puppeteer browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ hashFiles('package-lock.json') }}
+      - name: Install Node deps (puppeteer — Browsershot receipt rendering, UC-1-121)
+        run: npm ci
+      - name: Install puppeteer browsers (chrome + headless shell)
+        run: |
+          npx puppeteer browsers install chrome
+          npx puppeteer browsers install chrome-headless-shell
+      - run: cp .env.github .env
+      - run: php artisan key:generate
+      - run: php artisan migrate --force
+      - name: Full mutation run (gated — minMsi/minCoveredMsi from infection.json5)
+        # The full run is the latent-escape detector for diff-scoped PR runs
+        # (/tdd-red amendment Q; R-053 finding 3.2) — it MUST fail loudly, never
+        # `|| true` (Rule #13: that masked a total failure while reporting green).
+        # --threads=4 with LARAVEL_PARALLEL_TESTING=1 (OQ-1-173): Infection labels
+        # each worker with TEST_TOKEN, but Laravel switches to the per-token
+        # lesily_test_test_<N> databases only when LARAVEL_PARALLEL_TESTING is
+        # also set (ParallelTesting::inParallel). Without it every thread migrates
+        # the ONE lesily_test and the DDL races are counted as kills (OQ-1-167
+        # mechanism C) — if that topology ever silently returns, the token-DB
+        # control and kill-verdict steps below RED the run. The initial coverage
+        # run carries no TEST_TOKEN and stays on the lesily_test migrated above;
+        # tests using no DB trait also stay there (none touches the DB today).
+        # The per-PR diff-scoped job stays --threads=1 (ci.yml — tiny scope).
+        env:
+          LARAVEL_PARALLEL_TESTING: 1
+        run: vendor/bin/infection --threads=4
+      - name: Assert per-thread token DBs were used (OQ-1-173 positive control)
+        # Deterministic proof the tokenisation ENGAGED — the kill-verdict gate
+        # below catches the race symptom, which needs a collision to happen AND
+        # leave a matchable signature. A green mutation run that created no
+        # token DBs means the env flag silently failed; fail here, loudly.
+        run: |
+          n=$(mysql -h127.0.0.1 -uroot -N -e "SHOW DATABASES LIKE 'lesily_test_test_%'" | wc -l)
+          echo "token DBs created: $n"
+          [ "$n" -ge 2 ]
+      - name: Assert timeouts stayed bounded (OQ-1-173)
+        # Timed-out mutants count toward MSI as caught (Infection's Calculator),
+        # so thread contention could silently convert survivors into "kills".
+        # Baseline at --threads=1: 3 timeouts / 1,723 mutants. Bound 10 —
+        # investigate any breach, never raise the bound to quiet it.
+        if: ${{ !cancelled() }}
+        run: |
+          php -r '$s = json_decode((string) file_get_contents("infection.json"), true)["stats"] ?? null; if ($s === null) { echo "no readable report - skipping\n"; exit(0); } $t = $s["timeOutCount"] ?? 0; echo "timeOutCount: {$t} (bound 10)\n"; exit($t > 10 ? 1 : 0);'
+      - name: Assert every mutation kill was earned by an assertion (OQ-1-167)
+        # Backstop for the kill-verdict topology above: fail if any recorded
+        # "kill" carries positive evidence it was a DB-race SQLSTATE error or a
+        # masked surviving mutant rather than an assertion failure. Replaces the
+        # R-12 interim rule (classify kill mechanisms by hand). Runs unless the
+        # job was cancelled — a failing run is exactly when the verdict audit
+        # matters most. The script exits 0 on a MISSING report; a truncated one
+        # fails loudly (desired: that run's verdicts are unreadable).
+        if: ${{ !cancelled() }}
+        run: php scripts/check-mutation-kills.php infection.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: infection-report
+          path: |
+            infection.html
+            infection.json
+            infection.log
+            infection-summary.log

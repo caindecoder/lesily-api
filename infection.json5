@@ -145,8 +145,8 @@
         // are individual; a "::<line>" suffix pins ONE construct wherever the method also
         // carries real, killable mutants of the same mutator (a method-level entry would
         // silence 7 rows owned by T4-T6 plus 18 mutants the suite kills today). If a
-        // pinned method moves, the entry goes inert and the row re-escapes: the nightly
-        // ladder check detects that. It does NOT detect over-reach - a method-level entry
+        // pinned method moves, the entry goes inert and the row re-escapes: the
+        // full-run ladder check detects that. It does NOT detect over-reach - a method-level entry
         // also silences mutants added to that method LATER - so a method-level entry is
         // re-read whenever its method changes (same caveat as the entries above).
         //
