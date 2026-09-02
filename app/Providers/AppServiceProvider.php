@@ -34,10 +34,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Eloquent strict mode outside production is the N+1 net: a lazy
-        // relation read on a multi-row result throws, and so do a mass-assigned
-        // key outside $fillable and a read of an unloaded attribute; production
-        // observes via Telescope instead (conv-plan §2.19 R1/R6; OQ-1-178).
+        // Eloquent strict mode outside production is the N+1 net: lazy loads on
+        // multi-row results, discarded keys and unloaded-attribute reads all
+        // throw; production observes via Telescope (conv-plan §2.19 R1/R6).
         Model::shouldBeStrict(! $this->app->isProduction());
 
         // The company AuthorizeCompany resolved and validated for this request —

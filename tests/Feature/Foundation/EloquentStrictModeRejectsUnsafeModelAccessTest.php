@@ -87,13 +87,13 @@ class EloquentStrictModeRejectsUnsafeModelAccessTest extends FoundationTestCase
         (new AppServiceProvider($this->app))->boot();
 
         // Then none of the three guards is armed
-        $this->assertGuardsArmed(false);
+        $this->assertNoGuardIsArmed();
     }
 
-    protected function assertGuardsArmed(bool $armed): void
+    protected function assertNoGuardIsArmed(): void
     {
-        $this->assertSame($armed, Model::preventsLazyLoading());
-        $this->assertSame($armed, Model::preventsSilentlyDiscardingAttributes());
-        $this->assertSame($armed, Model::preventsAccessingMissingAttributes());
+        $this->assertFalse(Model::preventsLazyLoading());
+        $this->assertFalse(Model::preventsSilentlyDiscardingAttributes());
+        $this->assertFalse(Model::preventsAccessingMissingAttributes());
     }
 }
