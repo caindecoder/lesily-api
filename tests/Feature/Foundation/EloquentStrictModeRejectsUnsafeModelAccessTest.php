@@ -31,6 +31,7 @@ class EloquentStrictModeRejectsUnsafeModelAccessTest extends FoundationTestCase
         // When a relation is read lazily on one of them
         // Then the strict guard rejects the lazy load
         $this->expectException(LazyLoadingViolationException::class);
+        $this->expectExceptionMessage('[addons]');
 
         $addons = $companies->firstOrFail()->addons;
     }
@@ -45,6 +46,7 @@ class EloquentStrictModeRejectsUnsafeModelAccessTest extends FoundationTestCase
         // When the company is mass-assigned
         // Then the strict guard rejects the silent discard
         $this->expectException(MassAssignmentException::class);
+        $this->expectExceptionMessage('[not_a_column]');
 
         Company::query()->create($attributes);
     }
@@ -59,6 +61,7 @@ class EloquentStrictModeRejectsUnsafeModelAccessTest extends FoundationTestCase
         // When an unselected column is read
         // Then the strict guard rejects the missing attribute
         $this->expectException(MissingAttributeException::class);
+        $this->expectExceptionMessage('[name]');
 
         $name = $company->name;
     }
