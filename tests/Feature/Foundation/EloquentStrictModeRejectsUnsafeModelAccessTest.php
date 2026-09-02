@@ -3,8 +3,10 @@
 namespace Tests\Feature\Foundation;
 
 use App\Companies\Entities\Company;
+use App\Providers\AppServiceProvider;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\Addon;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Database\LazyLoadingViolationException;
 use Illuminate\Database\Eloquent\MassAssignmentException;
@@ -72,5 +74,32 @@ class EloquentStrictModeRejectsUnsafeModelAccessTest extends FoundationTestCase
 
         // Then the framework's single-model exemption lets the read through
         $this->assertCount(1, $addons);
+    }
+
+    #[Test]
+    public function when_the_environment_is_production_then_no_guard_is_armed(): void
+    {
+        // Given the application believes it is running in production
+        $this->app->detectEnvironment(fn (): string => 'production');
+
+        // When the provider boots
+        (new AppServiceProvider($this->app))->boot();
+
+        // Then none of the three guards is armed
+        $this->assertGuardsArmed(false);
+    }
+
+    protected function tearDown(): void
+    {
+        Model::shouldBeStrict();
+
+        parent::tearDown();
+    }
+
+    protected function assertGuardsArmed(bool $armed): void
+    {
+        $this->assertSame($armed, Model::preventsLazyLoading());
+        $this->assertSame($armed, Model::preventsSilentlyDiscardingAttributes());
+        $this->assertSame($armed, Model::preventsAccessingMissingAttributes());
     }
 }
