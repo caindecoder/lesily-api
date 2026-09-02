@@ -39,6 +39,7 @@ class EloquentStrictModeRejectsUnsafeModelAccessTest extends FoundationTestCase
     public function when_a_key_outside_fillable_is_mass_assigned_then_it_is_rejected(): void
     {
         // Given the company attributes plus one key the model does not fill
+        /** @var array<string, mixed> $attributes */
         $attributes = Company::factory()->raw() + ['not_a_column' => 'discarded'];
 
         // When the company is mass-assigned
@@ -67,7 +68,7 @@ class EloquentStrictModeRejectsUnsafeModelAccessTest extends FoundationTestCase
     {
         // Given one company holding an add-on, fetched on its own
         $created = Company::factory()->withAddon(Addon::TemplateEngine)->create();
-        $company = Company::query()->findOrFail($created->getKey());
+        $company = Company::query()->whereKey($created->getKey())->firstOrFail();
 
         // When the add-ons relation is read lazily on that single model
         $addons = $company->addons;
