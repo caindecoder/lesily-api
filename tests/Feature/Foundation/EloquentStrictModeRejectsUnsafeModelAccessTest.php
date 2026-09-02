@@ -89,13 +89,6 @@ class EloquentStrictModeRejectsUnsafeModelAccessTest extends FoundationTestCase
         $this->assertGuardsArmed(false);
     }
 
-    protected function tearDown(): void
-    {
-        Model::shouldBeStrict();
-
-        parent::tearDown();
-    }
-
     protected function assertGuardsArmed(bool $armed): void
     {
         $this->assertSame($armed, Model::preventsLazyLoading());
