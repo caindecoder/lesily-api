@@ -7,6 +7,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Database\LazyLoadingViolationException;
 use Illuminate\Database\Eloquent\MassAssignmentException;
+use Illuminate\Database\Eloquent\MissingAttributeException;
 
 /**
  * @testclass-carveout: infra-primitive — the Eloquent strict-mode contract
@@ -42,5 +43,19 @@ class EloquentStrictModeRejectsUnsafeModelAccessTest extends FoundationTestCase
         $this->expectException(MassAssignmentException::class);
 
         Company::query()->create($attributes);
+    }
+
+    #[Test]
+    public function when_an_attribute_the_model_never_loaded_is_read_then_it_is_rejected(): void
+    {
+        // Given a company fetched with only its key selected
+        Company::factory()->create();
+        $company = Company::query()->select('id')->firstOrFail();
+
+        // When an unselected column is read
+        // Then the strict guard rejects the missing attribute
+        $this->expectException(MissingAttributeException::class);
+
+        $name = $company->name;
     }
 }
