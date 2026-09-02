@@ -5,6 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use App\Companies\Entities\Company;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use App\Foundation\Auth\Totp\TotpVerifier;
@@ -33,6 +34,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Eloquent strict mode is the N+1 net: a lazy relation read on a
+        // multi-row result throws (conv-plan §2.19 R1; OQ-1-178).
+        Model::preventLazyLoading();
+
         // The company AuthorizeCompany resolved and validated for this request —
         // the tenant context every tenant-scoped controller consumes
         // (cd-foundation-http §3 step 4; §S11 isolation Layer 3).
