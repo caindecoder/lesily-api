@@ -6,6 +6,7 @@ use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Database\LazyLoadingViolationException;
+use Illuminate\Database\Eloquent\MassAssignmentException;
 
 /**
  * @testclass-carveout: infra-primitive — the Eloquent strict-mode contract
@@ -28,5 +29,18 @@ class EloquentStrictModeRejectsUnsafeModelAccessTest extends FoundationTestCase
         $this->expectException(LazyLoadingViolationException::class);
 
         $addons = $companies->firstOrFail()->addons;
+    }
+
+    #[Test]
+    public function when_a_key_outside_fillable_is_mass_assigned_then_it_is_rejected(): void
+    {
+        // Given the company attributes plus one key the model does not fill
+        $attributes = Company::factory()->raw() + ['not_a_column' => 'discarded'];
+
+        // When the company is mass-assigned
+        // Then the strict guard rejects the silent discard
+        $this->expectException(MassAssignmentException::class);
+
+        Company::query()->create($attributes);
     }
 }

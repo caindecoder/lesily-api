@@ -35,8 +35,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Eloquent strict mode is the N+1 net: a lazy relation read on a
-        // multi-row result throws (conv-plan §2.19 R1; OQ-1-178).
+        // multi-row result throws, and so does a mass-assigned key outside
+        // $fillable (conv-plan §2.19 R1; OQ-1-178).
         Model::preventLazyLoading();
+        Model::preventSilentlyDiscardingAttributes();
 
         // The company AuthorizeCompany resolved and validated for this request —
         // the tenant context every tenant-scoped controller consumes
