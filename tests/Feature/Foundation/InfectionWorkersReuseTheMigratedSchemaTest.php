@@ -15,9 +15,19 @@ class InfectionWorkersReuseTheMigratedSchemaTest extends FoundationTestCase
 {
     private const MARKER = 'zz_9999_99_99_000000_oq_1_181_marker';
 
+    private string|false $infectionEnvBefore = false;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->infectionEnvBefore = getenv('INFECTION');
+    }
+
     protected function tearDown(): void
     {
-        putenv('INFECTION');
+        putenv($this->infectionEnvBefore === false ? 'INFECTION' : 'INFECTION='.$this->infectionEnvBefore);
+        RefreshDatabaseState::$migrated = true;
 
         parent::tearDown();
     }
@@ -34,7 +44,6 @@ class InfectionWorkersReuseTheMigratedSchemaTest extends FoundationTestCase
 
         // Then the schema was rebuilt from scratch and the stale marker is gone
         $this->assertSchemaMigratedFresh();
-        RefreshDatabaseState::$migrated = true;
     }
 
     #[Test]
@@ -49,7 +58,6 @@ class InfectionWorkersReuseTheMigratedSchemaTest extends FoundationTestCase
 
         // Then the current schema is reused: nothing was dropped and nothing was pending
         $this->assertSchemaReused();
-        RefreshDatabaseState::$migrated = true;
     }
 
     private function markThisProcessAsAnOrdinaryRunner(): void

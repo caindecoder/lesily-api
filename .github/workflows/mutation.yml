@@ -80,8 +80,10 @@ jobs:
         # public 4-vCPU calibration and oversubscribed the private 2-vCPU runner
         # 2x; with a migrate:fresh per mutant process, 705/1,723 mutants tripped
         # Infection's 5-s bootstrap allowance — see the s199 design). Mutant
-        # processes now reuse the schema the initial run migrated (Tests\TestCase
-        # migrateDatabases override, keyed on INFECTION=1). LARAVEL_PARALLEL_TESTING=1
+        # processes now reuse the schema their token database already holds — the
+        # first worker on a token builds it once, every later one finds it current
+        # (Tests\TestCase migrateDatabases override, keyed on INFECTION=1).
+        # LARAVEL_PARALLEL_TESTING=1
         # (OQ-1-173): Infection labels each worker with TEST_TOKEN, but Laravel
         # switches to the per-token lesily_test_test_<N> databases only when
         # LARAVEL_PARALLEL_TESTING is also set (ParallelTesting::inParallel).

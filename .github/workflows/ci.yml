@@ -181,9 +181,9 @@ jobs:
           set +e
           sh scripts/check-db-trait-placement.sh > "$RUNNER_TEMP/db-trait.txt" 2>&1
           status=$?
+          summary=$(grep '^DB trait placement check:' "$RUNNER_TEMP/db-trait.txt")
           set -e
           cat "$RUNNER_TEMP/db-trait.txt"
-          summary=$(grep '^DB trait placement check:' "$RUNNER_TEMP/db-trait.txt")
           [ -n "$summary" ] || { echo "no summary line - the check did not run"; exit 1; }
           scanned=$(echo "$summary" | sed -E 's/.*; ([0-9]+) file\(s\) scanned/\1/')
           [ "$scanned" -gt 0 ] || { echo "scanned nothing"; exit 1; }

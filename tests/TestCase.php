@@ -13,9 +13,10 @@ abstract class TestCase extends BaseTestCase
 
     /**
      * Infection mutant processes carry INFECTION=1 (never Infection's initial run)
-     * and reuse the schema that run migrated fresh: an incremental migrate is a
-     * no-op when the schema is current. Every other runner migrates fresh per
-     * process, as before. OQ-1-181 - conv-plan section 2.1.
+     * and reuse whatever schema their database already holds: an incremental
+     * migrate builds an empty token database once and is a no-op after that.
+     * Every other runner migrates fresh per process. Rule: conventions plan
+     * section 2.1 (database test-trait placement).
      */
     protected function migrateDatabases(): void
     {

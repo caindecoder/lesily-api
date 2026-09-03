@@ -22,7 +22,7 @@ use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
  * seam, they belong in this class.
  *
  * `conflictFor` is a pure index→exception map that touches no database; the
- * base test case supplies `RefreshDatabase` (OQ-1-181), so any test added
+ * base test case supplies `RefreshDatabase`, so any test added
  * here that does need persistence is already isolated per test under ParaTest.
  *
  * Provenance: relocated from RegisterOwnerSadPathTest at the s142 partition
