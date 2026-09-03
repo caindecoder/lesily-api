@@ -4,10 +4,13 @@ namespace Tests;
 
 use Illuminate\Testing\TestResponse;
 use Database\Seeders\RolesPermissionsSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
 {
+    use RefreshDatabase;
+
     /**
      * Seed the UC-1-136 RBAC catalog. Every event-sourced company genesis enrolls
      * its owner against the seeded 'owner' role (CompanyProjector), so any test
