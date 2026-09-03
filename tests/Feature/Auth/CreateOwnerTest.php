@@ -8,7 +8,6 @@ use App\Models\User as UserReadModel;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Auth\Aggregates\User;
 use Illuminate\Support\Facades\Notification;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
@@ -23,8 +22,6 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class CreateOwnerTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     protected string $userId;
 
     protected string $companyId;

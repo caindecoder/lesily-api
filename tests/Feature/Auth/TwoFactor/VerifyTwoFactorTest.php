@@ -12,14 +12,11 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Auth\Events\User2FARecoveryCodeUsed;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class VerifyTwoFactorTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     #[Test]
     #[DataProvider('provideInvalidVerifyPayloads')]
     public function when_required_fields_are_missing_then_the_request_is_rejected(array $payload, string $invalidField, string $expectedMessage): void

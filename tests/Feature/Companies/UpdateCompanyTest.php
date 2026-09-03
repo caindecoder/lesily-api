@@ -6,7 +6,6 @@ use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
  * UC-1-033 Update Company Details (slice-companies Task 6). PUT /api/v1/companies/{companyId}
@@ -16,8 +15,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
  */
 class UpdateCompanyTest extends CompaniesTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

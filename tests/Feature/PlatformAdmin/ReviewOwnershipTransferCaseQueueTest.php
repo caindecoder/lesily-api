@@ -10,7 +10,6 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
@@ -18,7 +17,6 @@ use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
 class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCase
 {
     use AssertsFilterEmptyValueRejection;
-    use RefreshDatabase;
 
     #[Test]
     public function when_no_token_is_presented_then_the_queue_request_is_rejected_as_unauthenticated(): void

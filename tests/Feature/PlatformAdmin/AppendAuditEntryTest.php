@@ -7,7 +7,6 @@ use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Database\QueryException;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
  * Slice-plans-billing T6 — the audit_trail foundation (erd-audit-trail /
@@ -23,8 +22,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
  */
 class AppendAuditEntryTest extends PlatformAdminTestCase
 {
-    use RefreshDatabase;
-
     // Sad — the schema rejects an entry missing a required field: action is
     // NOT NULL per ERD-1-11 §3 and stands as the REPRESENTATIVE pin for the
     // schema's required set (event_class/subject_type share the same

@@ -12,7 +12,6 @@ use App\Consent\Events\ConsentRecorded;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\RolesPermissions\Entities\Role;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
@@ -21,8 +20,6 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RegisterOwnerTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     private const EXISTING_EMAIL = 'existing@contoso.lk';
 
     private const EXISTING_BR = 'PV-99999999';

@@ -21,11 +21,9 @@ use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
  * so the real map still runs); if a second caller ever needs them at the domain
  * seam, they belong in this class.
  *
- * No `RefreshDatabase` by design, not by omission: `conflictFor` is a pure
- * index→exception map that touches no database. Any test added here that DOES
- * need persistence must bring the trait with it — without it, it would read
- * whatever a sibling left behind and could pass or fail nondeterministically
- * under ParaTest.
+ * `conflictFor` is a pure index→exception map that touches no database; the
+ * base test case supplies `RefreshDatabase`, so any test added
+ * here that does need persistence is already isolated per test under ParaTest.
  *
  * Provenance: relocated from RegisterOwnerSadPathTest at the s142 partition
  * consolidation. RegisterOwnerTest's unmapped-violation walk STUBS conflictFor, so

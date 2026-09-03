@@ -24,9 +24,10 @@ concurrency:
 jobs:
   mutation-full:
     runs-on: ubuntu-latest
-    # Observed --threads=1 spread: 2h41m–4h12m (API-measured over the
-    # s189–s195 runs). 300 keeps the first threaded run alive even if the
-    # speed-up underdelivers; tighten toward ~120 once threads=4 is measured.
+    # Observed: --threads=1 2h41m–4h12m (public 4-vCPU runner, s189–s195);
+    # --threads=4 1h18m (public, s196); --threads=4 on the private 2-vCPU
+    # runner 4h08m and FAILED (s198 — OQ-1-181). 300 stays until the
+    # schema-reuse run is measured on the private runner; then tighten.
     timeout-minutes: 300
     services:
       mysql:
@@ -62,23 +63,40 @@ jobs:
       - run: cp .env.github .env
       - run: php artisan key:generate
       - run: php artisan migrate --force
+      - name: Runner class (record beside every timing pin — OQ-1-181)
+        # ubuntu-latest is 4 vCPU / 16 GB on public repositories and 2 vCPU / 8 GB
+        # on private ones; every timing pin in the conventions plan names the class
+        # it was measured on. ParaTest's "Processes:" line in the CI test job is the
+        # same fact for that job.
+        run: |
+          echo "vCPUs: $(nproc)"
+          free -m
       - name: Full mutation run (gated — minMsi/minCoveredMsi from infection.json5)
         # The full run is the latent-escape detector for diff-scoped PR runs
         # (/tdd-red amendment Q; R-053 finding 3.2) — it MUST fail loudly, never
         # `|| true` (Rule #13: that masked a total failure while reporting green).
-        # --threads=4 with LARAVEL_PARALLEL_TESTING=1 (OQ-1-173): Infection labels
-        # each worker with TEST_TOKEN, but Laravel switches to the per-token
-        # lesily_test_test_<N> databases only when LARAVEL_PARALLEL_TESTING is
-        # also set (ParallelTesting::inParallel). Without it every thread migrates
-        # the ONE lesily_test and the DDL races are counted as kills (OQ-1-167
-        # mechanism C) — if that topology ever silently returns, the token-DB
-        # control and kill-verdict steps below RED the run. The initial coverage
-        # run carries no TEST_TOKEN and stays on the lesily_test migrated above;
-        # tests using no DB trait also stay there (none touches the DB today).
-        # The per-PR diff-scoped job stays --threads=1 (ci.yml — tiny scope).
+        # --threads=max sizes the workers to the runner — 4 on a public-repo
+        # runner, 2 on the private repo's (OQ-1-181: the s196 --threads=4 was a
+        # public 4-vCPU calibration and oversubscribed the private 2-vCPU runner
+        # 2x; with a migrate:fresh per mutant process, 705/1,723 mutants tripped
+        # Infection's 5-s bootstrap allowance — see the s199 design). Mutant
+        # processes now reuse the schema their token database already holds — the
+        # first worker on a token builds it once, every later one finds it current
+        # (Tests\TestCase migrateDatabases override, keyed on INFECTION=1).
+        # LARAVEL_PARALLEL_TESTING=1
+        # (OQ-1-173): Infection labels each worker with TEST_TOKEN, but Laravel
+        # switches to the per-token lesily_test_test_<N> databases only when
+        # LARAVEL_PARALLEL_TESTING is also set (ParallelTesting::inParallel).
+        # Without it every thread migrates the ONE lesily_test and the DDL races
+        # are counted as kills (OQ-1-167 mechanism C) — if that topology ever
+        # silently returns, the token-DB control and kill-verdict steps below RED
+        # the run. The initial coverage run carries no TEST_TOKEN and stays on the
+        # lesily_test migrated above; every test class carries the base-class DB
+        # trait since OQ-1-181. The per-PR diff-scoped job stays --threads=1
+        # (ci.yml — tiny scope).
         env:
           LARAVEL_PARALLEL_TESTING: 1
-        run: vendor/bin/infection --threads=4
+        run: vendor/bin/infection --threads=max
       - name: Assert per-thread token DBs were used (OQ-1-173 positive control)
         # Deterministic proof the tokenisation ENGAGED — the kill-verdict gate
         # below catches the race symptom, which needs a collision to happen AND

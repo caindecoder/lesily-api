@@ -5,7 +5,6 @@ namespace Tests\Feature\Billing;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
 use App\Billing\Subscriptions\Events\SubscriptionTrialStarted;
@@ -22,8 +21,6 @@ use App\Billing\Subscriptions\Exceptions\SubscriptionAlreadyStartedException;
  */
 class StartTrialTest extends BillingTestCase
 {
-    use RefreshDatabase;
-
     protected string $companyId;
 
     protected string $subscriptionId;

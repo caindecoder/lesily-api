@@ -5,12 +5,9 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class LogoutTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     // Sad — the logout endpoint is guarded: a request with no token is rejected
     // by the Sanctum guard before any revocation runs (proves auth:sanctum is on).
     #[Test]

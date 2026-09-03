@@ -7,14 +7,11 @@ use PHPUnit\Framework\Attributes\Test;
 use Database\Seeders\RolesPermissionsSeeder;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\RolesPermissions\Entities\Role;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\RolesPermissions\Entities\Permission;
 use App\Foundation\RolesPermissions\Exceptions\SeederSourceException;
 
 class RolesPermissionsSeederTest extends FoundationTestCase
 {
-    use RefreshDatabase;
-
     #[Test]
     public function when_source_file_missing_then_seeder_throws_with_file_path(): void
     {

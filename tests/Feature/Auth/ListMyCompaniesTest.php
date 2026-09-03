@@ -9,12 +9,9 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use App\Foundation\Billing\Enums\BillingPlan;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class ListMyCompaniesTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

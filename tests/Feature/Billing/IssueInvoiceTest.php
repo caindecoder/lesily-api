@@ -10,7 +10,6 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Billing\Invoices\Events\InvoiceCreated;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
 use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
 use App\Billing\Invoices\Exceptions\InvoiceAmountNotPositiveException;
@@ -27,8 +26,6 @@ use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
  */
 class IssueInvoiceTest extends BillingTestCase
 {
-    use RefreshDatabase;
-
     #[Test]
     public function when_an_issued_invoice_is_issued_again_then_the_reissue_is_rejected(): void
     {

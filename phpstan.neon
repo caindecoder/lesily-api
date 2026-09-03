@@ -9,8 +9,6 @@ parameters:
         - database/seeders
         - tests
         - scripts  # s186 V5: the kill-verdict gate + crap radar are L8 code too (the s185 PHPStan-clean claim was vacuous without this)
-    excludePaths:
-        - tests/TestCase.php  # framework boilerplate
     # tests/* scoped ignores — locked session 044, re-added session 057 (Phase 5a UC-1-097 redo)
     # per spec §1 D1 ("tests/* PHPStan ignores — only re-add IF rewritten tests trigger them").
     # Conflict resolution: §2.8 LeaveDates style baseline forbids descriptive PHPDoc on test

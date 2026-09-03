@@ -7,12 +7,9 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class ViewProfileTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     #[Test]
     public function when_no_token_provided_then_request_is_unauthenticated(): void
     {

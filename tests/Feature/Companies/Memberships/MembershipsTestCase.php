@@ -26,7 +26,6 @@ use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
 use App\Foundation\RolesPermissions\Entities\Role;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Database\Events\TransactionBeginning;
 use Spatie\EventSourcing\StoredEvents\ShouldBeStored;
 use App\Companies\Memberships\Events\UserJoinedCompany;
@@ -47,7 +46,6 @@ use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
 abstract class MembershipsTestCase extends CompaniesTestCase
 {
     use InducesDatabaseFailures;
-    use RefreshDatabase;
     use WithRolePermissionFixtures;
 
     protected function setUp(): void

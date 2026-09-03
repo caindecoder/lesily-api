@@ -8,12 +8,9 @@ use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class LogoutAllTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     // Sad — the logout-all endpoint is guarded: a request with no token is rejected by the
     // Sanctum guard before any password check or revocation runs (proves auth:sanctum is on).
     #[Test]

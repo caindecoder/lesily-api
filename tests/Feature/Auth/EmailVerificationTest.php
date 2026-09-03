@@ -10,14 +10,11 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use App\Foundation\Auth\Events\UserEmailVerified;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\EventSourcing\StoredEvents\HandleStoredEventJob;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class EmailVerificationTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

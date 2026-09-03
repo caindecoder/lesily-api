@@ -10,7 +10,6 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use App\Companies\Events\CompanyTrialExpired;
 use App\Foundation\RolesPermissions\Entities\Role;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Entities\Company as CompanyReadModel;
 use App\Foundation\Notifications\Enums\NotificationType;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
@@ -20,7 +19,6 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
 {
     use CreatesTrialCompanies;
     use InteractsWithQueuedReactors;
-    use RefreshDatabase;
 
     private const COMPANY_NAME = 'Contoso';
 

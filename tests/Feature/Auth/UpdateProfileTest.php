@@ -9,7 +9,6 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Auth\Events\UserProfileUpdated;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\Notifications\Notifications\SystemNotification;
@@ -17,8 +16,6 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class UpdateProfileTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     /**
      * The established profile every scenario starts from — rejected updates must
      * leave the row exactly here (the Minimal Guarantee).

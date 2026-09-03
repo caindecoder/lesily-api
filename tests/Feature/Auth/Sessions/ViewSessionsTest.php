@@ -8,12 +8,9 @@ use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use Illuminate\Support\Facades\Config;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class ViewSessionsTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     // Sad — the session-list endpoint is guarded: a request with no token is
     // rejected by the Sanctum guard before any listing runs (proves auth:sanctum).
     #[Test]

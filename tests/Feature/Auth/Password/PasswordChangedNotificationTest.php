@@ -13,7 +13,6 @@ use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Notification;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\RolesPermissions\Entities\Role;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\Notifications\Entities\NotificationPreference;
@@ -28,8 +27,6 @@ use App\Foundation\Notifications\Notifications\SystemNotification;
  */
 class PasswordChangedNotificationTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

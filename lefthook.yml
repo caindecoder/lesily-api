@@ -16,3 +16,11 @@ pre-commit:
       # quality job); pure-POSIX sh - immune to the Herd php.bat gotcha above
       # AND to lefthook's {brace} templating (which mangles inline shell groups).
       run: sh scripts/check-test-class-naming.sh {staged_files}
+    db-trait-placement:
+      glob: "tests/**/*.php"
+      # OQ-1-181 (sec 2.1): the DB test trait lives in tests/TestCase.php only -
+      # a per-class re-declaration (alone, combined, or a leftover import) would
+      # shadow the base class's migrateDatabases() override (the Infection
+      # schema-reuse seam). Logic in scripts/check-db-trait-placement.sh (shared
+      # with the CI quality job).
+      run: sh scripts/check-db-trait-placement.sh {staged_files}

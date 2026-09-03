@@ -13,14 +13,11 @@ use App\Foundation\Auth\Events\User2FAEnabled;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Auth\Events\User2FADisabled;
 use App\Foundation\Http\Responses\ApiErrorCode;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class DisableTwoFactorTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     #[Test]
     public function when_no_token_is_presented_then_disabling_is_rejected(): void
     {

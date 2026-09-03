@@ -11,7 +11,6 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
  * Slice-plans-billing T7 — UC-1-122 Review Invoice (Admin): the cross-tenant
@@ -23,8 +22,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
  */
 class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

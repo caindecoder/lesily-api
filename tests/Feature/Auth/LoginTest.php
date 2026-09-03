@@ -11,12 +11,9 @@ use App\Companies\Entities\CompanyUser;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class LoginTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

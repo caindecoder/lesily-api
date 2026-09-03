@@ -9,7 +9,6 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
  * UC-1-139 Set Default Company (slice-companies Task 2) — the persisted
@@ -20,8 +19,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
  */
 class DefaultCompanyTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

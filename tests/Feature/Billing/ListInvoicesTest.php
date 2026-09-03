@@ -9,7 +9,6 @@ use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
 use App\Billing\Invoices\UseCases\Commands\InvoiceFilters;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
@@ -25,7 +24,6 @@ use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 class ListInvoicesTest extends BillingTestCase
 {
     use AssertsFilterEmptyValueRejection;
-    use RefreshDatabase;
 
     protected function setUp(): void
     {

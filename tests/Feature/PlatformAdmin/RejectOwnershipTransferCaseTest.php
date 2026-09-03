@@ -17,15 +17,12 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Database\Events\TransactionBeginning;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 {
-    use RefreshDatabase;
-
     #[Test]
     public function when_no_token_is_presented_then_the_reject_request_is_rejected_as_unauthenticated(): void
     {

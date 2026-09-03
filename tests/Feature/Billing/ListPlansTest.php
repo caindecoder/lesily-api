@@ -6,7 +6,6 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
  * UC-1-042 (partial — plan-picker read, slice-plans-billing T1).
@@ -15,8 +14,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
  */
 class ListPlansTest extends BillingTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

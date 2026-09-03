@@ -13,12 +13,9 @@ use Illuminate\Support\Facades\Event;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Contracts\Cache\Repository;
 use App\Foundation\Http\Services\IdempotencyCache;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class EnsureIdempotencyKeyTest extends FoundationTestCase
 {
-    use RefreshDatabase;
-
     protected User $user;
 
     protected function setUp(): void

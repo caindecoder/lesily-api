@@ -172,6 +172,22 @@ jobs:
           [ "$violations" -eq 0 ]
           [ "$skipped" -eq 0 ]
           [ "$status" -eq 0 ]
+      - name: Database test-trait placement (OQ-1-181, sec 2.1) - gating
+        # The DB trait lives in tests/TestCase.php only; a per-class re-declaration
+        # (alone, combined, or a leftover import) silently shadows the base class's
+        # migrateDatabases() override - the Infection schema-reuse seam. Liveness
+        # proof: the summary line must exist and the scan must have read a file.
+        run: |
+          set +e
+          sh scripts/check-db-trait-placement.sh > "$RUNNER_TEMP/db-trait.txt" 2>&1
+          status=$?
+          summary=$(grep '^DB trait placement check:' "$RUNNER_TEMP/db-trait.txt")
+          set -e
+          cat "$RUNNER_TEMP/db-trait.txt"
+          [ -n "$summary" ] || { echo "no summary line - the check did not run"; exit 1; }
+          scanned=$(echo "$summary" | sed -E 's/.*; ([0-9]+) file\(s\) scanned/\1/')
+          [ "$scanned" -gt 0 ] || { echo "scanned nothing"; exit 1; }
+          exit $status
       - name: Mutation kill-verdict classifier self-test (OQ-1-167)
         # The kill-integrity gate's steady state is always-PASS, so a rotted
         # classifier would be invisible on every clean infection.json. This
