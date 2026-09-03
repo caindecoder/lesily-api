@@ -37,9 +37,31 @@ class InfectionWorkersReuseTheMigratedSchemaTest extends FoundationTestCase
         RefreshDatabaseState::$migrated = true;
     }
 
+    #[Test]
+    public function when_an_infection_worker_finds_the_schema_current_then_it_reuses_it_instead_of_migrating_fresh(): void
+    {
+        // Given a process marked as an Infection worker whose token database is already migrated
+        $this->markThisProcessAsAnInfectionWorker();
+        $this->plantMigrationMarker();
+
+        // When the base class migrates for the first test of the process
+        $this->migrateDatabases();
+
+        // Then the current schema is reused: nothing was dropped and nothing was pending
+        $this->assertSchemaReused();
+        RefreshDatabaseState::$migrated = true;
+    }
+
     private function markThisProcessAsAnOrdinaryRunner(): void
     {
         putenv('INFECTION');
+        RefreshDatabaseState::$migrated = false;
+        $this->withoutMockingConsoleOutput();
+    }
+
+    private function markThisProcessAsAnInfectionWorker(): void
+    {
+        putenv('INFECTION=1');
         RefreshDatabaseState::$migrated = false;
         $this->withoutMockingConsoleOutput();
     }
@@ -53,5 +75,11 @@ class InfectionWorkersReuseTheMigratedSchemaTest extends FoundationTestCase
     {
         $this->assertStringContainsString('Dropping all tables', Artisan::output());
         $this->assertDatabaseMissing('migrations', ['migration' => self::MARKER]);
+    }
+
+    protected function assertSchemaReused(): void
+    {
+        $this->assertStringContainsString('Nothing to migrate', Artisan::output());
+        $this->assertDatabaseHas('migrations', ['migration' => self::MARKER]);
     }
 }

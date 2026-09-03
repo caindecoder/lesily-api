@@ -5,7 +5,6 @@ namespace Tests\Feature\PlatformAdmin;
 use App\Models\User;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
  * Slice-plans-billing T6 — the /api/v1/admin/* family's no-info-leak gate.
@@ -16,8 +15,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
  */
 class EnsurePlatformAdminTest extends PlatformAdminTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

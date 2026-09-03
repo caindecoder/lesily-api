@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\Mail;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\Notifications\Entities\NotificationPreference;
@@ -17,8 +16,6 @@ use App\Foundation\Notifications\Notifications\SystemNotification;
 
 class ReceiveEmailNotificationTest extends FoundationTestCase
 {
-    use RefreshDatabase;
-
     #[Test]
     public function when_email_delivery_fails_then_the_failure_is_logged_without_alerting_the_user(): void
     {

@@ -10,7 +10,6 @@ use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Billing\Invoices\Events\InvoiceVoided;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Exceptions\InvoiceNotVoidableException;
 
 /**
@@ -24,8 +23,6 @@ use App\Billing\Invoices\Exceptions\InvoiceNotVoidableException;
  */
 class VoidInvoiceTest extends BillingTestCase
 {
-    use RefreshDatabase;
-
     #[Test, DataProvider('provideNonVoidableStates')]
     public function when_a_paid_or_terminal_invoice_is_voided_then_the_void_is_rejected(
         string $state,

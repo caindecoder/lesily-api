@@ -10,7 +10,6 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Events\CompanyCreated;
 use App\Companies\Entities\CompanySettings;
 use App\Companies\Events\CompanySettingsCreated;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Entities\Company as CompanyReadModel;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
@@ -27,7 +26,6 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 class CreateCompanyTest extends CompaniesTestCase
 {
     use CreatesTrialCompanies;
-    use RefreshDatabase;
 
     // Sad — genesis is illegal from any state but [*]: an existing company cannot
     // be re-created, and the rejection must leave the original genesis untouched.

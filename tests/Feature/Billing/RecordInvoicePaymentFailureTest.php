@@ -8,7 +8,6 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Events\InvoicePaymentFailed;
 use App\Billing\Invoices\Exceptions\InvoiceNotPayableException;
 
@@ -24,8 +23,6 @@ use App\Billing\Invoices\Exceptions\InvoiceNotPayableException;
  */
 class RecordInvoicePaymentFailureTest extends BillingTestCase
 {
-    use RefreshDatabase;
-
     #[Test, DataProvider('provideNonFailableStates')]
     public function when_a_payment_failure_is_recorded_on_a_paid_or_terminal_invoice_then_the_failure_is_rejected(
         string $state,

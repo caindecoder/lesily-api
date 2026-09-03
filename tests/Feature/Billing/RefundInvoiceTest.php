@@ -9,7 +9,6 @@ use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Billing\Invoices\Events\InvoiceRefunded;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Exceptions\InvoiceNotRefundableException;
 use App\Billing\Invoices\Exceptions\InvoiceRefundAmountMismatchException;
 
@@ -25,8 +24,6 @@ use App\Billing\Invoices\Exceptions\InvoiceRefundAmountMismatchException;
  */
 class RefundInvoiceTest extends BillingTestCase
 {
-    use RefreshDatabase;
-
     #[Test, DataProvider('provideNonRefundableStates')]
     public function when_a_pending_or_voided_or_refunded_invoice_is_refunded_then_the_refund_is_rejected(
         string $state,

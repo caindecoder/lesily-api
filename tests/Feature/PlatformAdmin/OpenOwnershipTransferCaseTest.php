@@ -12,13 +12,10 @@ use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 {
-    use RefreshDatabase;
-
     protected Company $company;
 
     protected function setUp(): void

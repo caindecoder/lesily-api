@@ -7,7 +7,6 @@ use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\RolesPermissions\Entities\Role;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\RolesPermissions\Services\PermissionEvaluator;
 
 /**
@@ -17,7 +16,6 @@ use App\Foundation\RolesPermissions\Services\PermissionEvaluator;
  */
 class PermissionEvaluatorTest extends FoundationTestCase
 {
-    use RefreshDatabase;
     use WithRolePermissionFixtures;
 
     #[Test]

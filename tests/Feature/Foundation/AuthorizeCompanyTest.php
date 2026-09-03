@@ -9,11 +9,9 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class AuthorizeCompanyTest extends FoundationTestCase
 {
-    use RefreshDatabase;
     use WithRolePermissionFixtures;
 
     #[Test]

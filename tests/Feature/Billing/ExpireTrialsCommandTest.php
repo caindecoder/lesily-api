@@ -14,7 +14,6 @@ use PHPUnit\Framework\AssertionFailedError;
 use Illuminate\Support\Facades\Notification;
 use App\Companies\Events\CompanyTrialExpired;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Companies\CreatesTrialCompanies;
 use App\Companies\Reactors\TrialExpiredEmailReactor;
 use App\Billing\Subscriptions\Aggregates\Subscription;
@@ -36,7 +35,6 @@ class ExpireTrialsCommandTest extends BillingTestCase
 {
     use CreatesTrialCompanies;
     use InteractsWithQueuedReactors;
-    use RefreshDatabase;
 
     protected function setUp(): void
     {

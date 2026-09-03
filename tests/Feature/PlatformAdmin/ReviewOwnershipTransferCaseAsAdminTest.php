@@ -8,13 +8,10 @@ use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 
 class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestCase
 {
-    use RefreshDatabase;
-
     #[Test]
     public function when_no_token_is_presented_then_the_detail_request_is_rejected_as_unauthenticated(): void
     {

@@ -6,15 +6,12 @@ use App\Models\User;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Notifications\Enums\NotificationType;
 use Spatie\EventSourcing\StoredEvents\HandleStoredEventJob;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 
 class WelcomeEmailTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

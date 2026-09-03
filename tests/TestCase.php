@@ -12,6 +12,23 @@ abstract class TestCase extends BaseTestCase
     use RefreshDatabase;
 
     /**
+     * Infection mutant processes carry INFECTION=1 (never Infection's initial run)
+     * and reuse the schema that run migrated fresh: an incremental migrate is a
+     * no-op when the schema is current. Every other runner migrates fresh per
+     * process, as before. OQ-1-181 - conv-plan section 2.1.
+     */
+    protected function migrateDatabases(): void
+    {
+        if (getenv('INFECTION') === false) {
+            $this->artisan('migrate:fresh', $this->migrateFreshUsing());
+
+            return;
+        }
+
+        $this->artisan('migrate');
+    }
+
+    /**
      * Seed the UC-1-136 RBAC catalog. Every event-sourced company genesis enrolls
      * its owner against the seeded 'owner' role (CompanyProjector), so any test
      * arranging a company through the aggregate needs the catalog in place —

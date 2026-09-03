@@ -11,7 +11,6 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
 use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
 
@@ -26,8 +25,6 @@ use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
  */
 class DownloadInvoiceReceiptTest extends BillingTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

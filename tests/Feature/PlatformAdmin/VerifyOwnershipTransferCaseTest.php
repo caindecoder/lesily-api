@@ -16,7 +16,6 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Companies\Exceptions\OwnershipTransferContentionException;
@@ -24,8 +23,6 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 {
-    use RefreshDatabase;
-
     protected string $notes = 'Death certificate matched the registered Owner';
 
     /**

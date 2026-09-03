@@ -6,7 +6,6 @@ use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
  * UC-1-032 View Company Details + the R8 CompanyContextResolver route-param
@@ -16,8 +15,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
  */
 class ViewCompanyDetailsTest extends CompaniesTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

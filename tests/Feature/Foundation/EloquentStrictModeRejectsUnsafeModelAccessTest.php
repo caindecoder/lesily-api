@@ -7,7 +7,6 @@ use App\Providers\AppServiceProvider;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\Addon;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Database\LazyLoadingViolationException;
 use Illuminate\Database\Eloquent\MassAssignmentException;
 use Illuminate\Database\Eloquent\MissingAttributeException;
@@ -19,8 +18,6 @@ use Illuminate\Database\Eloquent\MissingAttributeException;
  */
 class EloquentStrictModeRejectsUnsafeModelAccessTest extends FoundationTestCase
 {
-    use RefreshDatabase;
-
     #[Test]
     public function when_a_relation_is_read_lazily_on_a_model_from_a_multi_row_result_then_it_is_rejected(): void
     {

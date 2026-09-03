@@ -10,14 +10,11 @@ use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class ChangePasswordTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

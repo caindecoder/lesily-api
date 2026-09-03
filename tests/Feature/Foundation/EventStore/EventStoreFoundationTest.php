@@ -5,7 +5,6 @@ namespace Tests\Feature\Foundation\EventStore;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\Feature\Foundation\FoundationTestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Foundation\EventStore\Fixtures\FixtureAggregate;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use Tests\Feature\Foundation\EventStore\Fixtures\FixtureThingHappened;
@@ -18,8 +17,6 @@ use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEventCollection;
  */
 class EventStoreFoundationTest extends FoundationTestCase
 {
-    use RefreshDatabase;
-
     // Sad / degenerate — the simplest thing that can be stored: a tenant-less event.
     #[Test]
     public function when_an_aggregate_records_an_event_without_a_company_then_it_is_stored_with_no_company_scope(): void

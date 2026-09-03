@@ -12,11 +12,9 @@ use Illuminate\Log\Events\MessageLogged;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\RolesPermissions\Entities\Role;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class TwoGateCheckTest extends FoundationTestCase
 {
-    use RefreshDatabase;
     use WithRolePermissionFixtures;
 
     #[Test]

@@ -8,7 +8,6 @@ use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\Auth\Notifications\PasswordResetLinkNotification;
 
 /**
@@ -18,8 +17,6 @@ use App\Foundation\Auth\Notifications\PasswordResetLinkNotification;
  */
 class ForgotPasswordTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

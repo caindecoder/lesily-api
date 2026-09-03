@@ -7,12 +7,9 @@ use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Http\Responses\ApiErrorCode;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class RevokeSessionTest extends AuthTestCase
 {
-    use RefreshDatabase;
-
     // Sad — the revoke endpoint is guarded: a request with no token is rejected by the
     // Sanctum guard before any deletion runs (proves auth:sanctum is on the route).
     #[Test]

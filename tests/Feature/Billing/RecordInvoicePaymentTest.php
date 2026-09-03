@@ -10,7 +10,6 @@ use App\Billing\Invoices\Aggregates\Invoice;
 use App\Billing\Invoices\Events\InvoicePaid;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Exceptions\InvoiceNotPayableException;
 use App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand;
 use App\Billing\Invoices\Exceptions\InvoicePaymentAmountMismatchException;
@@ -27,8 +26,6 @@ use App\Billing\Invoices\Exceptions\InvoicePaymentAmountMismatchException;
  */
 class RecordInvoicePaymentTest extends BillingTestCase
 {
-    use RefreshDatabase;
-
     #[Test, DataProvider('provideNonPayableStates')]
     public function when_payment_is_recorded_on_a_paid_or_terminal_invoice_then_the_payment_is_rejected(
         string $state,

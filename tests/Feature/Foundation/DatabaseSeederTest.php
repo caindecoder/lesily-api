@@ -5,14 +5,11 @@ namespace Tests\Feature\Foundation;
 use Database\Seeders\DatabaseSeeder;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\RolesPermissions\Entities\Role;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Foundation\RolesPermissions\Entities\Permission;
 use App\Foundation\RolesPermissions\Entities\RolePermission;
 
 class DatabaseSeederTest extends FoundationTestCase
 {
-    use RefreshDatabase;
-
     // OQ-1-110 — production `db:seed` must stand up the whole RBAC catalog:
     // owner signup enrolls the creator against the 'owner' role AND authorization
     // resolves that role's permissions, so a catalog-less (or partially-wired)

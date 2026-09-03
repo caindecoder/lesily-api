@@ -9,7 +9,6 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Billing\Invoices\Events\InvoiceDisputeFiled;
 use App\Billing\Invoices\Exceptions\InvoiceDisputeNotAllowedException;
 
@@ -25,8 +24,6 @@ use App\Billing\Invoices\Exceptions\InvoiceDisputeNotAllowedException;
  */
 class FileInvoiceDisputeTest extends BillingTestCase
 {
-    use RefreshDatabase;
-
     #[Test]
     public function when_a_dispute_is_filed_on_an_invoice_with_an_open_dispute_then_the_filing_is_rejected(): void
     {

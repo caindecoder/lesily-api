@@ -9,7 +9,6 @@ use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Database\QueryException;
 use App\Foundation\RolesPermissions\Entities\Role;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
  * @testclass-carveout: infra-primitive — DB FK RESTRICT + pivot-UUID schema pins;
@@ -17,8 +16,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
  */
 class MembershipHardDeleteGuardTest extends CompaniesTestCase
 {
-    use RefreshDatabase;
-
     private Company $company;
 
     private User $member;
