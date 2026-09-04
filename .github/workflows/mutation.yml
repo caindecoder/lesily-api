@@ -1,17 +1,15 @@
 name: Mutation
 
 on:
-  push:
-    branches: [main]
-    # Fail-safe filter (OQ-1-173, battery F3): fire on every merge EXCEPT
-    # markdown-only ones. The original allow-list missed verdict-moving
-    # surfaces (bootstrap/, lang/, resources/, .env.github) on its very first
-    # audit — an ignore-list never needs re-auditing when directories appear.
-    paths-ignore:
-      - '**.md'
+  # No push trigger (#120, s200): on the private repo a full run bills ~90
+  # minutes against 2,000 free/month, and the observed merge rate (~23/month)
+  # would spend ~2,070 on full runs alone. The per-PR diff-scoped job in
+  # ci.yml still guards every PR; a latent escape surfaces within the week.
   schedule:
-    # Weekly backstop (Sat 20:30 UTC = 02:00 SLT Sunday): catches environment
-    # drift (runner image / PHP patch bumps) that no merge would trigger.
+    # Weekly (Sat 20:30 UTC = 02:00 SLT Sunday): the latent-escape detector for
+    # the diff-scoped PR runs and the environment-drift catch (runner image /
+    # PHP patch bumps). Measured 1h29m at 2 workers on the private 2-vCPU
+    # runner (s200 run 33830650938).
     - cron: '30 20 * * 6'
   workflow_dispatch:
 
@@ -26,9 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     # Observed: --threads=1 2h41m–4h12m (public 4-vCPU runner, s189–s195);
     # --threads=4 1h18m (public, s196); --threads=4 on the private 2-vCPU
-    # runner 4h08m and FAILED (s198 — OQ-1-181). 300 stays until the
-    # schema-reuse run is measured on the private runner; then tighten.
-    timeout-minutes: 300
+    # runner 4h08m and FAILED (s198 — OQ-1-181); schema reuse at 2 workers on
+    # the private runner 1h29m (s200 run 33830650938). 180 = 2x that — a run
+    # that doubles is already a failure; kill it instead of billing it.
+    timeout-minutes: 180
     services:
       mysql:
         image: mysql:8.0
