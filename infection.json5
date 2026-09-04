@@ -4,11 +4,21 @@
         directories: ["app"],
         excludes: ["Console", "Exceptions", "Providers"]
     },
-    // 180s: at 30s every mutant covered only by ~10s-boot feature tests
-    // TIME-SKIPS locally (s164 class — skipped mutants leave the MSI
-    // denominator, a gate that stops looking; 50/56 skipped on the s178
-    // OQ-1-162 run). CI on Linux kills well inside either bound.
-    timeout: 180,
+    // 420 s (OQ-1-181 arm b, s201). Infection time-skips a mutant BEFORE running
+    // it when its covering set's initial-run time is >= this value
+    // (MutationTestingRunner::takingTooLong), and a skip leaves the MSI
+    // denominator silently — a gate that stops looking. The whole-suite-covered
+    // set (the module service providers, LesilyStoredEvent, User) measured
+    // 161–185 s on the private 2-vCPU runner (runs 33830650938 / 33783192768)
+    // and straddled the old 180: 0 vs 14 skipped on identical code. 420 = 2 x
+    // 185 rounded up to a minute. A mutant that runs gets min(5 + 5 x covering
+    // time, 420), so only covering sets over 35 s see a different budget; a
+    // genuine hang in that class now costs up to 7 min, bounded by
+    // mutation.yml's timeOutCount <= 10. History: 30 -> 120 (s152) -> 180
+    // (s178: the ~10-s-boot feature-test class skipped locally at 30) -> 420.
+    // Record the runner class beside any re-measure (a timing on one runner
+    // class is not a pin for another).
+    timeout: 420,
     logs: {
         text: "infection.log",
         html: "infection.html",
