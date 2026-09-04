@@ -75,8 +75,11 @@ jobs:
         # The full run is the latent-escape detector for diff-scoped PR runs
         # (/tdd-red amendment Q; R-053 finding 3.2) — it MUST fail loudly, never
         # `|| true` (Rule #13: that masked a total failure while reporting green).
-        # --threads=max sizes the workers to the runner — 4 on a public-repo
-        # runner, 2 on the private repo's (OQ-1-181: the s196 --threads=4 was a
+        # --threads="$(nproc)" sizes the workers to the runner's real core count —
+        # 4 on a public-repo runner, 2 on the private repo's. NOT --threads=max:
+        # Infection's `max` is max(1, cores - 1) (ConfigurationFactory.php:464-465,
+        # "we subtract 1 here"), which ran ONE worker on 2 vCPU and tripped the
+        # token-DB control below (s199 run 33783192768). (OQ-1-181: the s196 --threads=4 was a
         # public 4-vCPU calibration and oversubscribed the private 2-vCPU runner
         # 2x; with a migrate:fresh per mutant process, 705/1,723 mutants tripped
         # Infection's 5-s bootstrap allowance — see the s199 design). Mutant
@@ -96,7 +99,7 @@ jobs:
         # (ci.yml — tiny scope).
         env:
           LARAVEL_PARALLEL_TESTING: 1
-        run: vendor/bin/infection --threads=max
+        run: vendor/bin/infection --threads="$(nproc)"
       - name: Assert per-thread token DBs were used (OQ-1-173 positive control)
         # Deterministic proof the tokenisation ENGAGED — the kill-verdict gate
         # below catches the race symptom, which needs a collision to happen AND
