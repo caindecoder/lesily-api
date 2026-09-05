@@ -86,6 +86,22 @@ class ForgotPasswordTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_a_separate_ip_requests_a_reset_then_it_is_unaffected_by_another_ips_throttle(): void
+    {
+        // Given one IP has used up its per-IP allowance and is being throttled
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.1']);
+        $this->exhaustIpAllowance(10);
+        $this->assertThrottled($this->forgotPassword(['email' => 'eleventh@contoso.lk']));
+
+        // When a different IP makes its first request
+        $response = $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.2'])
+            ->forgotPassword(['email' => 'fresh@contoso.lk']);
+
+        // Then it is not throttled by the other IP's exhausted allowance
+        $response->assertNoContent();
+    }
+
+    #[Test]
     public function when_the_email_is_unregistered_then_the_response_is_identical_and_no_link_is_sent(): void
     {
         // Given no user for this email
