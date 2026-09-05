@@ -13,7 +13,8 @@ use App\Foundation\Auth\Notifications\PasswordResetLinkNotification;
 /**
  * Requesting a password-reset link (UC-1-008, forgot portion). A guest submits an email; the
  * response is an enumeration-safe 204 whether or not the email is registered, the request is
- * rate-limited 3/15min per email, and a registered email is emailed a single-use reset link.
+ * rate-limited 3/15min per email and 10/min per client IP, and a registered email is emailed a
+ * single-use reset link.
  */
 class ForgotPasswordTest extends AuthTestCase
 {
@@ -80,8 +81,8 @@ class ForgotPasswordTest extends AuthTestCase
         // Then a case-variant of the same email shares the bucket (the key is lowercased)
         $this->assertThrottled($this->forgotPassword(['email' => 'VICTIM@contoso.lk']));
 
-        // ...but a genuinely different email from the same client keeps its own allowance —
-        // the limit is keyed per email, not per IP (if it were IP-keyed, this would be throttled too)
+        // ...but a genuinely different email from the same client keeps its own per-email allowance
+        // (the client's six requests so far also count against its separate 10/min per-IP allowance)
         $this->forgotPassword(['email' => 'other@contoso.lk'])->assertNoContent();
     }
 

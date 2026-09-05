@@ -8,8 +8,8 @@ on:
   schedule:
     # Weekly (Sat 20:30 UTC = 02:00 SLT Sunday): the latent-escape detector for
     # the diff-scoped PR runs and the environment-drift catch (runner image /
-    # PHP patch bumps). Measured 1h29m at 2 workers on the private 2-vCPU
-    # runner (s200 run 33830650938).
+    # PHP patch bumps). Measured 1h40m at 2 workers on the private 2-vCPU
+    # runner at Infection timeout 420 (s201 run 33857377298).
     - cron: '30 20 * * 6'
   workflow_dispatch:
 
@@ -25,8 +25,9 @@ jobs:
     # Observed: --threads=1 2h41m–4h12m (public 4-vCPU runner, s189–s195);
     # --threads=4 1h18m (public, s196); --threads=4 on the private 2-vCPU
     # runner 4h08m and FAILED (s198 — OQ-1-181); schema reuse at 2 workers on
-    # the private runner 1h29m (s200 run 33830650938). 180 = 2x that — a run
-    # that doubles is already a failure; kill it instead of billing it.
+    # the private runner 1h40m at Infection timeout 420 (s201 run 33857377298).
+    # 180 = 1.8x that — a run that nearly doubles is already a failure; kill it
+    # instead of billing it.
     timeout-minutes: 180
     services:
       mysql:
