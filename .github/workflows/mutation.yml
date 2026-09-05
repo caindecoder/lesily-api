@@ -1,9 +1,9 @@
 name: Mutation
 
 on:
-  # No push trigger (#120, s200): on the private repo a full run bills ~90
+  # No push trigger (#120, s200): on the private repo a full run bills ~100
   # minutes against 2,000 free/month, and the observed merge rate (~23/month)
-  # would spend ~2,070 on full runs alone. The per-PR diff-scoped job in
+  # would spend ~2,300 on full runs alone. The per-PR diff-scoped job in
   # ci.yml still guards every PR; a latent escape surfaces within the week.
   schedule:
     # Weekly (Sat 20:30 UTC = 02:00 SLT Sunday): the latent-escape detector for
