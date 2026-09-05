@@ -24,3 +24,11 @@ pre-commit:
       # schema-reuse seam). Logic in scripts/check-db-trait-placement.sh (shared
       # with the CI quality job).
       run: sh scripts/check-db-trait-placement.sh {staged_files}
+    write-path-chain:
+      glob: "app/**/*.php"
+      # Sec 2.15.C (OQ-1-170): the canonical write-path chain's layer-skip bans -
+      # controllers never retrieve/persist/DB, DB::transaction only in interactors,
+      # reactors never write (ban 4).
+      # Logic in scripts/check-write-path-chain.sh (shared with the gating CI
+      # quality step). Comment lines are excluded (call-form only).
+      run: sh scripts/check-write-path-chain.sh {staged_files}

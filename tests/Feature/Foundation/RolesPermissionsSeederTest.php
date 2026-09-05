@@ -10,6 +10,10 @@ use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\RolesPermissions\Entities\Permission;
 use App\Foundation\RolesPermissions\Exceptions\SeederSourceException;
 
+/**
+ * @testclass-carveout: seeder — the artifact IS the behavior (the RBAC catalog
+ * seeder and its source-file contract; conv-plan §2.14 Rule B).
+ */
 class RolesPermissionsSeederTest extends FoundationTestCase
 {
     #[Test]
