@@ -56,7 +56,10 @@ class AppServiceProvider extends ServiceProvider
         // (not IP): a reset link must not be spammable into a victim's inbox — 3/15min/email
         // (questionnaire §S20). Enumeration-safe by design: the endpoint 204s regardless of
         // registration, so the limiter is the only signal and it never differs known vs unknown.
-        RateLimiter::for('forgot-password', fn (Request $request) => Limit::perMinutes(15, 3)->by(Str::lower((string) $request->input('email', ''))));
+        RateLimiter::for('forgot-password', fn (Request $request) => [
+            Limit::perMinutes(15, 3)->by(Str::lower((string) $request->input('email', ''))),
+            Limit::perMinute(10),
+        ]);
 
         // Invites are keyed by the ACTING user (not IP): 20/hr per actor caps invite-email
         // spam from one compromised or abusive account without letting a shared office IP

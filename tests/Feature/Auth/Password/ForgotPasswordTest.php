@@ -54,6 +54,20 @@ class ForgotPasswordTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_requests_from_one_ip_exceed_the_limit_across_different_emails_then_they_are_throttled(): void
+    {
+        // Given one client has used up its per-IP allowance across distinct emails (every email still
+        // holds its own per-email allowance, so only the per-IP limit can refuse the next request)
+        $this->exhaustIpAllowance(10);
+
+        // When an 11th request is made for yet another email
+        $response = $this->forgotPassword(['email' => 'eleventh@contoso.lk']);
+
+        // Then it is throttled
+        $this->assertThrottled($response);
+    }
+
+    #[Test]
     public function when_one_email_is_throttled_then_only_that_email_is_affected(): void
     {
         // Given one email has used up its 3/15min allowance (the client IP is held constant here)
@@ -118,6 +132,19 @@ class ForgotPasswordTest extends AuthTestCase
     private function forgotPassword(array $payload): TestResponse
     {
         return $this->postJson('/api/v1/auth/forgot-password', $payload);
+    }
+
+    /**
+     * Use up the client's per-IP allowance with $allowed requests for DISTINCT valid emails, each of
+     * which must pass — pinning the allowance at exactly $allowed while every per-email bucket stays
+     * at one hit. (AuthTestCase::exhaustAuthLimit posts empty bodies, which all share the '' per-email
+     * bucket and are refused by the per-email limit first, so it cannot exhaust the per-IP limit.)
+     */
+    private function exhaustIpAllowance(int $allowed): void
+    {
+        for ($i = 0; $i < $allowed; $i++) {
+            $this->forgotPassword(['email' => "guest{$i}@contoso.lk"])->assertNoContent();
+        }
     }
 
     /**
