@@ -6,20 +6,25 @@
 #     XProjectorTest, XReactorTest, XEntityTest, XModelTest) and the Rule-B
 #     carve-out categories whose artifact IS the behavior (XSeederTest,
 #     XMailRenderTest, XCommandTest for console commands; a DTO-command
-#     XCommandTest has no carve-out - Rule A bans it at review).
+#     XCommandTest has no carve-out - Rule A bans it at review). The marker
+#     must sit on a docblock line (` * @testclass-carveout: ...`); a string
+#     literal or a // line does not count.
 #  2. Test-PARTITION-named files (XSadPathTest, XHappyPathTest, XEdgeCaseTest,
 #     XErrorPathTest, XNegativeTest) are banned outright - no carve-out escape,
 #     because no partition name is ever a behavior name.
 # Shared by lefthook pre-commit (staged files) and the CI quality job (whole
-# tree). ALWAYS ends with the summary line CI parses; `scanned` counts files
-# actually inspected.
+# tree). Only tests/**/*Test.php files are inspected. ALWAYS ends with the
+# summary line CI parses; `scanned` counts files actually inspected.
 # Usage: sh scripts/check-test-class-naming.sh [file...]   (no args = scan tests/)
 violations=0
 scanned=0
+carveout='^[[:space:]]*\*[[:space:]]*@testclass-carveout:'
 
 inspect() {
   f=$1
   [ -f "$f" ] || return 0
+  case "$f" in *Test.php) ;; *) return 0 ;; esac
+  case "$f" in tests/*|./tests/*|*/tests/*) ;; *) return 0 ;; esac
   scanned=$((scanned + 1))
   case "$f" in
     *SadPathTest.php|*HappyPathTest.php|*EdgeCaseTest.php|*ErrorPathTest.php|*NegativeTest.php)
@@ -27,8 +32,8 @@ inspect() {
       violations=$((violations + 1))
       ;;
     *AggregateTest.php|*ProjectionTest.php|*ProjectorTest.php|*ReactorTest.php|*EntityTest.php|*ModelTest.php|*SeederTest.php|*MailRenderTest.php|*CommandTest.php)
-      if ! grep -q "@testclass-carveout:" "$f"; then
-        echo "sec-2.14 violation - artifact-named test class without @testclass-carveout: $f"
+      if ! grep -qE "$carveout" "$f"; then
+        echo "sec-2.14 violation - artifact-named test class without an @testclass-carveout: docblock line: $f"
         violations=$((violations + 1))
       fi
       ;;
