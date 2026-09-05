@@ -114,8 +114,8 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      # fetch-depth 0: the test-standards gate diffs against the PR base sha;
-      # a shallow clone has no merge-base and the diff dies (false-pass class).
+      # fetch-depth 0: full history for the diff-aware actions in this job. The
+      # sec 2.14 gate no longer diffs (whole tree since OQ-1-170).
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: shivammathur/setup-php@v2
@@ -128,18 +128,25 @@ jobs:
       - name: Semgrep SAST
         uses: returntocorp/semgrep-action@v1
         with: { config: 'p/security-audit p/php' }
-      - name: Test-class naming (conv-plan sec 2.14)
+      - name: Test-class naming (conv-plan sec 2.14, OQ-1-170) - gating
+        # Behavior-named test classes only: partition names are banned outright;
+        # artifact names (the six production suffixes + seeder / mail-render /
+        # command) need the @testclass-carveout: line. Whole tests/ tree - the
+        # diff-scoped form silently skipped on an empty diff and could not see
+        # the seeder / mail-render names at all (OQ-1-169 F2-F5 sat green under
+        # it). Same script as the lefthook test-class-naming hook. Liveness
+        # proof: the summary line must exist and the scan must have read a file.
         run: |
+          set +e
+          sh scripts/check-test-class-naming.sh > "$RUNNER_TEMP/test-class-naming.txt" 2>&1
+          status=$?
+          summary=$(grep '^Test-class naming check:' "$RUNNER_TEMP/test-class-naming.txt")
           set -e
-          BASE="${{ github.event.pull_request.base.sha }}"
-          [ -n "$BASE" ] || BASE="HEAD~1"
-          # sec 2.14 - artifact-named test classes need a carve-out marker
-          # (same script as the lefthook pre-commit hook). The diff MUST succeed -
-          # no silent fallback (a swallowed diff error false-passed this gate once).
-          CHANGED_TESTS=$(git diff --name-only "$BASE"...HEAD -- 'tests/**/*Test.php')
-          if [ -n "$CHANGED_TESTS" ]; then
-            sh scripts/check-test-class-naming.sh $CHANGED_TESTS
-          fi
+          cat "$RUNNER_TEMP/test-class-naming.txt"
+          [ -n "$summary" ] || { echo "no summary line - the check did not run"; exit 1; }
+          scanned=$(echo "$summary" | sed -E 's/.*; ([0-9]+) file\(s\) scanned/\1/')
+          [ "$scanned" -gt 0 ] || { echo "scanned nothing"; exit 1; }
+          exit $status
       - name: Write-path chain (conv-plan sec 2.15.C, OQ-1-170) - gating
         # Controllers never ::retrieve( / DB:: / ->persist(; DB::transaction only in
         # interactors; reactors never write (ban 4 - side effects only). Whole app/
