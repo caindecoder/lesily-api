@@ -1,11 +1,13 @@
 #!/bin/sh
 # Sec 2.15.C (coding-conventions-plan): the canonical write-path chain's
 # layer-skip bans, call-form only - comment lines are excluded, so a docblock
-# that merely names DB::transaction never fires. Two checks:
+# that merely names DB::transaction never fires. Three checks:
 #  C1 controllers never ::retrieve( / DB::x( / ->persist( - they translate
 #     and present only (the chain starts at the command).
 #  C2 DB::transaction( lives in UseCases/Interactors/ only - interactors own
 #     the transaction.
+#  C3 reactors never write (ban 4 - side effects only, Pattern A): no
+#     aggregate retrieve/persist, no DB facade, no Eloquent write verb.
 # Shared by lefthook pre-commit (staged app/ files) and the CI quality job
 # (whole tree). ALWAYS ends with the summary line CI parses; `scanned` counts
 # files actually inspected; `violations` counts offending lines.
@@ -15,6 +17,7 @@ scanned=0
 comment='^[0-9]+:[[:space:]]*(\*|//)'
 layer_skip='::retrieve\(|DB::[A-Za-z_]+[[:space:]]*\(|->persist\('
 transaction='DB::transaction[[:space:]]*\('
+reactor_write='::retrieve\(|->persist\(|DB::[A-Za-z_]+[[:space:]]*\(|->(save|update|delete|forceDelete|insert|create|forceFill|increment|decrement|touch)\(|::(create|insert|upsert|updateOrCreate|firstOrCreate|forceCreate)\('
 
 report() {
   hits=$(grep -nE "$3" "$1" | grep -vE "$comment")
@@ -36,6 +39,9 @@ inspect() {
   case "$f" in
     */UseCases/Interactors/*) ;;
     *) report "$f" "DB::transaction outside UseCases/Interactors" "$transaction" ;;
+  esac
+  case "$f" in
+    */Reactors/*) report "$f" "reactor write (reactors are side effects only - ban 4)" "$reactor_write" ;;
   esac
 }
 

@@ -142,7 +142,8 @@ jobs:
           fi
       - name: Write-path chain (conv-plan sec 2.15.C, OQ-1-170) - gating
         # Controllers never ::retrieve( / DB:: / ->persist(; DB::transaction only in
-        # interactors. Whole app/ tree, call-form only (comment lines excluded);
+        # interactors; reactors never write (ban 4 - side effects only). Whole app/
+        # tree, call-form only (comment lines excluded);
         # database/ seeders+migrations out of scope. Same script as the lefthook
         # write-path-chain hook. Liveness proof: the summary line must exist and
         # the scan must have read a file.
