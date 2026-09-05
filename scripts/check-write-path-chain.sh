@@ -8,16 +8,35 @@
 #     the transaction.
 #  C3 reactors never write (ban 4 - side effects only, Pattern A): no
 #     aggregate retrieve/persist, no DB facade, no Eloquent write verb.
-# Shared by lefthook pre-commit (staged app/ files) and the CI quality job
-# (whole tree). ALWAYS ends with the summary line CI parses; `scanned` counts
+# Every pattern is self-tested against a literal it must match before any file
+# is read: a pattern that cannot match (a broken regex makes grep exit 2 and
+# print nothing) would otherwise report a clean tree. Shared by lefthook
+# pre-commit (staged app/ files) and the CI quality job (whole tree). ALWAYS
+# ends with the summary line CI parses - except on a self-test abort, which
+# exits 2 with no summary so CI's liveness proof fails too; `scanned` counts
 # files actually inspected; `violations` counts offending lines.
 # Usage: sh scripts/check-write-path-chain.sh [file...]   (no args = scan app/)
 violations=0
 scanned=0
 comment='^[0-9]+:[[:space:]]*(\*|//)'
-layer_skip='::retrieve\(|DB::[A-Za-z_]+[[:space:]]*\(|->persist\('
+aggregate_io='::retrieve\(|->persist\('
+db_facade='DB::[A-Za-z_]+[[:space:]]*\('
+eloquent_write='->(save|update|delete|forceDelete|insert|create|forceFill|increment|decrement|touch)\('
+static_write='::(create|insert|upsert|updateOrCreate|firstOrCreate|forceCreate)\('
+layer_skip="$aggregate_io|$db_facade"
 transaction='DB::transaction[[:space:]]*\('
-reactor_write='::retrieve\(|->persist\(|DB::[A-Za-z_]+[[:space:]]*\(|->(save|update|delete|forceDelete|insert|create|forceFill|increment|decrement|touch)\(|::(create|insert|upsert|updateOrCreate|firstOrCreate|forceCreate)\('
+reactor_write="$aggregate_io|$db_facade|$eloquent_write|$static_write"
+
+self_test() {
+  printf '%s\n' "$2" | grep -qE "$1" && return 0
+  echo "Write-path chain check aborted - pattern cannot match its control '$2': $1"
+  exit 2
+}
+self_test "$layer_skip" 'UserAggregate::retrieve($id)->persist();'
+self_test "$layer_skip" 'DB::transaction(fn () => 1);'
+self_test "$transaction" 'DB::transaction(fn () => 1);'
+self_test "$reactor_write" 'User::query()->update([]);'
+self_test "$reactor_write" 'User::create([]);'
 
 report() {
   hits=$(grep -nE "$3" "$1" | grep -vE "$comment")
