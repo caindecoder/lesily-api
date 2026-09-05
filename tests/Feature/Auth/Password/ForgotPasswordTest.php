@@ -46,9 +46,7 @@ class ForgotPasswordTest extends AuthTestCase
         $email = 'guest@contoso.lk';
 
         // When the window's allowance of requests is used up
-        for ($attempt = 0; $attempt < 3; $attempt++) {
-            $this->forgotPassword(['email' => $email])->assertNoContent();
-        }
+        $this->exhaustEmailAllowance($email);
 
         // Then the next request is throttled
         $this->assertThrottled($this->forgotPassword(['email' => $email]));
@@ -73,9 +71,7 @@ class ForgotPasswordTest extends AuthTestCase
     {
         // Given one email has used up its 3/15min allowance (the client IP is held constant here)
         $exhausted = 'victim@contoso.lk';
-        for ($attempt = 0; $attempt < 3; $attempt++) {
-            $this->forgotPassword(['email' => $exhausted])->assertNoContent();
-        }
+        $this->exhaustEmailAllowance($exhausted);
         $this->assertThrottled($this->forgotPassword(['email' => $exhausted]));
 
         // Then a case-variant of the same email shares the bucket (the key is lowercased)
@@ -100,6 +96,35 @@ class ForgotPasswordTest extends AuthTestCase
 
         // Then it is not throttled by the other IP's exhausted allowance
         $response->assertNoContent();
+    }
+
+    #[Test]
+    public function when_the_per_ip_window_has_elapsed_then_the_client_may_request_again(): void
+    {
+        // Given one client has used up its per-IP allowance and is being throttled
+        $this->exhaustIpAllowance(10);
+        $this->assertThrottled($this->forgotPassword(['email' => 'eleventh@contoso.lk']));
+
+        // When the one-minute window has elapsed
+        $this->travel(61)->seconds();
+
+        // Then the client may request again
+        $this->forgotPassword(['email' => 'twelfth@contoso.lk'])->assertNoContent();
+    }
+
+    #[Test]
+    public function when_the_per_email_window_has_elapsed_then_the_email_may_be_requested_again(): void
+    {
+        // Given one email has used up its allowance and is being throttled
+        $email = 'victim@contoso.lk';
+        $this->exhaustEmailAllowance($email);
+        $this->assertThrottled($this->forgotPassword(['email' => $email]));
+
+        // When the fifteen-minute window has elapsed
+        $this->travel(16)->minutes();
+
+        // Then the email may be requested again
+        $this->forgotPassword(['email' => $email])->assertNoContent();
     }
 
     #[Test]
@@ -161,6 +186,16 @@ class ForgotPasswordTest extends AuthTestCase
     {
         for ($i = 0; $i < $allowed; $i++) {
             $this->forgotPassword(['email' => "guest{$i}@contoso.lk"])->assertNoContent();
+        }
+    }
+
+    /**
+     * Three passing requests for $email — its whole 3/15min allowance, pinned at exactly three.
+     */
+    private function exhaustEmailAllowance(string $email): void
+    {
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $this->forgotPassword(['email' => $email])->assertNoContent();
         }
     }
 
