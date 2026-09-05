@@ -46,17 +46,25 @@ class AppServiceProvider extends ServiceProvider
             return $this->attributes->get('company');
         });
 
-        // The public auth surface (register/login/reset/refresh) shares one
-        // per-IP limit — anti-brute-force per api-1-auth-onboarding §register
-        // (10/min/IP). Distinct from the per-tenant-tier general-API limiter
-        // (OQ-1-098), which resolves the limit from the company's plan.
+        // auth-tier: one 10/min per-IP bucket shared by every route that mounts
+        // throttle:auth-tier — the public credential surface (register, login,
+        // reset-password, 2FA verify) and the authenticated credential checks; see
+        // routes/api.php. Anti-brute-force per api-1-auth-onboarding §register.
+        // Distinct from the per-tenant-tier general-API limiter (OQ-1-098), which
+        // resolves the limit from the company's plan.
         RateLimiter::for('auth-tier', fn (Request $request) => Limit::perMinute(10)->by((string) $request->ip()));
 
-        // Forgot-password is tighter than the shared auth-tier and keyed by the TARGET email
-        // (not IP): a reset link must not be spammable into a victim's inbox — 3/15min/email
-        // (questionnaire §S20). Enumeration-safe by design: the endpoint 204s regardless of
-        // registration, so the limiter is the only signal and it never differs known vs unknown.
-        RateLimiter::for('forgot-password', fn (Request $request) => Limit::perMinutes(15, 3)->by(Str::lower((string) $request->input('email', ''))));
+        // Forgot-password stacks two limits: 3/15min keyed by the TARGET email — a reset link
+        // must not be spammable into a victim's inbox (questionnaire §S20) — and 10/min keyed
+        // by client IP, so one host cannot spray distinct emails into unbounded lookups, token
+        // inserts and reset mail (§S14 auth-endpoint parity). The keys are prefixed because the
+        // throttle runs before validation and a body email could equal an IP string.
+        // Enumeration-safe by design: the endpoint 204s regardless of registration, so the
+        // limiter is the only signal and it never differs known vs unknown.
+        RateLimiter::for('forgot-password', fn (Request $request) => [
+            Limit::perMinutes(15, 3)->by('email:'.Str::lower((string) $request->input('email', ''))),
+            Limit::perMinute(10)->by('ip:'.(string) $request->ip()),
+        ]);
 
         // Invites are keyed by the ACTING user (not IP): 20/hr per actor caps invite-email
         // spam from one compromised or abusive account without letting a shared office IP

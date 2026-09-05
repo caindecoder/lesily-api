@@ -53,8 +53,9 @@ Route::post('/v1/auth/login', LoginController::class)
     ->middleware('throttle:auth-tier');
 
 // Forgot password (UC-1-008) — a guest requests a reset link. Public; enumeration-safe (always
-// 204 whether or not the email is registered). throttle:forgot-password = 3/15min keyed by the
-// TARGET email (tighter than auth-tier), so a reset link can't be spammed to a victim's inbox.
+// 204 whether or not the email is registered). throttle:forgot-password stacks 3/15min keyed by
+// the TARGET email (a reset link can't be spammed to a victim's inbox) with 10/min keyed by client
+// IP (one host can't spray distinct emails) — both limits live in AppServiceProvider.
 Route::post('/v1/auth/forgot-password', ForgotPasswordController::class)
     ->middleware('throttle:forgot-password');
 
