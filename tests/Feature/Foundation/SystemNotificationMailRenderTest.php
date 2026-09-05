@@ -6,6 +6,10 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 
+/**
+ * @testclass-carveout: mail-render — the class under test IS the behaviour: a
+ * Mailable has no HTTP seam, so its rendering can only be proven directly.
+ */
 class SystemNotificationMailRenderTest extends FoundationTestCase
 {
     #[Test]

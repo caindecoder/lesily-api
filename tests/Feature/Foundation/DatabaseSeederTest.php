@@ -8,6 +8,10 @@ use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\RolesPermissions\Entities\Permission;
 use App\Foundation\RolesPermissions\Entities\RolePermission;
 
+/**
+ * @testclass-carveout: seeder — the artifact IS the behavior (the production
+ * db:seed entry point; conv-plan §2.14 Rule B).
+ */
 class DatabaseSeederTest extends FoundationTestCase
 {
     // OQ-1-110 — production `db:seed` must stand up the whole RBAC catalog:
