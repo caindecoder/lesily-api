@@ -177,8 +177,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then contention answers as a conflict; anything else passes through
         // (render only — the audit-veto row is the atomicity net)
-        $response->assertStatus($expectedStatus);
-        $response->assertJsonPath('error_code', $expected->value);
+        $this->assertRefusedWith($response, $expectedStatus, $expected);
     }
 
     #[Test]

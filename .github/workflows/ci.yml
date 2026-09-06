@@ -213,8 +213,9 @@ jobs:
       - name: Status assertions (conv-plan sec 2.2 Rule 11, OQ-1-177) - gating
         # A test states its expected HTTP status itself: assertStatus( fed by
         # ->status() (the tautology - the expectation moves with the mutation)
-        # or by a bare integer (use the named assert) is refused over the whole
-        # tests/ tree. Same script as the lefthook status-assertions hook; every
+        # or by a bare integer (use the named assert), a `$x = ...->status()`
+        # parked value, or the enum on the expected side of assertSame, is
+        # refused over the whole tests/ tree. Same script as the lefthook hook; every
         # matcher and the comment filter self-test at startup (a dead matcher
         # aborts with no summary). Liveness proof: the summary line must exist
         # and the tests population must be non-zero.

@@ -7,17 +7,26 @@
 #  M1 derived  - the status computed from production (`->status()`): the
 #                expectation moves with the mutation, so the test cannot fail
 #  M2 bare int - a three-digit literal (use the named assert)
-# Comment lines are excluded (call-form only). Every matcher AND the comment
-# filter are self-tested at startup on a planted hit and a planted miss; a
-# matcher that cannot match aborts with exit 2 and NO summary line.
+# and two forms that reach the same tautology around assertStatus(:
+#  M3 assigned - `$x = ...->status()` (the derived value parked in a variable,
+#                then handed to assertStatus($x) or a provider row)
+#  M4 expected - `assertSame(ApiErrorCode::X->status(), ...)` (the enum on the
+#                EXPECTED side; `assertSame(500, ApiErrorCode::X->status())`
+#                pins the arm with a literal and is allowed)
+# Comment lines are excluded (call-form only; //, /*, * and # openers - the
+# check-write-path-chain.sh filter). Every matcher AND the comment filter are
+# self-tested at startup on a planted hit and a planted miss; a matcher that
+# cannot match aborts with exit 2 and NO summary line.
 # Shared by lefthook pre-commit (staged files) and the CI quality job (whole
 # tree). ALWAYS ends with the summary line CI parses; `tests:` counts files
 # actually inspected.
 # Usage: sh scripts/check-status-assertions.sh [file...]   (no args = scan tests/)
 derived='assertStatus\([^)]*->status\(\)'
 bare='assertStatus\([[:space:]]*[0-9]{3}[[:space:]]*\)'
+assigned='=[[:space:]]*[^;]*->status\(\)'
+expected_side='assert(Same|Equals)\([[:space:]]*ApiErrorCode::[A-Za-z]+->status\(\)'
 # applied to `grep -n` output (line:content), so the anchor sits after the number
-comment='^[0-9]+:[[:space:]]*(\*|//)'
+comment='^[0-9]+:[[:space:]]*(\*|/\*|//|#)'
 
 self_test() {
   # $1 label, $2 pattern, $3 a line the pattern MUST match, $4 a line it must NOT match
@@ -42,12 +51,27 @@ self_test 'M2 bare int' "$bare" \
 self_test 'M2 bare int (spaced)' "$bare" \
   '        ->assertStatus( 201 );' \
   '        $response->assertStatus($status);'
+self_test 'M3 assigned (enum form)' "$assigned" \
+  '        $expected = ApiErrorCode::InviteInvalid->status();' \
+  '        $this->assertSame(500, ApiErrorCode::HttpError->status());'
+self_test 'M3 assigned (variable form)' "$assigned" \
+  '        $expected = $code->status();' \
+  '        $response->assertStatus($expectedStatus);'
+self_test 'M4 expected side' "$expected_side" \
+  '        $this->assertSame(ApiErrorCode::InviteInvalid->status(), $response->status());' \
+  '        $this->assertSame($unknownEmail->status(), $wrongPassword->status());'
 self_test 'comment filter (docblock)' "$comment" \
   '12:     * assertStatus(422) in a docblock' \
   '12:        $response->assertStatus(422);'
 self_test 'comment filter (// form)' "$comment" \
   '12:        // $response->assertStatus(422);' \
   '12:        $this->assertRefusedWith($response, Response::HTTP_OK, ApiErrorCode::InviteInvalid);'
+self_test 'comment filter (/* form)' "$comment" \
+  '12:        /* $response->assertStatus(422); */' \
+  '12:        $expected = ApiErrorCode::InviteInvalid->status();'
+self_test 'comment filter (# form)' "$comment" \
+  '12:        # $response->assertStatus(422);' \
+  '12:        $this->assertSame(ApiErrorCode::InviteInvalid->status(), $response->status());'
 
 violations=0
 scanned=0
@@ -57,7 +81,7 @@ report() {
   hits=$(grep -nE "$2" "$1" | grep -vE "$comment")
   [ -n "$hits" ] || return 0
   n=$(printf '%s\n' "$hits" | wc -l | tr -d ' ')
-  printf '%s\n' "$hits" | sed "s|^|sec-2.2 Rule 11 violation - assertStatus( fed by $3: $1:|"
+  printf '%s\n' "$hits" | sed "s|^|sec-2.2 Rule 11 violation - $3: $1:|"
   violations=$((violations + n))
 }
 
@@ -67,8 +91,10 @@ inspect() {
   case "$f" in *.php) ;; *) return 0 ;; esac
   case "$f" in tests/*|./tests/*|*/tests/*) ;; *) return 0 ;; esac
   scanned=$((scanned + 1))
-  report "$f" "$derived" 'a status read from production (->status())'
-  report "$f" "$bare" 'a bare integer (use the named assert)'
+  report "$f" "$derived" 'assertStatus( fed by a status read from production (->status())'
+  report "$f" "$bare" 'assertStatus( fed by a bare integer (use the named assert)'
+  report "$f" "$assigned" 'a status read from production and parked in a variable (state it as a named assert or a Response::HTTP_* constant)'
+  report "$f" "$expected_side" 'the enum on the expected side of assertSame/assertEquals'
 }
 
 if [ "$#" -gt 0 ]; then
