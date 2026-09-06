@@ -58,11 +58,15 @@ class AppServiceProvider extends ServiceProvider
         // must not be spammable into a victim's inbox (questionnaire §S20) — and 10/min keyed
         // by client IP, so one host cannot spray distinct emails into unbounded lookups, token
         // inserts and reset mail (§S14 auth-endpoint parity). The keys are prefixed because the
-        // throttle runs before validation and a body email could equal an IP string.
+        // throttle runs before validation and a body email could equal an IP string; for the same
+        // reason any non-string email (an array, a number, a boolean) keys as '': validation refuses
+        // it next, and casting an array would have crashed the request.
         // Enumeration-safe by design: the endpoint 204s regardless of registration, so the
         // limiter is the only signal and it never differs known vs unknown.
         RateLimiter::for('forgot-password', fn (Request $request) => [
-            Limit::perMinutes(15, 3)->by('email:'.Str::lower((string) $request->input('email', ''))),
+            Limit::perMinutes(15, 3)->by('email:'.Str::lower(
+                is_string($email = $request->input('email')) ? $email : ''
+            )),
             Limit::perMinute(10)->by('ip:'.(string) $request->ip()),
         ]);
 
