@@ -121,7 +121,7 @@ class RevokeInvitationTest extends MembershipsTestCase
         // Given
         [$company, $admin] = $this->aCompanyWithMember();
         $token = $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
         $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
 
         // When

@@ -84,7 +84,7 @@ class ApiErrorResponseTest extends FoundationTestCase
         $response = $this->getErrorProbe('error-feature-gate');
 
         // Then
-        $response->assertStatus(403);
+        $response->assertForbidden();
         $response->assertSee('"errors":{}', false);
     }
 
@@ -98,7 +98,7 @@ class ApiErrorResponseTest extends FoundationTestCase
         $response = $this->getErrorProbe('error-internal');
 
         // Then
-        $response->assertStatus(500);
+        $response->assertInternalServerError();
         $response->assertSee('boom', false);
     }
 
@@ -112,7 +112,7 @@ class ApiErrorResponseTest extends FoundationTestCase
         $response = $this->getErrorProbe('error-method-not-allowed');
 
         // Then the spec-mandated header survives the envelope rewrite (RFC 7231)
-        $response->assertStatus(405);
+        $response->assertMethodNotAllowed();
         $response->assertHeader('Allow', 'POST');
     }
 
@@ -126,7 +126,7 @@ class ApiErrorResponseTest extends FoundationTestCase
         $response = $this->getErrorProbe('error-http-detail');
 
         // Then the envelope shows the opaque generic message, never the raw detail
-        $response->assertStatus(410);
+        $response->assertGone();
         $response->assertJsonPath('message', 'The request could not be completed.');
         $response->assertDontSee('sensitive internal detail', false);
     }
@@ -182,14 +182,14 @@ class ApiErrorResponseTest extends FoundationTestCase
 
     protected function assertFieldValidationErrors(TestResponse $response, string $field, string $message): void
     {
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
         $response->assertJsonValidationErrors([$field => $message]);
     }
 
     protected function assertUpgradePromptIncluded(TestResponse $response, string $upgradeTo, string $upgradeUrl): void
     {
-        $response->assertStatus(403);
+        $response->assertForbidden();
         $response->assertJsonPath('error_code', 'FEATURE_NOT_AVAILABLE');
         $response->assertJsonPath('upgrade_to', $upgradeTo);
         $response->assertJsonPath('upgrade_url', $upgradeUrl);
@@ -197,7 +197,7 @@ class ApiErrorResponseTest extends FoundationTestCase
 
     protected function assertInternalErrorIsOpaque(TestResponse $response): void
     {
-        $response->assertStatus(500);
+        $response->assertInternalServerError();
         $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
         $response->assertJsonPath('message', 'An unexpected error occurred.');
         $response->assertDontSee('boom', false);

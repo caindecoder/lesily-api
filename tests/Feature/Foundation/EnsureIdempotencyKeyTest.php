@@ -356,28 +356,28 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
 
     protected function assertRejectedAsMissingKey(TestResponse $response): void
     {
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'IDEMPOTENCY_KEY_REQUIRED');
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
     protected function assertRefusedAsStoreUnavailable(TestResponse $response): void
     {
-        $response->assertStatus(503);
+        $response->assertServiceUnavailable();
         $response->assertJsonPath('error_code', 'IDEMPOTENCY_CACHE_UNAVAILABLE');
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
     protected function assertRejectedAsKeyConflict(TestResponse $response): void
     {
-        $response->assertStatus(409);
+        $response->assertConflict();
         $response->assertJsonPath('error_code', 'IDEMPOTENCY_KEY_CONFLICT');
         Event::assertDispatchedTimes('probe.idempotent.executed', 1);
     }
 
     protected function assertRejectedAsProcessing(TestResponse $response): void
     {
-        $response->assertStatus(409);
+        $response->assertConflict();
         $response->assertJsonPath('error_code', 'IDEMPOTENCY_KEY_PROCESSING');
         $response->assertJsonPath('retry_after', 1);
         $response->assertHeader('Retry-After', '1');
@@ -386,15 +386,15 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
 
     protected function assertReattemptedAfterFailure(TestResponse $first, TestResponse $second): void
     {
-        $first->assertStatus(422);
-        $second->assertStatus(422);
+        $first->assertUnprocessable();
+        $second->assertUnprocessable();
         Event::assertDispatchedTimes('probe.idempotent.executed', 2);
     }
 
     protected function assertReattemptedAfterError(TestResponse $first, TestResponse $second): void
     {
-        $first->assertStatus(500);
-        $second->assertStatus(500);
+        $first->assertInternalServerError();
+        $second->assertInternalServerError();
         Event::assertDispatchedTimes('probe.idempotent.executed', 2);
     }
 

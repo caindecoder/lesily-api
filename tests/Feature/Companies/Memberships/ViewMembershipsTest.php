@@ -315,7 +315,7 @@ class ViewMembershipsTest extends MembershipsTestCase
     protected function anAcceptedInvitation(Company $company, User $actor, string $email): void
     {
         $token = $this->aPendingInvitation($company, $actor, $email);
-        $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
     }
 
     /**
@@ -581,7 +581,7 @@ class ViewMembershipsTest extends MembershipsTestCase
         [$company, $owner] = $this->aCompanyWithMember('owner');
         $token = $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
         $invitationId = Invitation::query()->where('email', 'kasun@contoso.lk')->sole()->getKey();
-        $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
 
         // When the owner requests the roster
         $response = $this->viewMemberships($owner, $company);

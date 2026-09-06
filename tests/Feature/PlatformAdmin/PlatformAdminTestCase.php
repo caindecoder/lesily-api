@@ -366,7 +366,7 @@ abstract class PlatformAdminTestCase extends TestCase
      */
     protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
     {
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
         $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
     }
@@ -378,7 +378,7 @@ abstract class PlatformAdminTestCase extends TestCase
      */
     protected function assertUnauthenticated(TestResponse $response): void
     {
-        $response->assertStatus(401);
+        $response->assertUnauthorized();
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }

@@ -74,14 +74,14 @@ class AssignCorrelationIdTest extends FoundationTestCase
 
     protected function assertCorrelationPropagated(TestResponse $response, string $expectedId): void
     {
-        $response->assertStatus(200);
+        $response->assertOk();
         $response->assertHeader('Correlation-Id', $expectedId);
         $response->assertJsonPath('downstream_correlation_id', $expectedId);
     }
 
     protected function assertCorrelationMinted(TestResponse $response): void
     {
-        $response->assertStatus(200);
+        $response->assertOk();
 
         $mintedId = $response->headers->get('Correlation-Id');
         $this->assertTrue(Str::isUuid($mintedId), 'Correlation-Id is not a valid UUID.');
@@ -91,7 +91,7 @@ class AssignCorrelationIdTest extends FoundationTestCase
 
     protected function assertErrorResponseCarriesCorrelationId(TestResponse $response): void
     {
-        $response->assertStatus(404);
+        $response->assertNotFound();
         $this->assertNotEmpty($response->headers->get('Correlation-Id'));
     }
 

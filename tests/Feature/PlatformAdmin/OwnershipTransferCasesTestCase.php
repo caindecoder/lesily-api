@@ -152,7 +152,7 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
      */
     protected function assertFailedClosed(TestResponse $response): void
     {
-        $response->assertStatus(500);
+        $response->assertInternalServerError();
         $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
         $response->assertJsonMissingPath('data');
     }

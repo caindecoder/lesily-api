@@ -189,7 +189,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Given — the shared public-auth allowance (10/min per IP) spent on
         // token-guessing attempts
         for ($i = 0; $i < 10; $i++) {
-            $this->acceptInvitation("guessed-token-{$i}")->assertStatus(422);
+            $this->acceptInvitation("guessed-token-{$i}")->assertUnprocessable();
         }
 
         // When — one more attempt arrives from the same IP

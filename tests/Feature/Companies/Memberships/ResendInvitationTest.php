@@ -91,7 +91,7 @@ class ResendInvitationTest extends MembershipsTestCase
         // Given
         [$company, $admin] = $this->aCompanyWithMember();
         $token = $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
         $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
 
         // When
@@ -221,7 +221,7 @@ class ResendInvitationTest extends MembershipsTestCase
         $response = $this->acceptInvitation($newToken, $this->validNewUserBody());
 
         // Then
-        $response->assertStatus(201);
+        $response->assertCreated();
         $this->assertMembershipActivated($company, 'invitee@contoso.lk');
         $this->assertNewUserProvisioned('invitee@contoso.lk', 'Nimal Perera');
     }
@@ -318,7 +318,7 @@ class ResendInvitationTest extends MembershipsTestCase
      */
     protected function assertResendRefusedAsNotPending(TestResponse $response, string $oldTokenHash): void
     {
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $this->assertInvitationNotResent($response, ApiErrorCode::InviteNotPending, $oldTokenHash);
         $response->assertJsonPath('message', 'This invitation is no longer pending.');
     }

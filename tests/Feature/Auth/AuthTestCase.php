@@ -125,27 +125,27 @@ abstract class AuthTestCase extends TestCase
     protected function exhaustAuthLimit(int $allowed, string $endpoint): void
     {
         for ($i = 0; $i < $allowed; $i++) {
-            $this->postJson($endpoint, [])->assertStatus(422);
+            $this->postJson($endpoint, [])->assertUnprocessable();
         }
     }
 
     protected function assertThrottled(TestResponse $response): void
     {
-        $response->assertStatus(429);
+        $response->assertTooManyRequests();
         $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
         $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
     }
 
     protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
     {
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
         $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
     }
 
     protected function assertUnauthenticated(TestResponse $response): void
     {
-        $response->assertStatus(401);
+        $response->assertUnauthorized();
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
     }
 
@@ -480,7 +480,7 @@ abstract class AuthTestCase extends TestCase
     {
         Auth::forgetGuards();
         $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $oldPassword])
-            ->assertStatus(401);
+            ->assertUnauthorized();
 
         Auth::forgetGuards();
         $newLogin = $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $newPassword]);

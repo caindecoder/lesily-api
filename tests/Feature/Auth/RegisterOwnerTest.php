@@ -211,7 +211,7 @@ class RegisterOwnerTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), 'email' => self::EXISTING_EMAIL]);
 
         // Then the original database fault surfaces, never a masked conflict
-        $response->assertStatus(500);
+        $response->assertInternalServerError();
         $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
         $this->assertNoNewAccounts($usersBefore, $companiesBefore);
     }
@@ -229,7 +229,7 @@ class RegisterOwnerTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/register', $payload);
 
         // Then the request is rejected and the half-built account is rolled back
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'UNSUPPORTED_COUNTRY');
         $this->assertNothingPersisted();
     }
@@ -258,14 +258,14 @@ class RegisterOwnerTest extends AuthTestCase
         // Given one IP has exhausted its auth quota for the minute
         $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.1']);
         $this->exhaustAuthLimit(10, '/api/v1/auth/register');
-        $this->postJson('/api/v1/auth/register', [])->assertStatus(429);
+        $this->postJson('/api/v1/auth/register', [])->assertTooManyRequests();
 
         // When a different IP makes its first attempt
         $response = $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.2'])
             ->postJson('/api/v1/auth/register', []);
 
         // Then it is not throttled by the other IP's exhausted quota
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
     }
 
     // Edge — register is UA-derived (no deviceName on the register contract, per design):
@@ -438,7 +438,7 @@ class RegisterOwnerTest extends AuthTestCase
 
     protected function assertConflict(TestResponse $response, string $expectedCode): void
     {
-        $response->assertStatus(409);
+        $response->assertConflict();
         $response->assertJsonPath('error_code', $expectedCode);
         $response->assertJsonPath('errors', []);
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);

@@ -35,7 +35,7 @@ class InviteUserTest extends MembershipsTestCase
         ]);
 
         // Then it is refused as an existing member and nothing is created
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'ALREADY_MEMBER');
         $this->assertNoInvitationCreated();
     }
@@ -48,7 +48,7 @@ class InviteUserTest extends MembershipsTestCase
         $this->invite($admin, $company, [
             'email' => 'pending@contoso.lk',
             'roleCode' => 'employee',
-        ])->assertStatus(201);
+        ])->assertCreated();
 
         // When they invite the same email again
         $response = $this->invite($admin, $company, [
@@ -180,7 +180,7 @@ class InviteUserTest extends MembershipsTestCase
 
         // Then a pending invitation reuses the SAME membership UUID and the pivot
         // stays removed until the invitee accepts (undelete happens at accept, UC-1-019)
-        $response->assertStatus(201);
+        $response->assertCreated();
         $this->assertDatabaseHas('invitations', [
             'id' => $membershipId,
             'company_id' => $company->getKey(),
@@ -198,7 +198,7 @@ class InviteUserTest extends MembershipsTestCase
         $this->invite($admin, $company, [
             'email' => 'slow@contoso.lk',
             'roleCode' => 'employee',
-        ])->assertStatus(201);
+        ])->assertCreated();
         $this->travel(8)->days();
 
         // When the admin re-invites the same email
@@ -209,7 +209,7 @@ class InviteUserTest extends MembershipsTestCase
 
         // Then a FRESH pending invitation is issued (expiry is terminal — SM-1-01
         // T5: re-engagement is a new stream/row) and the expired row is preserved
-        $response->assertStatus(201);
+        $response->assertCreated();
         $rows = Invitation::query()
             ->where('company_id', $company->getKey())
             ->where('email', 'slow@contoso.lk')
@@ -238,7 +238,7 @@ class InviteUserTest extends MembershipsTestCase
         // Then a FRESH pending invitation is issued (revocation is terminal —
         // SM-1-01 T6: re-engagement is a new stream/row, mirroring expiry T5) and
         // the revoked row is preserved with its audit-forensics stamps intact
-        $response->assertStatus(201);
+        $response->assertCreated();
         $rows = Invitation::query()
             ->where('company_id', $company->getKey())
             ->where('email', 'slow@contoso.lk')
@@ -267,7 +267,7 @@ class InviteUserTest extends MembershipsTestCase
         ]);
 
         // Then the reused row returns to clean pending — every terminal marker reset
-        $response->assertStatus(201);
+        $response->assertCreated();
         $this->assertReinvitedRowCleanPending($membershipId, $admin, $company);
     }
 
@@ -307,7 +307,7 @@ class InviteUserTest extends MembershipsTestCase
 
         // Then a pending invitation is stored (hashed token at rest, 7-day expiry,
         // event-sourced) and the invite email is queued with the plaintext accept-link
-        $response->assertStatus(201);
+        $response->assertCreated();
         $response->assertJsonStructure(['data' => ['id', 'email', 'role', 'expires_at']]);
         $this->assertPendingInvitationCreated($company, 'newuser@contoso.lk', 'employee');
         $this->assertInvitationMailQueued($company, 'newuser@contoso.lk');
@@ -340,7 +340,7 @@ class InviteUserTest extends MembershipsTestCase
 
         // Then a pending invitation exists but NO membership pivot — alice joins
         // only by accepting while authenticated (D7; the pivot lands at UC-1-019)
-        $response->assertStatus(201);
+        $response->assertCreated();
         $this->assertPendingInvitationCreated($company, 'alice@example.lk', 'employee');
         $this->assertInvitationMailQueued($company, 'alice@example.lk');
         $this->assertDatabaseMissing('company_user', [
@@ -366,7 +366,7 @@ class InviteUserTest extends MembershipsTestCase
         ]);
 
         // Then the invitation belongs to company B alone and records the inviter
-        $response->assertStatus(201);
+        $response->assertCreated();
         $this->assertPendingInvitationCreated($companyB, 'newuser@contoso.lk', 'employee');
         $this->assertDatabaseMissing('invitations', ['company_id' => $companyA->getKey()]);
         $this->assertSame(1, LesilyStoredEvent::query()

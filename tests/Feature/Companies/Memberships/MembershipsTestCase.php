@@ -422,13 +422,13 @@ abstract class MembershipsTestCase extends CompaniesTestCase
             $this->invite($actor, $company, [
                 'email' => sprintf('invitee-%02d@contoso.lk', $i),
                 'roleCode' => 'employee',
-            ])->assertStatus(201);
+            ])->assertCreated();
         }
     }
 
     protected function assertThrottled(TestResponse $response): void
     {
-        $response->assertStatus(429);
+        $response->assertTooManyRequests();
         $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
         $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
     }
@@ -531,7 +531,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     protected function anAcceptedMembership(Company $company, User $actor, string $email): array
     {
         $token = $this->aPendingInvitation($company, $actor, $email);
-        $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
 
         Auth::forgetGuards();
 
@@ -607,7 +607,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      */
     protected function aPendingInvitation(Company $company, User $actor, string $email): string
     {
-        $this->invite($actor, $company, ['email' => $email, 'roleCode' => 'employee'])->assertStatus(201);
+        $this->invite($actor, $company, ['email' => $email, 'roleCode' => 'employee'])->assertCreated();
 
         $plaintextToken = null;
         Mail::assertQueued(InvitationMail::class, function (InvitationMail $mail) use ($email, &$plaintextToken): bool {

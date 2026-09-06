@@ -166,7 +166,7 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
      */
     protected function assertOldCodeRejectedAndNewAccepted(string $oldCode, string $newCode, User $user): void
     {
-        $this->verify($this->openChallenge($user), $oldCode)->assertStatus(401);
+        $this->verify($this->openChallenge($user), $oldCode)->assertUnauthorized();
         $this->verify($this->openChallenge($user), $newCode)->assertOk();
     }
 

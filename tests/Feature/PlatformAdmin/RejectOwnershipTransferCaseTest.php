@@ -119,7 +119,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response = $this->rejectCase($this->admin, $case->getKey());
 
         // Then the refusal names the closed state and nothing was written
-        $response->assertStatus(409);
+        $response->assertConflict();
         $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
         $response->assertJsonPath('message', 'Only an open or verified ownership-transfer case can be rejected; this case is closed.');
         $this->assertCaseUnchanged($case);
