@@ -3,6 +3,7 @@
 namespace App\Foundation\Auth\IO\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
 use App\Foundation\Auth\Support\DeviceName;
@@ -30,7 +31,7 @@ class LoginController extends Controller
         if ($outcome instanceof ChallengeRequired) {
             return (new TwoFactorChallengeResource($outcome->challengeId, $outcome->expiresAt))
                 ->response()
-                ->setStatusCode(202);
+                ->setStatusCode(Response::HTTP_ACCEPTED);
         }
 
         // The only other outcome is SessionIssued — LogInInteractor returns the sealed

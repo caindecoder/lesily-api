@@ -29,7 +29,7 @@ class InvitationsController
 
         $invitation = $interactor->execute($request->company(), $actor, $command);
 
-        return (new InvitationResource($invitation))->response($request)->setStatusCode(201);
+        return (new InvitationResource($invitation))->response($request)->setStatusCode(Response::HTTP_CREATED);
     }
 
     public function resend(Request $request, string $invitationId, ResendInvitationInteractor $interactor): JsonResponse
@@ -39,7 +39,7 @@ class InvitationsController
 
         $invitation = $interactor->execute($request->company(), $actor, $invitationId);
 
-        return (new InvitationResource($invitation))->response($request)->setStatusCode(200);
+        return (new InvitationResource($invitation))->response($request)->setStatusCode(Response::HTTP_OK);
     }
 
     public function destroy(Request $request, string $invitationId, RevokeInvitationInteractor $interactor): Response

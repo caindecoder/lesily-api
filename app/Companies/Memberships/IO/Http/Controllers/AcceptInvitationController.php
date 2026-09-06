@@ -3,6 +3,7 @@
 namespace App\Companies\Memberships\IO\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Foundation\Auth\Support\DeviceName;
 use App\Foundation\Auth\IO\Http\Resources\LoginResource;
@@ -40,13 +41,13 @@ class AcceptInvitationController
         // New user: 201 auto-login (H5) — their session was just minted.
         if ($outcome instanceof NewUserJoined) {
             return (new LoginResource($outcome->user, $outcome->session->token, $outcome->session->expiresAt))
-                ->response($request)->setStatusCode(201);
+                ->response($request)->setStatusCode(Response::HTTP_CREATED);
         }
 
         // Existing user: 200, no token minted (H5). The envelope echoes the
         // activated roster row — the change-role echo's shape (R-E s112).
         $row = $this->memberships->findById($outcome->membership->company_id, $outcome->membership->getKey());
 
-        return (new MembershipResource($row))->response($request)->setStatusCode(200);
+        return (new MembershipResource($row))->response($request)->setStatusCode(Response::HTTP_OK);
     }
 }

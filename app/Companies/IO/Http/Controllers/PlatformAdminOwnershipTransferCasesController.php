@@ -4,6 +4,7 @@ namespace App\Companies\IO\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
@@ -116,6 +117,6 @@ class PlatformAdminOwnershipTransferCasesController
             AdminRequestContext::fromRequest($request),
         );
 
-        return (new OwnershipTransferCaseAdminResource($case))->response($request)->setStatusCode(201);
+        return (new OwnershipTransferCaseAdminResource($case))->response($request)->setStatusCode(Response::HTTP_CREATED);
     }
 }
