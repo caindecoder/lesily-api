@@ -126,7 +126,8 @@ inspect_app() {
   scanned_app=$((scanned_app + 1))
   report "$1" "$bare_set_status" 'A1 setStatusCode( fed by a bare integer (use a Response::HTTP_* constant)'
   case " $status_maps " in
-    *" $(basename "$1") "*) report "$1" "$bare_match_arm" 'A2 a status-map arm returning a bare integer (use a Response::HTTP_* constant)' ;;
+    *" $(basename "$1") "*)
+      report "$1" "$bare_match_arm" 'A2 a status-map arm returning a bare integer (use a Response::HTTP_* constant)' ;;
   esac
 }
 
@@ -149,5 +150,6 @@ else
   for f in $(find tests app -name '*.php'); do inspect "$f"; done
   IFS=$OLDIFS
 fi
-echo "Status-assertion check: ${violations} violation(s); tests: ${scanned_tests} file(s) scanned; app: ${scanned_app} file(s) scanned"
+populations="tests: ${scanned_tests} file(s) scanned; app: ${scanned_app} file(s) scanned"
+echo "Status-assertion check: ${violations} violation(s); ${populations}"
 [ "$violations" -eq 0 ]

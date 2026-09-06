@@ -117,6 +117,8 @@ class PlatformAdminOwnershipTransferCasesController
             AdminRequestContext::fromRequest($request),
         );
 
-        return (new OwnershipTransferCaseAdminResource($case))->response($request)->setStatusCode(Response::HTTP_CREATED);
+        return (new OwnershipTransferCaseAdminResource($case))
+            ->response($request)
+            ->setStatusCode(Response::HTTP_CREATED);
     }
 }
