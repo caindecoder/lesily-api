@@ -38,6 +38,15 @@ pre-commit:
       # step); comment lines excluded, every matcher self-tested at startup.
       # Glob: tests/*.php (see db-trait-placement) so the root TestCase is scanned.
       run: sh scripts/check-status-assertions.sh {staged_files}
+    status-constants:
+      glob: "app/*.php"
+      # Sec 2.2 Rule 11, production half (OQ-1-183): an emitted status is a
+      # Response::HTTP_* constant - a bare three-digit setStatusCode( argument
+      # anywhere under app/, or a bare match arm in a status map
+      # (ApiErrorCode::status()), is refused. Same script as status-assertions
+      # above (it routes each file to its population by path); glob app/*.php
+      # reaches every depth (lefthook's `*` crosses `/`).
+      run: sh scripts/check-status-assertions.sh {staged_files}
     write-path-chain:
       glob: "app/**/*.php"
       # Sec 2.15.C (OQ-1-170): the canonical write-path chain's layer-skip bans -
