@@ -321,7 +321,7 @@ class UpdateProfileTest extends AuthTestCase
         string|array $invalidFields,
         array $before,
     ): void {
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
         $response->assertJsonValidationErrors($invalidFields);
         $this->assertDatabaseHas('users', $before);

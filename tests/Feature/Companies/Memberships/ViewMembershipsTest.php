@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -31,7 +32,7 @@ class ViewMembershipsTest extends MembershipsTestCase
         $response = $this->getJson('/api/v1/memberships', ['X-Company-Context' => $company->getKey()]);
 
         // Then it is refused as unauthenticated
-        $this->assertRefusedWith($response, ApiErrorCode::Unauthenticated);
+        $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
     }
 
     #[Test]
@@ -46,7 +47,7 @@ class ViewMembershipsTest extends MembershipsTestCase
 
         // Then the company context is denied (AuthorizeCompany membership check —
         // an unknown company id 404s via the resolver instead; built #03 contract)
-        $this->assertRefusedWith($response, ApiErrorCode::CompanyAccessDenied);
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::CompanyAccessDenied);
     }
 
     #[Test]
@@ -60,7 +61,7 @@ class ViewMembershipsTest extends MembershipsTestCase
         $response = $this->viewMemberships($actor, $company);
 
         // Then the roster is denied for the missing permission
-        $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
     }
 
     /**
@@ -314,7 +315,7 @@ class ViewMembershipsTest extends MembershipsTestCase
     protected function anAcceptedInvitation(Company $company, User $actor, string $email): void
     {
         $token = $this->aPendingInvitation($company, $actor, $email);
-        $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
     }
 
     /**
@@ -580,7 +581,7 @@ class ViewMembershipsTest extends MembershipsTestCase
         [$company, $owner] = $this->aCompanyWithMember('owner');
         $token = $this->aPendingInvitation($company, $owner, 'kasun@contoso.lk');
         $invitationId = Invitation::query()->where('email', 'kasun@contoso.lk')->sole()->getKey();
-        $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
 
         // When the owner requests the roster
         $response = $this->viewMemberships($owner, $company);

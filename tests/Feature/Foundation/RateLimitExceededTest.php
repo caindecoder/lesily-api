@@ -69,7 +69,7 @@ class RateLimitExceededTest extends FoundationTestCase
 
     protected function assertRejectedWithRetryGuidance(TestResponse $response): void
     {
-        $response->assertStatus(429);
+        $response->assertTooManyRequests();
         $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
 
         $retryAfter = (int) $response->json('retry_after');

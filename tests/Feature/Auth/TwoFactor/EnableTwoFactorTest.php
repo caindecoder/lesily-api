@@ -66,7 +66,7 @@ class EnableTwoFactorTest extends AuthTestCase
         $response = $this->confirm($user, $company, '123456');
 
         // Then it is rejected and nothing is enabled
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'TWO_FACTOR_SETUP_NOT_STARTED');
         $this->assertNoTwoFactorPersisted($user);
     }
@@ -101,7 +101,7 @@ class EnableTwoFactorTest extends AuthTestCase
         $response = $this->confirm($user, $company, '000000');
 
         // Then it is rejected and 2FA stays disabled
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'INVALID_TWO_FACTOR_CODE');
         $this->assertNoTwoFactorPersisted($user);
     }
@@ -118,7 +118,7 @@ class EnableTwoFactorTest extends AuthTestCase
         $response = $this->enable($user, $company);
 
         // Then it is refused as a conflict and no new secret is staged
-        $response->assertStatus(409);
+        $response->assertConflict();
         $response->assertJsonPath('error_code', 'TWO_FACTOR_ALREADY_ENABLED');
         $this->assertNull(Cache::get("2fa-setup:{$user->id}"), 'A rejected re-enrollment must stage no pending secret.');
     }
@@ -287,7 +287,7 @@ class EnableTwoFactorTest extends AuthTestCase
 
     protected function assertSetupExpired(TestResponse $response, User $user): void
     {
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'TWO_FACTOR_SETUP_NOT_STARTED');
         $this->assertNoTwoFactorPersisted($user);
     }

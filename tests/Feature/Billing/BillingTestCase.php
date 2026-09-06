@@ -149,7 +149,7 @@ abstract class BillingTestCase extends TestCase
      */
     protected function assertReceiptStateGuardRejected(TestResponse $response, string $message, ?string $currentStatus = null): void
     {
-        $response->assertStatus(409);
+        $response->assertConflict();
         $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
         $response->assertJsonPath('message', $message);
         $response->assertHeader('Content-Type', 'application/json');
@@ -187,7 +187,7 @@ abstract class BillingTestCase extends TestCase
      */
     protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
     {
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
         $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
     }
@@ -255,7 +255,7 @@ abstract class BillingTestCase extends TestCase
      */
     protected function assertUnauthenticated(TestResponse $response): void
     {
-        $response->assertStatus(401);
+        $response->assertUnauthorized();
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
@@ -536,7 +536,7 @@ abstract class BillingTestCase extends TestCase
      */
     protected function assertCorruptSnapshotRejected(TestResponse $response, string $invoiceId): void
     {
-        $response->assertStatus(500);
+        $response->assertInternalServerError();
         $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
         $response->assertHeader('Content-Type', 'application/json');
         $this->assertStringStartsNotWith('%PDF', (string) $response->getContent());
@@ -578,7 +578,7 @@ abstract class BillingTestCase extends TestCase
      */
     protected function assertReceiptGenerationUnavailable(TestResponse $response): void
     {
-        $response->assertStatus(503);
+        $response->assertServiceUnavailable();
         $response->assertJsonPath('error_code', 'RECEIPT_GENERATION_UNAVAILABLE');
         $response->assertJsonPath('message', 'Receipt generation is temporarily unavailable. Please try again shortly.');
         $response->assertHeader('Retry-After', '30');

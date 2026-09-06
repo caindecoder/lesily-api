@@ -114,7 +114,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response = $this->executeCase($this->admin, $case->getKey());
 
         // Then the refusal names the case's current state and nothing moved
-        $response->assertStatus(409);
+        $response->assertConflict();
         $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
         $response->assertJsonPath('message', 'Only a verified ownership-transfer case can be executed; this case is '.$stateName.'.');
         $this->assertNothingExecuted($case, $company->owner_id);
@@ -146,7 +146,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the refusal is the STATE guard's, asked before any cross-entity
         // work — never the member guard's (the 422-where-409 leak, P14)
-        $response->assertStatus(409);
+        $response->assertConflict();
         $response->assertJsonPath('message', 'Only a verified ownership-transfer case can be executed; this case is open.');
         $this->assertNothingExecuted($case, $company->owner_id);
     }
@@ -164,7 +164,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response = $this->executeCase($this->admin, $case->getKey());
 
         // Then the execution is refused on the vanished member and the case stays verified
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'TARGET_NOT_MEMBER');
         $this->assertNothingExecuted($case, $company->owner_id);
     }
@@ -183,7 +183,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response = $this->executeCase($this->admin, $case->getKey());
 
         // Then the world has moved — the execution is refused and the case stays verified
-        $response->assertStatus(409);
+        $response->assertConflict();
         $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
         $this->assertNothingExecuted($case, $bob->getKey());
     }
@@ -205,7 +205,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the STALE refusal wins — 409 answers the world moving before
         // any cross-entity complaint (the owner seat is the deeper premise)
-        $response->assertStatus(409);
+        $response->assertConflict();
         $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
         $this->assertNothingExecuted($case, $bob->getKey());
     }
@@ -234,8 +234,11 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
      */
     #[Test]
     #[DataProvider('contentionProvider')]
-    public function when_the_execution_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
-    {
+    public function when_the_execution_hits_lock_contention_then_it_is_refused_as_a_conflict(
+        array $failure,
+        int $expectedStatus,
+        ApiErrorCode $expected,
+    ): void {
         // Given a verified case, a live incoming member, and a write inside
         // the OUTER locked transaction — after the composed transfer — that
         // dies the way the driver reports it
@@ -249,8 +252,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then contention answers as a conflict; anything else passes through
         // (render only — the audit-veto row is the atomicity net)
-        $response->assertStatus($expected->status());
-        $response->assertJsonPath('error_code', $expected->value);
+        $this->assertRefusedWith($response, $expectedStatus, $expected);
     }
 
     #[Test]
@@ -266,7 +268,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response = $this->executeCase($this->admin, $case->getKey());
 
         // Then the generalized self-guard refuses — an owner cannot succeed themselves
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'SELF_TRANSFER_BLOCKED');
         $this->assertNothingExecuted($case, $company->owner_id);
     }
@@ -396,7 +398,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
      */
     protected function assertRefusedAsMissingIdempotencyKey(TestResponse $response): void
     {
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'IDEMPOTENCY_KEY_REQUIRED');
     }
 

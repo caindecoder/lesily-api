@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth\Password;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
@@ -57,8 +58,7 @@ class ChangePasswordTest extends AuthTestCase
         ]);
 
         // Then it is refused, the password is left intact, and NO session is revoked (Minimal Guarantee)
-        $this->assertRefusedWith($response, ApiErrorCode::IncorrectPassword);
-        $response->assertStatus(401); // literal pins the 401 contract independent of the enum
+        $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::IncorrectPassword);
         $response->assertJsonPath('message', 'Incorrect password. Please try again.'); // pins the bootstrap copy (Infection-blind)
         $this->assertPasswordUnchanged($user, 2);
     }
@@ -145,8 +145,7 @@ class ChangePasswordTest extends AuthTestCase
         ]);
 
         // Then the mutation is refused before any work — the route requires the key (idempotency-key:required)
-        $this->assertRefusedWith($response, ApiErrorCode::IdempotencyKeyRequired);
-        $response->assertStatus(422); // literal pins the 422 contract independent of the enum
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::IdempotencyKeyRequired);
     }
 
     #[Test]

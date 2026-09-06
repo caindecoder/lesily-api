@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Illuminate\Http\Response;
 use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
@@ -31,7 +32,7 @@ class RemoveMemberTest extends MembershipsTestCase
         $response = $this->removeMember($actor, $company, $membershipId);
 
         // Then the request is refused and the member is untouched
-        $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
         $this->assertMemberStillActive($membershipId);
     }
 
@@ -45,7 +46,7 @@ class RemoveMemberTest extends MembershipsTestCase
         $response = $this->removeMember($admin, $company, (string) Str::uuid7());
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
     }
 
     #[Test]
@@ -60,7 +61,7 @@ class RemoveMemberTest extends MembershipsTestCase
         $response = $this->removeMember($adminA, $companyA, $membershipIdB);
 
         // Then the company-scoped lookup hides it as not found
-        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
         $this->assertMemberStillActive($membershipIdB);
     }
 
@@ -75,7 +76,7 @@ class RemoveMemberTest extends MembershipsTestCase
         $response = $this->removeMember($admin, $company, $removedMembershipId);
 
         // Then the SoftDeletes scope hides it — a member can't be removed twice
-        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
     }
 
     #[Test]
@@ -95,7 +96,7 @@ class RemoveMemberTest extends MembershipsTestCase
         $response = $this->removeMember($admin, $company, $invitationId);
 
         // Then there is no pivot to remove — not found
-        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
     }
 
     #[Test]
@@ -109,8 +110,7 @@ class RemoveMemberTest extends MembershipsTestCase
         $response = $this->removeMember($admin, $company, $ownMembershipId);
 
         // Then
-        $response->assertStatus(422);
-        $this->assertRefusedWith($response, ApiErrorCode::SelfRemovalBlocked);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::SelfRemovalBlocked);
         $response->assertJsonPath('message', 'You cannot remove yourself. Ask another Owner/Admin.');
         $this->assertMemberStillActive($ownMembershipId);
     }
@@ -126,8 +126,7 @@ class RemoveMemberTest extends MembershipsTestCase
         $response = $this->removeMember($admin, $company, $ownerMembershipId);
 
         // Then the Owner is un-removable — ownership transfer required (R-A parity)
-        $response->assertStatus(422);
-        $this->assertRefusedWith($response, ApiErrorCode::OwnerTransferRequired);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::OwnerTransferRequired);
         $response->assertJsonPath('message', 'The company owner cannot be removed. Transfer ownership first.');
         $this->assertMemberStillActive($ownerMembershipId);
     }
@@ -144,7 +143,7 @@ class RemoveMemberTest extends MembershipsTestCase
 
         // Then the self-guard wins over the owner-target guard — locks the
         // interactor's guard ORDER as contract (self before owner; s112 parity)
-        $this->assertRefusedWith($response, ApiErrorCode::SelfRemovalBlocked);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::SelfRemovalBlocked);
         $this->assertMemberStillActive($ownMembershipId);
     }
 
@@ -227,8 +226,11 @@ class RemoveMemberTest extends MembershipsTestCase
      */
     #[Test]
     #[DataProvider('contentionProvider')]
-    public function when_the_removal_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
-    {
+    public function when_the_removal_hits_lock_contention_then_it_is_refused_as_a_conflict(
+        array $failure,
+        int $expectedStatus,
+        ApiErrorCode $expected,
+    ): void {
         // Given — a member to remove and a write inside the locked
         // transaction that dies the way the driver reports it
         [$company, $admin] = $this->aCompanyWithMember();
@@ -239,7 +241,7 @@ class RemoveMemberTest extends MembershipsTestCase
         $response = $this->removeMember($admin, $company, $membershipId);
 
         // Then — contention answers as a conflict; anything else passes through
-        $this->assertRefusedWith($response, $expected);
+        $this->assertRefusedWith($response, $expectedStatus, $expected);
     }
 
     #[Test]

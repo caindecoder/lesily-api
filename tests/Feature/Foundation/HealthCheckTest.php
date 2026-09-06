@@ -152,13 +152,13 @@ class HealthCheckTest extends FoundationTestCase
 
     protected function assertResponseIsHealthy(TestResponse $response): void
     {
-        $response->assertStatus(200);
+        $response->assertOk();
         $response->assertJsonPath('status', 'healthy');
     }
 
     protected function assertResponseIsUnhealthy(TestResponse $response): void
     {
-        $response->assertStatus(503);
+        $response->assertServiceUnavailable();
         $response->assertJsonPath('status', 'unhealthy');
     }
 

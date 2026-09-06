@@ -325,7 +325,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
      */
     protected function assertOpenFailedSafely(TestResponse $response): void
     {
-        $response->assertStatus(500);
+        $response->assertInternalServerError();
         $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
     }
 

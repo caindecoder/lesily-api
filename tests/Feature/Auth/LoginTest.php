@@ -423,7 +423,7 @@ class LoginTest extends AuthTestCase
         ]);
 
         // Then a 2FA challenge is issued (202), not the cap error — the cap is enforced at verify
-        $response->assertStatus(202);
+        $response->assertAccepted();
         $this->assertNotEmpty($response->json('data.challenge_id'), 'A 2FA login must return a challenge, not the device-cap error.');
         $this->assertSame(3, $user->tokens()->count(), 'No token is minted at the challenge step.');
     }
@@ -513,7 +513,7 @@ class LoginTest extends AuthTestCase
 
     protected function assertChallengeIssued(TestResponse $response, User $user): void
     {
-        $response->assertStatus(202);
+        $response->assertAccepted();
         $response->assertJsonMissingPath('data.token');
         $this->assertSame(0, $user->tokens()->count(), 'No Sanctum token may be minted until 2FA verification.');
         $challengeId = (string) $response->json('data.challenge_id');
@@ -542,7 +542,7 @@ class LoginTest extends AuthTestCase
 
     protected function assertCredentialsRejected(TestResponse $response): void
     {
-        $response->assertStatus(401);
+        $response->assertUnauthorized();
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
         $response->assertJsonPath('message', 'Invalid credentials.');
     }

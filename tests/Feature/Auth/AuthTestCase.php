@@ -6,6 +6,7 @@ use Tests\TestCase;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
@@ -124,38 +125,28 @@ abstract class AuthTestCase extends TestCase
     protected function exhaustAuthLimit(int $allowed, string $endpoint): void
     {
         for ($i = 0; $i < $allowed; $i++) {
-            $this->postJson($endpoint, [])->assertStatus(422);
+            $this->postJson($endpoint, [])->assertUnprocessable();
         }
     }
 
     protected function assertThrottled(TestResponse $response): void
     {
-        $response->assertStatus(429);
+        $response->assertTooManyRequests();
         $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
         $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
     }
 
     protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
     {
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
         $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
     }
 
     protected function assertUnauthenticated(TestResponse $response): void
     {
-        $response->assertStatus(401);
+        $response->assertUnauthorized();
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
-    }
-
-    /**
-     * Assert a request was refused with the §S21 envelope for $code (status + error_code).
-     * Shared by the 2FA verify / disable / regenerate suites (§2.10).
-     */
-    protected function assertRefusedWith(TestResponse $response, ApiErrorCode $code): void
-    {
-        $response->assertStatus($code->status());
-        $response->assertJsonPath('error_code', $code->value);
     }
 
     /**
@@ -420,8 +411,7 @@ abstract class AuthTestCase extends TestCase
      */
     protected function assertDeviceLimitRejected(TestResponse $response, User $user, int $expectedTokens): void
     {
-        $this->assertRefusedWith($response, ApiErrorCode::DeviceLimitReached);
-        $response->assertStatus(403); // literal pins the 403 contract independent of the enum
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::DeviceLimitReached);
         $response->assertJsonPath('message', 'Maximum device limit reached. Log out from another device first.');
         $this->assertSame($expectedTokens, $user->tokens()->count(), 'A capped attempt must mint no new session.');
     }
@@ -490,7 +480,7 @@ abstract class AuthTestCase extends TestCase
     {
         Auth::forgetGuards();
         $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $oldPassword])
-            ->assertStatus(401);
+            ->assertUnauthorized();
 
         Auth::forgetGuards();
         $newLogin = $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $newPassword]);

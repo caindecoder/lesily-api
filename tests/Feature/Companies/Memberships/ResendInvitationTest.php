@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
@@ -29,7 +30,7 @@ class ResendInvitationTest extends MembershipsTestCase
         $response = $this->resendInvitation($admin, $company, (string) Str::uuid7());
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
     }
 
     #[Test]
@@ -47,6 +48,7 @@ class ResendInvitationTest extends MembershipsTestCase
         $response = $this->resendInvitation($actor, $company, $invitation->getKey());
 
         // Then
+        $response->assertForbidden();
         $this->assertInvitationNotResent($response, ApiErrorCode::RoleInsufficient, $invitation->token_hash);
     }
 
@@ -79,6 +81,7 @@ class ResendInvitationTest extends MembershipsTestCase
         $response = $this->resendInvitation($adminA, $companyA, $invitationB->getKey());
 
         // Then
+        $response->assertNotFound();
         $this->assertInvitationNotResent($response, ApiErrorCode::ResourceNotFound, $invitationB->token_hash);
     }
 
@@ -88,7 +91,7 @@ class ResendInvitationTest extends MembershipsTestCase
         // Given
         [$company, $admin] = $this->aCompanyWithMember();
         $token = $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
         $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
 
         // When
@@ -145,7 +148,7 @@ class ResendInvitationTest extends MembershipsTestCase
 
         // Then it is dead — no two tokens are ever live at once (the UC's
         // Minimal Guarantee; each rotation kills every earlier link)
-        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
         $this->assertInvitationNotConsumed($company, 'invitee@contoso.lk');
     }
 
@@ -178,7 +181,7 @@ class ResendInvitationTest extends MembershipsTestCase
         $response = $this->acceptInvitation($oldToken, $this->validNewUserBody());
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
         $this->assertInvitationNotConsumed($company, 'invitee@contoso.lk');
     }
 
@@ -218,7 +221,7 @@ class ResendInvitationTest extends MembershipsTestCase
         $response = $this->acceptInvitation($newToken, $this->validNewUserBody());
 
         // Then
-        $response->assertStatus(201);
+        $response->assertCreated();
         $this->assertMembershipActivated($company, 'invitee@contoso.lk');
         $this->assertNewUserProvisioned('invitee@contoso.lk', 'Nimal Perera');
     }
@@ -284,13 +287,13 @@ class ResendInvitationTest extends MembershipsTestCase
     }
 
     /**
-     * The resend was refused with $code and changed nothing: the stored token
+     * The resend was refused with $code (the caller pins the status) and changed nothing: the stored token
      * hash is untouched (no rotation) and no InvitationMail was queued beyond
      * the single arrange-time invite mail.
      */
     protected function assertInvitationNotResent(TestResponse $response, ApiErrorCode $code, string $oldTokenHash): void
     {
-        $this->assertRefusedWith($response, $code);
+        $response->assertJsonPath('error_code', $code->value);
         $this->assertDatabaseHas('invitations', ['token_hash' => $oldTokenHash]);
         Mail::assertQueued(InvitationMail::class, 1);
     }
@@ -315,7 +318,7 @@ class ResendInvitationTest extends MembershipsTestCase
      */
     protected function assertResendRefusedAsNotPending(TestResponse $response, string $oldTokenHash): void
     {
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $this->assertInvitationNotResent($response, ApiErrorCode::InviteNotPending, $oldTokenHash);
         $response->assertJsonPath('message', 'This invitation is no longer pending.');
     }

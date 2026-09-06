@@ -3,6 +3,7 @@
 namespace Tests\Concerns;
 
 use PDOException;
+use Illuminate\Http\Response;
 use Illuminate\Database\QueryException;
 use App\Foundation\Http\Responses\ApiErrorCode;
 
@@ -39,25 +40,29 @@ trait InducesDatabaseFailures
      * (the raw QueryException arm production hits at top level) — and an
      * unrelated driver failure must pass through unclassified.
      *
-     * @return array<string, array{0: array{sqlstate: string, code: int, message: string}, 1: ApiErrorCode}>
+     * @return array<string, array{0: array{sqlstate: string, code: int, message: string}, 1: int, 2: ApiErrorCode}>
      */
     public static function contentionProvider(): array
     {
         return [
             'a deadlock detected mid-transaction' => [
                 ['sqlstate' => '40001', 'code' => 1213, 'message' => 'Deadlock found when trying to get lock'],
+                Response::HTTP_CONFLICT,
                 ApiErrorCode::StateGuardViolation,
             ],
             'a lock wait that timed out' => [
                 ['sqlstate' => 'HY000', 'code' => 1205, 'message' => 'SQLSTATE[HY000]: General error: 1205'],
+                Response::HTTP_CONFLICT,
                 ApiErrorCode::StateGuardViolation,
             ],
             'a deadlock reported without the detector phrase' => [
                 ['sqlstate' => '40001', 'code' => 1213, 'message' => 'SQLSTATE[40001]: General error: 1213'],
+                Response::HTTP_CONFLICT,
                 ApiErrorCode::StateGuardViolation,
             ],
             'a duplicate entry passes through unclassified' => [
                 ['sqlstate' => '23000', 'code' => 1062, 'message' => 'Duplicate entry'],
+                Response::HTTP_INTERNAL_SERVER_ERROR,
                 ApiErrorCode::InternalError,
             ],
         ];

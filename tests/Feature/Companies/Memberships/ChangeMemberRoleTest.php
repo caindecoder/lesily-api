@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
@@ -36,7 +37,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $response = $this->changeRole($admin, $company, (string) Str::uuid7());
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
         $this->assertNoRoleChangeRecorded();
     }
 
@@ -54,7 +55,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $response = $this->changeRole($actor, $company, $membershipId);
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
         $this->assertMembershipRoleUnchanged($membershipId, $this->seededRole('employee'));
     }
 
@@ -87,7 +88,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $response = $this->changeRole($adminA, $companyA, $membershipIdB);
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
         $this->assertMembershipRoleUnchanged($membershipIdB, $this->seededRole('employee'));
     }
 
@@ -139,8 +140,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $response = $this->changeRole($admin, $company, $ownerMembershipId);
 
         // Then
-        $response->assertStatus(422);
-        $this->assertRefusedWith($response, ApiErrorCode::OwnerTransferRequired);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::OwnerTransferRequired);
         $response->assertJsonPath('message', "The Owner's role can only be changed through an ownership transfer.");
         $this->assertMembershipRoleUnchanged($ownerMembershipId, $this->seededRole('owner'));
     }
@@ -156,8 +156,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $response = $this->changeRole($admin, $company, $ownMembershipId);
 
         // Then
-        $response->assertStatus(422);
-        $this->assertRefusedWith($response, ApiErrorCode::SelfRoleChangeBlocked);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::SelfRoleChangeBlocked);
         $response->assertJsonPath('message', 'You cannot change your own role. Ask another Owner/Admin.');
         $this->assertMembershipRoleUnchanged($ownMembershipId, $this->seededRole('admin'));
     }
@@ -175,7 +174,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         // Then the self-guard takes precedence over the owner-target guard —
         // locks the interactor's guard ORDER as contract (two distinct codes;
         // pr-test-analyzer IMPORTANT-1, s112)
-        $this->assertRefusedWith($response, ApiErrorCode::SelfRoleChangeBlocked);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::SelfRoleChangeBlocked);
         $this->assertMembershipRoleUnchanged($ownMembershipId, $this->seededRole('owner'));
     }
 
@@ -190,7 +189,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $response = $this->changeRole($admin, $company, $removedMembershipId);
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
         $this->assertMembershipRoleUnchanged($removedMembershipId, $this->seededRole('employee'));
     }
 
@@ -211,7 +210,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $response = $this->changeRole($admin, $company, $invitationId);
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
         $this->assertNoRoleChangeRecorded();
     }
 
@@ -228,7 +227,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
 
         // Then — the transaction the lock row proves PRESENT rolls back whole:
         // zero stored events, role untouched (the T2-deferred atomicity half)
-        $this->assertRefusedWith($response, ApiErrorCode::InternalError);
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
         $this->assertMembershipRoleUnchanged($membershipId, $this->seededRole('employee'));
     }
 
@@ -249,7 +248,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
 
         // Then — the conflict speaks with the MEMBERSHIP family's voice and
         // the driver cause rides the reported exception into the log chain
-        $this->assertRefusedWith($response, ApiErrorCode::StateGuardViolation);
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::StateGuardViolation);
         $response->assertJsonPath('message', 'The change lost to a concurrent membership update. Please retry.');
         Exceptions::assertReported(
             fn (MembershipContentionException $e): bool => $e->getPrevious() instanceof QueryException
@@ -261,8 +260,11 @@ class ChangeMemberRoleTest extends MembershipsTestCase
      */
     #[Test]
     #[DataProvider('contentionProvider')]
-    public function when_the_role_change_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
-    {
+    public function when_the_role_change_hits_lock_contention_then_it_is_refused_as_a_conflict(
+        array $failure,
+        int $expectedStatus,
+        ApiErrorCode $expected,
+    ): void {
         // Given — a member to re-role and a write inside the locked
         // transaction that dies the way the driver reports it
         [$company, $admin] = $this->aCompanyWithMember();
@@ -273,7 +275,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $response = $this->changeRole($admin, $company, $membershipId);
 
         // Then — contention answers as a conflict; anything else passes through
-        $this->assertRefusedWith($response, $expected);
+        $this->assertRefusedWith($response, $expectedStatus, $expected);
     }
 
     #[Test]
@@ -336,7 +338,11 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         // Given an employee who cannot view the roster (employee lacks users.view)
         [$company, $admin] = $this->aCompanyWithMember();
         [$bob, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
-        $this->assertRefusedWith($this->viewMemberships($bob, $company), ApiErrorCode::RoleInsufficient);
+        $this->assertRefusedWith(
+            $this->viewMemberships($bob, $company),
+            Response::HTTP_FORBIDDEN,
+            ApiErrorCode::RoleInsufficient
+        );
 
         // When their role changes to HR Officer (which holds users.view)
         $this->changeRole($admin, $company, $membershipId)->assertOk();

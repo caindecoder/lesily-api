@@ -137,7 +137,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         );
 
         // Then the refusal names the case's current state and nothing new is recorded
-        $response->assertStatus(409);
+        $response->assertConflict();
         $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
         $response->assertJsonPath('message', 'Only an open ownership-transfer case can be verified; this case is '.$stateName.'.');
         $this->assertNothingVerified($case);
@@ -174,7 +174,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         );
 
         // Then the refusal is the state guard's, not the target guard's
-        $response->assertStatus(409);
+        $response->assertConflict();
         $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
         $this->assertNothingVerified($case);
     }
@@ -197,7 +197,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         );
 
         // Then the verification is refused on the target and nothing is written
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'TARGET_NOT_MEMBER');
         $this->assertNothingVerified($case);
     }
@@ -219,7 +219,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         );
 
         // Then the verification is refused on the target and nothing is written
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'TARGET_NOT_MEMBER');
         $this->assertNothingVerified($case);
     }
@@ -229,8 +229,11 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
      */
     #[Test]
     #[DataProvider('contentionProvider')]
-    public function when_the_verification_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
-    {
+    public function when_the_verification_hits_lock_contention_then_it_is_refused_as_a_conflict(
+        array $failure,
+        int $expectedStatus,
+        ApiErrorCode $expected,
+    ): void {
         // Given an open case, a live member, and a write inside the locked
         // transaction that dies the way the driver reports it
         $company = Company::factory()->create();
@@ -244,8 +247,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Then contention answers as a conflict; anything else passes
         // through (render only — a synthetic deadlock cannot model MySQL's
         // server-side rollback; the audit-veto row is the atomicity net)
-        $response->assertStatus($expected->status());
-        $response->assertJsonPath('error_code', $expected->value);
+        $this->assertRefusedWith($response, $expectedStatus, $expected);
     }
 
     #[Test]
@@ -266,7 +268,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the conflict speaks with THIS family's voice and the driver
         // cause rides the reported exception into the log chain
-        $response->assertStatus(409);
+        $response->assertConflict();
         $response->assertJsonPath('message', 'The transfer lost to a concurrent change. Please retry.');
         Exceptions::assertReported(
             fn (OwnershipTransferContentionException $e): bool => $e->getPrevious() instanceof QueryException

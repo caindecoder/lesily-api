@@ -21,7 +21,6 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Events\QueryExecuted;
 use Tests\Feature\Companies\CompaniesTestCase;
 use App\Foundation\Auth\UseCases\SessionIssuer;
-use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
@@ -140,16 +139,6 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $this->assertDatabaseCount('invitations', 0);
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserInvited::class)->count());
         Mail::assertNothingQueued();
-    }
-
-    /**
-     * Assert a request was refused with the §S21 envelope for $code (status +
-     * error_code). Mirrors AuthTestCase's helper (§2.10).
-     */
-    protected function assertRefusedWith(TestResponse $response, ApiErrorCode $code): void
-    {
-        $response->assertStatus($code->status());
-        $response->assertJsonPath('error_code', $code->value);
     }
 
     /**
@@ -433,13 +422,13 @@ abstract class MembershipsTestCase extends CompaniesTestCase
             $this->invite($actor, $company, [
                 'email' => sprintf('invitee-%02d@contoso.lk', $i),
                 'roleCode' => 'employee',
-            ])->assertStatus(201);
+            ])->assertCreated();
         }
     }
 
     protected function assertThrottled(TestResponse $response): void
     {
-        $response->assertStatus(429);
+        $response->assertTooManyRequests();
         $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
         $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
     }
@@ -542,7 +531,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     protected function anAcceptedMembership(Company $company, User $actor, string $email): array
     {
         $token = $this->aPendingInvitation($company, $actor, $email);
-        $this->acceptInvitation($token, $this->validNewUserBody())->assertStatus(201);
+        $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
 
         Auth::forgetGuards();
 
@@ -618,7 +607,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      */
     protected function aPendingInvitation(Company $company, User $actor, string $email): string
     {
-        $this->invite($actor, $company, ['email' => $email, 'roleCode' => 'employee'])->assertStatus(201);
+        $this->invite($actor, $company, ['email' => $email, 'roleCode' => 'employee'])->assertCreated();
 
         $plaintextToken = null;
         Mail::assertQueued(InvitationMail::class, function (InvitationMail $mail) use ($email, &$plaintextToken): bool {
