@@ -161,7 +161,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
      */
     #[Test]
     #[DataProvider('contentionProvider')]
-    public function when_the_rejection_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
+    public function when_the_rejection_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, int $expectedStatus, ApiErrorCode $expected): void
     {
         // Given an open case and a write inside the locked transaction that
         // dies the way the driver reports it
@@ -174,7 +174,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then contention answers as a conflict; anything else passes through
         // (render only — the audit-veto row is the atomicity net)
-        $response->assertStatus($expected->status());
+        $response->assertStatus($expectedStatus);
         $response->assertJsonPath('error_code', $expected->value);
     }
 

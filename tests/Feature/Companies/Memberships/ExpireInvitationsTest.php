@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
@@ -209,7 +210,7 @@ class ExpireInvitationsTest extends MembershipsTestCase
         $response = $this->acceptInvitation($token, $this->validNewUserBody());
 
         // Then the accept is rejected and the invitation is never consumed
-        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
         $this->assertInvitationNotConsumed($company, 'invitee@contoso.lk');
     }
 

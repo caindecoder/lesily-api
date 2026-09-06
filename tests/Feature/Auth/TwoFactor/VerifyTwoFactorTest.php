@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth\TwoFactor;
 
 use App\Models\User;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
@@ -37,8 +38,7 @@ class VerifyTwoFactorTest extends AuthTestCase
         $response = $this->verify('not-a-live-challenge', '123456');
 
         // Then verification is refused as a missing challenge and no token is issued
-        $this->assertRefusedWith($response, ApiErrorCode::TwoFactorChallengeNotFound);
-        $response->assertStatus(404); // literal pins the 404 contract independent of the enum
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::TwoFactorChallengeNotFound);
         $response->assertJsonMissingPath('data.token');
     }
 
@@ -54,8 +54,7 @@ class VerifyTwoFactorTest extends AuthTestCase
         $response = $this->verify($challengeId, 'wrong-code');
 
         // Then verification is refused, no token is issued, and the attempt is counted
-        $this->assertRefusedWith($response, ApiErrorCode::TwoFactorVerificationFailed);
-        $response->assertStatus(401); // literal pins the 401 contract independent of the enum
+        $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::TwoFactorVerificationFailed);
         $this->assertNoTokenMinted($response, $user);
         $this->assertSame(
             LoginChallengeStore::MAX_ATTEMPTS - 1,
@@ -75,11 +74,11 @@ class VerifyTwoFactorTest extends AuthTestCase
         // When the full attempt allowance is spent on invalid codes
         for ($attempt = 0; $attempt < LoginChallengeStore::MAX_ATTEMPTS; $attempt++) {
             $this->verify($challengeId, 'wrong-code')
-                ->assertStatus(ApiErrorCode::TwoFactorVerificationFailed->status());
+                ->assertUnauthorized();
         }
 
         // Then the challenge is abandoned — a further attempt is refused as missing, not invalid
-        $this->assertRefusedWith($this->verify($challengeId, 'wrong-code'), ApiErrorCode::TwoFactorChallengeNotFound);
+        $this->assertRefusedWith($this->verify($challengeId, 'wrong-code'), Response::HTTP_NOT_FOUND, ApiErrorCode::TwoFactorChallengeNotFound);
     }
 
     #[Test]
@@ -94,7 +93,7 @@ class VerifyTwoFactorTest extends AuthTestCase
         $response = $this->verify($this->openChallenge($user), 'ONCE-ONLY');
 
         // Then it is refused — a single-use code cannot authenticate twice
-        $this->assertRefusedWith($response, ApiErrorCode::TwoFactorVerificationFailed);
+        $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::TwoFactorVerificationFailed);
         $response->assertJsonMissingPath('data.token');
     }
 
@@ -193,7 +192,7 @@ class VerifyTwoFactorTest extends AuthTestCase
         $response = $this->verify($challengeId, 'ANY-CODE');
 
         // Then it is refused — there is nothing left to match
-        $this->assertRefusedWith($response, ApiErrorCode::TwoFactorVerificationFailed);
+        $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::TwoFactorVerificationFailed);
         $response->assertJsonMissingPath('data.token');
     }
 

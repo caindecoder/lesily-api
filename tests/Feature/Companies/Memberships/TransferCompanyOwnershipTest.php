@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Mail;
@@ -48,7 +49,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $response = $this->transferOwnership($admin, $company, ['newOwnerUserId' => $target->getKey()]);
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
         $this->assertNothingTransferred($company, $owner);
     }
 
@@ -95,7 +96,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $outsider->getKey()]);
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::TargetNotMember);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::TargetNotMember);
         $this->assertNothingTransferred($company, $owner);
     }
 
@@ -112,7 +113,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $invitee->getKey()]);
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::TargetNotMember);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::TargetNotMember);
         $this->assertNothingTransferred($company, $owner);
         $this->assertInvitationNotConsumed($company, $invitee->email);
     }
@@ -131,7 +132,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
 
         // Then — a soft-deleted pivot is not membership; the locked lookup's
         // live scope decides (the projector's withTrashed is replay-only)
-        $this->assertRefusedWith($response, ApiErrorCode::TargetNotMember);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::TargetNotMember);
         $this->assertNothingTransferred($company, $owner);
     }
 
@@ -146,7 +147,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $owner->getKey()]);
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::SelfTransferBlocked);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::SelfTransferBlocked);
         $this->assertNothingTransferred($company, $owner);
     }
 
@@ -166,7 +167,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::StateGuardViolation);
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::StateGuardViolation);
         $this->assertNothingTransferred($company, $usurper);
     }
 
@@ -183,7 +184,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::InternalError);
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
         $this->assertNothingTransferred($company, $owner);
         $this->assertSame($this->seededRole('employee')->getKey(), $this->pivotOf($company, $target)->role_id);
     }
@@ -193,7 +194,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
      */
     #[Test]
     #[DataProvider('contentionProvider')]
-    public function when_the_transfer_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
+    public function when_the_transfer_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, int $expectedStatus, ApiErrorCode $expected): void
     {
         // Given — a write inside the locked transaction that dies the way the
         // driver reports it (a REAL two-connection deadlock stays out per P9)
@@ -209,7 +210,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         // through (render only — a detector-matched deadlock skips the
         // client-side rollback a real one gets server-side; the
         // projector-failure row is the atomicity net)
-        $this->assertRefusedWith($response, $expected);
+        $this->assertRefusedWith($response, $expectedStatus, $expected);
     }
 
     #[Test]

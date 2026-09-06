@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth\TwoFactor;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
@@ -56,8 +57,7 @@ class DisableTwoFactorTest extends AuthTestCase
         $response = $this->withToken($current)->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
 
         // Then it is refused — there is no 2FA to disable — and NO session is revoked (Minimal Guarantee)
-        $this->assertRefusedWith($response, ApiErrorCode::TwoFactorNotEnabled);
-        $response->assertStatus(422); // literal pins the 422 contract independent of the enum
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::TwoFactorNotEnabled);
         $response->assertJsonPath('message', 'Two-factor authentication is not enabled.'); // pins the bootstrap copy (Infection-blind)
         $this->assertSame(2, $user->tokens()->count(), 'A not-enabled refusal must revoke no sessions.');
     }
@@ -74,8 +74,7 @@ class DisableTwoFactorTest extends AuthTestCase
         $response = $this->withToken($current)->deleteJson('/api/v1/auth/2fa', ['password' => 'not-my-password']);
 
         // Then it is refused, 2FA is left fully intact, and NO session is revoked (the Minimal Guarantee)
-        $this->assertRefusedWith($response, ApiErrorCode::IncorrectPassword);
-        $response->assertStatus(401); // literal pins the 401 contract independent of the enum
+        $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::IncorrectPassword);
         $response->assertJsonPath('message', 'Incorrect password. Please try again.'); // pins the bootstrap copy (Infection-blind)
         $this->assertTwoFactorStillEnabled($user);
         $this->assertSame(2, $user->tokens()->count(), 'A refused disable must revoke no sessions.');

@@ -4,6 +4,7 @@ namespace Tests;
 
 use Illuminate\Testing\TestResponse;
 use Database\Seeders\RolesPermissionsSeeder;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
@@ -53,5 +54,17 @@ abstract class TestCase extends BaseTestCase
         $response->assertJsonPath('message', 'You do not have access to this company.');
         $response->assertJsonPath('errors', []);
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    /**
+     * The request was refused with the §S21 envelope for $code. The caller
+     * states the status (a Response::HTTP_* constant) — it is never read from
+     * the enum the production path renders from, so an arm change fails here.
+     * Conventions §2.2 Rule 11 (OQ-1-177). Shared by every module base.
+     */
+    protected function assertRefusedWith(TestResponse $response, int $expectedStatus, ApiErrorCode $code): void
+    {
+        $response->assertStatus($expectedStatus);
+        $response->assertJsonPath('error_code', $code->value);
     }
 }

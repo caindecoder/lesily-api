@@ -21,7 +21,6 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Events\QueryExecuted;
 use Tests\Feature\Companies\CompaniesTestCase;
 use App\Foundation\Auth\UseCases\SessionIssuer;
-use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
@@ -140,16 +139,6 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $this->assertDatabaseCount('invitations', 0);
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserInvited::class)->count());
         Mail::assertNothingQueued();
-    }
-
-    /**
-     * Assert a request was refused with the §S21 envelope for $code (status +
-     * error_code). Mirrors AuthTestCase's helper (§2.10).
-     */
-    protected function assertRefusedWith(TestResponse $response, ApiErrorCode $code): void
-    {
-        $response->assertStatus($code->status());
-        $response->assertJsonPath('error_code', $code->value);
     }
 
     /**

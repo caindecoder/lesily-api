@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -25,7 +26,7 @@ class RevokeInvitationTest extends MembershipsTestCase
         $response = $this->revokeInvitation($admin, $company, (string) Str::uuid7());
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
     }
 
     #[Test]
@@ -43,7 +44,7 @@ class RevokeInvitationTest extends MembershipsTestCase
         $response = $this->revokeInvitation($actor, $company, $invitation->getKey());
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
         $this->assertInvitationNotRevoked($company, 'invitee@contoso.lk');
     }
 
@@ -76,7 +77,7 @@ class RevokeInvitationTest extends MembershipsTestCase
         $response = $this->revokeInvitation($adminA, $companyA, $invitationB->getKey());
 
         // Then
-        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
         $this->assertInvitationNotRevoked($companyB, 'invitee@contoso.lk');
     }
 
@@ -228,8 +229,7 @@ class RevokeInvitationTest extends MembershipsTestCase
      */
     protected function assertRevokeRefusedAsNotPending(TestResponse $response): void
     {
-        $response->assertStatus(422);
-        $this->assertRefusedWith($response, ApiErrorCode::InviteNotPending);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteNotPending);
         $response->assertJsonPath('message', 'This invitation is no longer pending.');
     }
 

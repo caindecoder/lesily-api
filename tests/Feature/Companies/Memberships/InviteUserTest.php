@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
@@ -57,7 +58,7 @@ class InviteUserTest extends MembershipsTestCase
 
         // Then it is refused (the pending invitation stands — resend rotates it,
         // UC-1-021) and no second invitation row or email exists
-        $this->assertRefusedWith($response, ApiErrorCode::AlreadyMember);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::AlreadyMember);
         $this->assertSame(1, Invitation::query()
             ->where('company_id', $company->getKey())
             ->where('email', 'pending@contoso.lk')
@@ -128,7 +129,7 @@ class InviteUserTest extends MembershipsTestCase
         ]);
 
         // Then the invite is denied for the missing permission and nothing is created
-        $this->assertRefusedWith($response, ApiErrorCode::RoleInsufficient);
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
         $this->assertNoInvitationCreated();
     }
 

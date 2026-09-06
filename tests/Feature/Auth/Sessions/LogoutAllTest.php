@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth\Sessions;
 
 use App\Models\User;
+use Illuminate\Http\Response;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
@@ -56,8 +57,7 @@ class LogoutAllTest extends AuthTestCase
         $response = $this->logoutAll($current->plainTextToken, 'not-my-password');
 
         // Then it is refused and all three sessions remain intact
-        $this->assertRefusedWith($response, ApiErrorCode::IncorrectPassword);
-        $response->assertStatus(401); // literal pins the 401 contract independent of the enum
+        $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::IncorrectPassword);
         $response->assertJsonPath('message', 'Incorrect password. Please try again.'); // pins the bootstrap copy (Infection-blind)
         $this->assertSessionsPreserved($user, 3);
     }

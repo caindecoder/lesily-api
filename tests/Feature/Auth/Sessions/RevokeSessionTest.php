@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth\Sessions;
 
+use Illuminate\Http\Response;
 use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
@@ -38,7 +39,7 @@ class RevokeSessionTest extends AuthTestCase
         $response = $this->revokeSession($session->plainTextToken, $session->accessToken->getKey() + 1);
 
         // Then it is not found
-        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
     }
 
     // Sad / isolation — a token owned by another user is never revocable through the caller's
@@ -143,7 +144,7 @@ class RevokeSessionTest extends AuthTestCase
      */
     protected function assertSessionRefusedAndIntact(TestResponse $response, NewAccessToken $session): void
     {
-        $this->assertRefusedWith($response, ApiErrorCode::ResourceNotFound);
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
         $this->assertDatabaseHas('personal_access_tokens', ['id' => $session->accessToken->getKey()]);
         $this->probeWith($session->plainTextToken)->assertOk();
     }

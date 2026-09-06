@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth\TwoFactor;
 
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
@@ -51,8 +52,7 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/2fa/recovery-codes', ['password' => self::LOGIN_PASSWORD]);
 
         // Then it is refused — there is no 2FA to manage
-        $this->assertRefusedWith($response, ApiErrorCode::TwoFactorNotEnabled);
-        $response->assertStatus(422); // literal pins the 422 contract independent of the enum
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::TwoFactorNotEnabled);
         $response->assertJsonPath('message', 'Two-factor authentication is not enabled.');
     }
 
@@ -67,8 +67,7 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/2fa/recovery-codes', ['password' => 'not-my-password']);
 
         // Then it is refused and the existing codes are left intact (the Minimal Guarantee)
-        $this->assertRefusedWith($response, ApiErrorCode::IncorrectPassword);
-        $response->assertStatus(401); // literal pins the 401 contract independent of the enum
+        $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::IncorrectPassword);
         $response->assertJsonPath('message', 'Incorrect password. Please try again.');
         $this->assertRecoveryCodesUnchanged($user, 'KEEP-CODE');
     }

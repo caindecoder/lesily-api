@@ -6,6 +6,7 @@ use Tests\TestCase;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
@@ -146,16 +147,6 @@ abstract class AuthTestCase extends TestCase
     {
         $response->assertStatus(401);
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
-    }
-
-    /**
-     * Assert a request was refused with the §S21 envelope for $code (status + error_code).
-     * Shared by the 2FA verify / disable / regenerate suites (§2.10).
-     */
-    protected function assertRefusedWith(TestResponse $response, ApiErrorCode $code): void
-    {
-        $response->assertStatus($code->status());
-        $response->assertJsonPath('error_code', $code->value);
     }
 
     /**
@@ -420,8 +411,7 @@ abstract class AuthTestCase extends TestCase
      */
     protected function assertDeviceLimitRejected(TestResponse $response, User $user, int $expectedTokens): void
     {
-        $this->assertRefusedWith($response, ApiErrorCode::DeviceLimitReached);
-        $response->assertStatus(403); // literal pins the 403 contract independent of the enum
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::DeviceLimitReached);
         $response->assertJsonPath('message', 'Maximum device limit reached. Log out from another device first.');
         $this->assertSame($expectedTokens, $user->tokens()->count(), 'A capped attempt must mint no new session.');
     }

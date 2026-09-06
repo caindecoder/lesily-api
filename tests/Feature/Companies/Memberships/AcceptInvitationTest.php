@@ -6,6 +6,7 @@ use App\Models\User;
 use RuntimeException;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
@@ -55,7 +56,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         $response = $this->acceptInvitation('never-issued-token-0000000000000000000000', $body);
 
         // Then — the collapsed invite-invalid envelope; no state was created
-        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
         $this->assertNothingAccepted();
     }
 
@@ -72,7 +73,7 @@ class AcceptInvitationTest extends MembershipsTestCase
 
         // Then — the SAME collapsed envelope (no expired-vs-unknown leak, H4);
         // the invitation stays unconsumed and no account was created
-        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
         $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
         $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
     }
@@ -90,7 +91,7 @@ class AcceptInvitationTest extends MembershipsTestCase
 
         // Then — the SAME collapsed envelope (no revoked-vs-unknown leak, H4);
         // the invitation stays unconsumed and no account was created
-        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
         $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
         $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
     }
@@ -109,7 +110,7 @@ class AcceptInvitationTest extends MembershipsTestCase
 
         // Then — the SAME collapsed envelope (a used token is indistinguishable
         // from an unknown one — H4); the joiner still holds exactly ONE membership
-        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
         $this->assertSame(1, CompanyUser::withTrashed()
             ->whereIn('user_id', User::query()->where('email', 'kasun@newjoiner.lk')->pluck('id'))
             ->count());
@@ -127,7 +128,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         $response = $this->acceptInvitation($token);
 
         // Then — authentication is demanded first (R9/D7); nothing joined
-        $this->assertRefusedWith($response, ApiErrorCode::Unauthenticated);
+        $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
         $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
     }
 
@@ -144,8 +145,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         $response = $this->acceptInvitation($token, [], $someoneElse);
 
         // Then — only the invited email may accept (UC alt-4b); nothing joined
-        $response->assertStatus(403);
-        $this->assertRefusedWith($response, ApiErrorCode::InviteEmailMismatch);
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::InviteEmailMismatch);
         $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
     }
 
@@ -227,7 +227,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Then — refused with the collapsed envelope (H4; OQ-1-162): a leftover
         // invitation cannot resurrect a removed member — re-entry is the
         // deliberate same-UUID re-invite — and the removal stays intact
-        $this->assertRefusedWith($response, ApiErrorCode::InviteInvalid);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
         $this->assertRefusalLeftMemberRemoved($company, 'ruwan@member.lk', $membershipId);
     }
 
@@ -331,7 +331,7 @@ class AcceptInvitationTest extends MembershipsTestCase
 
         // Then — the conflict speaks with the INVITATION's voice (never a
         // sibling family's) and the driver cause rides the reported exception
-        $this->assertRefusedWith($response, ApiErrorCode::StateGuardViolation);
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::StateGuardViolation);
         $response->assertJsonPath('message', 'Your invitation is being processed by another request. Please retry.');
         Exceptions::assertReported(
             fn (InvitationAcceptContentionException $e): bool => $e->getPrevious() instanceof QueryException
@@ -352,7 +352,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         $response = $this->acceptInvitation($token, [], $invitee);
 
         // Then — the whole accept rolls back: nothing consumed, no membership
-        $this->assertRefusedWith($response, ApiErrorCode::InternalError);
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
         $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
     }
 
@@ -373,7 +373,7 @@ class AcceptInvitationTest extends MembershipsTestCase
 
         // Then — a plain failure, never the 409 retry hint; the membership
         // itself is already durable
-        $this->assertRefusedWith($response, ApiErrorCode::InternalError);
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
         $this->assertMembershipActivated($company, 'kasun@newjoiner.lk');
     }
 
@@ -382,7 +382,7 @@ class AcceptInvitationTest extends MembershipsTestCase
      */
     #[Test]
     #[DataProvider('contentionProvider')]
-    public function when_the_accept_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, ApiErrorCode $expected): void
+    public function when_the_accept_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, int $expectedStatus, ApiErrorCode $expected): void
     {
         // Given an existing account's invitation and a write inside the
         // accept transaction that dies the way the driver reports it
@@ -395,7 +395,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         $response = $this->acceptInvitation($token, [], $invitee);
 
         // Then contention answers as a conflict; anything else passes through
-        $this->assertRefusedWith($response, $expected);
+        $this->assertRefusedWith($response, $expectedStatus, $expected);
     }
 
     #[Test]

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Foundation;
 
+use Illuminate\Http\Response;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -141,13 +142,13 @@ class ApiErrorResponseTest extends FoundationTestCase
     public static function provideApiErrors(): array
     {
         return [
-            'validation error' => ['error-validation', 422, 'VALIDATION_FAILED'],
-            'feature gate' => ['error-feature-gate', 403, 'FEATURE_NOT_AVAILABLE'],
-            'resource not found' => ['error-not-found', 404, 'RESOURCE_NOT_FOUND'],
-            'http not found' => ['error-http-not-found', 404, 'RESOURCE_NOT_FOUND'],
-            'unmapped http exception preserves method-not-allowed status' => ['error-method-not-allowed', 405, 'HTTP_ERROR'],
-            'unmapped http exception preserves gone status' => ['error-gone', 410, 'HTTP_ERROR'],
-            'internal error' => ['error-internal', 500, 'INTERNAL_ERROR'],
+            'validation error' => ['error-validation', Response::HTTP_UNPROCESSABLE_ENTITY, 'VALIDATION_FAILED'],
+            'feature gate' => ['error-feature-gate', Response::HTTP_FORBIDDEN, 'FEATURE_NOT_AVAILABLE'],
+            'resource not found' => ['error-not-found', Response::HTTP_NOT_FOUND, 'RESOURCE_NOT_FOUND'],
+            'http not found' => ['error-http-not-found', Response::HTTP_NOT_FOUND, 'RESOURCE_NOT_FOUND'],
+            'unmapped http exception preserves method-not-allowed status' => ['error-method-not-allowed', Response::HTTP_METHOD_NOT_ALLOWED, 'HTTP_ERROR'],
+            'unmapped http exception preserves gone status' => ['error-gone', Response::HTTP_GONE, 'HTTP_ERROR'],
+            'internal error' => ['error-internal', Response::HTTP_INTERNAL_SERVER_ERROR, 'INTERNAL_ERROR'],
         ];
     }
 

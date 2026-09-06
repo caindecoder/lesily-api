@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth\Password;
 
 use App\Models\User;
 use Carbon\CarbonInterface;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
@@ -51,7 +52,7 @@ class PasswordChangedNotificationTest extends AuthTestCase
         ]);
 
         // Then the change is refused and no confirmation is sent — the notice is bound to the event
-        $this->assertRefusedWith($response, ApiErrorCode::IncorrectPassword);
+        $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::IncorrectPassword);
         Notification::assertNothingSent();
     }
 
@@ -113,7 +114,7 @@ class PasswordChangedNotificationTest extends AuthTestCase
         ]);
 
         // Then the reset is refused and no confirmation is sent — the notice is bound to the stored event
-        $this->assertRefusedWith($response, ApiErrorCode::ResetLinkInvalid);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::ResetLinkInvalid);
         Notification::assertNothingSent();
     }
 

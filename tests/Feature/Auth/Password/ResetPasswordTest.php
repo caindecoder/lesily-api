@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth\Password;
 
 use App\Models\User;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
@@ -57,8 +58,7 @@ class ResetPasswordTest extends AuthTestCase
         ]);
 
         // Then it is refused, the password is untouched, and the session survives (Minimal Guarantee)
-        $this->assertRefusedWith($response, ApiErrorCode::ResetLinkInvalid);
-        $response->assertStatus(422); // literal pins the 422 contract independent of the enum
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::ResetLinkInvalid);
         $response->assertJsonPath('message', 'This reset link is invalid or has expired. Request a new one.'); // pins the non-leaking security copy (Infection-blind bootstrap)
         $this->assertResetRefused($user, self::LOGIN_PASSWORD, 1);
     }
@@ -79,8 +79,7 @@ class ResetPasswordTest extends AuthTestCase
         ]);
 
         // Then it is refused with the same collapsed error and nothing changes
-        $this->assertRefusedWith($response, ApiErrorCode::ResetLinkInvalid);
-        $response->assertStatus(422);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::ResetLinkInvalid);
         $this->assertResetRefused($user, self::LOGIN_PASSWORD, 0);
     }
 
@@ -104,8 +103,7 @@ class ResetPasswordTest extends AuthTestCase
         ]);
 
         // Then the reuse is refused with the collapsed error — the token is single-use
-        $this->assertRefusedWith($response, ApiErrorCode::ResetLinkInvalid);
-        $response->assertStatus(422);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::ResetLinkInvalid);
     }
 
     #[Test]
@@ -124,8 +122,7 @@ class ResetPasswordTest extends AuthTestCase
         ]);
 
         // Then the reset is refused and neither account's password changes (a token is bound to its email)
-        $this->assertRefusedWith($response, ApiErrorCode::ResetLinkInvalid);
-        $response->assertStatus(422);
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::ResetLinkInvalid);
         $this->assertResetRefused($alice, self::LOGIN_PASSWORD, 0);
         $this->assertResetRefused($bob, self::LOGIN_PASSWORD, 0);
     }
