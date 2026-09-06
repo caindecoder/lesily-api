@@ -24,6 +24,15 @@ pre-commit:
       # schema-reuse seam). Logic in scripts/check-db-trait-placement.sh (shared
       # with the CI quality job).
       run: sh scripts/check-db-trait-placement.sh {staged_files}
+    status-assertions:
+      glob: "tests/**/*.php"
+      # Sec 2.2 Rule 11 (OQ-1-177): a test states its expected HTTP status itself -
+      # never assertStatus( fed by ->status() (the enum the code under test renders
+      # from, so the expectation moves with the mutation) nor by a bare integer
+      # (use the named assert). Logic in scripts/check-status-assertions.sh (shared
+      # with the gating CI quality step); comment lines excluded, every matcher
+      # self-tested at startup.
+      run: sh scripts/check-status-assertions.sh {staged_files}
     write-path-chain:
       glob: "app/**/*.php"
       # Sec 2.15.C (OQ-1-170): the canonical write-path chain's layer-skip bans -

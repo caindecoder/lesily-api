@@ -210,6 +210,25 @@ jobs:
           scanned=$(echo "$summary" | sed -E 's/.*; ([0-9]+) file\(s\) scanned/\1/')
           [ "$scanned" -gt 0 ] || { echo "scanned nothing"; exit 1; }
           exit $status
+      - name: Status assertions (conv-plan sec 2.2 Rule 11, OQ-1-177) - gating
+        # A test states its expected HTTP status itself: assertStatus( fed by
+        # ->status() (the tautology - the expectation moves with the mutation)
+        # or by a bare integer (use the named assert) is refused over the whole
+        # tests/ tree. Same script as the lefthook status-assertions hook; every
+        # matcher and the comment filter self-test at startup (a dead matcher
+        # aborts with no summary). Liveness proof: the summary line must exist
+        # and the tests population must be non-zero.
+        run: |
+          set +e
+          sh scripts/check-status-assertions.sh > "$RUNNER_TEMP/status-assertions.txt" 2>&1
+          status=$?
+          summary=$(grep '^Status-assertion check:' "$RUNNER_TEMP/status-assertions.txt")
+          set -e
+          cat "$RUNNER_TEMP/status-assertions.txt"
+          [ -n "$summary" ] || { echo "no summary line - the check did not run"; exit 1; }
+          scanned=$(echo "$summary" | sed -E 's/.*tests: ([0-9]+) file\(s\) scanned/\1/')
+          [ "$scanned" -gt 0 ] || { echo "scanned nothing"; exit 1; }
+          exit $status
       - name: Mutation kill-verdict classifier self-test (OQ-1-167)
         # The kill-integrity gate's steady state is always-PASS, so a rotted
         # classifier would be invisible on every clean infection.json. This
