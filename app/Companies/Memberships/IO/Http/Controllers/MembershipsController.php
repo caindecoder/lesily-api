@@ -51,7 +51,7 @@ class MembershipsController
         // aliased shape the roster lists, so the client updates in place.
         $row = $this->memberships->findById($company->getKey(), $membershipId);
 
-        return (new MembershipResource($row))->response($request)->setStatusCode(200);
+        return (new MembershipResource($row))->response($request)->setStatusCode(Response::HTTP_OK);
     }
 
     public function destroy(Request $request, string $membershipId, RemoveUserFromCompanyInteractor $interactor): Response

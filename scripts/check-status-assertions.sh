@@ -1,9 +1,10 @@
 #!/bin/sh
-# Sec 2.2 Rule 11 (coding-conventions-plan; OQ-1-177): a test states its expected
-# HTTP status itself - a named Laravel assert (assertUnprocessable(), ...) when
-# the status is asserted directly, a Response::HTTP_* constant when it travels
-# as a value (a helper parameter, a DataProvider row). Two bans inside
-# assertStatus( on tests/**/*.php:
+# Sec 2.2 Rule 11 (coding-conventions-plan; OQ-1-177 tests side, OQ-1-183
+# production side): an HTTP status is spelled by name on BOTH sides of the
+# double-entry, so neither side can drift silently into the other.
+# tests/ - a named Laravel assert (assertUnprocessable(), ...) when the status
+# is asserted directly, a Response::HTTP_* constant when it travels as a value
+# (a helper parameter, a DataProvider row). Two bans inside assertStatus(:
 #  M1 derived  - the status computed from production (`->status()`): the
 #                expectation moves with the mutation, so the test cannot fail
 #  M2 bare int - a three-digit literal (use the named assert)
@@ -13,18 +14,35 @@
 #  M4 expected - `assertSame(ApiErrorCode::X->status(), ...)` (the enum on the
 #                EXPECTED side; `assertSame(500, ApiErrorCode::X->status())`
 #                pins the arm with a literal and is allowed)
+# app/ - an emitted status is a Response::HTTP_* constant, never a bare int:
+#  A1 bare setStatusCode - `setStatusCode(201)` or `setStatusCode(201, $text)`
+#                          anywhere under app/ (Symfony's second argument is
+#                          the reason phrase)
+#  A2 bare match arm     - `=> 422,` inside a status map, the last arm without
+#                          its comma included (ApiErrorCode.php, the only map
+#                          today; a second map is added to status_maps below,
+#                          and the no-arg run aborts if a listed map is not
+#                          found - a typo must not leave A2 silently dead; no
+#                          generic three-digit matcher over app/, where
+#                          max:255 / Str::random(40) live)
 # Comment lines are excluded (call-form only; //, /*, * and # openers - the
 # check-write-path-chain.sh filter). Every matcher AND the comment filter are
 # self-tested at startup on a planted hit and a planted miss; a matcher that
 # cannot match aborts with exit 2 and NO summary line.
-# Shared by lefthook pre-commit (staged files) and the CI quality job (whole
-# tree). ALWAYS ends with the summary line CI parses; `tests:` counts files
-# actually inspected.
-# Usage: sh scripts/check-status-assertions.sh [file...]   (no args = scan tests/)
+# Shared by lefthook pre-commit (status-assertions: staged tests/ files;
+# status-constants: staged app/ files - the script routes each file to its
+# population by path) and the CI quality job (whole tree). ALWAYS ends with
+# the summary line CI parses; `tests:` and `app:` count the files actually
+# inspected in each population.
+# Usage: sh scripts/check-status-assertions.sh [file...]   (no args = scan tests/ and app/)
 derived='assertStatus\([^)]*->status\(\)'
 bare='assertStatus\([[:space:]]*[0-9]{3}[[:space:]]*\)'
 assigned='=[[:space:]]*[^;]*->status\(\)'
 expected_side='assert(Same|Equals)\([[:space:]]*ApiErrorCode::[A-Za-z]+->status\(\)'
+bare_set_status='setStatusCode\([[:space:]]*[0-9]{3}[[:space:]]*[,)]'
+bare_match_arm='=>[[:space:]]*[0-9]{3}[[:space:]]*(,|$)'
+# basenames of the production status maps A2 applies to (space-separated)
+status_maps='ApiErrorCode.php'
 # applied to `grep -n` output (line:content), so the anchor sits after the number
 comment='^[0-9]+:[[:space:]]*(\*|/\*|//|#)'
 
@@ -60,6 +78,24 @@ self_test 'M3 assigned (variable form)' "$assigned" \
 self_test 'M4 expected side' "$expected_side" \
   '        $this->assertSame(ApiErrorCode::InviteInvalid->status(), $response->status());' \
   '        $this->assertSame($unknownEmail->status(), $wrongPassword->status());'
+self_test 'A1 bare setStatusCode' "$bare_set_status" \
+  '                ->response($request)->setStatusCode(201);' \
+  '                ->response($request)->setStatusCode(Response::HTTP_CREATED);'
+self_test 'A1 bare setStatusCode (spaced)' "$bare_set_status" \
+  '        ->setStatusCode( 200 );' \
+  '        ->setStatusCode($status);'
+self_test 'A2 bare match arm' "$bare_match_arm" \
+  '            self::InviteInvalid => 422,' \
+  '            self::InviteInvalid => Response::HTTP_UNPROCESSABLE_ENTITY,'
+self_test 'A2 bare match arm (fallback arm)' "$bare_match_arm" \
+  '            self::HttpError => 500,' \
+  "            'name' => ['required', 'max:255'],"
+self_test 'A1 bare setStatusCode (two-argument form)' "$bare_set_status" \
+  '        return $response->setStatusCode(201, $text);' \
+  '        return $response->setStatusCode($status, $text);'
+self_test 'A2 bare match arm (last arm, no comma)' "$bare_match_arm" \
+  '            self::InternalError => 500' \
+  '            self::InternalError => Response::HTTP_INTERNAL_SERVER_ERROR'
 self_test 'comment filter (docblock)' "$comment" \
   '12:     * assertStatus(422) in a docblock' \
   '12:        $response->assertStatus(422);'
@@ -72,9 +108,13 @@ self_test 'comment filter (/* form)' "$comment" \
 self_test 'comment filter (# form)' "$comment" \
   '12:        # $response->assertStatus(422);' \
   '12:        $this->assertSame(ApiErrorCode::InviteInvalid->status(), $response->status());'
+self_test 'comment filter (app forms)' "$comment" \
+  '12:        // ->setStatusCode(201);' \
+  '12:                ->response($request)->setStatusCode(201);'
 
 violations=0
-scanned=0
+scanned_tests=0
+scanned_app=0
 
 report() {
   # $1 file, $2 pattern, $3 label
@@ -85,26 +125,50 @@ report() {
   violations=$((violations + n))
 }
 
+inspect_test() {
+  scanned_tests=$((scanned_tests + 1))
+  report "$1" "$derived" 'M1 assertStatus( fed by a status read from production (->status())'
+  report "$1" "$bare" 'M2 assertStatus( fed by a bare integer (use the named assert)'
+  report "$1" "$assigned" 'M3 a status read from production and parked in a variable (state it as a named assert or a Response::HTTP_* constant)'
+  report "$1" "$expected_side" 'M4 the enum on the expected side of assertSame/assertEquals'
+}
+
+inspect_app() {
+  scanned_app=$((scanned_app + 1))
+  report "$1" "$bare_set_status" 'A1 setStatusCode( fed by a bare integer (use a Response::HTTP_* constant)'
+  case " $status_maps " in
+    *" $(basename "$1") "*)
+      report "$1" "$bare_match_arm" 'A2 a status-map arm returning a bare integer (use a Response::HTTP_* constant)' ;;
+  esac
+}
+
 inspect() {
   f=$1
   [ -f "$f" ] || return 0
   case "$f" in *.php) ;; *) return 0 ;; esac
-  case "$f" in tests/*|./tests/*|*/tests/*) ;; *) return 0 ;; esac
-  scanned=$((scanned + 1))
-  report "$f" "$derived" 'assertStatus( fed by a status read from production (->status())'
-  report "$f" "$bare" 'assertStatus( fed by a bare integer (use the named assert)'
-  report "$f" "$assigned" 'a status read from production and parked in a variable (state it as a named assert or a Response::HTTP_* constant)'
-  report "$f" "$expected_side" 'the enum on the expected side of assertSame/assertEquals'
+  case "$f" in
+    tests/*|./tests/*|*/tests/*) inspect_test "$f" ;;
+    app/*|./app/*|*/app/*) inspect_app "$f" ;;
+  esac
 }
 
 if [ "$#" -gt 0 ]; then
   for f in "$@"; do inspect "$f"; done
 else
+  # whole-tree run: every listed status map must exist, or A2 is dead while
+  # the app population still counts - abort with no summary, like a dead matcher
+  for m in $status_maps; do
+    if [ -z "$(find app -name "$m" | head -1)" ]; then
+      echo "self-test failed - status map $m not found under app/ (A2 would scan nothing)"
+      exit 2
+    fi
+  done
   OLDIFS=$IFS
   IFS='
 '
-  for f in $(find tests -name '*.php'); do inspect "$f"; done
+  for f in $(find tests app -name '*.php'); do inspect "$f"; done
   IFS=$OLDIFS
 fi
-echo "Status-assertion check: ${violations} violation(s); tests: ${scanned} file(s) scanned"
+populations="tests: ${scanned_tests} file(s) scanned; app: ${scanned_app} file(s) scanned"
+echo "Status-assertion check: ${violations} violation(s); ${populations}"
 [ "$violations" -eq 0 ]
