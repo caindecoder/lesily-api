@@ -2,6 +2,8 @@
 
 namespace App\Foundation\Http\Responses;
 
+use Illuminate\Http\Response;
+
 enum ApiErrorCode: string
 {
     case ValidationFailed = 'VALIDATION_FAILED';
@@ -46,47 +48,47 @@ enum ApiErrorCode: string
     public function status(): int
     {
         return match ($this) {
-            self::ValidationFailed => 422,
-            self::Unauthenticated => 401,
-            self::CompanyAccessDenied => 403,
-            self::FeatureNotAvailable => 403,
-            self::RoleInsufficient => 403,
-            self::AlreadyMember => 422,
-            self::DeviceLimitReached => 403,
-            self::TwoFactorSetupNotStarted => 422,
-            self::InvalidTwoFactorCode => 422,
-            self::TwoFactorAlreadyEnabled => 409,
-            self::TwoFactorChallengeNotFound => 404,
-            self::TwoFactorVerificationFailed => 401,
-            self::TwoFactorNotEnabled => 422,
-            self::IncorrectPassword => 401,
-            self::ResetLinkInvalid => 422,
-            self::InviteInvalid => 422,
-            self::InviteNotPending => 422,
-            self::InviteEmailMismatch => 403,
-            self::OwnerTransferRequired => 422,
-            self::SelfRoleChangeBlocked => 422,
-            self::SelfRemovalBlocked => 422,
-            self::TargetNotMember => 422,
-            self::SelfTransferBlocked => 422,
-            self::ResourceNotFound => 404,
-            self::EmailRegistered => 409,
-            self::BrNumberRegistered => 409,
-            self::EpfNumberRegistered => 409,
-            self::UnsupportedCountry => 422,
-            self::InvalidSignature => 403,
-            self::RateLimitExceeded => 429,
-            self::IdempotencyKeyRequired => 422,
-            self::IdempotencyCacheUnavailable => 503,
-            self::IdempotencyKeyConflict => 409,
-            self::IdempotencyKeyProcessing => 409,
-            self::StateGuardViolation => 409,
-            self::ReceiptGenerationUnavailable => 503,
+            self::ValidationFailed => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::Unauthenticated => Response::HTTP_UNAUTHORIZED,
+            self::CompanyAccessDenied => Response::HTTP_FORBIDDEN,
+            self::FeatureNotAvailable => Response::HTTP_FORBIDDEN,
+            self::RoleInsufficient => Response::HTTP_FORBIDDEN,
+            self::AlreadyMember => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::DeviceLimitReached => Response::HTTP_FORBIDDEN,
+            self::TwoFactorSetupNotStarted => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::InvalidTwoFactorCode => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::TwoFactorAlreadyEnabled => Response::HTTP_CONFLICT,
+            self::TwoFactorChallengeNotFound => Response::HTTP_NOT_FOUND,
+            self::TwoFactorVerificationFailed => Response::HTTP_UNAUTHORIZED,
+            self::TwoFactorNotEnabled => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::IncorrectPassword => Response::HTTP_UNAUTHORIZED,
+            self::ResetLinkInvalid => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::InviteInvalid => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::InviteNotPending => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::InviteEmailMismatch => Response::HTTP_FORBIDDEN,
+            self::OwnerTransferRequired => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::SelfRoleChangeBlocked => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::SelfRemovalBlocked => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::TargetNotMember => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::SelfTransferBlocked => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::ResourceNotFound => Response::HTTP_NOT_FOUND,
+            self::EmailRegistered => Response::HTTP_CONFLICT,
+            self::BrNumberRegistered => Response::HTTP_CONFLICT,
+            self::EpfNumberRegistered => Response::HTTP_CONFLICT,
+            self::UnsupportedCountry => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::InvalidSignature => Response::HTTP_FORBIDDEN,
+            self::RateLimitExceeded => Response::HTTP_TOO_MANY_REQUESTS,
+            self::IdempotencyKeyRequired => Response::HTTP_UNPROCESSABLE_ENTITY,
+            self::IdempotencyCacheUnavailable => Response::HTTP_SERVICE_UNAVAILABLE,
+            self::IdempotencyKeyConflict => Response::HTTP_CONFLICT,
+            self::IdempotencyKeyProcessing => Response::HTTP_CONFLICT,
+            self::StateGuardViolation => Response::HTTP_CONFLICT,
+            self::ReceiptGenerationUnavailable => Response::HTTP_SERVICE_UNAVAILABLE,
             // Generic fallback for an unmapped HttpException. Production always
             // preserves the exception's real status via buildWithStatus(); this 500
             // is only the default required for match() exhaustiveness.
-            self::HttpError => 500,
-            self::InternalError => 500,
+            self::HttpError => Response::HTTP_INTERNAL_SERVER_ERROR,
+            self::InternalError => Response::HTTP_INTERNAL_SERVER_ERROR,
         };
     }
 }
