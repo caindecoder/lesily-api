@@ -158,7 +158,7 @@ class ForgotPasswordTest extends AuthTestCase
     }
 
     /**
-     * @return array<string, array{array<string, string>, string}>
+     * @return array<string, array{array<string, mixed>, string}>
      */
     public static function invalidEmailProvider(): array
     {
@@ -166,11 +166,12 @@ class ForgotPasswordTest extends AuthTestCase
             'missing email' => [[], 'The email field is required.'],
             'empty email' => [['email' => ''], 'The email field is required.'],
             'malformed email' => [['email' => 'not-an-email'], 'The email field must be a valid email address.'],
+            'array-shaped email' => [['email' => ['a', 'b']], 'The email field must be a valid email address.'],
         ];
     }
 
     /**
-     * @param  array<string, string>  $payload
+     * @param  array<string, mixed>  $payload
      */
     private function forgotPassword(array $payload): TestResponse
     {
