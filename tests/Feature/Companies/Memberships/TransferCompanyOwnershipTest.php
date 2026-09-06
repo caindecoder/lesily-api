@@ -194,8 +194,11 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
      */
     #[Test]
     #[DataProvider('contentionProvider')]
-    public function when_the_transfer_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, int $expectedStatus, ApiErrorCode $expected): void
-    {
+    public function when_the_transfer_hits_lock_contention_then_it_is_refused_as_a_conflict(
+        array $failure,
+        int $expectedStatus,
+        ApiErrorCode $expected,
+    ): void {
         // Given — a write inside the locked transaction that dies the way the
         // driver reports it (a REAL two-connection deadlock stays out per P9)
         $owner = User::factory()->create();

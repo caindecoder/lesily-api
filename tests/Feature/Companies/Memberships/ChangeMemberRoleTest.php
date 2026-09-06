@@ -260,8 +260,11 @@ class ChangeMemberRoleTest extends MembershipsTestCase
      */
     #[Test]
     #[DataProvider('contentionProvider')]
-    public function when_the_role_change_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, int $expectedStatus, ApiErrorCode $expected): void
-    {
+    public function when_the_role_change_hits_lock_contention_then_it_is_refused_as_a_conflict(
+        array $failure,
+        int $expectedStatus,
+        ApiErrorCode $expected,
+    ): void {
         // Given — a member to re-role and a write inside the locked
         // transaction that dies the way the driver reports it
         [$company, $admin] = $this->aCompanyWithMember();
@@ -335,7 +338,11 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         // Given an employee who cannot view the roster (employee lacks users.view)
         [$company, $admin] = $this->aCompanyWithMember();
         [$bob, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
-        $this->assertRefusedWith($this->viewMemberships($bob, $company), Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
+        $this->assertRefusedWith(
+            $this->viewMemberships($bob, $company),
+            Response::HTTP_FORBIDDEN,
+            ApiErrorCode::RoleInsufficient
+        );
 
         // When their role changes to HR Officer (which holds users.view)
         $this->changeRole($admin, $company, $membershipId)->assertOk();

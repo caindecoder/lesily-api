@@ -226,8 +226,11 @@ class RemoveMemberTest extends MembershipsTestCase
      */
     #[Test]
     #[DataProvider('contentionProvider')]
-    public function when_the_removal_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, int $expectedStatus, ApiErrorCode $expected): void
-    {
+    public function when_the_removal_hits_lock_contention_then_it_is_refused_as_a_conflict(
+        array $failure,
+        int $expectedStatus,
+        ApiErrorCode $expected,
+    ): void {
         // Given — a member to remove and a write inside the locked
         // transaction that dies the way the driver reports it
         [$company, $admin] = $this->aCompanyWithMember();

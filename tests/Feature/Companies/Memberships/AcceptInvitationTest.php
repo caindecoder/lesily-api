@@ -382,8 +382,11 @@ class AcceptInvitationTest extends MembershipsTestCase
      */
     #[Test]
     #[DataProvider('contentionProvider')]
-    public function when_the_accept_hits_lock_contention_then_it_is_refused_as_a_conflict(array $failure, int $expectedStatus, ApiErrorCode $expected): void
-    {
+    public function when_the_accept_hits_lock_contention_then_it_is_refused_as_a_conflict(
+        array $failure,
+        int $expectedStatus,
+        ApiErrorCode $expected,
+    ): void {
         // Given an existing account's invitation and a write inside the
         // accept transaction that dies the way the driver reports it
         [$company, $actor] = $this->aCompanyWithMember();

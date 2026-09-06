@@ -57,10 +57,9 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
-     * The request was refused with the §S21 envelope for $code. The caller
-     * states the status (a Response::HTTP_* constant) — it is never read from
-     * the enum the production path renders from, so an arm change fails here.
-     * Conventions §2.2 Rule 11 (OQ-1-177). Shared by every module base.
+     * The request was refused with the §S21 envelope for $code — the caller
+     * states the status (a Response::HTTP_* constant), never the enum the
+     * code under test renders from (§2.2 Rule 11). Shared by every module base.
      */
     protected function assertRefusedWith(TestResponse $response, int $expectedStatus, ApiErrorCode $code): void
     {

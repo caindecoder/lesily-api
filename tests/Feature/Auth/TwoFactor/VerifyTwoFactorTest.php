@@ -78,7 +78,11 @@ class VerifyTwoFactorTest extends AuthTestCase
         }
 
         // Then the challenge is abandoned — a further attempt is refused as missing, not invalid
-        $this->assertRefusedWith($this->verify($challengeId, 'wrong-code'), Response::HTTP_NOT_FOUND, ApiErrorCode::TwoFactorChallengeNotFound);
+        $this->assertRefusedWith(
+            $this->verify($challengeId, 'wrong-code'),
+            Response::HTTP_NOT_FOUND,
+            ApiErrorCode::TwoFactorChallengeNotFound
+        );
     }
 
     #[Test]
