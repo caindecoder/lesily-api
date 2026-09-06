@@ -15,11 +15,16 @@
 #                EXPECTED side; `assertSame(500, ApiErrorCode::X->status())`
 #                pins the arm with a literal and is allowed)
 # app/ - an emitted status is a Response::HTTP_* constant, never a bare int:
-#  A1 bare setStatusCode - `setStatusCode(201)` anywhere under app/
-#  A2 bare match arm     - `=> 422,` inside a status map (ApiErrorCode.php,
-#                          the only one today; a second map is added to
-#                          status_maps below - no generic three-digit matcher
-#                          over app/, where max:255 / Str::random(40) live)
+#  A1 bare setStatusCode - `setStatusCode(201)` or `setStatusCode(201, $text)`
+#                          anywhere under app/ (Symfony's second argument is
+#                          the reason phrase)
+#  A2 bare match arm     - `=> 422,` inside a status map, the last arm without
+#                          its comma included (ApiErrorCode.php, the only map
+#                          today; a second map is added to status_maps below,
+#                          and the no-arg run aborts if a listed map is not
+#                          found - a typo must not leave A2 silently dead; no
+#                          generic three-digit matcher over app/, where
+#                          max:255 / Str::random(40) live)
 # Comment lines are excluded (call-form only; //, /*, * and # openers - the
 # check-write-path-chain.sh filter). Every matcher AND the comment filter are
 # self-tested at startup on a planted hit and a planted miss; a matcher that
@@ -34,8 +39,8 @@ derived='assertStatus\([^)]*->status\(\)'
 bare='assertStatus\([[:space:]]*[0-9]{3}[[:space:]]*\)'
 assigned='=[[:space:]]*[^;]*->status\(\)'
 expected_side='assert(Same|Equals)\([[:space:]]*ApiErrorCode::[A-Za-z]+->status\(\)'
-bare_set_status='setStatusCode\([[:space:]]*[0-9]{3}[[:space:]]*\)'
-bare_match_arm='=>[[:space:]]*[0-9]{3},'
+bare_set_status='setStatusCode\([[:space:]]*[0-9]{3}[[:space:]]*[,)]'
+bare_match_arm='=>[[:space:]]*[0-9]{3}[[:space:]]*(,|$)'
 # basenames of the production status maps A2 applies to (space-separated)
 status_maps='ApiErrorCode.php'
 # applied to `grep -n` output (line:content), so the anchor sits after the number
@@ -85,6 +90,12 @@ self_test 'A2 bare match arm' "$bare_match_arm" \
 self_test 'A2 bare match arm (fallback arm)' "$bare_match_arm" \
   '            self::HttpError => 500,' \
   "            'name' => ['required', 'max:255'],"
+self_test 'A1 bare setStatusCode (two-argument form)' "$bare_set_status" \
+  '        return $response->setStatusCode(201, $text);' \
+  '        return $response->setStatusCode($status, $text);'
+self_test 'A2 bare match arm (last arm, no comma)' "$bare_match_arm" \
+  '            self::InternalError => 500' \
+  '            self::InternalError => Response::HTTP_INTERNAL_SERVER_ERROR'
 self_test 'comment filter (docblock)' "$comment" \
   '12:     * assertStatus(422) in a docblock' \
   '12:        $response->assertStatus(422);'
@@ -144,6 +155,14 @@ inspect() {
 if [ "$#" -gt 0 ]; then
   for f in "$@"; do inspect "$f"; done
 else
+  # whole-tree run: every listed status map must exist, or A2 is dead while
+  # the app population still counts - abort with no summary, like a dead matcher
+  for m in $status_maps; do
+    if [ -z "$(find app -name "$m" | head -1)" ]; then
+      echo "self-test failed - status map $m not found under app/ (A2 would scan nothing)"
+      exit 2
+    fi
+  done
   OLDIFS=$IFS
   IFS='
 '
