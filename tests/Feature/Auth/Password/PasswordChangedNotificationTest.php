@@ -9,12 +9,15 @@ use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Notification;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Notifications\Enums\NotificationType;
+use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\Notifications\Entities\NotificationPreference;
 use App\Foundation\Notifications\Notifications\SystemNotification;
@@ -28,6 +31,8 @@ use App\Foundation\Notifications\Notifications\SystemNotification;
  */
 class PasswordChangedNotificationTest extends AuthTestCase
 {
+    use InteractsWithQueuedReactors;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -245,6 +250,28 @@ class PasswordChangedNotificationTest extends AuthTestCase
 
         // Then the confirmation is labeled with the default company — the user's own choice wins
         $this->assertConfirmationNames($response, $user, $default->name);
+    }
+
+    #[Test]
+    public function when_the_password_is_changed_then_the_confirmation_is_queued_not_sent_inline(): void
+    {
+        // Given a company-attached user with an active session, and the fakes armed
+        $user = $this->aRegisteredUser();
+        $company = $this->attachCompany($user);
+        $session = $this->aSessionFor($user);
+        Notification::fake();
+        Queue::fake();
+
+        // When they change their password with the correct current password
+        $response = $this->changePassword($session->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the confirmation is deferred — not sent inline — and delivers to them at the drain
+        $this->assertReactorDeferred(UserPasswordChanged::class, SystemNotification::class);
+        $this->runQueuedHandlersFor(UserPasswordChanged::class);
+        $this->assertConfirmationNames($response, $user, $company->name);
     }
 
     /**
