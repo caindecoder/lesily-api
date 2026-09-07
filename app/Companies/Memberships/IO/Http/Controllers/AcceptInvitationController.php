@@ -7,6 +7,7 @@ use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Foundation\Auth\Support\DeviceName;
 use App\Foundation\Auth\IO\Http\Resources\LoginResource;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Memberships\UseCases\Results\NewUserJoined;
 use App\Companies\Memberships\IO\Http\Resources\MembershipResource;
 use App\Companies\Memberships\UseCases\Commands\AcceptInvitationCommand;
@@ -45,8 +46,11 @@ class AcceptInvitationController
         }
 
         // Existing user: 200, no token minted (H5). The envelope echoes the
-        // activated roster row — the change-role echo's shape (R-E s112).
-        $row = $this->memberships->findById($outcome->membership->company_id, $outcome->membership->getKey());
+        // activated roster row — the change-role echo's shape (R-E s112). A row
+        // removed between the join and this read answers the standard 404: the
+        // membership is gone, the join already stands (OQ-1-175).
+        $row = $this->memberships->findById($outcome->membership->company_id, $outcome->membership->getKey())
+            ?? throw new ModelNotFoundException;
 
         return (new MembershipResource($row))->response($request)->setStatusCode(Response::HTTP_OK);
     }
