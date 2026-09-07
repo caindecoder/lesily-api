@@ -158,7 +158,8 @@ class ResetPasswordTest extends AuthTestCase
         } catch (AssertionFailedError $guard) {
             throw $guard;
         } catch (RuntimeException $failure) {
-            // Then the committed reset, the revocation of every session and the token consumption survived the delivery failure
+            // Then the committed reset, the revocation of every session and the token consumption
+            // survived the delivery failure
             $this->assertAllSessionsRevoked($response, $user, [$web->plainTextToken, $mobile->plainTextToken]);
             $this->assertResetSurvivedReactorFailure($user, $failure);
         }

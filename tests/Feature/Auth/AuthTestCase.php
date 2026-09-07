@@ -500,17 +500,19 @@ abstract class AuthTestCase extends TestCase
      */
     protected function bindThrowingPasswordChangedReactor(): void
     {
-        $this->app->bind(PasswordChangedNotificationReactor::class, fn (): PasswordChangedNotificationReactor => new class extends PasswordChangedNotificationReactor
-        {
-            public function onUserPasswordChanged(UserPasswordChanged $event): void
+        $this->app->bind(
+            PasswordChangedNotificationReactor::class,
+            fn (): PasswordChangedNotificationReactor => new class extends PasswordChangedNotificationReactor
             {
-                throw new RuntimeException('Induced delivery-time reactor failure.');
-            }
+                public function onUserPasswordChanged(UserPasswordChanged $event): void
+                {
+                    throw new RuntimeException('Induced delivery-time reactor failure.');
+                }
 
-            public function onUserPasswordReset(UserPasswordReset $event): void
-            {
-                throw new RuntimeException('Induced delivery-time reactor failure.');
-            }
-        });
+                public function onUserPasswordReset(UserPasswordReset $event): void
+                {
+                    throw new RuntimeException('Induced delivery-time reactor failure.');
+                }
+            });
     }
 }

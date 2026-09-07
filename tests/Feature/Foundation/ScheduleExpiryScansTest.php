@@ -47,7 +47,8 @@ class ScheduleExpiryScansTest extends FoundationTestCase
             $this->scheduledCommandStrings()->contains(
                 fn (string $command): bool => $this->runsScan($command, $scan),
             ),
-            "The daily scan '{$scan}' is not registered in routes/console.php — it would silently never run in production.",
+            "The daily scan '{$scan}' is not registered in routes/console.php — "
+                .'it would silently never run in production.',
         );
     }
 
@@ -64,7 +65,8 @@ class ScheduleExpiryScansTest extends FoundationTestCase
                 collect(self::DECLARED_DAILY_SCANS)->contains(
                     fn (string $scan): bool => $this->runsScan($command, $scan),
                 ),
-                "Undeclared scheduled command [{$command}] — declare it in DECLARED_DAILY_SCANS so the registration guard covers it.",
+                "Undeclared scheduled command [{$command}] — declare it in "
+                    .'DECLARED_DAILY_SCANS so the registration guard covers it.',
             );
         }
     }
