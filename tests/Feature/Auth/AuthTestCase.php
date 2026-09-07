@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use Tests\TestCase;
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
@@ -17,9 +18,12 @@ use Illuminate\Support\Facades\Password;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\Auth\Events\UserPasswordReset;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Foundation\Auth\Events\UserPasswordChanged;
+use App\Foundation\Auth\Reactors\PasswordChangedNotificationReactor;
 
 abstract class AuthTestCase extends TestCase
 {
@@ -486,5 +490,27 @@ abstract class AuthTestCase extends TestCase
         $newLogin = $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $newPassword]);
         $newLogin->assertOk();
         $this->assertNotEmpty($newLogin->json('data.token'), 'The new password must authenticate and issue a session.');
+    }
+
+    /**
+     * Container-bind a confirmation reactor whose BOTH handlers fail at delivery time, so a test can
+     * prove the committed password write (and what follows it) survives the failure. spatie
+     * re-resolves handlers per call, so the binding is seen at the drain. Shared by the
+     * change-password (UC-1-016) and reset-password (UC-1-008) suites.
+     */
+    protected function bindThrowingPasswordChangedReactor(): void
+    {
+        $this->app->bind(PasswordChangedNotificationReactor::class, fn (): PasswordChangedNotificationReactor => new class extends PasswordChangedNotificationReactor
+        {
+            public function onUserPasswordChanged(UserPasswordChanged $event): void
+            {
+                throw new RuntimeException('Induced delivery-time reactor failure.');
+            }
+
+            public function onUserPasswordReset(UserPasswordReset $event): void
+            {
+                throw new RuntimeException('Induced delivery-time reactor failure.');
+            }
+        });
     }
 }

@@ -3,19 +3,25 @@
 namespace Tests\Feature\Auth\Password;
 
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Support\Str;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Events\UserPasswordChanged;
+use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class ChangePasswordTest extends AuthTestCase
 {
+    use InteractsWithQueuedReactors;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -93,6 +99,35 @@ class ChangePasswordTest extends AuthTestCase
 
         // Then the request is rejected as a validation error naming the offending field
         $this->assertValidationRejected($response, $invalidField, $expectedMessage);
+    }
+
+    #[Test]
+    public function when_the_confirmation_reactor_fails_after_the_change_commits_then_the_change_and_the_revocation_survive(): void
+    {
+        // Given an authenticated user on two devices and a confirmation reactor that fails at delivery time
+        $user = $this->aRegisteredUser();
+        $current = $this->aSessionFor($user, 'web');
+        $other = $this->aSessionFor($user, 'mobile');
+        Queue::fake();
+        $this->bindThrowingPasswordChangedReactor();
+
+        // When they change their password and the deferred confirmation is drained
+        $response = $this->changePassword($current->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+        $response->assertNoContent();
+
+        try {
+            $this->runQueuedHandlersFor(UserPasswordChanged::class);
+            $this->fail('Draining the queued reactor should surface the induced failure.');
+        } catch (AssertionFailedError $guard) {
+            throw $guard;
+        } catch (RuntimeException $failure) {
+            // Then the committed change and the revocation of the other device survived the delivery failure
+            $this->assertOtherSessionsRevoked($response, $current->plainTextToken, $other->plainTextToken);
+            $this->assertChangeSurvivedReactorFailure($user, $failure);
+        }
     }
 
     // --- Edge ---
@@ -226,6 +261,17 @@ class ChangePasswordTest extends AuthTestCase
         $response->assertNoContent();
         $this->assertUnauthenticated($this->probeWith($otherToken));
         $this->probeWith($currentToken)->assertOk();
+    }
+
+    /**
+     * The change survived a delivery-time confirmation failure: the drained job surfaced the induced
+     * failure (not some other error) and the NEW password authenticates — the reactor failed AFTER
+     * the committed write, never in its place.
+     */
+    protected function assertChangeSurvivedReactorFailure(User $user, RuntimeException $failure): void
+    {
+        $this->assertSame('Induced delivery-time reactor failure.', $failure->getMessage());
+        $this->assertPasswordReplaced($user, self::LOGIN_PASSWORD, self::NEW_PASSWORD);
     }
 
     /**
