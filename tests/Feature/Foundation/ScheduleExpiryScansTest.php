@@ -13,8 +13,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
  * The registration guard for the daily scans (OQ-1-155, ruling R7): a scan deleted from
  * routes/console.php would otherwise never run in production with every gate green. Guarded in
  * both directions over one declared list — a declared scan must exist as a command AND be
- * scheduled; every scheduled command must be declared (ruling D3). A deliberate divergence from
- * LeaveDates, which answers the runner question at runtime and the registration question not at all.
+ * scheduled; every scheduled task must be declared (ruling D3). Cadence is deliberately unpinned.
  *
  * @testclass-carveout: infra-primitive — pins scheduler wiring; no HTTP seam exists for it.
  */
@@ -58,8 +57,10 @@ class ScheduleExpiryScansTest extends FoundationTestCase
         // Given the application's registered schedule
         $scheduled = $this->scheduledCommandStrings();
 
-        // When each scheduled command is checked against the declared list
-        // Then none runs undeclared
+        // When each scheduled task is checked against the declared list
+        // Then the schedule is populated and none of it runs undeclared
+        $this->assertNotEmpty($scheduled, 'The schedule is empty — no daily scan is registered at all.');
+
         foreach ($scheduled as $command) {
             $this->assertTrue(
                 collect(self::DECLARED_DAILY_SCANS)->contains(
@@ -86,12 +87,15 @@ class ScheduleExpiryScansTest extends FoundationTestCase
     }
 
     /**
+     * Every scheduled task as its command string — a closure task, which has no command, falls
+     * back to its display summary so a failure names it rather than an empty string.
+     *
      * @return Collection<int, string>
      */
     protected function scheduledCommandStrings(): Collection
     {
         return collect(app(Schedule::class)->events())
-            ->map(fn (Event $event): string => (string) $event->command);
+            ->map(fn (Event $event): string => $event->command ?? $event->getSummaryForDisplay());
     }
 
     /**

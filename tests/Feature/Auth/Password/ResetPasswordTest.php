@@ -281,6 +281,7 @@ class ResetPasswordTest extends AuthTestCase
      * The reset survived a delivery-time confirmation failure: the drained job surfaced the induced
      * failure (not some other error), the NEW password authenticates, and the broker consumed the
      * single-use token — the reactor failed AFTER the committed write and the steps that follow it.
+     * Call it AFTER any token-count assertion: assertPasswordReplaced logs in and mints a token.
      */
     protected function assertResetSurvivedReactorFailure(User $user, RuntimeException $failure): void
     {

@@ -18,7 +18,7 @@ use App\Foundation\Notifications\Notifications\SystemNotification;
  * Queued (ShouldQueue): neither password flow wraps a transaction, so the stored event and the
  * projected hash are durable before this runs; an inline delivery failure would fail the request
  * and skip the session revocation (and, on reset, the token consumption) that follow persist(),
- * whereas a queued one lands in failed_jobs and retries. The companyName is resolved
+ * whereas a queued one lands in failed_jobs instead. The companyName is resolved
  * deterministically by User::notificationCompanyName() (OQ-1-124) — a company-less user degrades
  * to an empty label rather than failing the notice.
  */
