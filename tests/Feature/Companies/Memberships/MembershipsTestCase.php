@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Companies\Memberships;
 
+use stdClass;
 use Throwable;
 use App\Models\User;
 use RuntimeException;
@@ -35,6 +36,8 @@ use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
+use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterface;
+use App\Companies\Memberships\IO\Database\Repositories\EloquentCompanyUserRepository;
 
 /**
  * Shared fixtures for the membership (team-invite) feature tests (§2.10). Callers
@@ -332,6 +335,24 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         // get a FRESH copy whose target class is '' and never throw.
         app()->instance($projector::class, $projector);
         app(Projectionist::class)->addProjector($projector);
+    }
+
+    /**
+     * A concurrent removal landing between a membership write and its roster-row
+     * echo: the echo read finds the row already soft-deleted. The seam removes
+     * exactly the row it is asked for, then runs the real query.
+     */
+    protected function removeMembershipWhenEchoed(): void
+    {
+        $this->app->instance(CompanyUserRepositoryInterface::class, new class extends EloquentCompanyUserRepository
+        {
+            public function findById(string $companyId, string $membershipId): ?stdClass
+            {
+                CompanyUser::query()->whereKey($membershipId)->update(['deleted_at' => now()]);
+
+                return parent::findById($companyId, $membershipId);
+            }
+        });
     }
 
     /**

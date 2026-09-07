@@ -200,6 +200,25 @@ class AcceptInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_joiner_is_removed_as_the_accept_is_echoed_then_the_membership_is_not_found(): void
+    {
+        // Given — an existing account's invitation, with the new membership
+        // removed by a concurrent request between the join and the response's
+        // roster-row echo
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $this->removeMembershipWhenEchoed();
+
+        // When — the invitee accepts while authenticated
+        $response = $this->acceptInvitation($token, [], $invitee);
+
+        // Then — the echo reports the membership gone; the join itself stands
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
+        $this->assertJoinStoodOnRemovedMembership($company, 'anushka@member.lk');
+    }
+
+    #[Test]
     public function when_a_removed_member_accepts_a_leftover_invitation_then_acceptance_is_refused(): void
     {
         // Given — a member removed from the company, plus a leftover pending
@@ -538,6 +557,26 @@ class AcceptInvitationTest extends MembershipsTestCase
                 'last_active_at' => null,
             ],
         ]);
+    }
+
+    /**
+     * The join landed on a membership removed before the response echoed it:
+     * the invitation is consumed, the trashed pivot on its UUID carries the
+     * joiner under a removal stamp, and exactly one UserJoinedCompany stored
+     * event names it.
+     */
+    protected function assertJoinStoodOnRemovedMembership(Company $company, string $email): void
+    {
+        $invitation = Invitation::query()->where('company_id', $company->getKey())->where('email', $email)->sole();
+        $membership = CompanyUser::withTrashed()->whereKey($invitation->getKey())->sole();
+
+        $this->assertNotNull($invitation->accepted_at);
+        $this->assertNotNull($membership->deleted_at);
+        $this->assertSame(User::query()->where('email', $email)->sole()->getKey(), $membership->user_id);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserJoinedCompany::class)
+            ->where('event_properties->membershipId', $invitation->getKey())
+            ->count());
     }
 
     #[Test]

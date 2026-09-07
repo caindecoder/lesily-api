@@ -279,6 +279,24 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_member_is_removed_as_the_change_is_echoed_then_the_membership_is_not_found(): void
+    {
+        // Given — a member to re-role, removed by a concurrent request between
+        // the role write and the response's roster-row echo
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $this->removeMembershipWhenEchoed();
+
+        // When — the admin changes the member's role
+        $response = $this->changeRole($admin, $company, $membershipId);
+
+        // Then — the echo reports the membership gone; the role change itself
+        // stands on the removed row
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
+        $this->assertRoleChangeStoodOnRemovedMembership($membershipId, $this->seededRole('hr_officer'));
+    }
+
+    #[Test]
     public function when_new_role_equals_current_role_then_change_succeeds(): void
     {
         // Given
@@ -451,6 +469,24 @@ class ChangeMemberRoleTest extends MembershipsTestCase
             ->where('event_properties->changedBy', $changedBy->getKey())
             ->whereNotNull('event_properties->changedAt')
             ->where('company_id', $membership->company_id)
+            ->count());
+    }
+
+    /**
+     * The role change landed on a membership removed before the response
+     * echoed it: the trashed pivot holds $to under its removal stamp, and
+     * exactly one UserMembershipRoleChanged stored event names it with $to.
+     */
+    protected function assertRoleChangeStoodOnRemovedMembership(string $membershipId, Role $to): void
+    {
+        $membership = CompanyUser::withTrashed()->whereKey($membershipId)->sole();
+
+        $this->assertSame($to->getKey(), $membership->role_id);
+        $this->assertNotNull($membership->deleted_at);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', UserMembershipRoleChanged::class)
+            ->where('event_properties->membershipId', $membershipId)
+            ->where('event_properties->toRoleId', $to->getKey())
             ->count());
     }
 
