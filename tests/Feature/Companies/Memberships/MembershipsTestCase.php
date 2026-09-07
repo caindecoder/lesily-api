@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Companies\Memberships;
 
+use stdClass;
 use Throwable;
 use App\Models\User;
 use RuntimeException;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Laravel\Sanctum\NewAccessToken;
@@ -30,11 +32,15 @@ use Spatie\EventSourcing\StoredEvents\ShouldBeStored;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
+use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
+use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterface;
+use App\Companies\Memberships\IO\Database\Repositories\EloquentCompanyUserRepository;
 
 /**
  * Shared fixtures for the membership (team-invite) feature tests (§2.10). Callers
@@ -332,6 +338,45 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         // get a FRESH copy whose target class is '' and never throw.
         app()->instance($projector::class, $projector);
         app(Projectionist::class)->addProjector($projector);
+    }
+
+    /**
+     * A concurrent removal landing between a membership write and its roster-row
+     * echo: the echo read finds the row already soft-deleted. The double removes
+     * exactly the row it is asked for, then lets the REAL repository answer, so
+     * the production echo guard is what responds.
+     */
+    protected function removeMembershipWhenEchoed(): void
+    {
+        $real = $this->app->make(EloquentCompanyUserRepository::class);
+
+        $this->app->instance(CompanyUserRepositoryInterface::class, new class($real) implements CompanyUserRepositoryInterface
+        {
+            public function __construct(private readonly CompanyUserRepositoryInterface $real) {}
+
+            /**
+             * @return Collection<int, stdClass>
+             */
+            public function listForUser(string $userId): Collection
+            {
+                return $this->real->listForUser($userId);
+            }
+
+            /**
+             * @return LengthAwarePaginator<int, stdClass>
+             */
+            public function listForCompany(string $companyId, MembershipFilters $filters): LengthAwarePaginator
+            {
+                return $this->real->listForCompany($companyId, $filters);
+            }
+
+            public function findById(string $companyId, string $membershipId): ?stdClass
+            {
+                CompanyUser::query()->whereKey($membershipId)->update(['deleted_at' => now()]);
+
+                return $this->real->findById($companyId, $membershipId);
+            }
+        });
     }
 
     /**

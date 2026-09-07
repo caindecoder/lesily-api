@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 use App\Companies\Memberships\IO\Http\Resources\MembershipResource;
 use App\Companies\Memberships\IO\Http\Resources\MembershipCollection;
@@ -48,8 +49,11 @@ class MembershipsController
         $interactor->execute($company, $command, $membershipId);
 
         // The 200 envelope echoes the updated roster row (R-E s112) — the same
-        // aliased shape the roster lists, so the client updates in place.
-        $row = $this->memberships->findById($company->getKey(), $membershipId);
+        // aliased shape the roster lists, so the client updates in place. A row
+        // removed between the write and this read answers the standard 404: the
+        // membership is gone, the change already stands (OQ-1-175).
+        $row = $this->memberships->findById($company->getKey(), $membershipId)
+            ?? throw new ModelNotFoundException;
 
         return (new MembershipResource($row))->response($request)->setStatusCode(Response::HTTP_OK);
     }
