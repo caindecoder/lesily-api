@@ -48,7 +48,7 @@ class AcceptInvitationController
         // Existing user: 200, no token minted (H5). The envelope echoes the
         // activated roster row — the change-role echo's shape (R-E s112). A row
         // removed between the join and this read answers the standard 404: the
-        // membership is gone, the join already stands (OQ-1-175).
+        // membership is gone, the join already stands.
         $row = $this->memberships->findById($outcome->membership->company_id, $outcome->membership->getKey())
             ?? throw new ModelNotFoundException;
 

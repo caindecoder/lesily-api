@@ -51,7 +51,7 @@ class MembershipsController
         // The 200 envelope echoes the updated roster row (R-E s112) — the same
         // aliased shape the roster lists, so the client updates in place. A row
         // removed between the write and this read answers the standard 404: the
-        // membership is gone, the change already stands (OQ-1-175).
+        // membership is gone, the change already stands.
         $row = $this->memberships->findById($company->getKey(), $membershipId)
             ?? throw new ModelNotFoundException;
 

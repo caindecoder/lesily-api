@@ -340,8 +340,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     /**
      * A concurrent removal landing between a membership write and its roster-row
      * echo: the echo read finds the row already soft-deleted. The seam removes
-     * exactly the row it is asked for, then runs the real query, so the
-     * production echo guard is what responds.
+     * exactly the row it is asked for, then runs the real query.
      */
     protected function removeMembershipWhenEchoed(): void
     {
