@@ -3,14 +3,18 @@
 namespace Tests\Feature\Auth\Password;
 
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Events\UserPasswordReset;
+use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -22,6 +26,8 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class ResetPasswordTest extends AuthTestCase
 {
+    use InteractsWithQueuedReactors;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -125,6 +131,37 @@ class ResetPasswordTest extends AuthTestCase
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::ResetLinkInvalid);
         $this->assertResetRefused($alice, self::LOGIN_PASSWORD, 0);
         $this->assertResetRefused($bob, self::LOGIN_PASSWORD, 0);
+    }
+
+    #[Test]
+    public function when_the_confirmation_reactor_fails_after_the_reset_commits_then_the_reset_revocation_and_token_consumption_survive(): void
+    {
+        // Given a user on two devices with a valid reset token and a confirmation reactor that fails at delivery time
+        $user = $this->aRegisteredUser();
+        $web = $this->aSessionFor($user, 'web');
+        $mobile = $this->aSessionFor($user, 'mobile');
+        $token = $this->aResetTokenFor($user);
+        Queue::fake();
+        $this->bindThrowingPasswordChangedReactor();
+
+        // When they reset their password and the deferred confirmation is drained
+        $response = $this->resetPassword([
+            'token' => $token,
+            'email' => $user->email,
+            'password' => self::NEW_PASSWORD,
+        ]);
+        $response->assertNoContent();
+
+        try {
+            $this->runQueuedHandlersFor(UserPasswordReset::class);
+            $this->fail('Draining the queued reactor should surface the induced failure.');
+        } catch (AssertionFailedError $guard) {
+            throw $guard;
+        } catch (RuntimeException $failure) {
+            // Then the committed reset, the revocation of every session and the token consumption survived the delivery failure
+            $this->assertAllSessionsRevoked($response, $user, [$web->plainTextToken, $mobile->plainTextToken]);
+            $this->assertResetSurvivedReactorFailure($user, $failure);
+        }
     }
 
     #[Test]
@@ -237,5 +274,17 @@ class ResetPasswordTest extends AuthTestCase
             $this->assertUnauthenticated($this->probeWith($token));
         }
         $this->assertSame(0, $user->tokens()->count(), 'A reset must revoke every one of the user\'s sessions.');
+    }
+
+    /**
+     * The reset survived a delivery-time confirmation failure: the drained job surfaced the induced
+     * failure (not some other error), the NEW password authenticates, and the broker consumed the
+     * single-use token — the reactor failed AFTER the committed write and the steps that follow it.
+     */
+    protected function assertResetSurvivedReactorFailure(User $user, RuntimeException $failure): void
+    {
+        $this->assertSame('Induced delivery-time reactor failure.', $failure->getMessage());
+        $this->assertPasswordReplaced($user, self::LOGIN_PASSWORD, self::NEW_PASSWORD);
+        $this->assertDatabaseMissing('password_reset_tokens', ['email' => $user->email]);
     }
 }
