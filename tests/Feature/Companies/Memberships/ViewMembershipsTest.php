@@ -631,7 +631,7 @@ class ViewMembershipsTest extends MembershipsTestCase
     }
 
     #[Test]
-    public function when_roster_is_returned_then_envelope_shape_is_exact(): void
+    public function when_owner_views_roster_then_exact_contract_returned(): void
     {
         // Given a company whose roster is just the owner
         [$company, $owner] = $this->aCompanyWithMember('owner');
