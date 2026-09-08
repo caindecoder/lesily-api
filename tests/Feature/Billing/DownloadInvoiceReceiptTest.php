@@ -44,7 +44,7 @@ class DownloadInvoiceReceiptTest extends BillingTestCase
         // Given an owner of a company holding an invoice that was never paid
         [$company, $owner] = $this->aCompanyWithMember('owner');
         $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->anInvoiceInState($status, $company, $subscription);
+        $invoice = $this->anInvoiceInState($status, $subscription);
 
         // When they download its receipt
         $response = $this->downloadReceiptAs($owner, $company, $invoice->getKey());

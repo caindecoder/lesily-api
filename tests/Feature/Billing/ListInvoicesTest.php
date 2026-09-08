@@ -198,6 +198,27 @@ class ListInvoicesTest extends BillingTestCase
         $this->assertInvoicePage($response, 15, ['page' => 1, 'per_page' => 15, 'total' => 20, 'last_page' => 2]);
     }
 
+    #[Test]
+    public function when_an_invoice_filter_is_built_without_values_then_defaults_apply(): void
+    {
+        // Given no query values at all
+
+        // When the filter is built at the DTO seam
+        $filters = InvoiceFilters::validateAndCreate([]);
+
+        // Then it constructs with every property at its null default — the
+        // filled guard must never fire on an absent key
+        $this->assertSame([
+            'status' => null,
+            'within' => null,
+            'min_amount' => null,
+            'max_amount' => null,
+            'sort' => null,
+            'page' => null,
+            'per_page' => null,
+        ], $filters->toArray());
+    }
+
     // --- Happy ---
 
     #[Test]
@@ -581,27 +602,6 @@ class ListInvoicesTest extends BillingTestCase
         );
     }
 
-    #[Test]
-    public function when_an_invoice_filter_is_built_without_values_then_defaults_apply(): void
-    {
-        // Given no query values at all
-
-        // When the filter is built at the DTO seam
-        $filters = InvoiceFilters::validateAndCreate([]);
-
-        // Then it constructs with every property at its null default — the
-        // filled guard must never fire on an absent key
-        $this->assertSame([
-            'status' => null,
-            'within' => null,
-            'min_amount' => null,
-            'max_amount' => null,
-            'sort' => null,
-            'page' => null,
-            'per_page' => null,
-        ], $filters->toArray());
-    }
-
     /**
      * The drift-sensitive shape of an invoices row: every column's filled/null
      * state plus the status discriminator by value — identity, tenant, and
@@ -656,7 +656,7 @@ class ListInvoicesTest extends BillingTestCase
         ])];
 
         foreach (['paid', 'failed', 'refunded', 'voided'] as $index => $state) {
-            $invoices[$state] = $this->anInvoiceInState($state, $company, $subscription, [
+            $invoices[$state] = $this->anInvoiceInState($state, $subscription, [
                 'invoiceNumber' => sprintf('INV-2026-%06d', $index + 2),
             ]);
         }

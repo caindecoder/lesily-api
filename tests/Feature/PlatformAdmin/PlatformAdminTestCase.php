@@ -274,8 +274,10 @@ abstract class PlatformAdminTestCase extends TestCase
      * T7-scoped subset of BillingTestCase's dispatcher (module bases are
      * independent); every state is arranged through real aggregate commands.
      */
-    protected function anInvoiceInState(string $state, Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
+    protected function anInvoiceInState(string $state, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
+        $company = Company::findOrFail($subscription->company_id);
+
         return match ($state) {
             'voided' => $this->aVoidedInvoiceFor($company, $subscription, $overrides),
             'failed' => $this->aFailedInvoiceFor($company, $subscription, $overrides),

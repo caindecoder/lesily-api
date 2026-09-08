@@ -107,6 +107,64 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     }
 
     #[Test]
+    public function when_cases_share_a_created_at_second_then_the_order_stays_total(): void
+    {
+        // Given three cases opened inside one frozen second — the tie the
+        // timestamp column cannot break
+        $company = Company::factory()->create();
+        $this->travelTo(CarbonImmutable::parse('2026-08-09 09:00:00'));
+        $caseIds = [
+            $this->anOpenCaseFor($company)->getKey(),
+            $this->anOpenCaseFor($company)->getKey(),
+            $this->anOpenCaseFor($company)->getKey(),
+        ];
+        $this->travelBack();
+
+        // When the queue is requested
+        $response = $this->listCases($this->admin);
+
+        // Then equal created_at falls back to descending id — pages can
+        // never duplicate or skip a tied case
+        rsort($caseIds);
+        $this->assertCasesListedInOrder($response, $caseIds);
+    }
+
+    #[Test]
+    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
+    {
+        // Given sixteen cases — one more than a default page
+        OwnershipTransferCase::factory()->count(16)->forCompany(Company::factory()->create())->create();
+        Sanctum::actingAs($this->admin);
+
+        // When a second page is asked for in the BODY rather than the query string
+        $response = $this->json('GET', '/api/v1/admin/ownership-transfer-cases', ['page' => 2]);
+
+        // Then it is ignored: paging is driven only by the whitelisted, validated
+        // query DTO, so the first full page comes back (api-conventions §10.1)
+        $response->assertOk();
+        $response->assertJsonCount(15, 'data');
+        $this->assertCasePage($response, ['page' => 1, 'per_page' => 15, 'total' => 16, 'last_page' => 2]);
+    }
+
+    #[Test]
+    public function when_an_ownership_transfer_case_admin_filter_is_built_without_values_then_defaults_apply(): void
+    {
+        // Given no query values at all
+
+        // When the filter is built at the DTO seam
+        $filters = OwnershipTransferCaseAdminFilters::validateAndCreate([]);
+
+        // Then it constructs with every property at its null default — the
+        // filled guard must never fire on an absent key
+        $this->assertSame([
+            'status' => null,
+            'company_id' => null,
+            'page' => null,
+            'per_page' => null,
+        ], $filters->toArray());
+    }
+
+    #[Test]
     public function when_cases_exist_across_tenants_then_the_queue_lists_every_company_newest_first(): void
     {
         // Given three cases across two tenants, minted at distinct instants
@@ -131,29 +189,6 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
             'result_count' => 3,
             'page' => 1,
         ]);
-    }
-
-    #[Test]
-    public function when_cases_share_a_created_at_second_then_the_order_stays_total(): void
-    {
-        // Given three cases opened inside one frozen second — the tie the
-        // timestamp column cannot break
-        $company = Company::factory()->create();
-        $this->travelTo(CarbonImmutable::parse('2026-08-09 09:00:00'));
-        $caseIds = [
-            $this->anOpenCaseFor($company)->getKey(),
-            $this->anOpenCaseFor($company)->getKey(),
-            $this->anOpenCaseFor($company)->getKey(),
-        ];
-        $this->travelBack();
-
-        // When the queue is requested
-        $response = $this->listCases($this->admin);
-
-        // Then equal created_at falls back to descending id — pages can
-        // never duplicate or skip a tied case
-        rsort($caseIds);
-        $this->assertCasesListedInOrder($response, $caseIds);
     }
 
     #[Test]
@@ -228,23 +263,6 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     }
 
     #[Test]
-    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
-    {
-        // Given sixteen cases — one more than a default page
-        OwnershipTransferCase::factory()->count(16)->forCompany(Company::factory()->create())->create();
-        Sanctum::actingAs($this->admin);
-
-        // When a second page is asked for in the BODY rather than the query string
-        $response = $this->json('GET', '/api/v1/admin/ownership-transfer-cases', ['page' => 2]);
-
-        // Then it is ignored: paging is driven only by the whitelisted, validated
-        // query DTO, so the first full page comes back (api-conventions §10.1)
-        $response->assertOk();
-        $response->assertJsonCount(15, 'data');
-        $this->assertCasePage($response, ['page' => 1, 'per_page' => 15, 'total' => 16, 'last_page' => 2]);
-    }
-
-    #[Test]
     public function when_the_queue_spans_multiple_pages_then_the_requested_page_is_returned_with_its_own_audit_row(): void
     {
         // Given sixteen cases — one more than a default page
@@ -316,24 +334,6 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
                 'pagination' => ['page' => 1, 'per_page' => 15, 'total' => 1, 'last_page' => 1],
             ],
         ]);
-    }
-
-    #[Test]
-    public function when_an_ownership_transfer_case_admin_filter_is_built_without_values_then_defaults_apply(): void
-    {
-        // Given no query values at all
-
-        // When the filter is built at the DTO seam
-        $filters = OwnershipTransferCaseAdminFilters::validateAndCreate([]);
-
-        // Then it constructs with every property at its null default — the
-        // filled guard must never fire on an absent key
-        $this->assertSame([
-            'status' => null,
-            'company_id' => null,
-            'page' => null,
-            'per_page' => null,
-        ], $filters->toArray());
     }
 
     /**

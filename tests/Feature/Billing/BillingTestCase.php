@@ -622,8 +622,10 @@ abstract class BillingTestCase extends TestCase
      * Seam-fixture dispatch for DataProvider state matrices (§2.12) — every
      * state is arranged through real aggregate commands, never row writes.
      */
-    protected function anInvoiceInState(string $state, Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
+    protected function anInvoiceInState(string $state, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
+        $company = Company::findOrFail($subscription->company_id);
+
         return match ($state) {
             'pending' => $this->anIssuedInvoiceFor($company, $subscription, $overrides),
             'paid' => $this->aPaidInvoiceFor($company, $subscription, $overrides),
