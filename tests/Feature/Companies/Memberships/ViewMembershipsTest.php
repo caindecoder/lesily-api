@@ -197,6 +197,27 @@ class ViewMembershipsTest extends MembershipsTestCase
         $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 2, 'total' => 3, 'last_page' => 2]);
     }
 
+    #[Test]
+    public function when_a_membership_filter_is_built_without_values_then_defaults_apply(): void
+    {
+        // Given no query values at all
+
+        // When the filter is built at the DTO seam (the roster echo path builds
+        // exactly this shape in production — EloquentCompanyUserRepository::findById)
+        $filters = MembershipFilters::validateAndCreate([]);
+
+        // Then it constructs with every property at its null default — the
+        // filled guard must never fire on an absent key
+        $this->assertSame([
+            'role' => null,
+            'status' => null,
+            'search' => null,
+            'sort' => null,
+            'page' => null,
+            'per_page' => null,
+        ], $filters->toArray());
+    }
+
     // --- Happy ---
 
     #[Test]
@@ -639,26 +660,5 @@ class ViewMembershipsTest extends MembershipsTestCase
             ],
             'meta' => ['pagination' => ['page' => 1, 'per_page' => 15, 'total' => 1, 'last_page' => 1]],
         ]);
-    }
-
-    #[Test]
-    public function when_a_membership_filter_is_built_without_values_then_defaults_apply(): void
-    {
-        // Given no query values at all
-
-        // When the filter is built at the DTO seam (the roster echo path builds
-        // exactly this shape in production — EloquentCompanyUserRepository::findById)
-        $filters = MembershipFilters::validateAndCreate([]);
-
-        // Then it constructs with every property at its null default — the
-        // filled guard must never fire on an absent key
-        $this->assertSame([
-            'role' => null,
-            'status' => null,
-            'search' => null,
-            'sort' => null,
-            'page' => null,
-            'per_page' => null,
-        ], $filters->toArray());
     }
 }

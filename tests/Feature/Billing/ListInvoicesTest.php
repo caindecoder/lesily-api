@@ -198,6 +198,27 @@ class ListInvoicesTest extends BillingTestCase
         $this->assertInvoicePage($response, 15, ['page' => 1, 'per_page' => 15, 'total' => 20, 'last_page' => 2]);
     }
 
+    #[Test]
+    public function when_an_invoice_filter_is_built_without_values_then_defaults_apply(): void
+    {
+        // Given no query values at all
+
+        // When the filter is built at the DTO seam
+        $filters = InvoiceFilters::validateAndCreate([]);
+
+        // Then it constructs with every property at its null default — the
+        // filled guard must never fire on an absent key
+        $this->assertSame([
+            'status' => null,
+            'within' => null,
+            'min_amount' => null,
+            'max_amount' => null,
+            'sort' => null,
+            'page' => null,
+            'per_page' => null,
+        ], $filters->toArray());
+    }
+
     // --- Happy ---
 
     #[Test]
@@ -579,27 +600,6 @@ class ListInvoicesTest extends BillingTestCase
             $this->projectedRowShape($seamPaid),
             $this->projectedRowShape($factoryPaid),
         );
-    }
-
-    #[Test]
-    public function when_an_invoice_filter_is_built_without_values_then_defaults_apply(): void
-    {
-        // Given no query values at all
-
-        // When the filter is built at the DTO seam
-        $filters = InvoiceFilters::validateAndCreate([]);
-
-        // Then it constructs with every property at its null default — the
-        // filled guard must never fire on an absent key
-        $this->assertSame([
-            'status' => null,
-            'within' => null,
-            'min_amount' => null,
-            'max_amount' => null,
-            'sort' => null,
-            'page' => null,
-            'per_page' => null,
-        ], $filters->toArray());
     }
 
     /**
