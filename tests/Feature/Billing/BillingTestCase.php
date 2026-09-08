@@ -624,7 +624,7 @@ abstract class BillingTestCase extends TestCase
      */
     protected function anInvoiceInState(string $state, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
-        $company = Company::query()->findOrFail($subscription->company_id);
+        $company = Company::findOrFail($subscription->company_id);
 
         return match ($state) {
             'pending' => $this->anIssuedInvoiceFor($company, $subscription, $overrides),

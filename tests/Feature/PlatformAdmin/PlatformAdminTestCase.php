@@ -276,7 +276,7 @@ abstract class PlatformAdminTestCase extends TestCase
      */
     protected function anInvoiceInState(string $state, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
-        $company = Company::query()->findOrFail($subscription->company_id);
+        $company = Company::findOrFail($subscription->company_id);
 
         return match ($state) {
             'voided' => $this->aVoidedInvoiceFor($company, $subscription, $overrides),
