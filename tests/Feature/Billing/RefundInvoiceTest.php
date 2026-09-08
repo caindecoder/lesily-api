@@ -32,7 +32,7 @@ class RefundInvoiceTest extends BillingTestCase
         // Given an invoice in a state that cannot be refunded
         $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
         $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->anInvoiceInState($state, $company, $subscription);
+        $invoice = $this->anInvoiceInState($state, $subscription);
 
         // When a full refund is issued against it
         try {

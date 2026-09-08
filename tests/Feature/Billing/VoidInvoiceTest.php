@@ -31,7 +31,7 @@ class VoidInvoiceTest extends BillingTestCase
         // Given an invoice in a state that cannot be voided
         $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
         $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->anInvoiceInState($state, $company, $subscription);
+        $invoice = $this->anInvoiceInState($state, $subscription);
 
         // When an admin voids it
         try {

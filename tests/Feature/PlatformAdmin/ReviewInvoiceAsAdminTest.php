@@ -127,7 +127,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $this->allowlist([$admin->getKey()]);
         [$company] = $this->aCompanyWithMember('owner');
         $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->anInvoiceInState($state, $company, $subscription);
+        $invoice = $this->anInvoiceInState($state, $subscription);
 
         // When the admin reviews that invoice
         $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey());

@@ -656,7 +656,7 @@ class ListInvoicesTest extends BillingTestCase
         ])];
 
         foreach (['paid', 'failed', 'refunded', 'voided'] as $index => $state) {
-            $invoices[$state] = $this->anInvoiceInState($state, $company, $subscription, [
+            $invoices[$state] = $this->anInvoiceInState($state, $subscription, [
                 'invoiceNumber' => sprintf('INV-2026-%06d', $index + 2),
             ]);
         }

@@ -31,7 +31,7 @@ class RecordInvoicePaymentFailureTest extends BillingTestCase
         // Given an invoice in a state that cannot accept a payment failure
         $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
         $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->anInvoiceInState($state, $company, $subscription);
+        $invoice = $this->anInvoiceInState($state, $subscription);
 
         // When a failure webhook with a fresh event id is recorded against it
         try {
