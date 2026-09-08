@@ -123,35 +123,6 @@ class ListMyCompaniesTest extends AuthTestCase
         $this->assertCompaniesListed($response, ['Acme']);
     }
 
-    // Happy — the full switcher contract (slice-companies B4): every live
-    // membership with its role, plan, status, onboarding flags and join date,
-    // name-ordered, in the exact non-paginated envelope (leak-lock). Zeta is
-    // attached FIRST so the name ordering has teeth; is_default is false
-    // everywhere until UC-1-139 lands the default-company column.
-    #[Test]
-    public function when_user_belongs_to_multiple_companies_then_all_live_memberships_returned_name_ordered(): void
-    {
-        // Given a user who joined Zeta (Pro, admin, onboarded) before Acme (Free, employee)
-        $this->travelTo(CarbonImmutable::parse('2026-07-08 10:00:00'));
-        $user = $this->aRegisteredUser();
-        $zeta = Company::factory()->named('Zeta')->onPlan(BillingPlan::Pro)->create();
-        $acme = Company::factory()->named('Acme')->onPlan(BillingPlan::Free)->create();
-        $this->aMembershipFor($user, $zeta, 'admin');
-        $this->completedOnboardingIn($zeta, $user);
-        $this->aMembershipFor($user, $acme);
-
-        // When they list their companies
-        $response = $this->listCompanies($user);
-
-        // Then both memberships return name-ordered with the exact B4 row shape
-        $response->assertExactJson([
-            'data' => [
-                $this->expectedCompanyRow($acme, 'employee'),
-                $this->expectedCompanyRow($zeta, 'admin', onboarded: true),
-            ],
-        ]);
-    }
-
     // Edge — a user whose only membership was removed has an EMPTY list: 200 with
     // data: [] (the client renders the no-companies state — there is never a
     // server-side minimum-membership gate; exact envelope locks out pagination).
@@ -235,6 +206,35 @@ class ListMyCompaniesTest extends AuthTestCase
         // Then the removed row is absent and no remaining row is flagged default
         $this->assertCompaniesListed($response, ['Acme']);
         $this->assertListFlagsDefault($user, null);
+    }
+
+    // Happy — the full switcher contract (slice-companies B4): every live
+    // membership with its role, plan, status, onboarding flags and join date,
+    // name-ordered, in the exact non-paginated envelope (leak-lock). Zeta is
+    // attached FIRST so the name ordering has teeth; is_default is false
+    // everywhere until UC-1-139 lands the default-company column.
+    #[Test]
+    public function when_user_belongs_to_multiple_companies_then_all_live_memberships_returned_name_ordered(): void
+    {
+        // Given a user who joined Zeta (Pro, admin, onboarded) before Acme (Free, employee)
+        $this->travelTo(CarbonImmutable::parse('2026-07-08 10:00:00'));
+        $user = $this->aRegisteredUser();
+        $zeta = Company::factory()->named('Zeta')->onPlan(BillingPlan::Pro)->create();
+        $acme = Company::factory()->named('Acme')->onPlan(BillingPlan::Free)->create();
+        $this->aMembershipFor($user, $zeta, 'admin');
+        $this->completedOnboardingIn($zeta, $user);
+        $this->aMembershipFor($user, $acme);
+
+        // When they list their companies
+        $response = $this->listCompanies($user);
+
+        // Then both memberships return name-ordered with the exact B4 row shape
+        $response->assertExactJson([
+            'data' => [
+                $this->expectedCompanyRow($acme, 'employee'),
+                $this->expectedCompanyRow($zeta, 'admin', onboarded: true),
+            ],
+        ]);
     }
 
     /**
