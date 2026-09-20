@@ -184,9 +184,10 @@ jobs:
           set +e
           sh scripts/check-command-validation-placement.sh > "$RUNNER_TEMP/aq-placement.txt" 2>&1
           status=$?
+          summary=$(grep '^AQ placement check:' "$RUNNER_TEMP/aq-placement.txt")
           set -e
           cat "$RUNNER_TEMP/aq-placement.txt"
-          summary=$(grep '^AQ placement check:' "$RUNNER_TEMP/aq-placement.txt")
+          [ -n "$summary" ] || { echo "no summary line - the check did not run"; exit 1; }
           violations=$(echo "$summary" | sed -E 's/^AQ placement check: ([0-9]+) violation.*/\1/')
           checked=$(echo "$summary" | sed -E 's/.*; ([0-9]+) controller-referenced.*/\1/')
           skipped=$(echo "$summary" | sed -E 's/.*; ([0-9]+) skipped.*/\1/')
