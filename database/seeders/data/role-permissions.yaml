@@ -2,7 +2,7 @@
 # Source: Documentation/06-design/chunk-1/_process/2026-05-24-rbac-permissions-matrix.md
 # Chunk-1 scope: minimal grants sufficient for Tier-1 + Tier-2 UCs.
 # Manager: empty grants (chunk-1 placeholder per cd-roles-permissions §3 Notes).
-# Platform Super Admin: bypasses RBAC at the evaluator level (no row grants needed).
+# Platform Super Admin: no tenant grants - the /api/v1/admin/* family is gated by the platform.admin allowlist middleware (EnsurePlatformAdmin, interim), never by this matrix.
 
 platform_super_admin: []
 
