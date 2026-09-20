@@ -162,42 +162,46 @@ skip() {
   skipped=$((skipped + 1))
 }
 
-# One grep names every request DTO each controller mentions, one grep -L finds
-# the resolved sources without rules(); the lookups between them stay in the
-# shell (a process per class made this the slow check on Windows).
+# Sets $src (the app/ source files of class $1, space-joined) and $sources
+# (how many). Runs under IFS=newline; a shell loop, because a process per class
+# is slow on Windows.
+sources_of() {
+  src=''
+  sources=0
+  for candidate in $all_php; do
+    case "$candidate" in
+      */"$1".php) src="${src:+$src }$candidate"; sources=$((sources + 1)) ;;
+    esac
+  done
+}
+
+# Prints one `source|Class|controller` line per request DTO that resolves to
+# exactly one source; skips the rest loudly. Runs under IFS=newline.
+resolve_controller_request_dtos() {
+  for mention in $(grep -HoE -e "$command_name" -e "\\b($population)\\b" $1 | sort -u); do
+    controller=${mention%%:*}
+    cls=${mention##*:}
+    sources_of "$cls"
+    case "$sources" in
+      0) skip "no source file for $cls (referenced from $controller)" ;;
+      1) checked=$((checked + 1)); resolved="${resolved:+$resolved$newline}$src|$cls|$controller" ;;
+      *) skip "ambiguous source for $cls (referenced from $controller): $src" ;;
+    esac
+  done
+}
+
 check_controller_request_dtos_define_rules() {
   IFS=$newline
   controllers=$(printf '%s\n' "$all_php" | grep -E -e "$controller_file")
-  if [ -z "$controllers" ]; then
-    unset IFS
-    return 0
-  fi
   resolved=''
-  for reference in $(grep -HoE -e "$command_name" -e "\\b($population)\\b" $controllers | sort -u); do
-    controller=${reference%%:*}
-    cls=${reference##*:}
-    src=''
-    sources=0
-    for candidate in $all_php; do
-      case "$candidate" in
-        */"$cls".php) src="${src:+$src }$candidate"; sources=$((sources + 1)) ;;
-      esac
-    done
-    case "$sources" in
-      0) skip "no source file for $cls (referenced from $controller)"; continue ;;
-      1) ;;
-      *) skip "ambiguous source for $cls (referenced from $controller): $src"; continue ;;
-    esac
-    checked=$((checked + 1))
-    resolved="${resolved:+$resolved$newline}$src|$cls|$controller"
-  done
+  [ -z "$controllers" ] || resolve_controller_request_dtos "$controllers"
   if [ -n "$resolved" ]; then
     without_rules=$(grep -LE -e "$defines_rules" $(printf '%s\n' "$resolved" | cut -d'|' -f1 | sort -u))
     for entry in $resolved; do
       src=${entry%%|*}
-      reference=${entry#*|}
+      dto=${entry#*|}
       case "$newline$without_rules$newline" in
-        *"$newline$src$newline"*) violation "HTTP-boundary command without rules(): ${reference%%|*} (referenced from ${reference#*|})" ;;
+        *"$newline$src$newline"*) violation "HTTP-boundary command without rules(): ${dto%%|*} (referenced from ${dto#*|})" ;;
       esac
     done
   fi
