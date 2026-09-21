@@ -24,8 +24,10 @@
 # checks 2-4 sit behind `grep -v` pipelines, where a broken regex makes grep
 # exit 2, print nothing and report a clean tree.
 # The CI quality job and the lefthook command-validation-placement hook run this
-# GATING: any violation of any check - and any skipped class - fails. Scope is
-# app/ only - factories and tests are convention territory for the review.
+# GATING, and the exit status carries the whole verdict so both layers enforce
+# the same floors: any violation of any check, any skipped class, or a check 1
+# that inspected nothing exits 1. Scope is app/ only - factories and tests are
+# convention territory for the review.
 # The script ALWAYS ends with the summary line "AQ placement check: ..." - CI
 # parses it as the liveness proof and asserts that check 1 inspected something -
 # except on a self-test abort, which exits 2 with NO summary so CI fails too.
@@ -42,15 +44,22 @@ defines_rules='^[[:space:]]*public static function rules\('
 validate_call='::validateAndCreate\('
 sanctioned_call='(static|self)::validateAndCreate\(\$request->'
 sanctioned_site="^[^:]*/UseCases/Commands/[^:]*:[0-9]+:.*${sanctioned_call}"
-request_constructor='public static function from[A-Za-z0-9_]*\(Request '
+# the first parameter's type ends in `Request`: Request, an aliased HttpRequest,
+# a FormRequest subclass, or the fully-qualified \Illuminate\Http\Request
+request_constructor='public static function from[A-Za-z0-9_]*\([\A-Za-z0-9_]*Request '
 
 # $1 = class names joined by `|`
+mention_of() { printf '%s' "\\b($1)\\b"; }
 from_call_of() { printf '%s' "\\b($1)::from\\("; }
 # $1 = Class::method pairs joined by `|`
 constructor_call_of() { printf '%s' "\\b($1)\\("; }
 # stdin = PHP source lines; prints the Request-fed named constructors' names
 constructor_names() {
-  grep -oE -e "$request_constructor" | sed -E 's/^public static function (from[A-Za-z0-9_]*)\(Request $/\1/' | sort -u
+  grep -oE -e "$request_constructor" | sed -E 's/^public static function (from[A-Za-z0-9_]*)\(.*$/\1/' | sort -u
+}
+# stdin = source paths; prints their class names (the basename, PSR-4) joined by `|`
+class_alternation_of() {
+  sed -E 's#.*/##; s#\.php$##' | sort -u | tr '\n' '|' | sed 's/|$//'
 }
 
 self_test() {
@@ -64,11 +73,10 @@ self_test() {
     exit 2
   fi
 }
-expect_constructor_names() {
-  # $1 a source line, $2 the names constructor_names must print for it
-  extracted=$(printf '%s\n' "$1" | constructor_names)
-  if [ "$extracted" != "$2" ]; then
-    echo "self-test failed - constructor names of '$1' read '$extracted', expected '$2'"
+expect_equal() {
+  # $1 label, $2 what an extractor printed, $3 what it must print
+  if [ "$2" != "$3" ]; then
+    echo "self-test failed - $1 read '$2', expected '$3'"
     exit 2
   fi
 }
@@ -126,8 +134,24 @@ self_test '::from( call template (filters)' "$(from_call_of 'FooCommand|BarFilte
 self_test 'constructor call template' "$(constructor_call_of 'BarFilters::fromQuery|FooCommand::fromRequest')" \
   '        $filters = BarFilters::fromQuery($request);' \
   '        $filters = BarFilters::fromQueryString($request);'
-expect_constructor_names '    public static function fromQuery(Request $request): static' 'fromQuery'
-expect_constructor_names '    public static function fromArray(array $data): static' ''
+self_test 'class mention template' "$(mention_of 'FooCommand|BarFilters')" \
+  '        $filters = BarFilters::fromQuery($request);' \
+  '        $factory = MyBarFiltersFactory::make($request);'
+self_test 'Request-fed constructor (aliased type)' "$request_constructor" \
+  '    public static function fromRequest(HttpRequest $request): static' \
+  '    public static function fromArray(array $data): static'
+self_test 'Request-fed constructor (FormRequest type)' "$request_constructor" \
+  '    public static function fromRequest(StoreCompanyRequest $request): static' \
+  '    public static function fromLog(RequestLog $log): static'
+self_test 'Request-fed constructor (fully-qualified type)' "$request_constructor" \
+  '    public static function fromQuery(\Illuminate\Http\Request $request): static' \
+  '    public function fromQuery(Request $request): static'
+expect_equal 'constructor names' \
+  "$(printf '%s\n' '    public static function fromQuery(Request $request): static' | constructor_names)" 'fromQuery'
+expect_equal 'constructor names (not Request-fed)' \
+  "$(printf '%s\n' '    public static function fromArray(array $data): static' | constructor_names)" ''
+expect_equal 'class alternation' \
+  "$(printf '%s\n' 'app/A/UseCases/Commands/FooCommand.php' 'app/B/UseCases/Commands/BarFilters.php' | class_alternation_of)" 'BarFilters|FooCommand'
 
 fail=0
 violations=0
@@ -141,7 +165,7 @@ if [ -z "$population_files" ]; then
   echo "self-test failed - no class under app/ extends Data (checks 1 and 2 would scan nothing)"
   exit 2
 fi
-population=$(printf '%s\n' "$population_files" | sed -E 's#.*/##; s#\.php$##' | sort -u | tr '\n' '|' | sed 's/|$//')
+population=$(printf '%s\n' "$population_files" | class_alternation_of)
 
 violation() {
   echo "AQ violation - $1"
@@ -178,7 +202,7 @@ sources_of() {
 # Prints one `source|Class|controller` line per request DTO that resolves to
 # exactly one source; skips the rest loudly. Runs under IFS=newline.
 resolve_controller_request_dtos() {
-  for mention in $(grep -HoE -e "$command_name" -e "\\b($population)\\b" $1 | sort -u); do
+  for mention in $(grep -HoE -e "$command_name" -e "$(mention_of "$population")" $1 | sort -u); do
     controller=${mention%%:*}
     cls=${mention##*:}
     sources_of "$cls"
@@ -221,7 +245,7 @@ check_no_validate_outside_http_boundary() {
 check_request_constructors_called_from_http_only() {
   pairs=''
   IFS=$newline
-  for file in $(grep -rnE --include='*.php' -e "$validate_call" app | grep -E -e "$sanctioned_site" | cut -d: -f1 | sort -u); do
+  for file in $(grep -rnE --include='*.php' -e "$validate_call" app | grep -vE -e "$comment_lines" | grep -E -e "$sanctioned_site" | cut -d: -f1 | sort -u); do
     cls=$(basename "$file" .php)
     methods=$(constructor_names < "$file")
     if [ -z "$methods" ]; then
@@ -240,5 +264,13 @@ check_controller_request_dtos_define_rules
 check_no_from_in_controllers
 check_no_validate_outside_http_boundary
 check_request_constructors_called_from_http_only
+if [ "$skipped" -gt 0 ]; then
+  echo "AQ check failed - $skipped class(es) skipped: a skipped class is a bypassed check, not a pass"
+  fail=1
+fi
+if [ "$checked" -eq 0 ]; then
+  echo "AQ check failed - check 1 inspected nothing: no controller references a request DTO"
+  fail=1
+fi
 echo "AQ placement check: $violations violation(s); $checked controller-referenced command(s) checked; $skipped skipped"
 exit $fail

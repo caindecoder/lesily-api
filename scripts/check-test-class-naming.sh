@@ -16,7 +16,8 @@
 # classify as its arm (a deleted or mistyped suffix would otherwise narrow the
 # gate with nothing to notice it) and the carve-out regex must match a docblock
 # line and must NOT match a // line or a string literal (a loosened regex would
-# let any mention of the marker pass). Shared by lefthook pre-commit (staged
+# let any mention of the marker pass); so is the path test that decides which
+# files are inspected at all. Shared by lefthook pre-commit (staged
 # files) and the CI quality job (whole tree). Only tests/**/*Test.php files are
 # inspected. ALWAYS ends with the summary line CI parses - except on a
 # self-test abort, which exits 2 with NO summary so CI's liveness proof fails
@@ -56,6 +57,26 @@ expect_kind() {
     exit 2
   fi
 }
+# Succeeds for the files this gate inspects: a *Test.php under tests/.
+inspects() {
+  case "$1" in *Test.php) ;; *) return 1 ;; esac
+  case "$1" in tests/*|./tests/*|*/tests/*) return 0 ;; *) return 1 ;; esac
+}
+expect_inspects() {
+  # $1 path, $2 yes | no
+  if inspects "$1"; then inspected=yes; else inspected=no; fi
+  if [ "$inspected" != "$2" ]; then
+    echo "self-test failed - $1 inspected: $inspected, expected $2"
+    exit 2
+  fi
+}
+expect_inspects tests/Feature/Auth/LoginTest.php yes
+expect_inspects ./tests/Unit/ExampleTest.php yes
+expect_inspects /repo/lesily-api/tests/RootLevelTest.php yes
+expect_inspects tests/TestCase.php no
+expect_inspects tests/Feature/Auth/AuthTestCase.php no
+expect_inspects app/Foo/Tests/BarTest.php no
+expect_inspects /tmp/PlainClassTest.php no
 for name in XSadPathTest.php XHappyPathTest.php XEdgeCaseTest.php XErrorPathTest.php XNegativeTest.php; do
   expect_kind "$name" partition
 done
@@ -77,8 +98,7 @@ scanned=0
 inspect() {
   f=$1
   [ -f "$f" ] || return 0
-  case "$f" in *Test.php) ;; *) return 0 ;; esac
-  case "$f" in tests/*|./tests/*|*/tests/*) ;; *) return 0 ;; esac
+  inspects "$f" || return 0
   scanned=$((scanned + 1))
   kind_of "$f"
   case "$kind" in
