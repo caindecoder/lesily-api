@@ -119,6 +119,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
         with: { php-version: '8.4' }
+      # The npm audit step below needs the npm major that wrote
+      # package-lock.json (Node 24 / npm 11 - see the test job).
+      - uses: actions/setup-node@v7
+        with: { node-version: '24' }
       - run: composer install --no-interaction --prefer-dist
       - name: Pint (lint)
         run: vendor/bin/pint --test
@@ -127,6 +131,22 @@ jobs:
       - name: Semgrep SAST
         uses: returntocorp/semgrep-action@v1
         with: { config: 'p/security-audit p/php' }
+      - name: Dependency audit - composer (questionnaire sec 15b, OQ-1-186) - gating
+        # A high, critical or UNRATED advisory in composer.lock (dev packages
+        # included) fails the step; low and medium are listed as ignored and
+        # never gate. The exit status is the whole verdict - the summary format
+        # counts ignored advisories too, so no output line is parsed. Abandoned
+        # packages print and never gate. An unreachable advisory source fails
+        # the step (--ignore-unreachable is deliberately absent). setup-php's
+        # COMPOSER_NO_AUDIT=1 covers require / update / remove, not this command.
+        # No bypass: a high advisory with no fix is ONE ruled ignore entry with
+        # a reason and a remove-when clause (design note R7).
+        run: composer audit --locked --abandoned=report --ignore-severity=low --ignore-severity=medium
+      - name: Dependency audit - npm (questionnaire sec 15b, OQ-1-186) - gating
+        # Every dependency, the dev toolchain included; high and critical gate,
+        # moderate and below print. Reads package-lock.json alone - this job
+        # runs no npm ci.
+        run: npm audit --audit-level=high
       - name: Test-class naming (conv-plan sec 2.14, OQ-1-170) - gating
         # Behavior-named test classes only: partition names are banned outright;
         # artifact names (the six production suffixes + seeder / mail-render /
