@@ -177,16 +177,18 @@ jobs:
         # T4-T6. Liveness proof: the summary line must exist and check 1 must have
         # inspected at least one command - a script that never ran, died before its
         # summary, or scanned nothing fails this step. A skipped (unresolvable) command
-        # is a bypassed check, not a pass, so skips fail too. The final exit-status read
-        # is a belt for a future fail path that does not surface in the counted summary
-        # (today the script exits non-zero only via violation()).
+        # is a bypassed check, not a pass, so skips fail too. The script's own exit status
+        # carries the same verdict (a violation, a skipped class, an empty check 1), so
+        # the lefthook hook enforces these floors as well; the final exit-status read is
+        # the belt for a fail path that does not surface in the counted summary.
         run: |
           set +e
           sh scripts/check-command-validation-placement.sh > "$RUNNER_TEMP/aq-placement.txt" 2>&1
           status=$?
+          summary=$(grep '^AQ placement check:' "$RUNNER_TEMP/aq-placement.txt")
           set -e
           cat "$RUNNER_TEMP/aq-placement.txt"
-          summary=$(grep '^AQ placement check:' "$RUNNER_TEMP/aq-placement.txt")
+          [ -n "$summary" ] || { echo "no summary line - the check did not run"; exit 1; }
           violations=$(echo "$summary" | sed -E 's/^AQ placement check: ([0-9]+) violation.*/\1/')
           checked=$(echo "$summary" | sed -E 's/.*; ([0-9]+) controller-referenced.*/\1/')
           skipped=$(echo "$summary" | sed -E 's/.*; ([0-9]+) skipped.*/\1/')

@@ -1,8 +1,13 @@
+# Standard glob semantics: `**/` matches zero or more directories and `*` stops
+# at `/`. lefthook's default matcher (gobwas) reads `**/` as ONE or more
+# directories, so `tests/**/*Test.php` never saw a file directly under tests/.
+glob_matcher: doublestar
+
 pre-commit:
   parallel: true
   commands:
     pint:
-      glob: "*.php"
+      glob: "**/*.php"
       # Use vendor/bin/pint.bat directly (Composer's Windows wrapper) for Herd/git-bash compatibility.
       # Bare `php` or `./vendor/bin/pint` shell script doesn't work because Herd ships `php.bat`
       # (not `php.exe`) and git-bash's sh doesn't auto-resolve .bat extensions.
@@ -17,10 +22,9 @@ pre-commit:
       # AND to lefthook's {brace} templating (which mangles inline shell groups).
       run: sh scripts/check-test-class-naming.sh {staged_files}
     db-trait-placement:
-      # lefthook's `*` crosses `/`, so tests/*.php reaches every PHP file under
-      # tests/ INCLUDING the root tests/TestCase.php - which tests/**/*.php
-      # skipped (it demands a second slash; OQ-1-177 s204).
-      glob: "tests/*.php"
+      # Every PHP file under tests/, the root tests/TestCase.php included
+      # (glob_matcher: doublestar - `**/` matches zero directories too).
+      glob: "tests/**/*.php"
       # OQ-1-181 (sec 2.1): the DB test trait lives in tests/TestCase.php only -
       # a per-class re-declaration (alone, combined, or a leftover import) would
       # shadow the base class's migrateDatabases() override (the Infection
@@ -28,7 +32,7 @@ pre-commit:
       # with the CI quality job).
       run: sh scripts/check-db-trait-placement.sh {staged_files}
     status-assertions:
-      glob: "tests/*.php"
+      glob: "tests/**/*.php"
       # Sec 2.2 Rule 11 (OQ-1-177): a test states its expected HTTP status itself -
       # never assertStatus( fed by ->status() (the enum the code under test renders
       # from, so the expectation moves with the mutation) nor by a bare integer
@@ -36,16 +40,16 @@ pre-commit:
       # on the expected side of assertSame are refused too. Logic in
       # scripts/check-status-assertions.sh (shared with the gating CI quality
       # step); comment lines excluded, every matcher self-tested at startup.
-      # Glob: tests/*.php (see db-trait-placement) so the root TestCase is scanned.
+      # Glob: tests/**/*.php (see db-trait-placement) so the root TestCase is scanned.
       run: sh scripts/check-status-assertions.sh {staged_files}
     status-constants:
-      glob: "app/*.php"
+      glob: "app/**/*.php"
       # Sec 2.2 Rule 11, production half (OQ-1-183): an emitted status is a
       # Response::HTTP_* constant - a bare three-digit setStatusCode( argument
       # anywhere under app/, or a bare match arm in a status map
       # (ApiErrorCode::status()), is refused. Same script as status-assertions
-      # above (it routes each file to its population by path); glob app/*.php
-      # reaches every depth (lefthook's `*` crosses `/`).
+      # above (it routes each file to its population by path); glob app/**/*.php
+      # reaches every depth, the app/ root included.
       run: sh scripts/check-status-assertions.sh {staged_files}
     write-path-chain:
       glob: "app/**/*.php"
@@ -55,3 +59,12 @@ pre-commit:
       # Logic in scripts/check-write-path-chain.sh (shared with the gating CI
       # quality step). Comment lines are excluded (call-form only).
       run: sh scripts/check-write-path-chain.sh {staged_files}
+    command-validation-placement:
+      glob: "app/**/*.php"
+      # Sec 2.15.B.2 (amendment AQ): validateAndCreate only at the HTTP boundary.
+      # Its checks cross files (a controller to its request DTO's source, a
+      # Request-fed named constructor to its callers), so the script always reads
+      # the whole app/ tree and takes no file list - the glob only decides whether
+      # the hook runs. Logic in scripts/check-command-validation-placement.sh
+      # (shared with the gating CI quality step); every matcher self-tested.
+      run: sh scripts/check-command-validation-placement.sh
