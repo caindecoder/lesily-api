@@ -18,6 +18,30 @@ jobs:
           php-version: '8.4'
           extensions: mbstring, xml, ctype, json, bcmath, pdo_mysql, tokenizer, fileinfo, openssl, curl, redis, xdebug, gd
           coverage: xdebug
+      # The two audit steps run here, BEFORE anything is installed: every other
+      # job needs this one, so a lock the advisory database flags is refused
+      # before a dependency's install scripts can execute in any job. setup-php
+      # exports COMPOSER_NO_AUDIT=1 (it silences the audit inside require /
+      # update / remove, not the explicit command) and recommends exactly this.
+      # Node 24 / npm 11 is the pin the test job uses for the same lock file.
+      - uses: actions/setup-node@v7
+        with: { node-version: '24' }
+      - name: Dependency audit - composer (questionnaire sec 15b, OQ-1-186) - gating
+        # A high, critical or UNRATED advisory in composer.lock (dev packages
+        # included) fails the step; low and medium are listed as ignored and
+        # never gate. The exit status is the whole verdict - the summary format
+        # counts ignored advisories too, so no output line is parsed. Abandoned
+        # packages print and never gate. An advisory source that refuses the
+        # connection or answers with an error fails the step
+        # (--ignore-unreachable is deliberately absent). No bypass: a high
+        # advisory with no fix is ONE ruled ignore entry with a reason and a
+        # remove-when clause.
+        run: composer audit --locked --abandoned=report --ignore-severity=low --ignore-severity=medium
+      - name: Dependency audit - npm (questionnaire sec 15b, OQ-1-186) - gating
+        # Every dependency, the dev toolchain included; high and critical gate,
+        # moderate and below print. Reads package-lock.json alone - nothing is
+        # installed yet.
+        run: npm audit --audit-level=high
       - name: Cache Composer
         id: composer-cache
         uses: actions/cache@v6
