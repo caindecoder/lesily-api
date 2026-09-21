@@ -131,22 +131,6 @@ jobs:
       - name: Semgrep SAST
         uses: returntocorp/semgrep-action@v1
         with: { config: 'p/security-audit p/php' }
-      - name: Dependency audit - composer (questionnaire sec 15b, OQ-1-186) - gating
-        # A high, critical or UNRATED advisory in composer.lock (dev packages
-        # included) fails the step; low and medium are listed as ignored and
-        # never gate. The exit status is the whole verdict - the summary format
-        # counts ignored advisories too, so no output line is parsed. Abandoned
-        # packages print and never gate. An unreachable advisory source fails
-        # the step (--ignore-unreachable is deliberately absent). setup-php's
-        # COMPOSER_NO_AUDIT=1 covers require / update / remove, not this command.
-        # No bypass: a high advisory with no fix is ONE ruled ignore entry with
-        # a reason and a remove-when clause (design note R7).
-        run: composer audit --locked --abandoned=report --ignore-severity=low --ignore-severity=medium
-      - name: Dependency audit - npm (questionnaire sec 15b, OQ-1-186) - gating
-        # Every dependency, the dev toolchain included; high and critical gate,
-        # moderate and below print. Reads package-lock.json alone - this job
-        # runs no npm ci.
-        run: npm audit --audit-level=high
       - name: Test-class naming (conv-plan sec 2.14, OQ-1-170) - gating
         # Behavior-named test classes only: partition names are banned outright;
         # artifact names (the six production suffixes + seeder / mail-render /
@@ -262,6 +246,25 @@ jobs:
         # exercises it against known false-kill + genuine-kill shapes so a
         # regression that neuters the detection fails CI here (no DB needed).
         run: php scripts/check-mutation-kills.php --self-test
+      # The two audit steps run LAST: their verdict depends on the day and on the
+      # network, so every deterministic gate above reports before they can stop
+      # the job.
+      - name: Dependency audit - composer (questionnaire sec 15b, OQ-1-186) - gating
+        # A high, critical or UNRATED advisory in composer.lock (dev packages
+        # included) fails the step; low and medium are listed as ignored and
+        # never gate. The exit status is the whole verdict - the summary format
+        # counts ignored advisories too, so no output line is parsed. Abandoned
+        # packages print and never gate. An unreachable advisory source fails
+        # the step (--ignore-unreachable is deliberately absent). setup-php's
+        # COMPOSER_NO_AUDIT=1 covers require / update / remove, not this command.
+        # No bypass: a high advisory with no fix is ONE ruled ignore entry with
+        # a reason and a remove-when clause.
+        run: composer audit --locked --abandoned=report --ignore-severity=low --ignore-severity=medium
+      - name: Dependency audit - npm (questionnaire sec 15b, OQ-1-186) - gating
+        # Every dependency, the dev toolchain included; high and critical gate,
+        # moderate and below print. Reads package-lock.json alone - this job
+        # runs no npm ci.
+        run: npm audit --audit-level=high
 
   mutation-test:
     needs: test
