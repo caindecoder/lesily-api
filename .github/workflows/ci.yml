@@ -166,10 +166,12 @@ jobs:
         # returntocorp/semgrep-action@v1 is archived (its README: "This project is
         # deprecated ... migrate to native Semgrep") and pinned an unsupported semgrep.
         # Native form per docs.semgrep.dev/semgrep-ci/sample-ci-configs: the image runs
-        # `args` as its command in the checked-out workspace. Same two rule packs, the
-        # same full-tree scan as before; `--error` makes findings fail the step. The tag
-        # is pinned - bump it by hand (or via Dependabot if its github-actions updater
-        # covers docker:// refs; unconfirmed).
+        # `args` as its command in the checked-out workspace. Same two rule packs
+        # (p/php = 23 PHP rules; p/security-audit adds none for PHP); Semgrep's default
+        # .semgrepignore skips tests/ (506 targets of 598 tracked files at s218 - the
+        # archived action scanned tests/ too). `--error` makes findings fail the step.
+        # The tag is pinned - bump it by hand (or via Dependabot if its github-actions
+        # updater covers docker:// refs; unconfirmed).
         uses: docker://semgrep/semgrep:1.177.0
         with:
           args: semgrep scan --config p/security-audit --config p/php --error
