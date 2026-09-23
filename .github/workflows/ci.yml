@@ -66,15 +66,12 @@ jobs:
         # Rule-13 report-only class). Now: generate only when a path annotation exists,
         # and then a failure FAILS the job; otherwise print the true reason and skip.
         # The first annotation increment (Decision 17, master-action #86) makes it live.
-        # Controls (s218): a planted #[OA\Get] without responses made generate run and
-        # fail locally ("requires at least one @OA\Response()"; a RED commit on the PR
-        # branch repeats it on CI); the guard is silent on Info/Server alone.
-        run: |
-          if grep -rqE '(#\[|@)OA\\(Get|Post|Put|Patch|Delete|Head|Options|PathItem)\(' app; then
-            php artisan l5-swagger:generate
-          else
-            echo "No OpenAPI path annotation in app/ yet (Decision 17 / #86) - generation not attempted."
-          fi
+        # The guard lives in scripts/generate-openapi-if-annotated.sh (pattern self-tested
+        # at startup - a dead matcher exits 2, never the skip branch). Controls (s218): a
+        # planted #[OA\Get] without responses made generate run and fail locally
+        # ("requires at least one @OA\Response()"; a RED commit on the PR branch repeats
+        # it on CI); the guard is silent on Info/Server alone; a doctored pattern exits 2.
+        run: sh scripts/generate-openapi-if-annotated.sh
 
   test:
     needs: setup
@@ -445,16 +442,17 @@ jobs:
         with: { php-version: '8.4' }
       - run: composer install --no-interaction --prefer-dist
       - name: Generate base spec
-        # Same guard as the build job (VP2-5 R12, s218): generate only when a path
-        # annotation exists, and then a failure fails the job; the `|| true` is gone.
+        # Same guard as the build job (VP2-5 R12, s218), copied to /tmp first because the
+        # base tree predates the script; a generation failure fails the job; `|| true` is gone.
         run: |
+          cp scripts/generate-openapi-if-annotated.sh /tmp/generate-openapi-if-annotated.sh
           git checkout origin/${{ github.base_ref }}
-          if grep -rqE '(#\[|@)OA\\(Get|Post|Put|Patch|Delete|Head|Options|PathItem)\(' app; then php artisan l5-swagger:generate; else echo "no OpenAPI path annotation on the base - nothing to diff"; fi
+          sh /tmp/generate-openapi-if-annotated.sh
           if [ -f storage/api-docs/api-docs.json ]; then cp storage/api-docs/api-docs.json /tmp/base-spec.json; else echo "{}" > /tmp/base-spec.json; fi
       - name: Generate PR spec
         run: |
           git checkout ${{ github.sha }}
-          if grep -rqE '(#\[|@)OA\\(Get|Post|Put|Patch|Delete|Head|Options|PathItem)\(' app; then php artisan l5-swagger:generate; else echo "no OpenAPI path annotation on the PR head - nothing to diff"; fi
+          sh scripts/generate-openapi-if-annotated.sh
           if [ -f storage/api-docs/api-docs.json ]; then cp storage/api-docs/api-docs.json /tmp/pr-spec.json; else echo "{}" > /tmp/pr-spec.json; fi
       - name: Diff specs
         # Skip diff if both specs are empty stubs (pre-chunk-1). Re-enabled implicitly when real specs land.
