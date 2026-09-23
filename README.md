@@ -8,7 +8,7 @@ Laravel 13 API backend for the Lesily HRMS SaaS platform (FusionRealm).
 - MySQL
 - Event-sourced (`spatie/laravel-event-sourcing`)
 - API-only (no Blade/Inertia)
-- OpenAPI 3.x spec emitted via L5-Swagger
+- OpenAPI 3.x spec via L5-Swagger — generation is guarded on the first path annotation (`scripts/generate-openapi-if-annotated.sh`); no endpoint carries one yet, so no spec is emitted today
 
 ## Layout
 
