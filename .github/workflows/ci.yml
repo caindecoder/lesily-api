@@ -59,18 +59,13 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with: { php-version: '8.4' }
       - run: composer install --no-interaction --prefer-dist
-      - name: Generate OpenAPI spec (guarded on a path annotation - VP2-5 R12, s218)
-        # app/ carries #[OA\Info] + #[OA\Server] but no PATH annotation (#[OA\Get] etc.),
-        # so generation fails ("Required @OA\PathItem() not found") - and since the
-        # scaffold (s037) the `|| echo` fallback masked that failure on EVERY run (the
-        # Rule-13 report-only class). Now: generate only when a path annotation exists,
-        # and then a failure FAILS the job; otherwise print the true reason and skip.
-        # The first annotation increment (Decision 17, master-action #86) makes it live.
-        # The guard lives in scripts/generate-openapi-if-annotated.sh (pattern self-tested
-        # at startup - a dead matcher exits 2, never the skip branch). Controls (s218): a
-        # planted #[OA\Get] without responses made generate run and fail locally
-        # ("requires at least one @OA\Response()"; a RED commit on the PR branch repeats
-        # it on CI); the guard is silent on Info/Server alone; a doctored pattern exits 2.
+      - name: Generate OpenAPI spec (guarded on a path annotation - OQ-1-187)
+        # app/ carries #[OA\Info] + #[OA\Server] but no PATH annotation, so generation
+        # fails ("Required @OA\PathItem() not found") and the old `|| echo` fallback masked
+        # that on every run since the scaffold (the Rule-13 report-only class). The guard
+        # (scripts/generate-openapi-if-annotated.sh, pattern self-tested at startup) runs
+        # generation only when a path annotation exists - a failure then fails the job -
+        # and otherwise prints the true reason. Decision 17 / master-action #86 make it live.
         run: sh scripts/generate-openapi-if-annotated.sh
 
   test:
@@ -107,19 +102,16 @@ jobs:
           key: puppeteer-${{ hashFiles('package-lock.json') }}
       - name: Install Node deps (puppeteer — Browsershot receipt rendering, UC-1-121)
         run: npm ci
-      - name: npm audit signatures (questionnaire sec 15b registry security, VP2-5 R11) - gating
+      - name: npm audit signatures (questionnaire sec 15b registry security, OQ-1-187) - gating
         # Verifies every installed package's registry signature and provenance
         # attestation against the registry's published keys (npm/cli
-        # lib/utils/verify-signatures.js: an invalid or missing signature sets
-        # exitCode 1; no installed dependencies -> "found no installed dependencies
-        # to audit", exit 1 - the step cannot pass vacuously). Needs node_modules,
-        # so it follows npm ci here rather than the setup job's lock-only audits.
-        # name/version come from the installed tree, integrity + signatures from the
-        # registry manifest (pacote) and are checked against the registry's TUF-published
-        # keys - a locally tampered integrity is npm ci's EINTEGRITY, not this step's.
-        # Baseline s218: 86 packages verified, 33 attestations. Controls (s218): no
-        # node_modules -> exit 1; a registry serving the signature but not its key
-        # (registry.npmmirror.com) -> EMISSINGSIGNATUREKEY, exit 1.
+        # lib/utils/verify-signatures.js). Fails closed: an invalid or missing
+        # signature, a signature whose key is unknown (EMISSINGSIGNATUREKEY), a
+        # registry publishing no keys, or no installed dependencies all exit 1, so the
+        # step cannot pass vacuously. It verifies the registry's manifest against the
+        # registry's keys - a locally tampered integrity is npm ci's EINTEGRITY, not
+        # this step's. Needs node_modules, so it follows npm ci here rather than the
+        # setup job's lock-only audits.
         run: npm audit signatures
       # Round-5 fix: npm ci installs the puppeteer PACKAGE but the browser
       # binaries' postinstall download is nondeterministic on runners — the
@@ -170,14 +162,14 @@ jobs:
         run: vendor/bin/pint --test
       - name: Larastan (static analysis)
         run: vendor/bin/phpstan analyse --memory-limit=512M
-      - name: Semgrep SAST (native image - VP2-5 R10, s218)
-        # The archived returntocorp/semgrep-action@v1 ("This project is deprecated ...
-        # migrate to native Semgrep") pinned semgrep 1.36.0, which Semgrep no longer
-        # supports (< 1.76.0). Same rule packs; `--error` makes findings fail the step
-        # (`semgrep scan` exits 0 on findings without it). The image has no ENTRYPOINT,
-        # so `args` is the whole command; the workspace is the working directory.
-        # Tag pinned (1.177.0, 2026-09-10) so a bump is a reviewed diff.
-        # Control (s218): a planted eval() file made this step refuse (RED commit).
+      - name: Semgrep SAST (native image, OQ-1-187)
+        # returntocorp/semgrep-action@v1 is archived (its README: "This project is
+        # deprecated ... migrate to native Semgrep") and pinned an unsupported semgrep.
+        # Native form per docs.semgrep.dev/semgrep-ci/sample-ci-configs: the image runs
+        # `args` as its command in the checked-out workspace. Same two rule packs, the
+        # same full-tree scan as before; `--error` makes findings fail the step. The tag
+        # is pinned - bump it by hand (or via Dependabot if its github-actions updater
+        # covers docker:// refs; unconfirmed).
         uses: docker://semgrep/semgrep:1.177.0
         with:
           args: semgrep scan --config p/security-audit --config p/php --error
@@ -442,8 +434,11 @@ jobs:
         with: { php-version: '8.4' }
       - run: composer install --no-interaction --prefer-dist
       - name: Generate base spec
-        # Same guard as the build job (VP2-5 R12, s218), copied to /tmp first because the
-        # base tree predates the script; a generation failure fails the job; `|| true` is gone.
+        # Same guard as the build job (OQ-1-187), copied to /tmp first because the base
+        # tree predates the script; a generation failure fails the job; the `|| true`
+        # is gone from both generate steps. The "Diff specs" step below is pre-existing
+        # and still dormant (`hashFiles` sees only the workspace, `continue-on-error`) -
+        # it becomes real with the first annotation increment (PROC-openapi-surface-inert).
         run: |
           cp scripts/generate-openapi-if-annotated.sh /tmp/generate-openapi-if-annotated.sh
           git checkout origin/${{ github.base_ref }}
@@ -452,6 +447,7 @@ jobs:
       - name: Generate PR spec
         run: |
           git checkout ${{ github.sha }}
+          rm -f storage/api-docs/api-docs.json
           sh scripts/generate-openapi-if-annotated.sh
           if [ -f storage/api-docs/api-docs.json ]; then cp storage/api-docs/api-docs.json /tmp/pr-spec.json; else echo "{}" > /tmp/pr-spec.json; fi
       - name: Diff specs
