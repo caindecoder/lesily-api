@@ -110,6 +110,20 @@ jobs:
           key: puppeteer-${{ hashFiles('package-lock.json') }}
       - name: Install Node deps (puppeteer — Browsershot receipt rendering, UC-1-121)
         run: npm ci
+      - name: npm audit signatures (questionnaire sec 15b registry security, VP2-5 R11) - gating
+        # Verifies every installed package's registry signature and provenance
+        # attestation against the registry's published keys (npm/cli
+        # lib/utils/verify-signatures.js: an invalid or missing signature sets
+        # exitCode 1; no installed dependencies -> "found no installed dependencies
+        # to audit", exit 1 - the step cannot pass vacuously). Needs node_modules,
+        # so it follows npm ci here rather than the setup job's lock-only audits.
+        # name/version come from the installed tree, integrity + signatures from the
+        # registry manifest (pacote) and are checked against the registry's TUF-published
+        # keys - a locally tampered integrity is npm ci's EINTEGRITY, not this step's.
+        # Baseline s218: 86 packages verified, 33 attestations. Controls (s218): no
+        # node_modules -> exit 1; a registry serving the signature but not its key
+        # (registry.npmmirror.com) -> EMISSINGSIGNATUREKEY, exit 1.
+        run: npm audit signatures
       # Round-5 fix: npm ci installs the puppeteer PACKAGE but the browser
       # binaries' postinstall download is nondeterministic on runners — the
       # suite failed with "Could not find chrome-headless-shell". Explicit,
