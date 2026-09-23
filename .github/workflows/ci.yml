@@ -159,9 +159,17 @@ jobs:
         run: vendor/bin/pint --test
       - name: Larastan (static analysis)
         run: vendor/bin/phpstan analyse --memory-limit=512M
-      - name: Semgrep SAST
-        uses: returntocorp/semgrep-action@v1
-        with: { config: 'p/security-audit p/php' }
+      - name: Semgrep SAST (native image - VP2-5 R10, s218)
+        # The archived returntocorp/semgrep-action@v1 ("This project is deprecated ...
+        # migrate to native Semgrep") pinned semgrep 1.36.0, which Semgrep no longer
+        # supports (< 1.76.0). Same rule packs; `--error` makes findings fail the step
+        # (`semgrep scan` exits 0 on findings without it). The image has no ENTRYPOINT,
+        # so `args` is the whole command; the workspace is the working directory.
+        # Tag pinned (1.177.0, 2026-09-10) so a bump is a reviewed diff.
+        # Control (s218): a planted eval() file made this step refuse (RED commit).
+        uses: docker://semgrep/semgrep:1.177.0
+        with:
+          args: semgrep scan --config p/security-audit --config p/php --error
       - name: Test-class naming (conv-plan sec 2.14, OQ-1-170) - gating
         # Behavior-named test classes only: partition names are banned outright;
         # artifact names (the six production suffixes + seeder / mail-render /
