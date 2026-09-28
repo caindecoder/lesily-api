@@ -421,7 +421,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: coverage-reports
-      - uses: SonarSource/sonarqube-scan-action@v8.2.1
+      - uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
