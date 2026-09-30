@@ -12,7 +12,7 @@ Laravel 13 API backend for the Lesily HRMS SaaS platform (FusionRealm).
 
 ## Layout
 
-This repo is a sibling of `Documentation/`, `Lesily Design System/`, `lesily-web/`, and (later) `lesily-mobile/` under the workspace folder `D:\OneSyntax\Laravel Projects\Human Resource Management System\`. The workspace folder is **not** a git repo; each subfolder is.
+This repo is a sibling of `Documentation/`, `Lesily Design System/`, `lesily-web/`, and (later) `lesily-mobile/` under the workspace folder `D:\OneSyntax\Laravel Projects\Human Resource Management System\`. The workspace folder is itself a git repo, the private `caindecoder/lesily-workspace`, which holds `Documentation/` and ignores the nested repos, this one included; its README maps it.
 
 ## Branches
 
