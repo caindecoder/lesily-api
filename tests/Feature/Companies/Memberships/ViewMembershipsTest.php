@@ -218,6 +218,54 @@ class ViewMembershipsTest extends MembershipsTestCase
         ], $filters->toArray());
     }
 
+    #[Test]
+    public function when_search_term_contains_a_like_wildcard_then_it_matches_literally(): void
+    {
+        // Given two members whose emails differ exactly where the term has a
+        // literal underscore (an unescaped LIKE `_` would match both)
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $owner->update(['name' => 'Bhanu Fernando', 'email' => 'bhanu@octane.lk']);
+        $underscored = User::factory()->named('Sam One')->withEmail('sam_one@octane.lk')->create();
+        $lookalike = User::factory()->named('Samsone Perera')->withEmail('samsone@octane.lk')->create();
+        $this->attachMember($company, $underscored, $this->seededRole('employee'));
+        $this->attachMember($company, $lookalike, $this->seededRole('employee'));
+
+        // When the owner searches with the literal-underscore term
+        $response = $this->viewMemberships($owner, $company, ['search' => 'sam_one']);
+
+        // Then only the literal match is listed — wildcards in user input are inert
+        $this->assertRosterUserIds($response, [$underscored->getKey()]);
+    }
+
+    #[Test]
+    public function when_per_page_is_at_the_maximum_then_accepted(): void
+    {
+        // Given a company with an owner
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+
+        // When they request the roster at the per_page ceiling (api-conventions §9 max)
+        $response = $this->viewMemberships($owner, $company, ['per_page' => 100]);
+
+        // Then the ceiling value is accepted and echoed in the meta
+        $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 100, 'total' => 1, 'last_page' => 1]);
+    }
+
+    #[Test]
+    public function when_other_company_has_pending_invitations_then_not_in_roster(): void
+    {
+        // Given company A's owner and a pending invitation in company B only
+        [$companyA, $ownerA] = $this->aCompanyWithMember('owner');
+        [$companyB, $ownerB] = $this->aCompanyWithMember('owner');
+        $this->aPendingInvitation($companyB, $ownerB, 'kasun@contoso.lk');
+
+        // When A's owner requests A's roster
+        $response = $this->viewMemberships($ownerA, $companyA);
+
+        // Then B's pending invitation leaks nowhere — only A's own rows are
+        // listed (the union's second tenant surface, s110 #13)
+        $this->assertRosterUserIds($response, [$ownerA->getKey()]);
+    }
+
     // --- Happy ---
 
     #[Test]
@@ -380,25 +428,6 @@ class ViewMembershipsTest extends MembershipsTestCase
     }
 
     #[Test]
-    public function when_search_term_contains_a_like_wildcard_then_it_matches_literally(): void
-    {
-        // Given two members whose emails differ exactly where the term has a
-        // literal underscore (an unescaped LIKE `_` would match both)
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $owner->update(['name' => 'Bhanu Fernando', 'email' => 'bhanu@octane.lk']);
-        $underscored = User::factory()->named('Sam One')->withEmail('sam_one@octane.lk')->create();
-        $lookalike = User::factory()->named('Samsone Perera')->withEmail('samsone@octane.lk')->create();
-        $this->attachMember($company, $underscored, $this->seededRole('employee'));
-        $this->attachMember($company, $lookalike, $this->seededRole('employee'));
-
-        // When the owner searches with the literal-underscore term
-        $response = $this->viewMemberships($owner, $company, ['search' => 'sam_one']);
-
-        // Then only the literal match is listed — wildcards in user input are inert
-        $this->assertRosterUserIds($response, [$underscored->getKey()]);
-    }
-
-    #[Test]
     public function when_sorted_by_join_date_descending_then_newest_member_first(): void
     {
         // Given members who joined on three distinct days, named so that join
@@ -459,19 +488,6 @@ class ViewMembershipsTest extends MembershipsTestCase
 
         // Then the members are listed alphabetically
         $this->assertRosterOrder($response, ['Anna Perera', 'Chamil Silva']);
-    }
-
-    #[Test]
-    public function when_per_page_is_at_the_maximum_then_accepted(): void
-    {
-        // Given a company with an owner
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-
-        // When they request the roster at the per_page ceiling (api-conventions §9 max)
-        $response = $this->viewMemberships($owner, $company, ['per_page' => 100]);
-
-        // Then the ceiling value is accepted and echoed in the meta
-        $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 100, 'total' => 1, 'last_page' => 1]);
     }
 
     #[Test]
@@ -577,22 +593,6 @@ class ViewMembershipsTest extends MembershipsTestCase
         // Then the invited row is the only match — search spans both union arms
         // by email (an invited row has no name to match; uniform filters, s110)
         $this->assertOnlyInvitedRowListed($response, 'kasun@contoso.lk', 'employee');
-    }
-
-    #[Test]
-    public function when_other_company_has_pending_invitations_then_not_in_roster(): void
-    {
-        // Given company A's owner and a pending invitation in company B only
-        [$companyA, $ownerA] = $this->aCompanyWithMember('owner');
-        [$companyB, $ownerB] = $this->aCompanyWithMember('owner');
-        $this->aPendingInvitation($companyB, $ownerB, 'kasun@contoso.lk');
-
-        // When A's owner requests A's roster
-        $response = $this->viewMemberships($ownerA, $companyA);
-
-        // Then B's pending invitation leaks nowhere — only A's own rows are
-        // listed (the union's second tenant surface, s110 #13)
-        $this->assertRosterUserIds($response, [$ownerA->getKey()]);
     }
 
     #[Test]
