@@ -15,7 +15,6 @@ use App\Companies\Exceptions\TargetNotMemberException;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Foundation\Http\Middleware\EnsurePlatformAdmin;
 use App\Foundation\Http\Middleware\EnsureIdempotencyKey;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Companies\Exceptions\SelfTransferBlockedException;
@@ -331,11 +330,6 @@ return Application::configure(basePath: dirname(__DIR__))
             ApiErrorCode::ReceiptGenerationUnavailable,
             'Receipt generation is temporarily unavailable. Please try again shortly.',
         )->withHeaders(['Retry-After' => '30']));
-
-        $exceptions->render(fn (ModelNotFoundException $e) => EnvelopeBuilder::build(
-            ApiErrorCode::ResourceNotFound,
-            'The requested resource was not found.',
-        ));
 
         $exceptions->render(fn (NotFoundHttpException $e) => EnvelopeBuilder::build(
             ApiErrorCode::ResourceNotFound,
