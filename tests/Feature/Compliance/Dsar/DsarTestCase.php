@@ -220,6 +220,94 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * $replay is the remembered answer to $first — same status and body,
+     * flagged as replayed.
+     */
+    protected function assertReplayedOf(TestResponse $replay, TestResponse $first): void
+    {
+        $replay->assertCreated();
+        $replay->assertHeader('Idempotency-Replayed', 'true');
+        $this->assertSame($first->getContent(), $replay->getContent());
+    }
+
+    /**
+     * The submission was recorded the event-sourced way: a 201 request
+     * resource in progress with its 30-day deadline, one DsarRequestSubmitted
+     * event naming subject and requester, and the projected row carrying the
+     * requester's role at submission.
+     */
+    protected function assertDsarRequestRecorded(TestResponse $response, User $subject, User $requester): void
+    {
+        $response->assertCreated();
+        $record = $this->dsarRequestIn($response);
+        $response->assertJsonPath('data', [
+            'id' => $record->getKey(),
+            'status' => 'in_progress',
+            'request_type' => 'access',
+            'subject' => ['id' => $subject->getKey(), 'name' => $subject->name],
+            'requested_by' => ['id' => $requester->getKey(), 'name' => $requester->name],
+            'requested_at' => now()->toISOString(),
+            'sla_deadline' => now()->addDays(30)->toISOString(),
+            'completed_at' => null,
+            'download_expires_at' => null,
+            'cancelled_at' => null,
+            'rejection_reason' => null,
+        ]);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', DsarRequestSubmitted::class)
+            ->where('aggregate_uuid', $record->getKey())
+            ->where('event_properties->companyId', $record->company_id)
+            ->where('event_properties->subjectUserId', $subject->getKey())
+            ->where('event_properties->requestedByUserId', $requester->getKey())
+            ->where('event_properties->requestType', 'access')
+            ->count());
+        $this->assertSame($this->roleCodeOf($requester, $record->company_id), $record->requested_by_role);
+    }
+
+    /**
+     * Exactly one audit entry records the request — "DSAR requested — for:
+     * <subject>, by: <requester>" — linked to its stored event and stamped
+     * with the requester's role.
+     */
+    protected function assertDsarRequestAudited(TestResponse $response, User $subject, User $requester): void
+    {
+        $record = $this->dsarRequestIn($response);
+        $storedEventId = LesilyStoredEvent::query()->where('aggregate_uuid', $record->getKey())->sole()->id;
+
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $record->company_id,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'DsarRequestSubmitted',
+            'subject_type' => 'dsar_request',
+            'subject_id' => $record->getKey(),
+            'action' => 'dsar_requested',
+            'description' => 'DSAR requested — for: '.$subject->name.', by: '.$requester->name,
+            'actor_user_id' => $requester->getKey(),
+            'actor_role_code' => $this->roleCodeOf($requester, $record->company_id),
+            'actor_label' => $requester->name,
+        ]);
+    }
+
+    private function dsarRequestIn(TestResponse $response): DsarRequestRecord
+    {
+        $requestId = $response->json('data.id');
+        $this->assertIsString($requestId);
+
+        return DsarRequestRecord::query()->findOrFail($requestId);
+    }
+
+    private function roleCodeOf(User $member, string $companyId): string
+    {
+        $roleId = CompanyUser::query()
+            ->where('company_id', $companyId)
+            ->where('user_id', $member->getKey())
+            ->value('role_id');
+
+        return Role::query()->whereKey($roleId)->value('code');
+    }
+
+    /**
      * A refused submission left no trace in $company — no event stored and no
      * request projected.
      */

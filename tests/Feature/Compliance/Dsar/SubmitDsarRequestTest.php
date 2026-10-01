@@ -5,6 +5,7 @@ namespace Tests\Feature\Compliance\Dsar;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
@@ -203,5 +204,80 @@ class SubmitDsarRequestTest extends DsarTestCase
 
         // Then
         $this->assertAcceptedAsTheOnlyOpenRequest($response, $company, $subject);
+    }
+
+    #[Test]
+    public function when_the_same_idempotency_key_is_replayed_then_one_request_is_recorded(): void
+    {
+        // Given
+        $company = Company::factory()->create();
+        $subject = $this->aCompanyMember($company);
+        $first = $this->submitDsarRequest($subject, $company);
+
+        // When
+        $replay = $this->submitDsarRequest($subject, $company);
+
+        // Then
+        $this->assertReplayedOf($replay, $first);
+        $this->assertOneDsarRequestRecorded($company, $subject);
+    }
+
+    #[Test]
+    #[DataProvider('provideEveryRole')]
+    public function when_a_member_requests_their_own_data_then_the_request_is_recorded_in_progress(string $roleCode): void
+    {
+        // Given
+        $company = Company::factory()->onPlan(BillingPlan::Free)->create();
+        $member = $this->aCompanyMember($company, $roleCode);
+
+        // When
+        $response = $this->submitDsarRequest($member, $company);
+
+        // Then
+        $this->assertDsarRequestRecorded($response, $member, $member);
+        $this->assertDsarRequestAudited($response, $member, $member);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function provideEveryRole(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'employee' => ['employee'],
+            'auditor' => ['auditor'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('provideRequestForOthersRoles')]
+    public function when_an_owner_or_admin_requests_for_a_member_then_the_request_is_recorded_on_their_behalf(string $roleCode): void
+    {
+        // Given
+        $company = Company::factory()->create();
+        $actor = $this->aCompanyMember($company, $roleCode);
+        $member = $this->aCompanyMember($company);
+
+        // When
+        $response = $this->submitDsarRequest($actor, $company, ['subject_user_id' => $member->getKey()]);
+
+        // Then
+        $this->assertDsarRequestRecorded($response, $member, $actor);
+        $this->assertDsarRequestAudited($response, $member, $actor);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function provideRequestForOthersRoles(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+        ];
     }
 }
