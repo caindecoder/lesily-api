@@ -93,8 +93,8 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $afterSecond = $this->tableCounts();
 
         // Then every table's row count is stable across runs (idempotent — no duplicates)
-        // 11 permissions / 30 grants since companies.transfer-ownership joined,
-        // seeded owner-only (UC-1-028, slice-11R T3, s170).
+        // 12 permissions / 32 grants since dsar.request-for-others joined (owner + admin;
+        // UC-1-070, SLICE-dsar-access 1a).
         $this->assertSame(['roles' => 8, 'permissions' => 12, 'role_permission' => 32], $afterFirst);
         $this->assertSame($afterFirst, $afterSecond);
     }

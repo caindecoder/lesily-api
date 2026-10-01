@@ -13,23 +13,18 @@ use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\RolesPermissions\Services\PermissionEvaluator;
 use App\Compliance\Dsar\Exceptions\DsarRequestInProgressException;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
-use App\Compliance\Dsar\UseCases\Repositories\DsarRequestRepositoryInterface;
 
 class SubmitDsarRequestInteractor
 {
     public const string REQUEST_FOR_OTHERS = 'dsar.request-for-others';
 
-    public function __construct(
-        private readonly PermissionEvaluator $permissions,
-        private readonly DsarRequestRepositoryInterface $requests,
-    ) {}
+    public function __construct(private readonly PermissionEvaluator $permissions) {}
 
     public function execute(SubmitDsarRequestCommand $command, User $actor, AdminRequestContext $context): DsarRequestRecord
     {
@@ -39,9 +34,7 @@ class SubmitDsarRequestInteractor
             throw new RoleInsufficientException(self::REQUEST_FOR_OTHERS);
         }
 
-        if ($this->liveMembership($command->companyId, $command->subjectUserId()) === null) {
-            throw new ModelNotFoundException;
-        }
+        $this->liveMembership($command->companyId, $command->subjectUserId());
 
         try {
             return DB::transaction(fn () => $this->record($command, $actor, $context));
@@ -52,18 +45,16 @@ class SubmitDsarRequestInteractor
 
     private function record(SubmitDsarRequestCommand $command, User $actor, AdminRequestContext $context): DsarRequestRecord
     {
-        if ($this->requests->findOpenFor($command->companyId, $command->subjectUserId()) !== null) {
-            throw new DsarRequestInProgressException;
-        }
-
         $requestId = Str::uuid7()->toString();
-        $requestedByRole = $this->roleCodeOf($command->companyId, $actor);
+        $requestedByRole = Role::query()
+            ->whereKey($this->liveMembership($command->companyId, $actor->getKey())->role_id)
+            ->value('code');
 
         DsarRequest::retrieve($requestId)
             ->submit($command, $requestedByRole)
             ->persist();
 
-        $request = DsarRequestRecord::query()->with(['subject', 'requestedBy'])->findOrFail($requestId);
+        $request = DsarRequestRecord::query()->findOrFail($requestId);
         $this->recordRequested($request, $actor, $context);
 
         return $request;
@@ -100,18 +91,15 @@ class SubmitDsarRequestInteractor
             ->id;
     }
 
-    private function liveMembership(string $companyId, string $userId): ?CompanyUser
+    /**
+     * A removed (soft-deleted) membership is not live; a missing one answers
+     * 404 through ModelNotFoundException.
+     */
+    private function liveMembership(string $companyId, string $userId): CompanyUser
     {
         return CompanyUser::query()
             ->where('company_id', $companyId)
             ->where('user_id', $userId)
-            ->first();
-    }
-
-    private function roleCodeOf(string $companyId, User $actor): string
-    {
-        return Role::query()
-            ->whereKey($this->liveMembership($companyId, $actor->getKey())?->role_id)
-            ->value('code');
+            ->firstOrFail();
     }
 }

@@ -4,7 +4,6 @@ namespace App\Compliance\Dsar\Entities;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Builder;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use Database\Factories\DsarRequestRecordFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -44,6 +43,7 @@ class DsarRequestRecord extends Model
         'sla_deadline' => 'immutable_datetime',
         'completed_at' => 'immutable_datetime',
         'download_expires_at' => 'immutable_datetime',
+        'download_expired_at' => 'immutable_datetime',
         'cancelled_at' => 'immutable_datetime',
     ];
 
@@ -66,13 +66,5 @@ class DsarRequestRecord extends Model
     protected static function newFactory(): DsarRequestRecordFactory
     {
         return DsarRequestRecordFactory::new();
-    }
-
-    /**
-     * @param  Builder<self>  $query
-     */
-    protected function scopeOpen(Builder $query): void
-    {
-        $query->where('status', DsarRequestStatus::InProgress);
     }
 }

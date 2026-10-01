@@ -157,24 +157,6 @@ class SubmitDsarRequestTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_the_pre_check_is_bypassed_then_the_unique_key_refuses_a_second_open_request(): void
-    {
-        // Given
-        $company = Company::factory()->create();
-        $subject = $this->aCompanyMember($company);
-        $this->bypassOpenRequestPreCheck();
-        $this->submitDsarRequest($subject, $company);
-        [$actor, $body] = $this->aRepeatRequestFor($subject, $company, 'subject');
-
-        // When
-        $response = $this->submitDsarRequest($actor, $company, $body);
-
-        // Then
-        $this->assertRefusedAsInProgress($response);
-        $this->assertOneDsarRequestRecorded($company, $subject);
-    }
-
-    #[Test]
     public function when_only_a_closed_request_exists_for_the_subject_then_a_new_request_is_accepted(): void
     {
         // Given
@@ -220,6 +202,20 @@ class SubmitDsarRequestTest extends DsarTestCase
         // Then
         $this->assertReplayedOf($replay, $first);
         $this->assertOneDsarRequestRecorded($company, $subject);
+    }
+
+    #[Test]
+    public function when_a_member_names_themselves_as_the_subject_then_it_is_their_own_request(): void
+    {
+        // Given
+        $company = Company::factory()->create();
+        $member = $this->aCompanyMember($company);
+
+        // When
+        $response = $this->submitDsarRequest($member, $company, ['subject_user_id' => $member->getKey()]);
+
+        // Then
+        $this->assertDsarRequestRecorded($response, $member, $member);
     }
 
     #[Test]

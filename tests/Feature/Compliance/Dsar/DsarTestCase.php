@@ -17,7 +17,6 @@ use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
-use App\Compliance\Dsar\UseCases\Repositories\DsarRequestRepositoryInterface;
 
 abstract class DsarTestCase extends TestCase
 {
@@ -86,21 +85,6 @@ abstract class DsarTestCase extends TestCase
         }
 
         return [$subject, []];
-    }
-
-    /**
-     * The repository's open-request pre-check always answers "none", so a
-     * second open request reaches the database's unique key.
-     */
-    protected function bypassOpenRequestPreCheck(): void
-    {
-        $this->app->instance(DsarRequestRepositoryInterface::class, new class implements DsarRequestRepositoryInterface
-        {
-            public function findOpenFor(string $companyId, string $subjectUserId): ?DsarRequestRecord
-            {
-                return null;
-            }
-        });
     }
 
     protected function seededRole(string $code): Role
@@ -192,8 +176,8 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * Exactly one request exists for $subject in $company — one submitted event
-     * and one projected row, still open.
+     * Exactly one request exists for $subject in $company — one submitted event,
+     * one projected row and one audit entry.
      */
     protected function assertOneDsarRequestRecorded(Company $company, User $subject): void
     {
@@ -205,6 +189,7 @@ abstract class DsarTestCase extends TestCase
             ->where('company_id', $company->getKey())
             ->where('subject_user_id', $subject->getKey())
             ->count());
+        $this->assertDatabaseCount('audit_trail', 1);
     }
 
     /**
@@ -251,6 +236,7 @@ abstract class DsarTestCase extends TestCase
             'requested_at' => now()->toISOString(),
             'sla_deadline' => now()->addDays(30)->toISOString(),
             'completed_at' => null,
+            'download_available' => false,
             'download_expires_at' => null,
             'cancelled_at' => null,
             'rejection_reason' => null,
@@ -311,11 +297,12 @@ abstract class DsarTestCase extends TestCase
 
     /**
      * A refused submission left no trace in $company — no event stored and no
-     * request projected.
+     * request projected, no audit entry.
      */
     protected function assertNoDsarRequestRecorded(Company $company): void
     {
         $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
         $this->assertSame(0, DsarRequestRecord::query()->where('company_id', $company->getKey())->count());
+        $this->assertDatabaseMissing('audit_trail', ['company_id' => $company->getKey()]);
     }
 }
