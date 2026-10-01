@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use App\Companies\Entities\CompanyUser;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -33,6 +34,31 @@ abstract class DsarTestCase extends TestCase
         $user = User::factory()->create();
 
         $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
+
+        return $user;
+    }
+
+    /**
+     * The id of a user who is not a live member of $company: a member of
+     * another company, a removed (pivot soft-deleted) member, or no user.
+     */
+    protected function aNonMemberSubject(string $kind, Company $company): string
+    {
+        return match ($kind) {
+            'other-company-member' => $this->aCompanyMember(Company::factory()->create())->getKey(),
+            'removed-member' => $this->aRemovedMember($company)->getKey(),
+            default => (string) Str::uuid(),
+        };
+    }
+
+    protected function aRemovedMember(Company $company): User
+    {
+        $user = $this->aCompanyMember($company);
+
+        CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $user->getKey())
+            ->update(['deleted_at' => now()]);
 
         return $user;
     }
@@ -91,6 +117,28 @@ abstract class DsarTestCase extends TestCase
         $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
         $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
+    }
+
+    /**
+     * The member's role lacks the required permission — 403 ROLE_INSUFFICIENT
+     * naming the missing grant.
+     */
+    protected function assertRoleInsufficient(TestResponse $response, string $permission): void
+    {
+        $response->assertForbidden();
+        $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
+        $response->assertJsonPath('required_permission', $permission);
+    }
+
+    /**
+     * The requested resource does not exist — 404 with the §S21 envelope and no
+     * existence leak.
+     */
+    protected function assertResourceNotFound(TestResponse $response): void
+    {
+        $response->assertNotFound();
+        $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
+        $response->assertJsonPath('message', 'The requested resource was not found.');
     }
 
     /**

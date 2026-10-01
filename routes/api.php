@@ -345,4 +345,4 @@ Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/reject', [PlatformAdmi
 
 // Request a DSAR export (UC-1-070) - a member for themselves, Owner/Admin for a member.
 Route::post('/v1/dsar-requests', [DsarRequestsController::class, 'store'])
-    ->middleware(['auth:sanctum', 'idempotency-key:required']);
+    ->middleware(['auth:sanctum', 'auth.company', 'idempotency-key:required']);

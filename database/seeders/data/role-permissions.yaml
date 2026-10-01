@@ -18,6 +18,7 @@ owner:
   - billing.view
   - billing.manage
   - audit.view
+  - dsar.request-for-others
 
 admin:
   - users.invite
@@ -29,6 +30,7 @@ admin:
   - companies.update
   - billing.view
   - audit.view
+  - dsar.request-for-others
 
 hr_officer:
   - users.invite

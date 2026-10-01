@@ -68,3 +68,9 @@
   name: View Audit Trail
   description: Read the immutable audit log of data changes.
   module: audit
+
+- code: dsar.request-for-others
+  id: 0193abcd-2222-7000-8000-00000000000c
+  name: Request DSAR For Others
+  description: Request a personal-data export (DSAR) on behalf of another member of the company.
+  module: dsar

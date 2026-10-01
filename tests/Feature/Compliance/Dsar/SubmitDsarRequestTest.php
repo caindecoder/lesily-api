@@ -65,4 +65,63 @@ class SubmitDsarRequestTest extends DsarTestCase
             'a number' => [42],
         ];
     }
+
+    #[Test]
+    #[DataProvider('provideRolesWithoutRequestForOthers')]
+    public function when_a_member_without_the_permission_requests_for_another_member_then_it_is_refused(string $roleCode): void
+    {
+        // Given
+        $company = Company::factory()->create();
+        $actor = $this->aCompanyMember($company, $roleCode);
+        $colleague = $this->aCompanyMember($company);
+
+        // When
+        $response = $this->submitDsarRequest($actor, $company, ['subject_user_id' => $colleague->getKey()]);
+
+        // Then
+        $this->assertRoleInsufficient($response, 'dsar.request-for-others');
+        $this->assertNoDsarRequestRecorded($company);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function provideRolesWithoutRequestForOthers(): array
+    {
+        return [
+            'employee' => ['employee'],
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'auditor' => ['auditor'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('provideNonMemberSubjects')]
+    public function when_the_subject_is_not_a_member_of_the_company_then_it_is_refused_as_not_found(string $nonMember): void
+    {
+        // Given
+        $company = Company::factory()->create();
+        $admin = $this->aCompanyMember($company, 'admin');
+        $subjectUserId = $this->aNonMemberSubject($nonMember, $company);
+
+        // When
+        $response = $this->submitDsarRequest($admin, $company, ['subject_user_id' => $subjectUserId]);
+
+        // Then
+        $this->assertResourceNotFound($response);
+        $this->assertNoDsarRequestRecorded($company);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function provideNonMemberSubjects(): array
+    {
+        return [
+            "another company's member" => ['other-company-member'],
+            'a removed member' => ['removed-member'],
+            'an unknown user' => ['unknown-user'],
+        ];
+    }
 }

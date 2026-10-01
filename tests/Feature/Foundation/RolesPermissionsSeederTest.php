@@ -95,7 +95,7 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         // Then every table's row count is stable across runs (idempotent — no duplicates)
         // 11 permissions / 30 grants since companies.transfer-ownership joined,
         // seeded owner-only (UC-1-028, slice-11R T3, s170).
-        $this->assertSame(['roles' => 8, 'permissions' => 11, 'role_permission' => 30], $afterFirst);
+        $this->assertSame(['roles' => 8, 'permissions' => 12, 'role_permission' => 32], $afterFirst);
         $this->assertSame($afterFirst, $afterSecond);
     }
 
@@ -166,8 +166,8 @@ class RolesPermissionsSeederTest extends FoundationTestCase
             'platform_super_admin' => 0,
             // owner +1 for companies.transfer-ownership, the only owner-exclusive
             // grant (UC-1-028, slice-11R T3, s170).
-            'owner' => 11,
-            'admin' => 9,
+            'owner' => 12,
+            'admin' => 10,
             'hr_officer' => 4,
             // 1 since billing.view came out too (matrix §Module-6 ❌ — F2/D-A,
             // slice-plans-billing T1, s130); users.view left at D-A, s108.
