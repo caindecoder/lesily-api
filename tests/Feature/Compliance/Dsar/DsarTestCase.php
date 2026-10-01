@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
+use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanyUser;
@@ -53,7 +54,8 @@ abstract class DsarTestCase extends TestCase
         return match ($kind) {
             'other-company-member' => $this->aCompanyMember(Company::factory()->create())->getKey(),
             'removed-member' => $this->aRemovedMember($company)->getKey(),
-            default => (string) Str::uuid(),
+            'unknown-user' => (string) Str::uuid(),
+            default => throw new InvalidArgumentException("Unknown non-member kind: {$kind}"),
         };
     }
 

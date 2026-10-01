@@ -39,7 +39,7 @@ class SubmitDsarRequestInteractor
             throw new RoleInsufficientException(self::REQUEST_FOR_OTHERS);
         }
 
-        if ($this->liveMembership($company, $command->subjectUserId()) === null) {
+        if ($this->liveMembership($command->companyId, $command->subjectUserId()) === null) {
             throw new ModelNotFoundException;
         }
 
@@ -100,21 +100,18 @@ class SubmitDsarRequestInteractor
             ->id;
     }
 
-    private function liveMembership(Company $company, string $userId): ?CompanyUser
+    private function liveMembership(string $companyId, string $userId): ?CompanyUser
     {
         return CompanyUser::query()
-            ->where('company_id', $company->getKey())
+            ->where('company_id', $companyId)
             ->where('user_id', $userId)
             ->first();
     }
 
     private function roleCodeOf(string $companyId, User $actor): string
     {
-        $roleId = CompanyUser::query()
-            ->where('company_id', $companyId)
-            ->where('user_id', $actor->getKey())
-            ->value('role_id');
-
-        return Role::query()->whereKey($roleId)->value('code');
+        return Role::query()
+            ->whereKey($this->liveMembership($companyId, $actor->getKey())?->role_id)
+            ->value('code');
     }
 }

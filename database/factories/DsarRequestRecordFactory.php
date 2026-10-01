@@ -33,10 +33,17 @@ class DsarRequestRecordFactory extends Factory
             'status' => DsarRequestStatus::InProgress,
             'requested_at' => $requestedAt,
             'sla_deadline' => $requestedAt->addDays(30),
+            'sla_breached_at' => null,
             'completed_at' => null,
             'file_path' => null,
             'download_expires_at' => null,
+            'download_expired_at' => null,
+            'rejected_at' => null,
+            'rejection_reason' => null,
+            'cancelled_at' => null,
+            'cancelled_by' => null,
             'created_by' => fn (array $attributes) => $attributes['requested_by'],
+            'updated_by' => null,
         ];
     }
 
