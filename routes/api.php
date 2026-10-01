@@ -12,6 +12,7 @@ use App\Foundation\Auth\IO\Http\Controllers\LogoutAllController;
 use App\Companies\IO\Http\Controllers\CompanyOwnershipController;
 use App\Billing\Subscriptions\IO\Http\Controllers\PlansController;
 use App\Foundation\Auth\IO\Http\Controllers\MyCompaniesController;
+use App\Compliance\Dsar\IO\Http\Controllers\DsarRequestsController;
 use App\Foundation\Auth\IO\Http\Controllers\ViewSessionsController;
 use App\Foundation\Auth\IO\Http\Controllers\ResetPasswordController;
 use App\Foundation\Auth\IO\Http\Controllers\RevokeSessionController;
@@ -341,3 +342,7 @@ Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/execute', [PlatformAdm
 // is the dedup).
 Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/reject', [PlatformAdminOwnershipTransferCasesController::class, 'reject'])
     ->middleware(['auth:sanctum', 'platform.admin']);
+
+// Request a DSAR export (UC-1-070) - a member for themselves, Owner/Admin for a member.
+Route::post('/v1/dsar-requests', [DsarRequestsController::class, 'store'])
+    ->middleware(['auth:sanctum', 'idempotency-key:required']);

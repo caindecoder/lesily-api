@@ -1,0 +1,103 @@
+<?php
+
+namespace Tests\Feature\Compliance\Dsar;
+
+use Tests\TestCase;
+use App\Models\User;
+use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
+use App\Companies\Entities\Company;
+use Illuminate\Testing\TestResponse;
+use App\Foundation\RolesPermissions\Entities\Role;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+
+abstract class DsarTestCase extends TestCase
+{
+    protected ?string $idempotencyKey;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seedRbacCatalog();
+        $this->travelTo('2026-10-01 09:00:00');
+        config(['app.debug' => false]);
+        $this->idempotencyKey = (string) Str::uuid();
+    }
+
+    /**
+     * A fresh user made a live member of $company under a seeded role.
+     */
+    protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
+    {
+        $user = User::factory()->create();
+
+        $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
+
+        return $user;
+    }
+
+    protected function seededRole(string $code): Role
+    {
+        return Role::query()->where('code', $code)->sole();
+    }
+
+    /**
+     * An authenticated member submits a DSAR request in $company's context,
+     * carrying the shared idempotency key when one is set.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function submitDsarRequest(User $actor, Company $company, array $body = []): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        $headers = ['X-Company-Context' => $company->getKey()];
+        if ($this->idempotencyKey !== null) {
+            $headers['Idempotency-Key'] = $this->idempotencyKey;
+        }
+
+        return $this->postJson('/api/v1/dsar-requests', $body, $headers);
+    }
+
+    /**
+     * A guest (no Sanctum session) submits a DSAR request.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function submitDsarRequestAsGuest(array $body = []): TestResponse
+    {
+        return $this->postJson('/api/v1/dsar-requests', $body, ['Idempotency-Key' => $this->idempotencyKey]);
+    }
+
+    /**
+     * The request was rejected as unauthenticated — 401 with the §S21
+     * UNAUTHENTICATED envelope (module bases are independent — the
+     * CompaniesTestCase mirror).
+     */
+    protected function assertUnauthenticated(TestResponse $response): void
+    {
+        $response->assertUnauthorized();
+        $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    /**
+     * The input was refused as invalid on $invalidField — 422 VALIDATION_FAILED
+     * whose field-level errors contain $expectedMessage (§2.2 Rule 10).
+     */
+    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
+    {
+        $response->assertUnprocessable();
+        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
+        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
+    }
+
+    /**
+     * A refused submission left no trace in $company — no event stored.
+     */
+    protected function assertNoDsarRequestRecorded(Company $company): void
+    {
+        $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
+    }
+}
