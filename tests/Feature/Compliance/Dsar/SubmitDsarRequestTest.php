@@ -7,6 +7,7 @@ use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Compliance\Dsar\Entities\DsarRequestRecord;
 
 class SubmitDsarRequestTest extends DsarTestCase
 {
@@ -152,5 +153,55 @@ class SubmitDsarRequestTest extends DsarTestCase
             'the subject again' => ['subject'],
             'an admin on their behalf' => ['admin'],
         ];
+    }
+
+    #[Test]
+    public function when_the_pre_check_is_bypassed_then_the_unique_key_refuses_a_second_open_request(): void
+    {
+        // Given
+        $company = Company::factory()->create();
+        $subject = $this->aCompanyMember($company);
+        $this->bypassOpenRequestPreCheck();
+        $this->submitDsarRequest($subject, $company);
+        [$actor, $body] = $this->aRepeatRequestFor($subject, $company, 'subject');
+
+        // When
+        $response = $this->submitDsarRequest($actor, $company, $body);
+
+        // Then
+        $this->assertRefusedAsInProgress($response);
+        $this->assertOneDsarRequestRecorded($company, $subject);
+    }
+
+    #[Test]
+    public function when_only_a_closed_request_exists_for_the_subject_then_a_new_request_is_accepted(): void
+    {
+        // Given
+        $company = Company::factory()->create();
+        $subject = $this->aCompanyMember($company);
+        DsarRequestRecord::factory()->forSubject($company, $subject)->fulfilled()->create();
+
+        // When
+        $response = $this->submitDsarRequest($subject, $company);
+
+        // Then
+        $this->assertAcceptedAsTheOnlyOpenRequest($response, $company, $subject);
+    }
+
+    #[Test]
+    public function when_the_subject_has_an_open_request_in_another_company_then_a_request_here_is_accepted(): void
+    {
+        // Given
+        $company = Company::factory()->create();
+        $subject = $this->aCompanyMember($company);
+        $otherCompany = Company::factory()->create();
+        $otherCompany->users()->attach($subject, ['role_id' => $this->seededRole('employee')->getKey()]);
+        DsarRequestRecord::factory()->forSubject($otherCompany, $subject)->create();
+
+        // When
+        $response = $this->submitDsarRequest($subject, $company);
+
+        // Then
+        $this->assertAcceptedAsTheOnlyOpenRequest($response, $company, $subject);
     }
 }

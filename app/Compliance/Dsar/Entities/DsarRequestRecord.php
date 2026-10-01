@@ -5,11 +5,14 @@ namespace App\Compliance\Dsar\Entities;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
+use Database\Factories\DsarRequestRecordFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class DsarRequestRecord extends Model
 {
-    use HasUuids;
+    /** @use HasFactory<DsarRequestRecordFactory> */
+    use HasFactory, HasUuids;
 
     protected $table = 'dsar_requests';
 
@@ -23,6 +26,9 @@ class DsarRequestRecord extends Model
         'status',
         'requested_at',
         'sla_deadline',
+        'completed_at',
+        'file_path',
+        'download_expires_at',
         'created_by',
     ];
 
@@ -30,7 +36,14 @@ class DsarRequestRecord extends Model
         'status' => DsarRequestStatus::class,
         'requested_at' => 'immutable_datetime',
         'sla_deadline' => 'immutable_datetime',
+        'completed_at' => 'immutable_datetime',
+        'download_expires_at' => 'immutable_datetime',
     ];
+
+    protected static function newFactory(): DsarRequestRecordFactory
+    {
+        return DsarRequestRecordFactory::new();
+    }
 
     /**
      * @param  Builder<self>  $query

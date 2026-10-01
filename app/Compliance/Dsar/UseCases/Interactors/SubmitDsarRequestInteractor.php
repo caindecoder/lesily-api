@@ -4,11 +4,13 @@ namespace App\Compliance\Dsar\UseCases\Interactors;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\RolesPermissions\Services\PermissionEvaluator;
 use App\Compliance\Dsar\Exceptions\DsarRequestInProgressException;
@@ -35,6 +37,15 @@ class SubmitDsarRequestInteractor
             throw new ModelNotFoundException;
         }
 
+        try {
+            DB::transaction(fn () => $this->record($company, $actor, $command));
+        } catch (UniqueConstraintViolationException) {
+            throw new DsarRequestInProgressException;
+        }
+    }
+
+    private function record(Company $company, User $actor, SubmitDsarRequestCommand $command): void
+    {
         if ($this->requests->findOpenFor($company->getKey(), $command->subjectUserId()) !== null) {
             throw new DsarRequestInProgressException;
         }

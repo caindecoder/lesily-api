@@ -11,10 +11,12 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanyUser;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Compliance\Dsar\UseCases\Repositories\DsarRequestRepositoryInterface;
 
 abstract class DsarTestCase extends TestCase
 {
@@ -82,6 +84,21 @@ abstract class DsarTestCase extends TestCase
         }
 
         return [$subject, []];
+    }
+
+    /**
+     * The repository's open-request pre-check always answers "none", so a
+     * second open request reaches the database's unique key.
+     */
+    protected function bypassOpenRequestPreCheck(): void
+    {
+        $this->app->instance(DsarRequestRepositoryInterface::class, new class implements DsarRequestRepositoryInterface
+        {
+            public function findOpenFor(string $companyId, string $subjectUserId): ?DsarRequestRecord
+            {
+                return null;
+            }
+        });
     }
 
     protected function seededRole(string $code): Role
@@ -185,6 +202,20 @@ abstract class DsarTestCase extends TestCase
         $this->assertSame(1, DsarRequestRecord::query()
             ->where('company_id', $company->getKey())
             ->where('subject_user_id', $subject->getKey())
+            ->count());
+    }
+
+    /**
+     * The submission was accepted and is the subject's one open request in
+     * $company — any earlier requests there are closed.
+     */
+    protected function assertAcceptedAsTheOnlyOpenRequest(TestResponse $response, Company $company, User $subject): void
+    {
+        $response->assertCreated();
+        $this->assertSame(1, DsarRequestRecord::query()
+            ->where('company_id', $company->getKey())
+            ->where('subject_user_id', $subject->getKey())
+            ->where('status', DsarRequestStatus::InProgress)
             ->count());
     }
 
