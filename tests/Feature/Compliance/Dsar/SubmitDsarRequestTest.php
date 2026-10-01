@@ -124,4 +124,33 @@ class SubmitDsarRequestTest extends DsarTestCase
             'an unknown user' => ['unknown-user'],
         ];
     }
+
+    #[Test]
+    #[DataProvider('provideRepeatRequesters')]
+    public function when_an_open_request_exists_for_the_subject_then_another_is_refused_as_in_progress(string $repeatRequester): void
+    {
+        // Given
+        $company = Company::factory()->create();
+        $subject = $this->aCompanyMember($company);
+        $this->submitDsarRequest($subject, $company);
+        [$actor, $body] = $this->aRepeatRequestFor($subject, $company, $repeatRequester);
+
+        // When
+        $response = $this->submitDsarRequest($actor, $company, $body);
+
+        // Then
+        $this->assertRefusedAsInProgress($response);
+        $this->assertOneDsarRequestRecorded($company, $subject);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function provideRepeatRequesters(): array
+    {
+        return [
+            'the subject again' => ['subject'],
+            'an admin on their behalf' => ['admin'],
+        ];
+    }
 }

@@ -6,10 +6,14 @@ use Tests\TestCase;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanyUser;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class DsarTestCase extends TestCase
@@ -61,6 +65,23 @@ abstract class DsarTestCase extends TestCase
             ->update(['deleted_at' => now()]);
 
         return $user;
+    }
+
+    /**
+     * A second request for $subject under a fresh idempotency key — made by the
+     * subject themselves, or by an admin on their behalf.
+     *
+     * @return array{0: User, 1: array<string, string>}
+     */
+    protected function aRepeatRequestFor(User $subject, Company $company, string $requester): array
+    {
+        $this->idempotencyKey = (string) Str::uuid();
+
+        if ($requester === 'admin') {
+            return [$this->aCompanyMember($company, 'admin'), ['subject_user_id' => $subject->getKey()]];
+        }
+
+        return [$subject, []];
     }
 
     protected function seededRole(string $code): Role
@@ -142,10 +163,38 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * A refused submission left no trace in $company — no event stored.
+     * The submission was refused because an export is already being prepared
+     * for the subject — 409 DSAR_IN_PROGRESS with the UC-1-070 message.
+     */
+    protected function assertRefusedAsInProgress(TestResponse $response): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::DsarInProgress);
+        $response->assertJsonPath('message', 'A data export is already being prepared.');
+    }
+
+    /**
+     * Exactly one request exists for $subject in $company — one submitted event
+     * and one projected row, still open.
+     */
+    protected function assertOneDsarRequestRecorded(Company $company, User $subject): void
+    {
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', DsarRequestSubmitted::class)
+            ->whereForCompany($company->getKey())
+            ->count());
+        $this->assertSame(1, DsarRequestRecord::query()
+            ->where('company_id', $company->getKey())
+            ->where('subject_user_id', $subject->getKey())
+            ->count());
+    }
+
+    /**
+     * A refused submission left no trace in $company — no event stored and no
+     * request projected.
      */
     protected function assertNoDsarRequestRecorded(Company $company): void
     {
         $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
+        $this->assertSame(0, DsarRequestRecord::query()->where('company_id', $company->getKey())->count());
     }
 }

@@ -3,37 +3,59 @@
 namespace App\Compliance\Dsar\UseCases\Interactors;
 
 use App\Models\User;
+use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
+use App\Compliance\Dsar\Aggregates\DsarRequest;
+use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\RolesPermissions\Services\PermissionEvaluator;
+use App\Compliance\Dsar\Exceptions\DsarRequestInProgressException;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
+use App\Compliance\Dsar\UseCases\Repositories\DsarRequestRepositoryInterface;
 
 class SubmitDsarRequestInteractor
 {
     public const string REQUEST_FOR_OTHERS = 'dsar.request-for-others';
 
-    public function __construct(private readonly PermissionEvaluator $permissions) {}
+    public function __construct(
+        private readonly PermissionEvaluator $permissions,
+        private readonly DsarRequestRepositoryInterface $requests,
+    ) {}
 
     public function execute(Company $company, User $actor, SubmitDsarRequestCommand $command): void
     {
-        $subjectUserId = $command->subject_user_id ?? $actor->getKey();
-
-        if ($subjectUserId !== $actor->getKey() && ! $this->permissions->canUserDo($actor, $company, self::REQUEST_FOR_OTHERS)) {
+        if ($command->isForSomeoneElse() && ! $this->permissions->canUserDo($actor, $company, self::REQUEST_FOR_OTHERS)) {
             throw new RoleInsufficientException(self::REQUEST_FOR_OTHERS);
         }
 
-        if (! $this->isLiveMember($company, $subjectUserId)) {
+        $subjectMembership = $this->liveMembership($company, $command->subjectUserId());
+        if ($subjectMembership === null) {
             throw new ModelNotFoundException;
         }
+
+        if ($this->requests->findOpenFor($company->getKey(), $command->subjectUserId()) !== null) {
+            throw new DsarRequestInProgressException;
+        }
+
+        DsarRequest::retrieve(Str::uuid7()->toString())
+            ->submit($command, $this->roleCodeOf($company, $actor))
+            ->persist();
     }
 
-    private function isLiveMember(Company $company, string $userId): bool
+    private function liveMembership(Company $company, string $userId): ?CompanyUser
     {
         return CompanyUser::query()
             ->where('company_id', $company->getKey())
             ->where('user_id', $userId)
-            ->exists();
+            ->first();
+    }
+
+    private function roleCodeOf(Company $company, User $actor): string
+    {
+        $roleId = $this->liveMembership($company, $actor->getKey())?->role_id;
+
+        return Role::query()->whereKey($roleId)->value('code');
     }
 }

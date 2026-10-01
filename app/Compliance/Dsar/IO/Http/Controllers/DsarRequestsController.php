@@ -19,6 +19,8 @@ class DsarRequestsController extends Controller
 
         $command = SubmitDsarRequestCommand::validateAndCreate([
             'subject_user_id' => $request->input('subject_user_id'),
+            'companyId' => $request->company()->getKey(),
+            'requestedByUserId' => $actor->getKey(),
         ]);
 
         $interactor->execute($request->company(), $actor, $command);
