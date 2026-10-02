@@ -42,6 +42,7 @@ enum ApiErrorCode: string
     case IdempotencyKeyProcessing = 'IDEMPOTENCY_KEY_PROCESSING';
     case StateGuardViolation = 'STATE_GUARD_VIOLATION';
     case ReceiptGenerationUnavailable = 'RECEIPT_GENERATION_UNAVAILABLE';
+    case DsarInProgress = 'DSAR_IN_PROGRESS';
     case HttpError = 'HTTP_ERROR';
     case InternalError = 'INTERNAL_ERROR';
 
@@ -84,6 +85,7 @@ enum ApiErrorCode: string
             self::IdempotencyKeyProcessing => Response::HTTP_CONFLICT,
             self::StateGuardViolation => Response::HTTP_CONFLICT,
             self::ReceiptGenerationUnavailable => Response::HTTP_SERVICE_UNAVAILABLE,
+            self::DsarInProgress => Response::HTTP_CONFLICT,
             // Generic fallback for an unmapped HttpException. Production always
             // preserves the exception's real status via buildWithStatus(); this 500
             // is only the default required for match() exhaustiveness.

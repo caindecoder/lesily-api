@@ -1,0 +1,308 @@
+<?php
+
+namespace Tests\Feature\Compliance\Dsar;
+
+use Tests\TestCase;
+use App\Models\User;
+use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
+use InvalidArgumentException;
+use App\Companies\Entities\Company;
+use Illuminate\Testing\TestResponse;
+use App\Companies\Entities\CompanyUser;
+use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Compliance\Dsar\Enums\DsarRequestStatus;
+use App\Foundation\RolesPermissions\Entities\Role;
+use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Compliance\Dsar\Events\DsarRequestSubmitted;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+
+abstract class DsarTestCase extends TestCase
+{
+    protected ?string $idempotencyKey;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seedRbacCatalog();
+        $this->travelTo('2026-10-01 09:00:00');
+        config(['app.debug' => false]);
+        $this->idempotencyKey = (string) Str::uuid();
+    }
+
+    /**
+     * A fresh user made a live member of $company under a seeded role.
+     */
+    protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
+    {
+        $user = User::factory()->create();
+
+        $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
+
+        return $user;
+    }
+
+    /**
+     * The id of a user who is not a live member of $company: a member of
+     * another company, a removed (pivot soft-deleted) member, or no user.
+     */
+    protected function aNonMemberSubject(string $kind, Company $company): string
+    {
+        return match ($kind) {
+            'other-company-member' => $this->aCompanyMember(Company::factory()->create())->getKey(),
+            'removed-member' => $this->aRemovedMember($company)->getKey(),
+            'unknown-user' => (string) Str::uuid(),
+            default => throw new InvalidArgumentException("Unknown non-member kind: {$kind}"),
+        };
+    }
+
+    protected function aRemovedMember(Company $company): User
+    {
+        $user = $this->aCompanyMember($company);
+
+        CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $user->getKey())
+            ->update(['deleted_at' => now()]);
+
+        return $user;
+    }
+
+    /**
+     * A second request for $subject under a fresh idempotency key — made by the
+     * subject themselves, or by an admin on their behalf.
+     *
+     * @return array{0: User, 1: array<string, string>}
+     */
+    protected function aRepeatRequestFor(User $subject, Company $company, string $requester): array
+    {
+        $this->idempotencyKey = (string) Str::uuid();
+
+        if ($requester === 'admin') {
+            return [$this->aCompanyMember($company, 'admin'), ['subject_user_id' => $subject->getKey()]];
+        }
+
+        return [$subject, []];
+    }
+
+    protected function seededRole(string $code): Role
+    {
+        return Role::query()->where('code', $code)->sole();
+    }
+
+    /**
+     * An authenticated member submits a DSAR request in $company's context,
+     * carrying the shared idempotency key when one is set.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function submitDsarRequest(User $actor, Company $company, array $body = []): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        $headers = ['X-Company-Context' => $company->getKey()];
+        if ($this->idempotencyKey !== null) {
+            $headers['Idempotency-Key'] = $this->idempotencyKey;
+        }
+
+        return $this->postJson('/api/v1/dsar-requests', $body, $headers);
+    }
+
+    /**
+     * A guest (no Sanctum session) submits a DSAR request.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function submitDsarRequestAsGuest(array $body = []): TestResponse
+    {
+        return $this->postJson('/api/v1/dsar-requests', $body, ['Idempotency-Key' => $this->idempotencyKey]);
+    }
+
+    /**
+     * The request was rejected as unauthenticated — 401 with the §S21
+     * UNAUTHENTICATED envelope (module bases are independent — the
+     * CompaniesTestCase mirror).
+     */
+    protected function assertUnauthenticated(TestResponse $response): void
+    {
+        $response->assertUnauthorized();
+        $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    /**
+     * The input was refused as invalid on $invalidField — 422 VALIDATION_FAILED
+     * whose field-level errors contain $expectedMessage (§2.2 Rule 10).
+     */
+    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
+    {
+        $response->assertUnprocessable();
+        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
+        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
+    }
+
+    /**
+     * The member's role lacks the required permission — 403 ROLE_INSUFFICIENT
+     * naming the missing grant.
+     */
+    protected function assertRoleInsufficient(TestResponse $response, string $permission): void
+    {
+        $response->assertForbidden();
+        $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
+        $response->assertJsonPath('required_permission', $permission);
+    }
+
+    /**
+     * The requested resource does not exist — 404 with the §S21 envelope and no
+     * existence leak.
+     */
+    protected function assertResourceNotFound(TestResponse $response): void
+    {
+        $response->assertNotFound();
+        $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
+        $response->assertJsonPath('message', 'The requested resource was not found.');
+    }
+
+    /**
+     * The submission was refused because an export is already being prepared
+     * for the subject — 409 DSAR_IN_PROGRESS with the UC-1-070 message.
+     */
+    protected function assertRefusedAsInProgress(TestResponse $response): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::DsarInProgress);
+        $response->assertJsonPath('message', 'A data export is already being prepared.');
+    }
+
+    /**
+     * Exactly one request exists for $subject in $company — one submitted event,
+     * one projected row and one audit entry.
+     */
+    protected function assertOneDsarRequestRecorded(Company $company, User $subject): void
+    {
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', DsarRequestSubmitted::class)
+            ->whereForCompany($company->getKey())
+            ->count());
+        $this->assertSame(1, DsarRequestRecord::query()
+            ->where('company_id', $company->getKey())
+            ->where('subject_user_id', $subject->getKey())
+            ->count());
+        $this->assertDatabaseCount('audit_trail', 1);
+    }
+
+    /**
+     * The submission was accepted and is the subject's one open request in
+     * $company — any earlier requests there are closed.
+     */
+    protected function assertAcceptedAsTheOnlyOpenRequest(TestResponse $response, Company $company, User $subject): void
+    {
+        $response->assertCreated();
+        $this->assertSame(1, DsarRequestRecord::query()
+            ->where('company_id', $company->getKey())
+            ->where('subject_user_id', $subject->getKey())
+            ->where('status', DsarRequestStatus::InProgress)
+            ->count());
+    }
+
+    /**
+     * $replay is the remembered answer to $first — same status and body,
+     * flagged as replayed.
+     */
+    protected function assertReplayedOf(TestResponse $replay, TestResponse $first): void
+    {
+        $replay->assertCreated();
+        $replay->assertHeader('Idempotency-Replayed', 'true');
+        $this->assertSame($first->getContent(), $replay->getContent());
+    }
+
+    /**
+     * The submission was recorded the event-sourced way: a 201 request
+     * resource in progress with its 30-day deadline, one DsarRequestSubmitted
+     * event naming subject and requester, and the projected row carrying the
+     * requester's role at submission.
+     */
+    protected function assertDsarRequestRecorded(TestResponse $response, User $subject, User $requester): void
+    {
+        $response->assertCreated();
+        $record = $this->dsarRequestIn($response);
+        $response->assertJsonPath('data', [
+            'id' => $record->getKey(),
+            'status' => 'in_progress',
+            'request_type' => 'access',
+            'subject' => ['id' => $subject->getKey(), 'name' => $subject->name],
+            'requested_by' => ['id' => $requester->getKey(), 'name' => $requester->name],
+            'requested_at' => now()->toISOString(),
+            'sla_deadline' => now()->addDays(30)->toISOString(),
+            'completed_at' => null,
+            'download_available' => false,
+            'download_expires_at' => null,
+            'cancelled_at' => null,
+            'rejection_reason' => null,
+        ]);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', DsarRequestSubmitted::class)
+            ->where('aggregate_uuid', $record->getKey())
+            ->where('event_properties->companyId', $record->company_id)
+            ->where('event_properties->subjectUserId', $subject->getKey())
+            ->where('event_properties->requestedByUserId', $requester->getKey())
+            ->where('event_properties->requestType', 'access')
+            ->count());
+        $this->assertSame($this->roleCodeOf($requester, $record->company_id), $record->requested_by_role);
+    }
+
+    /**
+     * Exactly one audit entry records the request — "DSAR requested — for:
+     * <subject>, by: <requester>" — linked to its stored event and stamped
+     * with the requester's role.
+     */
+    protected function assertDsarRequestAudited(TestResponse $response, User $subject, User $requester): void
+    {
+        $record = $this->dsarRequestIn($response);
+        $storedEventId = LesilyStoredEvent::query()->where('aggregate_uuid', $record->getKey())->sole()->id;
+
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $record->company_id,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'DsarRequestSubmitted',
+            'subject_type' => 'dsar_request',
+            'subject_id' => $record->getKey(),
+            'action' => 'dsar_requested',
+            'description' => 'DSAR requested — for: '.$subject->name.', by: '.$requester->name,
+            'actor_user_id' => $requester->getKey(),
+            'actor_role_code' => $this->roleCodeOf($requester, $record->company_id),
+            'actor_label' => $requester->name,
+        ]);
+    }
+
+    private function dsarRequestIn(TestResponse $response): DsarRequestRecord
+    {
+        $requestId = $response->json('data.id');
+        $this->assertIsString($requestId);
+
+        return DsarRequestRecord::query()->findOrFail($requestId);
+    }
+
+    private function roleCodeOf(User $member, string $companyId): string
+    {
+        $roleId = CompanyUser::query()
+            ->where('company_id', $companyId)
+            ->where('user_id', $member->getKey())
+            ->value('role_id');
+
+        return Role::query()->whereKey($roleId)->value('code');
+    }
+
+    /**
+     * A refused submission left no trace in $company — no event stored and no
+     * request projected, no audit entry.
+     */
+    protected function assertNoDsarRequestRecorded(Company $company): void
+    {
+        $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
+        $this->assertSame(0, DsarRequestRecord::query()->where('company_id', $company->getKey())->count());
+        $this->assertDatabaseMissing('audit_trail', ['company_id' => $company->getKey()]);
+    }
+}

@@ -116,6 +116,7 @@
                 "App\\Companies\\Reactors\\NewOwnerNotificationReactor::onCompanyOwnershipTransferred",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserSignedUpAsOwner",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserCreatedFromInvitation",
+                "App\\Compliance\\Dsar\\Projectors\\DsarRequestProjector::onDsarRequestSubmitted",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserEmailVerified",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserProfileUpdated",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUser2FAEnabled",
@@ -129,6 +130,8 @@
                 // becomes a real, killable regression.
                 "App\\Billing\\Invoices\\Entities\\Invoice::company",
                 "App\\Companies\\Entities\\Company::settings",
+                "App\\Compliance\\Dsar\\Entities\\DsarRequestRecord::subject",
+                "App\\Compliance\\Dsar\\Entities\\DsarRequestRecord::requestedBy",
                 // OQ-1-172 PR-0 L-SCOPE: each is invoked from a scope that reaches
                 // protected - envelope() by the parent Mailable, forCompany() by the
                 // AggregateRoot subclasses, scopeWhereForCompany() via Model::callNamedScope.

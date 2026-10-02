@@ -34,6 +34,7 @@ use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use App\Companies\Exceptions\OwnershipTransferContentionException;
+use App\Compliance\Dsar\Exceptions\DsarRequestInProgressException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use App\Companies\Exceptions\OwnershipTransferCaseNotOpenException;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
@@ -221,6 +222,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // concurrent transfer won (UC-1-028 flow 3b; the world moved → 409).
         $exceptions->render(fn (StaleOwnershipException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // An open DSAR already exists for the subject in this company (UC-1-070 2a).
+        $exceptions->render(fn (DsarRequestInProgressException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::DsarInProgress,
             $e->getMessage(),
         ));
 
