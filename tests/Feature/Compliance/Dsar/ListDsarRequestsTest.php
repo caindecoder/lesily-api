@@ -6,6 +6,7 @@ use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
 use App\Compliance\Dsar\UseCases\Commands\DsarRequestFilters;
 
@@ -62,6 +63,51 @@ class ListDsarRequestsTest extends DsarTestCase
 
         // Then
         $this->assertValidationRejected($response, $invalidField, $expectedMessage);
+    }
+
+    #[Test]
+    public function when_a_member_of_two_companies_lists_then_only_the_current_company_requests_are_listed(): void
+    {
+        // Given
+        $member = $this->aCompanyMember($this->company);
+        $otherCompany = Company::factory()->create();
+        $otherCompany->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
+        DsarRequestRecord::factory()->forSubject($otherCompany, $member)->create();
+        $request = DsarRequestRecord::factory()->forSubject($this->company, $member)->create();
+
+        // When
+        $response = $this->listDsarRequests($member, $this->company);
+
+        // Then
+        $this->assertDsarRequestsListed($response, [$request->getKey()]);
+    }
+
+    #[Test]
+    #[DataProvider('provideRolesWithoutViewAll')]
+    public function when_a_member_without_view_all_lists_then_other_members_requests_stay_hidden(string $roleCode): void
+    {
+        // Given
+        $member = $this->aCompanyMember($this->company, $roleCode);
+        DsarRequestRecord::factory()->forSubject($this->company, $this->aCompanyMember($this->company))->create();
+
+        // When
+        $response = $this->listDsarRequests($member, $this->company);
+
+        // Then
+        $this->assertDsarRequestsListed($response, []);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideRolesWithoutViewAll(): array
+    {
+        return [
+            'employee' => ['employee'],
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'auditor' => ['auditor'],
+        ];
     }
 
     /**

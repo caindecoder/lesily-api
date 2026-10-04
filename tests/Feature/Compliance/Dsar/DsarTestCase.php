@@ -152,6 +152,19 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * The list answered with exactly $expectedIds, in that order, and a total
+     * that counts only them.
+     *
+     * @param  list<string>  $expectedIds
+     */
+    protected function assertDsarRequestsListed(TestResponse $response, array $expectedIds): void
+    {
+        $response->assertOk();
+        $this->assertSame($expectedIds, $response->json('data.*.id'));
+        $this->assertSame(count($expectedIds), $response->json('meta.pagination.total'));
+    }
+
+    /**
      * The request was rejected as unauthenticated — 401 with the §S21
      * UNAUTHENTICATED envelope (module bases are independent — the
      * CompaniesTestCase mirror).
