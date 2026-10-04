@@ -55,6 +55,14 @@ class DsarRequestRecordFactory extends Factory
         ]);
     }
 
+    public function requestedBy(User $requester, string $roleCode): static
+    {
+        return $this->state([
+            'requested_by' => $requester->getKey(),
+            'requested_by_role' => $roleCode,
+        ]);
+    }
+
     public function fulfilled(): static
     {
         return $this->state([

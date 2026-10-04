@@ -66,6 +66,22 @@ class ListDsarRequestsTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_a_view_all_holder_lists_then_other_companies_requests_stay_hidden(): void
+    {
+        // Given
+        $owner = $this->aCompanyMember($this->company, 'owner');
+        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->aCompanyMember($this->company))->create();
+        $otherCompany = Company::factory()->create();
+        DsarRequestRecord::factory()->forSubject($otherCompany, $this->aCompanyMember($otherCompany))->create();
+
+        // When
+        $response = $this->listDsarRequests($owner, $this->company);
+
+        // Then
+        $this->assertDsarRequestsListed($response, [$request->getKey()]);
+    }
+
+    #[Test]
     public function when_a_member_of_two_companies_lists_then_only_the_current_company_requests_are_listed(): void
     {
         // Given
@@ -95,6 +111,23 @@ class ListDsarRequestsTest extends DsarTestCase
 
         // Then
         $this->assertDsarRequestsListed($response, []);
+    }
+
+    #[Test]
+    public function when_a_requester_no_longer_holds_view_all_then_the_requests_they_made_stay_listed(): void
+    {
+        // Given a former admin, now an employee, who requested an export for a member
+        $formerAdmin = $this->aCompanyMember($this->company);
+        $request = DsarRequestRecord::factory()
+            ->forSubject($this->company, $this->aCompanyMember($this->company))
+            ->requestedBy($formerAdmin, 'admin')
+            ->create();
+
+        // When
+        $response = $this->listDsarRequests($formerAdmin, $this->company);
+
+        // Then
+        $this->assertDsarRequestsListed($response, [$request->getKey()]);
     }
 
     /**

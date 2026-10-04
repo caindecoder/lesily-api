@@ -74,13 +74,13 @@ class DsarRequestRecord extends Model
     }
 
     /**
-     * Requests about $user.
+     * Requests about $user or made by $user.
      *
      * @param  Builder<self>  $query
      */
     protected function scopeWhereVisibleTo(Builder $query, User $user): void
     {
-        $query->where('subject_user_id', $user->getKey());
+        $query->where('subject_user_id', $user->getKey())->orWhere('requested_by', $user->getKey());
     }
 
     protected static function newFactory(): DsarRequestRecordFactory
