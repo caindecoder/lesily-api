@@ -121,6 +121,37 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * An authenticated member lists the DSAR requests visible to them in
+     * $company's context.
+     *
+     * @param  array<string, mixed>  $query
+     */
+    protected function listDsarRequests(User $actor, Company $company, array $query = []): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/dsar-requests'.$this->queryString($query), ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * A guest (no Sanctum session) lists DSAR requests.
+     *
+     * @param  array<string, mixed>  $query
+     */
+    protected function listDsarRequestsAsGuest(array $query = []): TestResponse
+    {
+        return $this->getJson('/api/v1/dsar-requests'.$this->queryString($query));
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
+     */
+    private function queryString(array $query): string
+    {
+        return $query === [] ? '' : '?'.http_build_query($query);
+    }
+
+    /**
      * The request was rejected as unauthenticated — 401 with the §S21
      * UNAUTHENTICATED envelope (module bases are independent — the
      * CompaniesTestCase mirror).
