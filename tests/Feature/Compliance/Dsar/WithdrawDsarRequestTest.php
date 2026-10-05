@@ -8,6 +8,7 @@ use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 
 class WithdrawDsarRequestTest extends DsarTestCase
@@ -102,19 +103,19 @@ class WithdrawDsarRequestTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_the_request_is_already_withdrawn_then_the_withdrawal_is_refused_as_no_longer_in_progress(): void
+    #[DataProvider('provideClosedRequests')]
+    public function when_the_request_is_closed_then_the_withdrawal_is_refused_as_no_longer_in_progress(string $closedBy, DsarRequestStatus $status): void
     {
-        // Given a member's own request they have already withdrawn
+        // Given a member's own request already closed — withdrawn, fulfilled or rejected
         $member = $this->aCompanyMember($this->company);
-        $request = $this->aSubmittedRequest($this->company, $member);
-        $this->withdrawDsarRequest($member, $this->company, $request->getKey())->assertOk();
+        $request = $this->aClosedRequest($this->company, $member, $closedBy);
 
-        // When they withdraw it again
+        // When they withdraw it
         $response = $this->withdrawDsarRequest($member, $this->company, $request->getKey());
 
         // Then
         $this->assertRefusedAsNoLongerInProgress($response);
-        $this->assertWithdrawnOnce($request);
+        $this->assertStillClosedAs($request, $status);
     }
 
     #[Test]

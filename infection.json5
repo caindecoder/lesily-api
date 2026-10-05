@@ -118,6 +118,9 @@
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserCreatedFromInvitation",
                 "App\\Compliance\\Dsar\\Projectors\\DsarRequestProjector::onDsarRequestSubmitted",
                 "App\\Compliance\\Dsar\\Projectors\\DsarRequestProjector::onDsarRequestCancelled",
+                "App\\Compliance\\Dsar\\Projectors\\DsarRequestProjector::onDsarRequestFulfilled",
+                "App\\Compliance\\Dsar\\Projectors\\DsarRequestProjector::onDsarRequestRejected",
+                "App\\Compliance\\Dsar\\Reactors\\QueueDsarExportReactor::onDsarRequestSubmitted",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserEmailVerified",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserProfileUpdated",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUser2FAEnabled",
@@ -233,21 +236,28 @@
         // L-EQUIV-MISC: compositeKey() and isCurrentSession() run behind auth:sanctum -
         // user() is never null in flight. REMOVE WHEN either is mounted on a route
         // without auth:sanctum.
+        // L-SCHEMA: the DSAR profile / membership sections read created_at, which
+        // Eloquent stamps on every users / company_user insert (the projector create and
+        // the pivot attach); pinned so the sibling email_verified_at?-> / last_logged_at?->
+        // lines stay killed. REMOVE WHEN a writer inserts either row without timestamps.
         "NullSafeMethodCall": {
             ignore: [
                 "App\\Billing\\Subscriptions\\IO\\Http\\Resources\\SubscriptionResource::toArray::31",
                 "App\\Foundation\\Http\\Middleware\\EnsureIdempotencyKey::compositeKey",
                 "App\\Foundation\\Auth\\IO\\Http\\Resources\\SessionResource::isCurrentSession",
+                "App\\Compliance\\Dsar\\UseCases\\Sections\\ProfileSection::collect::28",
+                "App\\Compliance\\Dsar\\UseCases\\Sections\\MembershipSection::collect::30",
             ],
         },
-        // L-EQUIV-MISC: invitations.role_id is NOT NULL + FK (the role always resolves);
-        // the seeded owner role is a schema invariant (Company::owner). REMOVE WHEN a
-        // migration makes role_id nullable / drops the FK, or an owner-less company
-        // state is introduced.
+        // L-EQUIV-MISC: invitations.role_id and company_user.role_id are NOT NULL + FK
+        // (the role always resolves); the seeded owner role is a schema invariant
+        // (Company::owner). REMOVE WHEN a migration makes either role_id nullable /
+        // drops its FK, or an owner-less company state is introduced.
         "NullSafePropertyCall": {
             ignore: [
                 "App\\Companies\\Memberships\\IO\\Http\\Resources\\InvitationResource::toArray",
                 "App\\Companies\\Entities\\Company::owner",
+                "App\\Compliance\\Dsar\\UseCases\\Sections\\MembershipSection::collect",
             ],
         },
         // L-EQUIV-MISC: whereKey(null) yields IS NULL on a PK (the same empty result);
@@ -287,11 +297,15 @@
         // L-EQUIV-MISC: snapshot() - the declared array shape (body: string,
         // content_type: string) vs getContent(): string|false and headers->get(): ?string;
         // the PHPDoc demands the casts. execute() - the TOTP secret is never null for an
-        // enrolled user.
+        // enrolled user. DsarExportArchive::build() - tempnam(): string|false returns
+        // false only when no temp file can be made, after the E_NOTICE of its
+        // system-temp fallback, which Laravel raises as an ErrorException first.
+        // REMOVE WHEN tempnam() leaves the archive.
         "CastString": {
             ignore: [
                 "App\\Foundation\\Http\\Middleware\\EnsureIdempotencyKey::snapshot",
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::execute",
+                "App\\Compliance\\Dsar\\IO\\Export\\DsarExportArchive::build",
             ],
         },
     },

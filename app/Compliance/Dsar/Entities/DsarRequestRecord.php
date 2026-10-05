@@ -36,6 +36,8 @@ class DsarRequestRecord extends Model
         'completed_at',
         'file_path',
         'download_expires_at',
+        'rejected_at',
+        'rejection_reason',
         'cancelled_at',
         'cancelled_by',
         'created_by',
@@ -48,6 +50,7 @@ class DsarRequestRecord extends Model
         'completed_at' => 'immutable_datetime',
         'download_expires_at' => 'immutable_datetime',
         'download_expired_at' => 'immutable_datetime',
+        'rejected_at' => 'immutable_datetime',
         'cancelled_at' => 'immutable_datetime',
     ];
 

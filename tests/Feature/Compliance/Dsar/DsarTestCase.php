@@ -2,8 +2,11 @@
 
 namespace Tests\Feature\Compliance\Dsar;
 
+use Throwable;
+use ZipArchive;
 use Tests\TestCase;
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -11,20 +14,40 @@ use Illuminate\Http\Response;
 use InvalidArgumentException;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
+use App\Consent\Aggregates\Consent;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Facades\Queue;
 use App\Companies\Entities\CompanyUser;
+use Illuminate\Support\Facades\Storage;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Compliance\Dsar\Events\DsarRequestRejected;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
+use App\Compliance\Dsar\Events\DsarRequestFulfilled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
+use App\Compliance\Dsar\IO\Export\DsarExportArchive;
+use App\Compliance\Dsar\UseCases\Sections\DsarSections;
+use App\Consent\UseCases\Commands\RecordConsentCommand;
+use App\Compliance\Dsar\UseCases\Audit\DsarOutcomeAudit;
+use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
+use Tests\Feature\Foundation\InteractsWithQueuedReactors;
+use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
+use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
+use App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand;
+use App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Compliance\Dsar\UseCases\Interactors\RejectDsarRequestInteractor;
 
 abstract class DsarTestCase extends TestCase
 {
+    use InteractsWithQueuedReactors;
+
     protected ?string $idempotencyKey;
 
     protected function setUp(): void
@@ -35,6 +58,8 @@ abstract class DsarTestCase extends TestCase
         $this->travelTo('2026-10-01 09:00:00');
         config(['app.debug' => false]);
         $this->idempotencyKey = (string) Str::uuid();
+        Queue::fake();
+        Storage::fake('dsar');
     }
 
     /**
@@ -152,6 +177,70 @@ abstract class DsarTestCase extends TestCase
             'malformed text' => ['not-a-request-id'],
             'number' => ['12345'],
         ];
+    }
+
+    /**
+     * @return array<string, array{string, DsarRequestStatus}>
+     */
+    public static function provideClosedRequests(): array
+    {
+        return [
+            'withdrawn' => ['withdrawn', DsarRequestStatus::Cancelled],
+            'fulfilled' => ['fulfilled', DsarRequestStatus::Fulfilled],
+            'rejected' => ['rejected', DsarRequestStatus::Rejected],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string, DsarRequestStatus}>
+     */
+    public static function provideUnfulfilledClosedRequests(): array
+    {
+        return [
+            'withdrawn' => ['withdrawn', DsarRequestStatus::Cancelled],
+            'rejected' => ['rejected', DsarRequestStatus::Rejected],
+        ];
+    }
+
+    /**
+     * $subject's own request, closed the event-sourced way $closedBy names —
+     * withdrawn by them, fulfilled by its export, or rejected after its export
+     * failed.
+     */
+    protected function aClosedRequest(Company $company, User $subject, string $closedBy): DsarRequestRecord
+    {
+        $request = $this->aSubmittedRequest($company, $subject);
+        $aggregate = DsarRequest::retrieve($request->getKey());
+
+        match ($closedBy) {
+            'withdrawn' => $aggregate->cancel(CancelDsarRequestCommand::from([
+                'requestId' => $request->getKey(),
+                'companyId' => $company->getKey(),
+                'cancelledByUserId' => $subject->getKey(),
+            ])),
+            'fulfilled' => $aggregate->fulfil(FulfilDsarRequestCommand::from([
+                'requestId' => $request->getKey(),
+                'filePath' => $this->exportPathOf($request),
+            ])),
+            'rejected' => $aggregate->reject(RejectDsarRequestCommand::from([
+                'requestId' => $request->getKey(),
+                'reason' => 'The export could not be built. Please submit a new request.',
+            ])),
+            default => throw new InvalidArgumentException("Unknown closure: {$closedBy}"),
+        };
+        $aggregate->persist();
+
+        return $request;
+    }
+
+    /**
+     * $request is still closed as $status: its stream holds the submission
+     * and the one event that closed it — nothing recorded since.
+     */
+    protected function assertStillClosedAs(DsarRequestRecord $request, DsarRequestStatus $status): void
+    {
+        $this->assertSame($status, $request->fresh()?->status);
+        $this->assertSame(2, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->count());
     }
 
     /**
@@ -632,14 +721,14 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * A refused withdrawal left $request as it was — still in progress, its
-     * stream holding only the submission, no withdrawal audited.
+     * A refused or rolled-back change left $request as it was — still in
+     * progress, its stream holding only the submission, no withdrawal audited.
      */
     protected function assertStillInProgress(DsarRequestRecord $request): void
     {
         $this->assertSame(DsarRequestStatus::InProgress, $request->fresh()?->status);
         $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->count());
-        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_withdrawn']);
+        $this->assertSame(0, DB::table('audit_trail')->where('subject_id', $request->getKey())->count());
     }
 
     /**
@@ -651,5 +740,426 @@ abstract class DsarTestCase extends TestCase
         $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
         $this->assertSame(0, DsarRequestRecord::query()->where('company_id', $company->getKey())->count());
         $this->assertDatabaseMissing('audit_trail', ['company_id' => $company->getKey()]);
+    }
+
+    /**
+     * The export collects exactly $sections — the container hands the job
+     * this list instead of the registered one.
+     */
+    protected function withSections(DsarSectionProvider ...$sections): void
+    {
+        $this->app->instance(DsarSections::class, new DsarSections(array_values($sections)));
+    }
+
+    /**
+     * A section that withdraws $request, as its requester, while the export
+     * is being collected — the race a worker can lose.
+     */
+    protected function aSectionThatWithdraws(DsarRequestRecord $request): DsarSectionProvider
+    {
+        return new class($request) implements DsarSectionProvider
+        {
+            public function __construct(private readonly DsarRequestRecord $request) {}
+
+            public function key(): string
+            {
+                return 'withdraws';
+            }
+
+            public function collect(string $subjectUserId, string $companyId): array
+            {
+                DsarRequest::retrieve($this->request->getKey())
+                    ->cancel(CancelDsarRequestCommand::from([
+                        'requestId' => $this->request->getKey(),
+                        'companyId' => $companyId,
+                        'cancelledByUserId' => $this->request->requested_by,
+                    ]))
+                    ->persist();
+
+                return [];
+            }
+        };
+    }
+
+    /**
+     * Nothing was fulfilled for $request: no DsarRequestFulfilled on its
+     * stream, no fulfilment audited, no export file left, and its status is
+     * still $status.
+     */
+    protected function assertNothingFulfilled(DsarRequestRecord $request, DsarRequestStatus $status): void
+    {
+        $this->assertSame($status, $request->fresh()?->status);
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarRequestFulfilled::class)
+            ->count());
+        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_fulfilled']);
+        Storage::disk('dsar')->assertMissing('dsar/'.$request->company_id.'/'.$request->getKey().'.zip');
+    }
+
+    /**
+     * The half-written ZIP a failed try leaves on the dsar disk for $request.
+     */
+    protected function aPartialExportFor(DsarRequestRecord $request): void
+    {
+        Storage::disk('dsar')->put($this->exportPathOf($request), 'partial');
+    }
+
+    /**
+     * The worker gave up on $request's export: failed() runs once, after the
+     * last try, with the error that ended it.
+     */
+    protected function failTheExportFor(DsarRequestRecord $request, Throwable $cause): void
+    {
+        (new BuildDsarExportJob($request->getKey(), $request->company_id, $request->subject_user_id))->failed($cause);
+    }
+
+    /**
+     * $request was rejected the event-sourced way: one DsarRequestRejected on
+     * its stream, the row rejected now with the fixed reason — never the error
+     * — and no export file left.
+     */
+    protected function assertRejected(DsarRequestRecord $request): void
+    {
+        $rejected = $request->fresh() ?? $request;
+
+        $this->assertSame(
+            [DsarRequestStatus::Rejected, now()->toISOString(), 'The export could not be built. Please submit a new request.'],
+            [$rejected->status, $rejected->rejected_at?->toISOString(), $rejected->rejection_reason],
+        );
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', DsarRequestRejected::class)
+            ->where('aggregate_uuid', $request->getKey())
+            ->whereForCompany($request->company_id)
+            ->count());
+        Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
+    }
+
+    /**
+     * Exactly one audit entry records the rejection — "DSAR rejected — for:
+     * <subject>" — linked to its stored event, with no actor (ERD-1-11).
+     */
+    protected function assertRejectionAudited(DsarRequestRecord $request, User $subject): void
+    {
+        $storedEventId = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarRequestRejected::class)
+            ->sole()
+            ->id;
+
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_rejected')->count());
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $request->company_id,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'DsarRequestRejected',
+            'subject_type' => 'dsar_request',
+            'subject_id' => $request->getKey(),
+            'action' => 'dsar_rejected',
+            'description' => 'DSAR rejected — for: '.$subject->name,
+            'actor_user_id' => null,
+            'actor_role_code' => null,
+            'actor_label' => null,
+            'ip_address' => null,
+            'user_agent' => null,
+            'request_id' => null,
+        ]);
+    }
+
+    /**
+     * Nothing was rejected for $request: no DsarRequestRejected on its stream,
+     * no rejection audited, no export file left, and its status is still
+     * $status.
+     */
+    protected function assertNothingRejected(DsarRequestRecord $request, DsarRequestStatus $status): void
+    {
+        $this->assertSame($status, $request->fresh()?->status);
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarRequestRejected::class)
+            ->count());
+        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_rejected']);
+        Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
+    }
+
+    /**
+     * A failed change left $request still in progress with nothing recorded
+     * since, and no partial export file at its path.
+     */
+    protected function assertStillInProgressWithoutExportFile(DsarRequestRecord $request): void
+    {
+        $this->assertStillInProgress($request);
+        Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
+    }
+
+    /**
+     * A sibling run of $request's export fulfils it in the instant before this
+     * run's reject lands — the reject then finds the request already closed.
+     */
+    protected function aSiblingRunFulfilsBeforeTheReject(DsarRequestRecord $request): void
+    {
+        $this->app->instance(RejectDsarRequestInteractor::class, new class(app(DsarOutcomeAudit::class), $request) extends RejectDsarRequestInteractor
+        {
+            public function __construct(DsarOutcomeAudit $audit, private readonly DsarRequestRecord $request)
+            {
+                parent::__construct($audit);
+            }
+
+            public function execute(RejectDsarRequestCommand $command): void
+            {
+                DsarRequest::retrieve($this->request->getKey())
+                    ->fulfil(FulfilDsarRequestCommand::from([
+                        'requestId' => $this->request->getKey(),
+                        'filePath' => 'dsar/'.$this->request->company_id.'/'.$this->request->getKey().'.zip',
+                    ]))
+                    ->persist();
+
+                parent::execute($command);
+            }
+        });
+    }
+
+    /**
+     * $request is still closed as $status with nothing recorded since, and no
+     * export file is left at its path — no personal data outlives it (N27).
+     */
+    protected function assertStillClosedWithoutExportFile(DsarRequestRecord $request, DsarRequestStatus $status): void
+    {
+        $this->assertStillClosedAs($request, $status);
+        Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
+    }
+
+    /**
+     * $request is still fulfilled with nothing recorded since, and the export
+     * planted at its path is still there, unchanged.
+     */
+    protected function assertStillFulfilledWithExportKept(DsarRequestRecord $request): void
+    {
+        $this->assertStillClosedAs($request, DsarRequestStatus::Fulfilled);
+        $this->assertSame('partial', Storage::disk('dsar')->get($this->exportPathOf($request)));
+    }
+
+    /**
+     * A section whose collection fails — a database or storage error mid-export.
+     */
+    protected function aSectionThatFails(): DsarSectionProvider
+    {
+        return new class implements DsarSectionProvider
+        {
+            public function key(): string
+            {
+                return 'fails';
+            }
+
+            public function collect(string $subjectUserId, string $companyId): array
+            {
+                throw new RuntimeException('induced section failure');
+            }
+        };
+    }
+
+    /**
+     * $job gives the worker three tries, waiting one minute and then five
+     * before the last, on the default queue (ruling N24).
+     */
+    protected function assertTriesThreeTimesWithBackoff(BuildDsarExportJob $job): void
+    {
+        $this->assertSame(3, $job->tries);
+        $this->assertSame([60, 300], $job->backoff);
+        $this->assertNull($job->queue);
+    }
+
+    /**
+     * $user's consent to the terms and the privacy policy in $company,
+     * recorded the event-sourced way from one IP.
+     */
+    protected function aConsentRecordedBy(User $user, Company $company): void
+    {
+        Consent::retrieve(Str::uuid7()->toString())
+            ->record(RecordConsentCommand::from([
+                'userId' => $user->getKey(),
+                'companyId' => $company->getKey(),
+                'policyVersions' => ['terms' => '2026-03', 'privacy' => '2026-04'],
+                'ip' => '203.0.113.7',
+            ]))
+            ->persist();
+    }
+
+    /**
+     * The sections $request's export holds — data.json decoded from its ZIP
+     * on the dsar disk.
+     *
+     * @return array<string, mixed>
+     */
+    protected function exportedData(DsarRequestRecord $request): array
+    {
+        return json_decode($this->exportedJsonOf($request), true, flags: JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * data.json exactly as $request's export ZIP holds it.
+     */
+    protected function exportedJsonOf(DsarRequestRecord $request): string
+    {
+        $zip = new ZipArchive;
+        $zip->open(Storage::disk('dsar')->path($this->exportPathOf($request)));
+        $json = (string) $zip->getFromName('data.json');
+        $zip->close();
+
+        return $json;
+    }
+
+    /**
+     * The archive builds its ZIP in a fresh, empty directory of its own —
+     * returned so a test can see what the build leaves there.
+     */
+    protected function anArchiveWorkingInAnEmptyDirectory(): string
+    {
+        $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-work-'.Str::uuid7()->toString();
+        mkdir($directory);
+        $this->beforeApplicationDestroyed(fn () => (new Filesystem)->deleteDirectory($directory));
+        $this->app->instance(DsarExportArchive::class, new DsarExportArchive(new Filesystem, $directory));
+
+        return $directory;
+    }
+
+    /**
+     * $request's ZIP is on the dsar disk and the archive's working directory
+     * holds nothing — no temporary copy of the person's data survives.
+     */
+    protected function assertExportBuiltWithoutLeftovers(DsarRequestRecord $request, string $workDirectory): void
+    {
+        Storage::disk('dsar')->assertExists($this->exportPathOf($request));
+        $this->assertSame([], (new Filesystem)->files($workDirectory));
+    }
+
+    /**
+     * Every section of $exported belongs to $company alone: $member's
+     * membership of it, the consent they gave in it, and the audit entries
+     * they acted in there.
+     *
+     * @param  array<string, mixed>  $exported
+     */
+    protected function assertExportScopedTo(array $exported, Company $company, User $member): void
+    {
+        $this->assertSame(
+            [$company->getKey(), $this->roleCodeOf($member, $company->getKey())],
+            [$exported['membership']['company']['id'], $exported['membership']['role']],
+        );
+        $this->assertCount(2, $exported['consent_records']);
+        $this->assertSame(
+            AuditEntry::query()->where('company_id', $company->getKey())->where('actor_user_id', $member->getKey())->pluck('subject_id')->all(),
+            array_column($exported['audit_trail'], 'subject_id'),
+        );
+    }
+
+    /**
+     * None of $user's secrets — password hash, remember token, two-factor
+     * secret, recovery codes — appears anywhere in $exported.
+     *
+     * @param  array<string, mixed>  $exported
+     */
+    protected function assertNoSecretOf(User $user, array $exported): void
+    {
+        $json = json_encode($exported, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $secrets = [
+            $user->password,
+            $user->remember_token,
+            $user->two_factor_secret,
+            $user->getRawOriginal('two_factor_secret'),
+            ...($user->two_factor_recovery_codes ?? []),
+        ];
+
+        $this->assertSame($secrets, array_filter($secrets));
+        foreach ($secrets as $secret) {
+            $this->assertStringNotContainsString((string) $secret, $json);
+        }
+    }
+
+    /**
+     * The request a successful submission answered with.
+     */
+    protected function requestFrom(TestResponse $response): DsarRequestRecord
+    {
+        return DsarRequestRecord::query()->findOrFail((string) $response->json('data.id'));
+    }
+
+    protected function exportPathOf(DsarRequestRecord $request): string
+    {
+        return 'dsar/'.$request->company_id.'/'.$request->getKey().'.zip';
+    }
+
+    /**
+     * Runs $request's export job the way a worker would — handle() with its
+     * dependencies resolved from the container.
+     */
+    protected function runTheExportFor(DsarRequestRecord $request): void
+    {
+        app()->call([new BuildDsarExportJob($request->getKey(), $request->company_id, $request->subject_user_id), 'handle']);
+    }
+
+    /**
+     * $request was fulfilled the event-sourced way: one DsarRequestFulfilled
+     * naming its file, the row fulfilled now with a download window of seven
+     * days, and the export ZIP on the private dsar disk.
+     */
+    protected function assertFulfilled(DsarRequestRecord $request): void
+    {
+        $filePath = 'dsar/'.$request->company_id.'/'.$request->getKey().'.zip';
+        $fulfilled = $request->fresh() ?? $request;
+
+        $this->assertSame(
+            [DsarRequestStatus::Fulfilled, now()->toISOString(), $filePath, now()->addDays(7)->toISOString()],
+            [$fulfilled->status, $fulfilled->completed_at?->toISOString(), $fulfilled->file_path, $fulfilled->download_expires_at?->toISOString()],
+        );
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', DsarRequestFulfilled::class)
+            ->where('aggregate_uuid', $request->getKey())
+            ->whereForCompany($request->company_id)
+            ->where('event_properties->filePath', $filePath)
+            ->count());
+        Storage::disk('dsar')->assertExists($filePath);
+    }
+
+    /**
+     * Exactly one audit entry records the fulfilment — "DSAR fulfilled — for:
+     * <subject>" — linked to its stored event, with no actor: the export job
+     * is a system process (ERD-1-11).
+     */
+    protected function assertFulfilmentAudited(DsarRequestRecord $request, User $subject): void
+    {
+        $storedEventId = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarRequestFulfilled::class)
+            ->sole()
+            ->id;
+
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_fulfilled')->count());
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $request->company_id,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'DsarRequestFulfilled',
+            'subject_type' => 'dsar_request',
+            'subject_id' => $request->getKey(),
+            'action' => 'dsar_fulfilled',
+            'description' => 'DSAR fulfilled — for: '.$subject->name,
+            'actor_user_id' => null,
+            'actor_role_code' => null,
+            'actor_label' => null,
+            'ip_address' => null,
+            'user_agent' => null,
+            'request_id' => null,
+        ]);
+    }
+
+    /**
+     * Submitting $request queued its export — one job naming the request, its
+     * company and its data subject.
+     */
+    protected function assertExportQueuedFor(DsarRequestRecord $request): void
+    {
+        Queue::assertPushed(BuildDsarExportJob::class, 1);
+        Queue::assertPushed(BuildDsarExportJob::class, fn (BuildDsarExportJob $job): bool => $job->requestId === $request->getKey()
+            && $job->companyId === $request->company_id
+            && $job->subjectUserId === $request->subject_user_id);
     }
 }
