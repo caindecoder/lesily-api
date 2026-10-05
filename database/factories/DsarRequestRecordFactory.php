@@ -73,6 +73,11 @@ class DsarRequestRecordFactory extends Factory
         ]);
     }
 
+    public function downloadExpired(): static
+    {
+        return $this->state(['download_expired_at' => CarbonImmutable::now()]);
+    }
+
     public function fulfilled(): static
     {
         return $this->state([

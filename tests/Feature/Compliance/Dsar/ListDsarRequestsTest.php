@@ -150,16 +150,16 @@ class ListDsarRequestsTest extends DsarTestCase
     {
         // Given
         $owner = $this->aCompanyMember($this->company, 'owner');
-        [$oldest, $middle, $newest] = $this->requestsMadeDaysAgo([3, 2, 1]);
+        [$oldest] = $this->requestsMadeDaysAgo([3, 2, 1]);
 
-        // When
-        $response = $this->listDsarRequests($owner, $this->company, ['per_page' => 2]);
+        // When the second page of two is asked for
+        $response = $this->listDsarRequests($owner, $this->company, ['per_page' => 2, 'page' => 2]);
 
         // Then
         $this->assertDsarRequestPage(
             $response,
-            [$newest->getKey(), $middle->getKey()],
-            ['page' => 1, 'per_page' => 2, 'total' => 3, 'last_page' => 2],
+            [$oldest->getKey()],
+            ['page' => 2, 'per_page' => 2, 'total' => 3, 'last_page' => 2],
         );
     }
 
@@ -194,6 +194,20 @@ class ListDsarRequestsTest extends DsarTestCase
 
         // Then equal request times fall back to the newest id first
         $this->assertDsarRequestsListed($response, $requestIds);
+    }
+
+    #[Test]
+    public function when_a_download_has_expired_then_the_request_is_listed_as_no_longer_downloadable(): void
+    {
+        // Given a fulfilled request whose download window has been marked expired
+        $member = $this->aCompanyMember($this->company);
+        $expired = DsarRequestRecord::factory()->forSubject($this->company, $member)->fulfilled()->downloadExpired()->create();
+
+        // When
+        $response = $this->listDsarRequests($member, $this->company);
+
+        // Then
+        $this->assertListedRowShows($response, $expired, false);
     }
 
     #[Test]
@@ -297,6 +311,7 @@ class ListDsarRequestsTest extends DsarTestCase
             'empty status' => [['status' => ''], 'status', 'The status field must have a value.'],
             'per_page over max' => [['per_page' => 101], 'per_page', 'The per page field must not be greater than 100.'],
             'per_page below minimum' => [['per_page' => 0], 'per_page', 'The per page field must be at least 1.'],
+            'per_page not a number' => [['per_page' => 'abc'], 'per_page', 'The per page field must be an integer.'],
             'page below minimum' => [['page' => 0], 'page', 'The page field must be at least 1.'],
             'page not a number' => [['page' => 'abc'], 'page', 'The page field must be an integer.'],
             'company override attempt' => [['company_id' => (string) Str::uuid()], 'company_id', 'This filter is not supported.'],

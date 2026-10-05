@@ -177,7 +177,7 @@ abstract class DsarTestCase extends TestCase
 
     /**
      * A full first page came back and it cost fewer queries than it has rows —
-     * the relations are loaded once for the page, not once per row (§2.19 R3).
+     * the relations are loaded once for the page, not once per row.
      */
     protected function assertListedWithFewerQueriesThanRows(TestResponse $response, int $queryCount): void
     {
@@ -232,7 +232,7 @@ abstract class DsarTestCase extends TestCase
 
     /**
      * One page of the list — exactly $expectedIds in order, under the exact
-     * §8.3 pagination meta.
+     * pagination meta.
      *
      * @param  list<string>  $expectedIds
      * @param  array<string, int>  $pagination
