@@ -4,6 +4,7 @@ namespace App\Compliance\Dsar\UseCases\Sections;
 
 use Carbon\CarbonImmutable;
 use App\Consent\Events\ConsentRecorded;
+use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class ConsentRecordsSection implements DsarSectionProvider
@@ -32,7 +33,7 @@ class ConsentRecordsSection implements DsarSectionProvider
             ->where('event_properties->userId', $subjectUserId)
             ->orderBy('id')
             ->get()
-            ->map(fn (LesilyStoredEvent $consent): array => [
+            ->map(fn (EloquentStoredEvent $consent): array => [
                 'policy_type' => $consent->event_properties['policyType'],
                 'version' => $consent->event_properties['version'],
                 'ip_address' => $consent->event_properties['ip'],

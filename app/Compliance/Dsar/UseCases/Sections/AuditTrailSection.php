@@ -31,7 +31,7 @@ class AuditTrailSection implements DsarSectionProvider
             ->orderBy('id')
             ->get()
             ->map(fn (AuditEntry $entry): array => [
-                'recorded_at' => $entry->recorded_at?->toISOString(),
+                'recorded_at' => $entry->recorded_at->toISOString(),
                 'action' => $entry->action,
                 'description' => $entry->description,
                 'subject_type' => $entry->subject_type,

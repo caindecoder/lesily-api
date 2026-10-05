@@ -7,7 +7,6 @@ use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use App\Compliance\Dsar\Entities\DsarRequestRecord;
 
 class ExportDsarSectionsTest extends DsarTestCase
 {
@@ -31,7 +30,7 @@ class ExportDsarSectionsTest extends DsarTestCase
         $this->aConsentRecordedBy($member, $other);
         $this->submitDsarRequest($member, $other)->assertCreated();
         $this->idempotencyKey = (string) Str::uuid();
-        $request = DsarRequestRecord::query()->findOrFail($this->submitDsarRequest($member, $this->company)->json('data.id'));
+        $request = $this->requestFrom($this->submitDsarRequest($member, $this->company));
 
         // When their export here is built
         $this->runTheExportFor($request);
@@ -75,7 +74,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     {
         // Given a member whose own submission is audited, beside another member's audited submission
         $member = $this->aCompanyMember($this->company);
-        $request = DsarRequestRecord::query()->findOrFail($this->submitDsarRequest($member, $this->company)->json('data.id'));
+        $request = $this->requestFrom($this->submitDsarRequest($member, $this->company));
         $this->idempotencyKey = (string) Str::uuid();
         $this->submitDsarRequest($this->aCompanyMember($this->company), $this->company)->assertCreated();
 
@@ -85,7 +84,7 @@ class ExportDsarSectionsTest extends DsarTestCase
         // Then only the entry they acted in is exported
         $entry = AuditEntry::query()->where('actor_user_id', $member->getKey())->sole();
         $this->assertSame([[
-            'recorded_at' => $entry->recorded_at?->toISOString(),
+            'recorded_at' => $entry->recorded_at->toISOString(),
             'action' => 'dsar_requested',
             'description' => $entry->description,
             'subject_type' => 'dsar_request',

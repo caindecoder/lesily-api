@@ -290,6 +290,6 @@ class SubmitDsarRequestTest extends DsarTestCase
         $this->runQueuedHandlersFor(DsarRequestSubmitted::class);
 
         // Then
-        $this->assertExportQueuedFor(DsarRequestRecord::query()->findOrFail($response->json('data.id')));
+        $this->assertExportQueuedFor($this->requestFrom($response));
     }
 }

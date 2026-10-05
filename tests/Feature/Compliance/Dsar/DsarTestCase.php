@@ -706,8 +706,8 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * A refused withdrawal left $request as it was — still in progress, its
-     * stream holding only the submission, no withdrawal audited.
+     * A refused or rolled-back change left $request as it was — still in
+     * progress, its stream holding only the submission, no withdrawal audited.
      */
     protected function assertStillInProgress(DsarRequestRecord $request): void
     {
@@ -733,7 +733,7 @@ abstract class DsarTestCase extends TestCase
      */
     protected function withSections(DsarSectionProvider ...$sections): void
     {
-        $this->app->instance(DsarSections::class, new DsarSections($sections));
+        $this->app->instance(DsarSections::class, new DsarSections(array_values($sections)));
     }
 
     /**
@@ -974,13 +974,21 @@ abstract class DsarTestCase extends TestCase
             $user->remember_token,
             $user->two_factor_secret,
             $user->getRawOriginal('two_factor_secret'),
-            ...$user->two_factor_recovery_codes,
+            ...($user->two_factor_recovery_codes ?? []),
         ];
 
         $this->assertNotEmpty($secrets);
         foreach ($secrets as $secret) {
             $this->assertStringNotContainsString((string) $secret, $json);
         }
+    }
+
+    /**
+     * The request a successful submission answered with.
+     */
+    protected function requestFrom(TestResponse $response): DsarRequestRecord
+    {
+        return DsarRequestRecord::query()->findOrFail((string) $response->json('data.id'));
     }
 
     protected function exportPathOf(DsarRequestRecord $request): string
