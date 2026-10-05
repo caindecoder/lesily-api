@@ -80,6 +80,40 @@ class ViewDsarRequestTest extends DsarTestCase
         $this->assertHiddenAsNotFound($response, $request->getKey());
     }
 
+    #[Test]
+    public function when_the_requester_no_longer_holds_view_all_then_they_still_see_the_request_they_made(): void
+    {
+        // Given a former admin, now an employee, who requested an export for a member
+        $formerAdmin = $this->aCompanyMember($this->company);
+        $request = DsarRequestRecord::factory()
+            ->forSubject($this->company, $this->aCompanyMember($this->company))
+            ->requestedBy($formerAdmin, 'admin')
+            ->create();
+
+        // When
+        $response = $this->viewDsarRequest($formerAdmin, $this->company, $request->getKey());
+
+        // Then
+        $this->assertDsarRequestShown($response, $request, false);
+    }
+
+    #[Test]
+    public function when_a_request_was_made_on_the_subjects_behalf_then_the_subject_sees_it(): void
+    {
+        // Given an admin requested an export for the subject
+        $subject = $this->aCompanyMember($this->company);
+        $request = DsarRequestRecord::factory()
+            ->forSubject($this->company, $subject)
+            ->requestedBy($this->aCompanyMember($this->company, 'admin'), 'admin')
+            ->create();
+
+        // When
+        $response = $this->viewDsarRequest($subject, $this->company, $request->getKey());
+
+        // Then
+        $this->assertDsarRequestShown($response, $request, false);
+    }
+
     /**
      * @return array<string, array{string}>
      */

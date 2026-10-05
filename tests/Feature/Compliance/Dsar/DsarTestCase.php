@@ -171,6 +171,16 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * The detail answered with $request — every resource field as recorded,
+     * with $downloadAvailable stated by the test.
+     */
+    protected function assertDsarRequestShown(TestResponse $response, DsarRequestRecord $request, bool $downloadAvailable): void
+    {
+        $response->assertOk();
+        $this->assertSame($this->expectedRow($request, $downloadAvailable), $response->json('data'));
+    }
+
+    /**
      * Every resource field of $request as recorded, with $downloadAvailable
      * stated by the test.
      *
