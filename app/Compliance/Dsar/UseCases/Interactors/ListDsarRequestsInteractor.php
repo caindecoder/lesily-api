@@ -7,23 +7,19 @@ use App\Companies\Entities\Company;
 use Illuminate\Pagination\LengthAwarePaginator;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\UseCases\Commands\DsarRequestFilters;
-use App\Foundation\RolesPermissions\Services\PermissionEvaluator;
+use App\Compliance\Dsar\UseCases\Queries\DsarRequestVisibility;
 
 class ListDsarRequestsInteractor
 {
-    public const string VIEW_ALL = 'dsar.view-all';
-
-    public function __construct(private readonly PermissionEvaluator $permissions) {}
+    public function __construct(private readonly DsarRequestVisibility $visibility) {}
 
     /**
      * @return LengthAwarePaginator<int, DsarRequestRecord>
      */
     public function execute(DsarRequestFilters $filters, User $actor, Company $company): LengthAwarePaginator
     {
-        return DsarRequestRecord::query()
+        return $this->visibility->visibleTo($actor, $company)
             ->with(['subject', 'requestedBy'])
-            ->whereCompany($company)
-            ->unless($this->permissions->canUserDo($actor, $company, self::VIEW_ALL), fn ($query) => $query->whereVisibleTo($actor))
             ->when($filters->status, fn ($query, string $status) => $query->where('status', $status))
             ->orderByDesc('requested_at')
             ->orderByDesc('id')

@@ -94,6 +94,30 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * @return array<string, array{string}>
+     */
+    public static function provideRolesWithViewAll(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideRolesWithoutViewAll(): array
+    {
+        return [
+            'employee' => ['employee'],
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'auditor' => ['auditor'],
+        ];
+    }
+
+    /**
      * An authenticated member submits a DSAR request in $company's context,
      * carrying the shared idempotency key when one is set.
      *
@@ -143,7 +167,18 @@ abstract class DsarTestCase extends TestCase
         $response->assertOk();
         /** @var list<array<string, mixed>> $rows */
         $rows = $response->json('data');
-        $this->assertSame([
+        $this->assertSame($this->expectedRow($request, $downloadAvailable), collect($rows)->firstWhere('id', $request->getKey()));
+    }
+
+    /**
+     * Every resource field of $request as recorded, with $downloadAvailable
+     * stated by the test.
+     *
+     * @return array<string, mixed>
+     */
+    private function expectedRow(DsarRequestRecord $request, bool $downloadAvailable): array
+    {
+        return [
             'id' => $request->getKey(),
             'status' => $request->status->value,
             'request_type' => 'access',
@@ -156,7 +191,7 @@ abstract class DsarTestCase extends TestCase
             'download_expires_at' => $request->download_expires_at?->toISOString(),
             'cancelled_at' => null,
             'rejection_reason' => null,
-        ], collect($rows)->firstWhere('id', $request->getKey()));
+        ];
     }
 
     /**

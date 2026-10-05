@@ -260,30 +260,6 @@ class ListDsarRequestsTest extends DsarTestCase
     }
 
     /**
-     * @return array<string, array{string}>
-     */
-    public static function provideRolesWithViewAll(): array
-    {
-        return [
-            'owner' => ['owner'],
-            'admin' => ['admin'],
-        ];
-    }
-
-    /**
-     * @return array<string, array{string}>
-     */
-    public static function provideRolesWithoutViewAll(): array
-    {
-        return [
-            'employee' => ['employee'],
-            'hr officer' => ['hr_officer'],
-            'payroll officer' => ['payroll_officer'],
-            'auditor' => ['auditor'],
-        ];
-    }
-
-    /**
      * One request per new member of the company, each made the given number of
      * days ago, in the order given.
      *
