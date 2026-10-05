@@ -61,6 +61,10 @@ class DsarRequest extends AggregateRoot
 
     public function fulfil(FulfilDsarRequestCommand $command): static
     {
+        if ($this->status !== DsarRequestStatus::InProgress) {
+            throw new DsarRequestNotInProgressException;
+        }
+
         $completedAt = CarbonImmutable::now();
 
         return $this->recordThat(new DsarRequestFulfilled(

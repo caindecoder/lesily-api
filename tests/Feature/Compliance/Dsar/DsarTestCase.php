@@ -23,8 +23,11 @@ use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestFulfilled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
+use App\Compliance\Dsar\UseCases\Sections\DsarSections;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
+use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
+use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -660,6 +663,66 @@ abstract class DsarTestCase extends TestCase
         $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
         $this->assertSame(0, DsarRequestRecord::query()->where('company_id', $company->getKey())->count());
         $this->assertDatabaseMissing('audit_trail', ['company_id' => $company->getKey()]);
+    }
+
+    /**
+     * The export collects exactly $sections — the container hands the job
+     * this list instead of the registered one.
+     */
+    protected function withSections(DsarSectionProvider ...$sections): void
+    {
+        $this->app->instance(DsarSections::class, new DsarSections($sections));
+    }
+
+    /**
+     * A section that withdraws $request, as its requester, while the export
+     * is being collected — the race a worker can lose.
+     */
+    protected function aSectionThatWithdraws(DsarRequestRecord $request): DsarSectionProvider
+    {
+        return new class($request) implements DsarSectionProvider
+        {
+            public function __construct(private readonly DsarRequestRecord $request) {}
+
+            public function key(): string
+            {
+                return 'withdraws';
+            }
+
+            public function title(): string
+            {
+                return 'Withdraws the request';
+            }
+
+            public function collect(string $subjectUserId, string $companyId): array
+            {
+                DsarRequest::retrieve($this->request->getKey())
+                    ->cancel(CancelDsarRequestCommand::from([
+                        'requestId' => $this->request->getKey(),
+                        'companyId' => $companyId,
+                        'cancelledByUserId' => $this->request->requested_by,
+                    ]))
+                    ->persist();
+
+                return [];
+            }
+        };
+    }
+
+    /**
+     * Nothing was fulfilled for $request: no DsarRequestFulfilled on its
+     * stream, no fulfilment audited, no export file left, and its status is
+     * still $status.
+     */
+    protected function assertNothingFulfilled(DsarRequestRecord $request, DsarRequestStatus $status): void
+    {
+        $this->assertSame($status, $request->fresh()?->status);
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarRequestFulfilled::class)
+            ->count());
+        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_fulfilled']);
+        Storage::disk('dsar')->assertMissing('dsar/'.$request->company_id.'/'.$request->getKey().'.zip');
     }
 
     /**
