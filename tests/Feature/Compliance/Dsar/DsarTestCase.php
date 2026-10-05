@@ -4,6 +4,7 @@ namespace Tests\Feature\Compliance\Dsar;
 
 use Tests\TestCase;
 use App\Models\User;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
@@ -354,13 +355,13 @@ abstract class DsarTestCase extends TestCase
 
     /**
      * The request stayed hidden — the plain 404 envelope, nothing in the body
-     * that names $requestId.
+     * that names $requestId (the random correlation id aside).
      */
     protected function assertHiddenAsNotFound(TestResponse $response, string $requestId): void
     {
         $this->assertResourceNotFound($response);
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
-        $this->assertStringNotContainsString($requestId, (string) $response->getContent());
+        $this->assertStringNotContainsString($requestId, (string) json_encode(Arr::except((array) $response->json(), 'correlation_id')));
     }
 
     /**
