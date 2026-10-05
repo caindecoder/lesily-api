@@ -181,6 +181,66 @@ class ListDsarRequestsTest extends DsarTestCase
         );
     }
 
+    #[Test]
+    public function when_many_requests_are_listed_then_the_query_count_stays_below_the_row_count(): void
+    {
+        // Given
+        $owner = $this->aCompanyMember($this->company, 'owner');
+        $this->requestsMadeDaysAgo(range(1, 20));
+
+        // When
+        [$response, $queryCount] = $this->listDsarRequestsCountingQueries($owner, $this->company);
+
+        // Then
+        $this->assertListedWithFewerQueriesThanRows($response, $queryCount);
+    }
+
+    #[Test]
+    #[DataProvider('provideRolesWithViewAll')]
+    public function when_a_view_all_holder_lists_then_every_company_request_is_listed_newest_first(string $roleCode): void
+    {
+        // Given
+        $holder = $this->aCompanyMember($this->company, $roleCode);
+        [$oldest, $middle, $newest] = $this->requestsMadeDaysAgo([3, 2, 1]);
+
+        // When
+        $response = $this->listDsarRequests($holder, $this->company);
+
+        // Then
+        $this->assertDsarRequestsListed($response, [$newest->getKey(), $middle->getKey(), $oldest->getKey()]);
+    }
+
+    #[Test]
+    public function when_a_member_lists_then_their_requests_show_the_sla_dates_and_download_availability(): void
+    {
+        // Given a fulfilled request from 28 days ago and an open one an admin made today
+        $member = $this->aCompanyMember($this->company);
+        $fulfilled = DsarRequestRecord::factory()->forSubject($this->company, $member)->requestedDaysAgo(28)->fulfilled()->create();
+        $open = DsarRequestRecord::factory()
+            ->forSubject($this->company, $member)
+            ->requestedBy($this->aCompanyMember($this->company, 'admin'), 'admin')
+            ->create();
+
+        // When
+        $response = $this->listDsarRequests($member, $this->company);
+
+        // Then
+        $this->assertDsarRequestsListed($response, [$open->getKey(), $fulfilled->getKey()]);
+        $this->assertListedRowShows($response, $fulfilled, true);
+        $this->assertListedRowShows($response, $open, false);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideRolesWithViewAll(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+        ];
+    }
+
     /**
      * @return array<string, array{string}>
      */

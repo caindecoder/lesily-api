@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use InvalidArgumentException;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanyUser;
@@ -131,6 +132,56 @@ abstract class DsarTestCase extends TestCase
         Sanctum::actingAs($actor);
 
         return $this->getJson('/api/v1/dsar-requests'.$this->queryString($query), ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * $request's row in the list carries every resource field as recorded,
+     * with $downloadAvailable stated by the test.
+     */
+    protected function assertListedRowShows(TestResponse $response, DsarRequestRecord $request, bool $downloadAvailable): void
+    {
+        $response->assertOk();
+        $this->assertSame([
+            'id' => $request->getKey(),
+            'status' => $request->status->value,
+            'request_type' => 'access',
+            'subject' => ['id' => $request->subject->getKey(), 'name' => $request->subject->name],
+            'requested_by' => ['id' => $request->requestedBy->getKey(), 'name' => $request->requestedBy->name],
+            'requested_at' => $request->requested_at->toISOString(),
+            'sla_deadline' => $request->requested_at->addDays(30)->toISOString(),
+            'completed_at' => $request->completed_at?->toISOString(),
+            'download_available' => $downloadAvailable,
+            'download_expires_at' => $request->download_expires_at?->toISOString(),
+            'cancelled_at' => null,
+            'rejection_reason' => null,
+        ], collect($response->json('data'))->firstWhere('id', $request->getKey()));
+    }
+
+    /**
+     * The list call with the query log on around it.
+     *
+     * @return array{TestResponse, int}
+     */
+    protected function listDsarRequestsCountingQueries(User $actor, Company $company): array
+    {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $response = $this->listDsarRequests($actor, $company);
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return [$response, $queryCount];
+    }
+
+    /**
+     * A full first page came back and it cost fewer queries than it has rows —
+     * the relations are loaded once for the page, not once per row (§2.19 R3).
+     */
+    protected function assertListedWithFewerQueriesThanRows(TestResponse $response, int $queryCount): void
+    {
+        $response->assertOk();
+        $this->assertCount(15, $response->json('data'));
+        $this->assertLessThan(15, $queryCount);
     }
 
     /**
