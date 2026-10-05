@@ -12,6 +12,7 @@ use App\Compliance\Dsar\UseCases\Commands\DsarRequestFilters;
 use App\Compliance\Dsar\IO\Http\Resources\DsarRequestResource;
 use App\Compliance\Dsar\IO\Http\Resources\DsarRequestCollection;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
+use App\Compliance\Dsar\UseCases\Interactors\ShowDsarRequestInteractor;
 use App\Compliance\Dsar\UseCases\Interactors\ListDsarRequestsInteractor;
 use App\Compliance\Dsar\UseCases\Interactors\SubmitDsarRequestInteractor;
 
@@ -25,6 +26,14 @@ class DsarRequestsController extends Controller
         return new DsarRequestCollection(
             $interactor->execute(DsarRequestFilters::fromQuery($request), $actor, $request->company())
         );
+    }
+
+    public function show(Request $request, string $requestId, ShowDsarRequestInteractor $interactor): DsarRequestResource
+    {
+        /** @var User $actor — guaranteed by auth:sanctum */
+        $actor = $request->user();
+
+        return new DsarRequestResource($interactor->execute($requestId, $actor, $request->company()));
     }
 
     public function store(Request $request, SubmitDsarRequestInteractor $interactor): JsonResponse

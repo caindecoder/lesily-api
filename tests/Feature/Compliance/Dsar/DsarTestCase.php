@@ -4,6 +4,7 @@ namespace Tests\Feature\Compliance\Dsar;
 
 use Tests\TestCase;
 use App\Models\User;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
@@ -94,6 +95,30 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * @return array<string, array{string}>
+     */
+    public static function provideRolesWithViewAll(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideRolesWithoutViewAll(): array
+    {
+        return [
+            'employee' => ['employee'],
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'auditor' => ['auditor'],
+        ];
+    }
+
+    /**
      * An authenticated member submits a DSAR request in $company's context,
      * carrying the shared idempotency key when one is set.
      *
@@ -143,7 +168,28 @@ abstract class DsarTestCase extends TestCase
         $response->assertOk();
         /** @var list<array<string, mixed>> $rows */
         $rows = $response->json('data');
-        $this->assertSame([
+        $this->assertSame($this->expectedRow($request, $downloadAvailable), collect($rows)->firstWhere('id', $request->getKey()));
+    }
+
+    /**
+     * The detail answered with $request — every resource field as recorded,
+     * with $downloadAvailable stated by the test.
+     */
+    protected function assertDsarRequestShown(TestResponse $response, DsarRequestRecord $request, bool $downloadAvailable): void
+    {
+        $response->assertOk();
+        $this->assertSame($this->expectedRow($request, $downloadAvailable), $response->json('data'));
+    }
+
+    /**
+     * Every resource field of $request as recorded, with $downloadAvailable
+     * stated by the test.
+     *
+     * @return array<string, mixed>
+     */
+    private function expectedRow(DsarRequestRecord $request, bool $downloadAvailable): array
+    {
+        return [
             'id' => $request->getKey(),
             'status' => $request->status->value,
             'request_type' => 'access',
@@ -156,7 +202,7 @@ abstract class DsarTestCase extends TestCase
             'download_expires_at' => $request->download_expires_at?->toISOString(),
             'cancelled_at' => null,
             'rejection_reason' => null,
-        ], collect($rows)->firstWhere('id', $request->getKey()));
+        ];
     }
 
     /**
@@ -207,6 +253,24 @@ abstract class DsarTestCase extends TestCase
     protected function listDsarRequestsAsGuest(array $query = []): TestResponse
     {
         return $this->getJson('/api/v1/dsar-requests'.$this->queryString($query));
+    }
+
+    /**
+     * An authenticated member views one DSAR request in $company's context.
+     */
+    protected function viewDsarRequest(User $actor, Company $company, string $requestId): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/dsar-requests/'.$requestId, ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * A guest (no Sanctum session) views one DSAR request.
+     */
+    protected function viewDsarRequestAsGuest(string $requestId): TestResponse
+    {
+        return $this->getJson('/api/v1/dsar-requests/'.$requestId);
     }
 
     /**
@@ -287,6 +351,17 @@ abstract class DsarTestCase extends TestCase
         $response->assertNotFound();
         $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
         $response->assertJsonPath('message', 'The requested resource was not found.');
+    }
+
+    /**
+     * The request stayed hidden — the plain 404 envelope, nothing in the body
+     * that names $requestId (the random correlation id aside).
+     */
+    protected function assertHiddenAsNotFound(TestResponse $response, string $requestId): void
+    {
+        $this->assertResourceNotFound($response);
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+        $this->assertStringNotContainsString($requestId, (string) json_encode(Arr::except((array) $response->json(), 'correlation_id')));
     }
 
     /**
