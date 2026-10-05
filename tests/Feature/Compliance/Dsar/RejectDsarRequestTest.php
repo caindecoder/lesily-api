@@ -69,8 +69,23 @@ class RejectDsarRequestTest extends DsarTestCase
         $this->failTheExportFor($request, new RuntimeException('export failure'));
 
         // Then the fulfilment stands and its export is left exactly as it was
-        $this->assertStillClosedAs($request, DsarRequestStatus::Fulfilled);
-        $this->assertExportFileUntouched($request);
+        $this->assertStillFulfilledWithExportKept($request);
+    }
+
+    #[Test]
+    public function when_a_sibling_run_fulfils_the_request_during_the_final_failure_then_its_export_is_kept(): void
+    {
+        // Given a member's request still in progress, the export a sibling run wrote, and that run fulfilling just as this one gives up
+        $member = $this->aCompanyMember($this->company);
+        $request = $this->aSubmittedRequest($this->company, $member);
+        $this->aPartialExportFor($request);
+        $this->aSiblingRunFulfilsBeforeTheReject($request);
+
+        // When this run's export fails for good
+        $this->failTheExportFor($request, new RuntimeException('export failure'));
+
+        // Then the sibling's fulfilment stands and its export survives
+        $this->assertStillFulfilledWithExportKept($request);
     }
 
     #[Test]

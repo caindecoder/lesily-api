@@ -31,6 +31,7 @@ use App\Compliance\Dsar\Events\DsarRequestFulfilled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Compliance\Dsar\UseCases\Sections\DsarSections;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
+use App\Compliance\Dsar\UseCases\Audit\DsarOutcomeAudit;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
@@ -39,6 +40,7 @@ use App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Compliance\Dsar\UseCases\Interactors\RejectDsarRequestInteractor;
 
 abstract class DsarTestCase extends TestCase
 {
@@ -880,18 +882,49 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * No export file is left at $request's path on the dsar disk.
+     * A sibling run of $request's export fulfils it in the instant before this
+     * run's reject lands — the reject then finds the request already closed.
      */
-    protected function assertNoExportFileFor(DsarRequestRecord $request): void
+    protected function aSiblingRunFulfilsBeforeTheReject(DsarRequestRecord $request): void
     {
+        $this->app->instance(RejectDsarRequestInteractor::class, new class(app(DsarOutcomeAudit::class), $request) extends RejectDsarRequestInteractor
+        {
+            public function __construct(DsarOutcomeAudit $audit, private readonly DsarRequestRecord $request)
+            {
+                parent::__construct($audit);
+            }
+
+            public function execute(RejectDsarRequestCommand $command): void
+            {
+                DsarRequest::retrieve($this->request->getKey())
+                    ->fulfil(FulfilDsarRequestCommand::from([
+                        'requestId' => $this->request->getKey(),
+                        'filePath' => 'dsar/'.$this->request->company_id.'/'.$this->request->getKey().'.zip',
+                    ]))
+                    ->persist();
+
+                parent::execute($command);
+            }
+        });
+    }
+
+    /**
+     * $request is still closed as $status with nothing recorded since, and no
+     * export file is left at its path — no personal data outlives it (N27).
+     */
+    protected function assertStillClosedWithoutExportFile(DsarRequestRecord $request, DsarRequestStatus $status): void
+    {
+        $this->assertStillClosedAs($request, $status);
         Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
     }
 
     /**
-     * The file planted at $request's export path is still there, unchanged.
+     * $request is still fulfilled with nothing recorded since, and the export
+     * planted at its path is still there, unchanged.
      */
-    protected function assertExportFileUntouched(DsarRequestRecord $request): void
+    protected function assertStillFulfilledWithExportKept(DsarRequestRecord $request): void
     {
+        $this->assertStillClosedAs($request, DsarRequestStatus::Fulfilled);
         $this->assertSame('partial', Storage::disk('dsar')->get($this->exportPathOf($request)));
     }
 

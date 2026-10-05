@@ -59,15 +59,15 @@ class BuildDsarExportJob implements ShouldQueue
      */
     public function failed(Throwable $exception): void
     {
-        $this->discardExportUnlessFulfilled();
-
         try {
             resolve(RejectDsarRequestInteractor::class)->execute(RejectDsarRequestCommand::from([
                 'requestId' => $this->requestId,
                 'reason' => self::REJECTION_REASON,
             ]));
         } catch (DsarRequestNotInProgressException) {
-            // withdrawn while the export kept failing: the withdrawal stands
+            // closed meanwhile — withdrawn, or fulfilled by a sibling run: that outcome stands
+        } finally {
+            $this->discardExportUnlessFulfilled();
         }
     }
 

@@ -34,8 +34,7 @@ class FulfilDsarRequestTest extends DsarTestCase
         $this->runTheExportFor($request);
 
         // Then nothing is recorded and no personal-data file outlives the request
-        $this->assertStillClosedAs($request, $status);
-        $this->assertNoExportFileFor($request);
+        $this->assertStillClosedWithoutExportFile($request, $status);
     }
 
     #[Test]
@@ -50,8 +49,7 @@ class FulfilDsarRequestTest extends DsarTestCase
         $this->runTheExportFor($request);
 
         // Then nothing is recorded and the export is left exactly as it was
-        $this->assertStillClosedAs($request, DsarRequestStatus::Fulfilled);
-        $this->assertExportFileUntouched($request);
+        $this->assertStillFulfilledWithExportKept($request);
     }
 
     #[Test]
