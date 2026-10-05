@@ -4,6 +4,7 @@ namespace App\Compliance\Dsar\Projectors;
 
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Compliance\Dsar\Events\DsarRequestRejected;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestFulfilled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
@@ -34,6 +35,15 @@ class DsarRequestProjector extends Projector
             'completed_at' => $event->completedAt,
             'file_path' => $event->filePath,
             'download_expires_at' => $event->downloadExpiresAt,
+        ]);
+    }
+
+    public function onDsarRequestRejected(DsarRequestRejected $event): void
+    {
+        DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid())->update([
+            'status' => DsarRequestStatus::Rejected,
+            'rejected_at' => $event->rejectedAt,
+            'rejection_reason' => $event->reason,
         ]);
     }
 

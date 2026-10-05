@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Compliance\Dsar;
 
+use Throwable;
 use Tests\TestCase;
 use App\Models\User;
 use Illuminate\Support\Arr;
@@ -20,6 +21,7 @@ use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Compliance\Dsar\Events\DsarRequestRejected;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestFulfilled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
@@ -723,6 +725,76 @@ abstract class DsarTestCase extends TestCase
             ->count());
         $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_fulfilled']);
         Storage::disk('dsar')->assertMissing('dsar/'.$request->company_id.'/'.$request->getKey().'.zip');
+    }
+
+    /**
+     * The half-written ZIP a failed try leaves on the dsar disk for $request.
+     */
+    protected function aPartialExportFor(DsarRequestRecord $request): void
+    {
+        Storage::disk('dsar')->put($this->exportPathOf($request), 'partial');
+    }
+
+    /**
+     * The worker gave up on $request's export: failed() runs once, after the
+     * last try, with the error that ended it.
+     */
+    protected function failTheExportFor(DsarRequestRecord $request, Throwable $cause): void
+    {
+        (new BuildDsarExportJob($request->getKey(), $request->company_id, $request->subject_user_id))->failed($cause);
+    }
+
+    /**
+     * $request was rejected the event-sourced way: one DsarRequestRejected on
+     * its stream, the row rejected now with the fixed reason — never the error
+     * — and no export file left.
+     */
+    protected function assertRejected(DsarRequestRecord $request): void
+    {
+        $rejected = $request->fresh() ?? $request;
+
+        $this->assertSame(
+            [DsarRequestStatus::Rejected, now()->toISOString(), 'The export could not be built. Please submit a new request.'],
+            [$rejected->status, $rejected->rejected_at?->toISOString(), $rejected->rejection_reason],
+        );
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', DsarRequestRejected::class)
+            ->where('aggregate_uuid', $request->getKey())
+            ->whereForCompany($request->company_id)
+            ->count());
+        Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
+    }
+
+    /**
+     * Exactly one audit entry records the rejection — "DSAR rejected — for:
+     * <subject>" — linked to its stored event, with no actor (ERD-1-11).
+     */
+    protected function assertRejectionAudited(DsarRequestRecord $request, User $subject): void
+    {
+        $storedEventId = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarRequestRejected::class)
+            ->sole()
+            ->id;
+
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_rejected')->count());
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $request->company_id,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'DsarRequestRejected',
+            'subject_type' => 'dsar_request',
+            'subject_id' => $request->getKey(),
+            'action' => 'dsar_rejected',
+            'description' => 'DSAR rejected — for: '.$subject->name,
+            'actor_user_id' => null,
+            'actor_role_code' => null,
+            'actor_label' => null,
+        ]);
+    }
+
+    protected function exportPathOf(DsarRequestRecord $request): string
+    {
+        return 'dsar/'.$request->company_id.'/'.$request->getKey().'.zip';
     }
 
     /**

@@ -5,12 +5,14 @@ namespace App\Compliance\Dsar\Aggregates;
 use Carbon\CarbonImmutable;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
+use App\Compliance\Dsar\Events\DsarRequestRejected;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestFulfilled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Compliance\Dsar\Exceptions\DsarRequesterMismatchException;
 use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand;
+use App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Compliance\Dsar\Exceptions\DsarRequestNotInProgressException;
 
@@ -71,6 +73,14 @@ class DsarRequest extends AggregateRoot
             completedAt: $completedAt,
             filePath: $command->filePath,
             downloadExpiresAt: $completedAt->addDays(self::DOWNLOAD_DAYS),
+        ));
+    }
+
+    public function reject(RejectDsarRequestCommand $command): static
+    {
+        return $this->recordThat(new DsarRequestRejected(
+            rejectedAt: CarbonImmutable::now(),
+            reason: $command->reason,
         ));
     }
 
