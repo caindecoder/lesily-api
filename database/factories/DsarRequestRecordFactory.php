@@ -63,6 +63,16 @@ class DsarRequestRecordFactory extends Factory
         ]);
     }
 
+    public function requestedDaysAgo(int $days): static
+    {
+        $requestedAt = CarbonImmutable::now()->subDays($days);
+
+        return $this->state([
+            'requested_at' => $requestedAt,
+            'sla_deadline' => $requestedAt->addDays(30),
+        ]);
+    }
+
     public function fulfilled(): static
     {
         return $this->state([

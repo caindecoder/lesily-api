@@ -130,6 +130,57 @@ class ListDsarRequestsTest extends DsarTestCase
         $this->assertDsarRequestsListed($response, [$request->getKey()]);
     }
 
+    #[Test]
+    public function when_a_status_filter_is_given_then_only_requests_in_that_status_are_listed(): void
+    {
+        // Given
+        $member = $this->aCompanyMember($this->company);
+        $fulfilled = DsarRequestRecord::factory()->forSubject($this->company, $member)->requestedDaysAgo(10)->fulfilled()->create();
+        DsarRequestRecord::factory()->forSubject($this->company, $member)->create();
+
+        // When
+        $response = $this->listDsarRequests($member, $this->company, ['status' => 'fulfilled']);
+
+        // Then
+        $this->assertDsarRequestsListed($response, [$fulfilled->getKey()]);
+    }
+
+    #[Test]
+    public function when_requests_exceed_one_page_then_they_are_listed_page_by_page(): void
+    {
+        // Given
+        $owner = $this->aCompanyMember($this->company, 'owner');
+        [$oldest, $middle, $newest] = $this->requestsMadeDaysAgo([3, 2, 1]);
+
+        // When
+        $response = $this->listDsarRequests($owner, $this->company, ['per_page' => 2]);
+
+        // Then
+        $this->assertDsarRequestPage(
+            $response,
+            [$newest->getKey(), $middle->getKey()],
+            ['page' => 1, 'per_page' => 2, 'total' => 3, 'last_page' => 2],
+        );
+    }
+
+    #[Test]
+    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
+    {
+        // Given
+        $owner = $this->aCompanyMember($this->company, 'owner');
+        $newestFirst = $this->requestsMadeDaysAgo(range(1, 20));
+
+        // When a second page is asked for in the body rather than the query string
+        $response = $this->listDsarRequestsWithBody($owner, $this->company, ['page' => 2]);
+
+        // Then paging follows only the validated query, so the first page comes back
+        $this->assertDsarRequestPage(
+            $response,
+            array_map(fn (DsarRequestRecord $request): string => $request->getKey(), array_slice($newestFirst, 0, 15)),
+            ['page' => 1, 'per_page' => 15, 'total' => 20, 'last_page' => 2],
+        );
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -141,6 +192,24 @@ class ListDsarRequestsTest extends DsarTestCase
             'payroll officer' => ['payroll_officer'],
             'auditor' => ['auditor'],
         ];
+    }
+
+    /**
+     * One request per new member of the company, each made the given number of
+     * days ago, in the order given.
+     *
+     * @param  list<int>  $daysAgo
+     * @return list<DsarRequestRecord>
+     */
+    private function requestsMadeDaysAgo(array $daysAgo): array
+    {
+        return array_map(
+            fn (int $days): DsarRequestRecord => DsarRequestRecord::factory()
+                ->forSubject($this->company, $this->aCompanyMember($this->company))
+                ->requestedDaysAgo($days)
+                ->create(),
+            $daysAgo,
+        );
     }
 
     /**

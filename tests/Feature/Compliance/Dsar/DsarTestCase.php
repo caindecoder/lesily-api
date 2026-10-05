@@ -134,6 +134,19 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * The list asked for with $body sent as the request body instead of the
+     * query string.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function listDsarRequestsWithBody(User $actor, Company $company, array $body): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->json('GET', '/api/v1/dsar-requests', $body, ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
      * A guest (no Sanctum session) lists DSAR requests.
      *
      * @param  array<string, mixed>  $query
@@ -162,6 +175,20 @@ abstract class DsarTestCase extends TestCase
         $response->assertOk();
         $this->assertSame($expectedIds, $response->json('data.*.id'));
         $this->assertSame(count($expectedIds), $response->json('meta.pagination.total'));
+    }
+
+    /**
+     * One page of the list — exactly $expectedIds in order, under the exact
+     * §8.3 pagination meta.
+     *
+     * @param  list<string>  $expectedIds
+     * @param  array<string, int>  $pagination
+     */
+    protected function assertDsarRequestPage(TestResponse $response, array $expectedIds, array $pagination): void
+    {
+        $response->assertOk();
+        $this->assertSame($expectedIds, $response->json('data.*.id'));
+        $this->assertSame($pagination, $response->json('meta.pagination'));
     }
 
     /**
