@@ -9,6 +9,7 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 
 class SubmitDsarRequestTest extends DsarTestCase
 {
@@ -275,5 +276,20 @@ class SubmitDsarRequestTest extends DsarTestCase
             'owner' => ['owner'],
             'admin' => ['admin'],
         ];
+    }
+
+    #[Test]
+    public function when_a_request_is_submitted_then_its_export_is_queued(): void
+    {
+        // Given
+        $company = Company::factory()->create();
+        $member = $this->aCompanyMember($company);
+
+        // When
+        $response = $this->submitDsarRequest($member, $company);
+        $this->runQueuedHandlersFor(DsarRequestSubmitted::class);
+
+        // Then
+        $this->assertExportQueuedFor(DsarRequestRecord::query()->findOrFail($response->json('data.id')));
     }
 }

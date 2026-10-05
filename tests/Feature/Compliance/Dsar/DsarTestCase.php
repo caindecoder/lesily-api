@@ -12,7 +12,9 @@ use InvalidArgumentException;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Queue;
 use App\Companies\Entities\CompanyUser;
+use Illuminate\Support\Facades\Storage;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
@@ -20,11 +22,15 @@ use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
+use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
+use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class DsarTestCase extends TestCase
 {
+    use InteractsWithQueuedReactors;
+
     protected ?string $idempotencyKey;
 
     protected function setUp(): void
@@ -35,6 +41,8 @@ abstract class DsarTestCase extends TestCase
         $this->travelTo('2026-10-01 09:00:00');
         config(['app.debug' => false]);
         $this->idempotencyKey = (string) Str::uuid();
+        Queue::fake();
+        Storage::fake('dsar');
     }
 
     /**
@@ -651,5 +659,17 @@ abstract class DsarTestCase extends TestCase
         $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
         $this->assertSame(0, DsarRequestRecord::query()->where('company_id', $company->getKey())->count());
         $this->assertDatabaseMissing('audit_trail', ['company_id' => $company->getKey()]);
+    }
+
+    /**
+     * Submitting $request queued its export — one job naming the request, its
+     * company and its data subject.
+     */
+    protected function assertExportQueuedFor(DsarRequestRecord $request): void
+    {
+        Queue::assertPushed(BuildDsarExportJob::class, 1);
+        Queue::assertPushed(BuildDsarExportJob::class, fn (BuildDsarExportJob $job): bool => $job->requestId === $request->getKey()
+            && $job->companyId === $request->company_id
+            && $job->subjectUserId === $request->subject_user_id);
     }
 }
