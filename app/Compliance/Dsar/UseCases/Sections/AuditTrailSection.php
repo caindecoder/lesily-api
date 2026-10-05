@@ -11,11 +11,6 @@ class AuditTrailSection implements DsarSectionProvider
         return 'audit_trail';
     }
 
-    public function title(): string
-    {
-        return 'Audit trail';
-    }
-
     /**
      * The audit entries the subject acted in, in this company, oldest first
      * (ruling N25 — no writer names a user as an entry's subject yet).

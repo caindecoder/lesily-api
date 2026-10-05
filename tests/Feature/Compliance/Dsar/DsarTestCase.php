@@ -764,11 +764,6 @@ abstract class DsarTestCase extends TestCase
                 return 'withdraws';
             }
 
-            public function title(): string
-            {
-                return 'Withdraws the request';
-            }
-
             public function collect(string $subjectUserId, string $companyId): array
             {
                 DsarRequest::retrieve($this->request->getKey())
@@ -951,11 +946,6 @@ abstract class DsarTestCase extends TestCase
             public function key(): string
             {
                 return 'fails';
-            }
-
-            public function title(): string
-            {
-                return 'Fails to collect';
             }
 
             public function collect(string $subjectUserId, string $companyId): array

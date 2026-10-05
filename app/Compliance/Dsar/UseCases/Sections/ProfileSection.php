@@ -11,11 +11,6 @@ class ProfileSection implements DsarSectionProvider
         return 'profile';
     }
 
-    public function title(): string
-    {
-        return 'Profile';
-    }
-
     /**
      * @return array<string, mixed>
      */

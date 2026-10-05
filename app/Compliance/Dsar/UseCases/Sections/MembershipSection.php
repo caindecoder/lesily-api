@@ -12,11 +12,6 @@ class MembershipSection implements DsarSectionProvider
         return 'membership';
     }
 
-    public function title(): string
-    {
-        return 'Membership';
-    }
-
     /**
      * @return array<string, mixed>
      */

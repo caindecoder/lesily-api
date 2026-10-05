@@ -14,11 +14,6 @@ class ConsentRecordsSection implements DsarSectionProvider
         return 'consent_records';
     }
 
-    public function title(): string
-    {
-        return 'Consent records';
-    }
-
     /**
      * Each consent the subject gave in this company — the stored
      * ConsentRecorded IS the record (UC-1-069), oldest first.
