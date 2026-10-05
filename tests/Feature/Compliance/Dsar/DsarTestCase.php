@@ -141,6 +141,8 @@ abstract class DsarTestCase extends TestCase
     protected function assertListedRowShows(TestResponse $response, DsarRequestRecord $request, bool $downloadAvailable): void
     {
         $response->assertOk();
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $response->json('data');
         $this->assertSame([
             'id' => $request->getKey(),
             'status' => $request->status->value,
@@ -154,7 +156,7 @@ abstract class DsarTestCase extends TestCase
             'download_expires_at' => $request->download_expires_at?->toISOString(),
             'cancelled_at' => null,
             'rejection_reason' => null,
-        ], collect($response->json('data'))->firstWhere('id', $request->getKey()));
+        ], collect($rows)->firstWhere('id', $request->getKey()));
     }
 
     /**
