@@ -182,6 +182,21 @@ class ListDsarRequestsTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_request_times_tie_then_the_rows_come_back_in_a_stable_order(): void
+    {
+        // Given three requests made at the same instant
+        $owner = $this->aCompanyMember($this->company, 'owner');
+        $requestIds = array_map(fn (DsarRequestRecord $request): string => $request->getKey(), $this->requestsMadeDaysAgo([0, 0, 0]));
+        rsort($requestIds);
+
+        // When
+        $response = $this->listDsarRequests($owner, $this->company);
+
+        // Then equal request times fall back to the newest id first
+        $this->assertDsarRequestsListed($response, $requestIds);
+    }
+
+    #[Test]
     public function when_many_requests_are_listed_then_the_query_count_stays_below_the_row_count(): void
     {
         // Given

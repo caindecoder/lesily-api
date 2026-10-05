@@ -26,6 +26,7 @@ class ListDsarRequestsInteractor
             ->unless($this->permissions->canUserDo($actor, $company, self::VIEW_ALL), fn ($query) => $query->whereVisibleTo($actor))
             ->when($filters->status, fn ($query, string $status) => $query->where('status', $status))
             ->orderByDesc('requested_at')
+            ->orderByDesc('id')
             // page defaults here, never through Laravel's resolver, which would
             // honour a body-supplied page past the validated query filters.
             ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
