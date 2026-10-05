@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\AssertionFailedError;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 
 class RejectDsarRequestTest extends DsarTestCase
 {
@@ -18,6 +19,26 @@ class RejectDsarRequestTest extends DsarTestCase
         parent::setUp();
 
         $this->company = Company::factory()->create();
+    }
+
+    #[Test]
+    public function when_a_section_fails_then_the_job_fails_without_fulfilling(): void
+    {
+        // Given a member's own request and a section that fails while collecting
+        $member = $this->aCompanyMember($this->company);
+        $request = $this->aSubmittedRequest($this->company, $member);
+        $this->withSections($this->aSectionThatFails());
+
+        try {
+            // When its export is built
+            $this->runTheExportFor($request);
+            $this->fail('A failing section should fail the export job.');
+        } catch (AssertionFailedError $guard) {
+            throw $guard;
+        } catch (RuntimeException) {
+            // Then the failure reaches the worker's retries and nothing is fulfilled
+            $this->assertNothingFulfilled($request, DsarRequestStatus::InProgress);
+        }
     }
 
     #[Test]
@@ -54,6 +75,19 @@ class RejectDsarRequestTest extends DsarTestCase
             // Then the one transaction takes back the event, the row change and the audit row together
             $this->assertStillInProgress($request);
         }
+    }
+
+    #[Test]
+    public function when_the_job_is_queued_then_it_tries_three_times_with_backoff(): void
+    {
+        // Given
+        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
+
+        // When
+        $job = new BuildDsarExportJob($request->getKey(), $request->company_id, $request->subject_user_id);
+
+        // Then
+        $this->assertTriesThreeTimesWithBackoff($job);
     }
 
     #[Test]

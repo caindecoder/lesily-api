@@ -5,6 +5,7 @@ namespace Tests\Feature\Compliance\Dsar;
 use Throwable;
 use Tests\TestCase;
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -869,6 +870,41 @@ abstract class DsarTestCase extends TestCase
     protected function assertExportFileUntouched(DsarRequestRecord $request): void
     {
         $this->assertSame('partial', Storage::disk('dsar')->get($this->exportPathOf($request)));
+    }
+
+    /**
+     * A section whose collection fails — a database or storage error mid-export.
+     */
+    protected function aSectionThatFails(): DsarSectionProvider
+    {
+        return new class implements DsarSectionProvider
+        {
+            public function key(): string
+            {
+                return 'fails';
+            }
+
+            public function title(): string
+            {
+                return 'Fails to collect';
+            }
+
+            public function collect(string $subjectUserId, string $companyId): array
+            {
+                throw new RuntimeException('induced section failure');
+            }
+        };
+    }
+
+    /**
+     * $job gives the worker three tries, waiting one minute and then five
+     * before the last, on the default queue (ruling N24).
+     */
+    protected function assertTriesThreeTimesWithBackoff(BuildDsarExportJob $job): void
+    {
+        $this->assertSame(3, $job->tries);
+        $this->assertSame([60, 300], $job->backoff);
+        $this->assertNull($job->queue);
     }
 
     protected function exportPathOf(DsarRequestRecord $request): string

@@ -22,6 +22,11 @@ class BuildDsarExportJob implements ShouldQueue
 
     private const string REJECTION_REASON = 'The export could not be built. Please submit a new request.';
 
+    public int $tries = 3;
+
+    /** @var array<int, int> */
+    public array $backoff = [60, 300];
+
     public function __construct(
         public string $requestId,
         public string $companyId,
