@@ -45,6 +45,7 @@ use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
 use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
 use App\Companies\Memberships\Exceptions\SelfRemovalBlockedException;
+use App\Compliance\Dsar\Exceptions\DsarRequestNotInProgressException;
 use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
@@ -235,6 +236,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // Only the original requester may withdraw a DSAR request (UC-1-102 4b, V5).
         $exceptions->render(fn (DsarRequesterMismatchException $e) => EnvelopeBuilder::build(
             ApiErrorCode::DsarRequesterMismatch,
+            $e->getMessage(),
+        ));
+
+        // A DSAR request that is no longer in progress cannot be withdrawn (UC-1-102 4a, D7).
+        $exceptions->render(fn (DsarRequestNotInProgressException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));
 

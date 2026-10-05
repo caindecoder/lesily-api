@@ -102,6 +102,39 @@ class WithdrawDsarRequestTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_the_request_is_already_withdrawn_then_the_withdrawal_is_refused_as_no_longer_in_progress(): void
+    {
+        // Given a member's own request they have already withdrawn
+        $member = $this->aCompanyMember($this->company);
+        $request = $this->aSubmittedRequest($this->company, $member);
+        $this->withdrawDsarRequest($member, $this->company, $request->getKey())->assertOk();
+
+        // When they withdraw it again
+        $response = $this->withdrawDsarRequest($member, $this->company, $request->getKey());
+
+        // Then
+        $this->assertRefusedAsNoLongerInProgress($response);
+        $this->assertWithdrawnOnce($request);
+    }
+
+    #[Test]
+    public function when_a_non_requester_withdraws_a_closed_request_then_they_are_refused_as_not_the_requester(): void
+    {
+        // Given an admin withdrew the request they made for the subject
+        $subject = $this->aCompanyMember($this->company);
+        $admin = $this->aCompanyMember($this->company, 'admin');
+        $request = $this->aSubmittedRequest($this->company, $subject, $admin);
+        $this->withdrawDsarRequest($admin, $this->company, $request->getKey())->assertOk();
+
+        // When the subject withdraws it
+        $response = $this->withdrawDsarRequest($subject, $this->company, $request->getKey());
+
+        // Then the requester check answers before the state check
+        $this->assertRefusedAsNotTheRequester($response);
+        $this->assertWithdrawnOnce($request);
+    }
+
+    #[Test]
     public function when_the_audit_write_fails_then_nothing_is_withdrawn(): void
     {
         // Given a member's own request and an audit write that fails after its row is inserted
@@ -115,6 +148,35 @@ class WithdrawDsarRequestTest extends DsarTestCase
         // Then the one transaction takes back the event, the row change and the audit row together
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
         $this->assertStillInProgress($request);
+    }
+
+    #[Test]
+    public function when_an_owner_withdraws_a_request_they_made_for_a_member_then_it_is_withdrawn(): void
+    {
+        // Given an owner requested an export for a member
+        $owner = $this->aCompanyMember($this->company, 'owner');
+        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company), $owner);
+
+        // When the owner withdraws it
+        $response = $this->withdrawDsarRequest($owner, $this->company, $request->getKey());
+
+        // Then
+        $this->assertWithdrawn($response, $request, $owner);
+    }
+
+    #[Test]
+    public function when_a_request_is_withdrawn_then_a_new_request_for_the_subject_is_accepted(): void
+    {
+        // Given a member withdrew their request
+        $member = $this->aCompanyMember($this->company);
+        $request = $this->aSubmittedRequest($this->company, $member);
+        $this->withdrawDsarRequest($member, $this->company, $request->getKey())->assertOk();
+
+        // When they request a new export
+        $response = $this->submitDsarRequest($member, $this->company);
+
+        // Then the open-request slot was freed
+        $this->assertAcceptedAsTheOnlyOpenRequest($response, $this->company, $member);
     }
 
     #[Test]

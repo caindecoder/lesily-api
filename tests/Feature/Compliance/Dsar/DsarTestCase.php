@@ -456,6 +456,30 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * The withdrawal was refused because the request is no longer in progress —
+     * 409 STATE_GUARD_VIOLATION with the UC-1-102 message.
+     */
+    protected function assertRefusedAsNoLongerInProgress(TestResponse $response): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::StateGuardViolation);
+        $response->assertJsonPath('message', 'DSAR is no longer in progress.');
+    }
+
+    /**
+     * $request was withdrawn exactly once — one DsarRequestCancelled on its
+     * stream and one withdrawal audited — and stays cancelled.
+     */
+    protected function assertWithdrawnOnce(DsarRequestRecord $request): void
+    {
+        $this->assertSame(DsarRequestStatus::Cancelled, $request->fresh()?->status);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarRequestCancelled::class)
+            ->count());
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_withdrawn')->count());
+    }
+
+    /**
      * The withdrawal was recorded the event-sourced way: the request answered
      * as cancelled, its row stamped with when and by whom, and one
      * DsarRequestCancelled naming the actor on its stream.
