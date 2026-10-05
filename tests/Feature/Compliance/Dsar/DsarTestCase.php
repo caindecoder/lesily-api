@@ -21,6 +21,7 @@ use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
+use App\Compliance\Dsar\Events\DsarRequestFulfilled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
@@ -659,6 +660,66 @@ abstract class DsarTestCase extends TestCase
         $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
         $this->assertSame(0, DsarRequestRecord::query()->where('company_id', $company->getKey())->count());
         $this->assertDatabaseMissing('audit_trail', ['company_id' => $company->getKey()]);
+    }
+
+    /**
+     * Runs $request's export job the way a worker would — handle() with its
+     * dependencies resolved from the container.
+     */
+    protected function runTheExportFor(DsarRequestRecord $request): void
+    {
+        app()->call([new BuildDsarExportJob($request->getKey(), $request->company_id, $request->subject_user_id), 'handle']);
+    }
+
+    /**
+     * $request was fulfilled the event-sourced way: one DsarRequestFulfilled
+     * naming its file, the row fulfilled now with a download window of seven
+     * days, and the export ZIP on the private dsar disk.
+     */
+    protected function assertFulfilled(DsarRequestRecord $request): void
+    {
+        $filePath = 'dsar/'.$request->company_id.'/'.$request->getKey().'.zip';
+        $fulfilled = $request->fresh() ?? $request;
+
+        $this->assertSame(
+            [DsarRequestStatus::Fulfilled, now()->toISOString(), $filePath, now()->addDays(7)->toISOString()],
+            [$fulfilled->status, $fulfilled->completed_at?->toISOString(), $fulfilled->file_path, $fulfilled->download_expires_at?->toISOString()],
+        );
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', DsarRequestFulfilled::class)
+            ->where('aggregate_uuid', $request->getKey())
+            ->whereForCompany($request->company_id)
+            ->where('event_properties->filePath', $filePath)
+            ->count());
+        Storage::disk('dsar')->assertExists($filePath);
+    }
+
+    /**
+     * Exactly one audit entry records the fulfilment — "DSAR fulfilled — for:
+     * <subject>" — linked to its stored event, with no actor: the export job
+     * is a system process (ERD-1-11).
+     */
+    protected function assertFulfilmentAudited(DsarRequestRecord $request, User $subject): void
+    {
+        $storedEventId = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarRequestFulfilled::class)
+            ->sole()
+            ->id;
+
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_fulfilled')->count());
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $request->company_id,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'DsarRequestFulfilled',
+            'subject_type' => 'dsar_request',
+            'subject_id' => $request->getKey(),
+            'action' => 'dsar_fulfilled',
+            'description' => 'DSAR fulfilled — for: '.$subject->name,
+            'actor_user_id' => null,
+            'actor_role_code' => null,
+            'actor_label' => null,
+        ]);
     }
 
     /**

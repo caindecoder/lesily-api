@@ -5,6 +5,7 @@ namespace App\Compliance\Dsar\Projectors;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
+use App\Compliance\Dsar\Events\DsarRequestFulfilled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 
@@ -23,6 +24,16 @@ class DsarRequestProjector extends Projector
             'requested_at' => $event->requestedAt,
             'sla_deadline' => $event->slaDeadline,
             'created_by' => $event->requestedByUserId,
+        ]);
+    }
+
+    public function onDsarRequestFulfilled(DsarRequestFulfilled $event): void
+    {
+        DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid())->update([
+            'status' => DsarRequestStatus::Fulfilled,
+            'completed_at' => $event->completedAt,
+            'file_path' => $event->filePath,
+            'download_expires_at' => $event->downloadExpiresAt,
         ]);
     }
 
