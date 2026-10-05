@@ -726,7 +726,7 @@ abstract class DsarTestCase extends TestCase
     {
         $this->assertSame(DsarRequestStatus::InProgress, $request->fresh()?->status);
         $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->count());
-        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_withdrawn']);
+        $this->assertSame(0, DB::table('audit_trail')->where('subject_id', $request->getKey())->count());
     }
 
     /**
@@ -862,6 +862,9 @@ abstract class DsarTestCase extends TestCase
             'actor_user_id' => null,
             'actor_role_code' => null,
             'actor_label' => null,
+            'ip_address' => null,
+            'user_agent' => null,
+            'request_id' => null,
         ]);
     }
 
@@ -878,6 +881,16 @@ abstract class DsarTestCase extends TestCase
             ->where('event_class', DsarRequestRejected::class)
             ->count());
         $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_rejected']);
+        Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
+    }
+
+    /**
+     * A failed change left $request still in progress with nothing recorded
+     * since, and no partial export file at its path.
+     */
+    protected function assertStillInProgressWithoutExportFile(DsarRequestRecord $request): void
+    {
+        $this->assertStillInProgress($request);
         Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
     }
 
@@ -1004,7 +1017,10 @@ abstract class DsarTestCase extends TestCase
      */
     protected function assertExportScopedTo(array $exported, Company $company, User $member): void
     {
-        $this->assertSame($company->getKey(), $exported['membership']['company']['id']);
+        $this->assertSame(
+            [$company->getKey(), $this->roleCodeOf($member, $company->getKey())],
+            [$exported['membership']['company']['id'], $exported['membership']['role']],
+        );
         $this->assertCount(2, $exported['consent_records']);
         $this->assertSame(
             AuditEntry::query()->where('company_id', $company->getKey())->where('actor_user_id', $member->getKey())->pluck('subject_id')->all(),
@@ -1029,7 +1045,7 @@ abstract class DsarTestCase extends TestCase
             ...($user->two_factor_recovery_codes ?? []),
         ];
 
-        $this->assertNotEmpty($secrets);
+        $this->assertSame($secrets, array_filter($secrets));
         foreach ($secrets as $secret) {
             $this->assertStringNotContainsString((string) $secret, $json);
         }
@@ -1105,6 +1121,9 @@ abstract class DsarTestCase extends TestCase
             'actor_user_id' => null,
             'actor_role_code' => null,
             'actor_label' => null,
+            'ip_address' => null,
+            'user_agent' => null,
+            'request_id' => null,
         ]);
     }
 

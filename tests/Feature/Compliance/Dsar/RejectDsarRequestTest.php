@@ -35,8 +35,9 @@ class RejectDsarRequestTest extends DsarTestCase
             $this->fail('A failing section should fail the export job.');
         } catch (AssertionFailedError $guard) {
             throw $guard;
-        } catch (RuntimeException) {
-            // Then the failure reaches the worker's retries and nothing is fulfilled
+        } catch (RuntimeException $failure) {
+            // Then the section's own failure reaches the worker's retries and nothing is fulfilled
+            $this->assertSame('induced section failure', $failure->getMessage());
             $this->assertNothingFulfilled($request, DsarRequestStatus::InProgress);
         }
     }
@@ -47,7 +48,7 @@ class RejectDsarRequestTest extends DsarTestCase
         // Given a member's own request they withdrew while its export kept failing
         $member = $this->aCompanyMember($this->company);
         $request = $this->aSubmittedRequest($this->company, $member);
-        $this->withdrawDsarRequest($member, $this->company, $request->getKey());
+        $this->withdrawDsarRequest($member, $this->company, $request->getKey())->assertOk();
         $this->aPartialExportFor($request);
 
         // When the export fails for good
@@ -91,9 +92,10 @@ class RejectDsarRequestTest extends DsarTestCase
     #[Test]
     public function when_the_audit_entry_cannot_be_written_then_nothing_is_rejected(): void
     {
-        // Given a member's own request and an audit write that fails after its row is inserted
+        // Given a member's own request, its partial export, and an audit write that fails after its row is inserted
         $member = $this->aCompanyMember($this->company);
         $request = $this->aSubmittedRequest($this->company, $member);
+        $this->aPartialExportFor($request);
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         try {
@@ -102,9 +104,10 @@ class RejectDsarRequestTest extends DsarTestCase
             $this->fail('The induced audit failure should surface from failed().');
         } catch (AssertionFailedError $guard) {
             throw $guard;
-        } catch (RuntimeException) {
-            // Then the one transaction takes back the event, the row change and the audit row together
-            $this->assertStillInProgress($request);
+        } catch (RuntimeException $failure) {
+            // Then the one transaction takes back the event, the row change and the audit row together — and no partial file is left
+            $this->assertSame('induced audit failure', $failure->getMessage());
+            $this->assertStillInProgressWithoutExportFile($request);
         }
     }
 

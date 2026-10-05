@@ -81,8 +81,9 @@ class FulfilDsarRequestTest extends DsarTestCase
             $this->fail('The induced audit failure should fail the export job.');
         } catch (AssertionFailedError $guard) {
             throw $guard;
-        } catch (RuntimeException) {
+        } catch (RuntimeException $failure) {
             // Then the one transaction takes back the event, the row change and the audit row together
+            $this->assertSame('induced audit failure', $failure->getMessage());
             $this->assertStillInProgress($request);
         }
     }
