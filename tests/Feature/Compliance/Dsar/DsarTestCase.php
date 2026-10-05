@@ -14,6 +14,7 @@ use Illuminate\Http\Response;
 use InvalidArgumentException;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
+use App\Consent\Aggregates\Consent;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
 use App\Companies\Entities\CompanyUser;
@@ -28,6 +29,7 @@ use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestFulfilled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Compliance\Dsar\UseCases\Sections\DsarSections;
+use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
@@ -906,6 +908,22 @@ abstract class DsarTestCase extends TestCase
         $this->assertSame(3, $job->tries);
         $this->assertSame([60, 300], $job->backoff);
         $this->assertNull($job->queue);
+    }
+
+    /**
+     * $user's consent to the terms and the privacy policy in $company,
+     * recorded the event-sourced way from one IP.
+     */
+    protected function aConsentRecordedBy(User $user, Company $company): void
+    {
+        Consent::retrieve(Str::uuid7()->toString())
+            ->record(RecordConsentCommand::from([
+                'userId' => $user->getKey(),
+                'companyId' => $company->getKey(),
+                'policyVersions' => ['terms' => '2026-03', 'privacy' => '2026-04'],
+                'ip' => '203.0.113.7',
+            ]))
+            ->persist();
     }
 
     /**
