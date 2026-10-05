@@ -13,11 +13,14 @@ use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanyUser;
+use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
+use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class DsarTestCase extends TestCase
@@ -89,6 +92,27 @@ abstract class DsarTestCase extends TestCase
         return [$subject, []];
     }
 
+    /**
+     * A request recorded the event-sourced way — a real DsarRequestSubmitted
+     * on its own stream — for $subject, made by $requester (the subject when
+     * omitted).
+     */
+    protected function aSubmittedRequest(Company $company, User $subject, ?User $requester = null): DsarRequestRecord
+    {
+        $requester ??= $subject;
+        $requestId = Str::uuid7()->toString();
+
+        DsarRequest::retrieve($requestId)
+            ->submit(SubmitDsarRequestCommand::from([
+                'subject_user_id' => $subject->getKey(),
+                'companyId' => $company->getKey(),
+                'requestedByUserId' => $requester->getKey(),
+            ]), $this->roleCodeOf($requester, $company->getKey()))
+            ->persist();
+
+        return DsarRequestRecord::query()->findOrFail($requestId);
+    }
+
     protected function seededRole(string $code): Role
     {
         return Role::query()->where('code', $code)->sole();
@@ -115,6 +139,18 @@ abstract class DsarTestCase extends TestCase
             'hr officer' => ['hr_officer'],
             'payroll officer' => ['payroll_officer'],
             'auditor' => ['auditor'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideUnknownRequestIds(): array
+    {
+        return [
+            'random uuid' => [(string) Str::uuid()],
+            'malformed text' => ['not-a-request-id'],
+            'number' => ['12345'],
         ];
     }
 
@@ -200,7 +236,7 @@ abstract class DsarTestCase extends TestCase
             'completed_at' => $request->completed_at?->toISOString(),
             'download_available' => $downloadAvailable,
             'download_expires_at' => $request->download_expires_at?->toISOString(),
-            'cancelled_at' => null,
+            'cancelled_at' => $request->cancelled_at?->toISOString(),
             'rejection_reason' => null,
         ];
     }
@@ -271,6 +307,24 @@ abstract class DsarTestCase extends TestCase
     protected function viewDsarRequestAsGuest(string $requestId): TestResponse
     {
         return $this->getJson('/api/v1/dsar-requests/'.$requestId);
+    }
+
+    /**
+     * An authenticated member withdraws one DSAR request in $company's context.
+     */
+    protected function withdrawDsarRequest(User $actor, Company $company, string $requestId): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->patchJson('/api/v1/dsar-requests/'.$requestId.'/cancel', [], ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * A guest (no Sanctum session) withdraws one DSAR request.
+     */
+    protected function withdrawDsarRequestAsGuest(string $requestId): TestResponse
+    {
+        return $this->patchJson('/api/v1/dsar-requests/'.$requestId.'/cancel');
     }
 
     /**
@@ -392,6 +446,89 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * The withdrawal was refused because the actor did not make the request —
+     * 403 DSAR_REQUESTER_MISMATCH with the UC-1-102 message.
+     */
+    protected function assertRefusedAsNotTheRequester(TestResponse $response): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::DsarRequesterMismatch);
+        $response->assertJsonPath('message', 'Only the original requester can withdraw this DSAR.');
+    }
+
+    /**
+     * The withdrawal was refused because the request is no longer in progress —
+     * 409 STATE_GUARD_VIOLATION with the UC-1-102 message.
+     */
+    protected function assertRefusedAsNoLongerInProgress(TestResponse $response): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::StateGuardViolation);
+        $response->assertJsonPath('message', 'DSAR is no longer in progress.');
+    }
+
+    /**
+     * $request was withdrawn exactly once — one DsarRequestCancelled on its
+     * stream and one withdrawal audited — and stays cancelled.
+     */
+    protected function assertWithdrawnOnce(DsarRequestRecord $request): void
+    {
+        $this->assertSame(DsarRequestStatus::Cancelled, $request->fresh()?->status);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarRequestCancelled::class)
+            ->count());
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_withdrawn')->count());
+    }
+
+    /**
+     * The withdrawal was recorded the event-sourced way: the request answered
+     * as cancelled, its row stamped with when and by whom, and one
+     * DsarRequestCancelled naming the actor on its stream.
+     */
+    protected function assertWithdrawn(TestResponse $response, DsarRequestRecord $request, User $actor): void
+    {
+        $withdrawn = $request->fresh() ?? $request;
+        $this->assertDsarRequestShown($response, $withdrawn, false);
+        $this->assertSame(
+            [DsarRequestStatus::Cancelled, now()->toISOString(), $actor->getKey()],
+            [$withdrawn->status, $withdrawn->cancelled_at?->toISOString(), $withdrawn->cancelled_by],
+        );
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', DsarRequestCancelled::class)
+            ->where('aggregate_uuid', $request->getKey())
+            ->whereForCompany($request->company_id)
+            ->where('event_properties->cancelledByUserId', $actor->getKey())
+            ->count());
+    }
+
+    /**
+     * Exactly one audit entry records the withdrawal — "DSAR withdrawn — for:
+     * <subject>, by: <actor>" — linked to its stored event and stamped with the
+     * actor's role.
+     */
+    protected function assertWithdrawalAudited(DsarRequestRecord $request, User $subject, User $actor): void
+    {
+        $storedEventId = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarRequestCancelled::class)
+            ->sole()
+            ->id;
+
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_withdrawn')->count());
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $request->company_id,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'DsarRequestCancelled',
+            'subject_type' => 'dsar_request',
+            'subject_id' => $request->getKey(),
+            'action' => 'dsar_withdrawn',
+            'description' => 'DSAR withdrawn — for: '.$subject->name.', by: '.$actor->name,
+            'actor_user_id' => $actor->getKey(),
+            'actor_role_code' => $this->roleCodeOf($actor, $request->company_id),
+            'actor_label' => $actor->name,
+        ]);
+    }
+
+    /**
      * The submission was accepted and is the subject's one open request in
      * $company — any earlier requests there are closed.
      */
@@ -492,6 +629,17 @@ abstract class DsarTestCase extends TestCase
             ->value('role_id');
 
         return Role::query()->whereKey($roleId)->value('code');
+    }
+
+    /**
+     * A refused withdrawal left $request as it was — still in progress, its
+     * stream holding only the submission, no withdrawal audited.
+     */
+    protected function assertStillInProgress(DsarRequestRecord $request): void
+    {
+        $this->assertSame(DsarRequestStatus::InProgress, $request->fresh()?->status);
+        $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->count());
+        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_withdrawn']);
     }
 
     /**

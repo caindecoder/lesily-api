@@ -6,4 +6,5 @@ enum DsarRequestStatus: string
 {
     case InProgress = 'in_progress';
     case Fulfilled = 'fulfilled';
+    case Cancelled = 'cancelled';
 }

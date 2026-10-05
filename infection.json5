@@ -117,6 +117,7 @@
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserSignedUpAsOwner",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserCreatedFromInvitation",
                 "App\\Compliance\\Dsar\\Projectors\\DsarRequestProjector::onDsarRequestSubmitted",
+                "App\\Compliance\\Dsar\\Projectors\\DsarRequestProjector::onDsarRequestCancelled",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserEmailVerified",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserProfileUpdated",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUser2FAEnabled",

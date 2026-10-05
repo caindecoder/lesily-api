@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Compliance\Dsar;
 
-use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -151,18 +150,6 @@ class ViewDsarRequestTest extends DsarTestCase
         return [
             'this company owner' => ['owner'],
             'the subject from their other company' => ['subject'],
-        ];
-    }
-
-    /**
-     * @return array<string, array{string}>
-     */
-    public static function provideUnknownRequestIds(): array
-    {
-        return [
-            'random uuid' => [(string) Str::uuid()],
-            'malformed text' => ['not-a-request-id'],
-            'number' => ['12345'],
         ];
     }
 }

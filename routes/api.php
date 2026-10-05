@@ -351,6 +351,11 @@ Route::get('/v1/dsar-requests', [DsarRequestsController::class, 'index'])
 Route::get('/v1/dsar-requests/{requestId}', [DsarRequestsController::class, 'show'])
     ->middleware(['auth:sanctum', 'auth.company']);
 
+// Withdraw a DSAR request (UC-1-102) - the original requester, while in progress. No idempotency
+// mount: the closed-state guard is the dedup (the reject precedent above).
+Route::patch('/v1/dsar-requests/{requestId}/cancel', [DsarRequestsController::class, 'cancel'])
+    ->middleware(['auth:sanctum', 'auth.company']);
+
 // Request a DSAR export (UC-1-070) - a member for themselves, Owner/Admin for a member.
 Route::post('/v1/dsar-requests', [DsarRequestsController::class, 'store'])
     ->middleware(['auth:sanctum', 'auth.company', 'idempotency-key:required']);

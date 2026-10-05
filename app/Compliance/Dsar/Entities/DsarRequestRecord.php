@@ -36,6 +36,8 @@ class DsarRequestRecord extends Model
         'completed_at',
         'file_path',
         'download_expires_at',
+        'cancelled_at',
+        'cancelled_by',
         'created_by',
     ];
 

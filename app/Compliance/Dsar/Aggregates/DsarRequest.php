@@ -4,14 +4,23 @@ namespace App\Compliance\Dsar\Aggregates;
 
 use Carbon\CarbonImmutable;
 use App\Foundation\EventStore\AggregateRoot;
+use App\Compliance\Dsar\Enums\DsarRequestStatus;
+use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
+use App\Compliance\Dsar\Exceptions\DsarRequesterMismatchException;
+use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
+use App\Compliance\Dsar\Exceptions\DsarRequestNotInProgressException;
 
 class DsarRequest extends AggregateRoot
 {
     private const int SLA_DAYS = 30;
 
     private const string REQUEST_TYPE_ACCESS = 'access';
+
+    protected ?DsarRequestStatus $status = null;
+
+    protected ?string $requestedByUserId = null;
 
     public function submit(SubmitDsarRequestCommand $command, string $requestedByRole): static
     {
@@ -28,5 +37,32 @@ class DsarRequest extends AggregateRoot
                 requestedAt: $requestedAt,
                 slaDeadline: $requestedAt->addDays(self::SLA_DAYS),
             ));
+    }
+
+    public function cancel(CancelDsarRequestCommand $command): static
+    {
+        if ($command->cancelledByUserId !== $this->requestedByUserId) {
+            throw new DsarRequesterMismatchException;
+        }
+
+        if ($this->status !== DsarRequestStatus::InProgress) {
+            throw new DsarRequestNotInProgressException;
+        }
+
+        return $this->recordThat(new DsarRequestCancelled(
+            cancelledAt: CarbonImmutable::now(),
+            cancelledByUserId: $command->cancelledByUserId,
+        ));
+    }
+
+    protected function applyDsarRequestSubmitted(DsarRequestSubmitted $event): void
+    {
+        $this->status = DsarRequestStatus::InProgress;
+        $this->requestedByUserId = $event->requestedByUserId;
+    }
+
+    protected function applyDsarRequestCancelled(DsarRequestCancelled $event): void
+    {
+        $this->status = DsarRequestStatus::Cancelled;
     }
 }

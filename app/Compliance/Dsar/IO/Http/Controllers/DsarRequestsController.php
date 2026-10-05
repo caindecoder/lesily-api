@@ -11,9 +11,11 @@ use App\Foundation\Http\Values\AdminRequestContext;
 use App\Compliance\Dsar\UseCases\Commands\DsarRequestFilters;
 use App\Compliance\Dsar\IO\Http\Resources\DsarRequestResource;
 use App\Compliance\Dsar\IO\Http\Resources\DsarRequestCollection;
+use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Interactors\ShowDsarRequestInteractor;
 use App\Compliance\Dsar\UseCases\Interactors\ListDsarRequestsInteractor;
+use App\Compliance\Dsar\UseCases\Interactors\CancelDsarRequestInteractor;
 use App\Compliance\Dsar\UseCases\Interactors\SubmitDsarRequestInteractor;
 
 class DsarRequestsController extends Controller
@@ -50,5 +52,19 @@ class DsarRequestsController extends Controller
         $dsarRequest = $interactor->execute($command, $actor, AdminRequestContext::fromRequest($request));
 
         return (new DsarRequestResource($dsarRequest))->response()->setStatusCode(Response::HTTP_CREATED);
+    }
+
+    public function cancel(Request $request, string $requestId, CancelDsarRequestInteractor $interactor): DsarRequestResource
+    {
+        /** @var User $actor — guaranteed by auth:sanctum */
+        $actor = $request->user();
+
+        $command = CancelDsarRequestCommand::validateAndCreate([
+            'requestId' => $requestId,
+            'companyId' => $request->company()->getKey(),
+            'cancelledByUserId' => $actor->getKey(),
+        ]);
+
+        return new DsarRequestResource($interactor->execute($command, $actor, AdminRequestContext::fromRequest($request)));
     }
 }

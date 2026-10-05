@@ -34,6 +34,7 @@ use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use App\Companies\Exceptions\OwnershipTransferContentionException;
+use App\Compliance\Dsar\Exceptions\DsarRequesterMismatchException;
 use App\Compliance\Dsar\Exceptions\DsarRequestInProgressException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use App\Companies\Exceptions\OwnershipTransferCaseNotOpenException;
@@ -44,6 +45,7 @@ use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
 use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
 use App\Companies\Memberships\Exceptions\SelfRemovalBlockedException;
+use App\Compliance\Dsar\Exceptions\DsarRequestNotInProgressException;
 use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
@@ -228,6 +230,18 @@ return Application::configure(basePath: dirname(__DIR__))
         // An open DSAR already exists for the subject in this company (UC-1-070 2a).
         $exceptions->render(fn (DsarRequestInProgressException $e) => EnvelopeBuilder::build(
             ApiErrorCode::DsarInProgress,
+            $e->getMessage(),
+        ));
+
+        // Only the original requester may withdraw a DSAR request (UC-1-102 4b, V5).
+        $exceptions->render(fn (DsarRequesterMismatchException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::DsarRequesterMismatch,
+            $e->getMessage(),
+        ));
+
+        // A DSAR request that is no longer in progress cannot be withdrawn (UC-1-102 4a, D7).
+        $exceptions->render(fn (DsarRequestNotInProgressException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));
 
