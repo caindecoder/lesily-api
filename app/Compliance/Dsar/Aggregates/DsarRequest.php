@@ -78,6 +78,10 @@ class DsarRequest extends AggregateRoot
 
     public function reject(RejectDsarRequestCommand $command): static
     {
+        if ($this->status !== DsarRequestStatus::InProgress) {
+            throw new DsarRequestNotInProgressException;
+        }
+
         return $this->recordThat(new DsarRequestRejected(
             rejectedAt: CarbonImmutable::now(),
             reason: $command->reason,

@@ -48,10 +48,14 @@ class BuildDsarExportJob implements ShouldQueue
     {
         Storage::disk('dsar')->delete($this->filePath());
 
-        resolve(RejectDsarRequestInteractor::class)->execute(RejectDsarRequestCommand::from([
-            'requestId' => $this->requestId,
-            'reason' => self::REJECTION_REASON,
-        ]));
+        try {
+            resolve(RejectDsarRequestInteractor::class)->execute(RejectDsarRequestCommand::from([
+                'requestId' => $this->requestId,
+                'reason' => self::REJECTION_REASON,
+            ]));
+        } catch (DsarRequestNotInProgressException) {
+            // withdrawn while the export kept failing: the withdrawal stands
+        }
     }
 
     private function filePath(): string

@@ -792,6 +792,22 @@ abstract class DsarTestCase extends TestCase
         ]);
     }
 
+    /**
+     * Nothing was rejected for $request: no DsarRequestRejected on its stream,
+     * no rejection audited, no export file left, and its status is still
+     * $status.
+     */
+    protected function assertNothingRejected(DsarRequestRecord $request, DsarRequestStatus $status): void
+    {
+        $this->assertSame($status, $request->fresh()?->status);
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarRequestRejected::class)
+            ->count());
+        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_rejected']);
+        Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
+    }
+
     protected function exportPathOf(DsarRequestRecord $request): string
     {
         return 'dsar/'.$request->company_id.'/'.$request->getKey().'.zip';

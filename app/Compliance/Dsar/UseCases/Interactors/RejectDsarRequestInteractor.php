@@ -2,6 +2,7 @@
 
 namespace App\Compliance\Dsar\UseCases\Interactors;
 
+use Illuminate\Support\Facades\DB;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
@@ -13,9 +14,11 @@ class RejectDsarRequestInteractor
 {
     public function execute(RejectDsarRequestCommand $command): void
     {
-        DsarRequest::retrieve($command->requestId)->reject($command)->persist();
+        DB::transaction(function () use ($command): void {
+            DsarRequest::retrieve($command->requestId)->reject($command)->persist();
 
-        $this->recordRejected(DsarRequestRecord::query()->findOrFail($command->requestId));
+            $this->recordRejected(DsarRequestRecord::query()->findOrFail($command->requestId));
+        });
     }
 
     private function recordRejected(DsarRequestRecord $request): void
