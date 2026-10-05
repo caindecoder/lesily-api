@@ -3,6 +3,7 @@
 namespace Tests\Feature\Compliance\Dsar;
 
 use Throwable;
+use ZipArchive;
 use Tests\TestCase;
 use App\Models\User;
 use RuntimeException;
@@ -905,6 +906,22 @@ abstract class DsarTestCase extends TestCase
         $this->assertSame(3, $job->tries);
         $this->assertSame([60, 300], $job->backoff);
         $this->assertNull($job->queue);
+    }
+
+    /**
+     * The sections $request's export holds — data.json decoded from its ZIP
+     * on the dsar disk.
+     *
+     * @return array<string, mixed>
+     */
+    protected function exportedData(DsarRequestRecord $request): array
+    {
+        $zip = new ZipArchive;
+        $zip->open(Storage::disk('dsar')->path($this->exportPathOf($request)));
+        $data = json_decode((string) $zip->getFromName('data.json'), true, flags: JSON_THROW_ON_ERROR);
+        $zip->close();
+
+        return $data;
     }
 
     protected function exportPathOf(DsarRequestRecord $request): string
