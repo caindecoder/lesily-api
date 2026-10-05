@@ -4,6 +4,7 @@ namespace App\Compliance\Dsar\Aggregates;
 
 use Carbon\CarbonImmutable;
 use App\Foundation\EventStore\AggregateRoot;
+use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Compliance\Dsar\Exceptions\DsarRequesterMismatchException;
 use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
@@ -40,7 +41,10 @@ class DsarRequest extends AggregateRoot
             throw new DsarRequesterMismatchException;
         }
 
-        return $this;
+        return $this->recordThat(new DsarRequestCancelled(
+            cancelledAt: CarbonImmutable::now(),
+            cancelledByUserId: $command->cancelledByUserId,
+        ));
     }
 
     protected function applyDsarRequestSubmitted(DsarRequestSubmitted $event): void

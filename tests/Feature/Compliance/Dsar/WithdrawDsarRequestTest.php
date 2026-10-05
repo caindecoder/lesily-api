@@ -2,9 +2,13 @@
 
 namespace Tests\Feature\Compliance\Dsar;
 
+use RuntimeException;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 
 class WithdrawDsarRequestTest extends DsarTestCase
 {
@@ -95,6 +99,37 @@ class WithdrawDsarRequestTest extends DsarTestCase
         // Then
         $this->assertRefusedAsNotTheRequester($response);
         $this->assertStillInProgress($request);
+    }
+
+    #[Test]
+    public function when_the_audit_write_fails_then_nothing_is_withdrawn(): void
+    {
+        // Given a member's own request and an audit write that fails after its row is inserted
+        $member = $this->aCompanyMember($this->company);
+        $request = $this->aSubmittedRequest($this->company, $member);
+        AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When they withdraw it
+        $response = $this->withdrawDsarRequest($member, $this->company, $request->getKey());
+
+        // Then the one transaction takes back the event, the row change and the audit row together
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertStillInProgress($request);
+    }
+
+    #[Test]
+    public function when_a_member_withdraws_their_own_request_then_it_is_withdrawn_and_audited(): void
+    {
+        // Given a member's own request in progress
+        $member = $this->aCompanyMember($this->company);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When they withdraw it
+        $response = $this->withdrawDsarRequest($member, $this->company, $request->getKey());
+
+        // Then
+        $this->assertWithdrawn($response, $request, $member);
+        $this->assertWithdrawalAudited($request, $member, $member);
     }
 
     /**

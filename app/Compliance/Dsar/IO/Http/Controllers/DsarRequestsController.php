@@ -65,6 +65,6 @@ class DsarRequestsController extends Controller
             'cancelledByUserId' => $actor->getKey(),
         ]);
 
-        return new DsarRequestResource($interactor->execute($command, $actor));
+        return new DsarRequestResource($interactor->execute($command, $actor, AdminRequestContext::fromRequest($request)));
     }
 }

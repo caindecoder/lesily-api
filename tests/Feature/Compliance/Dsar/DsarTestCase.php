@@ -18,6 +18,7 @@ use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -235,7 +236,7 @@ abstract class DsarTestCase extends TestCase
             'completed_at' => $request->completed_at?->toISOString(),
             'download_available' => $downloadAvailable,
             'download_expires_at' => $request->download_expires_at?->toISOString(),
-            'cancelled_at' => null,
+            'cancelled_at' => $request->cancelled_at?->toISOString(),
             'rejection_reason' => null,
         ];
     }
@@ -452,6 +453,54 @@ abstract class DsarTestCase extends TestCase
     {
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::DsarRequesterMismatch);
         $response->assertJsonPath('message', 'Only the original requester can withdraw this DSAR.');
+    }
+
+    /**
+     * The withdrawal was recorded the event-sourced way: the request answered
+     * as cancelled, its row stamped with when and by whom, and one
+     * DsarRequestCancelled naming the actor on its stream.
+     */
+    protected function assertWithdrawn(TestResponse $response, DsarRequestRecord $request, User $actor): void
+    {
+        $withdrawn = $request->fresh() ?? $request;
+        $this->assertDsarRequestShown($response, $withdrawn, false);
+        $this->assertSame(
+            [DsarRequestStatus::Cancelled, now()->toISOString(), $actor->getKey()],
+            [$withdrawn->status, $withdrawn->cancelled_at?->toISOString(), $withdrawn->cancelled_by],
+        );
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', DsarRequestCancelled::class)
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_properties->cancelledByUserId', $actor->getKey())
+            ->count());
+    }
+
+    /**
+     * Exactly one audit entry records the withdrawal — "DSAR withdrawn — for:
+     * <subject>, by: <actor>" — linked to its stored event and stamped with the
+     * actor's role.
+     */
+    protected function assertWithdrawalAudited(DsarRequestRecord $request, User $subject, User $actor): void
+    {
+        $storedEventId = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarRequestCancelled::class)
+            ->sole()
+            ->id;
+
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_withdrawn')->count());
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $request->company_id,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'DsarRequestCancelled',
+            'subject_type' => 'dsar_request',
+            'subject_id' => $request->getKey(),
+            'action' => 'dsar_withdrawn',
+            'description' => 'DSAR withdrawn — for: '.$subject->name.', by: '.$actor->name,
+            'actor_user_id' => $actor->getKey(),
+            'actor_role_code' => $this->roleCodeOf($actor, $request->company_id),
+            'actor_label' => $actor->name,
+        ]);
     }
 
     /**
