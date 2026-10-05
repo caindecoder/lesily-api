@@ -236,21 +236,28 @@
         // L-EQUIV-MISC: compositeKey() and isCurrentSession() run behind auth:sanctum -
         // user() is never null in flight. REMOVE WHEN either is mounted on a route
         // without auth:sanctum.
+        // L-SCHEMA: the DSAR profile / membership sections read created_at, which
+        // Eloquent stamps on every users / company_user insert (the projector create and
+        // the pivot attach); pinned so the sibling email_verified_at?-> / last_logged_at?->
+        // lines stay killed. REMOVE WHEN a writer inserts either row without timestamps.
         "NullSafeMethodCall": {
             ignore: [
                 "App\\Billing\\Subscriptions\\IO\\Http\\Resources\\SubscriptionResource::toArray::31",
                 "App\\Foundation\\Http\\Middleware\\EnsureIdempotencyKey::compositeKey",
                 "App\\Foundation\\Auth\\IO\\Http\\Resources\\SessionResource::isCurrentSession",
+                "App\\Compliance\\Dsar\\UseCases\\Sections\\ProfileSection::collect::28",
+                "App\\Compliance\\Dsar\\UseCases\\Sections\\MembershipSection::collect::30",
             ],
         },
-        // L-EQUIV-MISC: invitations.role_id is NOT NULL + FK (the role always resolves);
-        // the seeded owner role is a schema invariant (Company::owner). REMOVE WHEN a
-        // migration makes role_id nullable / drops the FK, or an owner-less company
-        // state is introduced.
+        // L-EQUIV-MISC: invitations.role_id and company_user.role_id are NOT NULL + FK
+        // (the role always resolves); the seeded owner role is a schema invariant
+        // (Company::owner). REMOVE WHEN a migration makes either role_id nullable /
+        // drops its FK, or an owner-less company state is introduced.
         "NullSafePropertyCall": {
             ignore: [
                 "App\\Companies\\Memberships\\IO\\Http\\Resources\\InvitationResource::toArray",
                 "App\\Companies\\Entities\\Company::owner",
+                "App\\Compliance\\Dsar\\UseCases\\Sections\\MembershipSection::collect",
             ],
         },
         // L-EQUIV-MISC: whereKey(null) yields IS NULL on a PK (the same empty result);

@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Consent\Aggregates\Consent;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Queue;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Storage;
@@ -29,6 +30,7 @@ use App\Compliance\Dsar\Events\DsarRequestRejected;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestFulfilled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
+use App\Compliance\Dsar\IO\Export\DsarExportArchive;
 use App\Compliance\Dsar\UseCases\Sections\DsarSections;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Compliance\Dsar\UseCases\Audit\DsarOutcomeAudit;
@@ -990,12 +992,44 @@ abstract class DsarTestCase extends TestCase
      */
     protected function exportedData(DsarRequestRecord $request): array
     {
+        return json_decode($this->exportedJsonOf($request), true, flags: JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * data.json exactly as $request's export ZIP holds it.
+     */
+    protected function exportedJsonOf(DsarRequestRecord $request): string
+    {
         $zip = new ZipArchive;
         $zip->open(Storage::disk('dsar')->path($this->exportPathOf($request)));
-        $data = json_decode((string) $zip->getFromName('data.json'), true, flags: JSON_THROW_ON_ERROR);
+        $json = (string) $zip->getFromName('data.json');
         $zip->close();
 
-        return $data;
+        return $json;
+    }
+
+    /**
+     * The archive builds its ZIP in a fresh, empty directory of its own —
+     * returned so a test can see what the build leaves there.
+     */
+    protected function anArchiveWorkingInAnEmptyDirectory(): string
+    {
+        $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-work-'.Str::uuid7()->toString();
+        mkdir($directory);
+        $this->beforeApplicationDestroyed(fn () => (new Filesystem)->deleteDirectory($directory));
+        $this->app->instance(DsarExportArchive::class, new DsarExportArchive(new Filesystem, $directory));
+
+        return $directory;
+    }
+
+    /**
+     * $request's ZIP is on the dsar disk and the archive's working directory
+     * holds nothing — no temporary copy of the person's data survives.
+     */
+    protected function assertExportBuiltWithoutLeftovers(DsarRequestRecord $request, string $workDirectory): void
+    {
+        Storage::disk('dsar')->assertExists($this->exportPathOf($request));
+        $this->assertSame([], (new Filesystem)->files($workDirectory));
     }
 
     /**

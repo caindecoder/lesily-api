@@ -57,6 +57,34 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_the_export_is_built_then_no_temporary_file_outlives_it(): void
+    {
+        // Given a member's own request and an empty working directory for the archive
+        $member = $this->aCompanyMember($this->company);
+        $request = $this->aSubmittedRequest($this->company, $member);
+        $workDirectory = $this->anArchiveWorkingInAnEmptyDirectory();
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the ZIP reached the dsar disk and no copy of their data is left behind
+        $this->assertExportBuiltWithoutLeftovers($request, $workDirectory);
+    }
+
+    #[Test]
+    public function when_the_export_is_built_then_its_data_is_indented_for_reading(): void
+    {
+        // Given
+        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
+
+        // When
+        $this->runTheExportFor($request);
+
+        // Then
+        $this->assertStringStartsWith("{\n    \"profile\": {\n        \"id\": ", $this->exportedJsonOf($request));
+    }
+
+    #[Test]
     public function when_a_section_has_no_entries_then_it_is_exported_empty(): void
     {
         // Given a member who never consented here and acted in nothing audited
@@ -148,8 +176,8 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_export_is_built_then_the_profile_section_holds_the_persons_profile(): void
     {
-        // Given a member with two-factor sign-in who last signed in yesterday
-        $member = User::factory()->withTwoFactor()->lastLoggedAt('2026-09-30 18:00:00')->create();
+        // Given a member with two-factor sign-in, an unverified email, who last signed in yesterday
+        $member = User::factory()->unverified()->withTwoFactor()->lastLoggedAt('2026-09-30 18:00:00')->create();
         $this->company->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
         $request = $this->aSubmittedRequest($this->company, $member);
 
@@ -162,7 +190,7 @@ class ExportDsarSectionsTest extends DsarTestCase
             'name' => $member->name,
             'email' => $member->email,
             'locale' => $member->locale,
-            'email_verified_at' => $member->email_verified_at?->toISOString(),
+            'email_verified_at' => null,
             'last_logged_at' => '2026-09-30T18:00:00.000000Z',
             'created_at' => $member->created_at?->toISOString(),
             'two_factor_enabled' => true,

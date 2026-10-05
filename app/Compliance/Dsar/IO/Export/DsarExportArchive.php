@@ -3,23 +3,27 @@
 namespace App\Compliance\Dsar\IO\Export;
 
 use ZipArchive;
-use Illuminate\Support\Str;
 use Illuminate\Filesystem\Filesystem;
 
 class DsarExportArchive
 {
-    public function __construct(private readonly Filesystem $files) {}
+    public function __construct(
+        private readonly Filesystem $files,
+        private readonly string $workDirectory,
+    ) {}
 
     /**
-     * The export as ZIP bytes — one data.json holding every section. The ZIP
-     * is built at a fresh temporary path that nothing else has opened, and
-     * that path is gone when this returns.
+     * The export as ZIP bytes — one data.json holding every section, indented
+     * for reading. The ZIP is built at a fresh name in the work directory
+     * (reserved, then freed, so nothing else holds the file), and nothing of
+     * it is left there when this returns.
      *
      * @param  array<string, mixed>  $sections
      */
     public function build(array $sections): string
     {
-        $path = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-'.Str::uuid7()->toString().'.zip';
+        $path = (string) tempnam($this->workDirectory, 'dsar');
+        $this->files->delete($path);
 
         try {
             $zip = new ZipArchive;
