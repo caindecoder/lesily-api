@@ -347,6 +347,10 @@ Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/reject', [PlatformAdmi
 Route::get('/v1/dsar-requests', [DsarRequestsController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company']);
 
+// View one DSAR request (UC-1-070) - the list's visibility; anything else 404s, existence hidden.
+Route::get('/v1/dsar-requests/{requestId}', [DsarRequestsController::class, 'show'])
+    ->middleware(['auth:sanctum', 'auth.company']);
+
 // Request a DSAR export (UC-1-070) - a member for themselves, Owner/Admin for a member.
 Route::post('/v1/dsar-requests', [DsarRequestsController::class, 'store'])
     ->middleware(['auth:sanctum', 'auth.company', 'idempotency-key:required']);

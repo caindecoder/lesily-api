@@ -245,6 +245,24 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * An authenticated member views one DSAR request in $company's context.
+     */
+    protected function viewDsarRequest(User $actor, Company $company, string $requestId): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/dsar-requests/'.$requestId, ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * A guest (no Sanctum session) views one DSAR request.
+     */
+    protected function viewDsarRequestAsGuest(string $requestId): TestResponse
+    {
+        return $this->getJson('/api/v1/dsar-requests/'.$requestId);
+    }
+
+    /**
      * @param  array<string, mixed>  $query
      */
     private function queryString(array $query): string
@@ -322,6 +340,17 @@ abstract class DsarTestCase extends TestCase
         $response->assertNotFound();
         $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
         $response->assertJsonPath('message', 'The requested resource was not found.');
+    }
+
+    /**
+     * The request stayed hidden — the plain 404 envelope, nothing in the body
+     * that names $requestId.
+     */
+    protected function assertHiddenAsNotFound(TestResponse $response, string $requestId): void
+    {
+        $this->assertResourceNotFound($response);
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+        $this->assertStringNotContainsString($requestId, (string) $response->getContent());
     }
 
     /**
