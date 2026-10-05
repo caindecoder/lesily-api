@@ -31,7 +31,7 @@ class CancelDsarRequestInteractor
         return DB::transaction(function () use ($request, $command, $actor, $context): DsarRequestRecord {
             DsarRequest::retrieve($request->getKey())->cancel($command)->persist();
 
-            $withdrawn = DsarRequestRecord::query()->findOrFail($request->getKey());
+            $withdrawn = DsarRequestRecord::query()->findOrFail($command->requestId);
             $this->recordWithdrawn($withdrawn, $actor, $context);
 
             return $withdrawn;
