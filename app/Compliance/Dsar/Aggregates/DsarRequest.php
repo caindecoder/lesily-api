@@ -94,6 +94,16 @@ class DsarRequest extends AggregateRoot
         $this->requestedByUserId = $event->requestedByUserId;
     }
 
+    protected function applyDsarRequestFulfilled(DsarRequestFulfilled $event): void
+    {
+        $this->status = DsarRequestStatus::Fulfilled;
+    }
+
+    protected function applyDsarRequestRejected(DsarRequestRejected $event): void
+    {
+        $this->status = DsarRequestStatus::Rejected;
+    }
+
     protected function applyDsarRequestCancelled(DsarRequestCancelled $event): void
     {
         $this->status = DsarRequestStatus::Cancelled;

@@ -6,6 +6,7 @@ use RuntimeException;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\AssertionFailedError;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 
@@ -18,6 +19,23 @@ class FulfilDsarRequestTest extends DsarTestCase
         parent::setUp();
 
         $this->company = Company::factory()->create();
+    }
+
+    #[Test]
+    #[DataProvider('provideClosedRequests')]
+    public function when_the_request_is_no_longer_in_progress_then_the_job_writes_nothing(string $closedBy, DsarRequestStatus $status): void
+    {
+        // Given a member's own request already closed, and whatever file its disk path already holds
+        $member = $this->aCompanyMember($this->company);
+        $request = $this->aClosedRequest($this->company, $member, $closedBy);
+        $this->aPartialExportFor($request);
+
+        // When its export job runs late
+        $this->runTheExportFor($request);
+
+        // Then the job stops at once: nothing recorded, and the file there is left exactly as it was
+        $this->assertStillClosedAs($request, $status);
+        $this->assertExportFileUntouched($request);
     }
 
     #[Test]

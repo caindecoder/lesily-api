@@ -30,6 +30,8 @@ use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
 use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
+use App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand;
+use App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -166,6 +168,59 @@ abstract class DsarTestCase extends TestCase
             'malformed text' => ['not-a-request-id'],
             'number' => ['12345'],
         ];
+    }
+
+    /**
+     * @return array<string, array{string, DsarRequestStatus}>
+     */
+    public static function provideClosedRequests(): array
+    {
+        return [
+            'withdrawn' => ['withdrawn', DsarRequestStatus::Cancelled],
+            'fulfilled' => ['fulfilled', DsarRequestStatus::Fulfilled],
+            'rejected' => ['rejected', DsarRequestStatus::Rejected],
+        ];
+    }
+
+    /**
+     * $subject's own request, closed the event-sourced way $closedBy names —
+     * withdrawn by them, fulfilled by its export, or rejected after its export
+     * failed.
+     */
+    protected function aClosedRequest(Company $company, User $subject, string $closedBy): DsarRequestRecord
+    {
+        $request = $this->aSubmittedRequest($company, $subject);
+        $aggregate = DsarRequest::retrieve($request->getKey());
+
+        match ($closedBy) {
+            'withdrawn' => $aggregate->cancel(CancelDsarRequestCommand::from([
+                'requestId' => $request->getKey(),
+                'companyId' => $company->getKey(),
+                'cancelledByUserId' => $subject->getKey(),
+            ])),
+            'fulfilled' => $aggregate->fulfil(FulfilDsarRequestCommand::from([
+                'requestId' => $request->getKey(),
+                'filePath' => $this->exportPathOf($request),
+            ])),
+            'rejected' => $aggregate->reject(RejectDsarRequestCommand::from([
+                'requestId' => $request->getKey(),
+                'reason' => 'The export could not be built. Please submit a new request.',
+            ])),
+            default => throw new InvalidArgumentException("Unknown closure: {$closedBy}"),
+        };
+        $aggregate->persist();
+
+        return $request;
+    }
+
+    /**
+     * $request is still closed as $status: its stream holds the submission
+     * and the one event that closed it — nothing recorded since.
+     */
+    protected function assertStillClosedAs(DsarRequestRecord $request, DsarRequestStatus $status): void
+    {
+        $this->assertSame($status, $request->fresh()?->status);
+        $this->assertSame(2, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->count());
     }
 
     /**
@@ -806,6 +861,14 @@ abstract class DsarTestCase extends TestCase
             ->count());
         $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_rejected']);
         Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
+    }
+
+    /**
+     * The file planted at $request's export path is still there, unchanged.
+     */
+    protected function assertExportFileUntouched(DsarRequestRecord $request): void
+    {
+        $this->assertSame('partial', Storage::disk('dsar')->get($this->exportPathOf($request)));
     }
 
     protected function exportPathOf(DsarRequestRecord $request): string

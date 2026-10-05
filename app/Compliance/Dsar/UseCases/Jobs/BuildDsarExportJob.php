@@ -6,6 +6,8 @@ use Throwable;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use App\Compliance\Dsar\Enums\DsarRequestStatus;
+use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\IO\Export\DsarExportArchive;
 use App\Compliance\Dsar\UseCases\Sections\DsarSections;
 use App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand;
@@ -28,6 +30,10 @@ class BuildDsarExportJob implements ShouldQueue
 
     public function handle(DsarSections $sections, DsarExportArchive $archive, FulfilDsarRequestInteractor $fulfil): void
     {
+        if (DsarRequestRecord::query()->findOrFail($this->requestId)->status !== DsarRequestStatus::InProgress) {
+            return;
+        }
+
         Storage::disk('dsar')->put($this->filePath(), $archive->build($sections->collectFor($this->subjectUserId, $this->companyId)));
 
         try {
