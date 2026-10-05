@@ -47,6 +47,50 @@ class ViewDsarRequestTest extends DsarTestCase
         $this->assertHiddenAsNotFound($response, $unknownId);
     }
 
+    #[Test]
+    #[DataProvider('provideOtherCompanyViewers')]
+    public function when_the_request_belongs_to_another_company_then_it_is_not_found(string $viewerKind): void
+    {
+        // Given a member of both companies whose request lives in the other one
+        $subject = $this->aCompanyMember($this->company);
+        $otherCompany = Company::factory()->create();
+        $otherCompany->users()->attach($subject, ['role_id' => $this->seededRole('employee')->getKey()]);
+        $request = DsarRequestRecord::factory()->forSubject($otherCompany, $subject)->create();
+        $viewer = $viewerKind === 'owner' ? $this->aCompanyMember($this->company, 'owner') : $subject;
+
+        // When
+        $response = $this->viewDsarRequest($viewer, $this->company, $request->getKey());
+
+        // Then
+        $this->assertHiddenAsNotFound($response, $request->getKey());
+    }
+
+    #[Test]
+    #[DataProvider('provideRolesWithoutViewAll')]
+    public function when_a_member_without_view_all_views_another_members_request_then_it_is_not_found(string $roleCode): void
+    {
+        // Given
+        $member = $this->aCompanyMember($this->company, $roleCode);
+        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->aCompanyMember($this->company))->create();
+
+        // When
+        $response = $this->viewDsarRequest($member, $this->company, $request->getKey());
+
+        // Then
+        $this->assertHiddenAsNotFound($response, $request->getKey());
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideOtherCompanyViewers(): array
+    {
+        return [
+            'this company owner' => ['owner'],
+            'the subject from their other company' => ['subject'],
+        ];
+    }
+
     /**
      * @return array<string, array{string}>
      */
