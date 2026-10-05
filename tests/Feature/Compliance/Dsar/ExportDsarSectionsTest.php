@@ -21,6 +21,56 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_the_member_belongs_to_two_companies_then_only_this_companys_data_is_exported(): void
+    {
+        // Given a member of this company and another, with consent and an audited submission in each
+        $member = $this->aCompanyMember($this->company);
+        $other = Company::factory()->create();
+        $other->users()->attach($member, ['role_id' => $this->seededRole('admin')->getKey()]);
+        $this->aConsentRecordedBy($member, $this->company);
+        $this->aConsentRecordedBy($member, $other);
+        $this->submitDsarRequest($member, $other)->assertCreated();
+        $this->idempotencyKey = (string) Str::uuid();
+        $request = DsarRequestRecord::query()->findOrFail($this->submitDsarRequest($member, $this->company)->json('data.id'));
+
+        // When their export here is built
+        $this->runTheExportFor($request);
+
+        // Then every section holds this company's data alone
+        $this->assertExportScopedTo($this->exportedData($request), $this->company, $member);
+    }
+
+    #[Test]
+    public function when_the_export_is_built_then_no_secret_is_exported(): void
+    {
+        // Given a member with a password, a remember token and two-factor sign-in
+        $member = User::factory()->withTwoFactor()->create();
+        $this->company->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then none of their secrets appears anywhere in it
+        $this->assertNoSecretOf($member, $this->exportedData($request));
+    }
+
+    #[Test]
+    public function when_a_section_has_no_entries_then_it_is_exported_empty(): void
+    {
+        // Given a member who never consented here and acted in nothing audited
+        $member = $this->aCompanyMember($this->company);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then those sections are present and empty
+        $exported = $this->exportedData($request);
+        $this->assertSame([[], []], [$exported['consent_records'], $exported['audit_trail']]);
+    }
+
+    #[Test]
     public function when_the_export_is_built_then_the_audit_section_holds_the_entries_they_acted_in(): void
     {
         // Given a member whose own submission is audited, beside another member's audited submission

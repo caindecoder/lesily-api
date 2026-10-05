@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Storage;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarRequestRejected;
@@ -940,6 +941,46 @@ abstract class DsarTestCase extends TestCase
         $zip->close();
 
         return $data;
+    }
+
+    /**
+     * Every section of $exported belongs to $company alone: $member's
+     * membership of it, the consent they gave in it, and the audit entries
+     * they acted in there.
+     *
+     * @param  array<string, mixed>  $exported
+     */
+    protected function assertExportScopedTo(array $exported, Company $company, User $member): void
+    {
+        $this->assertSame($company->getKey(), $exported['membership']['company']['id']);
+        $this->assertCount(2, $exported['consent_records']);
+        $this->assertSame(
+            AuditEntry::query()->where('company_id', $company->getKey())->where('actor_user_id', $member->getKey())->pluck('subject_id')->all(),
+            array_column($exported['audit_trail'], 'subject_id'),
+        );
+    }
+
+    /**
+     * None of $user's secrets — password hash, remember token, two-factor
+     * secret, recovery codes — appears anywhere in $exported.
+     *
+     * @param  array<string, mixed>  $exported
+     */
+    protected function assertNoSecretOf(User $user, array $exported): void
+    {
+        $json = json_encode($exported, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $secrets = [
+            $user->password,
+            $user->remember_token,
+            $user->two_factor_secret,
+            $user->getRawOriginal('two_factor_secret'),
+            ...$user->two_factor_recovery_codes,
+        ];
+
+        $this->assertNotEmpty($secrets);
+        foreach ($secrets as $secret) {
+            $this->assertStringNotContainsString((string) $secret, $json);
+        }
     }
 
     protected function exportPathOf(DsarRequestRecord $request): string
