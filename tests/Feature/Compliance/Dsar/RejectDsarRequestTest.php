@@ -58,6 +58,22 @@ class RejectDsarRequestTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_the_request_was_fulfilled_before_the_final_failure_then_its_export_is_kept(): void
+    {
+        // Given a member's request a sibling run already fulfilled, and the export it is downloadable from
+        $member = $this->aCompanyMember($this->company);
+        $request = $this->aClosedRequest($this->company, $member, 'fulfilled');
+        $this->aPartialExportFor($request);
+
+        // When this run's export fails for good
+        $this->failTheExportFor($request, new RuntimeException('export failure'));
+
+        // Then the fulfilment stands and its export is left exactly as it was
+        $this->assertStillClosedAs($request, DsarRequestStatus::Fulfilled);
+        $this->assertExportFileUntouched($request);
+    }
+
+    #[Test]
     public function when_the_audit_entry_cannot_be_written_then_nothing_is_rejected(): void
     {
         // Given a member's own request and an audit write that fails after its row is inserted

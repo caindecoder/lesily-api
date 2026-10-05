@@ -22,19 +22,35 @@ class FulfilDsarRequestTest extends DsarTestCase
     }
 
     #[Test]
-    #[DataProvider('provideClosedRequests')]
-    public function when_the_request_is_no_longer_in_progress_then_the_job_writes_nothing(string $closedBy, DsarRequestStatus $status): void
+    #[DataProvider('provideUnfulfilledClosedRequests')]
+    public function when_the_request_was_withdrawn_or_rejected_then_the_job_records_nothing_and_discards_the_leftover_file(string $closedBy, DsarRequestStatus $status): void
     {
-        // Given a member's own request already closed, and whatever file its disk path already holds
+        // Given a member's own request withdrawn or rejected, with the ZIP an earlier failed try left behind
         $member = $this->aCompanyMember($this->company);
         $request = $this->aClosedRequest($this->company, $member, $closedBy);
         $this->aPartialExportFor($request);
 
-        // When its export job runs late
+        // When its export job runs again
         $this->runTheExportFor($request);
 
-        // Then the job stops at once: nothing recorded, and the file there is left exactly as it was
+        // Then nothing is recorded and no personal-data file outlives the request
         $this->assertStillClosedAs($request, $status);
+        $this->assertNoExportFileFor($request);
+    }
+
+    #[Test]
+    public function when_the_request_is_already_fulfilled_then_a_late_job_leaves_its_export_untouched(): void
+    {
+        // Given a member's fulfilled request and the export it is downloadable from
+        $member = $this->aCompanyMember($this->company);
+        $request = $this->aClosedRequest($this->company, $member, 'fulfilled');
+        $this->aPartialExportFor($request);
+
+        // When a late copy of its export job runs
+        $this->runTheExportFor($request);
+
+        // Then nothing is recorded and the export is left exactly as it was
+        $this->assertStillClosedAs($request, DsarRequestStatus::Fulfilled);
         $this->assertExportFileUntouched($request);
     }
 

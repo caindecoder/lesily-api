@@ -188,6 +188,17 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * @return array<string, array{string, DsarRequestStatus}>
+     */
+    public static function provideUnfulfilledClosedRequests(): array
+    {
+        return [
+            'withdrawn' => ['withdrawn', DsarRequestStatus::Cancelled],
+            'rejected' => ['rejected', DsarRequestStatus::Rejected],
+        ];
+    }
+
+    /**
      * $subject's own request, closed the event-sourced way $closedBy names —
      * withdrawn by them, fulfilled by its export, or rejected after its export
      * failed.
@@ -865,6 +876,14 @@ abstract class DsarTestCase extends TestCase
             ->where('event_class', DsarRequestRejected::class)
             ->count());
         $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_rejected']);
+        Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
+    }
+
+    /**
+     * No export file is left at $request's path on the dsar disk.
+     */
+    protected function assertNoExportFileFor(DsarRequestRecord $request): void
+    {
         Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
     }
 
