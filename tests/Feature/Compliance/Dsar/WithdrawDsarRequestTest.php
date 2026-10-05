@@ -155,13 +155,15 @@ class WithdrawDsarRequestTest extends DsarTestCase
     {
         // Given an owner requested an export for a member
         $owner = $this->aCompanyMember($this->company, 'owner');
-        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company), $owner);
+        $member = $this->aCompanyMember($this->company);
+        $request = $this->aSubmittedRequest($this->company, $member, $owner);
 
         // When the owner withdraws it
         $response = $this->withdrawDsarRequest($owner, $this->company, $request->getKey());
 
-        // Then
+        // Then the audit names the member as subject and the owner as actor
         $this->assertWithdrawn($response, $request, $owner);
+        $this->assertWithdrawalAudited($request, $member, $owner);
     }
 
     #[Test]

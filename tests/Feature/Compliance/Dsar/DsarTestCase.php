@@ -495,6 +495,7 @@ abstract class DsarTestCase extends TestCase
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', DsarRequestCancelled::class)
             ->where('aggregate_uuid', $request->getKey())
+            ->whereForCompany($request->company_id)
             ->where('event_properties->cancelledByUserId', $actor->getKey())
             ->count());
     }
