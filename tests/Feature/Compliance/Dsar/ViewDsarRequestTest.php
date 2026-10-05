@@ -114,6 +114,35 @@ class ViewDsarRequestTest extends DsarTestCase
         $this->assertDsarRequestShown($response, $request, false);
     }
 
+    #[Test]
+    #[DataProvider('provideRolesWithViewAll')]
+    public function when_a_view_all_holder_views_any_company_request_then_it_is_shown(string $roleCode): void
+    {
+        // Given
+        $holder = $this->aCompanyMember($this->company, $roleCode);
+        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->aCompanyMember($this->company))->create();
+
+        // When
+        $response = $this->viewDsarRequest($holder, $this->company, $request->getKey());
+
+        // Then
+        $this->assertDsarRequestShown($response, $request, false);
+    }
+
+    #[Test]
+    public function when_the_subject_views_their_fulfilled_request_then_the_sla_dates_are_shown(): void
+    {
+        // Given a request made 28 days ago and fulfilled today
+        $subject = $this->aCompanyMember($this->company);
+        $request = DsarRequestRecord::factory()->forSubject($this->company, $subject)->requestedDaysAgo(28)->fulfilled()->create();
+
+        // When
+        $response = $this->viewDsarRequest($subject, $this->company, $request->getKey());
+
+        // Then
+        $this->assertDsarRequestShown($response, $request, true);
+    }
+
     /**
      * @return array<string, array{string}>
      */
