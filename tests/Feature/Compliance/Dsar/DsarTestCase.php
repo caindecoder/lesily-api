@@ -445,6 +445,16 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * The withdrawal was refused because the actor did not make the request —
+     * 403 DSAR_REQUESTER_MISMATCH with the UC-1-102 message.
+     */
+    protected function assertRefusedAsNotTheRequester(TestResponse $response): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::DsarRequesterMismatch);
+        $response->assertJsonPath('message', 'Only the original requester can withdraw this DSAR.');
+    }
+
+    /**
      * The submission was accepted and is the subject's one open request in
      * $company — any earlier requests there are closed.
      */

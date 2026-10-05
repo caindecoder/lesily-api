@@ -5,6 +5,8 @@ namespace App\Compliance\Dsar\Aggregates;
 use Carbon\CarbonImmutable;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
+use App\Compliance\Dsar\Exceptions\DsarRequesterMismatchException;
+use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 
 class DsarRequest extends AggregateRoot
@@ -12,6 +14,8 @@ class DsarRequest extends AggregateRoot
     private const int SLA_DAYS = 30;
 
     private const string REQUEST_TYPE_ACCESS = 'access';
+
+    protected ?string $requestedByUserId = null;
 
     public function submit(SubmitDsarRequestCommand $command, string $requestedByRole): static
     {
@@ -28,5 +32,19 @@ class DsarRequest extends AggregateRoot
                 requestedAt: $requestedAt,
                 slaDeadline: $requestedAt->addDays(self::SLA_DAYS),
             ));
+    }
+
+    public function cancel(CancelDsarRequestCommand $command): static
+    {
+        if ($command->cancelledByUserId !== $this->requestedByUserId) {
+            throw new DsarRequesterMismatchException;
+        }
+
+        return $this;
+    }
+
+    protected function applyDsarRequestSubmitted(DsarRequestSubmitted $event): void
+    {
+        $this->requestedByUserId = $event->requestedByUserId;
     }
 }

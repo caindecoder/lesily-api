@@ -34,6 +34,7 @@ use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use App\Companies\Exceptions\OwnershipTransferContentionException;
+use App\Compliance\Dsar\Exceptions\DsarRequesterMismatchException;
 use App\Compliance\Dsar\Exceptions\DsarRequestInProgressException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use App\Companies\Exceptions\OwnershipTransferCaseNotOpenException;
@@ -228,6 +229,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // An open DSAR already exists for the subject in this company (UC-1-070 2a).
         $exceptions->render(fn (DsarRequestInProgressException $e) => EnvelopeBuilder::build(
             ApiErrorCode::DsarInProgress,
+            $e->getMessage(),
+        ));
+
+        // Only the original requester may withdraw a DSAR request (UC-1-102 4b, V5).
+        $exceptions->render(fn (DsarRequesterMismatchException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::DsarRequesterMismatch,
             $e->getMessage(),
         ));
 
