@@ -130,8 +130,6 @@
                 // becomes a real, killable regression.
                 "App\\Billing\\Invoices\\Entities\\Invoice::company",
                 "App\\Companies\\Entities\\Company::settings",
-                "App\\Compliance\\Dsar\\Entities\\DsarRequestRecord::subject",
-                "App\\Compliance\\Dsar\\Entities\\DsarRequestRecord::requestedBy",
                 // OQ-1-172 PR-0 L-SCOPE: each is invoked from a scope that reaches
                 // protected - envelope() by the parent Mailable, forCompany() by the
                 // AggregateRoot subclasses, scopeWhereForCompany() via Model::callNamedScope.

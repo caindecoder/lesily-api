@@ -55,6 +55,29 @@ class DsarRequestRecordFactory extends Factory
         ]);
     }
 
+    public function requestedBy(User $requester, string $roleCode): static
+    {
+        return $this->state([
+            'requested_by' => $requester->getKey(),
+            'requested_by_role' => $roleCode,
+        ]);
+    }
+
+    public function requestedDaysAgo(int $days): static
+    {
+        $requestedAt = CarbonImmutable::now()->subDays($days);
+
+        return $this->state([
+            'requested_at' => $requestedAt,
+            'sla_deadline' => $requestedAt->addDays(30),
+        ]);
+    }
+
+    public function downloadExpired(): static
+    {
+        return $this->state(['download_expired_at' => CarbonImmutable::now()]);
+    }
+
     public function fulfilled(): static
     {
         return $this->state([

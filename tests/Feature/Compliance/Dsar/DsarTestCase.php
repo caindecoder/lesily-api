@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use InvalidArgumentException;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanyUser;
@@ -118,6 +119,129 @@ abstract class DsarTestCase extends TestCase
     protected function submitDsarRequestAsGuest(array $body = []): TestResponse
     {
         return $this->postJson('/api/v1/dsar-requests', $body, ['Idempotency-Key' => $this->idempotencyKey]);
+    }
+
+    /**
+     * An authenticated member lists the DSAR requests visible to them in
+     * $company's context.
+     *
+     * @param  array<string, mixed>  $query
+     */
+    protected function listDsarRequests(User $actor, Company $company, array $query = []): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/dsar-requests'.$this->queryString($query), ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * $request's row in the list carries every resource field as recorded,
+     * with $downloadAvailable stated by the test.
+     */
+    protected function assertListedRowShows(TestResponse $response, DsarRequestRecord $request, bool $downloadAvailable): void
+    {
+        $response->assertOk();
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $response->json('data');
+        $this->assertSame([
+            'id' => $request->getKey(),
+            'status' => $request->status->value,
+            'request_type' => 'access',
+            'subject' => ['id' => $request->subject->getKey(), 'name' => $request->subject->name],
+            'requested_by' => ['id' => $request->requestedBy->getKey(), 'name' => $request->requestedBy->name],
+            'requested_at' => $request->requested_at->toISOString(),
+            'sla_deadline' => $request->requested_at->addDays(30)->toISOString(),
+            'completed_at' => $request->completed_at?->toISOString(),
+            'download_available' => $downloadAvailable,
+            'download_expires_at' => $request->download_expires_at?->toISOString(),
+            'cancelled_at' => null,
+            'rejection_reason' => null,
+        ], collect($rows)->firstWhere('id', $request->getKey()));
+    }
+
+    /**
+     * The list call with the query log on around it.
+     *
+     * @return array{TestResponse, int}
+     */
+    protected function listDsarRequestsCountingQueries(User $actor, Company $company): array
+    {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $response = $this->listDsarRequests($actor, $company);
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return [$response, $queryCount];
+    }
+
+    /**
+     * A full first page came back and it cost fewer queries than it has rows —
+     * the relations are loaded once for the page, not once per row.
+     */
+    protected function assertListedWithFewerQueriesThanRows(TestResponse $response, int $queryCount): void
+    {
+        $response->assertOk();
+        $this->assertCount(15, $response->json('data'));
+        $this->assertLessThan(15, $queryCount);
+    }
+
+    /**
+     * The list asked for with $body sent as the request body instead of the
+     * query string.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function listDsarRequestsWithBody(User $actor, Company $company, array $body): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->json('GET', '/api/v1/dsar-requests', $body, ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * A guest (no Sanctum session) lists DSAR requests.
+     *
+     * @param  array<string, mixed>  $query
+     */
+    protected function listDsarRequestsAsGuest(array $query = []): TestResponse
+    {
+        return $this->getJson('/api/v1/dsar-requests'.$this->queryString($query));
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
+     */
+    private function queryString(array $query): string
+    {
+        return $query === [] ? '' : '?'.http_build_query($query);
+    }
+
+    /**
+     * The list answered with exactly $expectedIds, in that order, and a total
+     * that counts only them.
+     *
+     * @param  list<string>  $expectedIds
+     */
+    protected function assertDsarRequestsListed(TestResponse $response, array $expectedIds): void
+    {
+        $response->assertOk();
+        $this->assertSame($expectedIds, $response->json('data.*.id'));
+        $this->assertSame(count($expectedIds), $response->json('meta.pagination.total'));
+    }
+
+    /**
+     * One page of the list — exactly $expectedIds in order, under the exact
+     * pagination meta.
+     *
+     * @param  list<string>  $expectedIds
+     * @param  array<string, int>  $pagination
+     */
+    protected function assertDsarRequestPage(TestResponse $response, array $expectedIds, array $pagination): void
+    {
+        $response->assertOk();
+        $this->assertSame($expectedIds, $response->json('data.*.id'));
+        $this->assertSame($pagination, $response->json('meta.pagination'));
     }
 
     /**

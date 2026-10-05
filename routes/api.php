@@ -343,6 +343,10 @@ Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/execute', [PlatformAdm
 Route::patch('/v1/admin/ownership-transfer-cases/{caseId}/reject', [PlatformAdminOwnershipTransferCasesController::class, 'reject'])
     ->middleware(['auth:sanctum', 'platform.admin']);
 
+// List the DSAR requests visible to the member (UC-1-070) - their own; dsar.view-all widens to the company.
+Route::get('/v1/dsar-requests', [DsarRequestsController::class, 'index'])
+    ->middleware(['auth:sanctum', 'auth.company']);
+
 // Request a DSAR export (UC-1-070) - a member for themselves, Owner/Admin for a member.
 Route::post('/v1/dsar-requests', [DsarRequestsController::class, 'store'])
     ->middleware(['auth:sanctum', 'auth.company', 'idempotency-key:required']);

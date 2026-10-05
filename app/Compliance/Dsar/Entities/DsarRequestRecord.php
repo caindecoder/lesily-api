@@ -3,7 +3,9 @@
 namespace App\Compliance\Dsar\Entities;
 
 use App\Models\User;
+use App\Companies\Entities\Company;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use Database\Factories\DsarRequestRecordFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -61,6 +63,24 @@ class DsarRequestRecord extends Model
     public function requestedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'requested_by');
+    }
+
+    /**
+     * @param  Builder<self>  $query
+     */
+    protected function scopeWhereCompany(Builder $query, Company $company): void
+    {
+        $query->where('company_id', $company->getKey());
+    }
+
+    /**
+     * Requests about $user or made by $user.
+     *
+     * @param  Builder<self>  $query
+     */
+    protected function scopeWhereVisibleTo(Builder $query, User $user): void
+    {
+        $query->where('subject_user_id', $user->getKey())->orWhere('requested_by', $user->getKey());
     }
 
     protected static function newFactory(): DsarRequestRecordFactory
