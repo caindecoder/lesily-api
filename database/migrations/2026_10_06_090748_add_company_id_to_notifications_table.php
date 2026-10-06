@@ -12,8 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('notifications', function (Blueprint $table) {
-            // Null = an account-level notice. No foreign key: the owner-signup
-            // welcome is stored before its company row exists.
+            // Null = an account-level notice. No foreign key: the rows outlive a
+            // company hard-delete and are anonymised (as stored_events.company_id).
             $table->uuid('company_id')->nullable()->after('notifiable_id')->index();
         });
     }
