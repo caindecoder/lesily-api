@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\OwnershipTransferCase;
+use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 
 class ExportDsarSectionsTest extends DsarTestCase
@@ -73,16 +74,24 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_export_is_built_then_no_secret_is_exported(): void
     {
-        // Given a member with a password, a remember token and two-factor sign-in
+        // Given a member with a password, a remember token, two-factor sign-in, a sign-in token, an invitation and a verified-then-rejected case
         $member = User::factory()->withTwoFactor()->create();
         $this->company->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
+        $signIn = $this->aSignInFor($member, 'iPhone', now()->addDays(90));
+        $invitationId = $this->anInvitationTo($member, $this->company);
+        $case = OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->verified()->closedRejected()->create();
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When their export is built
         $this->runTheExportFor($request);
 
-        // Then none of their secrets appears anywhere in it
-        $this->assertNoSecretOf($member, $this->exportedData($request));
+        // Then none of their secrets, token hashes, case notes or prose reasons appears anywhere in it
+        $this->assertNoSecretOf($member, $this->exportedData($request), [
+            $signIn->token,
+            Invitation::query()->findOrFail($invitationId)->token_hash,
+            $case->verification_notes,
+            $case->rejection_reason,
+        ]);
     }
 
     #[Test]

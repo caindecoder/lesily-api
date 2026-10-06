@@ -1169,11 +1169,13 @@ abstract class DsarTestCase extends TestCase
 
     /**
      * None of $user's secrets — password hash, remember token, two-factor
-     * secret, recovery codes — appears anywhere in $exported.
+     * secret, recovery codes — nor any of $otherSecrets appears anywhere in
+     * $exported.
      *
      * @param  array<string, mixed>  $exported
+     * @param  array<int, string|null>  $otherSecrets
      */
-    protected function assertNoSecretOf(User $user, array $exported): void
+    protected function assertNoSecretOf(User $user, array $exported, array $otherSecrets = []): void
     {
         $json = json_encode($exported, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         $secrets = [
@@ -1182,6 +1184,7 @@ abstract class DsarTestCase extends TestCase
             $user->two_factor_secret,
             $user->getRawOriginal('two_factor_secret'),
             ...($user->two_factor_recovery_codes ?? []),
+            ...$otherSecrets,
         ];
 
         $this->assertSame($secrets, array_filter($secrets));
