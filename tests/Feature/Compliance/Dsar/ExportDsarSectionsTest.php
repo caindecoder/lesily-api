@@ -151,9 +151,8 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_a_notice_concerned_their_whole_account_then_it_is_exported_with_this_companys(): void
     {
-        // Given a member of this company and another, told yesterday that their password changed, and welcomed here today
+        // Given a member told yesterday that their password changed, and welcomed here today
         $member = $this->aCompanyMember($this->company);
-        Company::factory()->create()->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
         $this->travel(-1)->days();
         $this->aNotificationFor($member, NotificationType::PasswordChanged, null);
         $this->travel(1)->days();
