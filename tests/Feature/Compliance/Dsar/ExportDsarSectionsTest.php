@@ -52,25 +52,27 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_co_workers_have_their_own_sign_ins_invitations_and_transfers_then_none_of_theirs_is_exported(): void
+    public function when_co_workers_have_their_own_sign_ins_invitations_transfers_and_notices_then_none_of_theirs_is_exported(): void
     {
-        // Given a member beside a co-worker who signed in, was invited and is named on a case, and a transfer between two others
+        // Given a member beside a co-worker who signed in, was invited, is named on a case, was welcomed here and switched an email off, and a transfer between two others
         $member = $this->aCompanyMember($this->company);
         $coWorker = $this->aCompanyMember($this->company);
         $this->aSignInFor($coWorker, 'iPhone', now()->addDays(90));
         $this->anInvitationTo($coWorker, $this->company);
         OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($coWorker)->create();
         $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $coWorker);
+        $this->aNotificationFor($coWorker, NotificationType::TeamWelcome, $this->company);
+        NotificationPreference::factory()->mailDisabled($coWorker, NotificationType::GeneralAccountNotice)->create();
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When the member's export is built
         $this->runTheExportFor($request);
 
-        // Then none of the others' sign-ins, invitations, transfers or cases is theirs
+        // Then none of the others' sign-ins, invitations, transfers, cases, notices or preferences is theirs
         $exported = $this->exportedData($request);
         $this->assertSame(
-            [[], [], ['transfers' => [], 'cases' => []]],
-            [$exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers']],
+            [[], [], ['transfers' => [], 'cases' => []], ['notifications' => [], 'preferences' => []]],
+            [$exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers'], $exported['notifications']],
         );
     }
 
