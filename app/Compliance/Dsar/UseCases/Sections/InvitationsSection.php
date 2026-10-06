@@ -2,6 +2,7 @@
 
 namespace App\Compliance\Dsar\UseCases\Sections;
 
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use App\Companies\Memberships\Events\UserInvited;
@@ -38,8 +39,14 @@ class InvitationsSection implements DsarSectionProvider
      */
     public function collect(string $subjectUserId, string $companyId): array
     {
+        $invitationIds = LesilyStoredEvent::query()
+            ->where('event_class', UserInvited::class)
+            ->where('event_properties->email', User::query()->findOrFail($subjectUserId)->email)
+            ->select('aggregate_uuid');
+
         $events = LesilyStoredEvent::query()
             ->whereForCompany($companyId)
+            ->whereIn('aggregate_uuid', $invitationIds)
             ->whereIn('event_class', array_keys(self::EVENTS))
             ->orderBy('id')
             ->get();

@@ -3,6 +3,7 @@
 namespace App\Compliance\Dsar\UseCases\Sections;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Companies\Events\CompanyOwnershipTransferred;
 use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
@@ -27,7 +28,7 @@ class OwnershipTransferCasesSection implements DsarSectionProvider
     {
         return [
             'transfers' => $this->transfers($subjectUserId, $companyId),
-            'cases' => $this->cases($companyId),
+            'cases' => $this->cases($subjectUserId, $companyId),
         ];
     }
 
@@ -39,6 +40,9 @@ class OwnershipTransferCasesSection implements DsarSectionProvider
         return LesilyStoredEvent::query()
             ->whereForCompany($companyId)
             ->where('event_class', CompanyOwnershipTransferred::class)
+            ->where(fn (Builder $query) => $query
+                ->where('event_properties->previousOwnerUserId', $subjectUserId)
+                ->orWhere('event_properties->newOwnerUserId', $subjectUserId))
             ->orderBy('id')
             ->get()
             ->map(fn (EloquentStoredEvent $transfer): array => [
@@ -52,10 +56,11 @@ class OwnershipTransferCasesSection implements DsarSectionProvider
     /**
      * @return array<int, array<string, string|null>>
      */
-    private function cases(string $companyId): array
+    private function cases(string $subjectUserId, string $companyId): array
     {
         return OwnershipTransferCase::query()
             ->forCompanyId($companyId)
+            ->where('new_owner_user_id', $subjectUserId)
             ->orderBy('created_at')
             ->orderBy('id')
             ->get()
