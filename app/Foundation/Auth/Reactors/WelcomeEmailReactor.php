@@ -21,6 +21,6 @@ class WelcomeEmailReactor extends Reactor implements ShouldQueue
     public function onUserSignedUpAsOwner(UserSignedUpAsOwner $event): void
     {
         User::query()->findOrFail($event->userId)
-            ->notify(new SystemNotification(NotificationType::GeneralAccountNotice, $event->companyName, null));
+            ->notify(new SystemNotification(NotificationType::GeneralAccountNotice, $event->companyName, $event->companyId));
     }
 }
