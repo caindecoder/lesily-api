@@ -56,7 +56,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_co_workers_have_their_own_sign_ins_invitations_transfers_and_notices_then_none_of_theirs_is_exported(): void
     {
-        // Given a member beside a co-worker who signed in, was invited, is named on a case, was welcomed here and switched an email off, and a transfer between two others
+        // Given a member beside a co-worker who signed in, was invited, is named on a case, was welcomed here, was told their password changed and switched an email off, and a transfer between two others
         $member = $this->aCompanyMember($this->company);
         $coWorker = $this->aCompanyMember($this->company);
         $this->aSignInFor($coWorker, 'iPhone', now()->addDays(90));
@@ -64,6 +64,7 @@ class ExportDsarSectionsTest extends DsarTestCase
         OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($coWorker)->create();
         $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $coWorker);
         $this->aNotificationFor($coWorker, NotificationType::TeamWelcome, $this->company);
+        $this->aNotificationFor($coWorker, NotificationType::PasswordChanged, null);
         NotificationPreference::factory()->mailDisabled($coWorker, NotificationType::GeneralAccountNotice)->create();
         $request = $this->aSubmittedRequest($this->company, $member);
 
@@ -144,6 +145,28 @@ class ExportDsarSectionsTest extends DsarTestCase
         $this->assertSame(
             [[], [], [], [], ['transfers' => [], 'cases' => []], ['notifications' => [], 'preferences' => []]],
             [$exported['consent_records'], $exported['audit_trail'], $exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers'], $exported['notifications']],
+        );
+    }
+
+    #[Test]
+    public function when_a_notice_concerned_their_whole_account_then_it_is_exported_with_this_companys(): void
+    {
+        // Given a member of this company and another, told yesterday that their password changed, and welcomed here today
+        $member = $this->aCompanyMember($this->company);
+        Company::factory()->create()->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
+        $this->travel(-1)->days();
+        $this->aNotificationFor($member, NotificationType::PasswordChanged, null);
+        $this->travel(1)->days();
+        $this->aNotificationFor($member, NotificationType::TeamWelcome, $this->company);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export here is built
+        $this->runTheExportFor($request);
+
+        // Then the account-wide notice is exported beside this company's, oldest first
+        $this->assertSame(
+            ['password_changed', 'team_welcome'],
+            array_column($this->exportedData($request)['notifications']['notifications'], 'notification_type'),
         );
     }
 

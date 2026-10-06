@@ -3,6 +3,7 @@
 namespace App\Compliance\Dsar\UseCases\Sections;
 
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Notifications\DatabaseNotification;
 use App\Foundation\Notifications\Entities\NotificationPreference;
 
@@ -14,8 +15,9 @@ class NotificationsSection implements DsarSectionProvider
     }
 
     /**
-     * The notices the subject received, oldest first, and the notification
-     * preferences they hold — never the notice's class or anyone's id.
+     * The notices the subject received about this company or their whole
+     * account, oldest first, and the notification preferences they hold —
+     * never the notice's class or anyone's id.
      *
      * @return array{notifications: array<int, array<string, mixed>>, preferences: array<int, array<string, mixed>>}
      */
@@ -34,7 +36,7 @@ class NotificationsSection implements DsarSectionProvider
     {
         return User::query()->findOrFail($subjectUserId)
             ->notifications()
-            ->where('company_id', $companyId)
+            ->where(fn (Builder $query): Builder => $query->where('company_id', $companyId)->orWhereNull('company_id'))
             ->reorder()
             ->orderBy('created_at')
             ->orderBy('id')
