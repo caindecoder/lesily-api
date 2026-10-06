@@ -215,4 +215,25 @@ class ExportDsarSectionsTest extends DsarTestCase
             ['device_name' => 'iPhone', 'signed_in_at' => now()->toISOString(), 'last_used_at' => now()->subHour()->toISOString(), 'expires_at' => now()->addDays(90)->toISOString()],
         ], $this->exportedData($request)['sign_ins']);
     }
+
+    #[Test]
+    public function when_the_export_is_built_then_the_invitations_section_holds_the_invitation_that_brought_them_in(): void
+    {
+        // Given a member who joined through an invitation
+        $member = User::factory()->create();
+        $invitationId = $this->anInvitationTo($member, $this->company);
+        $this->acceptTheInvitation($invitationId, $member);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the invitation is exported with its timeline
+        $this->assertSame([[
+            'timeline' => [
+                ['event' => 'invited', 'role' => 'employee', 'at' => now()->toISOString()],
+                ['event' => 'joined', 'role' => 'employee', 'at' => now()->toISOString()],
+            ],
+        ]], $this->exportedData($request)['invitations']);
+    }
 }

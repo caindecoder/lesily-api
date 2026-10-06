@@ -35,6 +35,7 @@ use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Compliance\Dsar\IO\Export\DsarExportArchive;
 use App\Compliance\Dsar\UseCases\Sections\DsarSections;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
+use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Compliance\Dsar\UseCases\Audit\DsarOutcomeAudit;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
@@ -44,6 +45,7 @@ use App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 use App\Compliance\Dsar\UseCases\Interactors\RejectDsarRequestInteractor;
 
 abstract class DsarTestCase extends TestCase
@@ -996,6 +998,37 @@ abstract class DsarTestCase extends TestCase
         $token->forceFill(['last_used_at' => now()->subHour()])->save();
 
         return $token;
+    }
+
+    /**
+     * An invitation of $user's email to $company as an employee, recorded the
+     * event-sourced way by a fresh inviter. Returns the invitation id.
+     */
+    protected function anInvitationTo(User $user, Company $company): string
+    {
+        $invitationId = Str::uuid7()->toString();
+
+        UserMembership::retrieve($invitationId)
+            ->invite(CreateInvitationCommand::from([
+                'companyId' => $company->getKey(),
+                'email' => $user->email,
+                'roleId' => $this->seededRole('employee')->getKey(),
+                'invitedByUserId' => User::factory()->create()->getKey(),
+                'plaintextToken' => Str::random(40),
+            ]))
+            ->persist();
+
+        return $invitationId;
+    }
+
+    /**
+     * $user accepts the invitation $invitationId as an employee.
+     */
+    protected function acceptTheInvitation(string $invitationId, User $user): void
+    {
+        UserMembership::retrieve($invitationId)
+            ->acceptInvitation($user->getKey(), $this->seededRole('employee')->getKey())
+            ->persist();
     }
 
     /**
