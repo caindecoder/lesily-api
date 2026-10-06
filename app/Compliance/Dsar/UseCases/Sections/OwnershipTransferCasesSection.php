@@ -22,7 +22,7 @@ class OwnershipTransferCasesSection implements DsarSectionProvider
      * them, oldest first (ruling N32): never the verification notes, the prose
      * rejection reason, event ids or another person's id.
      *
-     * @return array{transfers: array<int, array<string, string>>, cases: array<int, array<string, string|null>>}
+     * @return array{transfers: array<int, array<string, mixed>>, cases: array<int, array<string, string|null>>}
      */
     public function collect(string $subjectUserId, string $companyId): array
     {
@@ -33,7 +33,7 @@ class OwnershipTransferCasesSection implements DsarSectionProvider
     }
 
     /**
-     * @return array<int, array<string, string>>
+     * @return array<int, array<string, mixed>>
      */
     private function transfers(string $subjectUserId, string $companyId): array
     {
