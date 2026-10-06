@@ -22,6 +22,6 @@ class TrialExpiredEmailReactor extends Reactor implements ShouldQueue
     {
         $company = CompanyReadModel::query()->findOrFail($event->aggregateRootUuid());
 
-        $company->owner()?->notify(new SystemNotification(NotificationType::GeneralAccountNotice, $company->name, null));
+        $company->owner()?->notify(new SystemNotification(NotificationType::GeneralAccountNotice, $company->name, $company->id));
     }
 }
