@@ -14,7 +14,7 @@ class SignInsSection implements DsarSectionProvider
 
     /**
      * Every sign-in token the subject holds, oldest first — tokens belong to
-     * the account, not to a company (ruling N29), and never their hash.
+     * the account, not to a company — and never their hash.
      *
      * @return array<int, array<string, string|null>>
      */

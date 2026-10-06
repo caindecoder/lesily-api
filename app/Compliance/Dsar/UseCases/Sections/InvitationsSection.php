@@ -16,7 +16,7 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class InvitationsSection implements DsarSectionProvider
 {
-    /** The timeline name of each invitation event exported (ruling N31). */
+    /** The timeline name of each invitation event exported. */
     private const array EVENTS = [
         UserInvited::class => 'invited',
         UserInvitationResent::class => 'resent',
@@ -31,15 +31,16 @@ class InvitationsSection implements DsarSectionProvider
     }
 
     /**
-     * Each invitation of the subject's email, oldest first, with its full
-     * history from the event store (ruling N31) — never a token hash or
-     * another person's id.
+     * Each invitation of the subject's email, in any letter case, oldest
+     * first, with its full history from the event store — never a token hash
+     * or another person's id.
      *
      * @return array<int, array<string, mixed>>
      */
     public function collect(string $subjectUserId, string $companyId): array
     {
         $invitationIds = LesilyStoredEvent::query()
+            ->whereForCompany($companyId)
             ->where('event_class', UserInvited::class)
             ->whereRaw(
                 "lower(json_unquote(json_extract(event_properties, '$.email'))) = lower(?)",

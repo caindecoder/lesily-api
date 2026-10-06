@@ -19,7 +19,7 @@ class OwnershipTransferCasesSection implements DsarSectionProvider
     /**
      * The ownership transfers the subject took part in — self-service or
      * admin-assisted, from the event store — and the support cases that name
-     * them, oldest first (ruling N32): never the verification notes, the prose
+     * them, oldest first — never the verification notes, the prose
      * rejection reason, event ids or another person's id.
      *
      * @return array{transfers: array<int, array<string, mixed>>, cases: array<int, array<string, string|null>>}
