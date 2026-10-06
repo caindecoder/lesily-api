@@ -541,7 +541,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         $this->assertDatabaseHas('notifications', [
             'notifiable_id' => $to->getKey(),
-            'company_id' => $company->id,
+            'company_id' => $company->getKey(),
             'data->notification_type' => 'ownership_received',
             'data->company_name' => $company->name,
         ]);

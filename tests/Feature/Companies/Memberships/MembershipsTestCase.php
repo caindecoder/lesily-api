@@ -800,7 +800,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
 
         $this->assertDatabaseHas('notifications', [
             'notifiable_id' => $joiner->getKey(),
-            'company_id' => $company->id,
+            'company_id' => $company->getKey(),
             'data->notification_type' => 'team_welcome',
             'data->company_name' => $company->name,
         ]);

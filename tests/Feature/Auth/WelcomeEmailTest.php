@@ -57,14 +57,14 @@ class WelcomeEmailTest extends AuthTestCase
     protected function assertWelcomeNotificationSentTo(string $email, string $companyName): void
     {
         $owner = User::query()->where('email', $email)->sole();
-        $company = Company::query()->where('owner_id', $owner->id)->sole();
+        $company = Company::query()->where('owner_id', $owner->getKey())->sole();
 
         Notification::assertSentTo(
             $owner,
             SystemNotification::class,
             fn (SystemNotification $notification): bool => $notification->type === NotificationType::GeneralAccountNotice
                 && $notification->companyName === $companyName
-                && $notification->companyId === $company->id,
+                && $notification->companyId === $company->getKey(),
         );
     }
 }

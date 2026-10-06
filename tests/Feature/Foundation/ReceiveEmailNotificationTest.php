@@ -96,7 +96,7 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         $otherCompany = Company::factory()->create();
         $recipient = User::factory()->create();
 
-        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, $recipientCompany->name, $recipientCompany->id));
+        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, $recipientCompany->name, $recipientCompany->getKey()));
 
         $this->assertContentScopedToCompany($recipient, $recipientCompany, $otherCompany);
     }
@@ -170,7 +170,7 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
     protected function assertContentScopedToCompany(User $recipient, Company $recipientCompany, Company $otherCompany): void
     {
         $notification = $recipient->notifications()->sole();
-        $this->assertSame($recipientCompany->id, $notification->company_id);
+        $this->assertSame($recipientCompany->getKey(), $notification->company_id);
         $this->assertSame($recipientCompany->name, $notification->data['company_name']);
         $this->assertNotSame($otherCompany->name, $notification->data['company_name']);
         $this->assertSame(NotificationType::AccountSecurityAlert->value, $notification->data['notification_type']);
