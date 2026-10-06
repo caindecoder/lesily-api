@@ -32,6 +32,6 @@ class TeamWelcomeReactor extends Reactor implements ShouldQueue
 
         User::query()
             ->findOrFail($event->userId)
-            ->notify(new SystemNotification(NotificationType::TeamWelcome, $companyName));
+            ->notify(new SystemNotification(NotificationType::TeamWelcome, $companyName, null));
     }
 }

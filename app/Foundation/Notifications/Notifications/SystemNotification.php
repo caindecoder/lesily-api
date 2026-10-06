@@ -8,6 +8,7 @@ use Illuminate\Notifications\Notification;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Channels\QueuedMailChannel;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
+use App\Foundation\Notifications\Channels\CompanyDatabaseChannel;
 use App\Foundation\Notifications\Entities\NotificationPreference;
 
 /**
@@ -28,6 +29,7 @@ class SystemNotification extends Notification
     public function __construct(
         public NotificationType $type,
         public string $companyName,
+        public ?string $companyId,
     ) {}
 
     /**
@@ -36,7 +38,7 @@ class SystemNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        $channels = ['database'];
+        $channels = [CompanyDatabaseChannel::class];
 
         if ($this->type->isCritical() || ! $this->mailOptedOut($notifiable)) {
             $channels[] = QueuedMailChannel::class;
