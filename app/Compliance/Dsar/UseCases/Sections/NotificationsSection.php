@@ -22,7 +22,7 @@ class NotificationsSection implements DsarSectionProvider
     public function collect(string $subjectUserId, string $companyId): array
     {
         return [
-            'notifications' => $this->notificationsOf($subjectUserId),
+            'notifications' => $this->notificationsOf($subjectUserId, $companyId),
             'preferences' => $this->preferencesOf($subjectUserId),
         ];
     }
@@ -30,10 +30,11 @@ class NotificationsSection implements DsarSectionProvider
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function notificationsOf(string $subjectUserId): array
+    private function notificationsOf(string $subjectUserId, string $companyId): array
     {
         return User::query()->findOrFail($subjectUserId)
             ->notifications()
+            ->where('company_id', $companyId)
             ->reorder()
             ->orderBy('created_at')
             ->orderBy('id')
