@@ -28,6 +28,23 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_a_notice_concerns_the_whole_account_then_it_is_stored_without_a_company(): void
+    {
+        // Given a user
+        Mail::fake();
+        $recipient = User::factory()->create();
+
+        // When an account-level notice is raised for them
+        $recipient->notify(new SystemNotification(NotificationType::PasswordChanged, 'Contoso', null));
+
+        // Then its in-app record belongs to no company
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_id' => $recipient->getKey(),
+            'company_id' => null,
+        ]);
+    }
+
+    #[Test]
     public function when_user_opted_out_of_a_non_critical_notification_then_email_is_skipped_but_in_app_is_created(): void
     {
         Mail::fake();
