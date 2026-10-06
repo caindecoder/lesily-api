@@ -196,4 +196,23 @@ class ExportDsarSectionsTest extends DsarTestCase
             'two_factor_enabled' => true,
         ], $this->exportedData($request)['profile']);
     }
+
+    #[Test]
+    public function when_the_export_is_built_then_the_sign_ins_section_holds_every_token_they_signed_in_with(): void
+    {
+        // Given a member whose laptop sign-in has lapsed and whose phone sign-in is live
+        $member = $this->aCompanyMember($this->company);
+        $this->aSignInFor($member, 'Chrome on Windows', now()->subDay());
+        $this->aSignInFor($member, 'iPhone', now()->addDays(90));
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then both sign-ins are exported, oldest first
+        $this->assertSame([
+            ['device_name' => 'Chrome on Windows', 'signed_in_at' => now()->toISOString(), 'last_used_at' => now()->subHour()->toISOString(), 'expires_at' => now()->subDay()->toISOString()],
+            ['device_name' => 'iPhone', 'signed_in_at' => now()->toISOString(), 'last_used_at' => now()->subHour()->toISOString(), 'expires_at' => now()->addDays(90)->toISOString()],
+        ], $this->exportedData($request)['sign_ins']);
+    }
 }

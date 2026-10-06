@@ -7,6 +7,7 @@ use ZipArchive;
 use Tests\TestCase;
 use App\Models\User;
 use RuntimeException;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -20,6 +21,7 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Queue;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Sanctum\PersonalAccessToken;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
@@ -982,6 +984,18 @@ abstract class DsarTestCase extends TestCase
                 'ip' => '203.0.113.7',
             ]))
             ->persist();
+    }
+
+    /**
+     * A sign-in of $user from $deviceName — a Sanctum token expiring at
+     * $expiresAt, last used an hour ago.
+     */
+    protected function aSignInFor(User $user, string $deviceName, CarbonInterface $expiresAt): PersonalAccessToken
+    {
+        $token = $user->createToken($deviceName, ['*'], $expiresAt)->accessToken;
+        $token->forceFill(['last_used_at' => now()->subHour()])->save();
+
+        return $token;
     }
 
     /**
