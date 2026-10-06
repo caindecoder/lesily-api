@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
@@ -56,12 +57,14 @@ class WelcomeEmailTest extends AuthTestCase
     protected function assertWelcomeNotificationSentTo(string $email, string $companyName): void
     {
         $owner = User::query()->where('email', $email)->sole();
+        $company = Company::query()->where('owner_id', $owner->getKey())->sole();
 
         Notification::assertSentTo(
             $owner,
             SystemNotification::class,
             fn (SystemNotification $notification): bool => $notification->type === NotificationType::GeneralAccountNotice
-                && $notification->companyName === $companyName,
+                && $notification->companyName === $companyName
+                && $notification->companyId === $company->getKey(),
         );
     }
 }

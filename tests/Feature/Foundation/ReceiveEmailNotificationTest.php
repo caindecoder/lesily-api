@@ -28,13 +28,30 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_a_notice_concerns_the_whole_account_then_it_is_stored_without_a_company(): void
+    {
+        // Given a user
+        Mail::fake();
+        $recipient = User::factory()->create();
+
+        // When an account-level notice is raised for them
+        $recipient->notify(new SystemNotification(NotificationType::PasswordChanged, 'Contoso', null));
+
+        // Then its in-app record belongs to no company
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_id' => $recipient->getKey(),
+            'company_id' => null,
+        ]);
+    }
+
+    #[Test]
     public function when_user_opted_out_of_a_non_critical_notification_then_email_is_skipped_but_in_app_is_created(): void
     {
         Mail::fake();
         $recipient = User::factory()->create();
         $this->optOutOfMail($recipient, NotificationType::GeneralAccountNotice);
 
-        $recipient->notify(new SystemNotification(NotificationType::GeneralAccountNotice, 'Contoso'));
+        $recipient->notify(new SystemNotification(NotificationType::GeneralAccountNotice, 'Contoso', null));
 
         $this->assertOnlyInAppDelivered($recipient);
     }
@@ -46,7 +63,7 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         $recipient = User::factory()->create();
         $this->optOutOfMail($recipient, NotificationType::AccountSecurityAlert);
 
-        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso'));
+        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso', null));
 
         $this->assertEmailQueuedAndInAppCreated($recipient);
     }
@@ -58,7 +75,7 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         Mail::fake();
         $recipient = User::factory()->locale($locale)->create();
 
-        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso'));
+        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso', null));
 
         $this->assertEmailRenderedInLocale($locale);
     }
@@ -79,7 +96,7 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         $otherCompany = Company::factory()->create();
         $recipient = User::factory()->create();
 
-        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, $recipientCompany->name));
+        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, $recipientCompany->name, $recipientCompany->getKey()));
 
         $this->assertContentScopedToCompany($recipient, $recipientCompany, $otherCompany);
     }
@@ -90,7 +107,7 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         Mail::fake();
         $recipient = User::factory()->create();
 
-        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso'));
+        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso', null));
 
         $this->assertInAppCreatedAndEmailQueuedIndependently($recipient);
     }
@@ -101,7 +118,7 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         Mail::fake();
         $recipient = User::factory()->create();
 
-        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso'));
+        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso', null));
 
         $this->assertDeliveredAcrossBothChannels($recipient);
     }
@@ -152,10 +169,11 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
 
     protected function assertContentScopedToCompany(User $recipient, Company $recipientCompany, Company $otherCompany): void
     {
-        $data = $recipient->notifications()->sole()->data;
-        $this->assertSame($recipientCompany->name, $data['company_name']);
-        $this->assertNotSame($otherCompany->name, $data['company_name']);
-        $this->assertSame(NotificationType::AccountSecurityAlert->value, $data['notification_type']);
+        $notification = $recipient->notifications()->sole();
+        $this->assertSame($recipientCompany->getKey(), $notification->company_id);
+        $this->assertSame($recipientCompany->name, $notification->data['company_name']);
+        $this->assertNotSame($otherCompany->name, $notification->data['company_name']);
+        $this->assertSame(NotificationType::AccountSecurityAlert->value, $notification->data['notification_type']);
     }
 
     protected function assertInAppCreatedAndEmailQueuedIndependently(User $recipient): void

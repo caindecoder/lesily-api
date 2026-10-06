@@ -59,7 +59,7 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
         $this->expire($companyId);
 
         // Then only the owner receives the trial-ended notification
-        $this->assertNotifiedExactly($owner, $member, self::COMPANY_NAME);
+        $this->assertNotifiedExactly($owner, $member, $companyId);
     }
 
     // Edge (tenant isolation) — expiry is scoped to the expiring company; another company's
@@ -79,7 +79,7 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
         $this->expire($companyId);
 
         // Then only its own owner is notified, not the other company's
-        $this->assertNotifiedExactly($owner, $otherOwner, self::COMPANY_NAME);
+        $this->assertNotifiedExactly($owner, $otherOwner, $companyId);
     }
 
     // Happy (OQ-1-161 / F1 posture) — the owner notice rides the queue: nothing is sent inline
@@ -145,13 +145,14 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
             );
     }
 
-    protected function assertNotifiedExactly(User $recipient, User $notNotified, string $companyName): void
+    protected function assertNotifiedExactly(User $recipient, User $notNotified, string $companyId): void
     {
         Notification::assertSentTo(
             $recipient,
             SystemNotification::class,
             fn (SystemNotification $notification): bool => $notification->type === NotificationType::GeneralAccountNotice
-                && $notification->companyName === $companyName,
+                && $notification->companyName === self::COMPANY_NAME
+                && $notification->companyId === $companyId,
         );
         Notification::assertNotSentTo($notNotified, SystemNotification::class);
     }

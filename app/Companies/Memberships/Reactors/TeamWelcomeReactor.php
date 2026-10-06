@@ -24,14 +24,13 @@ class TeamWelcomeReactor extends Reactor implements ShouldQueue
 {
     public function onUserJoinedCompany(UserJoinedCompany $event): void
     {
-        $companyName = Invitation::query()
+        $company = Invitation::query()
             ->findOrFail($event->membershipId)
             ->company()
-            ->firstOrFail()
-            ->name;
+            ->firstOrFail();
 
         User::query()
             ->findOrFail($event->userId)
-            ->notify(new SystemNotification(NotificationType::TeamWelcome, $companyName));
+            ->notify(new SystemNotification(NotificationType::TeamWelcome, $company->name, $company->getKey()));
     }
 }

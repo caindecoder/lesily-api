@@ -171,7 +171,7 @@ class UpdateProfileTest extends AuthTestCase
 
         // When they switch their locale to Sinhala and a system notification then goes out
         $this->updateProfile($user, ['name' => self::CURRENT_NAME, 'locale' => 'si'])->assertOk();
-        $user->refresh()->notify(new SystemNotification(NotificationType::GeneralAccountNotice, 'Contoso'));
+        $user->refresh()->notify(new SystemNotification(NotificationType::GeneralAccountNotice, 'Contoso', null));
 
         // Then the mail leg renders via the NEW language (the HasLocalePreference path)
         Mail::assertQueued(

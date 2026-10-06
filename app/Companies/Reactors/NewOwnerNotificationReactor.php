@@ -24,6 +24,6 @@ class NewOwnerNotificationReactor extends Reactor implements ShouldQueue
         $company = CompanyReadModel::query()->findOrFail($event->aggregateRootUuid());
 
         User::query()->findOrFail($event->newOwnerUserId)
-            ->notify(new SystemNotification(NotificationType::OwnershipReceived, $company->name));
+            ->notify(new SystemNotification(NotificationType::OwnershipReceived, $company->name, $company->getKey()));
     }
 }

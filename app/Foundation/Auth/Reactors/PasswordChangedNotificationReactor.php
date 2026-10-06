@@ -41,6 +41,7 @@ class PasswordChangedNotificationReactor extends Reactor implements ShouldQueue
         $user->notify(new SystemNotification(
             NotificationType::PasswordChanged,
             $user->notificationCompanyName(),
+            null,
         ));
     }
 }
