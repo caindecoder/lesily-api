@@ -3,15 +3,23 @@
 namespace Tests\Feature\Compliance\Dsar;
 
 use App\Models\User;
+use Ramsey\Uuid\Uuid;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use Illuminate\Notifications\DatabaseNotification;
+use App\Foundation\Notifications\Enums\NotificationType;
+use App\Foundation\Notifications\Entities\NotificationPreference;
 
 class ExportDsarSectionsTest extends DsarTestCase
 {
+    protected const LOWER_ID = '00000000-0000-4000-8000-000000000001';
+
+    protected const HIGHER_ID = 'ffffffff-ffff-4fff-bfff-ffffffffffff';
+
     protected Company $company;
 
     protected function setUp(): void
@@ -24,7 +32,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_member_belongs_to_two_companies_then_only_this_companys_data_is_exported(): void
     {
-        // Given a member who joined another company first, under another role, with consent, an invitation, a transfer, a case and an audited submission in each — beside a co-worker's consent here
+        // Given a member who joined another company first, under another role, with consent, an invitation, a transfer, a case, a notice and an audited submission in each — beside a co-worker's consent here
         $member = User::factory()->create();
         $other = Company::factory()->create();
         $other->users()->attach($member, ['role_id' => $this->seededRole('admin')->getKey()]);
@@ -37,6 +45,8 @@ class ExportDsarSectionsTest extends DsarTestCase
         $this->revokeTheInvitation($this->anInvitationTo($member, $other));
         $this->anOwnershipTransfer($other, $member, $this->aCompanyMember($other));
         OwnershipTransferCase::factory()->forCompany($other)->proposedOwner($member)->closedRejected()->create();
+        $this->aNotificationFor($member, NotificationType::TeamWelcome, $this->company);
+        $this->aNotificationFor($member, NotificationType::OwnershipReceived, $other);
         $this->aConsentRecordedBy($this->aCompanyMember($this->company), $this->company);
         $this->submitDsarRequest($member, $other)->assertCreated();
         $this->idempotencyKey = (string) Str::uuid();
@@ -50,25 +60,28 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_co_workers_have_their_own_sign_ins_invitations_and_transfers_then_none_of_theirs_is_exported(): void
+    public function when_co_workers_have_their_own_sign_ins_invitations_transfers_and_notices_then_none_of_theirs_is_exported(): void
     {
-        // Given a member beside a co-worker who signed in, was invited and is named on a case, and a transfer between two others
+        // Given a member beside a co-worker who signed in, was invited, is named on a case, was welcomed here, was told their password changed and switched an email off, and a transfer between two others
         $member = $this->aCompanyMember($this->company);
         $coWorker = $this->aCompanyMember($this->company);
         $this->aSignInFor($coWorker, 'iPhone', now()->addDays(90));
         $this->anInvitationTo($coWorker, $this->company);
         OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($coWorker)->create();
         $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $coWorker);
+        $this->aNotificationFor($coWorker, NotificationType::TeamWelcome, $this->company);
+        $this->aNotificationFor($coWorker, NotificationType::PasswordChanged, null);
+        NotificationPreference::factory()->mailDisabled($coWorker, NotificationType::GeneralAccountNotice)->create();
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When the member's export is built
         $this->runTheExportFor($request);
 
-        // Then none of the others' sign-ins, invitations, transfers or cases is theirs
+        // Then none of the others' sign-ins, invitations, transfers, cases, notices or preferences is theirs
         $exported = $this->exportedData($request);
         $this->assertSame(
-            [[], [], ['transfers' => [], 'cases' => []]],
-            [$exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers']],
+            [[], [], ['transfers' => [], 'cases' => []], ['notifications' => [], 'preferences' => []]],
+            [$exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers'], $exported['notifications']],
         );
     }
 
@@ -126,7 +139,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_a_section_has_no_entries_then_it_is_exported_empty(): void
     {
-        // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited and took part in no transfer
+        // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited, took part in no transfer, received no notice and switched none off
         $member = $this->aCompanyMember($this->company);
         $request = $this->aSubmittedRequest($this->company, $member);
 
@@ -136,8 +149,33 @@ class ExportDsarSectionsTest extends DsarTestCase
         // Then those sections are present and empty
         $exported = $this->exportedData($request);
         $this->assertSame(
-            [[], [], [], [], ['transfers' => [], 'cases' => []]],
-            [$exported['consent_records'], $exported['audit_trail'], $exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers']],
+            [[], [], [], [], ['transfers' => [], 'cases' => []], ['notifications' => [], 'preferences' => []]],
+            [$exported['consent_records'], $exported['audit_trail'], $exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers'], $exported['notifications']],
+        );
+    }
+
+    #[Test]
+    public function when_a_notice_concerned_their_whole_account_then_it_is_exported_without_another_companys_name(): void
+    {
+        // Given a member of another company told yesterday that their password changed — the notice labelled with that company — who joined here and was welcomed today
+        $member = $this->aCompanyMember(Company::factory()->create());
+        $this->travel(-1)->days();
+        $this->aNotificationFor($member, NotificationType::PasswordChanged, null);
+        $this->travel(1)->days();
+        $this->company->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
+        $this->aNotificationFor($member, NotificationType::TeamWelcome, $this->company);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export here is built
+        $this->runTheExportFor($request);
+
+        // Then the account-wide notice is exported beside this company's, oldest first, naming no company
+        $this->assertSame(
+            [['password_changed', null], ['team_welcome', $this->company->name]],
+            array_map(
+                fn (array $notice): array => [$notice['notification_type'], $notice['company_name']],
+                $this->exportedData($request)['notifications']['notifications'],
+            ),
         );
     }
 
@@ -408,5 +446,47 @@ class ExportDsarSectionsTest extends DsarTestCase
                 ],
             ],
         ], $this->exportedData($request)['ownership_transfers']);
+    }
+
+    #[Test]
+    public function when_the_export_is_built_then_the_notifications_section_holds_their_notifications_here_and_their_preferences(): void
+    {
+        // Given a member handed the company today and welcomed here two days ago — the newer notice recorded first under the lower id — who read the welcome yesterday and switched the team, then the general emails off
+        $member = $this->aCompanyMember($this->company);
+        $this->theNextIdIs(self::LOWER_ID);
+        $this->aNotificationFor($member, NotificationType::OwnershipReceived, $this->company);
+        $this->travel(-2)->days();
+        $this->theNextIdIs(self::HIGHER_ID);
+        $this->aNotificationFor($member, NotificationType::TeamWelcome, $this->company);
+        $this->travel(1)->days();
+        DatabaseNotification::query()->findOrFail(self::HIGHER_ID)->markAsRead();
+        $this->travel(1)->days();
+        Str::createUuidsNormally();
+        NotificationPreference::factory()->mailDisabled($member, NotificationType::TeamWelcome)->create();
+        NotificationPreference::factory()->mailDisabled($member, NotificationType::GeneralAccountNotice)->create();
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then both notices are exported oldest first, beside the preferences they hold in type order
+        $this->assertSame([
+            'notifications' => [
+                ['notification_type' => 'team_welcome', 'company_name' => $this->company->name, 'sent_at' => now()->subDays(2)->toISOString(), 'read_at' => now()->subDay()->toISOString()],
+                ['notification_type' => 'ownership_received', 'company_name' => $this->company->name, 'sent_at' => now()->toISOString(), 'read_at' => null],
+            ],
+            'preferences' => [
+                ['notification_type' => 'general_account_notice', 'channel' => 'mail', 'enabled' => false, 'changed_at' => now()->toISOString()],
+                ['notification_type' => 'team_welcome', 'channel' => 'mail', 'enabled' => false, 'changed_at' => now()->toISOString()],
+            ],
+        ], $this->exportedData($request)['notifications']);
+    }
+
+    /**
+     * The next generated UUID is $id; those after it are random again.
+     */
+    protected function theNextIdIs(string $id): void
+    {
+        Str::createUuidsUsingSequence([Uuid::fromString($id)]);
     }
 }

@@ -12,6 +12,7 @@ use App\Compliance\Dsar\UseCases\Sections\SignInsSection;
 use App\Compliance\Dsar\UseCases\Sections\AuditTrailSection;
 use App\Compliance\Dsar\UseCases\Sections\MembershipSection;
 use App\Compliance\Dsar\UseCases\Sections\InvitationsSection;
+use App\Compliance\Dsar\UseCases\Sections\NotificationsSection;
 use App\Compliance\Dsar\UseCases\Sections\ConsentRecordsSection;
 use App\Compliance\Dsar\UseCases\Sections\OwnershipTransferCasesSection;
 
@@ -32,6 +33,7 @@ class ComplianceDsarServiceProvider extends ServiceProvider
             $app->make(SignInsSection::class),
             $app->make(InvitationsSection::class),
             $app->make(OwnershipTransferCasesSection::class),
+            $app->make(NotificationsSection::class),
         ]));
     }
 }

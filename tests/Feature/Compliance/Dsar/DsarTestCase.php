@@ -38,10 +38,12 @@ use App\Compliance\Dsar\UseCases\Sections\DsarSections;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Compliance\Dsar\UseCases\Audit\DsarOutcomeAudit;
+use App\Foundation\Notifications\Enums\NotificationType;
 use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
+use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand;
@@ -1004,6 +1006,19 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * A $type notice sent to $recipient about $company — or about their whole
+     * account when $company is null — as the production writers send it.
+     */
+    protected function aNotificationFor(User $recipient, NotificationType $type, ?Company $company): void
+    {
+        $recipient->notify(new SystemNotification(
+            $type,
+            $company === null ? $recipient->notificationCompanyName() : $company->name,
+            $company?->getKey(),
+        ));
+    }
+
+    /**
      * An invitation of $user's email to $company as an employee, recorded the
      * event-sourced way by a fresh inviter. Returns the invitation id.
      */
@@ -1185,9 +1200,9 @@ abstract class DsarTestCase extends TestCase
     /**
      * Every section of $exported belongs to $company alone: $member's
      * membership of it, the consent they gave in it, the audit entries they
-     * acted in there, and — of its invitations, transfers and cases — only
-     * the pending invitation, the transfer that made them owner and the open
-     * case naming them.
+     * acted in there, and — of its invitations, transfers, cases and notices —
+     * only the pending invitation, the transfer that made them owner, the open
+     * case naming them and the notice about $company.
      *
      * @param  array<string, mixed>  $exported
      */
@@ -1203,11 +1218,12 @@ abstract class DsarTestCase extends TestCase
             array_column($exported['audit_trail'], 'subject_id'),
         );
         $this->assertSame(
-            [[1], ['new_owner'], ['open']],
+            [[1], ['new_owner'], ['open'], [$company->name]],
             [
                 array_map(fn (array $invitation): int => count($invitation['timeline']), $exported['invitations']),
                 array_column($exported['ownership_transfers']['transfers'], 'role'),
                 array_column($exported['ownership_transfers']['cases'], 'status'),
+                array_column($exported['notifications']['notifications'], 'company_name'),
             ],
         );
     }
