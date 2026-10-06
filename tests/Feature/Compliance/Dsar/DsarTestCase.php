@@ -38,6 +38,7 @@ use App\Compliance\Dsar\UseCases\Sections\DsarSections;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Compliance\Dsar\UseCases\Audit\DsarOutcomeAudit;
+use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
@@ -45,6 +46,7 @@ use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
+use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand;
@@ -1065,6 +1067,21 @@ abstract class DsarTestCase extends TestCase
                 'revokedBy' => User::factory()->create()->getKey(),
                 'reason' => 'Sent to the wrong team',
             ]))
+            ->persist();
+    }
+
+    /**
+     * $from hands $company to $to through the self-service transfer, recorded
+     * the event-sourced way.
+     */
+    protected function anOwnershipTransfer(Company $company, User $from, User $to): void
+    {
+        CompanyAggregate::retrieve($company->getKey())
+            ->transferOwnership(TransferCompanyOwnershipCommand::from([
+                'newOwnerUserId' => $to->getKey(),
+                'transferredBy' => $from->getKey(),
+                'source' => TransferCompanyOwnershipCommand::SOURCE_SELF_SERVICE,
+            ]), $from->getKey())
             ->persist();
     }
 

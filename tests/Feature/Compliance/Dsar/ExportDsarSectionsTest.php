@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 
 class ExportDsarSectionsTest extends DsarTestCase
@@ -262,5 +263,36 @@ class ExportDsarSectionsTest extends DsarTestCase
                 ['event' => 'joined', 'role' => 'employee', 'at' => now()->toISOString()],
             ],
         ]], $this->exportedData($request)['invitations']);
+    }
+
+    #[Test]
+    public function when_the_export_is_built_then_the_ownership_section_holds_the_transfers_and_cases_they_took_part_in(): void
+    {
+        // Given a member who received the company, handed it on, and is the proposed owner on a verified case
+        $member = $this->aCompanyMember($this->company);
+        $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $member);
+        $this->anOwnershipTransfer($this->company, $member, $this->aCompanyMember($this->company));
+        $case = OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->verified()->create();
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then both transfers and the case are exported
+        $this->assertSame([
+            'transfers' => [
+                ['transferred_at' => now()->toISOString(), 'role' => 'new_owner', 'source' => 'self_service'],
+                ['transferred_at' => now()->toISOString(), 'role' => 'previous_owner', 'source' => 'self_service'],
+            ],
+            'cases' => [[
+                'status' => 'verified',
+                'outcome' => null,
+                'rejection_reason_code' => null,
+                'requested_context' => $case->requested_context,
+                'opened_at' => now()->toISOString(),
+                'verified_at' => now()->toISOString(),
+                'executed_at' => null,
+            ]],
+        ], $this->exportedData($request)['ownership_transfers']);
     }
 }
