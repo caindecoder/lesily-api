@@ -7,6 +7,9 @@ use Illuminate\Support\Collection;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Companies\Memberships\Events\UserJoinedCompany;
+use App\Companies\Memberships\Events\UserInvitationResent;
+use App\Companies\Memberships\Events\UserInvitationExpired;
+use App\Companies\Memberships\Events\UserInvitationRevoked;
 use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -15,6 +18,9 @@ class InvitationsSection implements DsarSectionProvider
     /** The timeline name of each invitation event exported (ruling N31). */
     private const array EVENTS = [
         UserInvited::class => 'invited',
+        UserInvitationResent::class => 'resent',
+        UserInvitationRevoked::class => 'revoked',
+        UserInvitationExpired::class => 'expired',
         UserJoinedCompany::class => 'joined',
     ];
 

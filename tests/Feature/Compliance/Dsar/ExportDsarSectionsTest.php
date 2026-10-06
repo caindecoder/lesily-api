@@ -100,6 +100,33 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_an_invitation_went_through_several_rounds_then_every_round_is_exported(): void
+    {
+        // Given a member whose invitation lapsed, went out again as an admin, was resent and then revoked
+        $member = $this->aCompanyMember($this->company);
+        $invitationId = $this->anInvitationTo($member, $this->company);
+        $this->expireTheInvitation($invitationId);
+        $this->inviteAgain($invitationId, 'admin');
+        $this->resendTheInvitation($invitationId);
+        $this->revokeTheInvitation($invitationId);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then every round is exported in order
+        $this->assertSame([[
+            'timeline' => [
+                ['event' => 'invited', 'role' => 'employee', 'at' => now()->toISOString()],
+                ['event' => 'expired', 'role' => null, 'at' => now()->toISOString()],
+                ['event' => 'invited', 'role' => 'admin', 'at' => now()->toISOString()],
+                ['event' => 'resent', 'role' => null, 'at' => now()->toISOString()],
+                ['event' => 'revoked', 'role' => null, 'at' => now()->toISOString()],
+            ],
+        ]], $this->exportedData($request)['invitations']);
+    }
+
+    #[Test]
     public function when_the_export_is_built_then_the_audit_section_holds_the_entries_they_acted_in(): void
     {
         // Given a member whose own submission is audited, beside another member's audited submission

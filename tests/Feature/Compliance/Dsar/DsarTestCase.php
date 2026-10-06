@@ -25,6 +25,7 @@ use Laravel\Sanctum\PersonalAccessToken;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
+use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
@@ -46,6 +47,8 @@ use App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
+use App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand;
+use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
 use App\Compliance\Dsar\UseCases\Interactors\RejectDsarRequestInteractor;
 
 abstract class DsarTestCase extends TestCase
@@ -1019,6 +1022,50 @@ abstract class DsarTestCase extends TestCase
             ->persist();
 
         return $invitationId;
+    }
+
+    /**
+     * The invitation $invitationId goes out again on its own stream, now for
+     * the role $roleCode.
+     */
+    protected function inviteAgain(string $invitationId, string $roleCode): void
+    {
+        $invitation = Invitation::query()->findOrFail($invitationId);
+
+        UserMembership::retrieve($invitationId)
+            ->invite(CreateInvitationCommand::from([
+                'companyId' => $invitation->company_id,
+                'email' => $invitation->email,
+                'roleId' => $this->seededRole($roleCode)->getKey(),
+                'invitedByUserId' => User::factory()->create()->getKey(),
+                'plaintextToken' => Str::random(40),
+            ]))
+            ->persist();
+    }
+
+    protected function expireTheInvitation(string $invitationId): void
+    {
+        UserMembership::retrieve($invitationId)->expireIfPending(now())->persist();
+    }
+
+    protected function resendTheInvitation(string $invitationId): void
+    {
+        UserMembership::retrieve($invitationId)
+            ->resendInvitation(ResendInvitationCommand::from([
+                'plaintextToken' => Str::random(40),
+                'resentBy' => User::factory()->create()->getKey(),
+            ]))
+            ->persist();
+    }
+
+    protected function revokeTheInvitation(string $invitationId): void
+    {
+        UserMembership::retrieve($invitationId)
+            ->revokeInvitation(RevokeInvitationCommand::from([
+                'revokedBy' => User::factory()->create()->getKey(),
+                'reason' => 'Sent to the wrong team',
+            ]))
+            ->persist();
     }
 
     /**
