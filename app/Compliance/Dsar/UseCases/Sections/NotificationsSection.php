@@ -17,7 +17,8 @@ class NotificationsSection implements DsarSectionProvider
     /**
      * The notices the subject received about this company or their whole
      * account, oldest first, and the notification preferences they hold —
-     * never the notice's class or anyone's id.
+     * never the notice's class or anyone's id. An account-wide notice carries
+     * no company name: its label may name another of their companies.
      *
      * @return array{notifications: array<int, array<string, mixed>>, preferences: array<int, array<string, mixed>>}
      */
@@ -43,7 +44,7 @@ class NotificationsSection implements DsarSectionProvider
             ->get()
             ->map(fn (DatabaseNotification $notification): array => [
                 'notification_type' => $notification->data['notification_type'],
-                'company_name' => $notification->data['company_name'],
+                'company_name' => $notification->getAttribute('company_id') === null ? null : $notification->data['company_name'],
                 'sent_at' => $notification->created_at?->toISOString(),
                 'read_at' => $notification->read_at?->toISOString(),
             ])

@@ -149,23 +149,27 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_a_notice_concerned_their_whole_account_then_it_is_exported_with_this_companys(): void
+    public function when_a_notice_concerned_their_whole_account_then_it_is_exported_without_another_companys_name(): void
     {
-        // Given a member told yesterday that their password changed, and welcomed here today
-        $member = $this->aCompanyMember($this->company);
+        // Given a member of another company told yesterday that their password changed — the notice labelled with that company — who joined here and was welcomed today
+        $member = $this->aCompanyMember(Company::factory()->create());
         $this->travel(-1)->days();
         $this->aNotificationFor($member, NotificationType::PasswordChanged, null);
         $this->travel(1)->days();
+        $this->company->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
         $this->aNotificationFor($member, NotificationType::TeamWelcome, $this->company);
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When their export here is built
         $this->runTheExportFor($request);
 
-        // Then the account-wide notice is exported beside this company's, oldest first
+        // Then the account-wide notice is exported beside this company's, oldest first, naming no company
         $this->assertSame(
-            ['password_changed', 'team_welcome'],
-            array_column($this->exportedData($request)['notifications']['notifications'], 'notification_type'),
+            [['password_changed', null], ['team_welcome', $this->company->name]],
+            array_map(
+                fn (array $notice): array => [$notice['notification_type'], $notice['company_name']],
+                $this->exportedData($request)['notifications']['notifications'],
+            ),
         );
     }
 
