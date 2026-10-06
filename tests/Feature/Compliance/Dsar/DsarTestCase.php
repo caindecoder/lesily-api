@@ -1011,12 +1011,21 @@ abstract class DsarTestCase extends TestCase
      */
     protected function anInvitationTo(User $user, Company $company): string
     {
+        return $this->anInvitationToEmail($user->email, $company);
+    }
+
+    /**
+     * An invitation of $email, as typed, to $company as an employee.
+     * Returns the invitation id.
+     */
+    protected function anInvitationToEmail(string $email, Company $company): string
+    {
         $invitationId = Str::uuid7()->toString();
 
         UserMembership::retrieve($invitationId)
             ->invite(CreateInvitationCommand::from([
                 'companyId' => $company->getKey(),
-                'email' => $user->email,
+                'email' => $email,
                 'roleId' => $this->seededRole('employee')->getKey(),
                 'invitedByUserId' => User::factory()->create()->getKey(),
                 'plaintextToken' => Str::random(40),

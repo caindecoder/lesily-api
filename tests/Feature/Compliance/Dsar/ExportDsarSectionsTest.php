@@ -141,6 +141,22 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_the_invitation_was_typed_in_other_letter_case_then_it_is_still_exported(): void
+    {
+        // Given a member whose invitation was sent to their email typed in capitals, and who accepted it
+        $member = User::factory()->create();
+        $invitationId = $this->anInvitationToEmail(Str::upper($member->email), $this->company);
+        $this->acceptTheInvitation($invitationId, $member);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the invitation is still theirs
+        $this->assertCount(1, $this->exportedData($request)['invitations']);
+    }
+
+    #[Test]
     public function when_an_invitation_went_through_several_rounds_then_every_round_is_exported(): void
     {
         // Given a member whose invitation lapsed, went out again as an admin, was resent and then revoked

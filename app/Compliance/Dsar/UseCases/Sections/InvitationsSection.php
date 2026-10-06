@@ -41,7 +41,10 @@ class InvitationsSection implements DsarSectionProvider
     {
         $invitationIds = LesilyStoredEvent::query()
             ->where('event_class', UserInvited::class)
-            ->where('event_properties->email', User::query()->findOrFail($subjectUserId)->email)
+            ->whereRaw(
+                "lower(json_unquote(json_extract(event_properties, '$.email'))) = lower(?)",
+                [User::query()->findOrFail($subjectUserId)->email],
+            )
             ->select('aggregate_uuid');
 
         $events = LesilyStoredEvent::query()
