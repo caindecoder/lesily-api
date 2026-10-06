@@ -1170,7 +1170,9 @@ abstract class DsarTestCase extends TestCase
     /**
      * Every section of $exported belongs to $company alone: $member's
      * membership of it, the consent they gave in it, the audit entries they
-     * acted in there, and its one invitation, transfer and case naming them.
+     * acted in there, and — of its invitations, transfers and cases — only
+     * the pending invitation, the transfer that made them owner and the open
+     * case naming them.
      *
      * @param  array<string, mixed>  $exported
      */
@@ -1186,8 +1188,12 @@ abstract class DsarTestCase extends TestCase
             array_column($exported['audit_trail'], 'subject_id'),
         );
         $this->assertSame(
-            [1, 1, 1],
-            [count($exported['invitations']), count($exported['ownership_transfers']['transfers']), count($exported['ownership_transfers']['cases'])],
+            [[1], ['new_owner'], ['open']],
+            [
+                array_map(fn (array $invitation): int => count($invitation['timeline']), $exported['invitations']),
+                array_column($exported['ownership_transfers']['transfers'], 'role'),
+                array_column($exported['ownership_transfers']['cases'], 'status'),
+            ],
         );
     }
 

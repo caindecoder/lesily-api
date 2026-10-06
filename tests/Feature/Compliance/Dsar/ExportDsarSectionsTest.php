@@ -31,11 +31,12 @@ class ExportDsarSectionsTest extends DsarTestCase
         $this->company->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
         $this->aConsentRecordedBy($member, $this->company);
         $this->aConsentRecordedBy($member, $other);
-        foreach ([$this->company, $other] as $company) {
-            $this->anInvitationTo($member, $company);
-            $this->anOwnershipTransfer($company, $this->aCompanyMember($company), $member);
-            OwnershipTransferCase::factory()->forCompany($company)->proposedOwner($member)->create();
-        }
+        $this->anInvitationTo($member, $this->company);
+        $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $member);
+        OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->create();
+        $this->revokeTheInvitation($this->anInvitationTo($member, $other));
+        $this->anOwnershipTransfer($other, $member, $this->aCompanyMember($other));
+        OwnershipTransferCase::factory()->forCompany($other)->proposedOwner($member)->closedRejected()->create();
         $this->aConsentRecordedBy($this->aCompanyMember($this->company), $this->company);
         $this->submitDsarRequest($member, $other)->assertCreated();
         $this->idempotencyKey = (string) Str::uuid();
