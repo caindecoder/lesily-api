@@ -144,9 +144,9 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_invitation_was_typed_in_other_letter_case_then_it_is_still_exported(): void
     {
-        // Given a member whose invitation was sent to their email typed in capitals, and who accepted it
-        $member = User::factory()->create();
-        $invitationId = $this->anInvitationToEmail(Str::upper($member->email), $this->company);
+        // Given a member registered as Nimal.Perera@Example.lk whose invitation was typed nimal.perera@EXAMPLE.LK, and who accepted it
+        $member = User::factory()->withEmail('Nimal.Perera@Example.lk')->create();
+        $invitationId = $this->anInvitationToEmail('nimal.perera@EXAMPLE.LK', $this->company);
         $this->acceptTheInvitation($invitationId, $member);
         $request = $this->aSubmittedRequest($this->company, $member);
 
@@ -155,6 +155,27 @@ class ExportDsarSectionsTest extends DsarTestCase
 
         // Then the invitation is still theirs
         $this->assertCount(1, $this->exportedData($request)['invitations']);
+    }
+
+    #[Test]
+    public function when_they_were_invited_twice_then_each_invitation_is_exported_oldest_first(): void
+    {
+        // Given a member whose first invitation was revoked yesterday and whose second, sent today, they accepted
+        $member = User::factory()->create();
+        $this->travel(-1)->days();
+        $this->revokeTheInvitation($this->anInvitationTo($member, $this->company));
+        $this->travel(1)->days();
+        $this->acceptTheInvitation($this->anInvitationTo($member, $this->company), $member);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then both invitations are exported, each with its own timeline, the older first
+        $this->assertSame(
+            [['invited', 'revoked'], ['invited', 'joined']],
+            array_map(fn (array $invitation): array => array_column($invitation['timeline'], 'event'), $this->exportedData($request)['invitations']),
+        );
     }
 
     #[Test]
@@ -347,12 +368,14 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_export_is_built_then_the_ownership_section_holds_the_transfers_and_cases_they_took_part_in(): void
     {
-        // Given a member who received the company, was the owner a rejected case expected, handed it on, and is the proposed owner on a verified case
+        // Given a member who received the company, was the owner a rejected case expected, handed it on through support, and became new owner on a case executed the day before — recorded after the others
         $member = $this->aCompanyMember($this->company);
         $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $member);
         $rejected = OwnershipTransferCase::factory()->forCompany($this->company->refresh())->closedRejected()->create();
-        $this->anOwnershipTransfer($this->company, $member, $this->aCompanyMember($this->company));
-        $verified = OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->verified()->create();
+        $this->aSupportAssistedTransfer($this->company, $member, $this->aCompanyMember($this->company));
+        $this->travel(-1)->days();
+        $executed = OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->closedExecuted()->create();
+        $this->travel(1)->days();
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When their export is built
@@ -362,9 +385,18 @@ class ExportDsarSectionsTest extends DsarTestCase
         $this->assertSame([
             'transfers' => [
                 ['transferred_at' => now()->toISOString(), 'role' => 'new_owner', 'source' => 'self_service'],
-                ['transferred_at' => now()->toISOString(), 'role' => 'previous_owner', 'source' => 'self_service'],
+                ['transferred_at' => now()->toISOString(), 'role' => 'previous_owner', 'source' => 'admin'],
             ],
             'cases' => [
+                [
+                    'status' => 'closed',
+                    'outcome' => 'executed',
+                    'rejection_reason_code' => null,
+                    'requested_context' => $executed->requested_context,
+                    'opened_at' => now()->subDay()->toISOString(),
+                    'verified_at' => now()->subDay()->toISOString(),
+                    'executed_at' => now()->subDay()->toISOString(),
+                ],
                 [
                     'status' => 'closed',
                     'outcome' => 'rejected',
@@ -372,15 +404,6 @@ class ExportDsarSectionsTest extends DsarTestCase
                     'requested_context' => $rejected->requested_context,
                     'opened_at' => now()->toISOString(),
                     'verified_at' => null,
-                    'executed_at' => null,
-                ],
-                [
-                    'status' => 'verified',
-                    'outcome' => null,
-                    'rejection_reason_code' => null,
-                    'requested_context' => $verified->requested_context,
-                    'opened_at' => now()->toISOString(),
-                    'verified_at' => now()->toISOString(),
                     'executed_at' => null,
                 ],
             ],

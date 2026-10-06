@@ -1110,6 +1110,21 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * Support hands $company from $from to $to (the admin-assisted path),
+     * recorded the event-sourced way.
+     */
+    protected function aSupportAssistedTransfer(Company $company, User $from, User $to): void
+    {
+        CompanyAggregate::retrieve($company->getKey())
+            ->transferOwnership(TransferCompanyOwnershipCommand::from([
+                'newOwnerUserId' => $to->getKey(),
+                'transferredBy' => User::factory()->create()->getKey(),
+                'source' => TransferCompanyOwnershipCommand::SOURCE_ADMIN,
+            ]), $from->getKey())
+            ->persist();
+    }
+
+    /**
      * $user accepts the invitation $invitationId as an employee.
      */
     protected function acceptTheInvitation(string $invitationId, User $user): void
