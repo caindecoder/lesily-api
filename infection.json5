@@ -244,6 +244,11 @@
         // it on insert) and expires_at (SessionIssuer, the one createToken caller, always
         // passes expiresAt); pinned so the sibling last_used_at?-> line stays killed.
         // REMOVE WHEN a token is minted without timestamps or without an expiry.
+        // L-SCHEMA: the DSAR notifications section reads a notice's created_at (the
+        // database channel inserts through Eloquent, which stamps it) and a
+        // preference's updated_at (stamped on every Eloquent insert); pinned so the
+        // sibling read_at?-> line stays killed. REMOVE WHEN a writer inserts either
+        // row without timestamps.
         "NullSafeMethodCall": {
             ignore: [
                 "App\\Billing\\Subscriptions\\IO\\Http\\Resources\\SubscriptionResource::toArray::31",
@@ -253,6 +258,8 @@
                 "App\\Compliance\\Dsar\\UseCases\\Sections\\MembershipSection::collect::30",
                 "App\\Compliance\\Dsar\\UseCases\\Sections\\SignInsSection::collect::30",
                 "App\\Compliance\\Dsar\\UseCases\\Sections\\SignInsSection::collect::32",
+                "App\\Compliance\\Dsar\\UseCases\\Sections\\NotificationsSection::notificationsOf::48",
+                "App\\Compliance\\Dsar\\UseCases\\Sections\\NotificationsSection::preferencesOf::68",
             ],
         },
         // L-EQUIV-MISC: invitations.role_id and company_user.role_id are NOT NULL + FK
