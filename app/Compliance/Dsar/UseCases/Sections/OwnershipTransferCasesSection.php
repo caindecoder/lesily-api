@@ -60,7 +60,9 @@ class OwnershipTransferCasesSection implements DsarSectionProvider
     {
         return OwnershipTransferCase::query()
             ->forCompanyId($companyId)
-            ->where('new_owner_user_id', $subjectUserId)
+            ->where(fn (Builder $query) => $query
+                ->where('expected_owner_user_id', $subjectUserId)
+                ->orWhere('new_owner_user_id', $subjectUserId))
             ->orderBy('created_at')
             ->orderBy('id')
             ->get()

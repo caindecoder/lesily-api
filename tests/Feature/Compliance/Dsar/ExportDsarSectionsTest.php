@@ -296,31 +296,43 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_export_is_built_then_the_ownership_section_holds_the_transfers_and_cases_they_took_part_in(): void
     {
-        // Given a member who received the company, handed it on, and is the proposed owner on a verified case
+        // Given a member who received the company, was the owner a rejected case expected, handed it on, and is the proposed owner on a verified case
         $member = $this->aCompanyMember($this->company);
         $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $member);
+        $rejected = OwnershipTransferCase::factory()->forCompany($this->company->refresh())->closedRejected()->create();
         $this->anOwnershipTransfer($this->company, $member, $this->aCompanyMember($this->company));
-        $case = OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->verified()->create();
+        $verified = OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->verified()->create();
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When their export is built
         $this->runTheExportFor($request);
 
-        // Then both transfers and the case are exported
+        // Then both transfers and both cases are exported
         $this->assertSame([
             'transfers' => [
                 ['transferred_at' => now()->toISOString(), 'role' => 'new_owner', 'source' => 'self_service'],
                 ['transferred_at' => now()->toISOString(), 'role' => 'previous_owner', 'source' => 'self_service'],
             ],
-            'cases' => [[
-                'status' => 'verified',
-                'outcome' => null,
-                'rejection_reason_code' => null,
-                'requested_context' => $case->requested_context,
-                'opened_at' => now()->toISOString(),
-                'verified_at' => now()->toISOString(),
-                'executed_at' => null,
-            ]],
+            'cases' => [
+                [
+                    'status' => 'closed',
+                    'outcome' => 'rejected',
+                    'rejection_reason_code' => 'identity_failed',
+                    'requested_context' => $rejected->requested_context,
+                    'opened_at' => now()->toISOString(),
+                    'verified_at' => null,
+                    'executed_at' => null,
+                ],
+                [
+                    'status' => 'verified',
+                    'outcome' => null,
+                    'rejection_reason_code' => null,
+                    'requested_context' => $verified->requested_context,
+                    'opened_at' => now()->toISOString(),
+                    'verified_at' => now()->toISOString(),
+                    'executed_at' => null,
+                ],
+            ],
         ], $this->exportedData($request)['ownership_transfers']);
     }
 }
