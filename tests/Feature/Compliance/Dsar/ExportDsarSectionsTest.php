@@ -6,6 +6,8 @@ use App\Models\User;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\OwnershipTransferCase;
+use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 
 class ExportDsarSectionsTest extends DsarTestCase
@@ -22,13 +24,19 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_member_belongs_to_two_companies_then_only_this_companys_data_is_exported(): void
     {
-        // Given a member who joined another company first, under another role, with consent and an audited submission in each — beside a co-worker's consent here
+        // Given a member who joined another company first, under another role, with consent, an invitation, a transfer, a case and an audited submission in each — beside a co-worker's consent here
         $member = User::factory()->create();
         $other = Company::factory()->create();
         $other->users()->attach($member, ['role_id' => $this->seededRole('admin')->getKey()]);
         $this->company->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
         $this->aConsentRecordedBy($member, $this->company);
         $this->aConsentRecordedBy($member, $other);
+        $this->anInvitationTo($member, $this->company);
+        $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $member);
+        OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->create();
+        $this->revokeTheInvitation($this->anInvitationTo($member, $other));
+        $this->anOwnershipTransfer($other, $member, $this->aCompanyMember($other));
+        OwnershipTransferCase::factory()->forCompany($other)->proposedOwner($member)->closedRejected()->create();
         $this->aConsentRecordedBy($this->aCompanyMember($this->company), $this->company);
         $this->submitDsarRequest($member, $other)->assertCreated();
         $this->idempotencyKey = (string) Str::uuid();
@@ -42,18 +50,49 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_co_workers_have_their_own_sign_ins_invitations_and_transfers_then_none_of_theirs_is_exported(): void
+    {
+        // Given a member beside a co-worker who signed in, was invited and is named on a case, and a transfer between two others
+        $member = $this->aCompanyMember($this->company);
+        $coWorker = $this->aCompanyMember($this->company);
+        $this->aSignInFor($coWorker, 'iPhone', now()->addDays(90));
+        $this->anInvitationTo($coWorker, $this->company);
+        OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($coWorker)->create();
+        $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $coWorker);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When the member's export is built
+        $this->runTheExportFor($request);
+
+        // Then none of the others' sign-ins, invitations, transfers or cases is theirs
+        $exported = $this->exportedData($request);
+        $this->assertSame(
+            [[], [], ['transfers' => [], 'cases' => []]],
+            [$exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers']],
+        );
+    }
+
+    #[Test]
     public function when_the_export_is_built_then_no_secret_is_exported(): void
     {
-        // Given a member with a password, a remember token and two-factor sign-in
+        // Given a member with a password, a remember token, two-factor sign-in, a sign-in token, an invitation and a verified-then-rejected case
         $member = User::factory()->withTwoFactor()->create();
         $this->company->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
+        $signIn = $this->aSignInFor($member, 'iPhone', now()->addDays(90));
+        $invitationId = $this->anInvitationTo($member, $this->company);
+        $case = OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->verified()->closedRejected()->create();
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When their export is built
         $this->runTheExportFor($request);
 
-        // Then none of their secrets appears anywhere in it
-        $this->assertNoSecretOf($member, $this->exportedData($request));
+        // Then none of their secrets, token hashes, case notes or prose reasons appears anywhere in it
+        $this->assertNoSecretOf($member, $this->exportedData($request), [
+            $signIn->token,
+            Invitation::query()->findOrFail($invitationId)->token_hash,
+            $case->verification_notes,
+            $case->rejection_reason,
+        ]);
     }
 
     #[Test]
@@ -87,7 +126,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_a_section_has_no_entries_then_it_is_exported_empty(): void
     {
-        // Given a member who never consented here and acted in nothing audited
+        // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited and took part in no transfer
         $member = $this->aCompanyMember($this->company);
         $request = $this->aSubmittedRequest($this->company, $member);
 
@@ -96,7 +135,94 @@ class ExportDsarSectionsTest extends DsarTestCase
 
         // Then those sections are present and empty
         $exported = $this->exportedData($request);
-        $this->assertSame([[], []], [$exported['consent_records'], $exported['audit_trail']]);
+        $this->assertSame(
+            [[], [], [], [], ['transfers' => [], 'cases' => []]],
+            [$exported['consent_records'], $exported['audit_trail'], $exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers']],
+        );
+    }
+
+    #[Test]
+    public function when_the_invitation_was_typed_in_other_letter_case_then_it_is_still_exported(): void
+    {
+        // Given a member registered as Nimal.Perera@Example.lk whose invitation was typed nimal.perera@EXAMPLE.LK, and who accepted it
+        $member = User::factory()->withEmail('Nimal.Perera@Example.lk')->create();
+        $invitationId = $this->anInvitationToEmail('nimal.perera@EXAMPLE.LK', $this->company);
+        $this->acceptTheInvitation($invitationId, $member);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the invitation is still theirs
+        $this->assertCount(1, $this->exportedData($request)['invitations']);
+    }
+
+    #[Test]
+    public function when_they_were_invited_twice_then_each_invitation_is_exported_oldest_first(): void
+    {
+        // Given a member whose first invitation was revoked yesterday and whose second, sent today, they accepted
+        $member = User::factory()->create();
+        $this->travel(-1)->days();
+        $this->revokeTheInvitation($this->anInvitationTo($member, $this->company));
+        $this->travel(1)->days();
+        $this->acceptTheInvitation($this->anInvitationTo($member, $this->company), $member);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then both invitations are exported, each with its own timeline, the older first
+        $this->assertSame(
+            [['invited', 'revoked'], ['invited', 'joined']],
+            array_map(fn (array $invitation): array => array_column($invitation['timeline'], 'event'), $this->exportedData($request)['invitations']),
+        );
+    }
+
+    #[Test]
+    public function when_their_membership_changed_after_joining_then_only_the_invitation_rounds_are_exported(): void
+    {
+        // Given a member who joined through an invitation and was later made an admin
+        $member = User::factory()->create();
+        $invitationId = $this->anInvitationTo($member, $this->company);
+        $this->acceptTheInvitation($invitationId, $member);
+        $this->changeTheRole($invitationId, 'admin');
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the invitation's timeline holds its own rounds alone
+        $this->assertSame(
+            ['invited', 'joined'],
+            array_column($this->exportedData($request)['invitations'][0]['timeline'], 'event'),
+        );
+    }
+
+    #[Test]
+    public function when_an_invitation_went_through_several_rounds_then_every_round_is_exported(): void
+    {
+        // Given a member whose invitation lapsed, went out again as an admin, was resent and then revoked
+        $member = $this->aCompanyMember($this->company);
+        $invitationId = $this->anInvitationTo($member, $this->company);
+        $this->expireTheInvitation($invitationId);
+        $this->inviteAgain($invitationId, 'admin');
+        $this->resendTheInvitation($invitationId);
+        $this->revokeTheInvitation($invitationId);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then every round is exported in order
+        $this->assertSame([[
+            'timeline' => [
+                ['event' => 'invited', 'role' => 'employee', 'at' => now()->toISOString()],
+                ['event' => 'expired', 'role' => null, 'at' => now()->toISOString()],
+                ['event' => 'invited', 'role' => 'admin', 'at' => now()->toISOString()],
+                ['event' => 'resent', 'role' => null, 'at' => now()->toISOString()],
+                ['event' => 'revoked', 'role' => null, 'at' => now()->toISOString()],
+            ],
+        ]], $this->exportedData($request)['invitations']);
     }
 
     #[Test]
@@ -195,5 +321,92 @@ class ExportDsarSectionsTest extends DsarTestCase
             'created_at' => $member->created_at?->toISOString(),
             'two_factor_enabled' => true,
         ], $this->exportedData($request)['profile']);
+    }
+
+    #[Test]
+    public function when_the_export_is_built_then_the_sign_ins_section_holds_every_token_they_signed_in_with(): void
+    {
+        // Given a member who signed in on a phone today, not used yet, and — recorded after it — on a laptop a week ago, used the next day and since lapsed
+        $member = $this->aCompanyMember($this->company);
+        $this->aSignInFor($member, 'iPhone', now()->addDays(90));
+        $this->travel(-7)->days();
+        $this->aSignInFor($member, 'Chrome on Windows', now()->addDays(6))->forceFill(['last_used_at' => now()->addDay()])->save();
+        $this->travel(7)->days();
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then both sign-ins are exported, oldest first
+        $this->assertSame([
+            ['device_name' => 'Chrome on Windows', 'signed_in_at' => now()->subDays(7)->toISOString(), 'last_used_at' => now()->subDays(6)->toISOString(), 'expires_at' => now()->subDay()->toISOString()],
+            ['device_name' => 'iPhone', 'signed_in_at' => now()->toISOString(), 'last_used_at' => null, 'expires_at' => now()->addDays(90)->toISOString()],
+        ], $this->exportedData($request)['sign_ins']);
+    }
+
+    #[Test]
+    public function when_the_export_is_built_then_the_invitations_section_holds_the_invitation_that_brought_them_in(): void
+    {
+        // Given a member who joined through an invitation
+        $member = User::factory()->create();
+        $invitationId = $this->anInvitationTo($member, $this->company);
+        $this->acceptTheInvitation($invitationId, $member);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the invitation is exported with its timeline
+        $this->assertSame([[
+            'timeline' => [
+                ['event' => 'invited', 'role' => 'employee', 'at' => now()->toISOString()],
+                ['event' => 'joined', 'role' => 'employee', 'at' => now()->toISOString()],
+            ],
+        ]], $this->exportedData($request)['invitations']);
+    }
+
+    #[Test]
+    public function when_the_export_is_built_then_the_ownership_section_holds_the_transfers_and_cases_they_took_part_in(): void
+    {
+        // Given a member who received the company, was the owner a rejected case expected, handed it on through support, and became new owner on a case executed the day before — recorded after the others
+        $member = $this->aCompanyMember($this->company);
+        $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $member);
+        $rejected = OwnershipTransferCase::factory()->forCompany($this->company->refresh())->closedRejected()->create();
+        $this->aSupportAssistedTransfer($this->company, $member, $this->aCompanyMember($this->company));
+        $this->travel(-1)->days();
+        $executed = OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->closedExecuted()->create();
+        $this->travel(1)->days();
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then both transfers and both cases are exported
+        $this->assertSame([
+            'transfers' => [
+                ['transferred_at' => now()->toISOString(), 'role' => 'new_owner', 'source' => 'self_service'],
+                ['transferred_at' => now()->toISOString(), 'role' => 'previous_owner', 'source' => 'admin'],
+            ],
+            'cases' => [
+                [
+                    'status' => 'closed',
+                    'outcome' => 'executed',
+                    'rejection_reason_code' => null,
+                    'requested_context' => $executed->requested_context,
+                    'opened_at' => now()->subDay()->toISOString(),
+                    'verified_at' => now()->subDay()->toISOString(),
+                    'executed_at' => now()->subDay()->toISOString(),
+                ],
+                [
+                    'status' => 'closed',
+                    'outcome' => 'rejected',
+                    'rejection_reason_code' => 'identity_failed',
+                    'requested_context' => $rejected->requested_context,
+                    'opened_at' => now()->toISOString(),
+                    'verified_at' => null,
+                    'executed_at' => null,
+                ],
+            ],
+        ], $this->exportedData($request)['ownership_transfers']);
     }
 }

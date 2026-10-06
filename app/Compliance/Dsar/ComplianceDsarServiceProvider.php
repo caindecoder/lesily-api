@@ -8,9 +8,12 @@ use Illuminate\Contracts\Foundation\Application;
 use App\Compliance\Dsar\IO\Export\DsarExportArchive;
 use App\Compliance\Dsar\UseCases\Sections\DsarSections;
 use App\Compliance\Dsar\UseCases\Sections\ProfileSection;
+use App\Compliance\Dsar\UseCases\Sections\SignInsSection;
 use App\Compliance\Dsar\UseCases\Sections\AuditTrailSection;
 use App\Compliance\Dsar\UseCases\Sections\MembershipSection;
+use App\Compliance\Dsar\UseCases\Sections\InvitationsSection;
 use App\Compliance\Dsar\UseCases\Sections\ConsentRecordsSection;
+use App\Compliance\Dsar\UseCases\Sections\OwnershipTransferCasesSection;
 
 class ComplianceDsarServiceProvider extends ServiceProvider
 {
@@ -26,6 +29,9 @@ class ComplianceDsarServiceProvider extends ServiceProvider
             $app->make(MembershipSection::class),
             $app->make(ConsentRecordsSection::class),
             $app->make(AuditTrailSection::class),
+            $app->make(SignInsSection::class),
+            $app->make(InvitationsSection::class),
+            $app->make(OwnershipTransferCasesSection::class),
         ]));
     }
 }

@@ -7,6 +7,7 @@ use ZipArchive;
 use Tests\TestCase;
 use App\Models\User;
 use RuntimeException;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -20,9 +21,11 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Queue;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Sanctum\PersonalAccessToken;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
+use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
@@ -33,7 +36,9 @@ use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Compliance\Dsar\IO\Export\DsarExportArchive;
 use App\Compliance\Dsar\UseCases\Sections\DsarSections;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
+use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Compliance\Dsar\UseCases\Audit\DsarOutcomeAudit;
+use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
@@ -41,8 +46,13 @@ use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
+use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
+use App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand;
+use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
 use App\Compliance\Dsar\UseCases\Interactors\RejectDsarRequestInteractor;
+use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
 
 abstract class DsarTestCase extends TestCase
 {
@@ -985,6 +995,146 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * A sign-in of $user from $deviceName — a Sanctum token expiring at
+     * $expiresAt, not used yet.
+     */
+    protected function aSignInFor(User $user, string $deviceName, CarbonInterface $expiresAt): PersonalAccessToken
+    {
+        return $user->createToken($deviceName, ['*'], $expiresAt)->accessToken;
+    }
+
+    /**
+     * An invitation of $user's email to $company as an employee, recorded the
+     * event-sourced way by a fresh inviter. Returns the invitation id.
+     */
+    protected function anInvitationTo(User $user, Company $company): string
+    {
+        return $this->anInvitationToEmail($user->email, $company);
+    }
+
+    /**
+     * An invitation of $email, as typed, to $company as an employee.
+     * Returns the invitation id.
+     */
+    protected function anInvitationToEmail(string $email, Company $company): string
+    {
+        $invitationId = Str::uuid7()->toString();
+
+        UserMembership::retrieve($invitationId)
+            ->invite(CreateInvitationCommand::from([
+                'companyId' => $company->getKey(),
+                'email' => $email,
+                'roleId' => $this->seededRole('employee')->getKey(),
+                'invitedByUserId' => User::factory()->create()->getKey(),
+                'plaintextToken' => Str::random(40),
+            ]))
+            ->persist();
+
+        return $invitationId;
+    }
+
+    /**
+     * The invitation $invitationId goes out again on its own stream, now for
+     * the role $roleCode.
+     */
+    protected function inviteAgain(string $invitationId, string $roleCode): void
+    {
+        $invitation = Invitation::query()->findOrFail($invitationId);
+
+        UserMembership::retrieve($invitationId)
+            ->invite(CreateInvitationCommand::from([
+                'companyId' => $invitation->company_id,
+                'email' => $invitation->email,
+                'roleId' => $this->seededRole($roleCode)->getKey(),
+                'invitedByUserId' => User::factory()->create()->getKey(),
+                'plaintextToken' => Str::random(40),
+            ]))
+            ->persist();
+    }
+
+    protected function expireTheInvitation(string $invitationId): void
+    {
+        UserMembership::retrieve($invitationId)->expireIfPending(now())->persist();
+    }
+
+    protected function resendTheInvitation(string $invitationId): void
+    {
+        UserMembership::retrieve($invitationId)
+            ->resendInvitation(ResendInvitationCommand::from([
+                'plaintextToken' => Str::random(40),
+                'resentBy' => User::factory()->create()->getKey(),
+            ]))
+            ->persist();
+    }
+
+    protected function revokeTheInvitation(string $invitationId): void
+    {
+        UserMembership::retrieve($invitationId)
+            ->revokeInvitation(RevokeInvitationCommand::from([
+                'revokedBy' => User::factory()->create()->getKey(),
+                'reason' => 'Sent to the wrong team',
+            ]))
+            ->persist();
+    }
+
+    /**
+     * $from hands $company to $to through the self-service transfer, recorded
+     * the event-sourced way.
+     */
+    protected function anOwnershipTransfer(Company $company, User $from, User $to): void
+    {
+        CompanyAggregate::retrieve($company->getKey())
+            ->transferOwnership(TransferCompanyOwnershipCommand::from([
+                'newOwnerUserId' => $to->getKey(),
+                'transferredBy' => $from->getKey(),
+                'source' => TransferCompanyOwnershipCommand::SOURCE_SELF_SERVICE,
+            ]), $from->getKey())
+            ->persist();
+    }
+
+    /**
+     * The employee who joined through $membershipId becomes a $roleCode.
+     */
+    protected function changeTheRole(string $membershipId, string $roleCode): void
+    {
+        UserMembership::retrieve($membershipId)
+            ->changeRole(
+                ChangeMembershipRoleCommand::from([
+                    'roleCode' => $roleCode,
+                    'changedBy' => User::factory()->create()->getKey(),
+                ]),
+                $this->seededRole('employee')->getKey(),
+                $this->seededRole($roleCode)->getKey(),
+            )
+            ->persist();
+    }
+
+    /**
+     * Support hands $company from $from to $to (the admin-assisted path),
+     * recorded the event-sourced way.
+     */
+    protected function aSupportAssistedTransfer(Company $company, User $from, User $to): void
+    {
+        CompanyAggregate::retrieve($company->getKey())
+            ->transferOwnership(TransferCompanyOwnershipCommand::from([
+                'newOwnerUserId' => $to->getKey(),
+                'transferredBy' => User::factory()->create()->getKey(),
+                'source' => TransferCompanyOwnershipCommand::SOURCE_ADMIN,
+            ]), $from->getKey())
+            ->persist();
+    }
+
+    /**
+     * $user accepts the invitation $invitationId as an employee.
+     */
+    protected function acceptTheInvitation(string $invitationId, User $user): void
+    {
+        UserMembership::retrieve($invitationId)
+            ->acceptInvitation($user->getKey(), $this->seededRole('employee')->getKey())
+            ->persist();
+    }
+
+    /**
      * The sections $request's export holds — data.json decoded from its ZIP
      * on the dsar disk.
      *
@@ -1034,8 +1184,10 @@ abstract class DsarTestCase extends TestCase
 
     /**
      * Every section of $exported belongs to $company alone: $member's
-     * membership of it, the consent they gave in it, and the audit entries
-     * they acted in there.
+     * membership of it, the consent they gave in it, the audit entries they
+     * acted in there, and — of its invitations, transfers and cases — only
+     * the pending invitation, the transfer that made them owner and the open
+     * case naming them.
      *
      * @param  array<string, mixed>  $exported
      */
@@ -1050,15 +1202,25 @@ abstract class DsarTestCase extends TestCase
             AuditEntry::query()->where('company_id', $company->getKey())->where('actor_user_id', $member->getKey())->pluck('subject_id')->all(),
             array_column($exported['audit_trail'], 'subject_id'),
         );
+        $this->assertSame(
+            [[1], ['new_owner'], ['open']],
+            [
+                array_map(fn (array $invitation): int => count($invitation['timeline']), $exported['invitations']),
+                array_column($exported['ownership_transfers']['transfers'], 'role'),
+                array_column($exported['ownership_transfers']['cases'], 'status'),
+            ],
+        );
     }
 
     /**
      * None of $user's secrets — password hash, remember token, two-factor
-     * secret, recovery codes — appears anywhere in $exported.
+     * secret, recovery codes — nor any of $otherSecrets appears anywhere in
+     * $exported.
      *
      * @param  array<string, mixed>  $exported
+     * @param  array<int, string|null>  $otherSecrets
      */
-    protected function assertNoSecretOf(User $user, array $exported): void
+    protected function assertNoSecretOf(User $user, array $exported, array $otherSecrets = []): void
     {
         $json = json_encode($exported, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         $secrets = [
@@ -1067,6 +1229,7 @@ abstract class DsarTestCase extends TestCase
             $user->two_factor_secret,
             $user->getRawOriginal('two_factor_secret'),
             ...($user->two_factor_recovery_codes ?? []),
+            ...$otherSecrets,
         ];
 
         $this->assertSame($secrets, array_filter($secrets));

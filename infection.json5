@@ -240,6 +240,10 @@
         // Eloquent stamps on every users / company_user insert (the projector create and
         // the pivot attach); pinned so the sibling email_verified_at?-> / last_logged_at?->
         // lines stay killed. REMOVE WHEN a writer inserts either row without timestamps.
+        // L-SCHEMA: the DSAR sign-ins section reads a token's created_at (Eloquent stamps
+        // it on insert) and expires_at (SessionIssuer, the one createToken caller, always
+        // passes expiresAt); pinned so the sibling last_used_at?-> line stays killed.
+        // REMOVE WHEN a token is minted without timestamps or without an expiry.
         "NullSafeMethodCall": {
             ignore: [
                 "App\\Billing\\Subscriptions\\IO\\Http\\Resources\\SubscriptionResource::toArray::31",
@@ -247,6 +251,8 @@
                 "App\\Foundation\\Auth\\IO\\Http\\Resources\\SessionResource::isCurrentSession",
                 "App\\Compliance\\Dsar\\UseCases\\Sections\\ProfileSection::collect::28",
                 "App\\Compliance\\Dsar\\UseCases\\Sections\\MembershipSection::collect::30",
+                "App\\Compliance\\Dsar\\UseCases\\Sections\\SignInsSection::collect::30",
+                "App\\Compliance\\Dsar\\UseCases\\Sections\\SignInsSection::collect::32",
             ],
         },
         // L-EQUIV-MISC: invitations.role_id and company_user.role_id are NOT NULL + FK
