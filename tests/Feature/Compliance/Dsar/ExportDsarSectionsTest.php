@@ -157,6 +157,26 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_their_membership_changed_after_joining_then_only_the_invitation_rounds_are_exported(): void
+    {
+        // Given a member who joined through an invitation and was later made an admin
+        $member = User::factory()->create();
+        $invitationId = $this->anInvitationTo($member, $this->company);
+        $this->acceptTheInvitation($invitationId, $member);
+        $this->changeTheRole($invitationId, 'admin');
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the invitation's timeline holds its own rounds alone
+        $this->assertSame(
+            ['invited', 'joined'],
+            array_column($this->exportedData($request)['invitations'][0]['timeline'], 'event'),
+        );
+    }
+
+    #[Test]
     public function when_an_invitation_went_through_several_rounds_then_every_round_is_exported(): void
     {
         // Given a member whose invitation lapsed, went out again as an admin, was resent and then revoked

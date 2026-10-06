@@ -52,6 +52,7 @@ use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
 use App\Compliance\Dsar\UseCases\Interactors\RejectDsarRequestInteractor;
+use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
 
 abstract class DsarTestCase extends TestCase
 {
@@ -1091,6 +1092,23 @@ abstract class DsarTestCase extends TestCase
                 'transferredBy' => $from->getKey(),
                 'source' => TransferCompanyOwnershipCommand::SOURCE_SELF_SERVICE,
             ]), $from->getKey())
+            ->persist();
+    }
+
+    /**
+     * The employee who joined through $membershipId becomes a $roleCode.
+     */
+    protected function changeTheRole(string $membershipId, string $roleCode): void
+    {
+        UserMembership::retrieve($membershipId)
+            ->changeRole(
+                ChangeMembershipRoleCommand::from([
+                    'roleCode' => $roleCode,
+                    'changedBy' => User::factory()->create()->getKey(),
+                ]),
+                $this->seededRole('employee')->getKey(),
+                $this->seededRole($roleCode)->getKey(),
+            )
             ->persist();
     }
 
