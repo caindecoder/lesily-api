@@ -996,14 +996,11 @@ abstract class DsarTestCase extends TestCase
 
     /**
      * A sign-in of $user from $deviceName — a Sanctum token expiring at
-     * $expiresAt, last used an hour ago.
+     * $expiresAt, not used yet.
      */
     protected function aSignInFor(User $user, string $deviceName, CarbonInterface $expiresAt): PersonalAccessToken
     {
-        $token = $user->createToken($deviceName, ['*'], $expiresAt)->accessToken;
-        $token->forceFill(['last_used_at' => now()->subHour()])->save();
-
-        return $token;
+        return $user->createToken($deviceName, ['*'], $expiresAt)->accessToken;
     }
 
     /**

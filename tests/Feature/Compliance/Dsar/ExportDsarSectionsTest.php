@@ -304,10 +304,12 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_export_is_built_then_the_sign_ins_section_holds_every_token_they_signed_in_with(): void
     {
-        // Given a member whose laptop sign-in has lapsed and whose phone sign-in is live
+        // Given a member who signed in on a phone today, not used yet, and — recorded after it — on a laptop a week ago, used the next day and since lapsed
         $member = $this->aCompanyMember($this->company);
-        $this->aSignInFor($member, 'Chrome on Windows', now()->subDay());
         $this->aSignInFor($member, 'iPhone', now()->addDays(90));
+        $this->travel(-7)->days();
+        $this->aSignInFor($member, 'Chrome on Windows', now()->addDays(6))->forceFill(['last_used_at' => now()->addDay()])->save();
+        $this->travel(7)->days();
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When their export is built
@@ -315,8 +317,8 @@ class ExportDsarSectionsTest extends DsarTestCase
 
         // Then both sign-ins are exported, oldest first
         $this->assertSame([
-            ['device_name' => 'Chrome on Windows', 'signed_in_at' => now()->toISOString(), 'last_used_at' => now()->subHour()->toISOString(), 'expires_at' => now()->subDay()->toISOString()],
-            ['device_name' => 'iPhone', 'signed_in_at' => now()->toISOString(), 'last_used_at' => now()->subHour()->toISOString(), 'expires_at' => now()->addDays(90)->toISOString()],
+            ['device_name' => 'Chrome on Windows', 'signed_in_at' => now()->subDays(7)->toISOString(), 'last_used_at' => now()->subDays(6)->toISOString(), 'expires_at' => now()->subDay()->toISOString()],
+            ['device_name' => 'iPhone', 'signed_in_at' => now()->toISOString(), 'last_used_at' => null, 'expires_at' => now()->addDays(90)->toISOString()],
         ], $this->exportedData($request)['sign_ins']);
     }
 
