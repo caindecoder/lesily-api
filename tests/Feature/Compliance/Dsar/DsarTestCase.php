@@ -38,10 +38,12 @@ use App\Compliance\Dsar\UseCases\Sections\DsarSections;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Compliance\Dsar\UseCases\Audit\DsarOutcomeAudit;
+use App\Foundation\Notifications\Enums\NotificationType;
 use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
+use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand;
@@ -1001,6 +1003,19 @@ abstract class DsarTestCase extends TestCase
     protected function aSignInFor(User $user, string $deviceName, CarbonInterface $expiresAt): PersonalAccessToken
     {
         return $user->createToken($deviceName, ['*'], $expiresAt)->accessToken;
+    }
+
+    /**
+     * A $type notice sent to $recipient about $company — or about their whole
+     * account when $company is null — as the production writers send it.
+     */
+    protected function aNotificationFor(User $recipient, NotificationType $type, ?Company $company): void
+    {
+        $recipient->notify(new SystemNotification(
+            $type,
+            $company === null ? $recipient->notificationCompanyName() : $company->name,
+            $company?->getKey(),
+        ));
     }
 
     /**

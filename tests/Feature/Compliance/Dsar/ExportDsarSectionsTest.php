@@ -9,6 +9,8 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\Notifications\Enums\NotificationType;
+use App\Foundation\Notifications\Entities\NotificationPreference;
 
 class ExportDsarSectionsTest extends DsarTestCase
 {
@@ -408,5 +410,32 @@ class ExportDsarSectionsTest extends DsarTestCase
                 ],
             ],
         ], $this->exportedData($request)['ownership_transfers']);
+    }
+
+    #[Test]
+    public function when_the_export_is_built_then_the_notifications_section_holds_their_notifications_here_and_their_preferences(): void
+    {
+        // Given a member welcomed here two days ago, handed the company today, who switched the general notices' email off
+        $member = $this->aCompanyMember($this->company);
+        $this->travel(-2)->days();
+        $this->aNotificationFor($member, NotificationType::TeamWelcome, $this->company);
+        $this->travel(2)->days();
+        $this->aNotificationFor($member, NotificationType::OwnershipReceived, $this->company);
+        NotificationPreference::factory()->mailDisabled($member, NotificationType::GeneralAccountNotice)->create();
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then both notices are exported oldest first, beside the preference they hold
+        $this->assertSame([
+            'notifications' => [
+                ['notification_type' => 'team_welcome', 'company_name' => $this->company->name, 'sent_at' => now()->subDays(2)->toISOString(), 'read_at' => null],
+                ['notification_type' => 'ownership_received', 'company_name' => $this->company->name, 'sent_at' => now()->toISOString(), 'read_at' => null],
+            ],
+            'preferences' => [
+                ['notification_type' => 'general_account_notice', 'channel' => 'mail', 'enabled' => false, 'changed_at' => now()->toISOString()],
+            ],
+        ], $this->exportedData($request)['notifications']);
     }
 }
