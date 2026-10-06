@@ -26,17 +26,18 @@ class OwnershipTransferCasesSection implements DsarSectionProvider
     public function collect(string $subjectUserId, string $companyId): array
     {
         return [
-            'transfers' => $this->transfers($subjectUserId),
-            'cases' => $this->cases(),
+            'transfers' => $this->transfers($subjectUserId, $companyId),
+            'cases' => $this->cases($companyId),
         ];
     }
 
     /**
      * @return array<int, array<string, string>>
      */
-    private function transfers(string $subjectUserId): array
+    private function transfers(string $subjectUserId, string $companyId): array
     {
         return LesilyStoredEvent::query()
+            ->whereForCompany($companyId)
             ->where('event_class', CompanyOwnershipTransferred::class)
             ->orderBy('id')
             ->get()
@@ -51,9 +52,10 @@ class OwnershipTransferCasesSection implements DsarSectionProvider
     /**
      * @return array<int, array<string, string|null>>
      */
-    private function cases(): array
+    private function cases(string $companyId): array
     {
         return OwnershipTransferCase::query()
+            ->forCompanyId($companyId)
             ->orderBy('created_at')
             ->orderBy('id')
             ->get()

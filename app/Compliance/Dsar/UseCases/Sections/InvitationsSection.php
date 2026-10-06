@@ -39,6 +39,7 @@ class InvitationsSection implements DsarSectionProvider
     public function collect(string $subjectUserId, string $companyId): array
     {
         $events = LesilyStoredEvent::query()
+            ->whereForCompany($companyId)
             ->whereIn('event_class', array_keys(self::EVENTS))
             ->orderBy('id')
             ->get();

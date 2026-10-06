@@ -1145,8 +1145,8 @@ abstract class DsarTestCase extends TestCase
 
     /**
      * Every section of $exported belongs to $company alone: $member's
-     * membership of it, the consent they gave in it, and the audit entries
-     * they acted in there.
+     * membership of it, the consent they gave in it, the audit entries they
+     * acted in there, and its one invitation, transfer and case naming them.
      *
      * @param  array<string, mixed>  $exported
      */
@@ -1160,6 +1160,10 @@ abstract class DsarTestCase extends TestCase
         $this->assertSame(
             AuditEntry::query()->where('company_id', $company->getKey())->where('actor_user_id', $member->getKey())->pluck('subject_id')->all(),
             array_column($exported['audit_trail'], 'subject_id'),
+        );
+        $this->assertSame(
+            [1, 1, 1],
+            [count($exported['invitations']), count($exported['ownership_transfers']['transfers']), count($exported['ownership_transfers']['cases'])],
         );
     }
 
