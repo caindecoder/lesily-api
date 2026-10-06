@@ -3,17 +3,23 @@
 namespace Tests\Feature\Compliance\Dsar;
 
 use App\Models\User;
+use Ramsey\Uuid\Uuid;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use Illuminate\Notifications\DatabaseNotification;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Entities\NotificationPreference;
 
 class ExportDsarSectionsTest extends DsarTestCase
 {
+    protected const LOWER_ID = '00000000-0000-4000-8000-000000000001';
+
+    protected const HIGHER_ID = 'ffffffff-ffff-4fff-bfff-ffffffffffff';
+
     protected Company $company;
 
     protected function setUp(): void
@@ -445,27 +451,42 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_export_is_built_then_the_notifications_section_holds_their_notifications_here_and_their_preferences(): void
     {
-        // Given a member welcomed here two days ago, handed the company today, who switched the general notices' email off
+        // Given a member handed the company today and welcomed here two days ago — the newer notice recorded first under the lower id — who read the welcome yesterday and switched the team, then the general emails off
         $member = $this->aCompanyMember($this->company);
-        $this->travel(-2)->days();
-        $this->aNotificationFor($member, NotificationType::TeamWelcome, $this->company);
-        $this->travel(2)->days();
+        $this->theNextIdIs(self::LOWER_ID);
         $this->aNotificationFor($member, NotificationType::OwnershipReceived, $this->company);
+        $this->travel(-2)->days();
+        $this->theNextIdIs(self::HIGHER_ID);
+        $this->aNotificationFor($member, NotificationType::TeamWelcome, $this->company);
+        $this->travel(1)->days();
+        DatabaseNotification::query()->findOrFail(self::HIGHER_ID)->markAsRead();
+        $this->travel(1)->days();
+        Str::createUuidsNormally();
+        NotificationPreference::factory()->mailDisabled($member, NotificationType::TeamWelcome)->create();
         NotificationPreference::factory()->mailDisabled($member, NotificationType::GeneralAccountNotice)->create();
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When their export is built
         $this->runTheExportFor($request);
 
-        // Then both notices are exported oldest first, beside the preference they hold
+        // Then both notices are exported oldest first, beside the preferences they hold in type order
         $this->assertSame([
             'notifications' => [
-                ['notification_type' => 'team_welcome', 'company_name' => $this->company->name, 'sent_at' => now()->subDays(2)->toISOString(), 'read_at' => null],
+                ['notification_type' => 'team_welcome', 'company_name' => $this->company->name, 'sent_at' => now()->subDays(2)->toISOString(), 'read_at' => now()->subDay()->toISOString()],
                 ['notification_type' => 'ownership_received', 'company_name' => $this->company->name, 'sent_at' => now()->toISOString(), 'read_at' => null],
             ],
             'preferences' => [
                 ['notification_type' => 'general_account_notice', 'channel' => 'mail', 'enabled' => false, 'changed_at' => now()->toISOString()],
+                ['notification_type' => 'team_welcome', 'channel' => 'mail', 'enabled' => false, 'changed_at' => now()->toISOString()],
             ],
         ], $this->exportedData($request)['notifications']);
+    }
+
+    /**
+     * The next generated UUID is $id; those after it are random again.
+     */
+    protected function theNextIdIs(string $id): void
+    {
+        Str::createUuidsUsingSequence([Uuid::fromString($id)]);
     }
 }
