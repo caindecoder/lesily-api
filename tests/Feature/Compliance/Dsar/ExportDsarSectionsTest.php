@@ -125,7 +125,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_a_section_has_no_entries_then_it_is_exported_empty(): void
     {
-        // Given a member who never consented here and acted in nothing audited
+        // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited and took part in no transfer
         $member = $this->aCompanyMember($this->company);
         $request = $this->aSubmittedRequest($this->company, $member);
 
@@ -134,7 +134,10 @@ class ExportDsarSectionsTest extends DsarTestCase
 
         // Then those sections are present and empty
         $exported = $this->exportedData($request);
-        $this->assertSame([[], []], [$exported['consent_records'], $exported['audit_trail']]);
+        $this->assertSame(
+            [[], [], [], [], ['transfers' => [], 'cases' => []]],
+            [$exported['consent_records'], $exported['audit_trail'], $exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers']],
+        );
     }
 
     #[Test]
