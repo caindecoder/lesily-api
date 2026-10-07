@@ -3,8 +3,11 @@
 namespace Tests\Feature\Compliance\Dsar;
 
 use RuntimeException;
+use Illuminate\Support\Str;
 use Spatie\LaravelPdf\PdfBuilder;
 use Spatie\LaravelPdf\Facades\Pdf;
+use Illuminate\Support\Facades\View;
+use Illuminate\Filesystem\Filesystem;
 use PHPUnit\Framework\Attributes\Test;
 use App\Compliance\Dsar\UseCases\Reports\DsarReport;
 use App\Compliance\Dsar\Exceptions\DsarReportRenderingFailedException;
@@ -46,6 +49,20 @@ class RenderDsarReportPdfTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_the_report_references_a_web_resource_then_it_is_never_fetched(): void
+    {
+        // Given a report template that loads an image from a listening web address
+        $listener = stream_socket_server('tcp://127.0.0.1:0');
+        $this->aReportTemplateLoading('http://'.stream_socket_get_name($listener, false).'/pixel.png');
+
+        // When the registered renderer renders a report
+        $this->theRegisteredReportRenderer()->render(new DsarReport);
+
+        // Then nothing ever connected to that address
+        $this->assertNoConnectionWaitingOn($listener);
+    }
+
+    #[Test]
     public function when_a_report_is_rendered_then_a_pdf_document_is_returned(): void
     {
         // Given a report
@@ -56,5 +73,30 @@ class RenderDsarReportPdfTest extends DsarTestCase
 
         // Then a PDF document comes back
         $this->assertStringStartsWith('%PDF', $pdf);
+    }
+
+    /**
+     * The report view is replaced, for this test only, by one that loads an
+     * image from $url.
+     */
+    protected function aReportTemplateLoading(string $url): void
+    {
+        $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-views-'.Str::random(8);
+        $files = new Filesystem;
+        $files->ensureDirectoryExists($directory.DIRECTORY_SEPARATOR.'dsar');
+        $files->put($directory.DIRECTORY_SEPARATOR.'dsar'.DIRECTORY_SEPARATOR.'report.blade.php', '<html><body><img src="'.$url.'"></body></html>');
+        View::getFinder()->prependLocation($directory);
+        $this->beforeApplicationDestroyed(fn () => $files->deleteDirectory($directory));
+    }
+
+    /**
+     * @param  resource  $listener
+     */
+    protected function assertNoConnectionWaitingOn($listener): void
+    {
+        $waiting = [$listener];
+        $unwatched = null;
+
+        $this->assertSame(0, stream_select($waiting, $unwatched, $unwatched, 0));
     }
 }

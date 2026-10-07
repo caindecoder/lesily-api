@@ -27,7 +27,9 @@ class ChromiumDsarReportRenderer implements DsarReportRendererInterface
             $bytes = base64_decode(Pdf::html($html)
                 ->format(Format::A4)
                 ->withBrowsershot(function (Browsershot $browsershot): void {
-                    $browsershot->noSandbox()->addChromiumArguments(['disable-dev-shm-usage']);
+                    $browsershot->noSandbox()
+                        ->addChromiumArguments(['disable-dev-shm-usage'])
+                        ->blockUrls(['http://', 'https://']);
                 })
                 ->base64());
         } catch (Throwable $e) {
