@@ -16,12 +16,14 @@ use InvalidArgumentException;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Consent\Aggregates\Consent;
+use Illuminate\Support\Facades\Lang;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Queue;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
+use Illuminate\Testing\Constraints\SeeInOrder;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
@@ -34,6 +36,7 @@ use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestFulfilled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Compliance\Dsar\IO\Export\DsarExportArchive;
+use App\Compliance\Dsar\UseCases\Reports\DsarReport;
 use App\Compliance\Dsar\UseCases\Sections\DsarSections;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Companies\Memberships\Aggregates\UserMembership;
@@ -50,6 +53,8 @@ use App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Compliance\Dsar\Exceptions\DsarReportRenderingFailedException;
+use App\Compliance\Dsar\UseCases\Renderers\DsarReportRendererInterface;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
@@ -60,7 +65,11 @@ abstract class DsarTestCase extends TestCase
 {
     use InteractsWithQueuedReactors;
 
+    public const STAND_IN_REPORT = '%PDF stand-in';
+
     protected ?string $idempotencyKey;
+
+    protected RecordingDsarReportRenderer $reportRenderer;
 
     protected function setUp(): void
     {
@@ -72,6 +81,8 @@ abstract class DsarTestCase extends TestCase
         $this->idempotencyKey = (string) Str::uuid();
         Queue::fake();
         Storage::fake('dsar');
+        $this->reportRenderer = new RecordingDsarReportRenderer(new Filesystem, sys_get_temp_dir());
+        $this->app->instance(DsarReportRendererInterface::class, $this->reportRenderer);
     }
 
     /**
@@ -951,6 +962,57 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * The renderer the application registers for the report — the stand-in
+     * bound for the export tests set aside.
+     */
+    protected function theRegisteredReportRenderer(): DsarReportRendererInterface
+    {
+        $this->app->forgetInstance(DsarReportRendererInterface::class);
+
+        return $this->app->make(DsarReportRendererInterface::class);
+    }
+
+    /**
+     * The report cannot be rendered — the renderer produced no complete PDF.
+     */
+    protected function aReportRendererThatFails(): void
+    {
+        $this->app->instance(DsarReportRendererInterface::class, new class implements DsarReportRendererInterface
+        {
+            public function render(DsarReport $report): string
+            {
+                throw new DsarReportRenderingFailedException('induced rendering failure');
+            }
+        });
+    }
+
+    /**
+     * A section under $key whose collection returns exactly $data.
+     *
+     * @param  array<int|string, mixed>  $data
+     */
+    protected function aSectionHolding(string $key, array $data): DsarSectionProvider
+    {
+        return new readonly class($key, $data) implements DsarSectionProvider
+        {
+            /**
+             * @param  array<int|string, mixed>  $data
+             */
+            public function __construct(private string $key, private array $data) {}
+
+            public function key(): string
+            {
+                return $this->key;
+            }
+
+            public function collect(string $subjectUserId, string $companyId): array
+            {
+                return $this->data;
+            }
+        };
+    }
+
+    /**
      * A section whose collection fails — a database or storage error mid-export.
      */
     protected function aSectionThatFails(): DsarSectionProvider
@@ -1165,12 +1227,107 @@ abstract class DsarTestCase extends TestCase
      */
     protected function exportedJsonOf(DsarRequestRecord $request): string
     {
-        $zip = new ZipArchive;
-        $zip->open(Storage::disk('dsar')->path($this->exportPathOf($request)));
+        $zip = $this->exportZipOf($request);
         $json = (string) $zip->getFromName('data.json');
         $zip->close();
 
         return $json;
+    }
+
+    /**
+     * $request's export ZIP holds exactly data.json and report.pdf, the
+     * report being the bytes the renderer produced.
+     */
+    protected function assertExportHoldsDataAndReport(DsarRequestRecord $request): void
+    {
+        $zip = $this->exportZipOf($request);
+        $entries = array_map(fn (int $index): string => (string) $zip->getNameIndex($index), range(0, $zip->numFiles - 1));
+        $report = $zip->getFromName('report.pdf');
+        $zip->close();
+
+        $this->assertSame(['data.json', 'report.pdf'], $entries);
+        $this->assertSame(self::STAND_IN_REPORT, $report);
+    }
+
+    /**
+     * The report opens with the Lesily cover — whose data, which company,
+     * which request, when — and then the guide to its two parts, in order.
+     */
+    protected function assertReportCover(DsarRequestRecord $request, User $subject, Company $company): void
+    {
+        $this->assertReportShowsInOrder([
+            'lesily',
+            'Your personal data',
+            $subject->name,
+            $subject->email,
+            $company->name,
+            $request->getKey(),
+            'Requested',
+            '1 Oct 2026, 09:00 UTC',
+            'Generated',
+            '1 Oct 2026, 11:00 UTC',
+            'This export has two parts',
+        ]);
+    }
+
+    /**
+     * Every field of every section in $exported — nested ones included — has
+     * a label in words, and the report shows no untranslated label key.
+     *
+     * @param  array<string, array<int|string, mixed>>  $exported
+     */
+    protected function assertEveryFieldLabelled(array $exported): void
+    {
+        $fields = [];
+        foreach ($exported as $section => $data) {
+            foreach ($this->fieldsIn($data) as $field) {
+                $fields[] = "dsar.fields.{$section}.{$field}";
+            }
+        }
+        $this->assertNotEmpty($fields);
+
+        foreach (array_unique($fields) as $field) {
+            $this->assertTrue(Lang::has($field), "No label for {$field}");
+        }
+        $this->assertStringNotContainsString('dsar.', $this->reportRenderer->html);
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $data
+     * @return array<int, int|string>
+     */
+    protected function fieldsIn(array $data): array
+    {
+        $fields = array_is_list($data) ? [] : array_keys($data);
+        foreach (array_filter($data, is_array(...)) as $nested) {
+            $fields = [...$fields, ...$this->fieldsIn($nested)];
+        }
+
+        return $fields;
+    }
+
+    /**
+     * The report holds a table cell reading exactly $text.
+     */
+    protected function assertReportCell(string $text): void
+    {
+        $this->assertStringContainsString('<td>'.e($text).'</td>', $this->reportRenderer->html);
+    }
+
+    /**
+     * @param  array<int, string>  $texts
+     */
+    protected function assertReportShowsInOrder(array $texts): void
+    {
+        $this->assertThat(array_map(e(...), $texts), new SeeInOrder($this->reportRenderer->html));
+    }
+
+    protected function exportZipOf(DsarRequestRecord $request): ZipArchive
+    {
+        $zip = new ZipArchive;
+        $zip->open(Storage::disk('dsar')->path($this->exportPathOf($request)));
+
+        return $zip;
     }
 
     /**
@@ -1238,7 +1395,26 @@ abstract class DsarTestCase extends TestCase
      */
     protected function assertNoSecretOf(User $user, array $exported, array $otherSecrets = []): void
     {
-        $json = json_encode($exported, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $this->assertNoSecretIn(json_encode($exported, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), $user, $otherSecrets);
+    }
+
+    /**
+     * None of $user's secrets nor any of $otherSecrets appears anywhere in
+     * the report.
+     *
+     * @param  array<int, string|null>  $otherSecrets
+     */
+    protected function assertReportHoldsNoSecretOf(User $user, array $otherSecrets): void
+    {
+        $this->assertStringContainsString(e($user->email), $this->reportRenderer->html);
+        $this->assertNoSecretIn($this->reportRenderer->html, $user, $otherSecrets);
+    }
+
+    /**
+     * @param  array<int, string|null>  $otherSecrets
+     */
+    protected function assertNoSecretIn(string $text, User $user, array $otherSecrets): void
+    {
         $secrets = [
             $user->password,
             $user->remember_token,
@@ -1250,7 +1426,7 @@ abstract class DsarTestCase extends TestCase
 
         $this->assertSame($secrets, array_filter($secrets));
         foreach ($secrets as $secret) {
-            $this->assertStringNotContainsString((string) $secret, $json);
+            $this->assertStringNotContainsString((string) $secret, $text);
         }
     }
 

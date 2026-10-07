@@ -8,8 +8,7 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
-use App\Compliance\Dsar\IO\Export\DsarExportArchive;
-use App\Compliance\Dsar\UseCases\Sections\DsarSections;
+use App\Compliance\Dsar\UseCases\Export\DsarExport;
 use App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand;
 use App\Compliance\Dsar\Exceptions\DsarRequestNotInProgressException;
@@ -33,7 +32,7 @@ class BuildDsarExportJob implements ShouldQueue
         public string $subjectUserId,
     ) {}
 
-    public function handle(DsarSections $sections, DsarExportArchive $archive, FulfilDsarRequestInteractor $fulfil): void
+    public function handle(DsarExport $export, FulfilDsarRequestInteractor $fulfil): void
     {
         if ($this->status() !== DsarRequestStatus::InProgress) {
             $this->discardExportUnlessFulfilled();
@@ -41,7 +40,7 @@ class BuildDsarExportJob implements ShouldQueue
             return;
         }
 
-        Storage::disk('dsar')->put($this->filePath(), $archive->build($sections->collectFor($this->subjectUserId, $this->companyId)));
+        Storage::disk('dsar')->put($this->filePath(), $export->build(DsarRequestRecord::query()->with('subject')->findOrFail($this->requestId)));
 
         try {
             $fulfil->execute(FulfilDsarRequestCommand::from([
