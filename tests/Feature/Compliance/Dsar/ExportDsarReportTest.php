@@ -34,12 +34,14 @@ class ExportDsarReportTest extends DsarTestCase
         $request = $this->aSubmittedRequest($this->company, $this->member);
         $this->aReportRendererThatFails();
 
-        // When their export is built
-        $attempt = fn () => $this->runTheExportFor($request);
-
-        // Then the attempt fails on the report, and the request stays in progress with no file
-        $this->assertThrows($attempt, DsarReportRenderingFailedException::class);
-        $this->assertStillInProgressWithoutExportFile($request);
+        try {
+            // When their export is built
+            $this->runTheExportFor($request);
+            $this->fail('A report that cannot be rendered should fail the export job.');
+        } catch (DsarReportRenderingFailedException) {
+            // Then the attempt fails on the report, and the request stays in progress with no file
+            $this->assertStillInProgressWithoutExportFile($request);
+        }
     }
 
     #[Test]
@@ -84,6 +86,7 @@ class ExportDsarReportTest extends DsarTestCase
             'Ownership transfers', 'Transfers', 'None recorded', 'Cases', 'None recorded',
             'Notifications and preferences', 'Notifications', 'None recorded', 'Preferences', 'None recorded',
         ]);
+        $this->assertSame(8, substr_count($this->reportRenderer->html, 'None recorded'));
     }
 
     /**
@@ -99,6 +102,7 @@ class ExportDsarReportTest extends DsarTestCase
             'an action code' => ['action', 'dsar_withdrawn', 'Withdrew a data request (dsar_withdrawn)'],
             'a role code' => ['role', 'hr_officer', 'HR Officer (hr_officer)'],
             'a code with no explanation yet' => ['action', 'a_new_action', 'a_new_action'],
+            'a role code outside a role field' => ['device_name', 'employee', 'employee'],
         ];
     }
 
@@ -186,8 +190,9 @@ class ExportDsarReportTest extends DsarTestCase
     #[Test]
     public function when_the_export_is_built_then_the_report_opens_with_the_cover_and_reading_guide(): void
     {
-        // Given a member's submitted request
+        // Given a member's request, submitted two hours before its export is built
         $request = $this->aSubmittedRequest($this->company, $this->member);
+        $this->travel(2)->hours();
 
         // When their export is built
         $this->runTheExportFor($request);

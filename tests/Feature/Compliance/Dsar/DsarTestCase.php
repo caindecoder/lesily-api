@@ -81,7 +81,7 @@ abstract class DsarTestCase extends TestCase
         $this->idempotencyKey = (string) Str::uuid();
         Queue::fake();
         Storage::fake('dsar');
-        $this->reportRenderer = new RecordingDsarReportRenderer;
+        $this->reportRenderer = new RecordingDsarReportRenderer(new Filesystem, sys_get_temp_dir());
         $this->app->instance(DsarReportRendererInterface::class, $this->reportRenderer);
     }
 
@@ -1265,7 +1265,7 @@ abstract class DsarTestCase extends TestCase
             'Requested',
             '1 Oct 2026, 09:00 UTC',
             'Generated',
-            '1 Oct 2026, 09:00 UTC',
+            '1 Oct 2026, 11:00 UTC',
             'This export has two parts',
         ]);
     }
@@ -1406,6 +1406,7 @@ abstract class DsarTestCase extends TestCase
      */
     protected function assertReportHoldsNoSecretOf(User $user, array $otherSecrets): void
     {
+        $this->assertStringContainsString(e($user->email), $this->reportRenderer->html);
         $this->assertNoSecretIn($this->reportRenderer->html, $user, $otherSecrets);
     }
 

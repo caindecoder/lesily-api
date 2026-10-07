@@ -204,8 +204,8 @@
                 "App\\Billing\\Invoices\\IO\\Pdf\\ChromiumReceiptPdfRenderer::render::32",
                 // L-CHROMIUM (DSAR report): the same container flag on the DSAR report
                 // renderer; the PDF bytes are identical either way. Pinned so the blockUrls
-                // items at :32 stay killable.
-                "App\\Compliance\\Dsar\\IO\\Pdf\\ChromiumDsarReportRenderer::print::31",
+                // items at :45 stay killable.
+                "App\\Compliance\\Dsar\\IO\\Pdf\\ChromiumDsarReportRenderer::print::44",
                 // L-VERIFY-BODY: the verify-email response message literal -
                 // api-1-auth-onboarding.md:190 leaves the body unpinned (P5 tuning).
                 "App\\Foundation\\Auth\\IO\\Http\\Controllers\\EmailVerificationController::__invoke",

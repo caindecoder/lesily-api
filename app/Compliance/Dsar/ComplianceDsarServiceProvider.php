@@ -27,7 +27,10 @@ class ComplianceDsarServiceProvider extends ServiceProvider
             sys_get_temp_dir(),
         ));
 
-        $this->app->bind(DsarReportRendererInterface::class, ChromiumDsarReportRenderer::class);
+        $this->app->bind(DsarReportRendererInterface::class, fn (Application $app): ChromiumDsarReportRenderer => new ChromiumDsarReportRenderer(
+            $app->make(Filesystem::class),
+            sys_get_temp_dir(),
+        ));
 
         $this->app->bind(DsarSections::class, fn (Application $app): DsarSections => new DsarSections([
             $app->make(ProfileSection::class),

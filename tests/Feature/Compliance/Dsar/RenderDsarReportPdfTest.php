@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Compliance\Dsar;
 
-use Throwable;
 use RuntimeException;
 use Illuminate\Support\Str;
 use Spatie\LaravelPdf\PdfBuilder;
@@ -13,6 +12,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Dsar\UseCases\Reports\DsarReport;
 use App\Compliance\Dsar\UseCases\Reports\DsarReportCover;
+use App\Compliance\Dsar\IO\Pdf\ChromiumDsarReportRenderer;
 use App\Compliance\Dsar\Exceptions\DsarReportRenderingFailedException;
 
 class RenderDsarReportPdfTest extends DsarTestCase
@@ -24,11 +24,14 @@ class RenderDsarReportPdfTest extends DsarTestCase
         $cause = new RuntimeException('Chromium process died');
         Pdf::shouldReceive('html')->once()->andThrow($cause);
 
-        // When the registered renderer renders a report
-        $attempt = fn () => $this->theRegisteredReportRenderer()->render($this->aReport());
-
-        // Then rendering fails with the report error, the cause kept
-        $this->assertThrows($attempt, fn (Throwable $failure): bool => $failure instanceof DsarReportRenderingFailedException && $failure->getPrevious() === $cause);
+        try {
+            // When the registered renderer renders a report
+            $this->theRegisteredReportRenderer()->render($this->aReport());
+            $this->fail('A Chromium failure should fail the rendering.');
+        } catch (DsarReportRenderingFailedException $failure) {
+            // Then rendering fails with the report error, the cause kept
+            $this->assertSame($cause, $failure->getPrevious());
+        }
     }
 
     #[Test]
@@ -44,11 +47,11 @@ class RenderDsarReportPdfTest extends DsarTestCase
         };
         Pdf::shouldReceive('html')->andReturn($emptyRender);
 
-        // When the registered renderer renders a report
-        $attempt = fn () => $this->theRegisteredReportRenderer()->render($this->aReport());
-
         // Then rendering fails with the report error rather than returning a broken PDF
-        $this->assertThrows($attempt, DsarReportRenderingFailedException::class);
+        $this->expectException(DsarReportRenderingFailedException::class);
+
+        // When the registered renderer renders a report
+        $this->theRegisteredReportRenderer()->render($this->aReport());
     }
 
     /**
@@ -76,6 +79,45 @@ class RenderDsarReportPdfTest extends DsarTestCase
         $this->assertNoConnectionWaitingOn($listener);
     }
 
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideTextReadingLikeALocalAddress(): array
+    {
+        return [
+            'a file address' => ['Nimal file:///etc/passwd Perera'],
+            'a source-view address' => ['view-source:Nimal Perera'],
+            'a loopback address' => ['Nimal //127.0.0.1/ Perera'],
+        ];
+    }
+
+    #[Test, DataProvider('provideTextReadingLikeALocalAddress')]
+    public function when_personal_data_reads_like_a_local_address_then_the_report_still_renders(string $subjectName): void
+    {
+        // Given a report whose subject's name reads like a local address
+        $report = $this->aReportNaming($subjectName);
+
+        // When the registered renderer renders it
+        $pdf = $this->theRegisteredReportRenderer()->render($report);
+
+        // Then a PDF document comes back
+        $this->assertStringStartsWith('%PDF', $pdf);
+    }
+
+    #[Test]
+    public function when_a_report_is_rendered_then_no_page_file_outlives_it(): void
+    {
+        // Given a renderer working in an empty directory of its own
+        $directory = $this->anEmptyWorkDirectory();
+        $renderer = new ChromiumDsarReportRenderer(new Filesystem, $directory);
+
+        // When it renders a report
+        $renderer->render($this->aReport());
+
+        // Then nothing of the report's page is left there
+        $this->assertSame([], (new Filesystem)->files($directory));
+    }
+
     #[Test]
     public function when_a_report_is_rendered_then_a_pdf_document_is_returned(): void
     {
@@ -89,9 +131,23 @@ class RenderDsarReportPdfTest extends DsarTestCase
         $this->assertStringStartsWith('%PDF', $pdf);
     }
 
+    protected function anEmptyWorkDirectory(): string
+    {
+        $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-render-'.Str::random(8);
+        mkdir($directory);
+        $this->beforeApplicationDestroyed(fn () => (new Filesystem)->deleteDirectory($directory));
+
+        return $directory;
+    }
+
     protected function aReport(): DsarReport
     {
-        return new DsarReport(new DsarReportCover('Nimal Perera', 'nimal@example.com', 'Lanka Tech Solutions', 'a-request-reference', '1 Oct 2026, 09:00 UTC', '1 Oct 2026, 09:00 UTC'), []);
+        return $this->aReportNaming('Nimal Perera');
+    }
+
+    protected function aReportNaming(string $subjectName): DsarReport
+    {
+        return new DsarReport(new DsarReportCover($subjectName, 'nimal@example.com', 'Lanka Tech Solutions', 'a-request-reference', '1 Oct 2026, 09:00 UTC', '1 Oct 2026, 09:00 UTC'), []);
     }
 
     /**
