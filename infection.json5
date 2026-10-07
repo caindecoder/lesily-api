@@ -323,6 +323,21 @@
                 "App\\Foundation\\Http\\Middleware\\EnsureIdempotencyKey::snapshot",
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::execute",
                 "App\\Compliance\\Dsar\\IO\\Export\\DsarExportArchive::build",
+                // L-DSAR-REPORT-VALUE: every scalar a DSAR section exports is a string or
+                // a bool / null handled before these arms (the sections write ISO strings,
+                // ids and codes); the casts only satisfy Larastan's mixed. Remove when a
+                // section exports an int or float.
+                "App\\Compliance\\Dsar\\UseCases\\Reports\\DsarReportPresenter::readable::120",
+                "App\\Compliance\\Dsar\\UseCases\\Reports\\DsarReportPresenter::readable::121",
+            ],
+        },
+        "AssignCoalesce": {
+            ignore: [
+                // L-ROLE-NAMES-MEMO: the role names are read once per report; without the
+                // memo every role cell re-reads the same rows - the same output, more
+                // queries (performance only, no behaviour). Remove when the role names come
+                // from a cached repository.
+                "App\\Compliance\\Dsar\\UseCases\\Reports\\DsarReportPresenter::roleNames::146",
             ],
         },
     },

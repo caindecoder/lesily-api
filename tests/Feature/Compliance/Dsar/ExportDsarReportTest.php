@@ -121,6 +121,20 @@ class ExportDsarReportTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_a_section_holds_one_entry_then_the_report_lists_each_field_label_before_its_value(): void
+    {
+        // Given an export whose profile holds a name and a two-step sign-in flag
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $this->withSections($this->aSectionHolding('profile', ['name' => 'Nimal Perera', 'two_factor_enabled' => true]));
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then each field reads as its label, then its value
+        $this->assertReportShowsInOrder(['Name', 'Nimal Perera', 'Two-step sign-in turned on', 'Yes']);
+    }
+
+    #[Test]
     public function when_a_section_lists_entries_then_the_report_tables_them_under_column_headings(): void
     {
         // Given an export whose section lists two entries

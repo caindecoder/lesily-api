@@ -35,6 +35,23 @@ class RenderDsarReportPdfTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_rendering_fails_then_no_page_file_outlives_it(): void
+    {
+        // Given a renderer working in an empty directory of its own, and Chromium dying while printing
+        $directory = $this->anEmptyWorkDirectory();
+        Pdf::shouldReceive('html')->once()->andThrow(new RuntimeException('Chromium process died'));
+
+        try {
+            // When it renders a report
+            (new ChromiumDsarReportRenderer(new Filesystem, $directory))->render($this->aReport());
+            $this->fail('A Chromium failure should fail the rendering.');
+        } catch (DsarReportRenderingFailedException) {
+            // Then nothing of the report's page is left there
+            $this->assertSame([], (new Filesystem)->files($directory));
+        }
+    }
+
+    #[Test]
     public function when_chromium_returns_an_incomplete_document_then_rendering_fails_with_the_report_error(): void
     {
         // Given Chromium returns an empty render instead of failing
@@ -119,7 +136,7 @@ class RenderDsarReportPdfTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_a_report_is_rendered_then_a_pdf_document_is_returned(): void
+    public function when_a_report_is_rendered_then_a_pdf_typeset_in_the_brand_font_is_returned(): void
     {
         // Given a report
         $report = $this->aReport();
@@ -127,8 +144,9 @@ class RenderDsarReportPdfTest extends DsarTestCase
         // When the registered renderer renders it
         $pdf = $this->theRegisteredReportRenderer()->render($report);
 
-        // Then a PDF document comes back
+        // Then a PDF document comes back, laid out as the report in Inter rather than printed as page source
         $this->assertStringStartsWith('%PDF', $pdf);
+        $this->assertStringContainsString('/FontFamily (Inter', $pdf);
     }
 
     protected function anEmptyWorkDirectory(): string

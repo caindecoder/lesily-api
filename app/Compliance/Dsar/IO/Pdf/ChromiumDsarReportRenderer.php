@@ -32,7 +32,7 @@ class ChromiumDsarReportRenderer implements DsarReportRendererInterface
      */
     protected function print(string $html): string
     {
-        $page = $this->workDirectory.DIRECTORY_SEPARATOR.'dsar-report-'.Str::random(16).'.html';
+        $page = $this->workDirectory.DIRECTORY_SEPARATOR.Str::uuid7().'.html';
         $this->files->put($page, $html);
 
         try {

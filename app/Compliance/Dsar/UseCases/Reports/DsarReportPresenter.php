@@ -89,7 +89,7 @@ class DsarReportPresenter
         ))];
 
         foreach (array_filter($entry, is_array(...)) as $field => $list) {
-            $tables = [...$tables, ...$this->tablesOf($section, $list, $this->label($section, $field))];
+            $tables = array_merge($tables, $this->tablesOf($section, $list, $this->label($section, $field)));
         }
 
         return $tables;
