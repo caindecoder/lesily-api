@@ -61,4 +61,18 @@ class ExportDsarReportTest extends DsarTestCase
         // Then the report opens with who and what it is for, and how to read it
         $this->assertReportCover($request, $this->member, $this->company);
     }
+
+    #[Test]
+    public function when_the_export_is_built_then_the_report_holds_every_section_titled_in_order(): void
+    {
+        // Given a member's submitted request
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the contents list names every section, and each follows under its title, in the same order
+        $titles = ['Your profile', 'Your membership', 'Consent records', 'Actions you took', 'Sign-ins', 'Invitations', 'Ownership transfers', 'Notifications and preferences'];
+        $this->assertReportShowsInOrder(['Contents', ...$titles, ...$titles]);
+    }
 }

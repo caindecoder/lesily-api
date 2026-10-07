@@ -78,7 +78,7 @@ class RenderDsarReportPdfTest extends DsarTestCase
 
     protected function aReport(): DsarReport
     {
-        return new DsarReport(new DsarReportCover('Nimal Perera', 'nimal@example.com', 'Lanka Tech Solutions', 'a-request-reference', '1 Oct 2026, 09:00 UTC', '1 Oct 2026, 09:00 UTC'));
+        return new DsarReport(new DsarReportCover('Nimal Perera', 'nimal@example.com', 'Lanka Tech Solutions', 'a-request-reference', '1 Oct 2026, 09:00 UTC', '1 Oct 2026, 09:00 UTC'), []);
     }
 
     /**

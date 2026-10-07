@@ -25,6 +25,6 @@ class DsarExport
     {
         $sections = $this->sections->collectFor($request->subject_user_id, $request->company_id);
 
-        return $this->archive->build($sections, $this->renderer->render($this->presenter->present($request)));
+        return $this->archive->build($sections, $this->renderer->render($this->presenter->present($request, $sections)));
     }
 }

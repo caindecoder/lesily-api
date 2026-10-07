@@ -12,6 +12,9 @@
         .cover td { padding: 4px 16px 4px 0; vertical-align: top; }
         .cover .label { color: #64748B; }
         .guide { border-left: 3px solid #0D9488; background: #F0FDFA; padding: 10px 14px; color: #334155; }
+        h2 { color: #134E4A; font-size: 18px; margin: 0 0 12px; }
+        .contents { color: #334155; line-height: 1.8; }
+        .section { break-before: page; }
     </style>
 </head>
 <body>
@@ -26,6 +29,17 @@
             <tr><td class="label">{{ __('dsar.report.generated') }}</td><td>{{ $report->cover->generatedAt }}</td></tr>
         </table>
         <p class="guide">{{ __('dsar.report.guide') }}</p>
+        <h2>{{ __('dsar.report.contents') }}</h2>
+        <ol class="contents">
+            @foreach ($report->sections as $section)
+                <li>{{ $section->title }}</li>
+            @endforeach
+        </ol>
     </section>
+    @foreach ($report->sections as $section)
+        <section class="section">
+            <h2>{{ $section->title }}</h2>
+        </section>
+    @endforeach
 </body>
 </html>

@@ -10,5 +10,16 @@ return [
         'requested' => 'Requested',
         'generated' => 'Generated',
         'guide' => 'This export has two parts. data.json holds all of your data in a machine-readable form. This report shows the same data for reading, with every code explained in words.',
+        'contents' => 'Contents',
+    ],
+    'sections' => [
+        'profile' => ['title' => 'Your profile'],
+        'membership' => ['title' => 'Your membership'],
+        'consent_records' => ['title' => 'Consent records'],
+        'audit_trail' => ['title' => 'Actions you took'],
+        'sign_ins' => ['title' => 'Sign-ins'],
+        'invitations' => ['title' => 'Invitations'],
+        'ownership_transfers' => ['title' => 'Ownership transfers'],
+        'notifications' => ['title' => 'Notifications and preferences'],
     ],
 ];
