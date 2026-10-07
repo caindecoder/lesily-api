@@ -1395,7 +1395,25 @@ abstract class DsarTestCase extends TestCase
      */
     protected function assertNoSecretOf(User $user, array $exported, array $otherSecrets = []): void
     {
-        $json = json_encode($exported, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $this->assertNoSecretIn(json_encode($exported, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), $user, $otherSecrets);
+    }
+
+    /**
+     * None of $user's secrets nor any of $otherSecrets appears anywhere in
+     * the report.
+     *
+     * @param  array<int, string|null>  $otherSecrets
+     */
+    protected function assertReportHoldsNoSecretOf(User $user, array $otherSecrets): void
+    {
+        $this->assertNoSecretIn($this->reportRenderer->html, $user, $otherSecrets);
+    }
+
+    /**
+     * @param  array<int, string|null>  $otherSecrets
+     */
+    protected function assertNoSecretIn(string $text, User $user, array $otherSecrets): void
+    {
         $secrets = [
             $user->password,
             $user->remember_token,
@@ -1407,7 +1425,7 @@ abstract class DsarTestCase extends TestCase
 
         $this->assertSame($secrets, array_filter($secrets));
         foreach ($secrets as $secret) {
-            $this->assertStringNotContainsString((string) $secret, $json);
+            $this->assertStringNotContainsString((string) $secret, $text);
         }
     }
 

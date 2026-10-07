@@ -7,6 +7,7 @@ use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
+use App\Companies\Memberships\Entities\Invitation;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Entities\NotificationPreference;
@@ -39,6 +40,29 @@ class ExportDsarReportTest extends DsarTestCase
         // Then the attempt fails on the report, and the request stays in progress with no file
         $this->assertThrows($attempt, DsarReportRenderingFailedException::class);
         $this->assertStillInProgressWithoutExportFile($request);
+    }
+
+    #[Test]
+    public function when_the_export_is_built_then_no_secret_appears_in_the_report(): void
+    {
+        // Given a member with a password, a remember token, two-factor sign-in, a sign-in token, an invitation and a verified-then-rejected case
+        $member = User::factory()->withTwoFactor()->create();
+        $this->company->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
+        $signIn = $this->aSignInFor($member, 'iPhone', now()->addDays(90));
+        $invitationId = $this->anInvitationTo($member, $this->company);
+        $case = OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->verified()->closedRejected()->create();
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then none of their secrets, token hashes, case notes or prose reasons appears in the report
+        $this->assertReportHoldsNoSecretOf($member, [
+            $signIn->token,
+            Invitation::query()->findOrFail($invitationId)->token_hash,
+            $case->verification_notes,
+            $case->rejection_reason,
+        ]);
     }
 
     #[Test]
