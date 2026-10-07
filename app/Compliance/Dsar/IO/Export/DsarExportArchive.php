@@ -14,13 +14,13 @@ class DsarExportArchive
 
     /**
      * The export as ZIP bytes — one data.json holding every section, indented
-     * for reading. The ZIP is built at a fresh name in the work directory
-     * (reserved, then freed, so nothing else holds the file), and nothing of
-     * it is left there when this returns.
+     * for reading, beside report.pdf. The ZIP is built at a fresh name in the
+     * work directory (reserved, then freed, so nothing else holds the file),
+     * and nothing of it is left there when this returns.
      *
      * @param  array<string, mixed>  $sections
      */
-    public function build(array $sections): string
+    public function build(array $sections, string $reportPdf): string
     {
         $path = (string) tempnam($this->workDirectory, 'dsar');
         $this->files->delete($path);
@@ -29,6 +29,7 @@ class DsarExportArchive
             $zip = new ZipArchive;
             $zip->open($path, ZipArchive::CREATE | ZipArchive::EXCL);
             $zip->addFromString('data.json', json_encode($sections, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+            $zip->addFromString('report.pdf', $reportPdf);
             $zip->close();
 
             return $this->files->get($path);

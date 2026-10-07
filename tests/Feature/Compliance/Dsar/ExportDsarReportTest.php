@@ -35,4 +35,17 @@ class ExportDsarReportTest extends DsarTestCase
         $this->assertThrows($attempt, DsarReportRenderingFailedException::class);
         $this->assertStillInProgressWithoutExportFile($request);
     }
+
+    #[Test]
+    public function when_the_export_is_built_then_the_zip_holds_the_report_beside_the_data(): void
+    {
+        // Given a member's submitted request
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the ZIP holds data.json and the rendered report.pdf
+        $this->assertExportHoldsDataAndReport($request);
+    }
 }

@@ -63,6 +63,8 @@ abstract class DsarTestCase extends TestCase
 {
     use InteractsWithQueuedReactors;
 
+    public const STAND_IN_REPORT = '%PDF stand-in';
+
     protected ?string $idempotencyKey;
 
     protected function setUp(): void
@@ -79,7 +81,7 @@ abstract class DsarTestCase extends TestCase
         {
             public function render(DsarReport $report): string
             {
-                return '%PDF stand-in';
+                return DsarTestCase::STAND_IN_REPORT;
             }
         });
     }
@@ -1189,12 +1191,34 @@ abstract class DsarTestCase extends TestCase
      */
     protected function exportedJsonOf(DsarRequestRecord $request): string
     {
-        $zip = new ZipArchive;
-        $zip->open(Storage::disk('dsar')->path($this->exportPathOf($request)));
+        $zip = $this->exportZipOf($request);
         $json = (string) $zip->getFromName('data.json');
         $zip->close();
 
         return $json;
+    }
+
+    /**
+     * $request's export ZIP holds exactly data.json and report.pdf, the
+     * report being the bytes the renderer produced.
+     */
+    protected function assertExportHoldsDataAndReport(DsarRequestRecord $request): void
+    {
+        $zip = $this->exportZipOf($request);
+        $entries = array_map(fn (int $index): string => (string) $zip->getNameIndex($index), range(0, $zip->numFiles - 1));
+        $report = $zip->getFromName('report.pdf');
+        $zip->close();
+
+        $this->assertSame(['data.json', 'report.pdf'], $entries);
+        $this->assertSame(self::STAND_IN_REPORT, $report);
+    }
+
+    protected function exportZipOf(DsarRequestRecord $request): ZipArchive
+    {
+        $zip = new ZipArchive;
+        $zip->open(Storage::disk('dsar')->path($this->exportPathOf($request)));
+
+        return $zip;
     }
 
     /**

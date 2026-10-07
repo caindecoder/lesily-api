@@ -21,8 +21,7 @@ class DsarExport
     public function build(string $subjectUserId, string $companyId): string
     {
         $sections = $this->sections->collectFor($subjectUserId, $companyId);
-        $this->renderer->render(new DsarReport);
 
-        return $this->archive->build($sections);
+        return $this->archive->build($sections, $this->renderer->render(new DsarReport));
     }
 }
