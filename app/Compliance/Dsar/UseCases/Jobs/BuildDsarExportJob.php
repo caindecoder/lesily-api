@@ -40,7 +40,7 @@ class BuildDsarExportJob implements ShouldQueue
             return;
         }
 
-        Storage::disk('dsar')->put($this->filePath(), $export->build($this->subjectUserId, $this->companyId));
+        Storage::disk('dsar')->put($this->filePath(), $export->build(DsarRequestRecord::query()->with('subject')->findOrFail($this->requestId)));
 
         try {
             $fulfil->execute(FulfilDsarRequestCommand::from([

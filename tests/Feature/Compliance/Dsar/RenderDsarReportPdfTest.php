@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\View;
 use Illuminate\Filesystem\Filesystem;
 use PHPUnit\Framework\Attributes\Test;
 use App\Compliance\Dsar\UseCases\Reports\DsarReport;
+use App\Compliance\Dsar\UseCases\Reports\DsarReportCover;
 use App\Compliance\Dsar\Exceptions\DsarReportRenderingFailedException;
 
 class RenderDsarReportPdfTest extends DsarTestCase
@@ -22,7 +23,7 @@ class RenderDsarReportPdfTest extends DsarTestCase
         Pdf::shouldReceive('html')->once()->andThrow($cause);
 
         // When the registered renderer renders a report
-        $attempt = fn () => $this->theRegisteredReportRenderer()->render(new DsarReport);
+        $attempt = fn () => $this->theRegisteredReportRenderer()->render($this->aReport());
 
         // Then rendering fails with the report error, the cause kept
         $this->assertThrows($attempt, fn (DsarReportRenderingFailedException $failure): bool => $failure->getPrevious() === $cause);
@@ -42,7 +43,7 @@ class RenderDsarReportPdfTest extends DsarTestCase
         Pdf::shouldReceive('html')->andReturn($emptyRender);
 
         // When the registered renderer renders a report
-        $attempt = fn () => $this->theRegisteredReportRenderer()->render(new DsarReport);
+        $attempt = fn () => $this->theRegisteredReportRenderer()->render($this->aReport());
 
         // Then rendering fails with the report error rather than returning a broken PDF
         $this->assertThrows($attempt, DsarReportRenderingFailedException::class);
@@ -56,7 +57,7 @@ class RenderDsarReportPdfTest extends DsarTestCase
         $this->aReportTemplateLoading('http://'.stream_socket_get_name($listener, false).'/pixel.png');
 
         // When the registered renderer renders a report
-        $this->theRegisteredReportRenderer()->render(new DsarReport);
+        $this->theRegisteredReportRenderer()->render($this->aReport());
 
         // Then nothing ever connected to that address
         $this->assertNoConnectionWaitingOn($listener);
@@ -66,13 +67,18 @@ class RenderDsarReportPdfTest extends DsarTestCase
     public function when_a_report_is_rendered_then_a_pdf_document_is_returned(): void
     {
         // Given a report
-        $report = new DsarReport;
+        $report = $this->aReport();
 
         // When the registered renderer renders it
         $pdf = $this->theRegisteredReportRenderer()->render($report);
 
         // Then a PDF document comes back
         $this->assertStringStartsWith('%PDF', $pdf);
+    }
+
+    protected function aReport(): DsarReport
+    {
+        return new DsarReport(new DsarReportCover('Nimal Perera', 'nimal@example.com', 'Lanka Tech Solutions', 'a-request-reference', '1 Oct 2026, 09:00 UTC', '1 Oct 2026, 09:00 UTC'));
     }
 
     /**

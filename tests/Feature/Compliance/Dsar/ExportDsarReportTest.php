@@ -48,4 +48,17 @@ class ExportDsarReportTest extends DsarTestCase
         // Then the ZIP holds data.json and the rendered report.pdf
         $this->assertExportHoldsDataAndReport($request);
     }
+
+    #[Test]
+    public function when_the_export_is_built_then_the_report_opens_with_the_cover_and_reading_guide(): void
+    {
+        // Given a member's submitted request
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the report opens with who and what it is for, and how to read it
+        $this->assertReportCover($request, $this->member, $this->company);
+    }
 }

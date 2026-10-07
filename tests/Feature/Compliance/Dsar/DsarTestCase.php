@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Queue;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
+use Illuminate\Testing\Constraints\SeeInOrder;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
@@ -67,6 +68,8 @@ abstract class DsarTestCase extends TestCase
 
     protected ?string $idempotencyKey;
 
+    protected RecordingDsarReportRenderer $reportRenderer;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -77,13 +80,8 @@ abstract class DsarTestCase extends TestCase
         $this->idempotencyKey = (string) Str::uuid();
         Queue::fake();
         Storage::fake('dsar');
-        $this->app->instance(DsarReportRendererInterface::class, new class implements DsarReportRendererInterface
-        {
-            public function render(DsarReport $report): string
-            {
-                return DsarTestCase::STAND_IN_REPORT;
-            }
-        });
+        $this->reportRenderer = new RecordingDsarReportRenderer;
+        $this->app->instance(DsarReportRendererInterface::class, $this->reportRenderer);
     }
 
     /**
@@ -1222,6 +1220,35 @@ abstract class DsarTestCase extends TestCase
 
         $this->assertSame(['data.json', 'report.pdf'], $entries);
         $this->assertSame(self::STAND_IN_REPORT, $report);
+    }
+
+    /**
+     * The report opens with the Lesily cover — whose data, which company,
+     * which request, when — and then the guide to its two parts, in order.
+     */
+    protected function assertReportCover(DsarRequestRecord $request, User $subject, Company $company): void
+    {
+        $this->assertReportShowsInOrder([
+            'lesily',
+            'Your personal data',
+            $subject->name,
+            $subject->email,
+            $company->name,
+            $request->getKey(),
+            'Requested',
+            '1 Oct 2026, 09:00 UTC',
+            'Generated',
+            '1 Oct 2026, 09:00 UTC',
+            'This export has two parts',
+        ]);
+    }
+
+    /**
+     * @param  array<int, string>  $texts
+     */
+    protected function assertReportShowsInOrder(array $texts): void
+    {
+        $this->assertThat(array_map(e(...), $texts), new SeeInOrder($this->reportRenderer->html));
     }
 
     protected function exportZipOf(DsarRequestRecord $request): ZipArchive
