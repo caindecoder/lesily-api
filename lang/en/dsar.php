@@ -12,6 +12,13 @@ return [
         'guide' => 'This export has two parts. data.json holds all of your data in a machine-readable form. This report shows the same data for reading, with every code explained in words.',
         'contents' => 'Contents',
         'none' => 'None recorded',
+        'yes' => 'Yes',
+        'no' => 'No',
+    ],
+    'codes' => [
+        'action' => [
+            'dsar_withdrawn' => 'Withdrew a data request',
+        ],
     ],
     'fields' => [
         'ownership_transfers' => [

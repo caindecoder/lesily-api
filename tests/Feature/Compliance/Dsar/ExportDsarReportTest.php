@@ -5,6 +5,7 @@ namespace Tests\Feature\Compliance\Dsar;
 use App\Models\User;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Dsar\Exceptions\DsarReportRenderingFailedException;
 
 class ExportDsarReportTest extends DsarTestCase
@@ -55,6 +56,36 @@ class ExportDsarReportTest extends DsarTestCase
             'Ownership transfers', 'Transfers', 'None recorded', 'Cases', 'None recorded',
             'Notifications and preferences', 'Notifications', 'None recorded', 'Preferences', 'None recorded',
         ]);
+    }
+
+    /**
+     * @return array<string, array{string, mixed, string}>
+     */
+    public static function provideValuesAndTheirReadableForms(): array
+    {
+        return [
+            'a time' => ['recorded_at', '2026-09-15T14:30:00.000000Z', '15 Sep 2026, 14:30 UTC'],
+            'a yes' => ['two_factor_enabled', true, 'Yes'],
+            'a no' => ['two_factor_enabled', false, 'No'],
+            'nothing' => ['last_logged_at', null, '—'],
+            'an action code' => ['action', 'dsar_withdrawn', 'Withdrew a data request (dsar_withdrawn)'],
+            'a role code' => ['role', 'hr_officer', 'HR Officer (hr_officer)'],
+            'a code with no explanation yet' => ['action', 'a_new_action', 'a_new_action'],
+        ];
+    }
+
+    #[Test, DataProvider('provideValuesAndTheirReadableForms')]
+    public function when_a_value_is_a_date_flag_empty_or_code_then_the_report_writes_it_readably(string $field, mixed $value, string $readable): void
+    {
+        // Given an export whose section holds the value
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $this->withSections($this->aSectionHolding('profile', [$field => $value]));
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the report writes it for a person to read
+        $this->assertReportCell($readable);
     }
 
     #[Test]

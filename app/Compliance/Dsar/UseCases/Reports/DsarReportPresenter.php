@@ -2,12 +2,18 @@
 
 namespace App\Compliance\Dsar\UseCases\Reports;
 
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Lang;
+use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 
 class DsarReportPresenter
 {
+    /** @var array<string, string>|null */
+    private ?array $roleNames = null;
+
     /**
      * The report of $request's export — its sections as collected, every
      * value written for a person to read.
@@ -59,7 +65,11 @@ class DsarReportPresenter
         return [new DsarReportTable(
             $caption,
             array_map(fn (string $field): string => $this->label($section, $field), array_keys($data[0] ?? [])),
-            array_map(fn (array $entry): array => array_values($entry), $data),
+            array_map(fn (array $entry): array => array_map(
+                fn (string $field, mixed $value): string => $this->readable($field, $value),
+                array_keys($entry),
+                $entry,
+            ), $data),
         )];
     }
 
@@ -71,7 +81,7 @@ class DsarReportPresenter
     {
         $fields = array_filter($entry, fn (mixed $value): bool => ! is_array($value));
         $tables = $fields === [] ? [] : [new DsarReportTable($caption, [], array_map(
-            fn (string $field, mixed $value): array => [$this->label($section, $field), $value],
+            fn (string $field, mixed $value): array => [$this->label($section, $field), $this->readable($field, $value)],
             array_keys($fields),
             $fields,
         ))];
@@ -94,6 +104,44 @@ class DsarReportPresenter
     private function label(string $section, string $field): string
     {
         return __("dsar.fields.{$section}.{$field}");
+    }
+
+    /**
+     * A value as a person reads it (ruling N45): a time in words, Yes / No,
+     * a dash for nothing, a code as its meaning with the code after it.
+     */
+    private function readable(string $field, mixed $value): string
+    {
+        return match (true) {
+            $value === null => '—',
+            is_bool($value) => __($value ? 'dsar.report.yes' : 'dsar.report.no'),
+            $field === 'at' || str_ends_with($field, '_at') => $this->readableTime(CarbonImmutable::parse((string) $value)),
+            default => $this->explained($field, (string) $value),
+        };
+    }
+
+    private function explained(string $field, string $code): string
+    {
+        $meaning = $this->meaningOf($field, $code);
+
+        return $meaning === null ? $code : "{$meaning} ({$code})";
+    }
+
+    private function meaningOf(string $field, string $code): ?string
+    {
+        if (Lang::has("dsar.codes.{$field}.{$code}")) {
+            return __("dsar.codes.{$field}.{$code}");
+        }
+
+        return $field === 'role' ? $this->roleNames()[$code] ?? null : null;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function roleNames(): array
+    {
+        return $this->roleNames ??= Role::query()->pluck('name', 'code')->all();
     }
 
     private function readableTime(CarbonInterface $time): string

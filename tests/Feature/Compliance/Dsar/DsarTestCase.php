@@ -986,6 +986,32 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * A section under $key whose collection returns exactly $data.
+     *
+     * @param  array<int|string, mixed>  $data
+     */
+    protected function aSectionHolding(string $key, array $data): DsarSectionProvider
+    {
+        return new readonly class($key, $data) implements DsarSectionProvider
+        {
+            /**
+             * @param  array<int|string, mixed>  $data
+             */
+            public function __construct(private string $key, private array $data) {}
+
+            public function key(): string
+            {
+                return $this->key;
+            }
+
+            public function collect(string $subjectUserId, string $companyId): array
+            {
+                return $this->data;
+            }
+        };
+    }
+
+    /**
      * A section whose collection fails — a database or storage error mid-export.
      */
     protected function aSectionThatFails(): DsarSectionProvider
@@ -1241,6 +1267,14 @@ abstract class DsarTestCase extends TestCase
             '1 Oct 2026, 09:00 UTC',
             'This export has two parts',
         ]);
+    }
+
+    /**
+     * The report holds a table cell reading exactly $text.
+     */
+    protected function assertReportCell(string $text): void
+    {
+        $this->assertStringContainsString('<td>'.e($text).'</td>', $this->reportRenderer->html);
     }
 
     /**
