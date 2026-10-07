@@ -16,6 +16,7 @@ use InvalidArgumentException;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Consent\Aggregates\Consent;
+use Illuminate\Support\Facades\Lang;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Queue;
@@ -1267,6 +1268,42 @@ abstract class DsarTestCase extends TestCase
             '1 Oct 2026, 09:00 UTC',
             'This export has two parts',
         ]);
+    }
+
+    /**
+     * Every field of every section in $exported — nested ones included — has
+     * a label in words, and the report shows no untranslated label key.
+     *
+     * @param  array<string, array<int|string, mixed>>  $exported
+     */
+    protected function assertEveryFieldLabelled(array $exported): void
+    {
+        $fields = [];
+        foreach ($exported as $section => $data) {
+            foreach ($this->fieldsIn($data) as $field) {
+                $fields[] = "dsar.fields.{$section}.{$field}";
+            }
+        }
+        $this->assertNotEmpty($fields);
+
+        foreach (array_unique($fields) as $field) {
+            $this->assertTrue(Lang::has($field), "No label for {$field}");
+        }
+        $this->assertStringNotContainsString('dsar.', $this->reportRenderer->html);
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $data
+     * @return array<int, string>
+     */
+    protected function fieldsIn(array $data): array
+    {
+        $fields = array_is_list($data) ? [] : array_keys($data);
+        foreach (array_filter($data, is_array(...)) as $nested) {
+            $fields = [...$fields, ...$this->fieldsIn($nested)];
+        }
+
+        return $fields;
     }
 
     /**

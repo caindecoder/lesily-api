@@ -6,6 +6,10 @@ use App\Models\User;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Companies\Entities\OwnershipTransferCase;
+use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Foundation\Notifications\Enums\NotificationType;
+use App\Foundation\Notifications\Entities\NotificationPreference;
 use App\Compliance\Dsar\Exceptions\DsarReportRenderingFailedException;
 
 class ExportDsarReportTest extends DsarTestCase
@@ -89,6 +93,19 @@ class ExportDsarReportTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_any_section_exports_a_field_then_the_report_labels_it(): void
+    {
+        // Given a member with an entry in every section
+        $request = $this->aRequestFromAMemberWithAnEntryInEverySection();
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then every field the export holds has a label in words, and no label is missing from the report
+        $this->assertEveryFieldLabelled($this->exportedData($request));
+    }
+
+    #[Test]
     public function when_the_export_is_built_then_the_zip_holds_the_report_beside_the_data(): void
     {
         // Given a member's submitted request
@@ -126,5 +143,24 @@ class ExportDsarReportTest extends DsarTestCase
         // Then the contents list names every section, and each follows under its title, in the same order
         $titles = ['Your profile', 'Your membership', 'Consent records', 'Actions you took', 'Sign-ins', 'Invitations', 'Ownership transfers', 'Notifications and preferences'];
         $this->assertReportShowsInOrder(['Contents', ...$titles, ...$titles]);
+    }
+
+    /**
+     * A member who joined through an invitation, consented, signed in, was
+     * handed the company and named on a rejected case, received a notice,
+     * switched an email off — and then submitted their request themselves.
+     */
+    protected function aRequestFromAMemberWithAnEntryInEverySection(): DsarRequestRecord
+    {
+        $member = User::factory()->create();
+        $this->acceptTheInvitation($this->anInvitationTo($member, $this->company), $member);
+        $this->aConsentRecordedBy($member, $this->company);
+        $this->aSignInFor($member, 'iPhone', now()->addDays(90));
+        $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $member);
+        OwnershipTransferCase::factory()->forCompany($this->company->refresh())->proposedOwner($member)->closedRejected()->create();
+        $this->aNotificationFor($member, NotificationType::TeamWelcome, $this->company);
+        NotificationPreference::factory()->mailDisabled($member, NotificationType::GeneralAccountNotice)->create();
+
+        return $this->requestFrom($this->submitDsarRequest($member, $this->company));
     }
 }
