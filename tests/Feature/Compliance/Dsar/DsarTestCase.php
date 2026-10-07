@@ -34,6 +34,7 @@ use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestFulfilled;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Compliance\Dsar\IO\Export\DsarExportArchive;
+use App\Compliance\Dsar\UseCases\Reports\DsarReport;
 use App\Compliance\Dsar\UseCases\Sections\DsarSections;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Companies\Memberships\Aggregates\UserMembership;
@@ -50,6 +51,8 @@ use App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Compliance\Dsar\Exceptions\DsarReportRenderingFailedException;
+use App\Compliance\Dsar\UseCases\Renderers\DsarReportRendererInterface;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand;
 use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
@@ -72,6 +75,13 @@ abstract class DsarTestCase extends TestCase
         $this->idempotencyKey = (string) Str::uuid();
         Queue::fake();
         Storage::fake('dsar');
+        $this->app->instance(DsarReportRendererInterface::class, new class implements DsarReportRendererInterface
+        {
+            public function render(DsarReport $report): string
+            {
+                return '%PDF stand-in';
+            }
+        });
     }
 
     /**
@@ -948,6 +958,20 @@ abstract class DsarTestCase extends TestCase
     {
         $this->assertStillClosedAs($request, DsarRequestStatus::Fulfilled);
         $this->assertSame('partial', Storage::disk('dsar')->get($this->exportPathOf($request)));
+    }
+
+    /**
+     * The report cannot be rendered — the renderer produced no complete PDF.
+     */
+    protected function aReportRendererThatFails(): void
+    {
+        $this->app->instance(DsarReportRendererInterface::class, new class implements DsarReportRendererInterface
+        {
+            public function render(DsarReport $report): string
+            {
+                throw new DsarReportRenderingFailedException('induced rendering failure');
+            }
+        });
     }
 
     /**

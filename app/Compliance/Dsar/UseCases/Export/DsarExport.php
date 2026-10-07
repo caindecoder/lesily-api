@@ -3,12 +3,15 @@
 namespace App\Compliance\Dsar\UseCases\Export;
 
 use App\Compliance\Dsar\IO\Export\DsarExportArchive;
+use App\Compliance\Dsar\UseCases\Reports\DsarReport;
 use App\Compliance\Dsar\UseCases\Sections\DsarSections;
+use App\Compliance\Dsar\UseCases\Renderers\DsarReportRendererInterface;
 
 class DsarExport
 {
     public function __construct(
         private readonly DsarSections $sections,
+        private readonly DsarReportRendererInterface $renderer,
         private readonly DsarExportArchive $archive,
     ) {}
 
@@ -17,6 +20,9 @@ class DsarExport
      */
     public function build(string $subjectUserId, string $companyId): string
     {
-        return $this->archive->build($this->sections->collectFor($subjectUserId, $companyId));
+        $sections = $this->sections->collectFor($subjectUserId, $companyId);
+        $this->renderer->render(new DsarReport);
+
+        return $this->archive->build($sections);
     }
 }
