@@ -3,6 +3,7 @@
 namespace Tests\Feature\Compliance\Dsar;
 
 use RuntimeException;
+use Spatie\LaravelPdf\PdfBuilder;
 use Spatie\LaravelPdf\Facades\Pdf;
 use PHPUnit\Framework\Attributes\Test;
 use App\Compliance\Dsar\UseCases\Reports\DsarReport;
@@ -22,6 +23,26 @@ class RenderDsarReportPdfTest extends DsarTestCase
 
         // Then rendering fails with the report error, the cause kept
         $this->assertThrows($attempt, fn (DsarReportRenderingFailedException $failure): bool => $failure->getPrevious() === $cause);
+    }
+
+    #[Test]
+    public function when_chromium_returns_an_incomplete_document_then_rendering_fails_with_the_report_error(): void
+    {
+        // Given Chromium returns an empty render instead of failing
+        $emptyRender = new class extends PdfBuilder
+        {
+            public function base64(): string
+            {
+                return '';
+            }
+        };
+        Pdf::shouldReceive('html')->andReturn($emptyRender);
+
+        // When the registered renderer renders a report
+        $attempt = fn () => $this->theRegisteredReportRenderer()->render(new DsarReport);
+
+        // Then rendering fails with the report error rather than returning a broken PDF
+        $this->assertThrows($attempt, DsarReportRenderingFailedException::class);
     }
 
     #[Test]

@@ -24,7 +24,7 @@ class ChromiumDsarReportRenderer implements DsarReportRendererInterface
     protected function print(string $html): string
     {
         try {
-            return base64_decode(Pdf::html($html)
+            $bytes = base64_decode(Pdf::html($html)
                 ->format(Format::A4)
                 ->withBrowsershot(function (Browsershot $browsershot): void {
                     $browsershot->noSandbox()->addChromiumArguments(['disable-dev-shm-usage']);
@@ -33,5 +33,11 @@ class ChromiumDsarReportRenderer implements DsarReportRendererInterface
         } catch (Throwable $e) {
             throw new DsarReportRenderingFailedException('The report could not be rendered.', previous: $e);
         }
+
+        if (! str_starts_with($bytes, '%PDF')) {
+            throw new DsarReportRenderingFailedException('The report rendered to an incomplete PDF.');
+        }
+
+        return $bytes;
     }
 }
