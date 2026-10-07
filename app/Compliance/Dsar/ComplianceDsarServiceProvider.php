@@ -9,11 +9,13 @@ use App\Compliance\Dsar\IO\Export\DsarExportArchive;
 use App\Compliance\Dsar\UseCases\Sections\DsarSections;
 use App\Compliance\Dsar\UseCases\Sections\ProfileSection;
 use App\Compliance\Dsar\UseCases\Sections\SignInsSection;
+use App\Compliance\Dsar\IO\Pdf\ChromiumDsarReportRenderer;
 use App\Compliance\Dsar\UseCases\Sections\AuditTrailSection;
 use App\Compliance\Dsar\UseCases\Sections\MembershipSection;
 use App\Compliance\Dsar\UseCases\Sections\InvitationsSection;
 use App\Compliance\Dsar\UseCases\Sections\NotificationsSection;
 use App\Compliance\Dsar\UseCases\Sections\ConsentRecordsSection;
+use App\Compliance\Dsar\UseCases\Renderers\DsarReportRendererInterface;
 use App\Compliance\Dsar\UseCases\Sections\OwnershipTransferCasesSection;
 
 class ComplianceDsarServiceProvider extends ServiceProvider
@@ -24,6 +26,8 @@ class ComplianceDsarServiceProvider extends ServiceProvider
             $app->make(Filesystem::class),
             sys_get_temp_dir(),
         ));
+
+        $this->app->bind(DsarReportRendererInterface::class, ChromiumDsarReportRenderer::class);
 
         $this->app->bind(DsarSections::class, fn (Application $app): DsarSections => new DsarSections([
             $app->make(ProfileSection::class),

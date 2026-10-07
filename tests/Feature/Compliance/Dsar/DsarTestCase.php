@@ -963,6 +963,17 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * The renderer the application registers for the report — the stand-in
+     * bound for the export tests set aside.
+     */
+    protected function theRegisteredReportRenderer(): DsarReportRendererInterface
+    {
+        $this->app->forgetInstance(DsarReportRendererInterface::class);
+
+        return $this->app->make(DsarReportRendererInterface::class);
+    }
+
+    /**
      * The report cannot be rendered — the renderer produced no complete PDF.
      */
     protected function aReportRendererThatFails(): void
