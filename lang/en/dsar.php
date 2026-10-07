@@ -11,6 +11,17 @@ return [
         'generated' => 'Generated',
         'guide' => 'This export has two parts. data.json holds all of your data in a machine-readable form. This report shows the same data for reading, with every code explained in words.',
         'contents' => 'Contents',
+        'none' => 'None recorded',
+    ],
+    'fields' => [
+        'ownership_transfers' => [
+            'transfers' => 'Transfers',
+            'cases' => 'Cases',
+        ],
+        'notifications' => [
+            'notifications' => 'Notifications',
+            'preferences' => 'Preferences',
+        ],
     ],
     'sections' => [
         'profile' => ['title' => 'Your profile'],

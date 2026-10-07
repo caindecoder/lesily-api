@@ -15,6 +15,12 @@
         h2 { color: #134E4A; font-size: 18px; margin: 0 0 12px; }
         .contents { color: #334155; line-height: 1.8; }
         .section { break-before: page; }
+        h3 { color: #334155; font-size: 14px; margin: 18px 0 8px; }
+        table.fields, table.entries { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+        table.fields td:first-child { color: #64748B; width: 34%; }
+        table.entries th { text-align: left; color: #134E4A; border-bottom: 2px solid #0D9488; padding: 5px 8px 5px 0; }
+        table.fields td, table.entries td { border-bottom: 1px solid #E2E8F0; padding: 5px 8px 5px 0; vertical-align: top; }
+        .none { color: #64748B; font-style: italic; }
     </style>
 </head>
 <body>
@@ -39,6 +45,25 @@
     @foreach ($report->sections as $section)
         <section class="section">
             <h2>{{ $section->title }}</h2>
+            @foreach ($section->tables as $table)
+                @if ($table->caption !== null)
+                    <h3>{{ $table->caption }}</h3>
+                @endif
+                @if ($table->rows === [])
+                    <p class="none">{{ __('dsar.report.none') }}</p>
+                @else
+                    <table class="{{ $table->columns === [] ? 'fields' : 'entries' }}">
+                        @if ($table->columns !== [])
+                            <thead><tr>@foreach ($table->columns as $column)<th>{{ $column }}</th>@endforeach</tr></thead>
+                        @endif
+                        <tbody>
+                            @foreach ($table->rows as $row)
+                                <tr>@foreach ($row as $cell)<td>{{ $cell }}</td>@endforeach</tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                @endif
+            @endforeach
         </section>
     @endforeach
 </body>
