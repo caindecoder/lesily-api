@@ -117,6 +117,47 @@ class ExportDsarReportTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_a_section_lists_entries_then_the_report_tables_them_under_column_headings(): void
+    {
+        // Given an export whose section lists two entries
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $this->withSections($this->aSectionHolding('audit_trail', [
+            ['recorded_at' => '2026-09-15T14:30:00.000000Z', 'action' => 'dsar_requested'],
+            ['recorded_at' => '2026-09-16T08:05:00.000000Z', 'action' => 'dsar_withdrawn'],
+        ]));
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the entries are rows under labelled column headings, each value readable, in order
+        $this->assertReportShowsInOrder([
+            'When', 'What you did',
+            '15 Sep 2026, 14:30 UTC', 'Asked for a copy of personal data (dsar_requested)',
+            '16 Sep 2026, 08:05 UTC', 'Withdrew a data request (dsar_withdrawn)',
+        ]);
+    }
+
+    #[Test]
+    public function when_each_entry_holds_a_list_then_the_report_tables_it_under_its_label(): void
+    {
+        // Given an export whose section lists two invitations, each with its own history
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $this->withSections($this->aSectionHolding('invitations', [
+            ['timeline' => [['event' => 'invited', 'at' => '2026-09-15T14:30:00.000000Z']]],
+            ['timeline' => [['event' => 'joined', 'at' => '2026-09-16T08:05:00.000000Z']]],
+        ]));
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then each entry's list is its own labelled table, in order
+        $this->assertReportShowsInOrder([
+            'Invitation history', 'What happened', 'Invited (invited)', '15 Sep 2026, 14:30 UTC',
+            'Invitation history', 'What happened', 'Joined (joined)', '16 Sep 2026, 08:05 UTC',
+        ]);
+    }
+
+    #[Test]
     public function when_any_section_exports_a_field_then_the_report_labels_it(): void
     {
         // Given a member with an entry in every section

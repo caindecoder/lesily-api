@@ -1,7 +1,7 @@
 <?php
 
-// The DSAR report's wording (ruling N44). English only for now; the Sinhala
-// and Tamil reports add lang/si and lang/ta with the i18n slice (R-052, R-057).
+// The DSAR report's wording. English only for now; the Sinhala and Tamil
+// reports add lang/si and lang/ta.
 return [
     'report' => [
         'title' => 'Your personal data',

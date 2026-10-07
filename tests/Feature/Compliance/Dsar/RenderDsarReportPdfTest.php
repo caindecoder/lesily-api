@@ -10,6 +10,7 @@ use Spatie\LaravelPdf\Facades\Pdf;
 use Illuminate\Support\Facades\View;
 use Illuminate\Filesystem\Filesystem;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Dsar\UseCases\Reports\DsarReport;
 use App\Compliance\Dsar\UseCases\Reports\DsarReportCover;
 use App\Compliance\Dsar\Exceptions\DsarReportRenderingFailedException;
@@ -50,12 +51,23 @@ class RenderDsarReportPdfTest extends DsarTestCase
         $this->assertThrows($attempt, DsarReportRenderingFailedException::class);
     }
 
-    #[Test]
-    public function when_the_report_references_a_web_resource_then_it_is_never_fetched(): void
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideWebSchemes(): array
+    {
+        return [
+            'plain web' => ['http'],
+            'secure web' => ['https'],
+        ];
+    }
+
+    #[Test, DataProvider('provideWebSchemes')]
+    public function when_the_report_references_a_web_resource_then_it_is_never_fetched(string $scheme): void
     {
         // Given a report template that loads an image from a listening web address
         $listener = stream_socket_server('tcp://127.0.0.1:0') ?: throw new RuntimeException('No socket to listen on.');
-        $this->aReportTemplateLoading('http://'.stream_socket_get_name($listener, false).'/pixel.png');
+        $this->aReportTemplateLoading($scheme.'://'.stream_socket_get_name($listener, false).'/pixel.png');
 
         // When the registered renderer renders a report
         $this->theRegisteredReportRenderer()->render($this->aReport());

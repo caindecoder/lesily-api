@@ -109,7 +109,7 @@ class DsarReportPresenter
     }
 
     /**
-     * A value as a person reads it (ruling N45): a time in words, Yes / No,
+     * A value as a person reads it: a time in words, Yes / No,
      * a dash for nothing, a code as its meaning with the code after it.
      */
     private function readable(string $field, mixed $value): string
