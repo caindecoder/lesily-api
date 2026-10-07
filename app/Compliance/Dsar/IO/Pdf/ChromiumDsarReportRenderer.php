@@ -2,10 +2,12 @@
 
 namespace App\Compliance\Dsar\IO\Pdf;
 
+use Throwable;
 use Spatie\LaravelPdf\Facades\Pdf;
 use Spatie\Browsershot\Browsershot;
 use Spatie\LaravelPdf\Enums\Format;
 use App\Compliance\Dsar\UseCases\Reports\DsarReport;
+use App\Compliance\Dsar\Exceptions\DsarReportRenderingFailedException;
 use App\Compliance\Dsar\UseCases\Renderers\DsarReportRendererInterface;
 
 class ChromiumDsarReportRenderer implements DsarReportRendererInterface
@@ -21,11 +23,15 @@ class ChromiumDsarReportRenderer implements DsarReportRendererInterface
      */
     protected function print(string $html): string
     {
-        return base64_decode(Pdf::html($html)
-            ->format(Format::A4)
-            ->withBrowsershot(function (Browsershot $browsershot): void {
-                $browsershot->noSandbox()->addChromiumArguments(['disable-dev-shm-usage']);
-            })
-            ->base64());
+        try {
+            return base64_decode(Pdf::html($html)
+                ->format(Format::A4)
+                ->withBrowsershot(function (Browsershot $browsershot): void {
+                    $browsershot->noSandbox()->addChromiumArguments(['disable-dev-shm-usage']);
+                })
+                ->base64());
+        } catch (Throwable $e) {
+            throw new DsarReportRenderingFailedException('The report could not be rendered.', previous: $e);
+        }
     }
 }
