@@ -4,8 +4,22 @@
     <meta charset="utf-8">
     <title>{{ __('dsar.report.title') }}</title>
     <style>
-        @page { size: A4; margin: 18mm 16mm; }
-        body { font-family: Arial, Helvetica, sans-serif; color: #0F172A; font-size: 12px; margin: 0; }
+        @font-face {
+            font-family: 'Inter';
+            font-weight: 100 900;
+            src: url('data:font/ttf;base64,{{ base64_encode(file_get_contents(resource_path('fonts/inter/InterVariable.ttf'))) }}') format('truetype');
+        }
+        @page {
+            size: A4;
+            margin: 18mm 16mm 20mm;
+            @bottom-right { content: "{{ __('dsar.report.page') }} " counter(page) " / " counter(pages); font-family: 'Inter', Arial, sans-serif; font-size: 9px; color: #64748B; }
+            @bottom-left { content: "{{ __('dsar.report.title') }} · {{ $report->cover->reference }}"; font-family: 'Inter', Arial, sans-serif; font-size: 9px; color: #64748B; }
+        }
+        @page :first {
+            @bottom-right { content: none; }
+            @bottom-left { content: none; }
+        }
+        body { font-family: 'Inter', Arial, Helvetica, sans-serif; color: #0F172A; font-size: 12px; margin: 0; }
         .wordmark { color: #0D9488; font-size: 26px; font-weight: bold; letter-spacing: 1px; }
         .cover h1 { color: #134E4A; font-size: 28px; margin: 24px 0 20px; }
         .cover table { border-collapse: collapse; margin-bottom: 24px; }

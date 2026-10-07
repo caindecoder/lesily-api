@@ -12,6 +12,7 @@ return [
         'guide' => 'This export has two parts. data.json holds all of your data in a machine-readable form. This report shows the same data for reading, with every code explained in words.',
         'contents' => 'Contents',
         'none' => 'None recorded',
+        'page' => 'Page',
         'yes' => 'Yes',
         'no' => 'No',
     ],
