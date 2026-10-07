@@ -1294,7 +1294,7 @@ abstract class DsarTestCase extends TestCase
 
     /**
      * @param  array<int|string, mixed>  $data
-     * @return array<int, string>
+     * @return array<int, int|string>
      */
     protected function fieldsIn(array $data): array
     {

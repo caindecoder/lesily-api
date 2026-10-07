@@ -55,9 +55,11 @@ class DsarReportPresenter
     private function tablesOf(string $section, array $data, ?string $caption): array
     {
         if (! array_is_list($data)) {
+            /** @var array<string, mixed> $data */
             return $this->entryTables($section, $data, $caption);
         }
 
+        /** @var array<int, array<string, mixed>> $data */
         if ($data !== [] && ! $this->isFlat($data[0])) {
             return array_merge(...array_map(fn (array $entry): array => $this->entryTables($section, $entry, $caption), $data));
         }

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Compliance\Dsar;
 
+use Throwable;
 use RuntimeException;
 use Illuminate\Support\Str;
 use Spatie\LaravelPdf\PdfBuilder;
@@ -26,7 +27,7 @@ class RenderDsarReportPdfTest extends DsarTestCase
         $attempt = fn () => $this->theRegisteredReportRenderer()->render($this->aReport());
 
         // Then rendering fails with the report error, the cause kept
-        $this->assertThrows($attempt, fn (DsarReportRenderingFailedException $failure): bool => $failure->getPrevious() === $cause);
+        $this->assertThrows($attempt, fn (Throwable $failure): bool => $failure instanceof DsarReportRenderingFailedException && $failure->getPrevious() === $cause);
     }
 
     #[Test]
@@ -53,7 +54,7 @@ class RenderDsarReportPdfTest extends DsarTestCase
     public function when_the_report_references_a_web_resource_then_it_is_never_fetched(): void
     {
         // Given a report template that loads an image from a listening web address
-        $listener = stream_socket_server('tcp://127.0.0.1:0');
+        $listener = stream_socket_server('tcp://127.0.0.1:0') ?: throw new RuntimeException('No socket to listen on.');
         $this->aReportTemplateLoading('http://'.stream_socket_get_name($listener, false).'/pixel.png');
 
         // When the registered renderer renders a report
@@ -91,7 +92,7 @@ class RenderDsarReportPdfTest extends DsarTestCase
         $files = new Filesystem;
         $files->ensureDirectoryExists($directory.DIRECTORY_SEPARATOR.'dsar');
         $files->put($directory.DIRECTORY_SEPARATOR.'dsar'.DIRECTORY_SEPARATOR.'report.blade.php', '<html><body><img src="'.$url.'"></body></html>');
-        View::getFinder()->prependLocation($directory);
+        View::prependLocation($directory);
         $this->beforeApplicationDestroyed(fn () => $files->deleteDirectory($directory));
     }
 
