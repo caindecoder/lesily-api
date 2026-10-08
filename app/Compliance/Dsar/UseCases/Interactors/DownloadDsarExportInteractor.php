@@ -4,9 +4,11 @@ namespace App\Compliance\Dsar\UseCases\Interactors;
 
 use App\Models\User;
 use App\Companies\Entities\Company;
+use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Foundation\Http\Values\AdminRequestContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Compliance\Dsar\Exceptions\DsarExportNotReadyException;
 use App\Compliance\Dsar\UseCases\Commands\DownloadDsarExportCommand;
 
 class DownloadDsarExportInteractor
@@ -15,7 +17,13 @@ class DownloadDsarExportInteractor
     {
         $company = Company::query()->findOrFail($command->companyId);
 
-        return DsarRequestRecord::query()->whereCompany($company)->whereSubject($actor)->whereKey($command->requestId)->first()
+        $request = DsarRequestRecord::query()->whereCompany($company)->whereSubject($actor)->whereKey($command->requestId)->first()
             ?? throw new ModelNotFoundException;
+
+        if ($request->status !== DsarRequestStatus::Fulfilled) {
+            throw new DsarExportNotReadyException;
+        }
+
+        return $request;
     }
 }

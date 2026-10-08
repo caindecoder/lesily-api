@@ -44,6 +44,7 @@ enum ApiErrorCode: string
     case ReceiptGenerationUnavailable = 'RECEIPT_GENERATION_UNAVAILABLE';
     case DsarInProgress = 'DSAR_IN_PROGRESS';
     case DsarRequesterMismatch = 'DSAR_REQUESTER_MISMATCH';
+    case DsarNotReady = 'DSAR_NOT_READY';
     case HttpError = 'HTTP_ERROR';
     case InternalError = 'INTERNAL_ERROR';
 
@@ -88,6 +89,7 @@ enum ApiErrorCode: string
             self::ReceiptGenerationUnavailable => Response::HTTP_SERVICE_UNAVAILABLE,
             self::DsarInProgress => Response::HTTP_CONFLICT,
             self::DsarRequesterMismatch => Response::HTTP_FORBIDDEN,
+            self::DsarNotReady => Response::HTTP_CONFLICT,
             // Generic fallback for an unmapped HttpException. Production always
             // preserves the exception's real status via buildWithStatus(); this 500
             // is only the default required for match() exhaustiveness.

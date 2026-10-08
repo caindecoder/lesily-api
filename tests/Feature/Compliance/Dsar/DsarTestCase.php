@@ -205,6 +205,18 @@ abstract class DsarTestCase extends TestCase
     /**
      * @return array<string, array{string}>
      */
+    public static function provideUnreadyRequests(): array
+    {
+        return [
+            'in progress' => ['in progress'],
+            'withdrawn' => ['withdrawn'],
+            'rejected' => ['rejected'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
     public static function provideNonSubjectViewers(): array
     {
         return [
@@ -455,6 +467,27 @@ abstract class DsarTestCase extends TestCase
             'member' => $this->aCompanyMember($company),
             default => throw new InvalidArgumentException("Unknown viewer: {$kind}"),
         };
+    }
+
+    /**
+     * $subject's own request in $company that is not fulfilled: still in
+     * progress, withdrawn, or rejected.
+     */
+    protected function anUnreadyRequest(string $state, Company $company, User $subject): DsarRequestRecord
+    {
+        return $state === 'in progress'
+            ? $this->aSubmittedRequest($company, $subject)
+            : $this->aClosedRequest($company, $subject, $state);
+    }
+
+    /**
+     * The download was refused because the export is not ready — 409
+     * DSAR_NOT_READY with the UC-1-070 5a message.
+     */
+    protected function assertRefusedAsNotReady(TestResponse $response): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::DsarNotReady);
+        $response->assertJsonPath('message', 'This data export is not ready to download.');
     }
 
     /**

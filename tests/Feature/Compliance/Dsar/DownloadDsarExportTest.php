@@ -77,4 +77,20 @@ class DownloadDsarExportTest extends DsarTestCase
         $this->assertHiddenAsNotFound($response, $request->getKey());
         $this->assertNoDownloadAudited($request);
     }
+
+    #[Test]
+    #[DataProvider('provideUnreadyRequests')]
+    public function when_the_export_is_not_ready_then_the_download_is_refused(string $state): void
+    {
+        // Given the subject's request, not fulfilled
+        $subject = $this->aCompanyMember($this->company);
+        $request = $this->anUnreadyRequest($state, $this->company, $subject);
+
+        // When
+        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+
+        // Then
+        $this->assertRefusedAsNotReady($response);
+        $this->assertNoDownloadAudited($request);
+    }
 }
