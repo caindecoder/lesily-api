@@ -140,19 +140,18 @@ class DownloadDsarExportTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_the_subject_downloads_twice_then_each_download_is_audited(): void
+    public function when_the_subject_downloads_again_then_the_new_download_is_audited_too(): void
     {
-        // Given the subject's ready export
+        // Given the subject's ready export, downloaded once already
         $subject = $this->aCompanyMember($this->company);
         $request = $this->aReadyExportFor($this->company, $subject);
+        $this->downloadDsarExport($subject, $this->company, $request->getKey());
 
         // When
-        $first = $this->downloadDsarExport($subject, $this->company, $request->getKey());
-        $second = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
 
         // Then
-        $this->assertDownloadAudited($first, $request, $subject);
-        $this->assertDownloadAudited($second, $request, $subject);
+        $this->assertDownloadAudited($response, $request, $subject);
         $this->assertDownloadsAudited($request, 2);
     }
 
