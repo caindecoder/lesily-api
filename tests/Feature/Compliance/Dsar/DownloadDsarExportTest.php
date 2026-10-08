@@ -116,7 +116,7 @@ class DownloadDsarExportTest extends DsarTestCase
         // Given the subject's ready export, one second before its window closes
         $subject = $this->aCompanyMember($this->company);
         $request = $this->aReadyExportFor($this->company, $subject);
-        $this->travelTo($request->download_expires_at->subSecond());
+        $this->travelTo($request->download_expires_at?->subSecond());
 
         // When
         $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());

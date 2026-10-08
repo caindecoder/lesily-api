@@ -84,7 +84,7 @@ class DsarRequestRecord extends Model
      */
     public function hasDownloadWindowClosed(): bool
     {
-        return now()->greaterThanOrEqualTo($this->download_expires_at);
+        return $this->download_expires_at <= now();
     }
 
     /**
