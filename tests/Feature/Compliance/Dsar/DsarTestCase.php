@@ -491,6 +491,16 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * The download was refused because its seven-day window has closed —
+     * 410 DSAR_DOWNLOAD_EXPIRED with the UC-1-070 5b message.
+     */
+    protected function assertRefusedAsExpired(TestResponse $response): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_GONE, ApiErrorCode::DsarDownloadExpired);
+        $response->assertJsonPath('message', 'This data export has expired. Request a fresh export.');
+    }
+
+    /**
      * No download of $request was audited.
      */
     protected function assertNoDownloadAudited(DsarRequestRecord $request): void

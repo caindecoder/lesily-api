@@ -9,6 +9,7 @@ use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Foundation\Http\Values\AdminRequestContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Compliance\Dsar\Exceptions\DsarExportNotReadyException;
+use App\Compliance\Dsar\Exceptions\DsarDownloadExpiredException;
 use App\Compliance\Dsar\UseCases\Commands\DownloadDsarExportCommand;
 
 class DownloadDsarExportInteractor
@@ -22,6 +23,10 @@ class DownloadDsarExportInteractor
 
         if ($request->status !== DsarRequestStatus::Fulfilled) {
             throw new DsarExportNotReadyException;
+        }
+
+        if ($request->hasDownloadWindowClosed()) {
+            throw new DsarDownloadExpiredException;
         }
 
         return $request;

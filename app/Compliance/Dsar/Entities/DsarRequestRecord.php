@@ -79,6 +79,15 @@ class DsarRequestRecord extends Model
     }
 
     /**
+     * The seven-day download window has closed — from download_expires_at
+     * itself, before the daily expiry records it.
+     */
+    public function hasDownloadWindowClosed(): bool
+    {
+        return now()->greaterThanOrEqualTo($this->download_expires_at);
+    }
+
+    /**
      * Requests about $user — the data subject's own.
      *
      * @param  Builder<self>  $query

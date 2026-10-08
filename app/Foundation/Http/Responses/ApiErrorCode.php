@@ -45,6 +45,7 @@ enum ApiErrorCode: string
     case DsarInProgress = 'DSAR_IN_PROGRESS';
     case DsarRequesterMismatch = 'DSAR_REQUESTER_MISMATCH';
     case DsarNotReady = 'DSAR_NOT_READY';
+    case DsarDownloadExpired = 'DSAR_DOWNLOAD_EXPIRED';
     case HttpError = 'HTTP_ERROR';
     case InternalError = 'INTERNAL_ERROR';
 
@@ -90,6 +91,7 @@ enum ApiErrorCode: string
             self::DsarInProgress => Response::HTTP_CONFLICT,
             self::DsarRequesterMismatch => Response::HTTP_FORBIDDEN,
             self::DsarNotReady => Response::HTTP_CONFLICT,
+            self::DsarDownloadExpired => Response::HTTP_GONE,
             // Generic fallback for an unmapped HttpException. Production always
             // preserves the exception's real status via buildWithStatus(); this 500
             // is only the default required for match() exhaustiveness.

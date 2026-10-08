@@ -93,4 +93,20 @@ class DownloadDsarExportTest extends DsarTestCase
         $this->assertRefusedAsNotReady($response);
         $this->assertNoDownloadAudited($request);
     }
+
+    #[Test]
+    public function when_the_download_window_has_closed_then_the_download_is_refused_as_expired(): void
+    {
+        // Given the subject's ready export, at the very end of its window
+        $subject = $this->aCompanyMember($this->company);
+        $request = $this->aReadyExportFor($this->company, $subject);
+        $this->travelTo($request->download_expires_at);
+
+        // When
+        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+
+        // Then
+        $this->assertRefusedAsExpired($response);
+        $this->assertNoDownloadAudited($request);
+    }
 }
