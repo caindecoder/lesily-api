@@ -90,7 +90,8 @@ class DsarRequestRecord extends Model
     }
 
     /**
-     * When the export was fulfilled — a request without that moment is not.
+     * When the export was fulfilled. Only fulfilment records that moment, so
+     * a request without it — in progress, withdrawn, rejected — is not ready.
      */
     public function fulfilledAt(): CarbonImmutable
     {

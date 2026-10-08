@@ -5,13 +5,12 @@ namespace App\Compliance\Dsar\UseCases\Interactors;
 use App\Models\User;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Storage;
-use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Compliance\Dsar\UseCases\Queries\MemberRoleCode;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use App\Compliance\Dsar\Exceptions\DsarExportNotReadyException;
+use App\Compliance\Dsar\UseCases\Responses\DsarExportFile;
 use App\Compliance\Dsar\Exceptions\DsarDownloadExpiredException;
 use App\Compliance\Dsar\Exceptions\DsarExportFileMissingException;
 use App\Compliance\Dsar\UseCases\Commands\DownloadDsarExportCommand;
@@ -20,28 +19,28 @@ class DownloadDsarExportInteractor
 {
     public function __construct(private readonly MemberRoleCode $memberRoleCode) {}
 
-    public function execute(DownloadDsarExportCommand $command, User $actor, AdminRequestContext $context): DsarRequestRecord
+    public function execute(DownloadDsarExportCommand $command, User $actor, AdminRequestContext $context): DsarExportFile
     {
         $company = Company::query()->findOrFail($command->companyId);
 
         $request = DsarRequestRecord::query()->whereCompany($company)->whereSubject($actor)->whereKey($command->requestId)->first()
             ?? throw new ModelNotFoundException;
 
-        if ($request->status !== DsarRequestStatus::Fulfilled) {
-            throw new DsarExportNotReadyException;
-        }
+        $fulfilledAt = $request->fulfilledAt();
 
         if (! $request->isDownloadWindowOpen()) {
             throw new DsarDownloadExpiredException;
         }
 
-        if (! Storage::disk('dsar')->exists($request->exportFilePath())) {
+        $path = $request->exportFilePath();
+
+        if (! Storage::disk('dsar')->exists($path)) {
             throw new DsarExportFileMissingException($request->getKey());
         }
 
         $this->recordDownloaded($request, $actor, $context);
 
-        return $request;
+        return new DsarExportFile($path, $fulfilledAt);
     }
 
     private function recordDownloaded(DsarRequestRecord $request, User $actor, AdminRequestContext $context): void

@@ -23,11 +23,11 @@ class DsarDownloadController extends Controller
             'companyId' => $request->company()->getKey(),
         ]);
 
-        $dsarRequest = $interactor->execute($command, $actor, AdminRequestContext::fromRequest($request));
+        $export = $interactor->execute($command, $actor, AdminRequestContext::fromRequest($request));
 
         return Storage::disk('dsar')->download(
-            $dsarRequest->exportFilePath(),
-            'lesily-data-export-'.$dsarRequest->fulfilledAt()->format('Y-m-d').'.zip',
+            $export->path,
+            $export->fileName(),
             ['Cache-Control' => 'no-store', 'X-Content-Type-Options' => 'nosniff'],
         );
     }

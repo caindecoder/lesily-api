@@ -4,7 +4,6 @@ namespace Tests\Feature\Compliance\Dsar;
 
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 
@@ -113,12 +112,13 @@ class DownloadDsarExportTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_the_export_file_is_missing_then_the_download_fails_without_being_audited(): void
+    #[DataProvider('provideLostExportFiles')]
+    public function when_the_export_file_is_missing_then_the_download_fails_without_being_audited(string $how): void
     {
-        // Given the subject's ready export whose ZIP is gone from the disk
+        // Given the subject's ready export whose ZIP is lost
         $subject = $this->aCompanyMember($this->company);
         $request = $this->aReadyExportFor($this->company, $subject);
-        Storage::disk('dsar')->delete($this->exportPathOf($request));
+        $this->loseTheExportFile($how, $request);
         Exceptions::fake();
 
         // When

@@ -515,6 +515,30 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * @return array<string, array{string}>
+     */
+    public static function provideLostExportFiles(): array
+    {
+        return [
+            'the file deleted from the disk' => ['deleted'],
+            'no file path recorded' => ['unrecorded'],
+        ];
+    }
+
+    /**
+     * $request's export ZIP is lost: deleted from the dsar disk, or its path
+     * never recorded on the row.
+     */
+    protected function loseTheExportFile(string $how, DsarRequestRecord $request): void
+    {
+        match ($how) {
+            'deleted' => Storage::disk('dsar')->delete($this->exportPathOf($request)),
+            'unrecorded' => DsarRequestRecord::query()->whereKey($request->getKey())->update(['file_path' => null]),
+            default => throw new InvalidArgumentException("Unknown loss: {$how}"),
+        };
+    }
+
+    /**
      * The download failed as a server fault — 500 INTERNAL_ERROR, the missing
      * export file reported for operations.
      */
