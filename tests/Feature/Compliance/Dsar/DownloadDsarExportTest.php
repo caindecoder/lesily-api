@@ -75,7 +75,7 @@ class DownloadDsarExportTest extends DsarTestCase
 
         // Then
         $this->assertHiddenAsNotFound($response, $request->getKey());
-        $this->assertNoDownloadAudited($request);
+        $this->assertDownloadsAudited($request, 0);
     }
 
     #[Test]
@@ -91,7 +91,7 @@ class DownloadDsarExportTest extends DsarTestCase
 
         // Then
         $this->assertRefusedAsNotReady($response);
-        $this->assertNoDownloadAudited($request);
+        $this->assertDownloadsAudited($request, 0);
     }
 
     #[Test]
@@ -107,7 +107,7 @@ class DownloadDsarExportTest extends DsarTestCase
 
         // Then
         $this->assertRefusedAsExpired($response);
-        $this->assertNoDownloadAudited($request);
+        $this->assertDownloadsAudited($request, 0);
     }
 
     #[Test]
@@ -137,5 +137,38 @@ class DownloadDsarExportTest extends DsarTestCase
 
         // Then
         $this->assertExportServed($response, $request);
+    }
+
+    #[Test]
+    public function when_the_subject_downloads_twice_then_each_download_is_audited(): void
+    {
+        // Given the subject's ready export
+        $subject = $this->aCompanyMember($this->company);
+        $request = $this->aReadyExportFor($this->company, $subject);
+
+        // When
+        $first = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+        $second = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+
+        // Then
+        $this->assertDownloadAudited($first, $request, $subject);
+        $this->assertDownloadAudited($second, $request, $subject);
+        $this->assertDownloadsAudited($request, 2);
+    }
+
+    #[Test]
+    public function when_the_subject_downloads_a_ready_export_then_the_zip_is_served_and_audited(): void
+    {
+        // Given the subject's own ready export
+        $subject = $this->aCompanyMember($this->company);
+        $request = $this->aReadyExportFor($this->company, $subject);
+
+        // When
+        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+
+        // Then
+        $this->assertExportServed($response, $request);
+        $this->assertServedPrivately($response);
+        $this->assertDownloadAudited($response, $request, $subject);
     }
 }

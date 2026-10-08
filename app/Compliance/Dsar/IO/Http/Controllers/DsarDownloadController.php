@@ -28,6 +28,7 @@ class DsarDownloadController extends Controller
         return Storage::disk('dsar')->download(
             (string) $export->file_path,
             'lesily-data-export-'.$export->completed_at?->format('Y-m-d').'.zip',
+            ['Cache-Control' => 'no-store', 'X-Content-Type-Options' => 'nosniff'],
         );
     }
 }

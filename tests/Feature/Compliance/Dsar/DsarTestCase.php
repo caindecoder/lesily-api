@@ -513,11 +513,49 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * No download of $request was audited.
+     * The download is kept out of every cache and is never content-sniffed
+     * (OWASP ASVS 14.3.2, 3.4.4 — R-058).
      */
-    protected function assertNoDownloadAudited(DsarRequestRecord $request): void
+    protected function assertServedPrivately(TestResponse $response): void
     {
-        $this->assertSame(0, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_downloaded')->count());
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
+        $response->assertHeader('X-Content-Type-Options', 'nosniff');
+    }
+
+    /**
+     * $request's export was downloaded — and audited — exactly $times times.
+     */
+    protected function assertDownloadsAudited(DsarRequestRecord $request, int $times): void
+    {
+        $this->assertSame($times, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_downloaded')->count());
+    }
+
+    /**
+     * The download $response served was audited as a read of $subject's
+     * personal data: one dsar_downloaded row carrying the response's
+     * Correlation-Id, no stored event, the subject as actor, the client's
+     * address and user agent.
+     */
+    protected function assertDownloadAudited(TestResponse $response, DsarRequestRecord $request, User $subject): void
+    {
+        $entry = AuditEntry::query()->where('request_id', $response->headers->get('Correlation-Id'))->sole();
+
+        $this->assertDatabaseHas('audit_trail', [
+            'id' => $entry->getKey(),
+            'company_id' => $request->company_id,
+            'stored_event_id' => null,
+            'event_class' => 'DsarExportDownloaded',
+            'subject_type' => 'dsar_request',
+            'subject_id' => $request->getKey(),
+            'action' => 'dsar_downloaded',
+            'description' => 'DSAR export downloaded — by: '.$subject->name,
+            'actor_user_id' => $subject->getKey(),
+            'actor_role_code' => $this->roleCodeOf($subject, $request->company_id),
+            'actor_label' => $subject->name,
+            'metadata' => null,
+            'ip_address' => '127.0.0.1',
+        ]);
+        $this->assertNotNull($entry->user_agent);
     }
 
     /**
