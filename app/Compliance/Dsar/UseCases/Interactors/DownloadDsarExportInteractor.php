@@ -4,6 +4,7 @@ namespace App\Compliance\Dsar\UseCases\Interactors;
 
 use App\Models\User;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Storage;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
@@ -12,6 +13,7 @@ use App\Compliance\Dsar\UseCases\Queries\MemberRoleCode;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Compliance\Dsar\Exceptions\DsarExportNotReadyException;
 use App\Compliance\Dsar\Exceptions\DsarDownloadExpiredException;
+use App\Compliance\Dsar\Exceptions\DsarExportFileMissingException;
 use App\Compliance\Dsar\UseCases\Commands\DownloadDsarExportCommand;
 
 class DownloadDsarExportInteractor
@@ -29,8 +31,12 @@ class DownloadDsarExportInteractor
             throw new DsarExportNotReadyException;
         }
 
-        if ($request->hasDownloadWindowClosed()) {
+        if (! $request->isDownloadWindowOpen()) {
             throw new DsarDownloadExpiredException;
+        }
+
+        if (! Storage::disk('dsar')->exists((string) $request->file_path)) {
+            throw new DsarExportFileMissingException($request->getKey());
         }
 
         $this->recordDownloaded($request, $actor, $context);

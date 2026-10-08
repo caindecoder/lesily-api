@@ -4,6 +4,8 @@ namespace Tests\Feature\Compliance\Dsar;
 
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 class DownloadDsarExportTest extends DsarTestCase
@@ -111,6 +113,23 @@ class DownloadDsarExportTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_the_export_file_is_missing_then_the_download_fails_without_being_audited(): void
+    {
+        // Given the subject's ready export whose ZIP is gone from the disk
+        $subject = $this->aCompanyMember($this->company);
+        $request = $this->aReadyExportFor($this->company, $subject);
+        Storage::disk('dsar')->delete($this->exportPathOf($request));
+        Exceptions::fake();
+
+        // When
+        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+
+        // Then
+        $this->assertFailedAsMissingFile($response);
+        $this->assertDownloadsAudited($request, 0);
+    }
+
+    #[Test]
     public function when_downloaded_one_second_before_the_window_closes_then_the_export_is_served(): void
     {
         // Given the subject's ready export, one second before its window closes
@@ -137,6 +156,21 @@ class DownloadDsarExportTest extends DsarTestCase
 
         // Then
         $this->assertExportServed($response, $request);
+    }
+
+    #[Test]
+    public function when_the_subject_holds_another_role_elsewhere_then_the_download_is_audited_with_their_role_here(): void
+    {
+        // Given an owner of another company who is an employee here, with a ready export here
+        $subject = $this->aCompanyMember(Company::factory()->create(), 'owner');
+        $this->company->users()->attach($subject, ['role_id' => $this->seededRole('employee')->getKey()]);
+        $request = $this->aReadyExportFor($this->company, $subject);
+
+        // When
+        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+
+        // Then
+        $this->assertDownloadAudited($response, $request, $subject);
     }
 
     #[Test]

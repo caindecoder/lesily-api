@@ -352,7 +352,7 @@ Route::get('/v1/dsar-requests', [DsarRequestsController::class, 'index'])
 Route::get('/v1/dsar-requests/{requestId}', [DsarRequestsController::class, 'show'])
     ->middleware(['auth:sanctum', 'auth.company']);
 
-// Download a DSAR export (UC-1-070) - the data subject only (N55); 409 until fulfilled, 410 from the
+// Download a DSAR export (UC-1-070) - the data subject only; 409 until fulfilled, 410 from the
 // end of its seven-day window. One audit row per served download.
 Route::get('/v1/dsar-requests/{requestId}/download', DsarDownloadController::class)
     ->middleware(['auth:sanctum', 'auth.company']);

@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Queue;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Testing\Constraints\SeeInOrder;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -46,6 +47,7 @@ use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
+use App\Compliance\Dsar\Exceptions\DsarExportFileMissingException;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand;
@@ -513,8 +515,17 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * The download is kept out of every cache and is never content-sniffed
-     * (OWASP ASVS 14.3.2, 3.4.4 — R-058).
+     * The download failed as a server fault — 500 INTERNAL_ERROR, the missing
+     * export file reported for operations.
+     */
+    protected function assertFailedAsMissingFile(TestResponse $response): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        Exceptions::assertReported(DsarExportFileMissingException::class);
+    }
+
+    /**
+     * The download is kept out of every cache and is never content-sniffed.
      */
     protected function assertServedPrivately(TestResponse $response): void
     {
@@ -547,6 +558,7 @@ abstract class DsarTestCase extends TestCase
             'event_class' => 'DsarExportDownloaded',
             'subject_type' => 'dsar_request',
             'subject_id' => $request->getKey(),
+            'subject_label' => null,
             'action' => 'dsar_downloaded',
             'description' => 'DSAR export downloaded — by: '.$subject->name,
             'actor_user_id' => $subject->getKey(),
@@ -554,8 +566,9 @@ abstract class DsarTestCase extends TestCase
             'actor_label' => $subject->name,
             'metadata' => null,
             'ip_address' => '127.0.0.1',
+            'user_agent' => 'Symfony',
+            'recorded_at' => now(),
         ]);
-        $this->assertNotNull($entry->user_agent);
     }
 
     /**

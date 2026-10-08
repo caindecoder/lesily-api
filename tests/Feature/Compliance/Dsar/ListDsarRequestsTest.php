@@ -197,9 +197,9 @@ class ListDsarRequestsTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_a_download_has_expired_then_the_request_is_listed_as_no_longer_downloadable(): void
+    public function when_the_download_window_has_closed_then_the_request_is_listed_as_no_longer_downloadable(): void
     {
-        // Given a fulfilled request whose download window has been marked expired
+        // Given a fulfilled request whose download window has closed and been marked expired
         $member = $this->aCompanyMember($this->company);
         $expired = DsarRequestRecord::factory()->forSubject($this->company, $member)->fulfilled()->downloadExpired()->create();
 

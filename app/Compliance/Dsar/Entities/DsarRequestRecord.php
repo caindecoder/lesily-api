@@ -79,20 +79,13 @@ class DsarRequestRecord extends Model
     }
 
     /**
-     * The seven-day download window has closed — from download_expires_at
-     * itself, before the daily expiry records it.
+     * The seven-day download window is open — only a fulfilled request has
+     * one, and it closes at download_expires_at itself, before the daily
+     * expiry records it.
      */
-    public function hasDownloadWindowClosed(): bool
+    public function isDownloadWindowOpen(): bool
     {
-        return $this->download_expires_at <= now();
-    }
-
-    /**
-     * The export can be downloaded now: fulfilled, its window still open.
-     */
-    public function isDownloadable(): bool
-    {
-        return $this->status === DsarRequestStatus::Fulfilled && ! $this->hasDownloadWindowClosed();
+        return $this->download_expires_at > now();
     }
 
     /**
