@@ -203,6 +203,18 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * @return array<string, array{string}>
+     */
+    public static function provideNonSubjectViewers(): array
+    {
+        return [
+            'the requester acting on their behalf' => ['requester'],
+            'an owner, who sees every request' => ['owner'],
+            'another member' => ['member'],
+        ];
+    }
+
+    /**
      * @return array<string, array{string, DsarRequestStatus}>
      */
     public static function provideClosedRequests(): array
@@ -419,6 +431,58 @@ abstract class DsarTestCase extends TestCase
     protected function viewDsarRequestAsGuest(string $requestId): TestResponse
     {
         return $this->getJson('/api/v1/dsar-requests/'.$requestId);
+    }
+
+    /**
+     * An authenticated member downloads one DSAR export in $company's context.
+     */
+    protected function downloadDsarExport(User $actor, Company $company, string $requestId): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/dsar-requests/'.$requestId.'/download', ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * A member of $company who is not the request's subject: $requester
+     * itself, an owner, or another member.
+     */
+    protected function aNonSubjectViewer(string $kind, Company $company, User $requester): User
+    {
+        return match ($kind) {
+            'requester' => $requester,
+            'owner' => $this->aCompanyMember($company, 'owner'),
+            'member' => $this->aCompanyMember($company),
+            default => throw new InvalidArgumentException("Unknown viewer: {$kind}"),
+        };
+    }
+
+    /**
+     * No download of $request was audited.
+     */
+    protected function assertNoDownloadAudited(DsarRequestRecord $request): void
+    {
+        $this->assertSame(0, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_downloaded')->count());
+    }
+
+    /**
+     * A guest (no Sanctum session) downloads one DSAR export.
+     */
+    protected function downloadDsarExportAsGuest(string $requestId): TestResponse
+    {
+        return $this->getJson('/api/v1/dsar-requests/'.$requestId.'/download');
+    }
+
+    /**
+     * $subject's request in $company, fulfilled by its export job: the ZIP is
+     * on the dsar disk and the download window runs seven days from now.
+     */
+    protected function aReadyExportFor(Company $company, User $subject, ?User $requester = null): DsarRequestRecord
+    {
+        $request = $this->aSubmittedRequest($company, $subject, $requester);
+        $this->runTheExportFor($request);
+
+        return $request->refresh();
     }
 
     /**

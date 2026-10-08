@@ -79,6 +79,16 @@ class DsarRequestRecord extends Model
     }
 
     /**
+     * Requests about $user — the data subject's own.
+     *
+     * @param  Builder<self>  $query
+     */
+    protected function scopeWhereSubject(Builder $query, User $user): void
+    {
+        $query->where('subject_user_id', $user->getKey());
+    }
+
+    /**
      * Requests about $user or made by $user.
      *
      * @param  Builder<self>  $query
