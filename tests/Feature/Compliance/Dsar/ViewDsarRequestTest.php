@@ -80,6 +80,21 @@ class ViewDsarRequestTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_the_download_window_has_closed_then_no_download_is_offered(): void
+    {
+        // Given a fulfilled request whose window has closed, its expiry not yet recorded
+        $subject = $this->aCompanyMember($this->company);
+        $request = DsarRequestRecord::factory()->forSubject($this->company, $subject)->fulfilled()->create();
+        $this->travelTo($request->download_expires_at);
+
+        // When
+        $response = $this->viewDsarRequest($subject, $this->company, $request->getKey());
+
+        // Then
+        $this->assertDsarRequestShown($response, $request, false);
+    }
+
+    #[Test]
     public function when_the_requester_no_longer_holds_view_all_then_they_still_see_the_request_they_made(): void
     {
         // Given a former admin, now an employee, who requested an export for a member

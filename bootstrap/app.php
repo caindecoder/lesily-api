@@ -23,10 +23,12 @@ use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use App\Foundation\Auth\Exceptions\InvalidResetLinkException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
+use App\Compliance\Dsar\Exceptions\DsarExportNotReadyException;
 use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
 use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use App\Companies\Memberships\Exceptions\AlreadyMemberException;
+use App\Compliance\Dsar\Exceptions\DsarDownloadExpiredException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
 use App\Billing\Invoices\Exceptions\ReceiptNotAvailableException;
@@ -236,6 +238,18 @@ return Application::configure(basePath: dirname(__DIR__))
         // Only the original requester may withdraw a DSAR request (UC-1-102 4b, V5).
         $exceptions->render(fn (DsarRequesterMismatchException $e) => EnvelopeBuilder::build(
             ApiErrorCode::DsarRequesterMismatch,
+            $e->getMessage(),
+        ));
+
+        // A DSAR export can be downloaded only once it is fulfilled (UC-1-070 5a).
+        $exceptions->render(fn (DsarExportNotReadyException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::DsarNotReady,
+            $e->getMessage(),
+        ));
+
+        // A DSAR export can be downloaded for seven days from fulfilment (UC-1-070 5b, D3).
+        $exceptions->render(fn (DsarDownloadExpiredException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::DsarDownloadExpired,
             $e->getMessage(),
         ));
 

@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Queue;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Testing\Constraints\SeeInOrder;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -46,6 +47,7 @@ use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
+use App\Compliance\Dsar\Exceptions\DsarExportFileMissingException;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand;
@@ -199,6 +201,30 @@ abstract class DsarTestCase extends TestCase
             'random uuid' => [(string) Str::uuid()],
             'malformed text' => ['not-a-request-id'],
             'number' => ['12345'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideUnreadyRequests(): array
+    {
+        return [
+            'in progress' => ['in progress'],
+            'withdrawn' => ['withdrawn'],
+            'rejected' => ['rejected'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideNonSubjectViewers(): array
+    {
+        return [
+            'the requester acting on their behalf' => ['requester'],
+            'an owner, who sees every request' => ['owner'],
+            'another member' => ['member'],
         ];
     }
 
@@ -419,6 +445,174 @@ abstract class DsarTestCase extends TestCase
     protected function viewDsarRequestAsGuest(string $requestId): TestResponse
     {
         return $this->getJson('/api/v1/dsar-requests/'.$requestId);
+    }
+
+    /**
+     * An authenticated member downloads one DSAR export in $company's context.
+     */
+    protected function downloadDsarExport(User $actor, Company $company, string $requestId): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/dsar-requests/'.$requestId.'/download', ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * A member of $company who is not the request's subject: $requester
+     * itself, an owner, or another member.
+     */
+    protected function aNonSubjectViewer(string $kind, Company $company, User $requester): User
+    {
+        return match ($kind) {
+            'requester' => $requester,
+            'owner' => $this->aCompanyMember($company, 'owner'),
+            'member' => $this->aCompanyMember($company),
+            default => throw new InvalidArgumentException("Unknown viewer: {$kind}"),
+        };
+    }
+
+    /**
+     * $subject's own request in $company that is not fulfilled: still in
+     * progress, withdrawn, or rejected.
+     */
+    protected function anUnreadyRequest(string $state, Company $company, User $subject): DsarRequestRecord
+    {
+        return $state === 'in progress'
+            ? $this->aSubmittedRequest($company, $subject)
+            : $this->aClosedRequest($company, $subject, $state);
+    }
+
+    /**
+     * The download was refused because the export is not ready — 409
+     * DSAR_NOT_READY with the UC-1-070 5a message.
+     */
+    protected function assertRefusedAsNotReady(TestResponse $response): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::DsarNotReady);
+        $response->assertJsonPath('message', 'This data export is not ready to download.');
+    }
+
+    /**
+     * The download was refused because its seven-day window has closed —
+     * 410 DSAR_DOWNLOAD_EXPIRED with the UC-1-070 5b message.
+     */
+    protected function assertRefusedAsExpired(TestResponse $response): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_GONE, ApiErrorCode::DsarDownloadExpired);
+        $response->assertJsonPath('message', 'This data export has expired. Request a fresh export.');
+    }
+
+    /**
+     * $request's export ZIP was served as a download named for the day it
+     * was fulfilled, byte for byte the file on the dsar disk.
+     */
+    protected function assertExportServed(TestResponse $response, DsarRequestRecord $request): void
+    {
+        $response->assertOk();
+        $response->assertDownload('lesily-data-export-2026-10-01.zip');
+        $response->assertHeader('Content-Type', 'application/zip');
+        $this->assertSame(Storage::disk('dsar')->get($this->exportPathOf($request)), $response->streamedContent());
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideLostExportFiles(): array
+    {
+        return [
+            'the file deleted from the disk' => ['deleted'],
+            'no file path recorded' => ['unrecorded'],
+        ];
+    }
+
+    /**
+     * $request's export ZIP is lost: deleted from the dsar disk, or its path
+     * never recorded on the row.
+     */
+    protected function loseTheExportFile(string $how, DsarRequestRecord $request): void
+    {
+        match ($how) {
+            'deleted' => Storage::disk('dsar')->delete($this->exportPathOf($request)),
+            'unrecorded' => DsarRequestRecord::query()->whereKey($request->getKey())->update(['file_path' => null]),
+            default => throw new InvalidArgumentException("Unknown loss: {$how}"),
+        };
+    }
+
+    /**
+     * The download failed as a server fault — 500 INTERNAL_ERROR, the missing
+     * export file reported for operations.
+     */
+    protected function assertFailedAsMissingFile(TestResponse $response): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        Exceptions::assertReported(DsarExportFileMissingException::class);
+    }
+
+    /**
+     * The download is kept out of every cache and is never content-sniffed.
+     */
+    protected function assertServedPrivately(TestResponse $response): void
+    {
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
+        $response->assertHeader('X-Content-Type-Options', 'nosniff');
+    }
+
+    /**
+     * $request's export was downloaded — and audited — exactly $times times.
+     */
+    protected function assertDownloadsAudited(DsarRequestRecord $request, int $times): void
+    {
+        $this->assertSame($times, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_downloaded')->count());
+    }
+
+    /**
+     * The download $response served was audited as a read of $subject's
+     * personal data: one dsar_downloaded row carrying the response's
+     * Correlation-Id, no stored event, the subject as actor, the client's
+     * address and user agent.
+     */
+    protected function assertDownloadAudited(TestResponse $response, DsarRequestRecord $request, User $subject): void
+    {
+        $entry = AuditEntry::query()->where('request_id', $response->headers->get('Correlation-Id'))->sole();
+
+        $this->assertDatabaseHas('audit_trail', [
+            'id' => $entry->getKey(),
+            'company_id' => $request->company_id,
+            'stored_event_id' => null,
+            'event_class' => 'DsarExportDownloaded',
+            'subject_type' => 'dsar_request',
+            'subject_id' => $request->getKey(),
+            'subject_label' => null,
+            'action' => 'dsar_downloaded',
+            'description' => 'DSAR export downloaded — by: '.$subject->name,
+            'actor_user_id' => $subject->getKey(),
+            'actor_role_code' => $this->roleCodeOf($subject, $request->company_id),
+            'actor_label' => $subject->name,
+            'metadata' => null,
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'Symfony',
+            'recorded_at' => now(),
+        ]);
+    }
+
+    /**
+     * A guest (no Sanctum session) downloads one DSAR export.
+     */
+    protected function downloadDsarExportAsGuest(string $requestId): TestResponse
+    {
+        return $this->getJson('/api/v1/dsar-requests/'.$requestId.'/download');
+    }
+
+    /**
+     * $subject's request in $company, fulfilled by its export job: the ZIP is
+     * on the dsar disk and the download window runs seven days from now.
+     */
+    protected function aReadyExportFor(Company $company, User $subject, ?User $requester = null): DsarRequestRecord
+    {
+        $request = $this->aSubmittedRequest($company, $subject, $requester);
+        $this->runTheExportFor($request);
+
+        return $request->refresh();
     }
 
     /**

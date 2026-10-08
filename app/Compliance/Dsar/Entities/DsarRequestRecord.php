@@ -3,6 +3,7 @@
 namespace App\Compliance\Dsar\Entities;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
@@ -11,6 +12,8 @@ use Database\Factories\DsarRequestRecordFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Compliance\Dsar\Exceptions\DsarExportNotReadyException;
+use App\Compliance\Dsar\Exceptions\DsarExportFileMissingException;
 
 /**
  * @property-read User $subject subject_user_id is NOT NULL + restrictOnDelete
@@ -76,6 +79,43 @@ class DsarRequestRecord extends Model
     protected function scopeWhereCompany(Builder $query, Company $company): void
     {
         $query->where('company_id', $company->getKey());
+    }
+
+    /**
+     * The export's path on the dsar disk — every fulfilled request has one.
+     */
+    public function exportFilePath(): string
+    {
+        return $this->file_path ?? throw new DsarExportFileMissingException($this->getKey());
+    }
+
+    /**
+     * When the export was fulfilled. Only fulfilment records that moment, so
+     * a request without it — in progress, withdrawn, rejected — is not ready.
+     */
+    public function fulfilledAt(): CarbonImmutable
+    {
+        return $this->completed_at ?? throw new DsarExportNotReadyException;
+    }
+
+    /**
+     * The seven-day download window is open — only a fulfilled request has
+     * one, and it closes at download_expires_at itself, before the daily
+     * expiry records it.
+     */
+    public function isDownloadWindowOpen(): bool
+    {
+        return $this->download_expires_at > now();
+    }
+
+    /**
+     * Requests about $user — the data subject's own.
+     *
+     * @param  Builder<self>  $query
+     */
+    protected function scopeWhereSubject(Builder $query, User $user): void
+    {
+        $query->where('subject_user_id', $user->getKey());
     }
 
     /**

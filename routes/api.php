@@ -12,6 +12,7 @@ use App\Foundation\Auth\IO\Http\Controllers\LogoutAllController;
 use App\Companies\IO\Http\Controllers\CompanyOwnershipController;
 use App\Billing\Subscriptions\IO\Http\Controllers\PlansController;
 use App\Foundation\Auth\IO\Http\Controllers\MyCompaniesController;
+use App\Compliance\Dsar\IO\Http\Controllers\DsarDownloadController;
 use App\Compliance\Dsar\IO\Http\Controllers\DsarRequestsController;
 use App\Foundation\Auth\IO\Http\Controllers\ViewSessionsController;
 use App\Foundation\Auth\IO\Http\Controllers\ResetPasswordController;
@@ -349,6 +350,11 @@ Route::get('/v1/dsar-requests', [DsarRequestsController::class, 'index'])
 
 // View one DSAR request (UC-1-070) - the list's visibility; anything else 404s, existence hidden.
 Route::get('/v1/dsar-requests/{requestId}', [DsarRequestsController::class, 'show'])
+    ->middleware(['auth:sanctum', 'auth.company']);
+
+// Download a DSAR export (UC-1-070) - the data subject only; 409 until fulfilled, 410 from the
+// end of its seven-day window. One audit row per served download.
+Route::get('/v1/dsar-requests/{requestId}/download', DsarDownloadController::class)
     ->middleware(['auth:sanctum', 'auth.company']);
 
 // Withdraw a DSAR request (UC-1-102) - the original requester, while in progress. No idempotency
