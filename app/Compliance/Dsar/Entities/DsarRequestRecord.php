@@ -3,6 +3,7 @@
 namespace App\Compliance\Dsar\Entities;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
@@ -11,6 +12,8 @@ use Database\Factories\DsarRequestRecordFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Compliance\Dsar\Exceptions\DsarExportNotReadyException;
+use App\Compliance\Dsar\Exceptions\DsarExportFileMissingException;
 
 /**
  * @property-read User $subject subject_user_id is NOT NULL + restrictOnDelete
@@ -76,6 +79,22 @@ class DsarRequestRecord extends Model
     protected function scopeWhereCompany(Builder $query, Company $company): void
     {
         $query->where('company_id', $company->getKey());
+    }
+
+    /**
+     * The export's path on the dsar disk — every fulfilled request has one.
+     */
+    public function exportFilePath(): string
+    {
+        return $this->file_path ?? throw new DsarExportFileMissingException($this->getKey());
+    }
+
+    /**
+     * When the export was fulfilled — a request without that moment is not.
+     */
+    public function fulfilledAt(): CarbonImmutable
+    {
+        return $this->completed_at ?? throw new DsarExportNotReadyException;
     }
 
     /**

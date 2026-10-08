@@ -35,7 +35,7 @@ class DownloadDsarExportInteractor
             throw new DsarDownloadExpiredException;
         }
 
-        if (! Storage::disk('dsar')->exists((string) $request->file_path)) {
+        if (! Storage::disk('dsar')->exists($request->exportFilePath())) {
             throw new DsarExportFileMissingException($request->getKey());
         }
 

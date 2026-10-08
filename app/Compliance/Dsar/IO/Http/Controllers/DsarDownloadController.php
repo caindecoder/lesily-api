@@ -26,8 +26,8 @@ class DsarDownloadController extends Controller
         $dsarRequest = $interactor->execute($command, $actor, AdminRequestContext::fromRequest($request));
 
         return Storage::disk('dsar')->download(
-            (string) $dsarRequest->file_path,
-            'lesily-data-export-'.$dsarRequest->completed_at?->format('Y-m-d').'.zip',
+            $dsarRequest->exportFilePath(),
+            'lesily-data-export-'.$dsarRequest->fulfilledAt()->format('Y-m-d').'.zip',
             ['Cache-Control' => 'no-store', 'X-Content-Type-Options' => 'nosniff'],
         );
     }
