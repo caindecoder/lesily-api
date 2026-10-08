@@ -88,6 +88,14 @@ class DsarRequestRecord extends Model
     }
 
     /**
+     * The export can be downloaded now: fulfilled, its window still open.
+     */
+    public function isDownloadable(): bool
+    {
+        return $this->status === DsarRequestStatus::Fulfilled && ! $this->hasDownloadWindowClosed();
+    }
+
+    /**
      * Requests about $user — the data subject's own.
      *
      * @param  Builder<self>  $query

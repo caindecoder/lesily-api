@@ -3,7 +3,6 @@
 namespace App\Compliance\Dsar\IO\Http\Resources;
 
 use Illuminate\Http\Request;
-use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use Illuminate\Http\Resources\Json\JsonResource;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 
@@ -26,8 +25,7 @@ class DsarRequestResource extends JsonResource
             'requested_at' => $this->resource->requested_at->toISOString(),
             'sla_deadline' => $this->resource->sla_deadline->toISOString(),
             'completed_at' => $this->resource->completed_at?->toISOString(),
-            'download_available' => $this->resource->status === DsarRequestStatus::Fulfilled
-                && $this->resource->download_expired_at === null,
+            'download_available' => $this->resource->isDownloadable(),
             'download_expires_at' => $this->resource->download_expires_at?->toISOString(),
             'cancelled_at' => $this->resource->cancelled_at?->toISOString(),
             'rejection_reason' => $this->resource->rejection_reason,

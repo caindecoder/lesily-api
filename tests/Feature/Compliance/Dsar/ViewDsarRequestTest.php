@@ -129,6 +129,21 @@ class ViewDsarRequestTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_the_download_window_has_closed_then_no_download_is_offered(): void
+    {
+        // Given a fulfilled request whose window has closed, its expiry not yet recorded
+        $subject = $this->aCompanyMember($this->company);
+        $request = DsarRequestRecord::factory()->forSubject($this->company, $subject)->fulfilled()->create();
+        $this->travelTo($request->download_expires_at);
+
+        // When
+        $response = $this->viewDsarRequest($subject, $this->company, $request->getKey());
+
+        // Then
+        $this->assertDsarRequestShown($response, $request, false);
+    }
+
+    #[Test]
     public function when_the_subject_views_their_fulfilled_request_then_the_sla_dates_are_shown(): void
     {
         // Given a request made 28 days ago and fulfilled today
