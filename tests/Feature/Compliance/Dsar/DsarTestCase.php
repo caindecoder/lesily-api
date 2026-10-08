@@ -501,6 +501,18 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * $request's export ZIP was served as a download named for the day it
+     * was fulfilled, byte for byte the file on the dsar disk.
+     */
+    protected function assertExportServed(TestResponse $response, DsarRequestRecord $request): void
+    {
+        $response->assertOk();
+        $response->assertDownload('lesily-data-export-2026-10-01.zip');
+        $response->assertHeader('Content-Type', 'application/zip');
+        $this->assertSame(Storage::disk('dsar')->get($this->exportPathOf($request)), $response->streamedContent());
+    }
+
+    /**
      * No download of $request was audited.
      */
     protected function assertNoDownloadAudited(DsarRequestRecord $request): void

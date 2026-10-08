@@ -109,4 +109,33 @@ class DownloadDsarExportTest extends DsarTestCase
         $this->assertRefusedAsExpired($response);
         $this->assertNoDownloadAudited($request);
     }
+
+    #[Test]
+    public function when_downloaded_one_second_before_the_window_closes_then_the_export_is_served(): void
+    {
+        // Given the subject's ready export, one second before its window closes
+        $subject = $this->aCompanyMember($this->company);
+        $request = $this->aReadyExportFor($this->company, $subject);
+        $this->travelTo($request->download_expires_at->subSecond());
+
+        // When
+        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+
+        // Then
+        $this->assertExportServed($response, $request);
+    }
+
+    #[Test]
+    public function when_the_subject_downloads_an_export_an_admin_requested_then_it_is_served(): void
+    {
+        // Given an export an admin requested on the subject's behalf
+        $subject = $this->aCompanyMember($this->company);
+        $request = $this->aReadyExportFor($this->company, $subject, $this->aCompanyMember($this->company, 'admin'));
+
+        // When
+        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+
+        // Then
+        $this->assertExportServed($response, $request);
+    }
 }
