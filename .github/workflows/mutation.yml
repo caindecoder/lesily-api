@@ -22,9 +22,11 @@ concurrency:
   group: mutation-main
   cancel-in-progress: true
 
+# Runner image pinned to ubuntu-24.04: GitHub moves ubuntu-latest to 26.04 from
+# 2026-10-19 (actions/runner-images#14748); 26.04 is trialled in its own PR.
 jobs:
   mutation-full:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Observed: --threads=1 2h41m–4h12m (public 4-vCPU runner, s189–s195);
     # --threads=4 1h18m (public, s196); --threads=4 on the private 2-vCPU
     # runner 4h08m and FAILED (s198 — OQ-1-181); schema reuse at 2 workers on
@@ -68,7 +70,7 @@ jobs:
       - run: php artisan key:generate
       - run: php artisan migrate --force
       - name: Runner class (record beside every timing pin — OQ-1-181)
-        # ubuntu-latest is 4 vCPU / 16 GB on public repositories and 2 vCPU / 8 GB
+        # The standard runner is 4 vCPU / 16 GB on public repositories and 2 vCPU / 8 GB
         # on private ones; every timing pin in the conventions plan names the class
         # it was measured on. ParaTest's "Processes:" line in the CI test job is the
         # same fact for that job.
