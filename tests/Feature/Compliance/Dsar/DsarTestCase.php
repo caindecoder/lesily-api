@@ -1528,14 +1528,34 @@ abstract class DsarTestCase extends TestCase
      * The archive builds its ZIP in a fresh, empty directory of its own —
      * returned so a test can see what the build leaves there.
      */
-    protected function anArchiveWorkingInAnEmptyDirectory(): string
+    protected function anArchiveWorkingInAnEmptyDirectory(Filesystem $files = new Filesystem): string
     {
         $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-work-'.Str::uuid7()->toString();
         mkdir($directory);
         $this->beforeApplicationDestroyed(fn () => (new Filesystem)->deleteDirectory($directory));
-        $this->app->instance(DsarExportArchive::class, new DsarExportArchive(new Filesystem, $directory));
+        $this->app->instance(DsarExportArchive::class, new DsarExportArchive($files, $directory));
 
         return $directory;
+    }
+
+    /**
+     * A filesystem shared with another worker that is handed every name the
+     * moment it is freed: each deleted file is created again at once.
+     */
+    protected function aFilesystemWhereAnotherWorkerTakesEveryFreedName(): Filesystem
+    {
+        return new class extends Filesystem
+        {
+            public function delete($paths): bool
+            {
+                $deleted = parent::delete($paths);
+                foreach ((array) $paths as $path) {
+                    touch($path);
+                }
+
+                return $deleted;
+            }
+        };
     }
 
     /**

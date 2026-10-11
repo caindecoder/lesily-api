@@ -3,6 +3,7 @@
 namespace App\Compliance\Dsar\IO\Export;
 
 use ZipArchive;
+use Illuminate\Support\Str;
 use Illuminate\Filesystem\Filesystem;
 
 class DsarExportArchive
@@ -14,16 +15,15 @@ class DsarExportArchive
 
     /**
      * The export as ZIP bytes — one data.json holding every section, indented
-     * for reading, beside report.pdf. The ZIP is built at a fresh name in the
-     * work directory (reserved, then freed, so nothing else holds the file),
-     * and nothing of it is left there when this returns.
+     * for reading, beside report.pdf. The ZIP is built at a fresh name of its
+     * own in the work directory, and nothing of it is left there when this
+     * returns.
      *
      * @param  array<string, mixed>  $sections
      */
     public function build(array $sections, string $reportPdf): string
     {
-        $path = (string) tempnam($this->workDirectory, 'dsar');
-        $this->files->delete($path);
+        $path = sprintf('%s%s%s.zip', $this->workDirectory, DIRECTORY_SEPARATOR, Str::uuid7());
 
         try {
             $zip = new ZipArchive;

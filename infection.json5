@@ -314,15 +314,11 @@
         // L-EQUIV-MISC: snapshot() - the declared array shape (body: string,
         // content_type: string) vs getContent(): string|false and headers->get(): ?string;
         // the PHPDoc demands the casts. execute() - the TOTP secret is never null for an
-        // enrolled user. DsarExportArchive::build() - tempnam(): string|false returns
-        // false only when no temp file can be made, after the E_NOTICE of its
-        // system-temp fallback, which Laravel raises as an ErrorException first.
-        // REMOVE WHEN tempnam() leaves the archive.
+        // enrolled user.
         "CastString": {
             ignore: [
                 "App\\Foundation\\Http\\Middleware\\EnsureIdempotencyKey::snapshot",
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::execute",
-                "App\\Compliance\\Dsar\\IO\\Export\\DsarExportArchive::build",
                 // L-DSAR-REPORT-VALUE: every scalar a DSAR section exports is a string or
                 // a bool / null handled before these arms (the sections write ISO strings,
                 // ids and codes); the casts only satisfy Larastan's mixed. Remove when a

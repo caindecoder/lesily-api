@@ -109,6 +109,20 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_another_worker_takes_a_freed_temporary_name_then_the_export_still_builds(): void
+    {
+        // Given a member's own request, and an archive sharing its directory with another worker that takes every freed name
+        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
+        $this->anArchiveWorkingInAnEmptyDirectory($this->aFilesystemWhereAnotherWorkerTakesEveryFreedName());
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the export holds their data and their report
+        $this->assertExportHoldsDataAndReport($request);
+    }
+
+    #[Test]
     public function when_the_export_is_built_then_no_temporary_file_outlives_it(): void
     {
         // Given a member's own request and an empty working directory for the archive
