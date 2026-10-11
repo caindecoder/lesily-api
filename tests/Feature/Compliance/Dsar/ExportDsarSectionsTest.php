@@ -31,6 +31,37 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_the_archive_cannot_be_created_then_the_export_fails_without_fulfilling(): void
+    {
+        // Given a member's own request, and an archive that cannot create its ZIP
+        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
+        $this->anArchiveWorkingInAMissingDirectory();
+
+        try {
+            // When their export is built
+            $this->runTheExportFor($request);
+            $this->fail('An archive that cannot be created should fail the export job.');
+        } catch (DsarExportArchiveFailedException) {
+            // Then the attempt fails on the archive, and the request stays in progress with no file
+            $this->assertStillInProgressWithoutExportFile($request);
+        }
+    }
+
+    #[Test]
+    public function when_another_worker_takes_a_freed_temporary_name_then_the_export_still_builds(): void
+    {
+        // Given a member's own request, and an archive sharing its directory with another worker that takes every freed name
+        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
+        $this->anArchiveWorkingInAnEmptyDirectory($this->aFilesystemWhereAnotherWorkerTakesEveryFreedName());
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the export holds their data and their report
+        $this->assertExportHoldsDataAndReport($request);
+    }
+
+    #[Test]
     public function when_the_member_belongs_to_two_companies_then_only_this_companys_data_is_exported(): void
     {
         // Given a member who joined another company first, under another role, with consent, an invitation, a transfer, a case, a notice and an audited submission in each — beside a co-worker's consent here
@@ -107,37 +138,6 @@ class ExportDsarSectionsTest extends DsarTestCase
             $case->verification_notes,
             $case->rejection_reason,
         ]);
-    }
-
-    #[Test]
-    public function when_the_archive_cannot_be_created_then_the_export_fails_without_fulfilling(): void
-    {
-        // Given a member's own request, and an archive that cannot create its ZIP
-        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
-        $this->anArchiveWorkingInAMissingDirectory();
-
-        try {
-            // When their export is built
-            $this->runTheExportFor($request);
-            $this->fail('An archive that cannot be created should fail the export job.');
-        } catch (DsarExportArchiveFailedException) {
-            // Then the attempt fails on the archive, and the request stays in progress with no file
-            $this->assertStillInProgressWithoutExportFile($request);
-        }
-    }
-
-    #[Test]
-    public function when_another_worker_takes_a_freed_temporary_name_then_the_export_still_builds(): void
-    {
-        // Given a member's own request, and an archive sharing its directory with another worker that takes every freed name
-        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
-        $this->anArchiveWorkingInAnEmptyDirectory($this->aFilesystemWhereAnotherWorkerTakesEveryFreedName());
-
-        // When their export is built
-        $this->runTheExportFor($request);
-
-        // Then the export holds their data and their report
-        $this->assertExportHoldsDataAndReport($request);
     }
 
     #[Test]
