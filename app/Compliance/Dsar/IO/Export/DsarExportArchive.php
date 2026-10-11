@@ -5,6 +5,7 @@ namespace App\Compliance\Dsar\IO\Export;
 use ZipArchive;
 use Illuminate\Support\Str;
 use Illuminate\Filesystem\Filesystem;
+use App\Compliance\Dsar\Exceptions\DsarExportArchiveFailedException;
 
 class DsarExportArchive
 {
@@ -27,7 +28,10 @@ class DsarExportArchive
 
         try {
             $zip = new ZipArchive;
-            $zip->open($path, ZipArchive::CREATE | ZipArchive::EXCL);
+            $opened = $zip->open($path, ZipArchive::CREATE | ZipArchive::EXCL);
+            if ($opened !== true) {
+                throw new DsarExportArchiveFailedException(sprintf('The export archive could not be created (ZipArchive error %d).', $opened));
+            }
             $zip->addFromString('data.json', json_encode($sections, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
             $zip->addFromString('report.pdf', $reportPdf);
             $zip->close();

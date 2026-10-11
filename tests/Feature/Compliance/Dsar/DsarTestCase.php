@@ -1539,6 +1539,16 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * The archive works in a directory that does not exist, so it cannot
+     * create its ZIP.
+     */
+    protected function anArchiveWorkingInAMissingDirectory(): void
+    {
+        $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-missing-'.Str::uuid7()->toString();
+        $this->app->instance(DsarExportArchive::class, new DsarExportArchive(new Filesystem, $directory));
+    }
+
+    /**
      * A filesystem shared with another worker that is handed every name the
      * moment it is freed: each deleted file is created again at once.
      */

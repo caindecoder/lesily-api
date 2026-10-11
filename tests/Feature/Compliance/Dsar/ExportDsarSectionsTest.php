@@ -13,6 +13,7 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Notifications\DatabaseNotification;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Entities\NotificationPreference;
+use App\Compliance\Dsar\Exceptions\DsarExportArchiveFailedException;
 
 class ExportDsarSectionsTest extends DsarTestCase
 {
@@ -106,6 +107,23 @@ class ExportDsarSectionsTest extends DsarTestCase
             $case->verification_notes,
             $case->rejection_reason,
         ]);
+    }
+
+    #[Test]
+    public function when_the_archive_cannot_be_created_then_the_export_fails_without_fulfilling(): void
+    {
+        // Given a member's own request, and an archive that cannot create its ZIP
+        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
+        $this->anArchiveWorkingInAMissingDirectory();
+
+        try {
+            // When their export is built
+            $this->runTheExportFor($request);
+            $this->fail('An archive that cannot be created should fail the export job.');
+        } catch (DsarExportArchiveFailedException) {
+            // Then the attempt fails on the archive, and the request stays in progress with no file
+            $this->assertStillInProgressWithoutExportFile($request);
+        }
     }
 
     #[Test]
