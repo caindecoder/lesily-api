@@ -1518,8 +1518,9 @@ abstract class DsarTestCase extends TestCase
 
     protected function exportZipOf(DsarRequestRecord $request): ZipArchive
     {
+        $path = Storage::disk('dsar')->path($this->exportPathOf($request));
         $zip = new ZipArchive;
-        $zip->open(Storage::disk('dsar')->path($this->exportPathOf($request)));
+        $this->assertTrue($zip->open($path), "The export ZIP at {$path} could not be opened.");
 
         return $zip;
     }
