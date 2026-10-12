@@ -161,6 +161,9 @@ return [
             'password_changed' => 'Password changed',
             'team_welcome' => 'Welcome to the team',
             'ownership_received' => 'You became the owner',
+            'dsar_export_ready' => 'Data export ready',
+            'dsar_export_failed' => 'Data export failed',
+            'dsar_request_withdrawn' => 'Data request withdrawn',
         ],
         'channel' => [
             'mail' => 'Email',

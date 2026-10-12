@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Foundation;
 
+use Illuminate\Support\Facades\Lang;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 
@@ -30,7 +32,9 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
         $notice = new SystemNotificationMail(NotificationType::GeneralAccountNotice, 'Contoso');
 
         // When / Then
-        $this->assertNotSame($security->render(), $notice->render());
+        $security->assertSeeInHtml("There was security activity on your Lesily account in Contoso. If it wasn't you, change your password now.", escape: false);
+        $security->assertDontSeeInHtml('You have a new notice about your account in Contoso.');
+        $notice->assertSeeInHtml('You have a new notice about your account in Contoso. Sign in to Lesily to read it.');
     }
 
     #[Test]
@@ -72,6 +76,34 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
         // When / Then — a missing lang entry would ship the literal translation
         // key as the subject (UC-1-028 new-owner notice)
         $mail->assertHasSubject('You are now the owner of Contoso');
+    }
+
+    #[Test]
+    #[DataProvider('provideNotificationTypes')]
+    public function when_any_notice_is_rendered_then_its_subject_and_body_are_its_own_copy(NotificationType $type): void
+    {
+        // Given a notice of the type
+        $mail = new SystemNotificationMail($type, 'Contoso');
+
+        // When / Then — the type has its own written subject and body, and no lang key shows through
+        $this->assertWrittenCopyFor($mail, $type);
+    }
+
+    /**
+     * @return array<string, array{NotificationType}>
+     */
+    public static function provideNotificationTypes(): array
+    {
+        return collect(NotificationType::cases())
+            ->mapWithKeys(fn (NotificationType $type): array => [$type->value => [$type]])
+            ->all();
+    }
+
+    protected function assertWrittenCopyFor(SystemNotificationMail $mail, NotificationType $type): void
+    {
+        $this->assertTrue(Lang::has("notifications.{$type->value}.subject", 'en', false));
+        $this->assertTrue(Lang::has("notifications.{$type->value}.body", 'en', false));
+        $mail->assertDontSeeInHtml('notifications.');
     }
 
     /**
