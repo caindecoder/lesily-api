@@ -1303,12 +1303,10 @@ abstract class DsarTestCase extends TestCase
      */
     protected function assertNoticeSentOnceEach(DsarRequestRecord $request, NotificationType $type, int $total): void
     {
-        $request = DsarRequestRecord::query()->with(['subject', 'requestedBy'])->findOrFail($request->getKey());
+        $request->load(['subject', 'requestedBy']);
         $company = Company::query()->findOrFail($request->company_id);
-        $recipients = array_filter([$request->subject, $request->requestedBy]);
-        $this->assertCount(2, $recipients);
 
-        foreach ($recipients as $recipient) {
+        foreach ([$request->subject, $request->requestedBy] as $recipient) {
             Notification::assertSentToTimes($recipient, SystemNotification::class, 1);
             Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->type === $type
                 && $notice->companyName === $company->name

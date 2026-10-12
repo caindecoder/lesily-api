@@ -10,6 +10,7 @@ use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarRequestRejected;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestFulfilled;
+use Spatie\EventSourcing\StoredEvents\ShouldBeStored;
 use App\Foundation\Notifications\Enums\NotificationType;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
 use App\Foundation\Notifications\Notifications\SystemNotification;
@@ -18,26 +19,26 @@ class DsarNotificationReactor extends Reactor implements ShouldQueue
 {
     public function onDsarRequestFulfilled(DsarRequestFulfilled $event): void
     {
-        $this->notifyAbout($event->aggregateRootUuid(), NotificationType::DsarExportReady);
+        $this->notifyAbout($event, NotificationType::DsarExportReady);
     }
 
     public function onDsarRequestRejected(DsarRequestRejected $event): void
     {
-        $this->notifyAbout($event->aggregateRootUuid(), NotificationType::DsarExportFailed);
+        $this->notifyAbout($event, NotificationType::DsarExportFailed);
     }
 
     public function onDsarRequestCancelled(DsarRequestCancelled $event): void
     {
-        $this->notifyAbout($event->aggregateRootUuid(), NotificationType::DsarRequestWithdrawn);
+        $this->notifyAbout($event, NotificationType::DsarRequestWithdrawn);
     }
 
     /**
      * One notice each to the request's subject and to whoever asked for it —
      * one in all when they are the same person.
      */
-    private function notifyAbout(string $requestId, NotificationType $type): void
+    private function notifyAbout(ShouldBeStored $event, NotificationType $type): void
     {
-        $request = DsarRequestRecord::query()->with(['subject', 'requestedBy'])->findOrFail($requestId);
+        $request = DsarRequestRecord::query()->with(['subject', 'requestedBy'])->findOrFail($event->aggregateRootUuid());
         $company = Company::query()->findOrFail($request->company_id);
 
         Notification::send(
