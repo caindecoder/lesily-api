@@ -33,17 +33,18 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_archive_cannot_be_created_then_the_export_fails_without_fulfilling(): void
     {
-        // Given a member's own request, and an archive that cannot create its ZIP
+        // Given a member's own request, and another process already holding the name the archive picks for its ZIP
         $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
-        $this->anArchiveWorkingInAMissingDirectory();
+        $takenFile = $this->anArchiveWhoseNameIsAlreadyTaken();
 
         try {
             // When their export is built
             $this->runTheExportFor($request);
             $this->fail('An archive that cannot be created should fail the export job.');
         } catch (DsarExportArchiveFailedException) {
-            // Then the attempt fails on the archive, and the request stays in progress with no file
+            // Then the attempt fails on the archive, the request stays in progress with no file, and the other process's file is left alone
             $this->assertStillInProgressWithoutExportFile($request);
+            $this->assertFileExists($takenFile);
         }
     }
 

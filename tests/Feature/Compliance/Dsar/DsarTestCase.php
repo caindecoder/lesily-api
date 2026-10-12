@@ -1540,13 +1540,18 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * The archive works in a directory that does not exist, so it cannot
-     * create its ZIP.
+     * Another process already holds a file at the name the archive will pick
+     * for its ZIP, so the archive cannot create it there — returned so a test
+     * can see that file.
      */
-    protected function anArchiveWorkingInAMissingDirectory(): void
+    protected function anArchiveWhoseNameIsAlreadyTaken(): string
     {
-        $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-missing-'.Str::uuid7()->toString();
-        $this->app->instance(DsarExportArchive::class, new DsarExportArchive(new Filesystem, $directory));
+        $directory = $this->anArchiveWorkingInAnEmptyDirectory();
+        $takenFile = $directory.DIRECTORY_SEPARATOR.Str::freezeUuids().'.zip';
+        $this->beforeApplicationDestroyed(fn () => Str::createUuidsNormally());
+        touch($takenFile);
+
+        return $takenFile;
     }
 
     /**
