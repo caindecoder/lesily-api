@@ -38,7 +38,7 @@ class DsarNotificationReactor extends Reactor implements ShouldQueue
      */
     private function notifyAbout(ShouldBeStored $event, NotificationType $type): void
     {
-        $request = DsarRequestRecord::query()->with(['subject', 'requestedBy'])->findOrFail($event->aggregateRootUuid());
+        $request = DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid());
         $company = Company::query()->findOrFail($request->company_id);
 
         Notification::send(
