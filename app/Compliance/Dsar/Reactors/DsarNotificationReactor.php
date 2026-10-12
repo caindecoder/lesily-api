@@ -8,6 +8,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Notification;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarRequestRejected;
+use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestFulfilled;
 use App\Foundation\Notifications\Enums\NotificationType;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
@@ -23,6 +24,11 @@ class DsarNotificationReactor extends Reactor implements ShouldQueue
     public function onDsarRequestRejected(DsarRequestRejected $event): void
     {
         $this->notifyAbout($event->aggregateRootUuid(), NotificationType::DsarExportFailed);
+    }
+
+    public function onDsarRequestCancelled(DsarRequestCancelled $event): void
+    {
+        $this->notifyAbout($event->aggregateRootUuid(), NotificationType::DsarRequestWithdrawn);
     }
 
     /**

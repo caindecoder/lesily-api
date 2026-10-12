@@ -11,6 +11,7 @@ enum NotificationType: string
     case OwnershipReceived = 'ownership_received';
     case DsarExportReady = 'dsar_export_ready';
     case DsarExportFailed = 'dsar_export_failed';
+    case DsarRequestWithdrawn = 'dsar_request_withdrawn';
 
     /**
      * Critical notifications (account-security alerts, password-change
@@ -27,6 +28,7 @@ enum NotificationType: string
             self::OwnershipReceived => true,
             self::DsarExportReady => false,
             self::DsarExportFailed => false,
+            self::DsarRequestWithdrawn => false,
             self::GeneralAccountNotice => false,
             self::TeamWelcome => false,
         };

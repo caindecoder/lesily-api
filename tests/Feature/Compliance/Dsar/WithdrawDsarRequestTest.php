@@ -10,6 +10,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Compliance\Dsar\Events\DsarRequestCancelled;
+use App\Foundation\Notifications\Enums\NotificationType;
 
 class WithdrawDsarRequestTest extends DsarTestCase
 {
@@ -180,6 +182,23 @@ class WithdrawDsarRequestTest extends DsarTestCase
 
         // Then the open-request slot was freed
         $this->assertAcceptedAsTheOnlyOpenRequest($response, $this->company, $member);
+    }
+
+    #[Test]
+    #[DataProvider('provideRequesters')]
+    public function when_a_request_is_withdrawn_then_its_subject_and_requester_are_notified_once_each(string $requestedBy, int $notices): void
+    {
+        // Given a member's request, made by them or by an owner on their behalf
+        $member = $this->aCompanyMember($this->company);
+        $requester = $this->aRequesterFor($this->company, $member, $requestedBy);
+        $request = $this->aSubmittedRequest($this->company, $member, $requester);
+
+        // When the requester withdraws it and the notices are delivered
+        $this->withdrawDsarRequest($requester, $this->company, $request->getKey())->assertOk();
+        $this->deliverTheNoticesOf(DsarRequestCancelled::class);
+
+        // Then the member and whoever asked for it each hear once that it was withdrawn
+        $this->assertNoticeSentOnceEach($request, NotificationType::DsarRequestWithdrawn, $notices);
     }
 
     #[Test]
