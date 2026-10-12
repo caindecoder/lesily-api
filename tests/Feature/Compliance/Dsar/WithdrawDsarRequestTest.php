@@ -6,6 +6,7 @@ use RuntimeException;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
@@ -188,7 +189,8 @@ class WithdrawDsarRequestTest extends DsarTestCase
     #[DataProvider('provideRequesters')]
     public function when_a_request_is_withdrawn_then_its_subject_and_requester_are_notified_once_each(string $requestedBy, int $notices): void
     {
-        // Given a member's request, made by them or by an owner on their behalf
+        // Given a member's request, made by them or by an owner on their behalf, with notices captured from the start
+        Notification::fake();
         $member = $this->aCompanyMember($this->company);
         $requester = $this->aRequesterFor($this->company, $member, $requestedBy);
         $request = $this->aSubmittedRequest($this->company, $member, $requester);

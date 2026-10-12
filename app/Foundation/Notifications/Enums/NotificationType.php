@@ -20,7 +20,7 @@ enum NotificationType: string
      * Security notices per foundation-brief / questionnaire S16 L474;
      * ownership-received is a control-surface change — who owns the company —
      * ruled critical at the UC-1-028 build (s170); a data export's ready or
-     * failed notice answers a statutory request (UC-1-070, UC-1-103).
+     * failed notice answers a statutory request.
      */
     public function isCritical(): bool
     {

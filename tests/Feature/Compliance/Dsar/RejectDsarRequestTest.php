@@ -6,6 +6,7 @@ use RuntimeException;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\AssertionFailedError;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -132,7 +133,8 @@ class RejectDsarRequestTest extends DsarTestCase
     #[DataProvider('provideRequesters')]
     public function when_an_export_fails_for_good_then_its_subject_and_requester_are_notified_once_each(string $requestedBy, int $notices): void
     {
-        // Given a member's request, made by them or by an owner on their behalf
+        // Given a member's request, made by them or by an owner on their behalf, with notices captured from the start
+        Notification::fake();
         $member = $this->aCompanyMember($this->company);
         $request = $this->aSubmittedRequest($this->company, $member, $this->aRequesterFor($this->company, $member, $requestedBy));
 

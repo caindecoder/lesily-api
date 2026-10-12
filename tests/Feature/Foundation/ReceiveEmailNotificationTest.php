@@ -48,12 +48,15 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
     #[DataProvider('provideOptOutTypes')]
     public function when_user_opted_out_of_a_non_critical_notification_then_email_is_skipped_but_in_app_is_created(NotificationType $type): void
     {
+        // Given a user who opted out of this type's email
         Mail::fake();
         $recipient = User::factory()->create();
         $this->optOutOfMail($recipient, $type);
 
+        // When a notice of the type is raised for them
         $recipient->notify(new SystemNotification($type, 'Contoso', null));
 
+        // Then only the in-app record is delivered
         $this->assertOnlyInAppDelivered($recipient);
     }
 
@@ -61,12 +64,15 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
     #[DataProvider('provideCriticalTypes')]
     public function when_notification_is_critical_then_user_opt_out_is_ignored_and_email_is_sent(NotificationType $type): void
     {
+        // Given a user who opted out of this critical type's email
         Mail::fake();
         $recipient = User::factory()->create();
         $this->optOutOfMail($recipient, $type);
 
+        // When a notice of the type is raised for them
         $recipient->notify(new SystemNotification($type, 'Contoso', null));
 
+        // Then the email is queued anyway, beside the in-app record
         $this->assertEmailQueuedAndInAppCreated($recipient);
     }
 

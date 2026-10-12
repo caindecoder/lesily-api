@@ -80,13 +80,49 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
 
     #[Test]
     #[DataProvider('provideNotificationTypes')]
-    public function when_any_notice_is_rendered_then_its_subject_and_body_are_its_own_copy(NotificationType $type): void
+    public function when_any_notice_is_rendered_then_it_has_a_written_subject_and_body(NotificationType $type): void
     {
         // Given a notice of the type
         $mail = new SystemNotificationMail($type, 'Contoso');
 
-        // When / Then — the type has its own written subject and body, and no lang key shows through
+        // When / Then — the type has a written subject and body, and no lang key shows through
         $this->assertWrittenCopyFor($mail, $type);
+    }
+
+    #[Test]
+    #[DataProvider('provideDsarNoticeCopy')]
+    public function when_a_data_export_notice_is_rendered_then_it_reads_its_own_subject_and_body(NotificationType $type, string $subject, string $body): void
+    {
+        // Given a data-export notice for Contoso
+        $mail = new SystemNotificationMail($type, 'Contoso');
+
+        // When / Then — its subject and body are this outcome's own words
+        $mail->assertHasSubject($subject);
+        $mail->assertSeeInHtml($body);
+    }
+
+    /**
+     * @return array<string, array{NotificationType, string, string}>
+     */
+    public static function provideDsarNoticeCopy(): array
+    {
+        return [
+            'ready' => [
+                NotificationType::DsarExportReady,
+                'A personal data export for Contoso is ready',
+                'The personal data export requested in Contoso is ready. The person it is about can download it while signed in to Lesily, for 7 days.',
+            ],
+            'failed' => [
+                NotificationType::DsarExportFailed,
+                'A personal data export for Contoso could not be prepared',
+                'The personal data export requested in Contoso could not be prepared. Please submit a new request.',
+            ],
+            'withdrawn' => [
+                NotificationType::DsarRequestWithdrawn,
+                'A personal data export request for Contoso was withdrawn',
+                'The personal data export request in Contoso was withdrawn before it was ready. A new request can be made at any time.',
+            ],
+        ];
     }
 
     /**

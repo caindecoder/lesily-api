@@ -1288,11 +1288,11 @@ abstract class DsarTestCase extends TestCase
 
     /**
      * Delivers the notices $eventClass leaves behind: none was sent inline,
-     * then the captured reactor runs as a worker would.
+     * then the captured reactor runs as a worker would. The caller arms
+     * Notification::fake() before acting, so an inline send is seen.
      */
     protected function deliverTheNoticesOf(string $eventClass): void
     {
-        Notification::fake();
         $this->assertReactorDeferred($eventClass, SystemNotification::class);
         $this->runQueuedHandlersFor($eventClass);
     }
