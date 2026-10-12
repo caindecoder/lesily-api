@@ -20,6 +20,14 @@ trait InteractsWithQueuedReactors
         );
     }
 
+    protected function assertNoHandlersQueuedFor(string $eventClass): void
+    {
+        Queue::assertNotPushed(
+            HandleStoredEventJob::class,
+            fn (HandleStoredEventJob $job): bool => $job->storedEvent->event_class === $eventClass,
+        );
+    }
+
     protected function runQueuedHandlersFor(string $eventClass): void
     {
         $queue = Queue::getFacadeRoot();

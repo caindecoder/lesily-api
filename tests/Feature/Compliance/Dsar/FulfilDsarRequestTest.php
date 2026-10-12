@@ -9,6 +9,8 @@ use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Compliance\Dsar\Events\DsarRequestFulfilled;
+use App\Foundation\Notifications\Enums\NotificationType;
 
 class FulfilDsarRequestTest extends DsarTestCase
 {
@@ -63,8 +65,9 @@ class FulfilDsarRequestTest extends DsarTestCase
         // When its export is built
         $this->runTheExportFor($request);
 
-        // Then the withdrawal stands, nothing is fulfilled and the export file is gone
+        // Then the withdrawal stands, nothing is fulfilled, the export file is gone and no ready notice is queued
         $this->assertNothingFulfilled($request, DsarRequestStatus::Cancelled);
+        $this->assertNoHandlersQueuedFor(DsarRequestFulfilled::class);
     }
 
     #[Test]
@@ -86,6 +89,22 @@ class FulfilDsarRequestTest extends DsarTestCase
             $this->assertSame('induced audit failure', $failure->getMessage());
             $this->assertStillInProgress($request);
         }
+    }
+
+    #[Test]
+    #[DataProvider('provideRequesters')]
+    public function when_an_export_is_ready_then_its_subject_and_requester_are_notified_once_each(string $requestedBy, int $notices): void
+    {
+        // Given a member's request, made by them or by an owner on their behalf
+        $member = $this->aCompanyMember($this->company);
+        $request = $this->aSubmittedRequest($this->company, $member, $this->aRequesterFor($this->company, $member, $requestedBy));
+
+        // When its export is built and the notices are delivered
+        $this->runTheExportFor($request);
+        $this->deliverTheNoticesOf(DsarRequestFulfilled::class);
+
+        // Then the member and whoever asked for it each hear once that it is ready
+        $this->assertNoticeSentOnceEach($request, NotificationType::DsarExportReady, $notices);
     }
 
     #[Test]

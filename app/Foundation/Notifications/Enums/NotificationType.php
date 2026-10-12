@@ -9,6 +9,7 @@ enum NotificationType: string
     case PasswordChanged = 'password_changed';
     case TeamWelcome = 'team_welcome';
     case OwnershipReceived = 'ownership_received';
+    case DsarExportReady = 'dsar_export_ready';
 
     /**
      * Critical notifications (account-security alerts, password-change
@@ -23,6 +24,7 @@ enum NotificationType: string
             self::AccountSecurityAlert => true,
             self::PasswordChanged => true,
             self::OwnershipReceived => true,
+            self::DsarExportReady => false,
             self::GeneralAccountNotice => false,
             self::TeamWelcome => false,
         };
