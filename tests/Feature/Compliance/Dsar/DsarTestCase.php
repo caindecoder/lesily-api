@@ -1518,8 +1518,9 @@ abstract class DsarTestCase extends TestCase
 
     protected function exportZipOf(DsarRequestRecord $request): ZipArchive
     {
+        $path = Storage::disk('dsar')->path($this->exportPathOf($request));
         $zip = new ZipArchive;
-        $zip->open(Storage::disk('dsar')->path($this->exportPathOf($request)));
+        $this->assertTrue($zip->open($path), "The export ZIP at {$path} could not be opened.");
 
         return $zip;
     }
@@ -1528,14 +1529,49 @@ abstract class DsarTestCase extends TestCase
      * The archive builds its ZIP in a fresh, empty directory of its own —
      * returned so a test can see what the build leaves there.
      */
-    protected function anArchiveWorkingInAnEmptyDirectory(): string
+    protected function anArchiveWorkingInAnEmptyDirectory(Filesystem $files = new Filesystem): string
     {
         $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-work-'.Str::uuid7()->toString();
         mkdir($directory);
         $this->beforeApplicationDestroyed(fn () => (new Filesystem)->deleteDirectory($directory));
-        $this->app->instance(DsarExportArchive::class, new DsarExportArchive(new Filesystem, $directory));
+        $this->app->instance(DsarExportArchive::class, new DsarExportArchive($files, $directory));
 
         return $directory;
+    }
+
+    /**
+     * Another process already holds a file at the name the archive will pick
+     * for its ZIP, so the archive cannot create it there — returned so a test
+     * can see that file.
+     */
+    protected function anArchiveWhoseNameIsAlreadyTaken(): string
+    {
+        $directory = $this->anArchiveWorkingInAnEmptyDirectory();
+        $takenFile = $directory.DIRECTORY_SEPARATOR.Str::freezeUuids().'.zip';
+        $this->beforeApplicationDestroyed(fn () => Str::createUuidsNormally());
+        touch($takenFile);
+
+        return $takenFile;
+    }
+
+    /**
+     * A filesystem shared with another worker that is handed every name the
+     * moment it is freed: each deleted file is created again at once.
+     */
+    protected function aFilesystemWhereAnotherWorkerTakesEveryFreedName(): Filesystem
+    {
+        return new class extends Filesystem
+        {
+            public function delete($paths): bool
+            {
+                $deleted = parent::delete($paths);
+                foreach ((array) $paths as $path) {
+                    touch($path);
+                }
+
+                return $deleted;
+            }
+        };
     }
 
     /**

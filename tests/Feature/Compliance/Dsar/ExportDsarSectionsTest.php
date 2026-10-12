@@ -13,6 +13,7 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Notifications\DatabaseNotification;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Entities\NotificationPreference;
+use App\Compliance\Dsar\Exceptions\DsarExportArchiveFailedException;
 
 class ExportDsarSectionsTest extends DsarTestCase
 {
@@ -27,6 +28,38 @@ class ExportDsarSectionsTest extends DsarTestCase
         parent::setUp();
 
         $this->company = Company::factory()->create();
+    }
+
+    #[Test]
+    public function when_the_archive_cannot_be_created_then_the_export_fails_without_fulfilling(): void
+    {
+        // Given a member's own request, and another process already holding the name the archive picks for its ZIP
+        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
+        $takenFile = $this->anArchiveWhoseNameIsAlreadyTaken();
+
+        try {
+            // When their export is built
+            $this->runTheExportFor($request);
+            $this->fail('An archive that cannot be created should fail the export job.');
+        } catch (DsarExportArchiveFailedException) {
+            // Then the attempt fails on the archive, the request stays in progress with no file, and the other process's file is left alone
+            $this->assertStillInProgressWithoutExportFile($request);
+            $this->assertFileExists($takenFile);
+        }
+    }
+
+    #[Test]
+    public function when_another_worker_takes_a_freed_temporary_name_then_the_export_still_builds(): void
+    {
+        // Given a member's own request, and an archive sharing its directory with another worker that takes every freed name
+        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
+        $this->anArchiveWorkingInAnEmptyDirectory($this->aFilesystemWhereAnotherWorkerTakesEveryFreedName());
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the export holds their data and their report
+        $this->assertExportHoldsDataAndReport($request);
     }
 
     #[Test]
