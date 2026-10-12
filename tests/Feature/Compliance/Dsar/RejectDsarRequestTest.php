@@ -6,8 +6,12 @@ use RuntimeException;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\AssertionFailedError;
+use Illuminate\Support\Facades\Notification;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Compliance\Dsar\Events\DsarRequestRejected;
+use App\Foundation\Notifications\Enums\NotificationType;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 
 class RejectDsarRequestTest extends DsarTestCase
@@ -54,8 +58,9 @@ class RejectDsarRequestTest extends DsarTestCase
         // When the export fails for good
         $this->failTheExportFor($request, new RuntimeException('export failure'));
 
-        // Then the withdrawal stands, nothing is rejected and the partial file is gone
+        // Then the withdrawal stands, nothing is rejected, the partial file is gone and no failed notice is queued
         $this->assertNothingRejected($request, DsarRequestStatus::Cancelled);
+        $this->assertNoHandlersQueuedFor(DsarRequestRejected::class);
     }
 
     #[Test]
@@ -122,6 +127,23 @@ class RejectDsarRequestTest extends DsarTestCase
 
         // Then
         $this->assertTriesThreeTimesWithBackoff($job);
+    }
+
+    #[Test]
+    #[DataProvider('provideRequesters')]
+    public function when_an_export_fails_for_good_then_its_subject_and_requester_are_notified_once_each(string $requestedBy, int $notices): void
+    {
+        // Given a member's request, made by them or by an owner on their behalf, with notices captured from the start
+        Notification::fake();
+        $member = $this->aCompanyMember($this->company);
+        $request = $this->aSubmittedRequest($this->company, $member, $this->aRequesterFor($this->company, $member, $requestedBy));
+
+        // When its export fails for good and the notices are delivered
+        $this->failTheExportFor($request, new RuntimeException('export failure'));
+        $this->deliverTheNoticesOf(DsarRequestRejected::class);
+
+        // Then the member and whoever asked for it each hear once that it failed
+        $this->assertNoticeSentOnceEach($request, NotificationType::DsarExportFailed, $notices);
     }
 
     #[Test]

@@ -24,6 +24,7 @@ use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Testing\Constraints\SeeInOrder;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -97,6 +98,19 @@ abstract class DsarTestCase extends TestCase
         $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
 
         return $user;
+    }
+
+    /**
+     * Who asks for $member's export: $member themselves, or an owner of
+     * $company on their behalf.
+     */
+    protected function aRequesterFor(Company $company, User $member, string $requestedBy): User
+    {
+        return match ($requestedBy) {
+            'themselves' => $member,
+            'an owner' => $this->aCompanyMember($company, 'owner'),
+            default => throw new InvalidArgumentException("Unknown requester: {$requestedBy}"),
+        };
     }
 
     /**
@@ -237,6 +251,17 @@ abstract class DsarTestCase extends TestCase
             'withdrawn' => ['withdrawn', DsarRequestStatus::Cancelled],
             'fulfilled' => ['fulfilled', DsarRequestStatus::Fulfilled],
             'rejected' => ['rejected', DsarRequestStatus::Rejected],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string, int}>
+     */
+    public static function provideRequesters(): array
+    {
+        return [
+            'their own request' => ['themselves', 1],
+            'an owner\'s request for them' => ['an owner', 2],
         ];
     }
 
@@ -1259,6 +1284,35 @@ abstract class DsarTestCase extends TestCase
     protected function aSignInFor(User $user, string $deviceName, CarbonInterface $expiresAt): PersonalAccessToken
     {
         return $user->createToken($deviceName, ['*'], $expiresAt)->accessToken;
+    }
+
+    /**
+     * Delivers the notices $eventClass leaves behind: none was sent inline,
+     * then the captured reactor runs as a worker would. The caller arms
+     * Notification::fake() before acting, so an inline send is seen.
+     */
+    protected function deliverTheNoticesOf(string $eventClass): void
+    {
+        $this->assertReactorDeferred($eventClass, SystemNotification::class);
+        $this->runQueuedHandlersFor($eventClass);
+    }
+
+    /**
+     * $request's subject and its requester were each sent one $type notice
+     * about the request's company, and $total notices went out in all.
+     */
+    protected function assertNoticeSentOnceEach(DsarRequestRecord $request, NotificationType $type, int $total): void
+    {
+        $request->load(['subject', 'requestedBy']);
+        $company = Company::query()->findOrFail($request->company_id);
+
+        foreach ([$request->subject, $request->requestedBy] as $recipient) {
+            Notification::assertSentToTimes($recipient, SystemNotification::class, 1);
+            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->type === $type
+                && $notice->companyName === $company->name
+                && $notice->companyId === $company->getKey());
+        }
+        Notification::assertCount($total);
     }
 
     /**

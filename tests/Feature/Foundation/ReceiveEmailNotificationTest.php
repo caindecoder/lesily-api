@@ -45,26 +45,34 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
     }
 
     #[Test]
-    public function when_user_opted_out_of_a_non_critical_notification_then_email_is_skipped_but_in_app_is_created(): void
+    #[DataProvider('provideOptOutTypes')]
+    public function when_user_opted_out_of_a_non_critical_notification_then_email_is_skipped_but_in_app_is_created(NotificationType $type): void
     {
+        // Given a user who opted out of this type's email
         Mail::fake();
         $recipient = User::factory()->create();
-        $this->optOutOfMail($recipient, NotificationType::GeneralAccountNotice);
+        $this->optOutOfMail($recipient, $type);
 
-        $recipient->notify(new SystemNotification(NotificationType::GeneralAccountNotice, 'Contoso', null));
+        // When a notice of the type is raised for them
+        $recipient->notify(new SystemNotification($type, 'Contoso', null));
 
+        // Then only the in-app record is delivered
         $this->assertOnlyInAppDelivered($recipient);
     }
 
     #[Test]
-    public function when_notification_is_critical_then_user_opt_out_is_ignored_and_email_is_sent(): void
+    #[DataProvider('provideCriticalTypes')]
+    public function when_notification_is_critical_then_user_opt_out_is_ignored_and_email_is_sent(NotificationType $type): void
     {
+        // Given a user who opted out of this critical type's email
         Mail::fake();
         $recipient = User::factory()->create();
-        $this->optOutOfMail($recipient, NotificationType::AccountSecurityAlert);
+        $this->optOutOfMail($recipient, $type);
 
-        $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso', null));
+        // When a notice of the type is raised for them
+        $recipient->notify(new SystemNotification($type, 'Contoso', null));
 
+        // Then the email is queued anyway, beside the in-app record
         $this->assertEmailQueuedAndInAppCreated($recipient);
     }
 
@@ -121,6 +129,32 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         $recipient->notify(new SystemNotification(NotificationType::AccountSecurityAlert, 'Contoso', null));
 
         $this->assertDeliveredAcrossBothChannels($recipient);
+    }
+
+    /**
+     * @return array<string, array{NotificationType}>
+     */
+    public static function provideOptOutTypes(): array
+    {
+        return [
+            'an account notice' => [NotificationType::GeneralAccountNotice],
+            'a team welcome' => [NotificationType::TeamWelcome],
+            'a withdrawn data request' => [NotificationType::DsarRequestWithdrawn],
+        ];
+    }
+
+    /**
+     * @return array<string, array{NotificationType}>
+     */
+    public static function provideCriticalTypes(): array
+    {
+        return [
+            'a security alert' => [NotificationType::AccountSecurityAlert],
+            'a password change' => [NotificationType::PasswordChanged],
+            'an ownership handover' => [NotificationType::OwnershipReceived],
+            'a ready data export' => [NotificationType::DsarExportReady],
+            'a failed data export' => [NotificationType::DsarExportFailed],
+        ];
     }
 
     /**
