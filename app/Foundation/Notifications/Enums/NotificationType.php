@@ -15,10 +15,12 @@ enum NotificationType: string
 
     /**
      * Critical notifications (account-security alerts, password-change
-     * confirmations, ownership-received notices) are mandatory: users cannot
-     * opt their email out of them. Security notices per foundation-brief /
-     * questionnaire S16 L474; ownership-received is a control-surface change —
-     * who owns the company — ruled critical at the UC-1-028 build (s170).
+     * confirmations, ownership-received notices, the outcome of a data
+     * export) are mandatory: users cannot opt their email out of them.
+     * Security notices per foundation-brief / questionnaire S16 L474;
+     * ownership-received is a control-surface change — who owns the company —
+     * ruled critical at the UC-1-028 build (s170); a data export's ready or
+     * failed notice answers a statutory request (UC-1-070, UC-1-103).
      */
     public function isCritical(): bool
     {
@@ -26,8 +28,8 @@ enum NotificationType: string
             self::AccountSecurityAlert => true,
             self::PasswordChanged => true,
             self::OwnershipReceived => true,
-            self::DsarExportReady => false,
-            self::DsarExportFailed => false,
+            self::DsarExportReady => true,
+            self::DsarExportFailed => true,
             self::DsarRequestWithdrawn => false,
             self::GeneralAccountNotice => false,
             self::TeamWelcome => false,
