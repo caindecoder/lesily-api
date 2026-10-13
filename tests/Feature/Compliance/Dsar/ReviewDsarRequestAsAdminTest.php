@@ -94,6 +94,21 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     }
 
     #[Test]
+    #[DataProvider('provideDaysAroundTheDeadline')]
+    public function when_the_deadline_is_near_then_days_remaining_counts_calendar_days(string $viewedAt, int $daysRemaining): void
+    {
+        // Given a request whose deadline is 31 Oct 09:00 UTC, viewed at this row's moment
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $this->travelTo($viewedAt);
+
+        // When the admin opens it
+        $response = $this->viewAsAdmin($this->admin, $request->getKey());
+
+        // Then the days remaining count calendar days on UTC dates
+        $response->assertJsonPath('data.days_remaining', $daysRemaining);
+    }
+
+    #[Test]
     public function when_the_admin_opens_a_fulfilled_request_then_its_timeline_shows_the_download_expiry(): void
     {
         // Given a request made on 1 Oct, fulfilled on 8 Oct, its download expired on 15 Oct
@@ -204,6 +219,19 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         return [
             'owner' => ['owner'],
             'auditor' => ['auditor'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string, int}>
+     */
+    public static function provideDaysAroundTheDeadline(): array
+    {
+        return [
+            'the evening before' => ['2026-10-30 23:59:59', 1],
+            'the deadline day begins' => ['2026-10-31 00:00:00', 0],
+            'the deadline day ends' => ['2026-10-31 23:59:59', 0],
+            'the day after' => ['2026-11-01 00:00:00', -1],
         ];
     }
 

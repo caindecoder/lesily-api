@@ -87,11 +87,12 @@ class DsarRequestRecord extends Model
     }
 
     /**
-     * Days left until the 30-day deadline — negative once it has passed.
+     * Calendar days from today to the 30-day deadline's date — 0 on the
+     * deadline day, negative after it. Dates are the app's, UTC.
      */
     public function daysRemaining(): int
     {
-        return (int) now()->diffInDays($this->sla_deadline, false);
+        return (int) now()->startOfDay()->diffInDays($this->sla_deadline->startOfDay(), false);
     }
 
     /**
