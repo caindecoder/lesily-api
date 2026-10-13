@@ -26,10 +26,14 @@ class SystemNotification extends Notification
     /** The notification_preferences.channel value for the email leg. */
     public const MAIL_CHANNEL = 'mail';
 
+    /**
+     * @param  array<string, string>  $details  values the type's body names beside the company
+     */
     public function __construct(
         public NotificationType $type,
         public string $companyName,
         public ?string $companyId,
+        public array $details = [],
     ) {}
 
     /**
@@ -52,18 +56,19 @@ class SystemNotification extends Notification
      */
     public function toMail(object $notifiable): SystemNotificationMail
     {
-        return (new SystemNotificationMail($this->type, $this->companyName))
+        return (new SystemNotificationMail($this->type, $this->companyName, $this->details))
             ->locale($notifiable->preferredLocale());
     }
 
     /**
-     * @return array<string, string>
+     * @return array<string, string|array<string, string>>
      */
     public function toArray(object $notifiable): array
     {
         return [
             'notification_type' => $this->type->value,
             'company_name' => $this->companyName,
+            'details' => $this->details,
         ];
     }
 

@@ -28,6 +28,22 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_a_notice_carries_details_then_its_email_and_in_app_record_keep_them(): void
+    {
+        // Given a user
+        Mail::fake();
+        $recipient = User::factory()->create();
+        $details = ['request' => '0199e3a4-7b2c-7d10-9f3e-5a6b7c8d9e0f', 'deadline' => '31 Oct 2026, 09:00 UTC'];
+
+        // When a notice naming a request and its deadline is raised for them
+        $recipient->notify(new SystemNotification(NotificationType::DsarDeadlineMissed, 'Contoso', null, $details));
+
+        // Then its email and its in-app record both keep those details
+        Mail::assertQueued(SystemNotificationMail::class, fn (SystemNotificationMail $mail): bool => $mail->details === $details);
+        $this->assertSame($details, $recipient->notifications()->sole()->data['details']);
+    }
+
+    #[Test]
     public function when_a_notice_concerns_the_whole_account_then_it_is_stored_without_a_company(): void
     {
         // Given a user

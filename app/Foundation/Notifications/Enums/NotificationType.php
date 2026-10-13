@@ -12,6 +12,7 @@ enum NotificationType: string
     case DsarExportReady = 'dsar_export_ready';
     case DsarExportFailed = 'dsar_export_failed';
     case DsarRequestWithdrawn = 'dsar_request_withdrawn';
+    case DsarDeadlineMissed = 'dsar_deadline_missed';
 
     /**
      * Critical notifications (account-security alerts, password-change
@@ -31,6 +32,7 @@ enum NotificationType: string
             self::DsarExportReady => true,
             self::DsarExportFailed => true,
             self::DsarRequestWithdrawn => false,
+            self::DsarDeadlineMissed => false,
             self::GeneralAccountNotice => false,
             self::TeamWelcome => false,
         };
