@@ -38,7 +38,9 @@ class DsarRequestAdminResource extends JsonResource
     }
 
     /**
-     * One entry per lifecycle moment the request has reached, oldest first.
+     * One entry per lifecycle moment the request has reached. The listed order
+     * is the order they happen in: a breach is flagged only while in progress,
+     * and a download expires only after fulfilment.
      *
      * @return list<array{event: string, at: ?string}>
      */
@@ -46,7 +48,10 @@ class DsarRequestAdminResource extends JsonResource
     {
         $moments = [
             'requested' => $this->resource->requested_at,
+            'sla_breached' => $this->resource->sla_breached_at,
             'fulfilled' => $this->resource->completed_at,
+            'rejected' => $this->resource->rejected_at,
+            'cancelled' => $this->resource->cancelled_at,
             'download_expired' => $this->resource->download_expired_at,
         ];
 

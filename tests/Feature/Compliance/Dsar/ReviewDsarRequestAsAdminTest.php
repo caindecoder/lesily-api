@@ -133,6 +133,69 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         $this->assertStreamUnchanged($request, 3);
     }
 
+    #[Test]
+    public function when_the_admin_opens_a_breached_request_then_it_shows_negative_days_and_the_breach(): void
+    {
+        // Given a request made on 1 Oct, flagged by the daily sweep at its 31 Oct deadline, still in progress
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $this->flagTheBreachAt($request, '2026-10-31 09:00:00');
+        $this->travelTo('2026-11-15 09:00:00');
+
+        // When the admin opens it on 15 Nov
+        $response = $this->viewAsAdmin($this->admin, $request->getKey());
+
+        // Then it shows fifteen days past the deadline and the breach on its timeline
+        $this->assertShown($response, [
+            'status' => 'in_progress',
+            'days_remaining' => -15,
+            'sla_breached_at' => '2026-10-31T09:00:00.000000Z',
+        ], [
+            ['event' => 'requested', 'at' => '2026-10-01T09:00:00.000000Z'],
+            ['event' => 'sla_breached', 'at' => '2026-10-31T09:00:00.000000Z'],
+        ]);
+        $this->assertAdminReadAudited($request, $response);
+    }
+
+    #[Test]
+    public function when_the_admin_opens_a_rejected_request_then_it_shows_the_rejection_reason(): void
+    {
+        // Given a request rejected after its export failed
+        $request = $this->aClosedRequest($this->company, $this->member, 'rejected');
+
+        // When the admin opens it
+        $response = $this->viewAsAdmin($this->admin, $request->getKey());
+
+        // Then it shows the rejection and its reason
+        $this->assertShown($response, [
+            'status' => 'rejected',
+            'rejection_reason' => 'The export could not be built. Please submit a new request.',
+        ], [
+            ['event' => 'requested', 'at' => '2026-10-01T09:00:00.000000Z'],
+            ['event' => 'rejected', 'at' => '2026-10-01T09:00:00.000000Z'],
+        ]);
+        $this->assertAdminReadAudited($request, $response);
+    }
+
+    #[Test]
+    public function when_the_admin_opens_a_withdrawn_request_then_it_shows_the_cancellation(): void
+    {
+        // Given a request its requester withdrew before it was fulfilled
+        $request = $this->aClosedRequest($this->company, $this->member, 'withdrawn');
+
+        // When the admin opens it
+        $response = $this->viewAsAdmin($this->admin, $request->getKey());
+
+        // Then it shows the withdrawal
+        $this->assertShown($response, [
+            'status' => 'cancelled',
+            'cancelled_at' => '2026-10-01T09:00:00.000000Z',
+        ], [
+            ['event' => 'requested', 'at' => '2026-10-01T09:00:00.000000Z'],
+            ['event' => 'cancelled', 'at' => '2026-10-01T09:00:00.000000Z'],
+        ]);
+        $this->assertAdminReadAudited($request, $response);
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -155,6 +218,33 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         }
 
         return $this->getJson("/api/v1/admin/dsar-requests/{$requestId}");
+    }
+
+    /**
+     * $request's missed deadline is flagged at $at, recorded by the aggregate itself.
+     */
+    protected function flagTheBreachAt(DsarRequestRecord $request, string $at): void
+    {
+        $this->travelTo($at);
+        DsarRequest::retrieve($request->getKey())->flagSlaBreach(CarbonImmutable::now())->persist();
+    }
+
+    /**
+     * The admin view shows each of $fields, and exactly $timeline as its timeline.
+     *
+     * @param  array<string, mixed>  $fields
+     * @param  list<array{event: string, at: string}>  $timeline
+     */
+    protected function assertShown(TestResponse $response, array $fields, array $timeline): void
+    {
+        $response->assertOk();
+        $this->assertNotEmpty($fields);
+
+        foreach ($fields as $key => $value) {
+            $response->assertJsonPath("data.{$key}", $value);
+        }
+
+        $this->assertSame($timeline, $response->json('data.timeline'));
     }
 
     /**
