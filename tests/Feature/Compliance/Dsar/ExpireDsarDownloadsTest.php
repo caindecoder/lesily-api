@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Storage;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarDownloadExpired;
 use App\Compliance\Dsar\UseCases\Jobs\DeleteDsarExportFileJob;
@@ -38,6 +39,48 @@ class ExpireDsarDownloadsTest extends DsarTestCase
 
         // Then the export is untouched
         $this->assertNotExpired($request);
+    }
+
+    #[Test]
+    public function when_an_expired_download_is_scanned_again_then_it_is_not_expired_twice(): void
+    {
+        // Given a download the daily scan already expired yesterday
+        $request = $this->aClosedWindowExport();
+        $this->runExpireLinks()->assertSuccessful();
+        $expiredAt = now();
+        $this->travel(1)->day();
+
+        // When the daily scan runs again today
+        $this->runExpireLinks()->expectsOutputToContain('0 download(s) expired.')->assertSuccessful();
+
+        // Then no second expiry is recorded and its expiry time is unchanged
+        $this->assertDownloadExpired($request, $expiredAt);
+    }
+
+    #[Test]
+    #[DataProvider('provideWindowEdges')]
+    public function when_the_scan_runs_at_the_window_edge_then_only_a_closed_window_expires(int $offsetSeconds, bool $expires): void
+    {
+        // Given a ready export, with the clock at the close of its window plus the offset
+        $request = $this->aReadyExportFor($this->company, $this->member);
+        $this->travelTo($request->download_expires_at?->addSeconds($offsetSeconds));
+
+        // When the daily scan runs
+        $this->runExpireLinks()->assertSuccessful();
+
+        // Then the download expires only once its window has closed
+        $expires ? $this->assertDownloadExpired($request, now()) : $this->assertNotExpired($request);
+    }
+
+    /**
+     * @return array<string, array{int, bool}>
+     */
+    public static function provideWindowEdges(): array
+    {
+        return [
+            'one second before it closes' => [-1, false],
+            'exactly as it closes' => [0, true],
+        ];
     }
 
     #[Test]

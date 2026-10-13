@@ -111,14 +111,15 @@ class DsarRequestRecord extends Model
     }
 
     /**
-     * Requests whose download window closed before $at — only fulfilment
-     * sets download_expires_at.
+     * Requests whose download window has closed by $at — the instant the
+     * download is refused — and whose expiry is not yet recorded. Only
+     * fulfilment sets download_expires_at.
      *
      * @param  Builder<self>  $query
      */
     protected function scopeWhereDownloadExpired(Builder $query, CarbonInterface $at): void
     {
-        $query->where('download_expires_at', '<', $at);
+        $query->where('download_expires_at', '<=', $at)->whereNull('download_expired_at');
     }
 
     /**
