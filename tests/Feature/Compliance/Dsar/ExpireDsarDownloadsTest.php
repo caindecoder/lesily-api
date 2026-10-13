@@ -3,12 +3,14 @@
 namespace Tests\Feature\Compliance\Dsar;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarDownloadExpired;
 use App\Compliance\Dsar\UseCases\Jobs\DeleteDsarExportFileJob;
@@ -55,6 +57,38 @@ class ExpireDsarDownloadsTest extends DsarTestCase
 
         // Then no second expiry is recorded and its expiry time is unchanged
         $this->assertDownloadExpired($request, $expiredAt);
+    }
+
+    // The aggregate's own no-op arms (SM-1-06): the scan never selects these
+    // requests, so they are asked to expire outright.
+    #[Test]
+    #[DataProvider('provideRequestsThatCannotExpire')]
+    public function when_a_request_cannot_expire_then_expiring_it_directly_records_nothing(string $kind, int $kept): void
+    {
+        // Given a request whose download cannot expire now
+        $request = $this->aRequestThatCannotExpire($kind);
+        $expiredAt = $request->fresh()?->download_expired_at?->toISOString();
+
+        // When its download is expired directly
+        $this->expireDirectly($request);
+
+        // Then no further expiry is recorded and its row is unchanged
+        $this->assertSame($kept, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->where('event_class', DsarDownloadExpired::class)->count());
+        $this->assertSame($expiredAt, $request->fresh()?->download_expired_at?->toISOString());
+    }
+
+    /**
+     * @return array<string, array{string, int}>
+     */
+    public static function provideRequestsThatCannotExpire(): array
+    {
+        return [
+            'still being prepared' => ['in progress', 0],
+            'withdrawn' => ['withdrawn', 0],
+            'rejected' => ['rejected', 0],
+            'window still open' => ['window still open', 0],
+            'already expired' => ['already expired', 1],
+        ];
     }
 
     #[Test]
@@ -127,6 +161,37 @@ class ExpireDsarDownloadsTest extends DsarTestCase
         // Then the queued deletion names its file and gives the worker three tries, one minute then five apart
         Queue::assertPushed(DeleteDsarExportFileJob::class, fn (DeleteDsarExportFileJob $job): bool => [$job->filePath, $job->tries, $job->backoff]
             === [$this->exportPathOf($request), 3, [60, 300]]);
+    }
+
+    /**
+     * $this->member's request in a state whose download cannot expire now —
+     * the clock moved past where a fulfilled export's window would close,
+     * except for the export whose window is still open.
+     */
+    protected function aRequestThatCannotExpire(string $kind): DsarRequestRecord
+    {
+        $request = match ($kind) {
+            'in progress' => $this->aSubmittedRequest($this->company, $this->member),
+            'withdrawn', 'rejected' => $this->aClosedRequest($this->company, $this->member, $kind),
+            'window still open' => $this->anExportFor($this->member),
+            'already expired' => $this->aClosedWindowExport(),
+        };
+
+        if ($kind === 'already expired') {
+            $this->runExpireLinks()->assertSuccessful();
+        } elseif ($kind !== 'window still open') {
+            $this->travel(8)->days();
+        }
+
+        return $request;
+    }
+
+    /**
+     * Asks $request's aggregate to expire its download now, outside the scan.
+     */
+    protected function expireDirectly(DsarRequestRecord $request): void
+    {
+        DsarRequest::retrieve($request->getKey())->expireDownload(CarbonImmutable::now())->persist();
     }
 
     /**

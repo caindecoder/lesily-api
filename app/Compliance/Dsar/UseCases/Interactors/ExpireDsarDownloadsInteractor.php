@@ -19,7 +19,8 @@ class ExpireDsarDownloadsInteractor
      */
     public function execute(CarbonInterface $at): int
     {
-        $requestIds = DsarRequestRecord::query()->whereDownloadExpired($at)->pluck('id');
+        /** @var array<int, string> $requestIds */
+        $requestIds = DsarRequestRecord::query()->whereDownloadExpired($at)->pluck('id')->all();
 
         foreach ($requestIds as $requestId) {
             DB::transaction(function () use ($requestId, $at): void {
@@ -29,6 +30,6 @@ class ExpireDsarDownloadsInteractor
             });
         }
 
-        return $requestIds->count();
+        return count($requestIds);
     }
 }
