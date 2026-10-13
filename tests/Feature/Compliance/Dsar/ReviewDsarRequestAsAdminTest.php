@@ -3,11 +3,16 @@
 namespace Tests\Feature\Compliance\Dsar;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Compliance\Dsar\Aggregates\DsarRequest;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class ReviewDsarRequestAsAdminTest extends DsarTestCase
 {
@@ -72,6 +77,46 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         $this->assertNoAdminReadRecorded();
     }
 
+    #[Test]
+    public function when_the_admin_opens_a_fulfilled_request_then_its_timeline_shows_the_download_expiry(): void
+    {
+        // Given a request made on 1 Oct, fulfilled on 8 Oct, its download expired on 15 Oct
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $this->travelTo('2026-10-08 09:00:00');
+        $this->runTheExportFor($request);
+        $this->expireTheDownloadAt($request, '2026-10-15 09:00:00');
+
+        // When the admin opens it on 15 Oct
+        $response = $this->viewAsAdmin($this->admin, $request->getKey());
+
+        // Then the whole admin view is shown, the read is recorded and the request is unchanged
+        $response->assertExactJson(['data' => [
+            'id' => $request->getKey(),
+            'status' => 'fulfilled',
+            'request_type' => 'access',
+            'subject' => ['id' => $this->member->getKey(), 'name' => $this->member->name],
+            'requested_by' => ['id' => $this->member->getKey(), 'name' => $this->member->name],
+            'requested_at' => '2026-10-01T09:00:00.000000Z',
+            'sla_deadline' => '2026-10-31T09:00:00.000000Z',
+            'completed_at' => '2026-10-08T09:00:00.000000Z',
+            'download_available' => false,
+            'download_expires_at' => '2026-10-15T09:00:00.000000Z',
+            'cancelled_at' => null,
+            'rejection_reason' => null,
+            'company' => ['id' => $this->company->getKey(), 'name' => $this->company->name],
+            'days_remaining' => 16,
+            'sla_breached_at' => null,
+            'download_expired_at' => '2026-10-15T09:00:00.000000Z',
+            'timeline' => [
+                ['event' => 'requested', 'at' => '2026-10-01T09:00:00.000000Z'],
+                ['event' => 'fulfilled', 'at' => '2026-10-08T09:00:00.000000Z'],
+                ['event' => 'download_expired', 'at' => '2026-10-15T09:00:00.000000Z'],
+            ],
+        ]]);
+        $this->assertAdminReadAudited($request, $response);
+        $this->assertStreamUnchanged($request, 3);
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -94,6 +139,51 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         }
 
         return $this->getJson("/api/v1/admin/dsar-requests/{$requestId}");
+    }
+
+    /**
+     * $request's download expires at $at, recorded by the aggregate itself.
+     */
+    protected function expireTheDownloadAt(DsarRequestRecord $request, string $at): void
+    {
+        $this->travelTo($at);
+        DsarRequest::retrieve($request->getKey())->expireDownload(CarbonImmutable::now())->persist();
+    }
+
+    /**
+     * Exactly one platform-admin read of $request is recorded — against the
+     * request and its company, by the admin, with the request's context.
+     */
+    protected function assertAdminReadAudited(DsarRequestRecord $request, TestResponse $response): void
+    {
+        $this->assertSame(1, AuditEntry::query()->where('action', 'dsar_admin_viewed')->count());
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $request->company_id,
+            'stored_event_id' => null,
+            'event_class' => 'DsarRequestViewedByAdmin',
+            'subject_type' => 'dsar_request',
+            'subject_id' => $request->getKey(),
+            'subject_label' => null,
+            'action' => 'dsar_admin_viewed',
+            'description' => 'DSAR request viewed by a platform admin.',
+            'actor_user_id' => $this->admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $this->admin->name,
+            'ip_address' => '127.0.0.1',
+            'metadata' => null,
+        ]);
+
+        $entry = AuditEntry::query()->where('action', 'dsar_admin_viewed')->sole();
+        $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
+        $this->assertNotNull($entry->user_agent);
+    }
+
+    /**
+     * Viewing recorded nothing on $request's stream — it still holds $events.
+     */
+    protected function assertStreamUnchanged(DsarRequestRecord $request, int $events): void
+    {
+        $this->assertSame($events, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->count());
     }
 
     /**

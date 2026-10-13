@@ -19,6 +19,7 @@ use App\Compliance\Dsar\Exceptions\DsarExportFileMissingException;
 /**
  * @property-read User $subject subject_user_id is NOT NULL + restrictOnDelete
  * @property-read User $requestedBy requested_by is NOT NULL + restrictOnDelete
+ * @property-read Company $company company_id is NOT NULL + restrictOnDelete
  */
 class DsarRequestRecord extends Model
 {
@@ -75,6 +76,22 @@ class DsarRequestRecord extends Model
     public function requestedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'requested_by');
+    }
+
+    /**
+     * @return BelongsTo<Company, $this>
+     */
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    /**
+     * Days left until the 30-day deadline — negative once it has passed.
+     */
+    public function daysRemaining(): int
+    {
+        return (int) now()->diffInDays($this->sla_deadline, false);
     }
 
     /**

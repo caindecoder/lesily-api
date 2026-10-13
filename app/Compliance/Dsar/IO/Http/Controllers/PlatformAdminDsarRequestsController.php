@@ -2,16 +2,20 @@
 
 namespace App\Compliance\Dsar\IO\Http\Controllers;
 
-use RuntimeException;
+use App\Models\User;
+use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use App\Foundation\Http\Values\AdminRequestContext;
+use App\Compliance\Dsar\IO\Http\Resources\DsarRequestAdminResource;
 use App\Compliance\Dsar\UseCases\Interactors\ReviewDsarRequestAsAdminInteractor;
 
 class PlatformAdminDsarRequestsController extends Controller
 {
-    public function show(string $requestId, ReviewDsarRequestAsAdminInteractor $interactor): never
+    public function show(Request $request, string $requestId, ReviewDsarRequestAsAdminInteractor $interactor): DsarRequestAdminResource
     {
-        $interactor->execute($requestId);
+        /** @var User $admin — guaranteed by auth:sanctum */
+        $admin = $request->user();
 
-        throw new RuntimeException('Not implemented');
+        return new DsarRequestAdminResource($interactor->execute($requestId, $admin, AdminRequestContext::fromRequest($request)));
     }
 }
