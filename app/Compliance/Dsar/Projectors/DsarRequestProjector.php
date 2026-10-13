@@ -2,6 +2,7 @@
 
 namespace App\Compliance\Dsar\Projectors;
 
+use App\Compliance\Dsar\Events\DsarSlaBreached;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarDownloadExpired;
@@ -54,6 +55,13 @@ class DsarRequestProjector extends Projector
             'status' => DsarRequestStatus::Cancelled,
             'cancelled_at' => $event->cancelledAt,
             'cancelled_by' => $event->cancelledByUserId,
+        ]);
+    }
+
+    public function onDsarSlaBreached(DsarSlaBreached $event): void
+    {
+        DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid())->update([
+            'sla_breached_at' => $event->breachedAt,
         ]);
     }
 

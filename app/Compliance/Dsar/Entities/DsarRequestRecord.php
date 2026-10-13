@@ -37,6 +37,7 @@ class DsarRequestRecord extends Model
         'status',
         'requested_at',
         'sla_deadline',
+        'sla_breached_at',
         'completed_at',
         'file_path',
         'download_expires_at',
@@ -52,6 +53,7 @@ class DsarRequestRecord extends Model
         'status' => DsarRequestStatus::class,
         'requested_at' => 'immutable_datetime',
         'sla_deadline' => 'immutable_datetime',
+        'sla_breached_at' => 'immutable_datetime',
         'completed_at' => 'immutable_datetime',
         'download_expires_at' => 'immutable_datetime',
         'download_expired_at' => 'immutable_datetime',
@@ -120,6 +122,16 @@ class DsarRequestRecord extends Model
     protected function scopeWhereDownloadDueToExpire(Builder $query, CarbonInterface $at): void
     {
         $query->where('download_expires_at', '<=', $at)->whereNull('download_expired_at');
+    }
+
+    /**
+     * Requests whose 30-day deadline passed by $at.
+     *
+     * @param  Builder<self>  $query
+     */
+    protected function scopeWhereBreachDueToFlag(Builder $query, CarbonInterface $at): void
+    {
+        $query->where('sla_deadline', '<', $at);
     }
 
     /**

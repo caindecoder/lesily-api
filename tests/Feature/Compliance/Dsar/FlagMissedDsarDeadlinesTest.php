@@ -37,6 +37,32 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
         $this->assertNotFlagged($request);
     }
 
+    #[Test]
+    public function when_an_open_request_misses_its_deadline_then_the_breach_is_recorded_and_audited(): void
+    {
+        // Given a request still in progress a day past its 30-day deadline
+        $request = $this->aMissedDeadlineRequest();
+
+        // When the daily scan runs
+        $this->runFlagMissedDeadlines()->expectsOutput('1 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then the breach is recorded on the still-open request and audited
+        $this->assertBreachRecorded($request, now());
+        $this->assertBreachAudited($request, $this->member);
+    }
+
+    /**
+     * $subject's request in this company — $this->member's by default — with
+     * the clock a day past its 30-day deadline.
+     */
+    protected function aMissedDeadlineRequest(?User $subject = null): DsarRequestRecord
+    {
+        $request = $this->aSubmittedRequest($this->company, $subject ?? $this->member);
+        $this->travelTo($request->sla_deadline->addDay());
+
+        return $request;
+    }
+
     protected function runFlagMissedDeadlines(?string $date = null): PendingCommand
     {
         $command = $this->artisan('dsar:flag-missed-deadlines', $date !== null ? ['--date' => $date] : []);

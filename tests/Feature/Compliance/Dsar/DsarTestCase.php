@@ -28,6 +28,7 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Testing\Constraints\SeeInOrder;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
+use App\Compliance\Dsar\Events\DsarSlaBreached;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Illuminate\Support\Testing\Fakes\QueueFake;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
@@ -1821,6 +1822,56 @@ abstract class DsarTestCase extends TestCase
             'subject_id' => $request->getKey(),
             'action' => 'dsar_download_expired',
             'description' => 'DSAR download expired — for: '.$subject->name,
+            'actor_user_id' => null,
+            'actor_role_code' => null,
+            'actor_label' => null,
+            'ip_address' => null,
+            'user_agent' => null,
+            'request_id' => null,
+        ]);
+    }
+
+    /**
+     * $request's missed deadline was flagged at $at the event-sourced way:
+     * still in progress, its row stamped $at, and exactly one DsarSlaBreached
+     * on its stream carrying $at.
+     */
+    protected function assertBreachRecorded(DsarRequestRecord $request, CarbonInterface $at): void
+    {
+        $flagged = $request->fresh() ?? $request;
+        $event = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarSlaBreached::class)
+            ->sole();
+
+        $this->assertSame(
+            [DsarRequestStatus::InProgress, $at->toISOString(), $at->toISOString()],
+            [$flagged->status, $flagged->sla_breached_at?->toISOString(), CarbonImmutable::parse($event->event_properties['breachedAt'])->toISOString()],
+        );
+    }
+
+    /**
+     * Exactly one audit entry records the missed deadline — "DSAR deadline
+     * missed — for: <subject>" — linked to its stored event, with no actor:
+     * the daily scan is a system process (ERD-1-11).
+     */
+    protected function assertBreachAudited(DsarRequestRecord $request, User $subject): void
+    {
+        $storedEventId = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarSlaBreached::class)
+            ->sole()
+            ->id;
+
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_deadline_missed')->count());
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $request->company_id,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'DsarSlaBreached',
+            'subject_type' => 'dsar_request',
+            'subject_id' => $request->getKey(),
+            'action' => 'dsar_deadline_missed',
+            'description' => 'DSAR deadline missed — for: '.$subject->name,
             'actor_user_id' => null,
             'actor_role_code' => null,
             'actor_label' => null,

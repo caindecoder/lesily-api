@@ -5,6 +5,7 @@ namespace App\Compliance\Dsar\Aggregates;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use App\Foundation\EventStore\AggregateRoot;
+use App\Compliance\Dsar\Events\DsarSlaBreached;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Compliance\Dsar\Events\DsarDownloadExpired;
 use App\Compliance\Dsar\Events\DsarRequestRejected;
@@ -106,6 +107,14 @@ class DsarRequest extends AggregateRoot
         }
 
         return $this->recordThat(new DsarDownloadExpired(expiredAt: $at));
+    }
+
+    /**
+     * Records that the request missed its 30-day deadline, found by $at.
+     */
+    public function flagSlaBreach(CarbonInterface $at): static
+    {
+        return $this->recordThat(new DsarSlaBreached(breachedAt: $at));
     }
 
     protected function applyDsarRequestSubmitted(DsarRequestSubmitted $event): void
