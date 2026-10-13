@@ -25,7 +25,7 @@ class DsarOutcomeAudit
             'subject_id' => $request->getKey(),
             'subject_label' => null,
             'action' => 'dsar_'.$outcome,
-            'description' => 'DSAR '.$outcome.' — for: '.$request->subject->name,
+            'description' => 'DSAR '.str_replace('_', ' ', $outcome).' — for: '.$request->subject->name,
             'actor_user_id' => null,
             'actor_role_code' => null,
             'actor_label' => null,

@@ -3,8 +3,10 @@
 namespace App\Compliance\Dsar\Aggregates;
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
+use App\Compliance\Dsar\Events\DsarDownloadExpired;
 use App\Compliance\Dsar\Events\DsarRequestRejected;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestFulfilled;
@@ -86,6 +88,11 @@ class DsarRequest extends AggregateRoot
             rejectedAt: CarbonImmutable::now(),
             reason: $command->reason,
         ));
+    }
+
+    public function expireDownload(CarbonInterface $at): static
+    {
+        return $this->recordThat(new DsarDownloadExpired(expiredAt: $at));
     }
 
     protected function applyDsarRequestSubmitted(DsarRequestSubmitted $event): void

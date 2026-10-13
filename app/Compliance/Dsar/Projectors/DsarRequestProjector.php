@@ -4,6 +4,7 @@ namespace App\Compliance\Dsar\Projectors;
 
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Compliance\Dsar\Events\DsarDownloadExpired;
 use App\Compliance\Dsar\Events\DsarRequestRejected;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestFulfilled;
@@ -53,6 +54,13 @@ class DsarRequestProjector extends Projector
             'status' => DsarRequestStatus::Cancelled,
             'cancelled_at' => $event->cancelledAt,
             'cancelled_by' => $event->cancelledByUserId,
+        ]);
+    }
+
+    public function onDsarDownloadExpired(DsarDownloadExpired $event): void
+    {
+        DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid())->update([
+            'download_expired_at' => $event->expiredAt,
         ]);
     }
 }

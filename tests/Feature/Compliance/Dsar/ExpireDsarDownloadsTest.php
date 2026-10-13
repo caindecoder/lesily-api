@@ -38,6 +38,33 @@ class ExpireDsarDownloadsTest extends DsarTestCase
         $this->assertNotExpired($request);
     }
 
+    #[Test]
+    public function when_the_download_window_has_closed_then_the_expiry_is_recorded_and_audited(): void
+    {
+        // Given a ready export whose seven-day window closed a day ago
+        $request = $this->aClosedWindowExport();
+
+        // When the daily scan runs
+        $this->runExpireLinks()->expectsOutputToContain('1 download(s) expired.')->assertSuccessful();
+
+        // Then the expiry is recorded now, audited, and the download is refused as expired
+        $this->assertDownloadExpired($request, now());
+        $this->assertExpiryAudited($request, $this->member);
+        $this->assertRefusedAsExpired($this->downloadDsarExport($this->member, $this->company, $request->getKey()));
+    }
+
+    /**
+     * $this->member's ready export, with the clock a day past the close of its
+     * seven-day download window.
+     */
+    protected function aClosedWindowExport(): DsarRequestRecord
+    {
+        $request = $this->aReadyExportFor($this->company, $this->member);
+        $this->travelTo($request->download_expires_at?->addDay());
+
+        return $request;
+    }
+
     protected function runExpireLinks(?string $date = null): PendingCommand
     {
         $command = $this->artisan('dsar:expire-links', $date !== null ? ['--date' => $date] : []);
