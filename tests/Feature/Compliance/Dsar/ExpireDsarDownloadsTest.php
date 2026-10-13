@@ -4,11 +4,13 @@ namespace Tests\Feature\Compliance\Dsar;
 
 use App\Models\User;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Storage;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarDownloadExpired;
+use App\Compliance\Dsar\UseCases\Jobs\DeleteDsarExportFileJob;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class ExpireDsarDownloadsTest extends DsarTestCase
@@ -51,6 +53,45 @@ class ExpireDsarDownloadsTest extends DsarTestCase
         $this->assertDownloadExpired($request, now());
         $this->assertExpiryAudited($request, $this->member);
         $this->assertRefusedAsExpired($this->downloadDsarExport($this->member, $this->company, $request->getKey()));
+    }
+
+    #[Test]
+    public function when_a_download_expires_then_its_export_file_is_deleted(): void
+    {
+        // Given a closed-window export and another member's export still open
+        $expired = $this->aClosedWindowExport();
+        $open = $this->anExportFor($this->aCompanyMember($this->company));
+
+        // When the daily scan runs and the worker deletes the expired files
+        $this->runExpireLinks()->assertSuccessful();
+        $this->deleteTheExpiredFiles();
+
+        // Then only the expired export's file is gone
+        Storage::disk('dsar')->assertMissing($this->exportPathOf($expired));
+        Storage::disk('dsar')->assertExists($this->exportPathOf($open));
+    }
+
+    #[Test]
+    public function when_an_export_file_is_queued_for_deletion_then_the_worker_gets_three_tries(): void
+    {
+        // Given a closed-window export expired by the daily scan
+        $request = $this->aClosedWindowExport();
+        $this->runExpireLinks()->assertSuccessful();
+
+        // When its expiry handler runs
+        $this->runQueuedHandlersFor(DsarDownloadExpired::class);
+
+        // Then the queued deletion names its file and gives the worker three tries, one minute then five apart
+        Queue::assertPushed(DeleteDsarExportFileJob::class, fn (DeleteDsarExportFileJob $job): bool => [$job->filePath, $job->tries, $job->backoff]
+            === [$this->exportPathOf($request), 3, [60, 300]]);
+    }
+
+    /**
+     * $subject's ready export in this company — its window opens now.
+     */
+    protected function anExportFor(User $subject): DsarRequestRecord
+    {
+        return $this->aReadyExportFor($this->company, $subject);
     }
 
     /**

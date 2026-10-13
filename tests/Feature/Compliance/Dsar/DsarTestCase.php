@@ -49,6 +49,7 @@ use App\Foundation\Notifications\Enums\NotificationType;
 use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
+use App\Compliance\Dsar\UseCases\Jobs\DeleteDsarExportFileJob;
 use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
 use App\Compliance\Dsar\Exceptions\DsarExportFileMissingException;
 use App\Foundation\Notifications\Notifications\SystemNotification;
@@ -1759,6 +1760,20 @@ abstract class DsarTestCase extends TestCase
             ->where('event_properties->filePath', $filePath)
             ->count());
         Storage::disk('dsar')->assertExists($filePath);
+    }
+
+    /**
+     * Runs the deferred expiry handlers the way a worker would, then each
+     * file deletion they queued — nothing is deleted while the scan runs.
+     */
+    protected function deleteTheExpiredFiles(): void
+    {
+        Queue::assertNotPushed(DeleteDsarExportFileJob::class);
+        $this->runQueuedHandlersFor(DsarDownloadExpired::class);
+
+        $deletions = Queue::pushed(DeleteDsarExportFileJob::class);
+        $this->assertNotEmpty($deletions);
+        $deletions->each(fn (DeleteDsarExportFileJob $job) => app()->call([$job, 'handle']));
     }
 
     /**
