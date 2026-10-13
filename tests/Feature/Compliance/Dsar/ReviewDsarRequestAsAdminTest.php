@@ -57,6 +57,21 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         $this->assertNoAdminReadRecorded();
     }
 
+    #[Test]
+    #[DataProvider('provideUnknownRequestIds')]
+    public function when_the_request_id_is_unknown_then_nothing_is_found_and_no_read_is_recorded(string $unknownId): void
+    {
+        // Given a platform admin and a request that is not the one asked for
+        $this->aSubmittedRequest($this->company, $this->member);
+
+        // When the admin asks for an id no request has
+        $response = $this->viewAsAdmin($this->admin, $unknownId);
+
+        // Then nothing is found and no read is recorded
+        $this->assertHiddenAsNotFound($response, $unknownId);
+        $this->assertNoAdminReadRecorded();
+    }
+
     /**
      * @return array<string, array{string}>
      */
