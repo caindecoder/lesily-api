@@ -117,7 +117,7 @@ class DsarRequestRecord extends Model
      *
      * @param  Builder<self>  $query
      */
-    protected function scopeWhereDownloadExpired(Builder $query, CarbonInterface $at): void
+    protected function scopeWhereDownloadDueToExpire(Builder $query, CarbonInterface $at): void
     {
         $query->where('download_expires_at', '<=', $at)->whereNull('download_expired_at');
     }

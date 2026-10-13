@@ -23,13 +23,14 @@ class ExpireDsarDownloadsInteractor
     public function execute(CarbonInterface $at): int
     {
         /** @var array<int, string> $requestIds */
-        $requestIds = DsarRequestRecord::query()->whereDownloadExpired($at)->pluck('id')->all();
+        $requestIds = DsarRequestRecord::query()->whereDownloadDueToExpire($at)->pluck('id')->all();
         $expired = 0;
 
         foreach ($requestIds as $requestId) {
             try {
-                $this->expire($requestId, $at);
-                $expired++;
+                if ($this->expire($requestId, $at)) {
+                    $expired++;
+                }
             } catch (Throwable $failure) {
                 report(new RuntimeException("DSAR download expiry failed for request {$requestId}.", previous: $failure));
             }
@@ -38,12 +39,23 @@ class ExpireDsarDownloadsInteractor
         return $expired;
     }
 
-    private function expire(string $requestId, CarbonInterface $at): void
+    /**
+     * Whether the request's aggregate recorded the expiry — one a concurrent
+     * run already recorded is neither audited nor counted again.
+     */
+    private function expire(string $requestId, CarbonInterface $at): bool
     {
-        DB::transaction(function () use ($requestId, $at): void {
-            DsarRequest::retrieve($requestId)->expireDownload($at)->persist();
+        return DB::transaction(function () use ($requestId, $at): bool {
+            $request = DsarRequest::retrieve($requestId)->expireDownload($at);
 
+            if ($request->getRecordedEvents() === []) {
+                return false;
+            }
+
+            $request->persist();
             $this->audit->record(DsarRequestRecord::query()->findOrFail($requestId), DsarDownloadExpired::class, 'download_expired');
+
+            return true;
         });
     }
 }

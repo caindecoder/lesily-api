@@ -5,6 +5,7 @@ namespace Tests\Feature\Compliance\Dsar;
 use App\Models\User;
 use RuntimeException;
 use Carbon\CarbonImmutable;
+use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\PendingCommand;
@@ -40,7 +41,7 @@ class ExpireDsarDownloadsTest extends DsarTestCase
         $request = $this->aReadyExportFor($this->company, $this->member);
 
         // When the daily scan runs with no --date (defaults to now)
-        $this->runExpireLinks()->expectsOutputToContain('0 download(s) expired.')->assertSuccessful();
+        $this->runExpireLinks()->expectsOutput('0 download(s) expired.')->assertSuccessful();
 
         // Then the export is untouched
         $this->assertNotExpired($request);
@@ -56,10 +57,29 @@ class ExpireDsarDownloadsTest extends DsarTestCase
         $this->travel(1)->day();
 
         // When the daily scan runs again today
-        $this->runExpireLinks()->expectsOutputToContain('0 download(s) expired.')->assertSuccessful();
+        $this->runExpireLinks()->expectsOutput('0 download(s) expired.')->assertSuccessful();
 
         // Then no second expiry is recorded and its expiry time is unchanged
         $this->assertDownloadExpired($request, $expiredAt);
+    }
+
+    // A concurrent run (a --date replay beside the nightly one) expired it
+    // between this run's selection and its own expiry: the stream holds the
+    // expiry while the read model this run selected from does not yet.
+    #[Test]
+    public function when_another_run_expired_the_download_first_then_it_is_neither_counted_nor_audited_again(): void
+    {
+        // Given a closed-window download already expired on its stream, its row not yet showing it
+        $request = $this->aClosedWindowExport();
+        $this->expireDirectly($request);
+        DsarRequestRecord::query()->whereKey($request->getKey())->update(['download_expired_at' => null]);
+
+        // When the daily scan runs
+        $this->runExpireLinks()->expectsOutput('0 download(s) expired.')->assertSuccessful();
+
+        // Then no second expiry is recorded and none is audited
+        $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->where('event_class', DsarDownloadExpired::class)->count());
+        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_download_expired']);
     }
 
     #[Test]
@@ -89,16 +109,18 @@ class ExpireDsarDownloadsTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_one_expiry_fails_then_it_is_reported_and_the_others_still_expire(): void
+    #[DataProvider('provideFailingPositions')]
+    public function when_one_expiry_fails_then_it_is_reported_and_the_others_still_expire(int $failingPosition): void
     {
-        // Given two closed-window exports, the first one's expiry failing
-        $failing = $this->anExportFor($this->member);
-        $other = $this->anExportFor($this->aCompanyMember($this->company));
+        // Given two closed-window exports, the one at the given position failing to expire
+        $exports = [$this->anExportFor($this->member), $this->anExportFor($this->aCompanyMember($this->company))];
+        $failing = $exports[$failingPosition];
+        $other = $exports[1 - $failingPosition];
         $cause = $this->failTheExpiryOf($failing);
         $this->travel(8)->days();
 
         // When the daily scan runs
-        $this->runExpireLinks()->expectsOutputToContain('1 download(s) expired.')->assertSuccessful();
+        $this->runExpireLinks()->expectsOutput('1 download(s) expired.')->assertSuccessful();
 
         // Then the failure is reported, the failed one is left for the next run, the other expired
         $this->assertExpiryFailureReported($failing, $cause);
@@ -106,14 +128,25 @@ class ExpireDsarDownloadsTest extends DsarTestCase
         $this->assertDownloadExpired($other, now());
     }
 
+    /**
+     * @return array<string, array{int}>
+     */
+    public static function provideFailingPositions(): array
+    {
+        return [
+            'the first one fails' => [0],
+            'the last one fails' => [1],
+        ];
+    }
+
     // The aggregate's own no-op arms (SM-1-06): the scan never selects these
     // requests, so they are asked to expire outright.
     #[Test]
     #[DataProvider('provideRequestsThatCannotExpire')]
-    public function when_a_request_cannot_expire_then_expiring_it_directly_records_nothing(string $kind, int $kept): void
+    public function when_a_request_cannot_expire_then_expiring_it_directly_records_nothing(string $state, int $kept): void
     {
         // Given a request whose download cannot expire now
-        $request = $this->aRequestThatCannotExpire($kind);
+        $request = $this->aRequestInState($state);
         $expiredAt = $request->fresh()?->download_expired_at?->toISOString();
 
         // When its download is expired directly
@@ -135,6 +168,34 @@ class ExpireDsarDownloadsTest extends DsarTestCase
             'rejected' => ['rejected', 0],
             'window still open' => ['window still open', 0],
             'already expired' => ['already expired', 1],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('provideRequestStates')]
+    public function when_the_scan_selects_then_only_a_closed_window_not_yet_expired_is_picked(string $state, bool $picked): void
+    {
+        // Given a request in the given state
+        $request = $this->aRequestInState($state);
+
+        // When the scan's selection is read as of now
+        $selected = DsarRequestRecord::query()->whereDownloadDueToExpire(now())->pluck('id')->all();
+
+        // Then only a closed download window whose expiry is not yet recorded is picked
+        $this->assertSame($picked ? [$request->getKey()] : [], $selected);
+    }
+
+    /**
+     * @return array<string, array{string, bool}>
+     */
+    public static function provideRequestStates(): array
+    {
+        return [
+            'still being prepared' => ['in progress', false],
+            'withdrawn' => ['withdrawn', false],
+            'window still open' => ['window still open', false],
+            'already expired' => ['already expired', false],
+            'window closed, not yet expired' => ['window closed, not yet expired', true],
         ];
     }
 
@@ -172,7 +233,7 @@ class ExpireDsarDownloadsTest extends DsarTestCase
         $this->travelTo('2026-10-10 12:00:00');
 
         // When the scan is replayed for that night
-        $this->runExpireLinks('2026-10-09')->expectsOutputToContain('1 download(s) expired.')->assertSuccessful();
+        $this->runExpireLinks('2026-10-09')->expectsOutput('1 download(s) expired.')->assertSuccessful();
 
         // Then the expiry is stamped with the replayed night, not the moment of the replay
         $this->assertDownloadExpired($request, CarbonImmutable::parse('2026-10-09 00:00:00'));
@@ -185,7 +246,7 @@ class ExpireDsarDownloadsTest extends DsarTestCase
         $request = $this->aClosedWindowExport();
 
         // When the daily scan runs
-        $this->runExpireLinks()->expectsOutputToContain('1 download(s) expired.')->assertSuccessful();
+        $this->runExpireLinks()->expectsOutput('1 download(s) expired.')->assertSuccessful();
 
         // Then the expiry is recorded now, audited, and the download is refused as expired
         $this->assertDownloadExpired($request, now());
@@ -224,11 +285,6 @@ class ExpireDsarDownloadsTest extends DsarTestCase
             === [$this->exportPathOf($request), 3, [60, 300]]);
     }
 
-    /**
-     * $this->member's request in a state whose download cannot expire now —
-     * the clock moved past where a fulfilled export's window would close,
-     * except for the export whose window is still open.
-     */
     #[Test]
     public function when_several_download_windows_have_closed_then_one_run_expires_them_all(): void
     {
@@ -238,25 +294,32 @@ class ExpireDsarDownloadsTest extends DsarTestCase
         $this->travel(8)->days();
 
         // When the daily scan runs
-        $this->runExpireLinks()->expectsOutputToContain('2 download(s) expired.')->assertSuccessful();
+        $this->runExpireLinks()->expectsOutput('2 download(s) expired.')->assertSuccessful();
 
         // Then both downloads are expired
         $this->assertDownloadExpired($first, now());
         $this->assertDownloadExpired($second, now());
     }
 
-    protected function aRequestThatCannotExpire(string $kind): DsarRequestRecord
+    /**
+     * $this->member's request in $state, the clock moved past where a
+     * fulfilled export's window would close — except for the export whose
+     * window is still open; an already-expired one a second after its expiry.
+     */
+    protected function aRequestInState(string $state): DsarRequestRecord
     {
-        $request = match ($kind) {
+        $request = match ($state) {
             'in progress' => $this->aSubmittedRequest($this->company, $this->member),
-            'withdrawn', 'rejected' => $this->aClosedRequest($this->company, $this->member, $kind),
+            'withdrawn', 'rejected' => $this->aClosedRequest($this->company, $this->member, $state),
             'window still open' => $this->anExportFor($this->member),
-            'already expired' => $this->aClosedWindowExport(),
+            'window closed, not yet expired', 'already expired' => $this->aClosedWindowExport(),
+            default => throw new InvalidArgumentException("Unknown state: {$state}"),
         };
 
-        if ($kind === 'already expired') {
+        if ($state === 'already expired') {
             $this->runExpireLinks()->assertSuccessful();
-        } elseif ($kind !== 'window still open') {
+            $this->travel(1)->second();
+        } elseif (in_array($state, ['in progress', 'withdrawn', 'rejected'], true)) {
             $this->travel(8)->days();
         }
 

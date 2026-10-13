@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Testing\Constraints\SeeInOrder;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use Illuminate\Support\Testing\Fakes\QueueFake;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -1771,7 +1772,10 @@ abstract class DsarTestCase extends TestCase
         Queue::assertNotPushed(DeleteDsarExportFileJob::class);
         $this->runQueuedHandlersFor(DsarDownloadExpired::class);
 
-        $deletions = Queue::pushed(DeleteDsarExportFileJob::class);
+        $queue = Queue::getFacadeRoot();
+        $this->assertInstanceOf(QueueFake::class, $queue);
+
+        $deletions = $queue->pushed(DeleteDsarExportFileJob::class);
         $this->assertNotEmpty($deletions);
         $deletions->each(fn (DeleteDsarExportFileJob $job) => app()->call([$job, 'handle']));
     }
