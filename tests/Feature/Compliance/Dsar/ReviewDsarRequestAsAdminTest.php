@@ -3,6 +3,7 @@
 namespace Tests\Feature\Compliance\Dsar;
 
 use App\Models\User;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
@@ -74,6 +75,21 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
 
         // Then nothing is found and no read is recorded
         $this->assertHiddenAsNotFound($response, $unknownId);
+        $this->assertNoAdminReadRecorded();
+    }
+
+    #[Test]
+    public function when_the_audit_write_fails_then_the_detail_returns_no_request_data(): void
+    {
+        // Given a submitted request and an audit write that fails after its row is inserted
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+        AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the admin opens it
+        $response = $this->viewAsAdmin($this->admin, $request->getKey());
+
+        // Then the read fails closed and the inserted row is rolled back with it
+        $this->assertFailedClosed($response);
         $this->assertNoAdminReadRecorded();
     }
 
@@ -176,6 +192,16 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         $entry = AuditEntry::query()->where('action', 'dsar_admin_viewed')->sole();
         $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
         $this->assertNotNull($entry->user_agent);
+    }
+
+    /**
+     * The read failed closed — the internal-error envelope and no request data.
+     */
+    protected function assertFailedClosed(TestResponse $response): void
+    {
+        $response->assertInternalServerError();
+        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
+        $response->assertJsonMissingPath('data');
     }
 
     /**

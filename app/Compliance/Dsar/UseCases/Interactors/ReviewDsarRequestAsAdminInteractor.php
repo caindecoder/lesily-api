@@ -3,6 +3,7 @@
 namespace App\Compliance\Dsar\UseCases\Interactors;
 
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Foundation\Http\Values\AdminRequestContext;
@@ -10,14 +11,19 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class ReviewDsarRequestAsAdminInteractor
 {
+    /**
+     * The read and its audit row share one transaction — no read without its evidence.
+     */
     public function execute(string $requestId, User $admin, AdminRequestContext $context): DsarRequestRecord
     {
-        $request = DsarRequestRecord::query()->whereKey($requestId)->first()
-            ?? throw new ModelNotFoundException;
+        return DB::transaction(function () use ($requestId, $admin, $context): DsarRequestRecord {
+            $request = DsarRequestRecord::query()->whereKey($requestId)->first()
+                ?? throw new ModelNotFoundException;
 
-        $this->recordAdminRead($request, $admin, $context);
+            $this->recordAdminRead($request, $admin, $context);
 
-        return $request;
+            return $request;
+        });
     }
 
     private function recordAdminRead(DsarRequestRecord $request, User $admin, AdminRequestContext $context): void
