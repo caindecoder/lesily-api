@@ -105,7 +105,32 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         $response = $this->viewAsAdmin($this->admin, $request->getKey());
 
         // Then the days remaining count calendar days on UTC dates
+        $response->assertOk();
         $response->assertJsonPath('data.days_remaining', $daysRemaining);
+    }
+
+    #[Test]
+    public function when_a_breached_request_is_fulfilled_late_then_its_timeline_shows_the_breach_first(): void
+    {
+        // Given a request flagged at its 31 Oct deadline and fulfilled on 2 Nov
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $this->flagTheBreachAt($request, '2026-10-31 09:00:00');
+        $this->travelTo('2026-11-02 09:00:00');
+        $this->runTheExportFor($request);
+
+        // When the admin opens it on 3 Nov, while its download window is open
+        $this->travelTo('2026-11-03 09:00:00');
+        $response = $this->viewAsAdmin($this->admin, $request->getKey());
+
+        // Then the breach precedes the fulfilment on its timeline and the download shows as available
+        $this->assertShown($response, [
+            'status' => 'fulfilled',
+            'download_available' => true,
+        ], [
+            ['event' => 'requested', 'at' => '2026-10-01T09:00:00.000000Z'],
+            ['event' => 'sla_breached', 'at' => '2026-10-31T09:00:00.000000Z'],
+            ['event' => 'fulfilled', 'at' => '2026-11-02T09:00:00.000000Z'],
+        ]);
     }
 
     #[Test]
@@ -121,6 +146,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         $response = $this->viewAsAdmin($this->admin, $request->getKey());
 
         // Then the whole admin view is shown, the read is recorded and the request is unchanged
+        $response->assertOk();
         $response->assertExactJson(['data' => [
             'id' => $request->getKey(),
             'status' => 'fulfilled',
@@ -151,16 +177,19 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     #[Test]
     public function when_the_admin_opens_a_breached_request_then_it_shows_negative_days_and_the_breach(): void
     {
-        // Given a request made on 1 Oct, flagged by the daily sweep at its 31 Oct deadline, still in progress
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        // Given a request the Owner made for a member on 1 Oct, flagged by the daily sweep at its 31 Oct deadline, still in progress
+        $owner = $this->aCompanyMember($this->company, 'owner');
+        $request = $this->aSubmittedRequest($this->company, $this->member, $owner);
         $this->flagTheBreachAt($request, '2026-10-31 09:00:00');
         $this->travelTo('2026-11-15 09:00:00');
 
         // When the admin opens it on 15 Nov
         $response = $this->viewAsAdmin($this->admin, $request->getKey());
 
-        // Then it shows fifteen days past the deadline and the breach on its timeline
+        // Then it shows who it is about and who asked, fifteen days past the deadline, and the breach on its timeline
         $this->assertShown($response, [
+            'subject.id' => $this->member->getKey(),
+            'requested_by.id' => $owner->getKey(),
             'status' => 'in_progress',
             'days_remaining' => -15,
             'sla_breached_at' => '2026-10-31T09:00:00.000000Z',
