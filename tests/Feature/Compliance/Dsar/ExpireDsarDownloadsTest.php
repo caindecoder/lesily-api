@@ -229,6 +229,22 @@ class ExpireDsarDownloadsTest extends DsarTestCase
      * the clock moved past where a fulfilled export's window would close,
      * except for the export whose window is still open.
      */
+    #[Test]
+    public function when_several_download_windows_have_closed_then_one_run_expires_them_all(): void
+    {
+        // Given two members' exports whose download windows have closed
+        $first = $this->anExportFor($this->member);
+        $second = $this->anExportFor($this->aCompanyMember($this->company));
+        $this->travel(8)->days();
+
+        // When the daily scan runs
+        $this->runExpireLinks()->expectsOutputToContain('2 download(s) expired.')->assertSuccessful();
+
+        // Then both downloads are expired
+        $this->assertDownloadExpired($first, now());
+        $this->assertDownloadExpired($second, now());
+    }
+
     protected function aRequestThatCannotExpire(string $kind): DsarRequestRecord
     {
         $request = match ($kind) {
