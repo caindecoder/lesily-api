@@ -63,6 +63,32 @@ class ExpireDsarDownloadsTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_the_date_is_not_a_date_then_the_scan_is_refused_and_nothing_expires(): void
+    {
+        // Given a ready export whose download window has closed
+        $request = $this->aClosedWindowExport();
+
+        // When the scan is run with a --date that is not a date
+        $this->runExpireLinks('not-a-date')->expectsOutputToContain('The --date option must be a date, such as 2026-10-08.')->assertFailed();
+
+        // Then nothing is expired
+        $this->assertNotExpired($request);
+    }
+
+    #[Test]
+    public function when_the_date_is_in_the_future_then_the_scan_is_refused_and_nothing_expires(): void
+    {
+        // Given a ready export whose download window has closed
+        $request = $this->aClosedWindowExport();
+
+        // When the scan is run with a --date later than now
+        $this->runExpireLinks(now()->addDay()->toDateString())->expectsOutputToContain('The --date option cannot be later than now.')->assertFailed();
+
+        // Then nothing is expired
+        $this->assertNotExpired($request);
+    }
+
+    #[Test]
     public function when_one_expiry_fails_then_it_is_reported_and_the_others_still_expire(): void
     {
         // Given two closed-window exports, the first one's expiry failing
@@ -136,6 +162,20 @@ class ExpireDsarDownloadsTest extends DsarTestCase
             'one second before it closes' => [-1, false],
             'exactly as it closes' => [0, true],
         ];
+    }
+
+    #[Test]
+    public function when_a_missed_night_is_replayed_then_the_expiry_is_stamped_with_its_date(): void
+    {
+        // Given a ready export whose window closed before a night the scheduler missed
+        $request = $this->aReadyExportFor($this->company, $this->member);
+        $this->travelTo('2026-10-10 12:00:00');
+
+        // When the scan is replayed for that night
+        $this->runExpireLinks('2026-10-09')->expectsOutputToContain('1 download(s) expired.')->assertSuccessful();
+
+        // Then the expiry is stamped with the replayed night, not the moment of the replay
+        $this->assertDownloadExpired($request, CarbonImmutable::parse('2026-10-09 00:00:00'));
     }
 
     #[Test]
