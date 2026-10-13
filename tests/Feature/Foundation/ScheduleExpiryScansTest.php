@@ -28,6 +28,7 @@ class ScheduleExpiryScansTest extends FoundationTestCase
     private const array DECLARED_DAILY_SCANS = [
         'trials:expire',
         'invitations:expire',
+        'dsar:expire-links',
     ];
 
     #[Test]

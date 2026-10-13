@@ -4,6 +4,7 @@ namespace App\Compliance\Dsar\Entities;
 
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use App\Companies\Entities\Company;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
@@ -39,6 +40,7 @@ class DsarRequestRecord extends Model
         'completed_at',
         'file_path',
         'download_expires_at',
+        'download_expired_at',
         'rejected_at',
         'rejection_reason',
         'cancelled_at',
@@ -106,6 +108,18 @@ class DsarRequestRecord extends Model
     public function isDownloadWindowOpen(): bool
     {
         return $this->download_expires_at > now();
+    }
+
+    /**
+     * Requests whose download window has closed by $at — the instant the
+     * download is refused — and whose expiry is not yet recorded. Only
+     * fulfilment sets download_expires_at.
+     *
+     * @param  Builder<self>  $query
+     */
+    protected function scopeWhereDownloadDueToExpire(Builder $query, CarbonInterface $at): void
+    {
+        $query->where('download_expires_at', '<=', $at)->whereNull('download_expired_at');
     }
 
     /**

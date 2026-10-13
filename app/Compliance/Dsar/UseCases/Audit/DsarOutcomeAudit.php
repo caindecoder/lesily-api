@@ -9,9 +9,9 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 class DsarOutcomeAudit
 {
     /**
-     * One audit entry for the export job's outcome on $request — "DSAR
-     * <outcome> — for: <subject>" — linked to its stored $eventClass, with no
-     * actor: the job is a system process (ERD-1-11).
+     * One audit entry for a system process's outcome on $request — the
+     * export job's or the daily expiry's: "DSAR <outcome> — for: <subject>",
+     * linked to its stored $eventClass, with no actor (ERD-1-11).
      *
      * @param  class-string  $eventClass
      */
@@ -25,7 +25,7 @@ class DsarOutcomeAudit
             'subject_id' => $request->getKey(),
             'subject_label' => null,
             'action' => 'dsar_'.$outcome,
-            'description' => 'DSAR '.$outcome.' — for: '.$request->subject->name,
+            'description' => 'DSAR '.str_replace('_', ' ', $outcome).' — for: '.$request->subject->name,
             'actor_user_id' => null,
             'actor_role_code' => null,
             'actor_label' => null,

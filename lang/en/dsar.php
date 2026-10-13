@@ -107,6 +107,7 @@ return [
             'dsar_withdrawn' => 'Withdrew a data request',
             'dsar_fulfilled' => 'A data export was completed',
             'dsar_rejected' => 'A data export could not be completed',
+            'dsar_download_expired' => "A data export's download window closed",
             'case_opened' => 'Opened an ownership transfer case',
             'case_verified' => 'Verified an ownership transfer case',
             'case_executed' => 'Carried out an ownership transfer',

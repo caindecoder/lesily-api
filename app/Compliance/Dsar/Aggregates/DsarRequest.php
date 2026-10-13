@@ -3,8 +3,10 @@
 namespace App\Compliance\Dsar\Aggregates;
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
+use App\Compliance\Dsar\Events\DsarDownloadExpired;
 use App\Compliance\Dsar\Events\DsarRequestRejected;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestFulfilled;
@@ -27,6 +29,10 @@ class DsarRequest extends AggregateRoot
     protected ?DsarRequestStatus $status = null;
 
     protected ?string $requestedByUserId = null;
+
+    protected ?CarbonInterface $downloadExpiresAt = null;
+
+    protected bool $downloadExpired = false;
 
     public function submit(SubmitDsarRequestCommand $command, string $requestedByRole): static
     {
@@ -88,6 +94,20 @@ class DsarRequest extends AggregateRoot
         ));
     }
 
+    /**
+     * Closes a fulfilled export's download once its window has closed by
+     * $at; any other request, or one already expired, is left as it is.
+     * Only fulfilment opens a download window.
+     */
+    public function expireDownload(CarbonInterface $at): static
+    {
+        if ($this->downloadExpiresAt === null || $this->downloadExpired || $at->lessThan($this->downloadExpiresAt)) {
+            return $this;
+        }
+
+        return $this->recordThat(new DsarDownloadExpired(expiredAt: $at));
+    }
+
     protected function applyDsarRequestSubmitted(DsarRequestSubmitted $event): void
     {
         $this->status = DsarRequestStatus::InProgress;
@@ -97,6 +117,12 @@ class DsarRequest extends AggregateRoot
     protected function applyDsarRequestFulfilled(DsarRequestFulfilled $event): void
     {
         $this->status = DsarRequestStatus::Fulfilled;
+        $this->downloadExpiresAt = $event->downloadExpiresAt;
+    }
+
+    protected function applyDsarDownloadExpired(DsarDownloadExpired $event): void
+    {
+        $this->downloadExpired = true;
     }
 
     protected function applyDsarRequestRejected(DsarRequestRejected $event): void

@@ -7,6 +7,7 @@ use ZipArchive;
 use Tests\TestCase;
 use App\Models\User;
 use RuntimeException;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
@@ -28,11 +29,13 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Testing\Constraints\SeeInOrder;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use Illuminate\Support\Testing\Fakes\QueueFake;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Compliance\Dsar\Events\DsarDownloadExpired;
 use App\Compliance\Dsar\Events\DsarRequestRejected;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Compliance\Dsar\Events\DsarRequestFulfilled;
@@ -47,6 +50,7 @@ use App\Foundation\Notifications\Enums\NotificationType;
 use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
+use App\Compliance\Dsar\UseCases\Jobs\DeleteDsarExportFileJob;
 use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
 use App\Compliance\Dsar\Exceptions\DsarExportFileMissingException;
 use App\Foundation\Notifications\Notifications\SystemNotification;
@@ -1757,6 +1761,73 @@ abstract class DsarTestCase extends TestCase
             ->where('event_properties->filePath', $filePath)
             ->count());
         Storage::disk('dsar')->assertExists($filePath);
+    }
+
+    /**
+     * Runs the deferred expiry handlers the way a worker would, then each
+     * file deletion they queued — nothing is deleted while the scan runs.
+     */
+    protected function deleteTheExpiredFiles(): void
+    {
+        Queue::assertNotPushed(DeleteDsarExportFileJob::class);
+        $this->runQueuedHandlersFor(DsarDownloadExpired::class);
+
+        $queue = Queue::getFacadeRoot();
+        $this->assertInstanceOf(QueueFake::class, $queue);
+
+        $deletions = $queue->pushed(DeleteDsarExportFileJob::class);
+        $this->assertNotEmpty($deletions);
+        $deletions->each(fn (DeleteDsarExportFileJob $job) => app()->call([$job, 'handle']));
+    }
+
+    /**
+     * $request's download was expired at $at the event-sourced way: still
+     * fulfilled, its row stamped $at, and exactly one DsarDownloadExpired on
+     * its stream carrying $at.
+     */
+    protected function assertDownloadExpired(DsarRequestRecord $request, CarbonInterface $at): void
+    {
+        $expired = $request->fresh() ?? $request;
+        $event = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarDownloadExpired::class)
+            ->sole();
+
+        $this->assertSame(
+            [DsarRequestStatus::Fulfilled, $at->toISOString(), $at->toISOString()],
+            [$expired->status, $expired->download_expired_at?->toISOString(), CarbonImmutable::parse($event->event_properties['expiredAt'])->toISOString()],
+        );
+    }
+
+    /**
+     * Exactly one audit entry records the expiry — "DSAR download expired —
+     * for: <subject>" — linked to its stored event, with no actor: the daily
+     * scan is a system process (ERD-1-11).
+     */
+    protected function assertExpiryAudited(DsarRequestRecord $request, User $subject): void
+    {
+        $storedEventId = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $request->getKey())
+            ->where('event_class', DsarDownloadExpired::class)
+            ->sole()
+            ->id;
+
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_download_expired')->count());
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $request->company_id,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'DsarDownloadExpired',
+            'subject_type' => 'dsar_request',
+            'subject_id' => $request->getKey(),
+            'action' => 'dsar_download_expired',
+            'description' => 'DSAR download expired — for: '.$subject->name,
+            'actor_user_id' => null,
+            'actor_role_code' => null,
+            'actor_label' => null,
+            'ip_address' => null,
+            'user_agent' => null,
+            'request_id' => null,
+        ]);
     }
 
     /**
