@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('trials:expire')->dailyAt('00:00')->onOneServer();
 Schedule::command('invitations:expire')->dailyAt('00:00')->onOneServer();
+Schedule::command('dsar:expire-links')->dailyAt('00:00')->onOneServer();
