@@ -3,16 +3,19 @@
 namespace Tests\Feature\Compliance\Dsar;
 
 use App\Models\User;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarDownloadExpired;
+use App\Compliance\Dsar\UseCases\Audit\DsarOutcomeAudit;
 use App\Compliance\Dsar\UseCases\Jobs\DeleteDsarExportFileJob;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -57,6 +60,24 @@ class ExpireDsarDownloadsTest extends DsarTestCase
 
         // Then no second expiry is recorded and its expiry time is unchanged
         $this->assertDownloadExpired($request, $expiredAt);
+    }
+
+    #[Test]
+    public function when_one_expiry_fails_then_it_is_reported_and_the_others_still_expire(): void
+    {
+        // Given two closed-window exports, the first one's expiry failing
+        $failing = $this->anExportFor($this->member);
+        $other = $this->anExportFor($this->aCompanyMember($this->company));
+        $cause = $this->failTheExpiryOf($failing);
+        $this->travel(8)->days();
+
+        // When the daily scan runs
+        $this->runExpireLinks()->expectsOutputToContain('1 download(s) expired.')->assertSuccessful();
+
+        // Then the failure is reported, the failed one is left for the next run, the other expired
+        $this->assertExpiryFailureReported($failing, $cause);
+        $this->assertNotExpired($failing);
+        $this->assertDownloadExpired($other, now());
     }
 
     // The aggregate's own no-op arms (SM-1-06): the scan never selects these
@@ -184,6 +205,41 @@ class ExpireDsarDownloadsTest extends DsarTestCase
         }
 
         return $request;
+    }
+
+    /**
+     * Makes recording $request's expiry fail inside its transaction — every
+     * other request's expiry records as usual — and returns the failure.
+     */
+    protected function failTheExpiryOf(DsarRequestRecord $request): RuntimeException
+    {
+        Exceptions::fake();
+        $cause = new RuntimeException('Induced expiry failure.');
+
+        $this->app->instance(DsarOutcomeAudit::class, new class($request, $cause) extends DsarOutcomeAudit
+        {
+            public function __construct(private readonly DsarRequestRecord $failing, private readonly RuntimeException $cause) {}
+
+            public function record(DsarRequestRecord $request, string $eventClass, string $outcome): void
+            {
+                if ($request->is($this->failing)) {
+                    throw $this->cause;
+                }
+
+                parent::record($request, $eventClass, $outcome);
+            }
+        });
+
+        return $cause;
+    }
+
+    /**
+     * The scan reported $request's failed expiry by its id, keeping $cause.
+     */
+    protected function assertExpiryFailureReported(DsarRequestRecord $request, RuntimeException $cause): void
+    {
+        Exceptions::assertReported(fn (RuntimeException $reported): bool => $reported->getMessage() === "DSAR download expiry failed for request {$request->getKey()}."
+            && $reported->getPrevious() === $cause);
     }
 
     /**
