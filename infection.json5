@@ -126,6 +126,8 @@
                 "App\\Compliance\\Dsar\\Reactors\\DsarNotificationReactor::onDsarRequestCancelled",
                 "App\\Compliance\\Dsar\\Projectors\\DsarRequestProjector::onDsarDownloadExpired",
                 "App\\Compliance\\Dsar\\Reactors\\DeleteDsarExportFileReactor::onDsarDownloadExpired",
+                "App\\Compliance\\Dsar\\Projectors\\DsarRequestProjector::onDsarSlaBreached",
+                "App\\Compliance\\Dsar\\Reactors\\DsarNotificationReactor::onDsarSlaBreached",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserEmailVerified",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserProfileUpdated",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUser2FAEnabled",

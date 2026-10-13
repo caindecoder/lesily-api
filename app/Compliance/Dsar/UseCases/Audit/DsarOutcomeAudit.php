@@ -10,7 +10,7 @@ class DsarOutcomeAudit
 {
     /**
      * One audit entry for a system process's outcome on $request — the
-     * export job's or the daily expiry's: "DSAR <outcome> — for: <subject>",
+     * export job's or a daily scan's: "DSAR <outcome> — for: <subject>",
      * linked to its stored $eventClass, with no actor (ERD-1-11).
      *
      * @param  class-string  $eventClass

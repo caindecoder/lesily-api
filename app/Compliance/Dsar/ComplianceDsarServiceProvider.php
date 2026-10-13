@@ -11,6 +11,7 @@ use App\Compliance\Dsar\UseCases\Sections\DsarSections;
 use App\Compliance\Dsar\UseCases\Sections\ProfileSection;
 use App\Compliance\Dsar\UseCases\Sections\SignInsSection;
 use App\Compliance\Dsar\IO\Pdf\ChromiumDsarReportRenderer;
+use App\Compliance\Dsar\IO\Console\FlagMissedDsarDeadlines;
 use App\Compliance\Dsar\UseCases\Sections\AuditTrailSection;
 use App\Compliance\Dsar\UseCases\Sections\MembershipSection;
 use App\Compliance\Dsar\UseCases\Sections\InvitationsSection;
@@ -48,7 +49,7 @@ class ComplianceDsarServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([ExpireDsarDownloads::class]);
+            $this->commands([ExpireDsarDownloads::class, FlagMissedDsarDeadlines::class]);
         }
     }
 }

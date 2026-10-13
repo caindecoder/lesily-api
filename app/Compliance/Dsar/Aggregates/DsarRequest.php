@@ -5,6 +5,7 @@ namespace App\Compliance\Dsar\Aggregates;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use App\Foundation\EventStore\AggregateRoot;
+use App\Compliance\Dsar\Events\DsarSlaBreached;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Compliance\Dsar\Events\DsarDownloadExpired;
 use App\Compliance\Dsar\Events\DsarRequestRejected;
@@ -29,6 +30,11 @@ class DsarRequest extends AggregateRoot
     protected ?DsarRequestStatus $status = null;
 
     protected ?string $requestedByUserId = null;
+
+    /** The 30-day deadline while the request is open; closing it clears it. */
+    protected ?CarbonInterface $openDeadline = null;
+
+    protected bool $slaBreached = false;
 
     protected ?CarbonInterface $downloadExpiresAt = null;
 
@@ -108,15 +114,36 @@ class DsarRequest extends AggregateRoot
         return $this->recordThat(new DsarDownloadExpired(expiredAt: $at));
     }
 
+    /**
+     * Records that an open request missed its 30-day deadline, found by $at;
+     * a closed request, one not yet due or one already flagged is left as
+     * it is.
+     */
+    public function flagSlaBreach(CarbonInterface $at): static
+    {
+        if ($this->openDeadline === null || $this->slaBreached || $at->lessThan($this->openDeadline)) {
+            return $this;
+        }
+
+        return $this->recordThat(new DsarSlaBreached(breachedAt: $at));
+    }
+
     protected function applyDsarRequestSubmitted(DsarRequestSubmitted $event): void
     {
         $this->status = DsarRequestStatus::InProgress;
         $this->requestedByUserId = $event->requestedByUserId;
+        $this->openDeadline = $event->slaDeadline;
+    }
+
+    protected function applyDsarSlaBreached(DsarSlaBreached $event): void
+    {
+        $this->slaBreached = true;
     }
 
     protected function applyDsarRequestFulfilled(DsarRequestFulfilled $event): void
     {
         $this->status = DsarRequestStatus::Fulfilled;
+        $this->openDeadline = null;
         $this->downloadExpiresAt = $event->downloadExpiresAt;
     }
 
@@ -128,10 +155,12 @@ class DsarRequest extends AggregateRoot
     protected function applyDsarRequestRejected(DsarRequestRejected $event): void
     {
         $this->status = DsarRequestStatus::Rejected;
+        $this->openDeadline = null;
     }
 
     protected function applyDsarRequestCancelled(DsarRequestCancelled $event): void
     {
         $this->status = DsarRequestStatus::Cancelled;
+        $this->openDeadline = null;
     }
 }

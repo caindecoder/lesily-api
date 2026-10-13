@@ -25,9 +25,13 @@ class SystemNotificationMail extends Mailable implements ShouldQueue
     /** @var array<int, int> */
     public array $backoff = [1, 5, 15];
 
+    /**
+     * @param  array<string, string>  $details  values the type's body names beside the company
+     */
     public function __construct(
         public NotificationType $type,
         public string $companyName,
+        public array $details = [],
     ) {}
 
     /**

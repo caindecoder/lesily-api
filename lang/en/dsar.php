@@ -108,6 +108,7 @@ return [
             'dsar_fulfilled' => 'A data export was completed',
             'dsar_rejected' => 'A data export could not be completed',
             'dsar_download_expired' => "A data export's download window closed",
+            'dsar_deadline_missed' => 'A data request missed its 30-day deadline',
             'case_opened' => 'Opened an ownership transfer case',
             'case_verified' => 'Verified an ownership transfer case',
             'case_executed' => 'Carried out an ownership transfer',
@@ -165,6 +166,7 @@ return [
             'dsar_export_ready' => 'Data export ready',
             'dsar_export_failed' => 'Data export failed',
             'dsar_request_withdrawn' => 'Data request withdrawn',
+            'dsar_deadline_missed' => 'Data request deadline missed',
         ],
         'channel' => [
             'mail' => 'Email',

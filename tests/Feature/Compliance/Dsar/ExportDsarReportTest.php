@@ -101,10 +101,12 @@ class ExportDsarReportTest extends DsarTestCase
             'nothing' => ['last_logged_at', null, '—'],
             'an action code' => ['action', 'dsar_withdrawn', 'Withdrew a data request (dsar_withdrawn)'],
             'an expired download action' => ['action', 'dsar_download_expired', "A data export's download window closed (dsar_download_expired)"],
+            'a missed deadline action' => ['action', 'dsar_deadline_missed', 'A data request missed its 30-day deadline (dsar_deadline_missed)'],
             'a role code' => ['role', 'hr_officer', 'HR Officer (hr_officer)'],
             'a ready data export notice' => ['notification_type', 'dsar_export_ready', 'Data export ready (dsar_export_ready)'],
             'a failed data export notice' => ['notification_type', 'dsar_export_failed', 'Data export failed (dsar_export_failed)'],
             'a withdrawn data request notice' => ['notification_type', 'dsar_request_withdrawn', 'Data request withdrawn (dsar_request_withdrawn)'],
+            'a missed data request deadline notice' => ['notification_type', 'dsar_deadline_missed', 'Data request deadline missed (dsar_deadline_missed)'],
             'a code with no explanation yet' => ['action', 'a_new_action', 'a_new_action'],
             'a role code outside a role field' => ['device_name', 'employee', 'employee'],
         ];

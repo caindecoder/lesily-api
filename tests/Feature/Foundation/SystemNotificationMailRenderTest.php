@@ -101,6 +101,20 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
         $mail->assertSeeInHtml($body);
     }
 
+    #[Test]
+    public function when_a_notice_carries_details_then_its_mail_reads_them(): void
+    {
+        // Given a missed-deadline notice for Contoso naming the request and its deadline
+        $mail = new SystemNotificationMail(NotificationType::DsarDeadlineMissed, 'Contoso', [
+            'request' => '0199e3a4-7b2c-7d10-9f3e-5a6b7c8d9e0f',
+            'deadline' => '31 Oct 2026, 09:00 UTC',
+        ]);
+
+        // When / Then — its subject and body read the request and its deadline
+        $mail->assertHasSubject('A personal data request in Contoso missed its 30-day deadline');
+        $mail->assertSeeInHtml('The personal data request 0199e3a4-7b2c-7d10-9f3e-5a6b7c8d9e0f in Contoso was due on 31 Oct 2026, 09:00 UTC and is not yet complete. Please follow it up with the company.');
+    }
+
     /**
      * @return array<string, array{NotificationType, string, string}>
      */

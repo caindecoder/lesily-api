@@ -36,4 +36,8 @@ return [
         'subject' => 'A personal data export request for :company was withdrawn',
         'body' => 'The personal data export request in :company was withdrawn before it was ready. A new request can be made at any time.',
     ],
+    'dsar_deadline_missed' => [
+        'subject' => 'A personal data request in :company missed its 30-day deadline',
+        'body' => 'The personal data request :request in :company was due on :deadline and is not yet complete. Please follow it up with the company.',
+    ],
 ];
