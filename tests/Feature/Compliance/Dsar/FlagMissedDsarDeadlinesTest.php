@@ -343,6 +343,21 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
         $this->assertAdminsAlertedOnce($request);
     }
 
+    #[Test]
+    public function when_several_requests_miss_their_deadline_then_one_run_flags_them_all(): void
+    {
+        // Given two requests still in progress past their deadlines
+        $first = $this->aMissedDeadlineRequest();
+        $second = $this->aMissedDeadlineRequest($this->aCompanyMember($this->company));
+
+        // When the daily scan runs
+        $this->runFlagMissedDeadlines()->expectsOutput('2 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then both breaches are recorded
+        $this->assertBreachRecorded($first, now());
+        $this->assertBreachRecorded($second, now());
+    }
+
     /**
      * $subject's request in this company — $this->member's by default — with
      * the clock a day past its 30-day deadline.
