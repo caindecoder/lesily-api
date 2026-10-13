@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use App\Foundation\RolesPermissions\Services\PlatformAdminAllowlist;
 
 /**
  * The /api/v1/admin/* family's gate (alias platform.admin) — runs directly
@@ -22,6 +23,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 class EnsurePlatformAdmin
 {
+    public function __construct(private readonly PlatformAdminAllowlist $platformAdmins) {}
+
     public function handle(Request $request, Closure $next): Response
     {
         if (! $this->isAllowlisted($request)) {
@@ -32,19 +35,11 @@ class EnsurePlatformAdmin
     }
 
     /**
-     * Strict membership over the normalized allowlist. config/platform.php
-     * hands over the raw env explode; normalization lives here at the
-     * use-site (LD trim/filter idiom) so padded entries match and blank
-     * segments — including the absent-env [''] shape — fail closed.
+     * Strict membership over the normalized allowlist, so blank segments fail
+     * closed.
      */
     private function isAllowlisted(Request $request): bool
     {
-        /** @var array<int, string> $adminUserIds raw env explode (config/platform.php) */
-        $adminUserIds = config('platform.admin_user_ids', []);
-
-        return collect($adminUserIds)
-            ->map(fn (string $id): string => trim($id))
-            ->reject(fn (string $id): bool => $id === '')
-            ->containsStrict($request->user()?->getKey() ?? '');
+        return in_array($request->user()?->getKey() ?? '', $this->platformAdmins->userIds(), true);
     }
 }

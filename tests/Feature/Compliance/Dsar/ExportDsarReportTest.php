@@ -106,6 +106,7 @@ class ExportDsarReportTest extends DsarTestCase
             'a ready data export notice' => ['notification_type', 'dsar_export_ready', 'Data export ready (dsar_export_ready)'],
             'a failed data export notice' => ['notification_type', 'dsar_export_failed', 'Data export failed (dsar_export_failed)'],
             'a withdrawn data request notice' => ['notification_type', 'dsar_request_withdrawn', 'Data request withdrawn (dsar_request_withdrawn)'],
+            'a missed data request deadline notice' => ['notification_type', 'dsar_deadline_missed', 'Data request deadline missed (dsar_deadline_missed)'],
             'a code with no explanation yet' => ['action', 'a_new_action', 'a_new_action'],
             'a role code outside a role field' => ['device_name', 'employee', 'employee'],
         ];

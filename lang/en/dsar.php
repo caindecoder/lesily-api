@@ -166,6 +166,7 @@ return [
             'dsar_export_ready' => 'Data export ready',
             'dsar_export_failed' => 'Data export failed',
             'dsar_request_withdrawn' => 'Data request withdrawn',
+            'dsar_deadline_missed' => 'Data request deadline missed',
         ],
         'channel' => [
             'mail' => 'Email',
