@@ -9,6 +9,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
@@ -16,9 +17,11 @@ use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Compliance\Dsar\Events\DsarSlaBreached;
+use Illuminate\Support\Testing\Fakes\QueueFake;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Foundation\Notifications\Enums\NotificationType;
+use Spatie\EventSourcing\StoredEvents\HandleStoredEventJob;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -67,8 +70,9 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
         // When the daily scan runs again today
         $this->runFlagMissedDeadlines()->expectsOutput('0 missed deadline(s) flagged.')->assertSuccessful();
 
-        // Then no second breach is recorded — so no second alert — and its time is unchanged
+        // Then no second breach is recorded, no second alert is queued, and its time is unchanged
         $this->assertBreachRecorded($request, $flaggedAt);
+        $this->assertAlertsQueued(1);
     }
 
     // A concurrent run (a --date replay beside the nightly one) flagged it
@@ -101,8 +105,9 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
         // When the daily scan runs
         $this->runFlagMissedDeadlines()->expectsOutput('0 missed deadline(s) flagged.')->assertSuccessful();
 
-        // Then it is not flagged and stays closed as it was
+        // Then it is not flagged, no alert is queued, and it stays closed as it was
         $this->assertNotFlagged($request);
+        $this->assertNoHandlersQueuedFor(DsarSlaBreached::class);
         $this->assertStillClosedAs($request, $status);
     }
 
@@ -437,6 +442,21 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     {
         Exceptions::assertReported(fn (RuntimeException $reported): bool => $reported->getMessage() === "DSAR deadline flag failed for request {$request->getKey()}."
             && $reported->getPrevious() === $cause);
+    }
+
+    /**
+     * $times missed-deadline alerts were queued for the platform admins —
+     * one per recorded breach.
+     */
+    protected function assertAlertsQueued(int $times): void
+    {
+        $queue = Queue::getFacadeRoot();
+        $this->assertInstanceOf(QueueFake::class, $queue);
+
+        $this->assertCount($times, $queue->pushed(
+            HandleStoredEventJob::class,
+            fn (HandleStoredEventJob $job): bool => $job->storedEvent->event_class === DsarSlaBreached::class,
+        ));
     }
 
     protected function runFlagMissedDeadlines(?string $date = null): PendingCommand
