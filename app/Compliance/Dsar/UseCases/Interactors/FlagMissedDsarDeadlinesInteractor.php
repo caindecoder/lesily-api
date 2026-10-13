@@ -2,6 +2,8 @@
 
 namespace App\Compliance\Dsar\UseCases\Interactors;
 
+use Throwable;
+use RuntimeException;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
@@ -15,7 +17,9 @@ class FlagMissedDsarDeadlinesInteractor
 
     /**
      * Flags every open request whose deadline passed by $at, each request in
-     * its own transaction, and returns how many it flagged.
+     * its own transaction, and returns how many it flagged. A request that
+     * fails is reported and left for the next run; the others are still
+     * flagged.
      */
     public function execute(CarbonInterface $at): int
     {
@@ -24,8 +28,12 @@ class FlagMissedDsarDeadlinesInteractor
         $flagged = 0;
 
         foreach ($requestIds as $requestId) {
-            if ($this->flag($requestId, $at)) {
-                $flagged++;
+            try {
+                if ($this->flag($requestId, $at)) {
+                    $flagged++;
+                }
+            } catch (Throwable $failure) {
+                report(new RuntimeException("DSAR deadline flag failed for request {$requestId}.", previous: $failure));
             }
         }
 

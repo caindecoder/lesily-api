@@ -106,6 +106,62 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
         $this->assertStillClosedAs($request, $status);
     }
 
+    #[Test]
+    public function when_the_date_is_not_a_date_then_the_scan_is_refused_and_nothing_is_flagged(): void
+    {
+        // Given a request past its deadline
+        $request = $this->aMissedDeadlineRequest();
+
+        // When the scan is run with a --date that is not a date
+        $this->runFlagMissedDeadlines('not-a-date')->expectsOutputToContain('The --date option must be a date, such as 2026-10-31.')->assertFailed();
+
+        // Then nothing is flagged
+        $this->assertNotFlagged($request);
+    }
+
+    #[Test]
+    public function when_the_date_is_in_the_future_then_the_scan_is_refused_and_nothing_is_flagged(): void
+    {
+        // Given a request past its deadline
+        $request = $this->aMissedDeadlineRequest();
+
+        // When the scan is run with a --date later than now
+        $this->runFlagMissedDeadlines(now()->addDay()->toDateString())->expectsOutputToContain('The --date option cannot be later than now.')->assertFailed();
+
+        // Then nothing is flagged
+        $this->assertNotFlagged($request);
+    }
+
+    #[Test]
+    #[DataProvider('provideFailingPositions')]
+    public function when_one_flag_fails_then_it_is_reported_and_the_others_are_still_flagged(int $failingPosition): void
+    {
+        // Given two missed deadlines, the one at the given position failing to flag
+        $requests = [$this->aMissedDeadlineRequest(), $this->aMissedDeadlineRequest($this->aCompanyMember($this->company))];
+        $failing = $requests[$failingPosition];
+        $other = $requests[1 - $failingPosition];
+        $cause = $this->failTheAuditOf($failing);
+
+        // When the daily scan runs
+        $this->runFlagMissedDeadlines()->expectsOutput('1 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then the failure is reported, the failed one is left for the next run, the other is flagged
+        $this->assertFlagFailureReported($failing, $cause);
+        $this->assertNotFlagged($failing);
+        $this->assertBreachRecorded($other, now());
+    }
+
+    /**
+     * @return array<string, array{int}>
+     */
+    public static function provideFailingPositions(): array
+    {
+        return [
+            'the first one fails' => [0],
+            'the last one fails' => [1],
+        ];
+    }
+
     /**
      * @param  Closure(): array<int, string>  $allowlist
      */
@@ -229,6 +285,20 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_a_missed_night_is_replayed_then_the_breach_is_stamped_with_its_date(): void
+    {
+        // Given a request whose deadline passed before a night the scan missed
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $this->travelTo('2026-11-02 12:00:00');
+
+        // When that night is replayed
+        $this->runFlagMissedDeadlines('2026-11-01')->expectsOutput('1 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then the breach is stamped with the replayed date, not with now
+        $this->assertBreachRecorded($request, CarbonImmutable::parse('2026-11-01 00:00:00'));
+    }
+
+    #[Test]
     public function when_the_admin_list_is_padded_then_the_listed_admin_is_still_alerted(): void
     {
         // Given an allowlist whose one entry is padded and followed by a blank segment
@@ -343,6 +413,15 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
                 && $notice->details === ['request' => $request->getKey(), 'deadline' => '31 Oct 2026, 09:00 UTC']);
         }
         Notification::assertCount(count($this->admins));
+    }
+
+    /**
+     * The scan reported $request's failed flag by its id, keeping $cause.
+     */
+    protected function assertFlagFailureReported(DsarRequestRecord $request, RuntimeException $cause): void
+    {
+        Exceptions::assertReported(fn (RuntimeException $reported): bool => $reported->getMessage() === "DSAR deadline flag failed for request {$request->getKey()}."
+            && $reported->getPrevious() === $cause);
     }
 
     protected function runFlagMissedDeadlines(?string $date = null): PendingCommand

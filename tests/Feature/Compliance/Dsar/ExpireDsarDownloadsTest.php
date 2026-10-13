@@ -16,7 +16,6 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarDownloadExpired;
-use App\Compliance\Dsar\UseCases\Audit\DsarOutcomeAudit;
 use App\Compliance\Dsar\UseCases\Jobs\DeleteDsarExportFileJob;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -116,7 +115,7 @@ class ExpireDsarDownloadsTest extends DsarTestCase
         $exports = [$this->anExportFor($this->member), $this->anExportFor($this->aCompanyMember($this->company))];
         $failing = $exports[$failingPosition];
         $other = $exports[1 - $failingPosition];
-        $cause = $this->failTheExpiryOf($failing);
+        $cause = $this->failTheAuditOf($failing);
         $this->travel(8)->days();
 
         // When the daily scan runs
@@ -324,32 +323,6 @@ class ExpireDsarDownloadsTest extends DsarTestCase
         }
 
         return $request;
-    }
-
-    /**
-     * Makes recording $request's expiry fail inside its transaction — every
-     * other request's expiry records as usual — and returns the failure.
-     */
-    protected function failTheExpiryOf(DsarRequestRecord $request): RuntimeException
-    {
-        Exceptions::fake();
-        $cause = new RuntimeException('Induced expiry failure.');
-
-        $this->app->instance(DsarOutcomeAudit::class, new class($request, $cause) extends DsarOutcomeAudit
-        {
-            public function __construct(private readonly DsarRequestRecord $failing, private readonly RuntimeException $cause) {}
-
-            public function record(DsarRequestRecord $request, string $eventClass, string $outcome): void
-            {
-                if ($request->is($this->failing)) {
-                    throw $this->cause;
-                }
-
-                parent::record($request, $eventClass, $outcome);
-            }
-        });
-
-        return $cause;
     }
 
     /**
