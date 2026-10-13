@@ -228,7 +228,7 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     }
 
     // The aggregate refuses every request the scan should skip, so each
-    // selection filter is proven here directly (N73).
+    // selection filter is proven here directly.
     #[Test]
     #[DataProvider('provideScanStates')]
     public function when_the_scan_selects_then_only_an_open_unflagged_request_past_its_deadline_is_picked(string $state, bool $picked): void
@@ -414,8 +414,8 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
 
     /**
      * Each platform admin got one missed-deadline alert naming $request's
-     * company, the request and its deadline, filed under no company (N74,
-     * N75) — and no one else was sent anything.
+     * company, the request and its deadline, filed under no company — and no
+     * one else was sent anything.
      */
     protected function assertAdminsAlertedOnce(DsarRequestRecord $request): void
     {

@@ -47,21 +47,21 @@ class DsarNotificationReactor extends Reactor implements ShouldQueue
         $request = DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid());
         $admins = User::query()->whereKey($this->platformAdmins->userIds())->get();
 
-        if ($admins->isEmpty()) {
+        if ($admins->isNotEmpty()) {
+            Notification::send($admins, $this->deadlineMissedAlert($request));
+        } else {
             report(new RuntimeException("No platform admin to alert about DSAR request {$request->getKey()}."));
-
-            return;
         }
+    }
 
+    private function deadlineMissedAlert(DsarRequestRecord $request): SystemNotification
+    {
         $company = Company::query()->findOrFail($request->company_id);
 
-        Notification::send(
-            $admins,
-            new SystemNotification(NotificationType::DsarDeadlineMissed, $company->name, null, [
-                'request' => $request->getKey(),
-                'deadline' => $request->sla_deadline->format('j M Y, H:i').' UTC',
-            ]),
-        );
+        return new SystemNotification(NotificationType::DsarDeadlineMissed, $company->name, null, [
+            'request' => $request->getKey(),
+            'deadline' => $request->sla_deadline->format('j M Y, H:i').' UTC',
+        ]);
     }
 
     /**
