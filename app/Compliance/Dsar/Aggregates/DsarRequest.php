@@ -31,6 +31,10 @@ class DsarRequest extends AggregateRoot
 
     protected ?string $requestedByUserId = null;
 
+    protected ?CarbonInterface $slaDeadline = null;
+
+    protected bool $slaBreached = false;
+
     protected ?CarbonInterface $downloadExpiresAt = null;
 
     protected bool $downloadExpired = false;
@@ -110,10 +114,16 @@ class DsarRequest extends AggregateRoot
     }
 
     /**
-     * Records that the request missed its 30-day deadline, found by $at.
+     * Records that an open request missed its 30-day deadline, found by $at;
+     * a closed request, one not yet due or one already flagged is left as
+     * it is.
      */
     public function flagSlaBreach(CarbonInterface $at): static
     {
+        if ($this->status !== DsarRequestStatus::InProgress || $this->slaBreached || $at->lessThan($this->slaDeadline)) {
+            return $this;
+        }
+
         return $this->recordThat(new DsarSlaBreached(breachedAt: $at));
     }
 
@@ -121,6 +131,12 @@ class DsarRequest extends AggregateRoot
     {
         $this->status = DsarRequestStatus::InProgress;
         $this->requestedByUserId = $event->requestedByUserId;
+        $this->slaDeadline = $event->slaDeadline;
+    }
+
+    protected function applyDsarSlaBreached(DsarSlaBreached $event): void
+    {
+        $this->slaBreached = true;
     }
 
     protected function applyDsarRequestFulfilled(DsarRequestFulfilled $event): void

@@ -5,14 +5,18 @@ namespace Tests\Feature\Compliance\Dsar;
 use Closure;
 use App\Models\User;
 use RuntimeException;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Compliance\Dsar\Events\DsarSlaBreached;
+use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Notifications\SystemNotification;
@@ -51,6 +55,57 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
         $this->assertNotFlagged($request);
     }
 
+    #[Test]
+    public function when_a_flagged_request_is_scanned_again_then_it_is_not_flagged_or_alerted_twice(): void
+    {
+        // Given a missed deadline the daily scan already flagged yesterday
+        $request = $this->aMissedDeadlineRequest();
+        $this->runFlagMissedDeadlines()->assertSuccessful();
+        $flaggedAt = now();
+        $this->travel(1)->day();
+
+        // When the daily scan runs again today
+        $this->runFlagMissedDeadlines()->expectsOutput('0 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then no second breach is recorded — so no second alert — and its time is unchanged
+        $this->assertBreachRecorded($request, $flaggedAt);
+    }
+
+    // A concurrent run (a --date replay beside the nightly one) flagged it
+    // between this run's selection and its own flag: the stream holds the
+    // breach while the read model this run selected from does not yet.
+    #[Test]
+    public function when_another_run_flagged_the_request_first_then_it_is_neither_counted_nor_audited_again(): void
+    {
+        // Given a missed deadline already flagged on its stream, its row not yet showing it
+        $request = $this->aMissedDeadlineRequest();
+        $this->flagDirectly($request);
+        DsarRequestRecord::query()->whereKey($request->getKey())->update(['sla_breached_at' => null]);
+
+        // When the daily scan runs
+        $this->runFlagMissedDeadlines()->expectsOutput('0 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then no second breach is recorded and none is audited
+        $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->where('event_class', DsarSlaBreached::class)->count());
+        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_deadline_missed']);
+    }
+
+    #[Test]
+    #[DataProvider('provideClosedRequests')]
+    public function when_a_closed_request_is_past_its_deadline_then_it_is_not_flagged(string $closedBy, DsarRequestStatus $status): void
+    {
+        // Given a request closed before its deadline, the clock now a day past it
+        $request = $this->aClosedRequest($this->company, $this->member, $closedBy);
+        $this->travelTo($request->sla_deadline->addDay());
+
+        // When the daily scan runs
+        $this->runFlagMissedDeadlines()->expectsOutput('0 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then it is not flagged and stays closed as it was
+        $this->assertNotFlagged($request);
+        $this->assertStillClosedAs($request, $status);
+    }
+
     /**
      * @param  Closure(): array<int, string>  $allowlist
      */
@@ -81,6 +136,95 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
         return [
             'no admin listed' => [fn (): array => ['']],
             'no listed id is a user' => [fn (): array => [Str::uuid()->toString()]],
+        ];
+    }
+
+    // The aggregate's own no-op arms (SM-1-06): the scan never selects these
+    // requests, so they are asked to flag outright.
+    #[Test]
+    #[DataProvider('provideRequestsThatCannotBeFlagged')]
+    public function when_a_request_cannot_be_flagged_then_flagging_it_directly_records_nothing(string $state, int $kept): void
+    {
+        // Given a request in a state that cannot be flagged
+        $request = $this->aRequestInState($state);
+        $breachedAt = $request->fresh()?->sla_breached_at;
+
+        // When its aggregate is asked to flag the deadline directly
+        $this->flagDirectly($request);
+
+        // Then no new breach is recorded and its breach time is unchanged
+        $this->assertSame($kept, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->where('event_class', DsarSlaBreached::class)->count());
+        $this->assertEquals($breachedAt, $request->fresh()?->sla_breached_at);
+    }
+
+    /**
+     * @return array<string, array{string, int}>
+     */
+    public static function provideRequestsThatCannotBeFlagged(): array
+    {
+        return [
+            'not yet due' => ['not yet due', 0],
+            'fulfilled' => ['fulfilled', 0],
+            'rejected' => ['rejected', 0],
+            'withdrawn' => ['withdrawn', 0],
+            'already flagged' => ['already flagged', 1],
+        ];
+    }
+
+    // The aggregate refuses every request the scan should skip, so each
+    // selection filter is proven here directly (N73).
+    #[Test]
+    #[DataProvider('provideScanStates')]
+    public function when_the_scan_selects_then_only_an_open_unflagged_request_past_its_deadline_is_picked(string $state, bool $picked): void
+    {
+        // Given a request in the state
+        $request = $this->aRequestInState($state);
+
+        // When the scan's selection is read for now
+        $selected = DsarRequestRecord::query()->whereBreachDueToFlag(now())->pluck('id')->all();
+
+        // Then the request is picked only when it is open, due and not yet flagged
+        $this->assertSame($picked ? [$request->getKey()] : [], $selected);
+    }
+
+    /**
+     * @return array<string, array{string, bool}>
+     */
+    public static function provideScanStates(): array
+    {
+        return [
+            'not yet due' => ['not yet due', false],
+            'fulfilled' => ['fulfilled', false],
+            'rejected' => ['rejected', false],
+            'withdrawn' => ['withdrawn', false],
+            'already flagged' => ['already flagged', false],
+            'due, not flagged' => ['due, not flagged', true],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('provideDeadlineEdges')]
+    public function when_the_scan_runs_at_the_deadline_edge_then_only_a_missed_deadline_is_flagged(int $offsetSeconds, bool $flagged): void
+    {
+        // Given a submitted request, the clock at its deadline moved by the offset
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $this->travelTo($request->sla_deadline->addSeconds($offsetSeconds));
+
+        // When the daily scan runs
+        $this->runFlagMissedDeadlines()->assertSuccessful();
+
+        // Then it is flagged only once its deadline has been reached
+        $flagged ? $this->assertBreachRecorded($request, now()) : $this->assertNotFlagged($request);
+    }
+
+    /**
+     * @return array<string, array{int, bool}>
+     */
+    public static function provideDeadlineEdges(): array
+    {
+        return [
+            'one second before the deadline' => [-1, false],
+            'exactly at the deadline' => [0, true],
         ];
     }
 
@@ -139,6 +283,38 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
         $this->travelTo($request->sla_deadline->addDay());
 
         return $request;
+    }
+
+    /**
+     * $this->member's request in $state, the clock past its deadline —
+     * except a request not yet due; an already-flagged one a second after
+     * the run that flagged it.
+     */
+    protected function aRequestInState(string $state): DsarRequestRecord
+    {
+        $request = match ($state) {
+            'not yet due' => $this->aSubmittedRequest($this->company, $this->member),
+            'fulfilled', 'rejected', 'withdrawn' => $this->aClosedRequest($this->company, $this->member, $state),
+            'due, not flagged', 'already flagged' => $this->aMissedDeadlineRequest(),
+            default => throw new InvalidArgumentException("Unknown state: {$state}"),
+        };
+
+        if ($state === 'already flagged') {
+            $this->runFlagMissedDeadlines()->assertSuccessful();
+            $this->travel(1)->second();
+        } elseif (in_array($state, ['fulfilled', 'rejected', 'withdrawn'], true)) {
+            $this->travelTo($request->sla_deadline->addDay());
+        }
+
+        return $request;
+    }
+
+    /**
+     * Asks $request's aggregate to flag its deadline now, outside the scan.
+     */
+    protected function flagDirectly(DsarRequestRecord $request): void
+    {
+        DsarRequest::retrieve($request->getKey())->flagSlaBreach(CarbonImmutable::now())->persist();
     }
 
     /**

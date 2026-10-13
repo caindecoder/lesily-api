@@ -21,19 +21,34 @@ class FlagMissedDsarDeadlinesInteractor
     {
         /** @var array<int, string> $requestIds */
         $requestIds = DsarRequestRecord::query()->whereBreachDueToFlag($at)->pluck('id')->all();
+        $flagged = 0;
 
         foreach ($requestIds as $requestId) {
-            $this->flag($requestId, $at);
+            if ($this->flag($requestId, $at)) {
+                $flagged++;
+            }
         }
 
-        return count($requestIds);
+        return $flagged;
     }
 
-    private function flag(string $requestId, CarbonInterface $at): void
+    /**
+     * Whether the request's aggregate recorded the breach — one a concurrent
+     * run already recorded is neither audited nor counted again.
+     */
+    private function flag(string $requestId, CarbonInterface $at): bool
     {
-        DB::transaction(function () use ($requestId, $at): void {
-            DsarRequest::retrieve($requestId)->flagSlaBreach($at)->persist();
+        return DB::transaction(function () use ($requestId, $at): bool {
+            $request = DsarRequest::retrieve($requestId)->flagSlaBreach($at);
+
+            if ($request->getRecordedEvents() === []) {
+                return false;
+            }
+
+            $request->persist();
             $this->audit->record(DsarRequestRecord::query()->findOrFail($requestId), DsarSlaBreached::class, 'deadline_missed');
+
+            return true;
         });
     }
 }

@@ -125,13 +125,14 @@ class DsarRequestRecord extends Model
     }
 
     /**
-     * Requests whose 30-day deadline passed by $at.
+     * Requests still in progress whose 30-day deadline passed by $at and
+     * whose breach is not yet recorded.
      *
      * @param  Builder<self>  $query
      */
     protected function scopeWhereBreachDueToFlag(Builder $query, CarbonInterface $at): void
     {
-        $query->where('sla_deadline', '<', $at);
+        $query->where('status', DsarRequestStatus::InProgress)->where('sla_deadline', '<=', $at)->whereNull('sla_breached_at');
     }
 
     /**
