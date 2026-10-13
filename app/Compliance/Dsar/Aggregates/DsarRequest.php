@@ -31,7 +31,8 @@ class DsarRequest extends AggregateRoot
 
     protected ?string $requestedByUserId = null;
 
-    protected ?CarbonInterface $slaDeadline = null;
+    /** The 30-day deadline while the request is open; closing it clears it. */
+    protected ?CarbonInterface $openDeadline = null;
 
     protected bool $slaBreached = false;
 
@@ -120,7 +121,7 @@ class DsarRequest extends AggregateRoot
      */
     public function flagSlaBreach(CarbonInterface $at): static
     {
-        if ($this->status !== DsarRequestStatus::InProgress || $this->slaBreached || $at->lessThan($this->slaDeadline)) {
+        if ($this->openDeadline === null || $this->slaBreached || $at->lessThan($this->openDeadline)) {
             return $this;
         }
 
@@ -131,7 +132,7 @@ class DsarRequest extends AggregateRoot
     {
         $this->status = DsarRequestStatus::InProgress;
         $this->requestedByUserId = $event->requestedByUserId;
-        $this->slaDeadline = $event->slaDeadline;
+        $this->openDeadline = $event->slaDeadline;
     }
 
     protected function applyDsarSlaBreached(DsarSlaBreached $event): void
@@ -142,6 +143,7 @@ class DsarRequest extends AggregateRoot
     protected function applyDsarRequestFulfilled(DsarRequestFulfilled $event): void
     {
         $this->status = DsarRequestStatus::Fulfilled;
+        $this->openDeadline = null;
         $this->downloadExpiresAt = $event->downloadExpiresAt;
     }
 
@@ -153,10 +155,12 @@ class DsarRequest extends AggregateRoot
     protected function applyDsarRequestRejected(DsarRequestRejected $event): void
     {
         $this->status = DsarRequestStatus::Rejected;
+        $this->openDeadline = null;
     }
 
     protected function applyDsarRequestCancelled(DsarRequestCancelled $event): void
     {
         $this->status = DsarRequestStatus::Cancelled;
+        $this->openDeadline = null;
     }
 }
