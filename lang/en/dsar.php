@@ -105,6 +105,7 @@ return [
         'action' => [
             'dsar_requested' => 'Asked for a copy of personal data',
             'dsar_withdrawn' => 'Withdrew a data request',
+            'dsar_downloaded' => 'Downloaded a copy of personal data',
             'dsar_fulfilled' => 'A data export was completed',
             'dsar_rejected' => 'A data export could not be completed',
             'dsar_download_expired' => "A data export's download window closed",

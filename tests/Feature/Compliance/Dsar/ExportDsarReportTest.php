@@ -235,6 +235,21 @@ class ExportDsarReportTest extends DsarTestCase
         $this->assertReportShowsInOrder(['Contents', ...$titles, ...$titles]);
     }
 
+    #[Test]
+    public function when_a_subject_who_downloaded_an_export_asks_again_then_the_report_names_the_download(): void
+    {
+        // Given a member who downloaded their ready export, then asked for their data again
+        $first = $this->aReadyExportFor($this->company, $this->member);
+        $this->downloadDsarExport($this->member, $this->company, $first->getKey());
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+
+        // When their new export is built
+        $this->runTheExportFor($request);
+
+        // Then the report names the download in words
+        $this->assertReportCell('Downloaded a copy of personal data (dsar_downloaded)');
+    }
+
     /**
      * A member who joined through an invitation, consented, signed in, was
      * handed the company and named on a rejected case, received a notice,
