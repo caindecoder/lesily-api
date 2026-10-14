@@ -164,8 +164,7 @@ jobs:
       - uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage-missing.xml
-          disable_search: true
+          files: coverage.xml
           fail_ci_if_error: true
 
   quality:
