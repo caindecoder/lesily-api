@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
@@ -16,7 +16,7 @@ class ReviewDsarRequestAsAdminInteractor
     /**
      * The read and its audit row share one transaction — no read without its evidence.
      */
-    public function execute(string $requestId, User $admin, AdminRequestContext $context): DsarRequestRecord
+    public function execute(string $requestId, User $admin, RequestOrigin $context): DsarRequestRecord
     {
         return DB::transaction(function () use ($requestId, $admin, $context): DsarRequestRecord {
             $request = DsarRequestRecord::query()->whereKey($requestId)->first()
@@ -28,7 +28,7 @@ class ReviewDsarRequestAsAdminInteractor
         });
     }
 
-    private function recordAdminRead(DsarRequestRecord $request, User $admin, AdminRequestContext $context): void
+    private function recordAdminRead(DsarRequestRecord $request, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $request->company_id,

@@ -10,7 +10,7 @@ use App\Foundation\Database\LockContention;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
@@ -25,7 +25,7 @@ use App\Companies\Exceptions\OwnershipTransferCaseAlreadyClosedException;
  */
 class RejectOwnershipTransferCaseInteractor
 {
-    public function execute(RejectOwnershipTransferCaseCommand $command, User $admin, AdminRequestContext $context): OwnershipTransferCase
+    public function execute(RejectOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
     {
         try {
             return $this->executeLocked($command, $admin, $context);
@@ -38,7 +38,7 @@ class RejectOwnershipTransferCaseInteractor
         }
     }
 
-    private function executeLocked(RejectOwnershipTransferCaseCommand $command, User $admin, AdminRequestContext $context): OwnershipTransferCase
+    private function executeLocked(RejectOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
     {
         return DB::transaction(function () use ($command, $admin, $context): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()
@@ -63,7 +63,7 @@ class RejectOwnershipTransferCaseInteractor
         });
     }
 
-    private function recordCaseRejected(OwnershipTransferCase $case, User $admin, AdminRequestContext $context): void
+    private function recordCaseRejected(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $case->company_id,

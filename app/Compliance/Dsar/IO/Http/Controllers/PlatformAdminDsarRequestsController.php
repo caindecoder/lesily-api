@@ -6,7 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters;
 use App\Compliance\Dsar\IO\Http\Resources\DsarRequestAdminCollection;
 use App\Compliance\Dsar\IO\Http\Resources\DsarRequestAdminDetailResource;
@@ -20,7 +20,7 @@ class PlatformAdminDsarRequestsController extends Controller
         /** @var User $admin — guaranteed by auth:sanctum */
         $admin = $request->user();
 
-        $queue = $interactor->execute(DsarRequestAdminFilters::fromQuery($request), $admin, AdminRequestContext::fromRequest($request));
+        $queue = $interactor->execute(DsarRequestAdminFilters::fromQuery($request), $admin, RequestOrigin::fromRequest($request));
 
         return (new DsarRequestAdminCollection($queue->page))
             ->additional(['kpis' => ['open' => $queue->open, 'overdue' => $queue->overdue, 'due_in_7_days' => $queue->dueInSevenDays]])
@@ -32,6 +32,6 @@ class PlatformAdminDsarRequestsController extends Controller
         /** @var User $admin — guaranteed by auth:sanctum */
         $admin = $request->user();
 
-        return new DsarRequestAdminDetailResource($interactor->execute($requestId, $admin, AdminRequestContext::fromRequest($request)));
+        return new DsarRequestAdminDetailResource($interactor->execute($requestId, $admin, RequestOrigin::fromRequest($request)));
     }
 }

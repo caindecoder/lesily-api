@@ -4,7 +4,7 @@ namespace App\Billing\Invoices\IO\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Billing\Invoices\IO\Http\Resources\InvoiceAdminResource;
 use App\Billing\Invoices\UseCases\Interactors\ReviewInvoiceAsAdminInteractor;
 
@@ -23,7 +23,7 @@ class PlatformAdminInvoicesController
         $admin = $request->user();
 
         return new InvoiceAdminResource(
-            $interactor->execute($invoiceId, $admin, AdminRequestContext::fromRequest($request))
+            $interactor->execute($invoiceId, $admin, RequestOrigin::fromRequest($request))
         );
     }
 }

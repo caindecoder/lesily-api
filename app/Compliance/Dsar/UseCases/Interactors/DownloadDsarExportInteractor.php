@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Storage;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Compliance\Dsar\UseCases\Queries\MemberRoleCode;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -21,7 +21,7 @@ class DownloadDsarExportInteractor
 {
     public function __construct(private readonly MemberRoleCode $memberRoleCode) {}
 
-    public function execute(DownloadDsarExportCommand $command, User $actor, AdminRequestContext $context): DsarExportFile
+    public function execute(DownloadDsarExportCommand $command, User $actor, RequestOrigin $context): DsarExportFile
     {
         $company = Company::query()->findOrFail($command->companyId);
 
@@ -45,7 +45,7 @@ class DownloadDsarExportInteractor
         return new DsarExportFile($path, $fulfilledAt);
     }
 
-    private function recordDownloaded(DsarRequestRecord $request, User $actor, AdminRequestContext $context): void
+    private function recordDownloaded(DsarRequestRecord $request, User $actor, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $request->company_id,

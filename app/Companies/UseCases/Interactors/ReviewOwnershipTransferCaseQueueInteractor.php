@@ -8,7 +8,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
@@ -27,7 +27,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
     /**
      * @return LengthAwarePaginator<int, OwnershipTransferCase>
      */
-    public function execute(OwnershipTransferCaseAdminFilters $filters, User $admin, AdminRequestContext $context): LengthAwarePaginator
+    public function execute(OwnershipTransferCaseAdminFilters $filters, User $admin, RequestOrigin $context): LengthAwarePaginator
     {
         return DB::transaction(function () use ($filters, $admin, $context): LengthAwarePaginator {
             $page = OwnershipTransferCase::query()
@@ -64,7 +64,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
     /**
      * @param  array<string, mixed>  $queryContext
      */
-    private function recordQueueRead(array $queryContext, User $admin, AdminRequestContext $context): void
+    private function recordQueueRead(array $queryContext, User $admin, RequestOrigin $context): void
     {
         // The queue read points at a PAGE, not a record.
         AuditEntry::query()->create([

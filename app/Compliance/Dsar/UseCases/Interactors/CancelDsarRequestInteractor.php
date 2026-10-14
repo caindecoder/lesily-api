@@ -9,7 +9,7 @@ use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Compliance\Dsar\Events\DsarRequestCancelled;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Compliance\Dsar\UseCases\Queries\MemberRoleCode;
@@ -25,7 +25,7 @@ class CancelDsarRequestInteractor
         private readonly MemberRoleCode $memberRoleCode,
     ) {}
 
-    public function execute(CancelDsarRequestCommand $command, User $actor, AdminRequestContext $context): DsarRequestRecord
+    public function execute(CancelDsarRequestCommand $command, User $actor, RequestOrigin $context): DsarRequestRecord
     {
         $company = Company::query()->findOrFail($command->companyId);
 
@@ -42,7 +42,7 @@ class CancelDsarRequestInteractor
         });
     }
 
-    private function recordWithdrawn(DsarRequestRecord $request, User $actor, AdminRequestContext $context): void
+    private function recordWithdrawn(DsarRequestRecord $request, User $actor, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $request->company_id,

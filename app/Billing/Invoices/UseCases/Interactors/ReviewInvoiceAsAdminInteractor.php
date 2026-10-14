@@ -6,7 +6,7 @@ use App\Models\User;
 use App\Billing\Invoices\Entities\Invoice;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Billing\Invoices\UseCases\Repositories\InvoiceRepositoryInterface;
@@ -26,7 +26,7 @@ class ReviewInvoiceAsAdminInteractor
 {
     public function __construct(private readonly InvoiceRepositoryInterface $invoices) {}
 
-    public function execute(string $invoiceId, User $admin, AdminRequestContext $context): Invoice
+    public function execute(string $invoiceId, User $admin, RequestOrigin $context): Invoice
     {
         $invoice = $this->invoices->findById($invoiceId);
 
@@ -45,7 +45,7 @@ class ReviewInvoiceAsAdminInteractor
      * Immutable by convention — no update/delete path exists (UC-1-066
      * enforces the invariant mechanically in its own slice).
      */
-    private function recordAdminReview(Invoice $invoice, User $admin, AdminRequestContext $context): void
+    private function recordAdminReview(Invoice $invoice, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $invoice->company_id,

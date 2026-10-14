@@ -12,7 +12,7 @@ use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -28,7 +28,7 @@ class SubmitDsarRequestInteractor
 
     public function __construct(private readonly PermissionEvaluator $permissions) {}
 
-    public function execute(SubmitDsarRequestCommand $command, User $actor, AdminRequestContext $context): DsarRequestRecord
+    public function execute(SubmitDsarRequestCommand $command, User $actor, RequestOrigin $context): DsarRequestRecord
     {
         $company = Company::query()->findOrFail($command->companyId);
 
@@ -45,7 +45,7 @@ class SubmitDsarRequestInteractor
         }
     }
 
-    private function record(SubmitDsarRequestCommand $command, User $actor, AdminRequestContext $context): DsarRequestRecord
+    private function record(SubmitDsarRequestCommand $command, User $actor, RequestOrigin $context): DsarRequestRecord
     {
         $requestId = Str::uuid7()->toString();
         $requestedByRole = Role::query()
@@ -62,7 +62,7 @@ class SubmitDsarRequestInteractor
         return $request;
     }
 
-    private function recordRequested(DsarRequestRecord $request, User $actor, AdminRequestContext $context): void
+    private function recordRequested(DsarRequestRecord $request, User $actor, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $request->company_id,

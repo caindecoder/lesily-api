@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Foundation\Http\Values;
+namespace App\Foundation\AuditTrail\Values;
 
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Context;
  * dependency direction; second consumer arrived with the ownership-transfer
  * case slice).
  */
-readonly class AdminRequestContext
+readonly class RequestOrigin
 {
     public function __construct(
         public ?string $ip,
