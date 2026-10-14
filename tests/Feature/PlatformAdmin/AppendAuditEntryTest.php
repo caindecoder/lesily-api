@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\PlatformAdmin;
 
+use ValueError;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Database\QueryException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 
 /**
@@ -46,6 +48,33 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
         } catch (QueryException $e) {
             // Then the insert is rejected by the integrity constraint on that column
             $this->assertNotNullViolationOn($e, 'action');
+        }
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideUnknownCodes(): array
+    {
+        return [
+            'an unknown action' => ['action'],
+            'an unknown subject type' => ['subject_type'],
+        ];
+    }
+
+    #[Test, DataProvider('provideUnknownCodes')]
+    public function when_an_entry_names_an_unknown_code_then_it_is_refused(string $field): void
+    {
+        // Given an entry naming a code that is not an audit code
+        $attributes = [$field => 'not_a_code'];
+
+        try {
+            // When it is appended
+            AuditEntry::factory()->create($attributes);
+            $this->fail("Expected the unknown {$field} to be refused.");
+        } catch (ValueError) {
+            // Then it is refused, and nothing is stored
+            $this->assertDatabaseCount('audit_trail', 0);
         }
     }
 
