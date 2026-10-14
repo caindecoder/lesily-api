@@ -391,9 +391,14 @@ class ListInvoicesTest extends BillingTestCase
     #[Test]
     public function when_filtering_by_amount_range_then_only_invoices_within_bounds_returned(): void
     {
-        // Given invoices at LKR 500.00, 600.00 and 700.00
+        // Given invoices at LKR 400.00, 500.00, 600.00 and 700.00
         [$company, $owner] = $this->aCompanyWithMember('owner');
         $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $this->anIssuedInvoiceFor($company, $subscription, [
+            'invoiceNumber' => 'INV-2026-000004',
+            'amountCents' => 40000,
+            'lineItems' => [self::planLineItem(40000)],
+        ]);
         $atFloor = $this->anIssuedInvoiceFor($company, $subscription, [
             'invoiceNumber' => 'INV-2026-000001',
             'amountCents' => 50000,
