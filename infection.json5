@@ -141,9 +141,6 @@
                 // becomes a real, killable regression.
                 "App\\Billing\\Invoices\\Entities\\Invoice::company",
                 "App\\Companies\\Entities\\Company::settings",
-                // The same class: the admin DSAR detail reads the request's company lazily.
-                // REMOVE WHEN the admin DSAR queue (SLICE-dsar-access 10b) eager-loads it.
-                "App\\Compliance\\Dsar\\Entities\\DsarRequestRecord::company",
                 // OQ-1-172 PR-0 L-SCOPE: each is invoked from a scope that reaches
                 // protected - envelope() by the parent Mailable, forCompany() by the
                 // AggregateRoot subclasses, scopeWhereForCompany() via Model::callNamedScope.

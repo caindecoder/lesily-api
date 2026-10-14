@@ -5,6 +5,7 @@ namespace Tests\Feature\Compliance\Dsar;
 use App\Models\User;
 use RuntimeException;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -137,6 +138,36 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
 
         // Then the counts place it by calendar day: overdue through the deadline day, due within seven days after it
         $this->assertKpis($response, $kpis);
+    }
+
+    #[Test]
+    #[DataProvider('provideClosedStates')]
+    public function when_a_request_is_no_longer_in_progress_then_the_kpis_leave_it_out(string $state): void
+    {
+        // Given one request closed this row's way, its deadline passed
+        $closed = $this->aRequestDue($this->company, '2026-09-25 09:00:00', $state);
+
+        // When the admin lists the queue
+        $response = $this->listQueue($this->admin);
+
+        // Then it is listed, but no count includes it — open, overdue and due-soon are in-progress counts
+        $this->assertListed($response, [$closed]);
+        $this->assertKpis($response, ['open' => 0, 'overdue' => 0, 'due_in_7_days' => 0]);
+    }
+
+    #[Test]
+    public function when_the_queue_lists_several_requests_then_it_reads_them_with_fewer_queries_than_rows(): void
+    {
+        // Given fifteen requests spread over two companies
+        foreach (range(1, 15) as $day) {
+            $this->aRequestDue($day % 2 === 0 ? $this->company : $this->otherCompany, sprintf('2026-10-%02d 09:00:00', $day + 1));
+        }
+
+        // When the admin lists the queue with the query log on
+        [$response, $queryCount] = $this->listQueueCountingQueries();
+
+        // Then the page cost fewer queries than it has rows — company, subject and requester load once per page
+        $this->assertListedWithFewerQueriesThanRows($response, $queryCount);
     }
 
     #[Test]
@@ -273,6 +304,37 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
+    {
+        // Given sixteen requests — two pages at the default size
+        $this->sixteenRequests();
+
+        // When the admin sends page 2 in the request body instead of the query string
+        $response = $this->listQueueWithBody(['page' => 2]);
+
+        // Then the body is ignored and the first page comes back
+        $response->assertOk();
+        $this->assertCount(15, $response->json('data'));
+        $response->assertJsonPath('meta.pagination.page', 1);
+    }
+
+    #[Test]
+    public function when_the_queue_spans_pages_then_the_requested_page_is_returned_with_its_own_audit_row(): void
+    {
+        // Given sixteen requests due on consecutive days from tomorrow
+        $requests = $this->sixteenRequests();
+
+        // When the admin asks for the second page of ten
+        $response = $this->listQueue($this->admin, ['page' => 2, 'per_page' => 10]);
+
+        // Then the last six are listed, the counts still cover all sixteen, and this page's read is recorded
+        $this->assertListed($response, array_slice($requests, 10));
+        $response->assertJsonPath('meta.pagination', ['page' => 2, 'per_page' => 10, 'total' => 16, 'last_page' => 2]);
+        $this->assertKpis($response, ['open' => 16, 'overdue' => 0, 'due_in_7_days' => 7]);
+        $this->assertQueueReadAudited($response, ['filters' => [], 'result_count' => 6, 'page' => 2]);
+    }
+
+    #[Test]
     public function when_a_dsar_admin_filter_is_built_without_values_then_defaults_apply(): void
     {
         // Given no query values at all
@@ -302,6 +364,18 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
             'per_page above cap' => [['per_page' => 101], 'per_page', 'The per page field must not be greater than 100.'],
             'page below floor' => [['page' => 0], 'page', 'The page field must be at least 1.'],
             'empty status value' => [['status' => ''], 'status', 'The status field must have a value.'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideClosedStates(): array
+    {
+        return [
+            'fulfilled' => ['fulfilled'],
+            'rejected' => ['rejected'],
+            'cancelled' => ['cancelled'],
         ];
     }
 
@@ -478,6 +552,48 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         ]);
         $this->assertNotNull($entry->user_agent);
         $this->assertEquals($metadata, $entry->metadata);
+    }
+
+    /**
+     * The admin lists the queue with $body sent as the request body, the query string empty.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function listQueueWithBody(array $body): TestResponse
+    {
+        Sanctum::actingAs($this->admin);
+
+        return $this->json('GET', '/api/v1/admin/dsar-requests', $body);
+    }
+
+    /**
+     * Sixteen in-progress requests due on consecutive days from 2 Oct — one
+     * more than a default page.
+     *
+     * @return list<DsarRequestRecord>
+     */
+    protected function sixteenRequests(): array
+    {
+        return array_map(
+            fn (int $day): DsarRequestRecord => $this->aRequestDue($this->company, sprintf('2026-10-%02d 09:00:00', $day + 1)),
+            range(1, 16),
+        );
+    }
+
+    /**
+     * The admin's queue call with the query log on around it.
+     *
+     * @return array{TestResponse, int}
+     */
+    protected function listQueueCountingQueries(): array
+    {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $response = $this->listQueue($this->admin);
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return [$response, $queryCount];
     }
 
     /**

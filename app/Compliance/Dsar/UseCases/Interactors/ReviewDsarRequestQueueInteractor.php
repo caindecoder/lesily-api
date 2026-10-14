@@ -26,7 +26,9 @@ class ReviewDsarRequestQueueInteractor
                 ->with(['company', 'subject', 'requestedBy'])
                 ->orderBy('sla_deadline')
                 ->orderBy('id')
-                ->paginate();
+                // page defaults here, never through Laravel's resolver, which would
+                // honour a body-supplied page past the validated query filters.
+                ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
             $counts = $this->countInProgress($this->selectedBy($filters));
 
             $this->recordQueueRead($this->queryContextOf($filters, $page), $admin, $context);
