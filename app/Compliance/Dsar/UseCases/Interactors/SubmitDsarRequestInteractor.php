@@ -8,11 +8,13 @@ use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Compliance\Dsar\Events\DsarRequestSubmitted;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\RolesPermissions\Services\PermissionEvaluator;
@@ -66,10 +68,10 @@ class SubmitDsarRequestInteractor
             'company_id' => $request->company_id,
             'stored_event_id' => $this->submittedEventIdFor($request),
             'event_class' => 'DsarRequestSubmitted',
-            'subject_type' => 'dsar_request',
+            'subject_type' => AuditSubjectType::DsarRequest,
             'subject_id' => $request->getKey(),
             'subject_label' => null,
-            'action' => 'dsar_requested',
+            'action' => AuditAction::DsarRequested,
             'description' => 'DSAR requested — for: '.$request->subject->name.', by: '.$actor->name,
             'actor_user_id' => $actor->getKey(),
             'actor_role_code' => $request->requested_by_role,

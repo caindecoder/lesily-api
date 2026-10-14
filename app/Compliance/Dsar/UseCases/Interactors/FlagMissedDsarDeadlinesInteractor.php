@@ -8,6 +8,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Compliance\Dsar\Events\DsarSlaBreached;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\UseCases\Audit\DsarOutcomeAudit;
 
@@ -54,7 +55,7 @@ class FlagMissedDsarDeadlinesInteractor
             }
 
             $request->persist();
-            $this->audit->record(DsarRequestRecord::query()->findOrFail($requestId), DsarSlaBreached::class, 'deadline_missed');
+            $this->audit->record(DsarRequestRecord::query()->findOrFail($requestId), DsarSlaBreached::class, AuditAction::DsarDeadlineMissed);
 
             return true;
         });

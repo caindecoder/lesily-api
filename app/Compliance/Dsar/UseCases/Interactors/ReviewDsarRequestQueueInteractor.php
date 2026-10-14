@@ -8,9 +8,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Compliance\Dsar\UseCases\Responses\DsarRequestQueue;
 use App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters;
 
@@ -113,8 +115,8 @@ class ReviewDsarRequestQueueInteractor
     {
         AuditEntry::query()->create([
             'event_class' => 'DsarRequestQueueViewed',
-            'subject_type' => 'dsar_request_queue',
-            'action' => 'dsar_queue_viewed',
+            'subject_type' => AuditSubjectType::DsarRequestQueue,
+            'action' => AuditAction::DsarQueueViewed,
             'description' => 'Platform admin viewed a page of the DSAR request queue.',
             'actor_user_id' => $admin->getKey(),
             'actor_role_code' => 'platform_super_admin',
