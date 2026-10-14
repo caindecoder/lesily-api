@@ -73,6 +73,21 @@ class DsarRequestRecordFactory extends Factory
         ]);
     }
 
+    public function identifiedAs(string $id): static
+    {
+        return $this->state(['id' => $id]);
+    }
+
+    public function dueAt(string $deadline): static
+    {
+        $slaDeadline = CarbonImmutable::parse($deadline);
+
+        return $this->state([
+            'requested_at' => $slaDeadline->subDays(30),
+            'sla_deadline' => $slaDeadline,
+        ]);
+    }
+
     public function downloadExpired(): static
     {
         return $this->state([

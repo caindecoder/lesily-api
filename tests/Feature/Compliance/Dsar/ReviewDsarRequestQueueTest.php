@@ -3,11 +3,13 @@
 namespace Tests\Feature\Compliance\Dsar;
 
 use App\Models\User;
+use RuntimeException;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
 use App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters;
@@ -92,6 +94,75 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_the_audit_write_fails_then_the_queue_returns_no_request_data(): void
+    {
+        // Given a request, and an audit write that fails AFTER its row is
+        // inserted — only the read's transaction can take the row back out
+        DsarRequestRecord::factory()->forSubject($this->company, $this->aCompanyMember($this->company))->create();
+        AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the admin lists the queue
+        $response = $this->listQueue($this->admin);
+
+        // Then the read fails closed — no request data, and the evidence row was rolled back with it
+        $this->assertFailedClosed($response);
+        $this->assertNoQueueReadRecorded();
+    }
+
+    #[Test]
+    public function when_no_requests_match_then_the_queue_is_empty_with_zero_kpis_and_the_read_is_still_recorded(): void
+    {
+        // Given a platform admin and no DSAR requests anywhere
+        // When the admin lists the queue
+        $response = $this->listQueue($this->admin);
+
+        // Then the page and every count are empty, and the read still left its evidence
+        $this->assertListed($response, []);
+        $this->assertKpis($response, ['open' => 0, 'overdue' => 0, 'due_in_7_days' => 0]);
+        $this->assertQueueReadAudited($response, ['filters' => [], 'result_count' => 0, 'page' => 1]);
+    }
+
+    #[Test]
+    public function when_requests_exist_across_companies_then_the_queue_lists_them_soonest_deadline_first(): void
+    {
+        // Given a request in one company due in three days, and one in another company due tomorrow
+        $dueLater = $this->aRequestDue($this->company, '2026-10-04 09:00:00');
+        $dueSooner = $this->aRequestDue($this->otherCompany, '2026-10-02 09:00:00');
+
+        // When the admin lists the queue
+        $response = $this->listQueue($this->admin);
+
+        // Then both companies' requests are listed soonest deadline first, as admin rows, with the counts
+        $response->assertOk();
+        $response->assertExactJson([
+            'data' => [$this->adminRowOf($dueSooner, 1), $this->adminRowOf($dueLater, 3)],
+            'meta' => ['pagination' => ['page' => 1, 'per_page' => 15, 'total' => 2, 'last_page' => 1]],
+            'kpis' => ['open' => 2, 'overdue' => 0, 'due_in_7_days' => 2],
+        ]);
+        $this->assertQueueReadAudited($response, ['filters' => [], 'result_count' => 2, 'page' => 1]);
+    }
+
+    #[Test]
+    public function when_deadlines_tie_then_the_order_falls_back_to_the_id(): void
+    {
+        // Given three requests due at the same instant, created highest id first
+        $tied = array_map(
+            fn (string $id): DsarRequestRecord => DsarRequestRecord::factory()
+                ->forSubject($this->company, $this->aCompanyMember($this->company))
+                ->identifiedAs($id)
+                ->dueAt('2026-10-20 09:00:00')
+                ->create(),
+            ['0199a3f0-0000-7000-8000-000000000003', '0199a3f0-0000-7000-8000-000000000002', '0199a3f0-0000-7000-8000-000000000001'],
+        );
+
+        // When the admin lists the queue
+        $response = $this->listQueue($this->admin);
+
+        // Then the tie falls back to the lowest id first — pages can never duplicate or skip a tied request
+        $this->assertListed($response, array_reverse($tied));
+    }
+
+    #[Test]
     public function when_a_dsar_admin_filter_is_built_without_values_then_defaults_apply(): void
     {
         // Given no query values at all
@@ -154,6 +225,98 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         }
 
         return $this->getJson('/api/v1/admin/dsar-requests?'.http_build_query($query));
+    }
+
+    /**
+     * A request about a new member of $company, due at $deadline, in progress.
+     */
+    protected function aRequestDue(Company $company, string $deadline): DsarRequestRecord
+    {
+        return DsarRequestRecord::factory()
+            ->forSubject($company, $this->aCompanyMember($company))
+            ->dueAt($deadline)
+            ->create();
+    }
+
+    /**
+     * The admin row an in-progress $request is listed as — the member fields,
+     * its company and its countdown; no timeline (the detail's alone).
+     *
+     * @return array<string, mixed>
+     */
+    protected function adminRowOf(DsarRequestRecord $request, int $daysRemaining): array
+    {
+        return [
+            'id' => $request->getKey(),
+            'status' => 'in_progress',
+            'request_type' => 'access',
+            'subject' => ['id' => $request->subject->getKey(), 'name' => $request->subject->name],
+            'requested_by' => ['id' => $request->requestedBy->getKey(), 'name' => $request->requestedBy->name],
+            'requested_at' => $request->requested_at->toISOString(),
+            'sla_deadline' => $request->sla_deadline->toISOString(),
+            'completed_at' => null,
+            'download_available' => false,
+            'download_expires_at' => null,
+            'cancelled_at' => null,
+            'rejection_reason' => null,
+            'company' => ['id' => $request->company->getKey(), 'name' => $request->company->name],
+            'days_remaining' => $daysRemaining,
+            'sla_breached_at' => null,
+            'download_expired_at' => null,
+        ];
+    }
+
+    /**
+     * The page lists exactly $requests, in this order.
+     *
+     * @param  list<DsarRequestRecord>  $requests
+     */
+    protected function assertListed(TestResponse $response, array $requests): void
+    {
+        $response->assertOk();
+        $this->assertSame(
+            array_map(fn (DsarRequestRecord $request): string => $request->getKey(), $requests),
+            array_column($response->json('data'), 'id'),
+        );
+    }
+
+    /**
+     * The KPI strip shows exactly $kpis.
+     *
+     * @param  array{open: int, overdue: int, due_in_7_days: int}  $kpis
+     */
+    protected function assertKpis(TestResponse $response, array $kpis): void
+    {
+        $this->assertSame($kpis, $response->json('kpis'));
+    }
+
+    /**
+     * Exactly one read of the queue is recorded — platform-level, by the
+     * admin, with the request's context and $metadata as its query context.
+     *
+     * @param  array<string, mixed>  $metadata
+     */
+    protected function assertQueueReadAudited(TestResponse $response, array $metadata): void
+    {
+        $entry = AuditEntry::query()->where('action', 'dsar_queue_viewed')->sole();
+
+        $this->assertDatabaseHas('audit_trail', [
+            'id' => $entry->getKey(),
+            'company_id' => null,
+            'stored_event_id' => null,
+            'event_class' => 'DsarRequestQueueViewed',
+            'subject_type' => 'dsar_request_queue',
+            'subject_id' => null,
+            'subject_label' => null,
+            'description' => 'Platform admin viewed a page of the DSAR request queue.',
+            'actor_user_id' => $this->admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $this->admin->name,
+            'ip_address' => '127.0.0.1',
+            'request_id' => $response->headers->get('Correlation-Id'),
+        ]);
+        $this->assertNotNull($entry->user_agent);
+        $this->assertEquals($metadata, $entry->metadata);
     }
 
     /**
