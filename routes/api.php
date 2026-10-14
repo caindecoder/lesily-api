@@ -32,6 +32,7 @@ use App\Billing\Subscriptions\IO\Http\Controllers\SubscriptionsController;
 use App\Billing\Invoices\IO\Http\Controllers\PlatformAdminInvoicesController;
 use App\Companies\Memberships\IO\Http\Controllers\AcceptInvitationController;
 use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
+use App\Compliance\Dsar\IO\Http\Controllers\PlatformAdminDsarRequestsController;
 use App\Companies\IO\Http\Controllers\PlatformAdminOwnershipTransferCasesController;
 
 // Health is operational tooling and opts out of the platform cross-cutting
@@ -365,3 +366,8 @@ Route::patch('/v1/dsar-requests/{requestId}/cancel', [DsarRequestsController::cl
 // Request a DSAR export (UC-1-070) - a member for themselves, Owner/Admin for a member.
 Route::post('/v1/dsar-requests', [DsarRequestsController::class, 'store'])
     ->middleware(['auth:sanctum', 'auth.company', 'idempotency-key:required']);
+
+// A platform admin views one DSAR request across companies (UC-1-124) - auth:sanctum + platform.admin
+// only, no auth.company; one audit row per read, written with the read (an audit failure vetoes it).
+Route::get('/v1/admin/dsar-requests/{requestId}', [PlatformAdminDsarRequestsController::class, 'show'])
+    ->middleware(['auth:sanctum', 'platform.admin']);
