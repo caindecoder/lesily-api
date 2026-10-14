@@ -30,12 +30,12 @@ class ReviewOwnershipTransferCaseQueueInteractor
         return DB::transaction(function () use ($filters, $admin, $context): LengthAwarePaginator {
             $page = OwnershipTransferCase::query()
                 ->when($filters->status, fn ($query, string $status) => $query->withStatus(OwnershipTransferCaseStatus::from($status)))
-                ->when($filters->company_id, fn ($query, string $companyId) => $query->forCompanyId($companyId))
+                ->when($filters->companyId, fn ($query, string $companyId) => $query->forCompanyId($companyId))
                 ->newestFirst()
                 // page defaults HERE, never by falling through to Laravel's resolver:
                 // that reads $request->input('page'), which would honour a body-supplied
                 // page and bypass the whitelisted, validated query DTO (api-conventions §10.1).
-                ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
+                ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
 
             $this->recordQueueRead($this->queryContextOf($filters, $page), $admin, $context);
 
@@ -51,7 +51,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
     {
         return [
             'filters' => array_filter(
-                ['status' => $filters->status, 'company_id' => $filters->company_id],
+                ['status' => $filters->status, 'company_id' => $filters->companyId],
                 fn (?string $value): bool => $value !== null,
             ),
             'result_count' => count($page->items()),

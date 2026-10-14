@@ -216,7 +216,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         // Then nothing is filtered, both flags are off, and pagination falls to its defaults
         $this->assertSame(
             [null, null, false, false, null, null],
-            [$filters->status, $filters->company_id, $filters->overdueOnly(), $filters->breachedOnly(), $filters->page, $filters->per_page],
+            [$filters->status, $filters->companyId, $filters->overdueOnly(), $filters->breachedOnly(), $filters->page, $filters->perPage],
         );
     }
 

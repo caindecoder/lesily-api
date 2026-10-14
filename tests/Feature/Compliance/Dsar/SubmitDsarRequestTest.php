@@ -51,10 +51,10 @@ class SubmitDsarRequestTest extends DsarTestCase
         $member = $this->aCompanyMember($company);
 
         // When
-        $response = $this->submitDsarRequest($member, $company, ['subject_user_id' => $subjectReference]);
+        $response = $this->submitDsarRequest($member, $company, ['subjectUserId' => $subjectReference]);
 
         // Then
-        $this->assertValidationRejected($response, 'subject_user_id', 'The subject user id field must be a valid UUID.');
+        $this->assertValidationRejected($response, 'subjectUserId', 'The subject user id field must be a valid UUID.');
         $this->assertNoDsarRequestRecorded($company);
     }
 
@@ -79,7 +79,7 @@ class SubmitDsarRequestTest extends DsarTestCase
         $colleague = $this->aCompanyMember($company);
 
         // When
-        $response = $this->submitDsarRequest($actor, $company, ['subject_user_id' => $colleague->getKey()]);
+        $response = $this->submitDsarRequest($actor, $company, ['subjectUserId' => $colleague->getKey()]);
 
         // Then
         $this->assertRoleInsufficient($response, 'dsar.request-for-others');
@@ -109,7 +109,7 @@ class SubmitDsarRequestTest extends DsarTestCase
         $subjectUserId = $this->aNonMemberSubject($nonMember, $company);
 
         // When
-        $response = $this->submitDsarRequest($admin, $company, ['subject_user_id' => $subjectUserId]);
+        $response = $this->submitDsarRequest($admin, $company, ['subjectUserId' => $subjectUserId]);
 
         // Then
         $this->assertResourceNotFound($response);
@@ -213,7 +213,7 @@ class SubmitDsarRequestTest extends DsarTestCase
         $member = $this->aCompanyMember($company);
 
         // When
-        $response = $this->submitDsarRequest($member, $company, ['subject_user_id' => $member->getKey()]);
+        $response = $this->submitDsarRequest($member, $company, ['subjectUserId' => $member->getKey()]);
 
         // Then
         $this->assertDsarRequestRecorded($response, $member, $member);
@@ -260,7 +260,7 @@ class SubmitDsarRequestTest extends DsarTestCase
         $member = $this->aCompanyMember($company);
 
         // When
-        $response = $this->submitDsarRequest($actor, $company, ['subject_user_id' => $member->getKey()]);
+        $response = $this->submitDsarRequest($actor, $company, ['subjectUserId' => $member->getKey()]);
 
         // Then
         $this->assertDsarRequestRecorded($response, $member, $actor);

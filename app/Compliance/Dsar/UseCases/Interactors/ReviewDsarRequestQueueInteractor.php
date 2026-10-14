@@ -30,7 +30,7 @@ class ReviewDsarRequestQueueInteractor
                 ->orderBy('id')
                 // page defaults here, never through Laravel's resolver, which would
                 // honour a body-supplied page past the validated query filters.
-                ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
+                ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
             $counts = $this->countInProgress($this->selectedBy($filters, $now), $now);
 
             $this->recordQueueRead($this->queryContextOf($filters, $page), $admin, $context);
@@ -48,7 +48,7 @@ class ReviewDsarRequestQueueInteractor
     {
         return DsarRequestRecord::query()
             ->when($filters->status, fn (Builder $query, string $status) => $query->where('status', $status))
-            ->when($filters->company_id, fn (Builder $query, string $companyId) => $query->where('company_id', $companyId))
+            ->when($filters->companyId, fn (Builder $query, string $companyId) => $query->where('company_id', $companyId))
             ->when($filters->overdueOnly(), fn (Builder $query) => $query->whereOverdue($now))
             ->when($filters->breachedOnly(), fn (Builder $query) => $query->whereSlaBreached());
     }
@@ -92,9 +92,9 @@ class ReviewDsarRequestQueueInteractor
             'filters' => array_filter(
                 [
                     'status' => $filters->status,
-                    'company_id' => $filters->company_id,
+                    'company_id' => $filters->companyId,
                     'overdue' => $filters->overdue,
-                    'sla_breached' => $filters->sla_breached,
+                    'sla_breached' => $filters->slaBreached,
                 ],
                 fn (?string $value): bool => $value !== null,
             ),

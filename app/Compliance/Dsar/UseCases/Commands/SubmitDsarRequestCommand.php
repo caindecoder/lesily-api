@@ -7,7 +7,7 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 class SubmitDsarRequestCommand extends Data
 {
-    public ?string $subject_user_id = null;
+    public ?string $subjectUserId = null;
 
     public string $companyId;
 
@@ -22,17 +22,17 @@ class SubmitDsarRequestCommand extends Data
     public static function rules(ValidationContext $context): array
     {
         return [
-            'subject_user_id' => ['nullable', 'uuid'],
+            'subjectUserId' => ['nullable', 'uuid'],
         ];
     }
 
-    public function subjectUserId(): string
+    public function resolvedSubjectUserId(): string
     {
-        return $this->subject_user_id ?? $this->requestedByUserId;
+        return $this->subjectUserId ?? $this->requestedByUserId;
     }
 
     public function isForSomeoneElse(): bool
     {
-        return $this->subjectUserId() !== $this->requestedByUserId;
+        return $this->resolvedSubjectUserId() !== $this->requestedByUserId;
     }
 }

@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Spatie\LaravelData\Attributes\MapInputName;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
@@ -14,8 +15,8 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  * params per api-conventions §9 + §10.1. No sort key — ordering is fixed
  * newest-first, so a `?sort=` is refused like any unknown key. Unknown query
  * keys are refused because Data would silently ignore them (InvoiceFilters /
- * MembershipFilters precedent). Properties spell the wire keys verbatim
- * (conv-plan §2.17).
+ * MembershipFilters precedent). Snake query keys map onto camelCase
+ * properties (conv-plan §2.17).
  */
 class OwnershipTransferCaseAdminFilters extends Data
 {
@@ -28,11 +29,13 @@ class OwnershipTransferCaseAdminFilters extends Data
 
     public ?string $status = null;
 
-    public ?string $company_id = null;
+    #[MapInputName('company_id')]
+    public ?string $companyId = null;
 
     public ?int $page = null;
 
-    public ?int $per_page = null;
+    #[MapInputName('per_page')]
+    public ?int $perPage = null;
 
     public static function fromQuery(Request $request): static
     {

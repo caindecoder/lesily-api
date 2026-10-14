@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Spatie\LaravelData\Attributes\MapInputName;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -40,7 +41,8 @@ class MembershipFilters extends Data
 
     public ?int $page = null;
 
-    public ?int $per_page = null;
+    #[MapInputName('per_page')]
+    public ?int $perPage = null;
 
     public static function fromQuery(Request $request): static
     {

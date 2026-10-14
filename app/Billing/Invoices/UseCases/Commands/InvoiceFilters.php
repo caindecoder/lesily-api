@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Spatie\LaravelData\Attributes\MapInputName;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -47,15 +48,18 @@ class InvoiceFilters extends Data
 
     public ?string $within = null;
 
-    public ?int $min_amount = null;
+    #[MapInputName('min_amount')]
+    public ?int $minAmount = null;
 
-    public ?int $max_amount = null;
+    #[MapInputName('max_amount')]
+    public ?int $maxAmount = null;
 
     public ?string $sort = null;
 
     public ?int $page = null;
 
-    public ?int $per_page = null;
+    #[MapInputName('per_page')]
+    public ?int $perPage = null;
 
     public static function fromQuery(Request $request): static
     {
