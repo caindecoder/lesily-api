@@ -129,26 +129,43 @@ jobs:
       - run: php artisan migrate --force
       - name: Run tests with coverage
         run: php artisan test -p --coverage --coverage-clover=coverage.xml --coverage-crap4j=crap4j.xml --log-junit=junit.xml
-      # The single source of both reports. The sonarcloud job downloads these
-      # instead of re-running the suite — see the long note on that job for why,
-      # and for the absolute-path coupling this introduces.
-      - name: Share coverage + test reports with sonarcloud
+      # The single source of both reports. The codecov and sonarcloud jobs
+      # download these instead of re-running the suite — see the long note on
+      # sonarcloud for why, and for the absolute-path coupling this introduces.
+      - name: Share coverage + test reports with codecov and sonarcloud
         uses: actions/upload-artifact@v7
         with:
           name: coverage-reports
           path: |
             coverage.xml
             junit.xml
-      - uses: codecov/codecov-action@v7
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
       - name: CRAP radar (report-only — R-053 verdict, radar not gate)
         run: php scripts/crap-radar.php crap4j.xml 30
       - uses: actions/upload-artifact@v7
         with:
           name: crap4j-report
           path: crap4j.xml
+
+  codecov:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      # The uploader reads the commit from git and maps the report's absolute
+      # paths onto the checkout, so this job checks out to the same runner
+      # workspace as `test` (no custom `path:`).
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: coverage-reports
+      # A failed upload fails this job: otherwise codecov/patch is simply absent
+      # and looks like nothing. Its own job, so a Codecov outage leaves `test`
+      # and `sonarcloud` reporting. Dependabot runs read CODECOV_TOKEN from the
+      # repo's Dependabot secrets, not its Actions secrets.
+      - uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          fail_ci_if_error: true
 
   quality:
     needs: setup
@@ -418,8 +435,8 @@ jobs:
       # sonarcloud job via upload/download-artifact. lesily-api was the outlier.
       #
       # COUPLING, do not break: clover and junit both record ABSOLUTE paths, so
-      # this works only while `test` and `sonarcloud` check out to the same runner
-      # workspace. Never add a custom `path:` to either checkout.
+      # this works only while `test`, `codecov` and `sonarcloud` check out to the
+      # same runner workspace. Never add a custom `path:` to any of the three.
       - uses: actions/download-artifact@v8
         with:
           name: coverage-reports

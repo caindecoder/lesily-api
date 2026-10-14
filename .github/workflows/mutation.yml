@@ -1,18 +1,19 @@
 name: Mutation
 
 on:
-  # No push trigger (#120, s200): on the private repo a full run bills ~55-101
-  # minutes (54m33s-1h40m measured, s218) against 2,000 free/month, and the
-  # observed merge rate (~23/month) would spend ~1,300-2,300 on full runs alone.
+  # No push trigger (#120, s200): on the private repo a full run bills ~55-114
+  # minutes (54m33s-1h53m measured) against 2,000 free/month, and the
+  # observed merge rate (~23/month) would spend ~1,300-2,600 on full runs alone.
   # The per-PR diff-scoped job in ci.yml still guards every PR; a latent escape
   # surfaces within the week.
   schedule:
     # Weekly (Sat 20:30 UTC = 02:00 SLT Sunday): the latent-escape detector for
     # the diff-scoped PR runs and the environment-drift catch (runner image /
-    # PHP patch bumps). Measured 54m33s-1h40m at 2 workers on the private 2-vCPU
-    # runner at Infection timeout 420 (s201 run 33857377298 = the 1h40m ceiling;
-    # the 09-12 and 09-19 crons 34722891762 / 35473315111 on identical code =
-    # 1h10m54s and 54m33s - the spread is the runner's, VP2-5 s218).
+    # PHP patch bumps). Measured 54m33s-1h53m at 2 workers on the private 2-vCPU
+    # runner at Infection timeout 420 (the 10-10 cron 38096134135 = the 1h53m
+    # ceiling, 2,060 mutants; the 09-12 and 09-19 crons 34722891762 /
+    # 35473315111 on identical code = 1h10m54s and 54m33s - the spread is the
+    # runner's, VP2-5 s218).
     - cron: '30 20 * * 6'
   workflow_dispatch:
 
@@ -30,11 +31,11 @@ jobs:
     # Observed: --threads=1 2h41m–4h12m (public 4-vCPU runner, s189–s195);
     # --threads=4 1h18m (public, s196); --threads=4 on the private 2-vCPU
     # runner 4h08m and FAILED (s198 — OQ-1-181); schema reuse at 2 workers on
-    # the private runner 54m33s-1h40m at Infection timeout 420 (s201 run
-    # 33857377298 is the ceiling; the weekly crons since run 54m33s-1h10m54s).
-    # 180 = 1.8x that ceiling — a run that nearly doubles is already a failure; kill it
-    # instead of billing it.
-    timeout-minutes: 180
+    # the private runner 54m33s-1h53m at Infection timeout 420 (the 10-10 cron
+    # 38096134135 is the ceiling, 2,060 mutants).
+    # 240 = 2x that ceiling (226), rounded up to the hour — a run that doubles is
+    # already a failure; kill it instead of billing it.
+    timeout-minutes: 240
     services:
       mysql:
         image: mysql:8.0

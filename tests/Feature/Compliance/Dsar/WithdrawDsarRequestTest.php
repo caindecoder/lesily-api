@@ -167,7 +167,7 @@ class WithdrawDsarRequestTest extends DsarTestCase
 
         // Then the audit names the member as subject and the owner as actor
         $this->assertWithdrawn($response, $request, $owner);
-        $this->assertWithdrawalAudited($request, $member, $owner);
+        $this->assertWithdrawalAudited($response, $member, $owner);
     }
 
     #[Test]
@@ -215,7 +215,7 @@ class WithdrawDsarRequestTest extends DsarTestCase
 
         // Then
         $this->assertWithdrawn($response, $request, $member);
-        $this->assertWithdrawalAudited($request, $member, $member);
+        $this->assertWithdrawalAudited($response, $member, $member);
     }
 
     /**
