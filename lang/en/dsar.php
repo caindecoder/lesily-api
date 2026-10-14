@@ -105,10 +105,13 @@ return [
         'action' => [
             'dsar_requested' => 'Asked for a copy of personal data',
             'dsar_withdrawn' => 'Withdrew a data request',
+            'dsar_downloaded' => 'Downloaded a copy of personal data',
             'dsar_fulfilled' => 'A data export was completed',
             'dsar_rejected' => 'A data export could not be completed',
             'dsar_download_expired' => "A data export's download window closed",
             'dsar_deadline_missed' => 'A data request missed its 30-day deadline',
+            'dsar_admin_viewed' => 'Viewed a data request',
+            'dsar_queue_viewed' => 'Viewed the data requests',
             'case_opened' => 'Opened an ownership transfer case',
             'case_verified' => 'Verified an ownership transfer case',
             'case_executed' => 'Carried out an ownership transfer',
@@ -119,6 +122,7 @@ return [
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',
+            'dsar_request_queue' => 'The data requests',
             'invoice' => 'An invoice',
             'ownership_transfer_case' => 'An ownership transfer case',
             'ownership_transfer_case_queue' => 'The ownership transfer cases',

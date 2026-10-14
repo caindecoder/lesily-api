@@ -2,8 +2,11 @@
 
 namespace App\Compliance\Dsar\UseCases\Audit;
 
+use Illuminate\Support\Str;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class DsarOutcomeAudit
@@ -15,17 +18,17 @@ class DsarOutcomeAudit
      *
      * @param  class-string  $eventClass
      */
-    public function record(DsarRequestRecord $request, string $eventClass, string $outcome): void
+    public function record(DsarRequestRecord $request, string $eventClass, AuditAction $outcome): void
     {
         AuditEntry::query()->create([
             'company_id' => $request->company_id,
             'stored_event_id' => $this->storedEventIdOf($request, $eventClass),
             'event_class' => class_basename($eventClass),
-            'subject_type' => 'dsar_request',
+            'subject_type' => AuditSubjectType::DsarRequest,
             'subject_id' => $request->getKey(),
             'subject_label' => null,
-            'action' => 'dsar_'.$outcome,
-            'description' => 'DSAR '.str_replace('_', ' ', $outcome).' — for: '.$request->subject->name,
+            'action' => $outcome,
+            'description' => 'DSAR '.str_replace('_', ' ', Str::after($outcome->value, 'dsar_')).' — for: '.$request->subject->name,
             'actor_user_id' => null,
             'actor_role_code' => null,
             'actor_label' => null,

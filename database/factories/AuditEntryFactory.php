@@ -5,8 +5,10 @@ namespace Database\Factories;
 use App\Models\User;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 
 /**
  * Append-only audit rows for the T6 foundation pins and T7's admin-read
@@ -34,10 +36,10 @@ class AuditEntryFactory extends Factory
             'company_id' => Company::factory(),
             'stored_event_id' => null,
             'event_class' => 'AdminInvoiceReviewed',
-            'subject_type' => 'invoice',
+            'subject_type' => AuditSubjectType::Invoice,
             'subject_id' => (string) Str::uuid(),
             'subject_label' => $invoiceNumber,
-            'action' => 'admin_reviewed',
+            'action' => AuditAction::AdminReviewed,
             'description' => "Platform admin reviewed invoice {$invoiceNumber}.",
             'actor_user_id' => User::factory(),
             'actor_role_code' => 'platform_super_admin',

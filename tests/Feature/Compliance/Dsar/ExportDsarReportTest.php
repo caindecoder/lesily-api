@@ -4,11 +4,14 @@ namespace Tests\Feature\Compliance\Dsar;
 
 use App\Models\User;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Lang;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Entities\NotificationPreference;
 use App\Compliance\Dsar\Exceptions\DsarReportRenderingFailedException;
@@ -102,6 +105,10 @@ class ExportDsarReportTest extends DsarTestCase
             'an action code' => ['action', 'dsar_withdrawn', 'Withdrew a data request (dsar_withdrawn)'],
             'an expired download action' => ['action', 'dsar_download_expired', "A data export's download window closed (dsar_download_expired)"],
             'a missed deadline action' => ['action', 'dsar_deadline_missed', 'A data request missed its 30-day deadline (dsar_deadline_missed)'],
+            'a download action' => ['action', 'dsar_downloaded', 'Downloaded a copy of personal data (dsar_downloaded)'],
+            "an admin's view action" => ['action', 'dsar_admin_viewed', 'Viewed a data request (dsar_admin_viewed)'],
+            "an admin's queue view action" => ['action', 'dsar_queue_viewed', 'Viewed the data requests (dsar_queue_viewed)'],
+            'the data request queue' => ['subject_type', 'dsar_request_queue', 'The data requests (dsar_request_queue)'],
             'a role code' => ['role', 'hr_officer', 'HR Officer (hr_officer)'],
             'a ready data export notice' => ['notification_type', 'dsar_export_ready', 'Data export ready (dsar_export_ready)'],
             'a failed data export notice' => ['notification_type', 'dsar_export_failed', 'Data export failed (dsar_export_failed)'],
@@ -124,6 +131,31 @@ class ExportDsarReportTest extends DsarTestCase
 
         // Then the report writes it for a person to read
         $this->assertReportCell($readable);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function provideAuditCodes(): array
+    {
+        return [
+            ...collect(AuditAction::cases())->mapWithKeys(fn (AuditAction $action): array => ["action {$action->value}" => ['action', $action->value]])->all(),
+            ...collect(AuditSubjectType::cases())->mapWithKeys(fn (AuditSubjectType $type): array => ["subject type {$type->value}" => ['subject_type', $type->value]])->all(),
+        ];
+    }
+
+    #[Test, DataProvider('provideAuditCodes')]
+    public function when_any_audit_code_is_exported_then_the_report_has_words_for_it(string $field, string $code): void
+    {
+        // Given an export whose section holds the audit code
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $this->withSections($this->aSectionHolding('profile', [$field => $code]));
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the report explains the code in words
+        $this->assertReportExplains($field, $code);
     }
 
     #[Test]
@@ -233,6 +265,32 @@ class ExportDsarReportTest extends DsarTestCase
         // Then the contents list names every section, and each follows under its title, in the same order
         $titles = ['Your profile', 'Your membership', 'Consent records', 'Actions you took', 'Sign-ins', 'Invitations', 'Ownership transfers', 'Notifications and preferences'];
         $this->assertReportShowsInOrder(['Contents', ...$titles, ...$titles]);
+    }
+
+    #[Test]
+    public function when_a_subject_who_downloaded_an_export_asks_again_then_the_report_names_the_download(): void
+    {
+        // Given a member who downloaded their ready export, then asked for their data again
+        $first = $this->aReadyExportFor($this->company, $this->member);
+        $this->downloadDsarExport($this->member, $this->company, $first->getKey());
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+
+        // When their new export is built
+        $this->runTheExportFor($request);
+
+        // Then the report names the download in words
+        $this->assertReportCell('Downloaded a copy of personal data (dsar_downloaded)');
+    }
+
+    /**
+     * $code has words in lang/en/dsar.php, and the report shows them with the
+     * code after them.
+     */
+    protected function assertReportExplains(string $field, string $code): void
+    {
+        $key = "dsar.codes.{$field}.{$code}";
+        $this->assertTrue(Lang::has($key), "No words for {$key}");
+        $this->assertReportCell(__($key)." ({$code})");
     }
 
     /**

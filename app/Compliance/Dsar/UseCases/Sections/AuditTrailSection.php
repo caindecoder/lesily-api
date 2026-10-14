@@ -27,9 +27,9 @@ class AuditTrailSection implements DsarSectionProvider
             ->get()
             ->map(fn (AuditEntry $entry): array => [
                 'recorded_at' => $entry->recorded_at->toISOString(),
-                'action' => $entry->action,
+                'action' => $entry->action->value,
                 'description' => $entry->description,
-                'subject_type' => $entry->subject_type,
+                'subject_type' => $entry->subject_type->value,
                 'subject_id' => $entry->subject_id,
                 'ip_address' => $entry->ip_address,
                 'user_agent' => $entry->user_agent,

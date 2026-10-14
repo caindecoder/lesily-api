@@ -7,6 +7,7 @@ use RuntimeException;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\Events\DsarDownloadExpired;
 use App\Compliance\Dsar\UseCases\Audit\DsarOutcomeAudit;
@@ -53,7 +54,7 @@ class ExpireDsarDownloadsInteractor
             }
 
             $request->persist();
-            $this->audit->record(DsarRequestRecord::query()->findOrFail($requestId), DsarDownloadExpired::class, 'download_expired');
+            $this->audit->record(DsarRequestRecord::query()->findOrFail($requestId), DsarDownloadExpired::class, AuditAction::DsarDownloadExpired);
 
             return true;
         });

@@ -5,10 +5,12 @@ namespace App\Companies\UseCases\Interactors;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Pagination\LengthAwarePaginator;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
 
 /**
@@ -67,8 +69,8 @@ class ReviewOwnershipTransferCaseQueueInteractor
         // The queue read points at a PAGE, not a record.
         AuditEntry::query()->create([
             'event_class' => 'OwnershipTransferCaseQueueViewed',
-            'subject_type' => 'ownership_transfer_case_queue',
-            'action' => 'case_queue_viewed',
+            'subject_type' => AuditSubjectType::OwnershipTransferCaseQueue,
+            'action' => AuditAction::CaseQueueViewed,
             'description' => 'Platform admin viewed a page of the ownership-transfer case queue.',
             'actor_user_id' => $admin->id,
             'actor_role_code' => 'platform_super_admin',

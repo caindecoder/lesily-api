@@ -4,9 +4,11 @@ namespace App\Compliance\Dsar\UseCases\Interactors;
 
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class ReviewDsarRequestAsAdminInteractor
@@ -32,10 +34,10 @@ class ReviewDsarRequestAsAdminInteractor
             'company_id' => $request->company_id,
             'stored_event_id' => null,
             'event_class' => 'DsarRequestViewedByAdmin',
-            'subject_type' => 'dsar_request',
+            'subject_type' => AuditSubjectType::DsarRequest,
             'subject_id' => $request->getKey(),
             'subject_label' => null,
-            'action' => 'dsar_admin_viewed',
+            'action' => AuditAction::DsarAdminViewed,
             'description' => 'DSAR request viewed by a platform admin.',
             'actor_user_id' => $admin->getKey(),
             'actor_role_code' => 'platform_super_admin',

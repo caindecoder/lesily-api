@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\PlatformAdmin;
 
+use ValueError;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Database\QueryException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 
 /**
@@ -34,8 +36,8 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
     public function when_appending_an_entry_missing_a_required_field_then_insert_is_rejected(): void
     {
         // Given an otherwise-valid entry with no action (setAttribute pushes
-        // null past the string property type on purpose — the DB constraint
-        // is the thing under test)
+        // null past the property type on purpose — the DB constraint is the
+        // thing under test)
         $entry = AuditEntry::factory()->make();
         $entry->setAttribute('action', null);
 
@@ -46,6 +48,33 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
         } catch (QueryException $e) {
             // Then the insert is rejected by the integrity constraint on that column
             $this->assertNotNullViolationOn($e, 'action');
+        }
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideUnknownCodes(): array
+    {
+        return [
+            'an unknown action' => ['action'],
+            'an unknown subject type' => ['subject_type'],
+        ];
+    }
+
+    #[Test, DataProvider('provideUnknownCodes')]
+    public function when_an_entry_names_an_unknown_code_then_it_is_refused(string $field): void
+    {
+        // Given an entry naming a code that is not an audit code
+        $attributes = [$field => 'not_a_code'];
+
+        try {
+            // When it is appended
+            AuditEntry::factory()->create($attributes);
+            $this->fail("Expected the unknown {$field} to be refused.");
+        } catch (ValueError) {
+            // Then it is refused, and nothing is stored
+            $this->assertDatabaseCount('audit_trail', 0);
         }
     }
 
@@ -87,7 +116,7 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
         ]);
     }
 
-    // Edge — the two declared casts are live behavior, not decoration
+    // Edge — the metadata and recorded_at casts are live behavior, not decoration
     // (independent-review findings TA-3.2/4.2): structured metadata written
     // as an array reads back as the same array (JSON round-trip), and
     // recorded_at hydrates as a datetime. Teeth: the lap-11 revert-check

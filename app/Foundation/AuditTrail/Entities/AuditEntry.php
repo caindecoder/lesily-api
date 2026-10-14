@@ -4,7 +4,9 @@ namespace App\Foundation\AuditTrail\Entities;
 
 use Illuminate\Database\Eloquent\Model;
 use Database\Factories\AuditEntryFactory;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
@@ -50,6 +52,8 @@ class AuditEntry extends Model
     ];
 
     protected $casts = [
+        'action' => AuditAction::class,
+        'subject_type' => AuditSubjectType::class,
         'metadata' => 'array',
         'recorded_at' => 'datetime',
     ];

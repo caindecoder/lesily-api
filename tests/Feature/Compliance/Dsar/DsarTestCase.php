@@ -32,6 +32,7 @@ use App\Compliance\Dsar\Events\DsarSlaBreached;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Illuminate\Support\Testing\Fakes\QueueFake;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
@@ -1882,7 +1883,7 @@ abstract class DsarTestCase extends TestCase
         {
             public function __construct(private readonly DsarRequestRecord $failing, private readonly RuntimeException $cause) {}
 
-            public function record(DsarRequestRecord $request, string $eventClass, string $outcome): void
+            public function record(DsarRequestRecord $request, string $eventClass, AuditAction $outcome): void
             {
                 if ($request->is($this->failing)) {
                     throw $this->cause;
