@@ -190,7 +190,7 @@ abstract class AuthTestCase extends TestCase
     protected function verify(string $challengeId, string $code): TestResponse
     {
         return $this->postJson('/api/v1/auth/2fa/verify', [
-            'challenge_id' => $challengeId,
+            'challengeId' => $challengeId,
             'code' => $code,
         ]);
     }

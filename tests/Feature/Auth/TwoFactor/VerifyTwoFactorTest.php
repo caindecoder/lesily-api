@@ -131,7 +131,7 @@ class VerifyTwoFactorTest extends AuthTestCase
         // When they verify, naming their device
         $this->withHeader('User-Agent', 'Mozilla/5.0 (TestAgent)')
             ->postJson('/api/v1/auth/2fa/verify', [
-                'challenge_id' => $challengeId,
+                'challengeId' => $challengeId,
                 'code' => '123456',
                 'deviceName' => 'Alice iPhone',
             ])->assertOk();
@@ -157,7 +157,7 @@ class VerifyTwoFactorTest extends AuthTestCase
         // When they complete 2FA via the recovery code, naming their device
         $this->withHeader('User-Agent', 'Mozilla/5.0 (TestAgent)')
             ->postJson('/api/v1/auth/2fa/verify', [
-                'challenge_id' => $challengeId,
+                'challengeId' => $challengeId,
                 'code' => 'HAPY-CODE',
                 'deviceName' => 'Alice iPhone',
             ])->assertOk();
@@ -267,9 +267,9 @@ class VerifyTwoFactorTest extends AuthTestCase
     public static function provideInvalidVerifyPayloads(): array
     {
         return [
-            'missing challenge id' => [['code' => '123456'], 'challenge_id', 'The challenge id field is required.'],
-            'missing code' => [['challenge_id' => 'a-challenge-id'], 'code', 'The code field is required.'],
-            'blank code' => [['challenge_id' => 'a-challenge-id', 'code' => ''], 'code', 'The code field is required.'],
+            'missing challenge id' => [['code' => '123456'], 'challengeId', 'The challenge id field is required.'],
+            'missing code' => [['challengeId' => 'a-challenge-id'], 'code', 'The code field is required.'],
+            'blank code' => [['challengeId' => 'a-challenge-id', 'code' => ''], 'code', 'The code field is required.'],
         ];
     }
 
