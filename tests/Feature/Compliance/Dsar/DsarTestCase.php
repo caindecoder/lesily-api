@@ -155,7 +155,7 @@ abstract class DsarTestCase extends TestCase
         $this->idempotencyKey = (string) Str::uuid();
 
         if ($requester === 'admin') {
-            return [$this->aCompanyMember($company, 'admin'), ['subject_user_id' => $subject->getKey()]];
+            return [$this->aCompanyMember($company, 'admin'), ['subjectUserId' => $subject->getKey()]];
         }
 
         return [$subject, []];
@@ -173,7 +173,7 @@ abstract class DsarTestCase extends TestCase
 
         DsarRequest::retrieve($requestId)
             ->submit(SubmitDsarRequestCommand::from([
-                'subject_user_id' => $subject->getKey(),
+                'subjectUserId' => $subject->getKey(),
                 'companyId' => $company->getKey(),
                 'requestedByUserId' => $requester->getKey(),
             ]), $this->roleCodeOf($requester, $company->getKey()))
