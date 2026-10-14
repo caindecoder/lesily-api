@@ -642,7 +642,9 @@ abstract class DsarTestCase extends TestCase
      */
     protected function assertDownloadAudited(TestResponse $response, DsarRequestRecord $request, User $subject): void
     {
-        $entry = AuditEntry::query()->where('request_id', $response->headers->get('Correlation-Id'))->sole();
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
 
         $this->assertDatabaseHas('audit_trail', [
             'id' => $entry->getKey(),
@@ -889,7 +891,9 @@ abstract class DsarTestCase extends TestCase
             ->where('event_class', DsarRequestCancelled::class)
             ->sole()
             ->id;
-        $entry = AuditEntry::query()->where('request_id', $response->headers->get('Correlation-Id'))->sole();
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
 
         $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_withdrawn')->count());
         $this->assertDatabaseHas('audit_trail', [
@@ -979,7 +983,9 @@ abstract class DsarTestCase extends TestCase
     {
         $record = $this->dsarRequestIn($response);
         $storedEventId = LesilyStoredEvent::query()->where('aggregate_uuid', $record->getKey())->sole()->id;
-        $entry = AuditEntry::query()->where('request_id', $response->headers->get('Correlation-Id'))->sole();
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
 
         $this->assertDatabaseCount('audit_trail', 1);
         $this->assertDatabaseHas('audit_trail', [
