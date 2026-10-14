@@ -159,7 +159,8 @@ jobs:
           name: coverage-reports
       # A failed upload fails this job: otherwise codecov/patch is simply absent
       # and looks like nothing. Its own job, so a Codecov outage leaves `test`
-      # and `sonarcloud` reporting.
+      # and `sonarcloud` reporting. Dependabot runs read CODECOV_TOKEN from the
+      # repo's Dependabot secrets, not its Actions secrets.
       - uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -434,8 +435,8 @@ jobs:
       # sonarcloud job via upload/download-artifact. lesily-api was the outlier.
       #
       # COUPLING, do not break: clover and junit both record ABSOLUTE paths, so
-      # this works only while `test` and `sonarcloud` check out to the same runner
-      # workspace. Never add a custom `path:` to either checkout.
+      # this works only while `test`, `codecov` and `sonarcloud` check out to the
+      # same runner workspace. Never add a custom `path:` to any of the three.
       - uses: actions/download-artifact@v8
         with:
           name: coverage-reports
