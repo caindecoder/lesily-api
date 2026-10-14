@@ -5,6 +5,7 @@ namespace App\Compliance\Dsar\UseCases\Interactors;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -20,46 +21,86 @@ class ReviewDsarRequestQueueInteractor
      */
     public function execute(DsarRequestAdminFilters $filters, User $admin, AdminRequestContext $context): DsarRequestQueue
     {
-        return DB::transaction(function () use ($admin, $context): DsarRequestQueue {
-            $page = DsarRequestRecord::query()
+        return DB::transaction(function () use ($filters, $admin, $context): DsarRequestQueue {
+            $page = $this->selectedBy($filters)
                 ->with(['company', 'subject', 'requestedBy'])
                 ->orderBy('sla_deadline')
                 ->orderBy('id')
                 ->paginate();
-            $counts = $this->countInProgress();
+            $counts = $this->countInProgress($this->selectedBy($filters));
 
-            $this->recordQueueRead($page, $admin, $context);
+            $this->recordQueueRead($this->queryContextOf($filters, $page), $admin, $context);
 
-            return new DsarRequestQueue($page, open: (int) $counts->open, overdue: 0, dueInSevenDays: (int) $counts->due_in_7_days);
+            return new DsarRequestQueue($page, open: (int) $counts->open, overdue: (int) $counts->overdue, dueInSevenDays: (int) $counts->due_in_7_days);
         });
     }
 
     /**
-     * The in-progress requests, counted in one query. Days are calendar days
-     * on UTC dates (N78): due within seven days = from tomorrow's start to
-     * before the eighth day's start.
+     * The requests the filters select — the page and the counts read the same set (N84).
+     *
+     * @return Builder<DsarRequestRecord>
      */
-    private function countInProgress(): object
+    private function selectedBy(DsarRequestAdminFilters $filters): Builder
+    {
+        return DsarRequestRecord::query()
+            ->when($filters->status, fn (Builder $query, string $status) => $query->where('status', $status))
+            ->when($filters->company_id, fn (Builder $query, string $companyId) => $query->where('company_id', $companyId))
+            ->when($filters->overdueOnly(), fn (Builder $query) => $query->whereOverdue(CarbonImmutable::now()))
+            ->when($filters->breachedOnly(), fn (Builder $query) => $query->whereSlaBreached());
+    }
+
+    /**
+     * The in-progress requests among $selected, counted in one query. Days are
+     * calendar days on UTC dates (N78): overdue = due before tomorrow's start
+     * (0 days or fewer left); due within seven days = from tomorrow's start to
+     * before the eighth day's start.
+     *
+     * @param  Builder<DsarRequestRecord>  $selected
+     */
+    private function countInProgress(Builder $selected): object
     {
         $tomorrow = CarbonImmutable::now()->startOfDay()->addDay();
 
-        return DsarRequestRecord::query()
+        return $selected
             ->where('status', DsarRequestStatus::InProgress)
             ->selectRaw(
-                'count(*) as open, sum(case when sla_deadline >= ? and sla_deadline < ? then 1 else 0 end) as due_in_7_days',
-                [$tomorrow, $tomorrow->addDays(7)],
+                'count(*) as open, '
+                .'sum(case when sla_deadline < ? then 1 else 0 end) as overdue, '
+                .'sum(case when sla_deadline >= ? and sla_deadline < ? then 1 else 0 end) as due_in_7_days',
+                [$tomorrow, $tomorrow, $tomorrow->addDays(7)],
             )
             ->toBase()
             ->sole();
     }
 
     /**
+     * @param  LengthAwarePaginator<int, DsarRequestRecord>  $page
+     * @return array<string, mixed>
+     */
+    private function queryContextOf(DsarRequestAdminFilters $filters, LengthAwarePaginator $page): array
+    {
+        return [
+            'filters' => array_filter(
+                [
+                    'status' => $filters->status,
+                    'company_id' => $filters->company_id,
+                    'overdue' => $filters->overdue,
+                    'sla_breached' => $filters->sla_breached,
+                ],
+                fn (?string $value): bool => $value !== null,
+            ),
+            'result_count' => count($page->items()),
+            'page' => $page->currentPage(),
+        ];
+    }
+
+    /**
      * A queue read points at a page, not at one request — the row is
      * platform-level, its query context in metadata.
      *
-     * @param  LengthAwarePaginator<int, DsarRequestRecord>  $page
+     * @param  array<string, mixed>  $queryContext
      */
-    private function recordQueueRead(LengthAwarePaginator $page, User $admin, AdminRequestContext $context): void
+    private function recordQueueRead(array $queryContext, User $admin, AdminRequestContext $context): void
     {
         AuditEntry::query()->create([
             'event_class' => 'DsarRequestQueueViewed',
@@ -72,7 +113,7 @@ class ReviewDsarRequestQueueInteractor
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),
-            'metadata' => ['filters' => [], 'result_count' => count($page->items()), 'page' => $page->currentPage()],
+            'metadata' => $queryContext,
             'recorded_at' => now(),
         ]);
     }

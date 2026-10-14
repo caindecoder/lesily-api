@@ -122,6 +122,23 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         $this->assertQueueReadAudited($response, ['filters' => [], 'result_count' => 0, 'page' => 1]);
     }
 
+    /**
+     * @param  array{open: int, overdue: int, due_in_7_days: int}  $kpis
+     */
+    #[Test]
+    #[DataProvider('provideDeadlinesAroundToday')]
+    public function when_deadlines_fall_around_today_then_the_kpis_count_calendar_days(string $deadline, array $kpis): void
+    {
+        // Given one in-progress request due at this row's instant — the clock reads 1 Oct 09:00 UTC
+        $this->aRequestDue($this->company, $deadline);
+
+        // When the admin lists the queue
+        $response = $this->listQueue($this->admin);
+
+        // Then the counts place it by calendar day: overdue through the deadline day, due within seven days after it
+        $this->assertKpis($response, $kpis);
+    }
+
     #[Test]
     public function when_requests_exist_across_companies_then_the_queue_lists_them_soonest_deadline_first(): void
     {
@@ -162,6 +179,99 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         $this->assertListed($response, array_reverse($tied));
     }
 
+    /**
+     * @param  array{open: int, overdue: int, due_in_7_days: int}  $kpis
+     */
+    #[Test]
+    #[DataProvider('provideStatusFilters')]
+    public function when_the_queue_is_filtered_by_status_then_only_matching_requests_are_listed_and_the_kpis_follow(string $status, array $kpis): void
+    {
+        // Given one request in each status
+        $requests = [];
+        foreach (['in_progress', 'fulfilled', 'rejected', 'cancelled'] as $state) {
+            $requests[$state] = $this->aRequestDue($this->company, '2026-10-20 09:00:00', $state);
+        }
+
+        // When the admin lists the queue filtered by this row's status
+        $response = $this->listQueue($this->admin, ['status' => $status]);
+
+        // Then only that status is listed, the counts follow the filter, and the filter is recorded
+        $this->assertListed($response, [$requests[$status]]);
+        $this->assertKpis($response, $kpis);
+        $this->assertQueueReadAudited($response, ['filters' => ['status' => $status], 'result_count' => 1, 'page' => 1]);
+    }
+
+    #[Test]
+    public function when_the_queue_is_filtered_by_company_then_only_that_companys_requests_and_kpis_are_shown(): void
+    {
+        // Given two requests in one company — one overdue, one due in four days — and an overdue one in another company
+        $overdue = $this->aRequestDue($this->company, '2026-09-30 09:00:00');
+        $dueSoon = $this->aRequestDue($this->company, '2026-10-05 09:00:00');
+        $this->aRequestDue($this->otherCompany, '2026-09-29 09:00:00');
+
+        // When the admin lists the queue for the first company
+        $response = $this->listQueue($this->admin, ['company_id' => $this->company->getKey()]);
+
+        // Then only that company's requests are listed and counted, and the filter is recorded
+        $this->assertListed($response, [$overdue, $dueSoon]);
+        $this->assertKpis($response, ['open' => 2, 'overdue' => 1, 'due_in_7_days' => 1]);
+        $this->assertQueueReadAudited($response, ['filters' => ['company_id' => $this->company->getKey()], 'result_count' => 2, 'page' => 1]);
+    }
+
+    #[Test]
+    public function when_overdue_only_is_toggled_then_only_overdue_requests_are_listed_and_the_kpis_recompute(): void
+    {
+        // Given in-progress requests two days late and due today (both overdue — 0 days or fewer left),
+        // one in progress due at the first second of tomorrow, and a fulfilled one whose deadline passed
+        $dueToday = $this->aRequestDue($this->company, '2026-10-01 09:00:00');
+        $twoDaysLate = $this->aRequestDue($this->otherCompany, '2026-09-29 09:00:00');
+        $this->aRequestDue($this->company, '2026-10-02 00:00:00');
+        $this->aRequestDue($this->otherCompany, '2026-09-25 09:00:00', 'fulfilled');
+
+        // When the admin toggles "Overdue only"
+        $response = $this->listQueue($this->admin, ['overdue' => 'true']);
+
+        // Then only the overdue in-progress requests are listed, soonest deadline first, the counts recompute
+        // against them, and the filter is recorded
+        $this->assertListed($response, [$twoDaysLate, $dueToday]);
+        $this->assertKpis($response, ['open' => 2, 'overdue' => 2, 'due_in_7_days' => 0]);
+        $this->assertQueueReadAudited($response, ['filters' => ['overdue' => 'true'], 'result_count' => 2, 'page' => 1]);
+    }
+
+    #[Test]
+    public function when_breached_is_toggled_then_only_flagged_requests_are_listed(): void
+    {
+        // Given a flagged request still in progress, a flagged one fulfilled late, and an overdue one the sweep has not flagged
+        $flaggedInProgress = $this->aRequestDue($this->company, '2026-09-28 09:00:00', 'breached');
+        $flaggedThenFulfilled = $this->aRequestDue($this->otherCompany, '2026-09-26 09:00:00', 'breached_fulfilled');
+        $this->aRequestDue($this->company, '2026-09-30 09:00:00');
+
+        // When the admin toggles "Breached"
+        $response = $this->listQueue($this->admin, ['sla_breached' => 'true']);
+
+        // Then only the flagged requests are listed, the counts recompute against them, and the filter is recorded
+        $this->assertListed($response, [$flaggedThenFulfilled, $flaggedInProgress]);
+        $this->assertKpis($response, ['open' => 1, 'overdue' => 1, 'due_in_7_days' => 0]);
+        $this->assertQueueReadAudited($response, ['filters' => ['sla_breached' => 'true'], 'result_count' => 2, 'page' => 1]);
+    }
+
+    #[Test]
+    #[DataProvider('provideFlags')]
+    public function when_a_flag_is_false_then_the_queue_is_not_restricted(string $flag): void
+    {
+        // Given an unflagged request due in four days and a flagged overdue one
+        $dueSoon = $this->aRequestDue($this->company, '2026-10-05 09:00:00');
+        $flaggedOverdue = $this->aRequestDue($this->otherCompany, '2026-09-28 09:00:00', 'breached');
+
+        // When the admin lists the queue with this row's flag switched off
+        $response = $this->listQueue($this->admin, [$flag => 'false']);
+
+        // Then nothing is filtered out, the counts cover both, and the switched-off flag is recorded
+        $this->assertListed($response, [$flaggedOverdue, $dueSoon]);
+        $this->assertKpis($response, ['open' => 2, 'overdue' => 1, 'due_in_7_days' => 1]);
+        $this->assertQueueReadAudited($response, ['filters' => [$flag => 'false'], 'result_count' => 2, 'page' => 1]);
+    }
+
     #[Test]
     public function when_a_dsar_admin_filter_is_built_without_values_then_defaults_apply(): void
     {
@@ -192,6 +302,46 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
             'per_page above cap' => [['per_page' => 101], 'per_page', 'The per page field must not be greater than 100.'],
             'page below floor' => [['page' => 0], 'page', 'The page field must be at least 1.'],
             'empty status value' => [['status' => ''], 'status', 'The status field must have a value.'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideFlags(): array
+    {
+        return [
+            'overdue' => ['overdue'],
+            'breached' => ['sla_breached'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string, array{open: int, overdue: int, due_in_7_days: int}}>
+     */
+    public static function provideDeadlinesAroundToday(): array
+    {
+        return [
+            'a day late' => ['2026-09-30 09:00:00', ['open' => 1, 'overdue' => 1, 'due_in_7_days' => 0]],
+            'the last second of today' => ['2026-10-01 23:59:59', ['open' => 1, 'overdue' => 1, 'due_in_7_days' => 0]],
+            'the first second of tomorrow' => ['2026-10-02 00:00:00', ['open' => 1, 'overdue' => 0, 'due_in_7_days' => 1]],
+            'the last second of the seventh day' => ['2026-10-08 23:59:59', ['open' => 1, 'overdue' => 0, 'due_in_7_days' => 1]],
+            'the first second of the eighth day' => ['2026-10-09 00:00:00', ['open' => 1, 'overdue' => 0, 'due_in_7_days' => 0]],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string, array{open: int, overdue: int, due_in_7_days: int}}>
+     */
+    public static function provideStatusFilters(): array
+    {
+        $none = ['open' => 0, 'overdue' => 0, 'due_in_7_days' => 0];
+
+        return [
+            'in progress' => ['in_progress', ['open' => 1, 'overdue' => 0, 'due_in_7_days' => 0]],
+            'fulfilled' => ['fulfilled', $none],
+            'rejected' => ['rejected', $none],
+            'cancelled' => ['cancelled', $none],
         ];
     }
 
@@ -228,14 +378,25 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     }
 
     /**
-     * A request about a new member of $company, due at $deadline, in progress.
+     * A request about a new member of $company, due at $deadline, in $state —
+     * a status, or a breach flagged while in progress or before a late fulfilment.
      */
-    protected function aRequestDue(Company $company, string $deadline): DsarRequestRecord
+    protected function aRequestDue(Company $company, string $deadline, string $state = 'in_progress'): DsarRequestRecord
     {
-        return DsarRequestRecord::factory()
+        $factory = DsarRequestRecord::factory()
             ->forSubject($company, $this->aCompanyMember($company))
-            ->dueAt($deadline)
-            ->create();
+            ->dueAt($deadline);
+
+        $factory = match ($state) {
+            'in_progress' => $factory,
+            'fulfilled' => $factory->fulfilled(),
+            'rejected' => $factory->rejected(),
+            'cancelled' => $factory->cancelled(),
+            'breached' => $factory->slaBreached(),
+            'breached_fulfilled' => $factory->slaBreached()->fulfilled(),
+        };
+
+        return $factory->create();
     }
 
     /**

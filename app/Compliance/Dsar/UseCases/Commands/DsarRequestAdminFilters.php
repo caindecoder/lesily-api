@@ -43,12 +43,12 @@ class DsarRequestAdminFilters extends Data
 
     public function overdueOnly(): bool
     {
-        return false;
+        return $this->overdue === 'true';
     }
 
     public function breachedOnly(): bool
     {
-        return false;
+        return $this->sla_breached === 'true';
     }
 
     /**
