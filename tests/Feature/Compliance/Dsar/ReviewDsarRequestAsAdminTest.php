@@ -29,8 +29,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
 
         $this->company = Company::factory()->create();
         $this->member = $this->aCompanyMember($this->company);
-        $this->admin = User::factory()->create();
-        config(['platform.admin_user_ids' => [$this->admin->getKey()]]);
+        $this->admin = $this->aPlatformAdmin();
     }
 
     #[Test]
@@ -241,17 +240,6 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     }
 
     /**
-     * @return array<string, array{string}>
-     */
-    public static function provideTenantRolesDeniedTheAdminSurface(): array
-    {
-        return [
-            'owner' => ['owner'],
-            'auditor' => ['auditor'],
-        ];
-    }
-
-    /**
      * @return array<string, array{string, int}>
      */
     public static function provideDaysAroundTheDeadline(): array
@@ -339,16 +327,6 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         $entry = AuditEntry::query()->where('action', 'dsar_admin_viewed')->sole();
         $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
         $this->assertNotNull($entry->user_agent);
-    }
-
-    /**
-     * The read failed closed — the internal-error envelope and no request data.
-     */
-    protected function assertFailedClosed(TestResponse $response): void
-    {
-        $response->assertInternalServerError();
-        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
-        $response->assertJsonMissingPath('data');
     }
 
     /**

@@ -73,6 +73,44 @@ class DsarRequestRecordFactory extends Factory
         ]);
     }
 
+    public function identifiedAs(string $id): static
+    {
+        return $this->state(['id' => $id]);
+    }
+
+    public function dueAt(string $deadline): static
+    {
+        $slaDeadline = CarbonImmutable::parse($deadline);
+
+        return $this->state([
+            'requested_at' => $slaDeadline->subDays(30),
+            'sla_deadline' => $slaDeadline,
+        ]);
+    }
+
+    public function slaBreached(): static
+    {
+        return $this->state(['sla_breached_at' => CarbonImmutable::now()]);
+    }
+
+    public function rejected(): static
+    {
+        return $this->state([
+            'status' => DsarRequestStatus::Rejected,
+            'rejected_at' => CarbonImmutable::now(),
+            'rejection_reason' => 'The export could not be built. Please submit a new request.',
+        ]);
+    }
+
+    public function cancelled(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => DsarRequestStatus::Cancelled,
+            'cancelled_at' => CarbonImmutable::now(),
+            'cancelled_by' => $attributes['requested_by'],
+        ]);
+    }
+
     public function downloadExpired(): static
     {
         return $this->state([

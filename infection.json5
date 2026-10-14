@@ -141,9 +141,6 @@
                 // becomes a real, killable regression.
                 "App\\Billing\\Invoices\\Entities\\Invoice::company",
                 "App\\Companies\\Entities\\Company::settings",
-                // The same class: the admin DSAR detail reads the request's company lazily.
-                // REMOVE WHEN the admin DSAR queue (SLICE-dsar-access 10b) eager-loads it.
-                "App\\Compliance\\Dsar\\Entities\\DsarRequestRecord::company",
                 // OQ-1-172 PR-0 L-SCOPE: each is invoked from a scope that reaches
                 // protected - envelope() by the parent Mailable, forCompany() by the
                 // AggregateRoot subclasses, scopeWhereForCompany() via Model::callNamedScope.
@@ -341,9 +338,16 @@
         // returns a whole-number float, which the non-strict int return type coerces
         // without loss - the (int) cast only satisfies Larastan. REMOVE WHEN
         // declare(strict_types=1) lands: the uncast float becomes a TypeError.
+        // L-NATIVE-COUNT: the admin DSAR queue's COUNT(*) arrives from pdo_mysql as a
+        // native int (PHP 8.1+, PDO::ATTR_STRINGIFY_FETCHES off), so the (int) on `open`
+        // only satisfies Larastan's int shape; the two SUM casts are earned (decimal
+        // strings, NULL over no rows - the empty-queue test kills them). Line-keyed so
+        // those two stay mutated. REMOVE WHEN the connection stringifies fetches or
+        // the driver changes: the uncast count would then reach DsarRequestQueue as text.
         "CastInt": {
             ignore: [
                 "App\\Compliance\\Dsar\\Entities\\DsarRequestRecord::daysRemaining",
+                "App\\Compliance\\Dsar\\UseCases\\Interactors\\ReviewDsarRequestQueueInteractor::countInProgress::79",
             ],
         },
         "AssignCoalesce": {

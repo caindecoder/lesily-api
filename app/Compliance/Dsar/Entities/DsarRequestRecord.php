@@ -154,6 +154,28 @@ class DsarRequestRecord extends Model
     }
 
     /**
+     * Requests still in progress with 0 days or fewer left on $at — due
+     * before the start of the next calendar day.
+     *
+     * @param  Builder<self>  $query
+     */
+    protected function scopeWhereOverdue(Builder $query, CarbonInterface $at): void
+    {
+        $query->where('status', DsarRequestStatus::InProgress)
+            ->where('sla_deadline', '<', CarbonImmutable::instance($at)->startOfDay()->addDay());
+    }
+
+    /**
+     * Requests whose missed deadline the daily sweep has flagged.
+     *
+     * @param  Builder<self>  $query
+     */
+    protected function scopeWhereSlaBreached(Builder $query): void
+    {
+        $query->whereNotNull('sla_breached_at');
+    }
+
+    /**
      * Requests about $user — the data subject's own.
      *
      * @param  Builder<self>  $query

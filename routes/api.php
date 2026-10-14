@@ -367,6 +367,11 @@ Route::patch('/v1/dsar-requests/{requestId}/cancel', [DsarRequestsController::cl
 Route::post('/v1/dsar-requests', [DsarRequestsController::class, 'store'])
     ->middleware(['auth:sanctum', 'auth.company', 'idempotency-key:required']);
 
+// A platform admin reviews the DSAR queue across companies (UC-1-123) - auth:sanctum + platform.admin
+// only, no auth.company; one audit row per read, written with the read.
+Route::get('/v1/admin/dsar-requests', [PlatformAdminDsarRequestsController::class, 'index'])
+    ->middleware(['auth:sanctum', 'platform.admin']);
+
 // A platform admin views one DSAR request across companies (UC-1-124) - auth:sanctum + platform.admin
 // only, no auth.company; one audit row per read, written with the read (an audit failure vetoes it).
 Route::get('/v1/admin/dsar-requests/{requestId}', [PlatformAdminDsarRequestsController::class, 'show'])
