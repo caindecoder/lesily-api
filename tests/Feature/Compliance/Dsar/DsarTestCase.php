@@ -212,6 +212,44 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * Every assignable tenant role — none of them reaches the platform-admin surface.
+     *
+     * @return array<string, array{string}>
+     */
+    public static function provideTenantRolesDeniedTheAdminSurface(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'employee' => ['employee'],
+            'auditor' => ['auditor'],
+        ];
+    }
+
+    /**
+     * A fresh user on the platform-admin allowlist.
+     */
+    protected function aPlatformAdmin(): User
+    {
+        $admin = User::factory()->create();
+        config(['platform.admin_user_ids' => [$admin->getKey()]]);
+
+        return $admin;
+    }
+
+    /**
+     * The read failed closed — the internal-error envelope and no request data.
+     */
+    protected function assertFailedClosed(TestResponse $response): void
+    {
+        $response->assertInternalServerError();
+        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
+        $response->assertJsonMissingPath('data');
+    }
+
+    /**
      * @return array<string, array{string}>
      */
     public static function provideUnknownRequestIds(): array
