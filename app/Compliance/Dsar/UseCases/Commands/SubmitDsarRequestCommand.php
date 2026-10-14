@@ -26,13 +26,13 @@ class SubmitDsarRequestCommand extends Data
         ];
     }
 
-    public function subjectUserId(): string
+    public function resolvedSubjectUserId(): string
     {
         return $this->subjectUserId ?? $this->requestedByUserId;
     }
 
     public function isForSomeoneElse(): bool
     {
-        return $this->subjectUserId() !== $this->requestedByUserId;
+        return $this->resolvedSubjectUserId() !== $this->requestedByUserId;
     }
 }

@@ -48,7 +48,7 @@ class DsarRequest extends AggregateRoot
             ->recordThat(new DsarRequestSubmitted(
                 requestId: $this->uuid(),
                 companyId: $command->companyId,
-                subjectUserId: $command->subjectUserId(),
+                subjectUserId: $command->resolvedSubjectUserId(),
                 requestedByUserId: $command->requestedByUserId,
                 requestedByRole: $requestedByRole,
                 requestType: self::REQUEST_TYPE_ACCESS,

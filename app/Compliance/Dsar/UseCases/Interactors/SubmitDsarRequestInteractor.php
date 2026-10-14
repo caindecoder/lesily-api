@@ -34,7 +34,7 @@ class SubmitDsarRequestInteractor
             throw new RoleInsufficientException(self::REQUEST_FOR_OTHERS);
         }
 
-        $this->liveMembership($command->companyId, $command->subjectUserId());
+        $this->liveMembership($command->companyId, $command->resolvedSubjectUserId());
 
         try {
             return DB::transaction(fn () => $this->record($command, $actor, $context));
