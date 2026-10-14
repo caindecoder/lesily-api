@@ -172,26 +172,6 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_requests_exist_across_companies_then_the_queue_lists_them_soonest_deadline_first(): void
-    {
-        // Given a request in one company due in three days, and one in another company due tomorrow
-        $dueLater = $this->aRequestDue($this->company, '2026-10-04 09:00:00');
-        $dueSooner = $this->aRequestDue($this->otherCompany, '2026-10-02 09:00:00');
-
-        // When the admin lists the queue
-        $response = $this->listQueue($this->admin);
-
-        // Then both companies' requests are listed soonest deadline first, as admin rows, with the counts
-        $response->assertOk();
-        $response->assertExactJson([
-            'data' => [$this->adminRowOf($dueSooner, 1), $this->adminRowOf($dueLater, 3)],
-            'meta' => ['pagination' => ['page' => 1, 'per_page' => 15, 'total' => 2, 'last_page' => 1]],
-            'kpis' => ['open' => 2, 'overdue' => 0, 'due_in_7_days' => 2],
-        ]);
-        $this->assertQueueReadAudited($response, ['filters' => [], 'result_count' => 2, 'page' => 1]);
-    }
-
-    #[Test]
     public function when_deadlines_tie_then_the_order_falls_back_to_the_id(): void
     {
         // Given three requests due at the same instant, created highest id first
@@ -209,6 +189,55 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
 
         // Then the tie falls back to the lowest id first — pages can never duplicate or skip a tied request
         $this->assertListed($response, array_reverse($tied));
+    }
+
+    #[Test]
+    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
+    {
+        // Given sixteen requests — two pages at the default size
+        $this->sixteenRequests();
+
+        // When the admin sends page 2 in the request body instead of the query string
+        $response = $this->listQueueWithBody(['page' => 2]);
+
+        // Then the body is ignored and the first page comes back
+        $response->assertOk();
+        $this->assertCount(15, $response->json('data'));
+        $response->assertJsonPath('meta.pagination.page', 1);
+    }
+
+    #[Test]
+    public function when_a_dsar_admin_filter_is_built_without_values_then_defaults_apply(): void
+    {
+        // Given no query values at all
+        // When the filter is built
+        $filters = DsarRequestAdminFilters::validateAndCreate([]);
+
+        // Then nothing is filtered, both flags are off, and pagination falls to its defaults
+        $this->assertSame(
+            [null, null, false, false, null, null],
+            [$filters->status, $filters->company_id, $filters->overdueOnly(), $filters->breachedOnly(), $filters->page, $filters->per_page],
+        );
+    }
+
+    #[Test]
+    public function when_requests_exist_across_companies_then_the_queue_lists_them_soonest_deadline_first(): void
+    {
+        // Given a request in one company due in three days, and one in another company due tomorrow
+        $dueLater = $this->aRequestDue($this->company, '2026-10-04 09:00:00');
+        $dueSooner = $this->aRequestDue($this->otherCompany, '2026-10-02 09:00:00');
+
+        // When the admin lists the queue
+        $response = $this->listQueue($this->admin);
+
+        // Then both companies' requests are listed soonest deadline first, as admin rows, with the counts
+        $response->assertOk();
+        $response->assertExactJson([
+            'data' => [$this->adminRowOf($dueSooner, 1), $this->adminRowOf($dueLater, 3)],
+            'meta' => ['pagination' => ['page' => 1, 'per_page' => 15, 'total' => 2, 'last_page' => 1]],
+            'kpis' => ['open' => 2, 'overdue' => 0, 'due_in_7_days' => 2],
+        ]);
+        $this->assertQueueReadAudited($response, ['filters' => [], 'result_count' => 2, 'page' => 1]);
     }
 
     /**
@@ -305,21 +334,6 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
-    {
-        // Given sixteen requests — two pages at the default size
-        $this->sixteenRequests();
-
-        // When the admin sends page 2 in the request body instead of the query string
-        $response = $this->listQueueWithBody(['page' => 2]);
-
-        // Then the body is ignored and the first page comes back
-        $response->assertOk();
-        $this->assertCount(15, $response->json('data'));
-        $response->assertJsonPath('meta.pagination.page', 1);
-    }
-
-    #[Test]
     public function when_the_queue_spans_pages_then_the_requested_page_is_returned_with_its_own_audit_row(): void
     {
         // Given sixteen requests due on consecutive days from tomorrow
@@ -333,20 +347,6 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         $response->assertJsonPath('meta.pagination', ['page' => 2, 'per_page' => 10, 'total' => 16, 'last_page' => 2]);
         $this->assertKpis($response, ['open' => 16, 'overdue' => 0, 'due_in_7_days' => 7]);
         $this->assertQueueReadAudited($response, ['filters' => [], 'result_count' => 6, 'page' => 2]);
-    }
-
-    #[Test]
-    public function when_a_dsar_admin_filter_is_built_without_values_then_defaults_apply(): void
-    {
-        // Given no query values at all
-        // When the filter is built
-        $filters = DsarRequestAdminFilters::validateAndCreate([]);
-
-        // Then nothing is filtered, both flags are off, and pagination falls to its defaults
-        $this->assertSame(
-            [null, null, false, false, null, null],
-            [$filters->status, $filters->company_id, $filters->overdueOnly(), $filters->breachedOnly(), $filters->page, $filters->per_page],
-        );
     }
 
     /**
@@ -364,6 +364,8 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
             'per_page below floor' => [['per_page' => 0], 'per_page', 'The per page field must be at least 1.'],
             'per_page above cap' => [['per_page' => 101], 'per_page', 'The per page field must not be greater than 100.'],
             'page below floor' => [['page' => 0], 'page', 'The page field must be at least 1.'],
+            'page not a number' => [['page' => 'abc'], 'page', 'The page field must be an integer.'],
+            'per_page not a number' => [['per_page' => 'abc'], 'per_page', 'The per page field must be an integer.'],
             'empty status value' => [['status' => ''], 'status', 'The status field must have a value.'],
         ];
     }

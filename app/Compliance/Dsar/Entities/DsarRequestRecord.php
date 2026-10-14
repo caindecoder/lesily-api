@@ -155,7 +155,7 @@ class DsarRequestRecord extends Model
 
     /**
      * Requests still in progress with 0 days or fewer left on $at — due
-     * before the start of the next calendar day (N78).
+     * before the start of the next calendar day.
      *
      * @param  Builder<self>  $query
      */

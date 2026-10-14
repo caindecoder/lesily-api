@@ -40,7 +40,7 @@ class ReviewDsarRequestQueueInteractor
     }
 
     /**
-     * The requests the filters select on $now — the page and the counts read the same set (N84).
+     * The requests the filters select on $now — the page and the counts read the same set.
      *
      * @return Builder<DsarRequestRecord>
      */
@@ -55,7 +55,7 @@ class ReviewDsarRequestQueueInteractor
 
     /**
      * The in-progress requests among $selected, counted in one query. Days are
-     * calendar days on UTC dates (N78): overdue = due before tomorrow's start
+     * calendar days on UTC dates: overdue = due before tomorrow's start
      * (0 days or fewer left); due within seven days = from tomorrow's start to
      * before the eighth day's start.
      *
