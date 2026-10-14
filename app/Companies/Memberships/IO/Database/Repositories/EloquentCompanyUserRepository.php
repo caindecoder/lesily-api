@@ -55,7 +55,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             // page defaults HERE, never by falling through to Laravel's resolver:
             // that reads $request->input('page'), which would honour a body-supplied
             // page and bypass the whitelisted, validated query DTO (api-conventions §10.1).
-            ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
+            ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
     }
 
     /**

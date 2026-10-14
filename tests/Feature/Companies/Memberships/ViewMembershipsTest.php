@@ -214,7 +214,7 @@ class ViewMembershipsTest extends MembershipsTestCase
             'search' => null,
             'sort' => null,
             'page' => null,
-            'per_page' => null,
+            'perPage' => null,
         ], $filters->toArray());
     }
 

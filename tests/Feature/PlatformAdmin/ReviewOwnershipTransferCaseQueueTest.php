@@ -158,9 +158,9 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
         // filled guard must never fire on an absent key
         $this->assertSame([
             'status' => null,
-            'company_id' => null,
+            'companyId' => null,
             'page' => null,
-            'per_page' => null,
+            'perPage' => null,
         ], $filters->toArray());
     }
 

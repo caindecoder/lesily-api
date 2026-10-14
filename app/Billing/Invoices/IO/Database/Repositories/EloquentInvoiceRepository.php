@@ -32,13 +32,13 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
         }
 
         return $query
-            ->when($filters->min_amount !== null, fn (Builder $query) => $query->where('amount_cents', '>=', $filters->min_amount))
-            ->when($filters->max_amount !== null, fn (Builder $query) => $query->where('amount_cents', '<=', $filters->max_amount))
+            ->when($filters->minAmount !== null, fn (Builder $query) => $query->where('amount_cents', '>=', $filters->minAmount))
+            ->when($filters->maxAmount !== null, fn (Builder $query) => $query->where('amount_cents', '<=', $filters->maxAmount))
             ->tap(fn (Builder $query) => $this->applySort($query, $filters->sort))
             // page defaults HERE, never by falling through to Laravel's resolver:
             // that reads $request->input('page'), which would honour a body-supplied
             // page and bypass the whitelisted, validated query DTO (api-conventions §10.1).
-            ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
+            ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
     }
 
     public function findForCompany(string $companyId, string $invoiceId): ?Invoice

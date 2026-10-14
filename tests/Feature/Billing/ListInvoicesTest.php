@@ -211,11 +211,11 @@ class ListInvoicesTest extends BillingTestCase
         $this->assertSame([
             'status' => null,
             'within' => null,
-            'min_amount' => null,
-            'max_amount' => null,
+            'minAmount' => null,
+            'maxAmount' => null,
             'sort' => null,
             'page' => null,
-            'per_page' => null,
+            'perPage' => null,
         ], $filters->toArray());
     }
 

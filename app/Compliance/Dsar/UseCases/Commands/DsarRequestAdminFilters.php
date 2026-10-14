@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Spatie\LaravelData\Attributes\MapInputName;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
@@ -18,15 +19,18 @@ class DsarRequestAdminFilters extends Data
 
     public ?string $status = null;
 
-    public ?string $company_id = null;
+    #[MapInputName('company_id')]
+    public ?string $companyId = null;
 
     public ?string $overdue = null;
 
-    public ?string $sla_breached = null;
+    #[MapInputName('sla_breached')]
+    public ?string $slaBreached = null;
 
     public ?int $page = null;
 
-    public ?int $per_page = null;
+    #[MapInputName('per_page')]
+    public ?int $perPage = null;
 
     public static function fromQuery(Request $request): static
     {
@@ -48,7 +52,7 @@ class DsarRequestAdminFilters extends Data
 
     public function breachedOnly(): bool
     {
-        return $this->sla_breached === 'true';
+        return $this->slaBreached === 'true';
     }
 
     /**

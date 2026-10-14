@@ -25,6 +25,6 @@ class ListDsarRequestsInteractor
             ->orderByDesc('id')
             // page defaults here, never through Laravel's resolver, which would
             // honour a body-supplied page past the validated query filters.
-            ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
+            ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
     }
 }
