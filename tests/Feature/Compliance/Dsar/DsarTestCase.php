@@ -876,20 +876,24 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * Exactly one audit entry records the withdrawal — "DSAR withdrawn — for:
-     * <subject>, by: <actor>" — linked to its stored event and stamped with the
-     * actor's role.
+     * Exactly one audit entry records the withdrawal $response answered — "DSAR
+     * withdrawn — for: <subject>, by: <actor>" — linked to its stored event,
+     * stamped with the actor's role, the response's Correlation-Id and the
+     * client's address and user agent.
      */
-    protected function assertWithdrawalAudited(DsarRequestRecord $request, User $subject, User $actor): void
+    protected function assertWithdrawalAudited(TestResponse $response, User $subject, User $actor): void
     {
+        $request = $this->dsarRequestIn($response);
         $storedEventId = LesilyStoredEvent::query()
             ->where('aggregate_uuid', $request->getKey())
             ->where('event_class', DsarRequestCancelled::class)
             ->sole()
             ->id;
+        $entry = AuditEntry::query()->where('request_id', $response->headers->get('Correlation-Id'))->sole();
 
         $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_withdrawn')->count());
         $this->assertDatabaseHas('audit_trail', [
+            'id' => $entry->getKey(),
             'company_id' => $request->company_id,
             'stored_event_id' => $storedEventId,
             'event_class' => 'DsarRequestCancelled',
@@ -900,6 +904,8 @@ abstract class DsarTestCase extends TestCase
             'actor_user_id' => $actor->getKey(),
             'actor_role_code' => $this->roleCodeOf($actor, $request->company_id),
             'actor_label' => $actor->name,
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'Symfony',
         ]);
     }
 
@@ -965,16 +971,19 @@ abstract class DsarTestCase extends TestCase
 
     /**
      * Exactly one audit entry records the request — "DSAR requested — for:
-     * <subject>, by: <requester>" — linked to its stored event and stamped
-     * with the requester's role.
+     * <subject>, by: <requester>" — linked to its stored event, stamped with
+     * the requester's role, the response's Correlation-Id and the client's
+     * address and user agent.
      */
     protected function assertDsarRequestAudited(TestResponse $response, User $subject, User $requester): void
     {
         $record = $this->dsarRequestIn($response);
         $storedEventId = LesilyStoredEvent::query()->where('aggregate_uuid', $record->getKey())->sole()->id;
+        $entry = AuditEntry::query()->where('request_id', $response->headers->get('Correlation-Id'))->sole();
 
         $this->assertDatabaseCount('audit_trail', 1);
         $this->assertDatabaseHas('audit_trail', [
+            'id' => $entry->getKey(),
             'company_id' => $record->company_id,
             'stored_event_id' => $storedEventId,
             'event_class' => 'DsarRequestSubmitted',
@@ -985,6 +994,8 @@ abstract class DsarTestCase extends TestCase
             'actor_user_id' => $requester->getKey(),
             'actor_role_code' => $this->roleCodeOf($requester, $record->company_id),
             'actor_label' => $requester->name,
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'Symfony',
         ]);
     }
 
