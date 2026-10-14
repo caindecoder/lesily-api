@@ -11,7 +11,7 @@ use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Compliance\Dsar\UseCases\Responses\DsarRequestQueue;
 use App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters;
@@ -21,7 +21,7 @@ class ReviewDsarRequestQueueInteractor
     /**
      * The read and its audit row share one transaction — no read without its evidence.
      */
-    public function execute(DsarRequestAdminFilters $filters, User $admin, AdminRequestContext $context): DsarRequestQueue
+    public function execute(DsarRequestAdminFilters $filters, User $admin, RequestOrigin $context): DsarRequestQueue
     {
         $now = CarbonImmutable::now();
 
@@ -111,7 +111,7 @@ class ReviewDsarRequestQueueInteractor
      *
      * @param  array<string, mixed>  $queryContext
      */
-    private function recordQueueRead(array $queryContext, User $admin, AdminRequestContext $context): void
+    private function recordQueueRead(array $queryContext, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'event_class' => 'DsarRequestQueueViewed',

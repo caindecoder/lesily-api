@@ -6,7 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
 use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminResource;
@@ -38,7 +38,7 @@ class PlatformAdminOwnershipTransferCasesController
         $page = $interactor->execute(
             OwnershipTransferCaseAdminFilters::fromQuery($request),
             $admin,
-            AdminRequestContext::fromRequest($request),
+            RequestOrigin::fromRequest($request),
         );
 
         return (new OwnershipTransferCaseAdminCollection($page))->response($request);
@@ -52,7 +52,7 @@ class PlatformAdminOwnershipTransferCasesController
         return new OwnershipTransferCaseAdminResource($interactor->execute(
             $caseId,
             $admin,
-            AdminRequestContext::fromRequest($request),
+            RequestOrigin::fromRequest($request),
         ));
     }
 
@@ -69,7 +69,7 @@ class PlatformAdminOwnershipTransferCasesController
         return new OwnershipTransferCaseAdminResource($interactor->execute(
             $command,
             $admin,
-            AdminRequestContext::fromRequest($request),
+            RequestOrigin::fromRequest($request),
         ));
     }
 
@@ -85,7 +85,7 @@ class PlatformAdminOwnershipTransferCasesController
         return new OwnershipTransferCaseAdminResource($interactor->execute(
             $command,
             $admin,
-            AdminRequestContext::fromRequest($request),
+            RequestOrigin::fromRequest($request),
         ));
     }
 
@@ -102,7 +102,7 @@ class PlatformAdminOwnershipTransferCasesController
         return new OwnershipTransferCaseAdminResource($interactor->execute(
             $command,
             $admin,
-            AdminRequestContext::fromRequest($request),
+            RequestOrigin::fromRequest($request),
         ));
     }
 
@@ -114,7 +114,7 @@ class PlatformAdminOwnershipTransferCasesController
         $case = $interactor->execute(
             OpenOwnershipTransferCaseCommand::validateAndCreate($request),
             $admin,
-            AdminRequestContext::fromRequest($request),
+            RequestOrigin::fromRequest($request),
         );
 
         return (new OwnershipTransferCaseAdminResource($case))

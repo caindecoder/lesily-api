@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 
 /**
@@ -19,7 +19,7 @@ use App\Foundation\AuditTrail\Enums\AuditSubjectType;
  */
 class ReviewOwnershipTransferCaseAsAdminInteractor
 {
-    public function execute(string $caseId, User $admin, AdminRequestContext $context): OwnershipTransferCase
+    public function execute(string $caseId, User $admin, RequestOrigin $context): OwnershipTransferCase
     {
         return DB::transaction(function () use ($caseId, $admin, $context): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()->findOrFail($caseId);
@@ -30,7 +30,7 @@ class ReviewOwnershipTransferCaseAsAdminInteractor
         });
     }
 
-    private function recordCaseRead(OwnershipTransferCase $case, User $admin, AdminRequestContext $context): void
+    private function recordCaseRead(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $case->company_id,

@@ -159,9 +159,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_a_non_open_case_names_a_non_member_then_the_refusal_names_the_case_state(): void
     {
         // Given a VERIFIED case and a target who is no member of its company
-        // — both guards would fire; the case state is the REAL reason
-        // (cd-ownership-transfer P14: state guard first, never an incidental
-        // refusal)
+        // — both guards would fire; the case state is the real reason
         $company = Company::factory()->create();
         $case = $this->aVerifiedCaseFor($company);
         $foreignMember = $this->aCompanyMember(Company::factory()->create(), 'employee');

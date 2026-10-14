@@ -11,7 +11,7 @@ use App\Foundation\Database\LockContention;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Companies\Exceptions\TargetNotMemberException;
@@ -31,7 +31,7 @@ use App\Companies\UseCases\Commands\VerifyOwnershipTransferCaseCommand;
  */
 class VerifyOwnershipTransferCaseInteractor
 {
-    public function execute(VerifyOwnershipTransferCaseCommand $command, User $admin, AdminRequestContext $context): OwnershipTransferCase
+    public function execute(VerifyOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
     {
         try {
             return $this->executeLocked($command, $admin, $context);
@@ -44,7 +44,7 @@ class VerifyOwnershipTransferCaseInteractor
         }
     }
 
-    private function executeLocked(VerifyOwnershipTransferCaseCommand $command, User $admin, AdminRequestContext $context): OwnershipTransferCase
+    private function executeLocked(VerifyOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
     {
         return DB::transaction(function () use ($command, $admin, $context): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()->lockForUpdate()->findOrFail($command->caseId);
@@ -115,7 +115,7 @@ class VerifyOwnershipTransferCaseInteractor
             ->id;
     }
 
-    private function recordCaseVerified(OwnershipTransferCase $case, User $admin, AdminRequestContext $context): void
+    private function recordCaseVerified(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $case->company_id,

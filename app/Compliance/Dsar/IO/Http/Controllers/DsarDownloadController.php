@@ -6,7 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Storage;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Compliance\Dsar\UseCases\Commands\DownloadDsarExportCommand;
 use App\Compliance\Dsar\UseCases\Interactors\DownloadDsarExportInteractor;
@@ -23,7 +23,7 @@ class DsarDownloadController extends Controller
             'companyId' => $request->company()->getKey(),
         ]);
 
-        $export = $interactor->execute($command, $actor, AdminRequestContext::fromRequest($request));
+        $export = $interactor->execute($command, $actor, RequestOrigin::fromRequest($request));
 
         return Storage::disk('dsar')->download(
             $export->path,

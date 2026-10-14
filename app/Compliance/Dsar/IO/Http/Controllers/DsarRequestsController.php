@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
-use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Compliance\Dsar\UseCases\Commands\DsarRequestFilters;
 use App\Compliance\Dsar\IO\Http\Resources\DsarRequestResource;
 use App\Compliance\Dsar\IO\Http\Resources\DsarRequestCollection;
@@ -49,7 +49,7 @@ class DsarRequestsController extends Controller
             'requestedByUserId' => $actor->getKey(),
         ]);
 
-        $dsarRequest = $interactor->execute($command, $actor, AdminRequestContext::fromRequest($request));
+        $dsarRequest = $interactor->execute($command, $actor, RequestOrigin::fromRequest($request));
 
         return (new DsarRequestResource($dsarRequest))->response()->setStatusCode(Response::HTTP_CREATED);
     }
@@ -65,6 +65,6 @@ class DsarRequestsController extends Controller
             'cancelledByUserId' => $actor->getKey(),
         ]);
 
-        return new DsarRequestResource($interactor->execute($command, $actor, AdminRequestContext::fromRequest($request)));
+        return new DsarRequestResource($interactor->execute($command, $actor, RequestOrigin::fromRequest($request)));
     }
 }

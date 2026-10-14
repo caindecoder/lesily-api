@@ -70,8 +70,8 @@ Route::post('/v1/auth/forgot-password', ForgotPasswordController::class)
 Route::post('/v1/auth/reset-password', ResetPasswordController::class)
     ->middleware('throttle:auth-tier');
 
-// Log out (UC-1-004) — revoke the CURRENT Sanctum token only (not other devices;
-// logout-all is UC-1-011, deferred). Token-only (cd-auth §5): a thin controller
+// Log out (UC-1-004) — revoke the CURRENT Sanctum token only (other
+// devices: logout-all below). Token-only (cd-auth §5): a thin controller
 // deletes the access token, no domain event. Bare auth:sanctum, no throttle — the
 // slice's authoritative contract (the api-doc's tenant-tier row predates this and
 // has no limiter to bind to; reconciled at slice close). LeaveDates parity: its
