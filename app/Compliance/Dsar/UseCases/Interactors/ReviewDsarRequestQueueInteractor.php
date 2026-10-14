@@ -33,7 +33,7 @@ class ReviewDsarRequestQueueInteractor
 
             $this->recordQueueRead($this->queryContextOf($filters, $page), $admin, $context);
 
-            return new DsarRequestQueue($page, open: (int) $counts->open, overdue: (int) $counts->overdue, dueInSevenDays: (int) $counts->due_in_7_days);
+            return new DsarRequestQueue($page, ...$counts);
         });
     }
 
@@ -58,12 +58,13 @@ class ReviewDsarRequestQueueInteractor
      * before the eighth day's start.
      *
      * @param  Builder<DsarRequestRecord>  $selected
+     * @return array{open: int, overdue: int, dueInSevenDays: int}
      */
-    private function countInProgress(Builder $selected): object
+    private function countInProgress(Builder $selected): array
     {
         $tomorrow = CarbonImmutable::now()->startOfDay()->addDay();
 
-        return $selected
+        $counts = (array) $selected
             ->where('status', DsarRequestStatus::InProgress)
             ->selectRaw(
                 'count(*) as open, '
@@ -73,6 +74,13 @@ class ReviewDsarRequestQueueInteractor
             )
             ->toBase()
             ->sole();
+
+        // MySQL returns sums as decimal strings, and null over no rows.
+        return [
+            'open' => (int) $counts['open'],
+            'overdue' => (int) $counts['overdue'],
+            'dueInSevenDays' => (int) $counts['due_in_7_days'],
+        ];
     }
 
     /**

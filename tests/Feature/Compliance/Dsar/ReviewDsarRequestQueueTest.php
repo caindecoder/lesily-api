@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Compliance\Dsar;
 
+use LogicException;
 use App\Models\User;
 use RuntimeException;
 use Laravel\Sanctum\Sanctum;
@@ -468,6 +469,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
             'cancelled' => $factory->cancelled(),
             'breached' => $factory->slaBreached(),
             'breached_fulfilled' => $factory->slaBreached()->fulfilled(),
+            default => throw new LogicException("No such request state: {$state}"),
         };
 
         return $factory->create();
