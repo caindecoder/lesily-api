@@ -8,12 +8,14 @@ use App\Companies\Entities\Company;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\DeadlockException;
 use App\Foundation\Database\LockContention;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Companies\Events\CompanyOwnershipTransferred;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Companies\Exceptions\OwnershipTransferContentionException;
 use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -101,10 +103,10 @@ class ExecuteOwnershipTransferCaseInteractor
             'company_id' => $case->company_id,
             'stored_event_id' => $case->transfer_event_id,
             'event_class' => 'CompanyOwnershipTransferred',
-            'subject_type' => 'ownership_transfer_case',
+            'subject_type' => AuditSubjectType::OwnershipTransferCase,
             'subject_id' => $case->id,
             'subject_label' => null,
-            'action' => 'case_executed',
+            'action' => AuditAction::CaseExecuted,
             'description' => 'Platform admin executed a verified ownership-transfer case.',
             'actor_user_id' => $admin->id,
             'actor_role_code' => 'platform_super_admin',

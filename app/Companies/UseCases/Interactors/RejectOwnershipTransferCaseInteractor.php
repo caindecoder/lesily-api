@@ -7,11 +7,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\DeadlockException;
 use App\Foundation\Database\LockContention;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\Http\Values\AdminRequestContext;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Companies\Exceptions\OwnershipTransferContentionException;
 use App\Companies\UseCases\Commands\RejectOwnershipTransferCaseCommand;
 use App\Companies\Exceptions\OwnershipTransferCaseAlreadyClosedException;
@@ -67,10 +69,10 @@ class RejectOwnershipTransferCaseInteractor
             'company_id' => $case->company_id,
             'stored_event_id' => null,
             'event_class' => 'OwnershipTransferCaseRejected',
-            'subject_type' => 'ownership_transfer_case',
+            'subject_type' => AuditSubjectType::OwnershipTransferCase,
             'subject_id' => $case->id,
             'subject_label' => null,
-            'action' => 'case_rejected',
+            'action' => AuditAction::CaseRejected,
             'description' => 'Platform admin rejected an ownership-transfer case.',
             'actor_user_id' => $admin->id,
             'actor_role_code' => 'platform_super_admin',

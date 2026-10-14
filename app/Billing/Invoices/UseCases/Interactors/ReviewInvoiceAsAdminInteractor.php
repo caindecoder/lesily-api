@@ -4,8 +4,10 @@ namespace App\Billing\Invoices\UseCases\Interactors;
 
 use App\Models\User;
 use App\Billing\Invoices\Entities\Invoice;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\Http\Values\AdminRequestContext;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Billing\Invoices\UseCases\Repositories\InvoiceRepositoryInterface;
 
@@ -49,10 +51,10 @@ class ReviewInvoiceAsAdminInteractor
             'company_id' => $invoice->company_id,
             'stored_event_id' => null,
             'event_class' => 'AdminInvoiceReviewed',
-            'subject_type' => 'invoice',
+            'subject_type' => AuditSubjectType::Invoice,
             'subject_id' => $invoice->id,
             'subject_label' => $invoice->invoice_number,
-            'action' => 'admin_reviewed',
+            'action' => AuditAction::AdminReviewed,
             'description' => "Platform admin reviewed invoice {$invoice->invoice_number}.",
             'actor_user_id' => $admin->id,
             'actor_role_code' => 'platform_super_admin',
