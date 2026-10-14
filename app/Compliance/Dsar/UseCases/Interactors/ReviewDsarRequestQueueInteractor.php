@@ -21,15 +21,17 @@ class ReviewDsarRequestQueueInteractor
      */
     public function execute(DsarRequestAdminFilters $filters, User $admin, AdminRequestContext $context): DsarRequestQueue
     {
-        return DB::transaction(function () use ($filters, $admin, $context): DsarRequestQueue {
-            $page = $this->selectedBy($filters)
+        $now = CarbonImmutable::now();
+
+        return DB::transaction(function () use ($filters, $now, $admin, $context): DsarRequestQueue {
+            $page = $this->selectedBy($filters, $now)
                 ->with(['company', 'subject', 'requestedBy'])
                 ->orderBy('sla_deadline')
                 ->orderBy('id')
                 // page defaults here, never through Laravel's resolver, which would
                 // honour a body-supplied page past the validated query filters.
                 ->paginate(perPage: $filters->per_page ?? 15, page: $filters->page ?? 1);
-            $counts = $this->countInProgress($this->selectedBy($filters));
+            $counts = $this->countInProgress($this->selectedBy($filters, $now), $now);
 
             $this->recordQueueRead($this->queryContextOf($filters, $page), $admin, $context);
 
@@ -38,16 +40,16 @@ class ReviewDsarRequestQueueInteractor
     }
 
     /**
-     * The requests the filters select — the page and the counts read the same set (N84).
+     * The requests the filters select on $now — the page and the counts read the same set (N84).
      *
      * @return Builder<DsarRequestRecord>
      */
-    private function selectedBy(DsarRequestAdminFilters $filters): Builder
+    private function selectedBy(DsarRequestAdminFilters $filters, CarbonImmutable $now): Builder
     {
         return DsarRequestRecord::query()
             ->when($filters->status, fn (Builder $query, string $status) => $query->where('status', $status))
             ->when($filters->company_id, fn (Builder $query, string $companyId) => $query->where('company_id', $companyId))
-            ->when($filters->overdueOnly(), fn (Builder $query) => $query->whereOverdue(CarbonImmutable::now()))
+            ->when($filters->overdueOnly(), fn (Builder $query) => $query->whereOverdue($now))
             ->when($filters->breachedOnly(), fn (Builder $query) => $query->whereSlaBreached());
     }
 
@@ -60,18 +62,15 @@ class ReviewDsarRequestQueueInteractor
      * @param  Builder<DsarRequestRecord>  $selected
      * @return array{open: int, overdue: int, dueInSevenDays: int}
      */
-    private function countInProgress(Builder $selected): array
+    private function countInProgress(Builder $selected, CarbonImmutable $now): array
     {
-        $tomorrow = CarbonImmutable::now()->startOfDay()->addDay();
+        $tomorrow = $now->startOfDay()->addDay();
 
         $counts = (array) $selected
             ->where('status', DsarRequestStatus::InProgress)
-            ->selectRaw(
-                'count(*) as open, '
-                .'sum(case when sla_deadline < ? then 1 else 0 end) as overdue, '
-                .'sum(case when sla_deadline >= ? and sla_deadline < ? then 1 else 0 end) as due_in_7_days',
-                [$tomorrow, $tomorrow, $tomorrow->addDays(7)],
-            )
+            ->selectRaw('count(*) as open')
+            ->selectRaw('sum(case when sla_deadline < ? then 1 else 0 end) as overdue', [$tomorrow])
+            ->selectRaw('sum(case when sla_deadline >= ? and sla_deadline < ? then 1 else 0 end) as due_in_7_days', [$tomorrow, $tomorrow->addDays(7)])
             ->toBase()
             ->sole();
 
