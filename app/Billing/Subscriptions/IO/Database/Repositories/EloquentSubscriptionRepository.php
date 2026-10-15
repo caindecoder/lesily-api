@@ -20,7 +20,7 @@ class EloquentSubscriptionRepository implements SubscriptionRepositoryInterface
             ->get()
             ->map(fn (SubscriptionReadModel $subscription): array => [
                 'companyId' => $subscription->company_id,
-                'subscriptionId' => $subscription->id,
+                'subscriptionId' => $subscription->getKey(),
             ])
             ->all();
     }

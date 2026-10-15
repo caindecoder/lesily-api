@@ -26,7 +26,7 @@ class RegisterSuccessResource extends JsonResource
         return [
             'token' => $this->token,
             'user' => [
-                'id' => $this->owner->id,
+                'id' => $this->owner->getKey(),
                 'name' => $this->owner->name,
                 'email' => $this->owner->email,
             ],

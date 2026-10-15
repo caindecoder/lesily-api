@@ -30,7 +30,7 @@ class LoginResource extends JsonResource
             'token' => $this->token,
             'expiresAt' => $this->expiresAt,
             'user' => [
-                'id' => $this->user->id,
+                'id' => $this->user->getKey(),
                 'name' => $this->user->name,
                 'email' => $this->user->email,
             ],

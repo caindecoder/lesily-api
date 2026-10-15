@@ -39,7 +39,7 @@ class LogInInteractor
         // get a session straight away (the existing 200 path, forward-compatible).
         if ($user->two_factor_confirmed_at !== null) {
             return new ChallengeRequired(
-                $this->challenges->create($user->id),
+                $this->challenges->create($user->getKey()),
                 now()->addMinutes(LoginChallengeStore::TTL_MINUTES),
             );
         }

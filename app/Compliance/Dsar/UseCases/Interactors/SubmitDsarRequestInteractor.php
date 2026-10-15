@@ -90,7 +90,7 @@ class SubmitDsarRequestInteractor
             ->where('aggregate_uuid', $request->getKey())
             ->where('event_class', DsarRequestSubmitted::class)
             ->sole()
-            ->id;
+            ->getKey();
     }
 
     /**

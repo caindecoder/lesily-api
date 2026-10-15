@@ -114,7 +114,7 @@ class Company extends Model
      */
     public function owner(): ?User
     {
-        return $this->users()->wherePivot('role_id', Role::findByCode('owner')?->id)->first();
+        return $this->users()->wherePivot('role_id', Role::findByCode('owner')?->getKey())->first();
     }
 
     protected static function newFactory(): CompanyFactory
