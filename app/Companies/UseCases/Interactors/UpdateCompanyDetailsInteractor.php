@@ -3,6 +3,7 @@
 namespace App\Companies\UseCases\Interactors;
 
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Companies\UseCases\Commands\UpdateCompanyCommand;
@@ -20,9 +21,9 @@ class UpdateCompanyDetailsInteractor
         /** @var string $actorId users are UUID-keyed (HasUuids) */
         $actorId = $actor->getKey();
 
-        CompanyAggregate::retrieve($company->getKey())
+        DB::transaction(fn () => CompanyAggregate::retrieve($company->getKey())
             ->updateDetails($command, $actorId)
-            ->persist();
+            ->persist());
 
         return $company->refresh();
     }

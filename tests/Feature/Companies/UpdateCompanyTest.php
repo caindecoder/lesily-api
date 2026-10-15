@@ -2,10 +2,13 @@
 
 namespace Tests\Feature\Companies;
 
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Companies\Events\CompanySettingsUpdated;
 
 /**
  * UC-1-033 Update Company Details (slice-companies Task 6). PUT /api/v1/companies/{companyId}
@@ -190,6 +193,27 @@ class UpdateCompanyTest extends CompaniesTestCase
             'employee' => ['employee'],
             'manager' => ['manager'],
         ];
+    }
+
+    // Sad — the settings projection fails after the name was already projected:
+    // the update is one unit, so neither change nor either event survives.
+    #[Test]
+    public function when_the_settings_projection_fails_then_neither_the_name_nor_the_settings_change(): void
+    {
+        // Given the owner of Contoso and a settings projection that fails mid-update
+        $company = Company::factory()->withSettings()->named('Contoso')->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        $this->induceProjectorFailureFor(CompanySettingsUpdated::class);
+
+        // When they submit a new name and a new timezone together
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), [
+            'name' => 'Contoso (Pvt) Ltd',
+            'timezone' => 'Asia/Singapore',
+        ]);
+
+        // Then the update fails whole: the old name and settings, no recorded events
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertCompanyUnchanged($company, 'Contoso');
     }
 
     // Edge — a name-only update records the details event and nothing else:
