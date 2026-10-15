@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Password;
 use App\Foundation\Auth\Totp\TotpVerifier;
+use Tests\Concerns\InducesProjectorFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Events\UserPasswordReset;
@@ -27,6 +28,8 @@ use App\Foundation\Auth\Reactors\PasswordChangedNotificationReactor;
 
 abstract class AuthTestCase extends TestCase
 {
+    use InducesProjectorFailures;
+
     /**
      * Canonical login-ready credentials, shared by the login and logout suites
      * (§2.10). A registered, verified user authenticates with these.
