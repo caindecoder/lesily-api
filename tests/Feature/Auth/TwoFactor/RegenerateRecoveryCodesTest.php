@@ -179,6 +179,6 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
             ->sole()
             ->event_properties;
         $this->assertSame(['userId', 'regeneratedAt'], array_keys($properties), 'The marker must carry only non-secret metadata (Design-Y).');
-        $this->assertSame($user->id, $properties['userId'] ?? null, 'The marker must be scoped to the regenerating user.');
+        $this->assertSame($user->getKey(), $properties['userId'] ?? null, 'The marker must be scoped to the regenerating user.');
     }
 }

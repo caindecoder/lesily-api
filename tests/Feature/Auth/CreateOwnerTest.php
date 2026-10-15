@@ -112,8 +112,8 @@ class CreateOwnerTest extends AuthTestCase
 
     protected function assertOwnerProjectedHonouringModelContract(UserReadModel $row): void
     {
-        $this->assertSame($this->userId, $row->id);
-        $this->assertTrue(Str::isUuid($row->id), 'users.id must be a char(36) UUID (ERD-1-01, R-042)');
+        $this->assertSame($this->userId, $row->getKey());
+        $this->assertTrue(Str::isUuid($row->getKey()), 'users.id must be a char(36) UUID (ERD-1-01, R-042)');
         // Unverified until the signed link is clicked (UC-1-001 alt-6a); the
         // email_verified_at Carbon-cast pin lives at EmailVerificationTest:80.
         $this->assertNull($row->email_verified_at);

@@ -70,6 +70,6 @@ class CancelDsarRequestInteractor
             ->where('aggregate_uuid', $request->getKey())
             ->where('event_class', DsarRequestCancelled::class)
             ->sole()
-            ->id;
+            ->getKey();
     }
 }

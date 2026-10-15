@@ -116,9 +116,9 @@ class ViewProfileTest extends AuthTestCase
     protected function assertOnlyOwnProfile(TestResponse $response, User $owner, User $other): void
     {
         $response->assertOk();
-        $response->assertJsonPath('data.id', $owner->id);
+        $response->assertJsonPath('data.id', $owner->getKey());
         $response->assertJsonPath('data.email', $owner->email);
-        $this->assertStringNotContainsString($other->id, (string) $response->getContent());
+        $this->assertStringNotContainsString($other->getKey(), (string) $response->getContent());
         $this->assertStringNotContainsString($other->email, (string) $response->getContent());
     }
 

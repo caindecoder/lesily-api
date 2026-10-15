@@ -72,7 +72,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
             'subject_type' => AuditSubjectType::OwnershipTransferCaseQueue,
             'action' => AuditAction::CaseQueueViewed,
             'description' => 'Platform admin viewed a page of the ownership-transfer case queue.',
-            'actor_user_id' => $admin->id,
+            'actor_user_id' => $admin->getKey(),
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => $admin->name,
             'ip_address' => $context->ip,

@@ -170,7 +170,7 @@ class LoginTest extends AuthTestCase
 
         // Then it authenticates as that user
         $response->assertOk();
-        $response->assertJsonPath('user_id', $user->id);
+        $response->assertJsonPath('user_id', $user->getKey());
     }
 
     // Edge — the issued token carries the locked 90-day expiry (api-conventions §7 /
@@ -521,7 +521,7 @@ class LoginTest extends AuthTestCase
             now()->addMinutes(LoginChallengeStore::TTL_MINUTES)->equalTo($response->json('data.expires_at')),
             'The challenge must advertise its real 5-minute expiry.',
         );
-        $this->assertSame($user->id, app(LoginChallengeStore::class)->find($challengeId)?->userId);
+        $this->assertSame($user->getKey(), app(LoginChallengeStore::class)->find($challengeId)?->userId);
     }
 
     protected function assertLoginSucceeded(TestResponse $response, User $user): void

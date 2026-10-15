@@ -435,7 +435,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertSame($this->admin->getKey(), $event->event_properties['transferredBy']);
         $this->assertSame('admin', $event->event_properties['source']);
 
-        return (int) $event->id;
+        return (int) $event->getKey();
     }
 
     /**
@@ -584,8 +584,8 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         $fresh = $case->fresh();
         $this->assertInstanceOf(OwnershipTransferCase::class, $fresh);
-        $this->assertSame((int) $ownEvent->id, $fresh->transfer_event_id);
-        $this->assertNotSame((int) $routineEvent->id, $fresh->transfer_event_id);
+        $this->assertSame((int) $ownEvent->getKey(), $fresh->transfer_event_id);
+        $this->assertNotSame((int) $routineEvent->getKey(), $fresh->transfer_event_id);
         $this->assertSame('admin', $ownEvent->event_properties['source']);
     }
 

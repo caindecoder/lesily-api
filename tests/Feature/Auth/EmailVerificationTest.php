@@ -145,7 +145,7 @@ class EmailVerificationTest extends AuthTestCase
         return URL::temporarySignedRoute(
             'verification.verify',
             CarbonImmutable::now()->addHour(),
-            ['id' => $user->id, 'hash' => sha1($user->email)],
+            ['id' => $user->getKey(), 'hash' => sha1($user->email)],
         );
     }
 
@@ -154,7 +154,7 @@ class EmailVerificationTest extends AuthTestCase
         $this->assertNull($user->refresh()->email_verified_at);
         $this->assertSame(0, LesilyStoredEvent::query()
             ->where('event_class', UserEmailVerified::class)
-            ->where('event_properties->userId', $user->id)
+            ->where('event_properties->userId', $user->getKey())
             ->count());
     }
 
@@ -163,7 +163,7 @@ class EmailVerificationTest extends AuthTestCase
         $this->assertNotNull($user->refresh()->email_verified_at);
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', UserEmailVerified::class)
-            ->where('event_properties->userId', $user->id)
+            ->where('event_properties->userId', $user->getKey())
             ->count());
     }
 

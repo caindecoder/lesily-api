@@ -890,7 +890,7 @@ abstract class DsarTestCase extends TestCase
             ->where('aggregate_uuid', $request->getKey())
             ->where('event_class', DsarRequestCancelled::class)
             ->sole()
-            ->id;
+            ->getKey();
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
         $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
@@ -982,7 +982,7 @@ abstract class DsarTestCase extends TestCase
     protected function assertDsarRequestAudited(TestResponse $response, User $subject, User $requester): void
     {
         $record = $this->dsarRequestIn($response);
-        $storedEventId = LesilyStoredEvent::query()->where('aggregate_uuid', $record->getKey())->sole()->id;
+        $storedEventId = LesilyStoredEvent::query()->where('aggregate_uuid', $record->getKey())->sole()->getKey();
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
         $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
@@ -1148,7 +1148,7 @@ abstract class DsarTestCase extends TestCase
             ->where('aggregate_uuid', $request->getKey())
             ->where('event_class', DsarRequestRejected::class)
             ->sole()
-            ->id;
+            ->getKey();
 
         $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_rejected')->count());
         $this->assertDatabaseHas('audit_trail', [
@@ -1867,7 +1867,7 @@ abstract class DsarTestCase extends TestCase
             ->where('aggregate_uuid', $request->getKey())
             ->where('event_class', DsarDownloadExpired::class)
             ->sole()
-            ->id;
+            ->getKey();
 
         $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_download_expired')->count());
         $this->assertDatabaseHas('audit_trail', [
@@ -1943,7 +1943,7 @@ abstract class DsarTestCase extends TestCase
             ->where('aggregate_uuid', $request->getKey())
             ->where('event_class', DsarSlaBreached::class)
             ->sole()
-            ->id;
+            ->getKey();
 
         $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_deadline_missed')->count());
         $this->assertDatabaseHas('audit_trail', [
@@ -1974,7 +1974,7 @@ abstract class DsarTestCase extends TestCase
             ->where('aggregate_uuid', $request->getKey())
             ->where('event_class', DsarRequestFulfilled::class)
             ->sole()
-            ->id;
+            ->getKey();
 
         $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_fulfilled')->count());
         $this->assertDatabaseHas('audit_trail', [

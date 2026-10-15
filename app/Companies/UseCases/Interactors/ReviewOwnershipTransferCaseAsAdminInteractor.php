@@ -41,7 +41,7 @@ class ReviewOwnershipTransferCaseAsAdminInteractor
             'subject_label' => null,
             'action' => AuditAction::CaseViewed,
             'description' => 'Platform admin viewed an ownership-transfer case.',
-            'actor_user_id' => $admin->id,
+            'actor_user_id' => $admin->getKey(),
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => $admin->name,
             'ip_address' => $context->ip,

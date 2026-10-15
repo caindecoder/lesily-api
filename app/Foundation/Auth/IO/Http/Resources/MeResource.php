@@ -20,7 +20,7 @@ class MeResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->id,
+            'id' => $this->getKey(),
             'name' => $this->name,
             'email' => $this->email,
             'email_verified' => $this->email_verified_at !== null,

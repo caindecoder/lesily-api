@@ -49,6 +49,6 @@ class DsarOutcomeAudit
             ->where('aggregate_uuid', $request->getKey())
             ->where('event_class', $eventClass)
             ->sole()
-            ->id;
+            ->getKey();
     }
 }

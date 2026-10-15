@@ -61,7 +61,7 @@ class ExecuteOwnershipTransferCaseInteractor
 
             $this->transferInteractor->execute($company, TransferCompanyOwnershipCommand::from([
                 'newOwnerUserId' => $case->new_owner_user_id,
-                'transferredBy' => $admin->id,
+                'transferredBy' => $admin->getKey(),
                 'source' => TransferCompanyOwnershipCommand::SOURCE_ADMIN,
                 'caseId' => $case->getKey(),
             ]), $case->expected_owner_user_id);
@@ -70,7 +70,7 @@ class ExecuteOwnershipTransferCaseInteractor
                 'status' => OwnershipTransferCaseStatus::Closed,
                 'closed_outcome' => OwnershipTransferCaseOutcome::Executed,
                 'executed_at' => now(),
-                'executed_by' => $admin->id,
+                'executed_by' => $admin->getKey(),
                 'transfer_event_id' => $this->transferEventIdFor($case),
             ]);
 
@@ -94,7 +94,7 @@ class ExecuteOwnershipTransferCaseInteractor
             ->where('event_class', CompanyOwnershipTransferred::class)
             ->where('event_properties->caseId', $case->getKey())
             ->sole()
-            ->id;
+            ->getKey();
     }
 
     private function recordCaseExecuted(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
@@ -104,11 +104,11 @@ class ExecuteOwnershipTransferCaseInteractor
             'stored_event_id' => $case->transfer_event_id,
             'event_class' => 'CompanyOwnershipTransferred',
             'subject_type' => AuditSubjectType::OwnershipTransferCase,
-            'subject_id' => $case->id,
+            'subject_id' => $case->getKey(),
             'subject_label' => null,
             'action' => AuditAction::CaseExecuted,
             'description' => 'Platform admin executed a verified ownership-transfer case.',
-            'actor_user_id' => $admin->id,
+            'actor_user_id' => $admin->getKey(),
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => $admin->name,
             'ip_address' => $context->ip,

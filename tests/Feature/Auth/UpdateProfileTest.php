@@ -83,7 +83,7 @@ class UpdateProfileTest extends AuthTestCase
 
         // Then no such route exists (self-only by construction) and Bob is unchanged
         $response->assertNotFound();
-        $this->assertDatabaseHas('users', ['id' => $bob->id, 'name' => 'Bob Silva', 'locale' => 'ta']);
+        $this->assertDatabaseHas('users', ['id' => $bob->getKey(), 'name' => 'Bob Silva', 'locale' => 'ta']);
     }
 
     /**
@@ -153,7 +153,7 @@ class UpdateProfileTest extends AuthTestCase
 
         // Then the name round-trips (utf8mb4), the locale is untouched, and the audit names ONLY the changed field
         $response->assertOk();
-        $this->assertDatabaseHas('users', ['id' => $user->id, 'name' => 'ඇලිස් පෙරේරා', 'locale' => self::CURRENT_LOCALE]);
+        $this->assertDatabaseHas('users', ['id' => $user->getKey(), 'name' => 'ඇලිස් පෙරේරා', 'locale' => self::CURRENT_LOCALE]);
         $this->assertProfileUpdateWasEventSourced($user, [
             'name' => 'ඇලිස් පෙරේරා',
             'locale' => self::CURRENT_LOCALE,
@@ -177,7 +177,7 @@ class UpdateProfileTest extends AuthTestCase
 
         // Then the update succeeds on the schema fields only — the email column is untouched
         $response->assertOk();
-        $this->assertDatabaseHas('users', ['id' => $user->id, 'name' => 'Alice Fernando', 'email' => $originalEmail]);
+        $this->assertDatabaseHas('users', ['id' => $user->getKey(), 'name' => 'Alice Fernando', 'email' => $originalEmail]);
     }
 
     #[Test]
@@ -238,7 +238,7 @@ class UpdateProfileTest extends AuthTestCase
      */
     protected function unchangedProfileOf(User $user): array
     {
-        return ['id' => $user->id, 'name' => self::CURRENT_NAME, 'locale' => self::CURRENT_LOCALE];
+        return ['id' => $user->getKey(), 'name' => self::CURRENT_NAME, 'locale' => self::CURRENT_LOCALE];
     }
 
     /**
@@ -275,7 +275,7 @@ class UpdateProfileTest extends AuthTestCase
     {
         Sanctum::actingAs($actor);
 
-        return $this->putJson("/api/v1/users/{$target->id}/profile", $payload);
+        return $this->putJson("/api/v1/users/{$target->getKey()}/profile", $payload);
     }
 
     /**
@@ -289,7 +289,7 @@ class UpdateProfileTest extends AuthTestCase
     protected function assertProfileUpdatedEverywhere(TestResponse $response, User $user, array $expected): void
     {
         $this->assertExactProfileEnvelope($response, $user);
-        $this->assertDatabaseHas('users', ['id' => $user->id, ...$expected]);
+        $this->assertDatabaseHas('users', ['id' => $user->getKey(), ...$expected]);
     }
 
     /**
@@ -331,7 +331,7 @@ class UpdateProfileTest extends AuthTestCase
     {
         $stored = LesilyStoredEvent::query()->where('event_class', UserProfileUpdated::class)->sole();
 
-        $this->assertSame($user->id, $stored->event_properties['userId']);
+        $this->assertSame($user->getKey(), $stored->event_properties['userId']);
         $this->assertSame($expected['name'], $stored->event_properties['name']);
         $this->assertSame($expected['locale'], $stored->event_properties['locale']);
         $this->assertSame($expected['changedFields'], $stored->event_properties['changedFields']);

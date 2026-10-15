@@ -120,7 +120,7 @@ class EnableTwoFactorTest extends AuthTestCase
         // Then it is refused as a conflict and no new secret is staged
         $response->assertConflict();
         $response->assertJsonPath('error_code', 'TWO_FACTOR_ALREADY_ENABLED');
-        $this->assertNull(Cache::get("2fa-setup:{$user->id}"), 'A rejected re-enrollment must stage no pending secret.');
+        $this->assertNull(Cache::get("2fa-setup:{$user->getKey()}"), 'A rejected re-enrollment must stage no pending secret.');
     }
 
     // Sad — 2FA confirm is idempotent on the aggregate: re-confirming records no second marker.
@@ -297,7 +297,7 @@ class EnableTwoFactorTest extends AuthTestCase
         $response->assertForbidden();
         $response->assertJsonPath('error_code', 'FEATURE_NOT_AVAILABLE');
         $response->assertJsonPath('upgrade_to', 'Pro');
-        $this->assertNull(Cache::get("2fa-setup:{$user->id}"), 'A blocked enrollment must stage no pending secret.');
+        $this->assertNull(Cache::get("2fa-setup:{$user->getKey()}"), 'A blocked enrollment must stage no pending secret.');
     }
 
     protected function assertProvisioningReturnedWithoutPersisting(TestResponse $response, User $user): void

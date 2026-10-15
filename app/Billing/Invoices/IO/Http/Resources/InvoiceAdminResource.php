@@ -23,7 +23,7 @@ class InvoiceAdminResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->resource->id,
+            'id' => $this->resource->getKey(),
             'number' => $this->resource->invoice_number,
             'issued_at' => $this->resource->issued_at->toJSON(),
             'due_at' => $this->resource->due_date->toDateString(),
@@ -74,7 +74,7 @@ class InvoiceAdminResource extends JsonResource
     {
         return $this->resource->lineItems
             ->map(fn (InvoiceLineItem $line): array => [
-                'id' => $line->id,
+                'id' => $line->getKey(),
                 'description' => $line->description,
                 'quantity' => $line->quantity,
                 'unit_price_cents' => $line->unit_price_cents,

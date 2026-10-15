@@ -53,7 +53,7 @@ class VerifyOwnershipTransferCaseInteractor
             $this->guardTargetIsLiveMember($case, $command->newOwnerUserId);
 
             CompanyAggregate::retrieve($case->company_id)
-                ->recordOwnershipVerification($command, $admin->id)
+                ->recordOwnershipVerification($command, $admin->getKey())
                 ->persist();
 
             $verificationEventId = $this->verificationEventIdFor($case);
@@ -61,7 +61,7 @@ class VerifyOwnershipTransferCaseInteractor
             $case->update([
                 'status' => OwnershipTransferCaseStatus::Verified,
                 'verified_at' => now(),
-                'verified_by' => $admin->id,
+                'verified_by' => $admin->getKey(),
                 'new_owner_user_id' => $command->newOwnerUserId,
                 'verification_notes' => $command->notes,
                 'verification_artefacts' => $command->artefactMetadata(),
@@ -112,7 +112,7 @@ class VerifyOwnershipTransferCaseInteractor
             ->where('event_class', CompanyOwnershipVerificationRecorded::class)
             ->where('event_properties->caseId', $case->getKey())
             ->sole()
-            ->id;
+            ->getKey();
     }
 
     private function recordCaseVerified(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
@@ -122,11 +122,11 @@ class VerifyOwnershipTransferCaseInteractor
             'stored_event_id' => $case->verification_event_id,
             'event_class' => 'CompanyOwnershipVerificationRecorded',
             'subject_type' => AuditSubjectType::OwnershipTransferCase,
-            'subject_id' => $case->id,
+            'subject_id' => $case->getKey(),
             'subject_label' => null,
             'action' => AuditAction::CaseVerified,
             'description' => 'Platform admin recorded identity verification on an ownership-transfer case.',
-            'actor_user_id' => $admin->id,
+            'actor_user_id' => $admin->getKey(),
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => $admin->name,
             'ip_address' => $context->ip,
