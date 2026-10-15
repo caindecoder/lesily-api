@@ -23,11 +23,11 @@ concurrency:
   group: mutation-main
   cancel-in-progress: true
 
-# Runner image pinned to ubuntu-24.04: GitHub moves ubuntu-latest to 26.04 from
-# 2026-10-19 (actions/runner-images#14748); 26.04 is trialled in its own PR.
+# Runner image pinned to ubuntu-26.04 (conventions plan sec 4.11): every job names
+# one image, never ubuntu-latest; an image change is its own PR with a full mutation run.
 jobs:
   mutation-full:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Observed: --threads=1 2h41m–4h12m (public 4-vCPU runner, s189–s195);
     # --threads=4 1h18m (public, s196); --threads=4 on the private 2-vCPU
     # runner 4h08m and FAILED (s198 — OQ-1-181); schema reuse at 2 workers on
