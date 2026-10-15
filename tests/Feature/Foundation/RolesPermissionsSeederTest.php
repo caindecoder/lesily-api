@@ -122,7 +122,7 @@ class RolesPermissionsSeederTest extends FoundationTestCase
 
         // And the owner role is persisted faithfully with its committed stable UUID
         $owner = Role::query()->where('code', 'owner')->firstOrFail();
-        $this->assertSame('0193abcd-1111-7000-8000-000000000002', $owner->id);
+        $this->assertSame('0193abcd-1111-7000-8000-000000000002', $owner->getKey());
         $this->assertOwnerRolePersistedFaithfully($owner);
     }
 

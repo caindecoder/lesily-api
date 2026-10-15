@@ -291,7 +291,7 @@ class VerifyTwoFactorTest extends AuthTestCase
         Auth::forgetGuards();
         $probe = $this->withToken($token)->getJson('/api/_test/authenticated-probe');
         $probe->assertOk();
-        $probe->assertJsonPath('user_id', $user->id);
+        $probe->assertJsonPath('user_id', $user->getKey());
     }
 
     protected function assertNoEventRecorded(): void
@@ -316,7 +316,7 @@ class VerifyTwoFactorTest extends AuthTestCase
             ->where('event_class', User2FARecoveryCodeUsed::class)
             ->sole()
             ->event_properties;
-        $this->assertSame($user->id, $properties['userId'] ?? null, 'The marker must be scoped to the verifying user.');
+        $this->assertSame($user->getKey(), $properties['userId'] ?? null, 'The marker must be scoped to the verifying user.');
         $this->assertSame($remaining, $properties['remaining'] ?? null, 'The marker must carry the codes still usable.');
     }
 }

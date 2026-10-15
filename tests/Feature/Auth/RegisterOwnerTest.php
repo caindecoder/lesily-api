@@ -359,13 +359,13 @@ class RegisterOwnerTest extends AuthTestCase
     protected function assertCompanyOnTrialWithOwner(string $ownerEmail): void
     {
         $owner = User::query()->where('email', $ownerEmail)->sole();
-        $company = Company::query()->where('owner_id', $owner->id)->sole();
+        $company = Company::query()->where('owner_id', $owner->getKey())->sole();
 
         $this->assertSame('Contoso', $company->name);
         $this->assertSame(CompanyStatus::Trial, $company->status);
         $this->assertSame('2026-07-08 00:00:00', $company->trial_ends_at?->toDateTimeString());
         $this->assertDatabaseHas('subscriptions', [
-            'company_id' => $company->id,
+            'company_id' => $company->getKey(),
             'status' => 'trial',
             'trial_ends_at' => '2026-07-08 00:00:00',
         ]);
@@ -374,24 +374,24 @@ class RegisterOwnerTest extends AuthTestCase
     protected function assertConsentRecorded(string $ownerEmail): void
     {
         $owner = User::query()->where('email', $ownerEmail)->sole();
-        $company = Company::query()->where('owner_id', $owner->id)->sole();
+        $company = Company::query()->where('owner_id', $owner->getKey())->sole();
 
         // One version-stamped record per policy type (UC-1-069); sole() doubles
         // as the exactly-one-per-type count assertion, and the total bounds the set.
         $this->assertSame(2, LesilyStoredEvent::query()
-            ->whereForCompany($company->id)
+            ->whereForCompany($company->getKey())
             ->where('event_class', ConsentRecorded::class)
             ->count());
 
         foreach (['tos', 'privacy'] as $policyType) {
             $consent = LesilyStoredEvent::query()
-                ->whereForCompany($company->id)
+                ->whereForCompany($company->getKey())
                 ->where('event_class', ConsentRecorded::class)
                 ->where('event_properties->policyType', $policyType)
                 ->sole();
 
             $this->assertSame('v1.0', $consent->event_properties['version']);
-            $this->assertSame($owner->id, $consent->event_properties['userId']);
+            $this->assertSame($owner->getKey(), $consent->event_properties['userId']);
             $this->assertSame('127.0.0.1', $consent->event_properties['ip']);
         }
     }
@@ -399,10 +399,10 @@ class RegisterOwnerTest extends AuthTestCase
     protected function assertCompanySettingsSeeded(string $ownerEmail): void
     {
         $owner = User::query()->where('email', $ownerEmail)->sole();
-        $company = Company::query()->where('owner_id', $owner->id)->sole();
+        $company = Company::query()->where('owner_id', $owner->getKey())->sole();
 
         $this->assertDatabaseHas('company_settings', [
-            'company_id' => $company->id,
+            'company_id' => $company->getKey(),
             'currency' => 'LKR',
             'timezone' => 'Asia/Colombo',
             'locale_default' => 'en',
@@ -415,13 +415,13 @@ class RegisterOwnerTest extends AuthTestCase
     protected function assertOwnerEnrolledWithEmergencyContact(string $ownerEmail): void
     {
         $owner = User::query()->where('email', $ownerEmail)->sole();
-        $company = Company::query()->where('owner_id', $owner->id)->sole();
+        $company = Company::query()->where('owner_id', $owner->getKey())->sole();
         $ownerRole = Role::findByCode('owner');
 
         $this->assertNotNull($ownerRole);
         $this->assertDatabaseHas('company_user', [
-            'user_id' => $owner->id,
-            'company_id' => $company->id,
+            'user_id' => $owner->getKey(),
+            'company_id' => $company->getKey(),
             'role_id' => $ownerRole->getKey(),
             'emergency_contact_name' => 'Kamala Perera',
             'emergency_contact_email' => 'kamala@contoso.lk',

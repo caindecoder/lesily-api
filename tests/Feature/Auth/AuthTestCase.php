@@ -184,7 +184,7 @@ abstract class AuthTestCase extends TestCase
      */
     protected function openChallenge(User $user): string
     {
-        return app(LoginChallengeStore::class)->create($user->id);
+        return app(LoginChallengeStore::class)->create($user->getKey());
     }
 
     /**
@@ -358,7 +358,7 @@ abstract class AuthTestCase extends TestCase
 
         $response->assertOk();
         $response->assertExactJson(['data' => [
-            'id' => $user->id,
+            'id' => $user->getKey(),
             'name' => $user->name,
             'email' => $user->email,
             'email_verified' => true,

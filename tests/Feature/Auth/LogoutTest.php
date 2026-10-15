@@ -95,6 +95,6 @@ class LogoutTest extends AuthTestCase
     protected function assertOnlyCurrentSessionRevoked(TestResponse $current, TestResponse $other, User $user): void
     {
         $this->assertUnauthenticated($current);
-        $other->assertOk()->assertJsonPath('user_id', $user->id);
+        $other->assertOk()->assertJsonPath('user_id', $user->getKey());
     }
 }

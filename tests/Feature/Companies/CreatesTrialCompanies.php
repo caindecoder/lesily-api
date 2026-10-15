@@ -31,7 +31,7 @@ trait CreatesTrialCompanies
             'brNumber' => "BR-{$companyId}",
             'epfNumber' => "EPF-{$companyId}",
             'country' => 'LK',
-            'ownerUserId' => $ownerUserId ?? User::factory()->create()->id,
+            'ownerUserId' => $ownerUserId ?? User::factory()->create()->getKey(),
         ]);
     }
 }

@@ -342,8 +342,8 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             ->where('aggregate_uuid', $company->getKey())
             ->where('event_properties->caseId', $caseB->getKey())
             ->sole();
-        $this->assertSame((int) $ownEvent->id, $caseB->fresh()?->verification_event_id);
-        $this->assertSame((int) $ownEvent->id, (int) AuditEntry::query()
+        $this->assertSame((int) $ownEvent->getKey(), $caseB->fresh()?->verification_event_id);
+        $this->assertSame((int) $ownEvent->getKey(), (int) AuditEntry::query()
             ->where('subject_id', $caseB->getKey())
             ->sole()
             ->stored_event_id);
@@ -483,7 +483,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertSame([$this->artefact], $properties['artefacts']);
         $this->assertTrue(CarbonImmutable::parse($properties['verifiedAt'])->equalTo(now()));
 
-        return (int) $event->id;
+        return (int) $event->getKey();
     }
 
     /**

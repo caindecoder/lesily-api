@@ -119,7 +119,7 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
     {
         $user = User::factory()->create();
         CompanyReadModel::query()->findOrFail($companyId)
-            ->users()->attach($user, ['role_id' => $this->ensureRoleExists($roleCode)->id]);
+            ->users()->attach($user, ['role_id' => $this->ensureRoleExists($roleCode)->getKey()]);
 
         return $user;
     }
@@ -140,8 +140,8 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
     {
         CompanyReadModel::query()->findOrFail($companyId)
             ->users()->updateExistingPivot(
-                $this->genesisOwnerOf($companyId)->id,
-                ['role_id' => $this->ensureRoleExists('admin')->id],
+                $this->genesisOwnerOf($companyId)->getKey(),
+                ['role_id' => $this->ensureRoleExists('admin')->getKey()],
             );
     }
 
