@@ -162,6 +162,24 @@ class InviteUserTest extends MembershipsTestCase
         $this->assertThrottled($response);
     }
 
+    #[Test]
+    public function when_the_invitation_projection_fails_then_no_invitation_is_recorded_or_mailed(): void
+    {
+        // Given an admin and an invitations projection that fails mid-invite
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->induceProjectorFailureFor(UserInvited::class);
+
+        // When the admin invites a new email
+        $response = $this->invite($admin, $company, [
+            'email' => 'newhire@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then the invite fails whole: no invitation, no recorded event, no email
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertNoInvitationCreated();
+    }
+
     // --- Edge ---
 
     #[Test]

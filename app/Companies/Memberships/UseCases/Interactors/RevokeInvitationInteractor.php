@@ -2,6 +2,7 @@
 
 namespace App\Companies\Memberships\UseCases\Interactors;
 
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Aggregates\UserMembership;
@@ -33,8 +34,8 @@ class RevokeInvitationInteractor
             throw new InvitationNotPendingException;
         }
 
-        UserMembership::retrieve($invitation->getKey())
+        DB::transaction(fn () => UserMembership::retrieve($invitation->getKey())
             ->revokeInvitation($command)
-            ->persist();
+            ->persist());
     }
 }
