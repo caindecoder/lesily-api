@@ -3,6 +3,7 @@
 namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\Auth\UseCases\Commands\UpdateUserProfileCommand;
 
@@ -25,9 +26,9 @@ class UpdateUserProfileInteractor
             return $user;
         }
 
-        UserAggregate::retrieve($user->getKey())
+        DB::transaction(fn () => UserAggregate::retrieve($user->getKey())
             ->updateProfile($command, $changedFields)
-            ->persist();
+            ->persist());
 
         return $user->refresh();
     }

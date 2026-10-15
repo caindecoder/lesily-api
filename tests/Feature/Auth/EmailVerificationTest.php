@@ -4,11 +4,13 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Auth\Notifications\VerifyEmail;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Events\UserEmailVerified;
 use Spatie\EventSourcing\StoredEvents\HandleStoredEventJob;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -40,6 +42,26 @@ class EmailVerificationTest extends AuthTestCase
         // Then it is rejected as a forbidden envelope and the email stays unverified
         $response->assertForbidden();
         $response->assertJsonPath('error_code', 'INVALID_SIGNATURE');
+        $this->assertEmailNotVerified($user);
+    }
+
+    // Sad — the verification projection fails after the event write: the
+    // verification is one unit, so the email stays unverified with no event.
+    #[Test]
+    public function when_the_verification_projection_fails_then_the_email_stays_unverified(): void
+    {
+        // Given production error rendering, an unverified owner with a valid link
+        // and a users projection that fails mid-verification
+        config(['app.debug' => false]);
+        $user = User::factory()->unverified()->create();
+        $link = $this->verificationLinkFor($user);
+        $this->induceProjectorFailureFor(UserEmailVerified::class);
+
+        // When the link is followed
+        $response = $this->getJson($link);
+
+        // Then the verification fails whole and the email stays unverified
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
         $this->assertEmailNotVerified($user);
     }
 

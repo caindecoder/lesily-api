@@ -4,6 +4,7 @@ namespace App\Companies\Memberships\UseCases\Interactors;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Mail;
 use App\Companies\Memberships\Entities\Invitation;
@@ -39,12 +40,12 @@ class ResendInvitationInteractor
 
         $plaintextToken = Str::random(40);
 
-        UserMembership::retrieve($invitation->getKey())
+        DB::transaction(fn () => UserMembership::retrieve($invitation->getKey())
             ->resendInvitation(ResendInvitationCommand::from([
                 'plaintextToken' => $plaintextToken,
                 'resentBy' => $actor->getKey(),
             ]))
-            ->persist();
+            ->persist());
 
         $invitation->refresh()->load('role');
 

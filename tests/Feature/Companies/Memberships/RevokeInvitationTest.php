@@ -150,6 +150,23 @@ class RevokeInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_revocation_projection_fails_then_the_invitation_stays_pending(): void
+    {
+        // Given a pending invitation and an invitations projection that fails mid-revoke
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->induceProjectorFailureFor(UserInvitationRevoked::class);
+
+        // When the admin revokes it
+        $response = $this->revokeInvitation($admin, $company, $invitation->getKey());
+
+        // Then the revoke fails whole: no revocation stamps, no recorded event
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertInvitationNotRevoked($company, 'invitee@contoso.lk');
+    }
+
+    #[Test]
     #[DataProvider('provideAllowedRevokeRoles')]
     public function when_authorized_role_revokes_pending_invitation_then_invitation_revoked(string $roleCode): void
     {

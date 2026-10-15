@@ -8,6 +8,7 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanySettings;
+use Tests\Concerns\InducesProjectorFailures;
 use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\RolesPermissions\Entities\Role;
@@ -15,6 +16,8 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class CompaniesTestCase extends TestCase
 {
+    use InducesProjectorFailures;
+
     // Shared Companies fixtures populated on real need (§2.10) — first consumer:
     // the UC-1-032 view-company-details suite (slice-companies Task 5).
 

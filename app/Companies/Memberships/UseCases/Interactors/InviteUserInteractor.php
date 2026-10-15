@@ -4,6 +4,7 @@ namespace App\Companies\Memberships\UseCases\Interactors;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Mail;
 use App\Companies\Entities\CompanyUser;
@@ -54,7 +55,7 @@ class InviteUserInteractor
         $membershipId = $this->removedMembershipId($company, $userId) ?? Str::uuid7()->toString();
         $plaintextToken = Str::random(40);
 
-        UserMembership::retrieve($membershipId)
+        DB::transaction(fn () => UserMembership::retrieve($membershipId)
             ->invite(CreateInvitationCommand::from([
                 'companyId' => $company->getKey(),
                 'email' => $command->email,
@@ -62,7 +63,7 @@ class InviteUserInteractor
                 'invitedByUserId' => $actor->getKey(),
                 'plaintextToken' => $plaintextToken,
             ]))
-            ->persist();
+            ->persist());
 
         $invitation = Invitation::query()->with('role')->findOrFail($membershipId);
 

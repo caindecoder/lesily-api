@@ -215,13 +215,15 @@ jobs:
           exit $status
       - name: Write-path chain (conv-plan sec 2.15.C, OQ-1-170) - gating
         # Controllers never ::retrieve( / DB:: / ->persist(; DB::transaction only in
-        # interactors; reactors never write (ban 4 - side effects only). Whole app/
-        # tree, call-form only (leading comment lines excluded);
-        # database/ seeders+migrations out of scope. Same script as the lefthook
-        # write-path-chain hook. Liveness proof: the summary line must exist, the
-        # scan must have read a file, and every per-check population (controllers,
-        # interactors, reactors) must be non-zero - a renamed layer directory would
-        # otherwise leave that check scanning nothing while the step stays green.
+        # interactors; reactors never write (ban 4 - side effects only); an
+        # interactor that persists does so inside its own DB::transaction (C4,
+        # OQ-1-188). Whole app/ tree, call-form only (leading comment lines
+        # excluded); database/ seeders+migrations out of scope. Same script as the
+        # lefthook write-path-chain hook. Liveness proof: the summary line must
+        # exist, the scan must have read a file, and every per-check population
+        # (controllers, interactors, reactors, persisting) must be non-zero - a
+        # renamed layer directory would otherwise leave that check scanning nothing
+        # while the step stays green.
         run: |
           set +e
           sh scripts/check-write-path-chain.sh > "$RUNNER_TEMP/write-path.txt" 2>&1
@@ -232,7 +234,7 @@ jobs:
           [ -n "$summary" ] || { echo "no summary line - the check did not run"; exit 1; }
           scanned=$(echo "$summary" | sed -E 's/.*; ([0-9]+) file\(s\) scanned.*/\1/')
           [ "$scanned" -gt 0 ] || { echo "scanned nothing"; exit 1; }
-          for layer in controllers interactors reactors; do
+          for layer in controllers interactors reactors persisting; do
             population=$(echo "$summary" | sed -E "s/.*[( ]$layer ([0-9]+)[,)].*/\1/")
             [ "$population" -gt 0 ] || { echo "$layer population is $population - that check scanned nothing"; exit 1; }
           done

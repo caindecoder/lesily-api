@@ -2,6 +2,7 @@
 
 namespace App\Foundation\Auth\UseCases\Interactors;
 
+use Illuminate\Support\Facades\DB;
 use App\Foundation\Auth\Aggregates\User;
 
 /**
@@ -15,6 +16,6 @@ class VerifyEmailInteractor
 {
     public function execute(string $userId): void
     {
-        User::retrieve($userId)->verifyEmail()->persist();
+        DB::transaction(fn () => User::retrieve($userId)->verifyEmail()->persist());
     }
 }

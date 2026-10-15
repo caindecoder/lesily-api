@@ -169,6 +169,22 @@ class ResendInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_resend_projection_fails_then_the_token_is_not_rotated_or_mailed(): void
+    {
+        // Given a pending invitation and an invitations projection that fails mid-resend
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->induceProjectorFailureFor(UserInvitationResent::class);
+
+        // When the admin resends it
+        $response = $this->resendInvitation($admin, $company, $invitation->getKey());
+
+        // Then the resend fails whole: the old token stands, no event, no second email
+        $this->assertResendRolledBack($response, $invitation->token_hash);
+    }
+
+    #[Test]
     public function when_invitation_resent_then_previous_link_no_longer_accepts(): void
     {
         // Given
@@ -296,6 +312,18 @@ class ResendInvitationTest extends MembershipsTestCase
         $response->assertJsonPath('error_code', $code->value);
         $this->assertDatabaseHas('invitations', ['token_hash' => $oldTokenHash]);
         Mail::assertQueued(InvitationMail::class, 1);
+    }
+
+    /**
+     * The resend failed after its event write and was rolled back whole: a
+     * 500, the old token hash still stored, only the arrange-time email, and
+     * no UserInvitationResent left on the stream.
+     */
+    protected function assertResendRolledBack(TestResponse $response, string $oldTokenHash): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertInvitationNotResent($response, ApiErrorCode::InternalError, $oldTokenHash);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserInvitationResent::class)->count());
     }
 
     /**
