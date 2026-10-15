@@ -3,6 +3,7 @@
 namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use App\Foundation\Auth\UseCases\TokenRevoker;
@@ -26,7 +27,7 @@ class ResetPasswordInteractor
 
     public function execute(ResetPasswordCommand $command): void
     {
-        $status = Password::broker()->reset(
+        $status = DB::transaction(fn (): string => Password::broker()->reset(
             ['email' => $command->email, 'password' => $command->password, 'token' => $command->token],
             function (User $user, string $plainPassword): void {
                 UserAggregate::retrieve($user->getKey())
@@ -35,7 +36,7 @@ class ResetPasswordInteractor
 
                 $this->tokenRevoker->revokeAllForUserExcept($user, null);
             },
-        );
+        ));
 
         if ($status !== Password::PASSWORD_RESET) {
             throw new InvalidResetLinkException;

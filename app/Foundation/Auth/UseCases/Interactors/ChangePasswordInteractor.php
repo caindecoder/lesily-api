@@ -3,6 +3,7 @@
 namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use App\Foundation\Auth\UseCases\TokenRevoker;
 use App\Foundation\Auth\UseCases\PasswordVerifier;
@@ -27,10 +28,12 @@ class ChangePasswordInteractor
     {
         $this->passwordVerifier->verify($user, $command->currentPassword);
 
-        UserAggregate::retrieve($user->getKey())
-            ->changePassword(Hash::make($command->newPassword))
-            ->persist();
+        DB::transaction(function () use ($user, $command, $currentTokenId): void {
+            UserAggregate::retrieve($user->getKey())
+                ->changePassword(Hash::make($command->newPassword))
+                ->persist();
 
-        $this->tokenRevoker->revokeAllForUserExcept($user, $currentTokenId);
+            $this->tokenRevoker->revokeAllForUserExcept($user, $currentTokenId);
+        });
     }
 }

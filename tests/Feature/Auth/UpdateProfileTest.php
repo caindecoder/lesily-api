@@ -4,10 +4,12 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Events\UserProfileUpdated;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
@@ -102,6 +104,22 @@ class UpdateProfileTest extends AuthTestCase
             'whitespace-only name' => [['name' => '   ', 'locale' => self::CURRENT_LOCALE], 'name'],
             'empty payload' => [[], ['name', 'locale']],
         ];
+    }
+
+    #[Test]
+    public function when_the_profile_projection_fails_then_the_profile_is_unchanged(): void
+    {
+        // Given production error rendering, an established user and a users
+        // projection that fails mid-update
+        config(['app.debug' => false]);
+        $user = $this->anEstablishedUser();
+        $this->induceProjectorFailureFor(UserProfileUpdated::class);
+
+        // When they submit a new name and locale
+        $response = $this->updateProfile($user, ['name' => 'Alice Fernando', 'locale' => 'si']);
+
+        // Then the update fails whole: the profile is untouched and no event is recorded
+        $this->assertProfileRolledBack($response, $user);
     }
 
     // --- Edge ---
@@ -286,6 +304,18 @@ class UpdateProfileTest extends AuthTestCase
             LesilyStoredEvent::query()->where('event_class', UserProfileUpdated::class)->count(),
             'An identical submit must record no UserProfileUpdated event.',
         );
+    }
+
+    /**
+     * The update failed after its event write and was rolled back whole: a
+     * 500, the users row at its established values, and no UserProfileUpdated
+     * left on the stream.
+     */
+    protected function assertProfileRolledBack(TestResponse $response, User $user): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertDatabaseHas('users', $this->unchangedProfileOf($user));
+        $this->assertNoProfileEventRecorded();
     }
 
     /**

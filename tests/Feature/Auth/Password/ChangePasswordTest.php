@@ -130,6 +130,25 @@ class ChangePasswordTest extends AuthTestCase
         }
     }
 
+    #[Test]
+    public function when_the_password_projection_fails_then_the_password_and_sessions_are_untouched(): void
+    {
+        // Given an authenticated user on two devices and a users projection that fails mid-change
+        $user = $this->aRegisteredUser();
+        $current = $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->induceProjectorFailureFor(UserPasswordChanged::class);
+
+        // When they change their password
+        $response = $this->changePassword($current->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the change fails whole: the old password, both sessions, no recorded event
+        $this->assertChangeRolledBack($response, $user);
+    }
+
     // --- Edge ---
 
     #[Test]
@@ -249,6 +268,18 @@ class ChangePasswordTest extends AuthTestCase
         $this->assertTrue(Hash::check(self::LOGIN_PASSWORD, $stored->password), 'The original password must still authenticate.');
         $this->assertFalse(Hash::check(self::NEW_PASSWORD, $stored->password), 'A rejected new password must not be stored.');
         $this->assertSame($expectedSessions, $user->tokens()->count(), 'A rejected change must revoke no sessions.');
+    }
+
+    /**
+     * The change failed after its event write and was rolled back whole: a
+     * 500, the original password and both sessions intact, and no
+     * UserPasswordChanged left on the stream.
+     */
+    protected function assertChangeRolledBack(TestResponse $response, User $user): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertPasswordUnchanged($user, 2);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserPasswordChanged::class)->count());
     }
 
     /**

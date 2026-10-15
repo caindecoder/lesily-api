@@ -166,6 +166,27 @@ class ResetPasswordTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_reset_projection_fails_then_the_password_sessions_and_link_are_untouched(): void
+    {
+        // Given a user on two devices with a valid reset token and a users projection that fails mid-reset
+        $user = $this->aRegisteredUser();
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $token = $this->aResetTokenFor($user);
+        $this->induceProjectorFailureFor(UserPasswordReset::class);
+
+        // When they reset their password
+        $response = $this->resetPassword([
+            'token' => $token,
+            'email' => $user->email,
+            'password' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the reset fails whole: the old password, both sessions, the link still usable, no event
+        $this->assertResetRolledBack($response, $user);
+    }
+
+    #[Test]
     public function when_too_many_resets_are_attempted_then_they_are_throttled(): void
     {
         // Given the shared per-IP auth-tier allowance is exhausted against the reset endpoint
@@ -244,6 +265,19 @@ class ResetPasswordTest extends AuthTestCase
         $this->assertTrue(Hash::check($originalPassword, $stored->password), 'The original password must still authenticate.');
         $this->assertFalse(Hash::check(self::NEW_PASSWORD, $stored->password), 'A rejected new password must not be stored.');
         $this->assertSame($expectedSessions, $user->tokens()->count(), 'A rejected reset must revoke no sessions.');
+    }
+
+    /**
+     * The reset failed after its event write and was rolled back whole: a
+     * 500, the original password and both sessions intact, the reset token
+     * still stored for a retry, and no UserPasswordReset left on the stream.
+     */
+    protected function assertResetRolledBack(TestResponse $response, User $user): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertResetRefused($user, self::LOGIN_PASSWORD, 2);
+        $this->assertDatabaseHas('password_reset_tokens', ['email' => $user->email]);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserPasswordReset::class)->count());
     }
 
     /**
