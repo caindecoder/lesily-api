@@ -187,6 +187,27 @@ class ResetPasswordTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_session_revocation_fails_then_the_password_reset_is_rolled_back(): void
+    {
+        // Given a user on two devices with a valid reset token and a session revocation that fails
+        $user = $this->aRegisteredUser();
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $token = $this->aResetTokenFor($user);
+        $this->bindThrowingTokenRevoker();
+
+        // When they reset their password
+        $response = $this->resetPassword([
+            'token' => $token,
+            'email' => $user->email,
+            'password' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the reset fails whole: the old password, both sessions, the link still usable, no event
+        $this->assertResetRolledBack($response, $user);
+    }
+
+    #[Test]
     public function when_too_many_resets_are_attempted_then_they_are_throttled(): void
     {
         // Given the shared per-IP auth-tier allowance is exhausted against the reset endpoint

@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Password;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use Tests\Concerns\InducesProjectorFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
+use App\Foundation\Auth\UseCases\TokenRevoker;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Events\UserPasswordReset;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
@@ -493,6 +494,24 @@ abstract class AuthTestCase extends TestCase
         $newLogin = $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $newPassword]);
         $newLogin->assertOk();
         $this->assertNotEmpty($newLogin->json('data.token'), 'The new password must authenticate and issue a session.');
+    }
+
+    /**
+     * Container-bind a session revoker that fails, so a test can prove the password write it follows
+     * shares its transaction. Interactors receive the revoker by constructor injection, so the binding
+     * is seen at resolution. Shared by the change-password and reset-password suites.
+     */
+    protected function bindThrowingTokenRevoker(): void
+    {
+        $this->app->bind(
+            TokenRevoker::class,
+            fn (): TokenRevoker => new class extends TokenRevoker
+            {
+                public function revokeAllForUserExcept(User $user, ?string $exceptTokenId): int
+                {
+                    throw new RuntimeException('Induced session-revocation failure.');
+                }
+            });
     }
 
     /**

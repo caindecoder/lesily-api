@@ -149,6 +149,25 @@ class ChangePasswordTest extends AuthTestCase
         $this->assertChangeRolledBack($response, $user);
     }
 
+    #[Test]
+    public function when_the_session_revocation_fails_then_the_password_change_is_rolled_back(): void
+    {
+        // Given an authenticated user on two devices and a session revocation that fails
+        $user = $this->aRegisteredUser();
+        $current = $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->bindThrowingTokenRevoker();
+
+        // When they change their password
+        $response = $this->changePassword($current->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the change fails whole: the old password, both sessions, no recorded event
+        $this->assertChangeRolledBack($response, $user);
+    }
+
     // --- Edge ---
 
     #[Test]

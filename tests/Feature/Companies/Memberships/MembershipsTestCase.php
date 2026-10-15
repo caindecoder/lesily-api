@@ -28,7 +28,6 @@ use App\Companies\Memberships\Events\UserJoinedCompany;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
-use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
