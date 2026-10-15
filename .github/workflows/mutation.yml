@@ -77,7 +77,7 @@ jobs:
         # same fact for that job. On ubuntu-26.04 /tmp is a RAM-backed tmpfs capped
         # at half the memory (actions/runner-images#14777), shared by Infection,
         # Chromium and the DSAR export: its type and size are printed here, and its
-        # use after the run by the last step.
+        # use after the run by the step before the report upload.
         run: |
           echo "vCPUs: $(nproc)"
           free -m
