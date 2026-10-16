@@ -232,8 +232,8 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $response->assertOk();
         $this->assertDatabaseCount('audit_trail', 1);
         $entry = AuditEntry::query()->sole();
-        $this->assertSame(255, strlen((string) $entry->user_agent));
-        $this->assertSame(255, strlen((string) $entry->request_id));
+        $this->assertSame(str_repeat('a', 255), $entry->user_agent);
+        $this->assertSame(str_repeat('b', 255), $entry->request_id);
     }
 
     // Happy — the full admin contract, locked byte-for-byte (exact-envelope
