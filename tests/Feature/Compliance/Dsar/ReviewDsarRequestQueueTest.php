@@ -537,6 +537,8 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
      */
     protected function assertQueueReadAudited(TestResponse $response, array $metadata): void
     {
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
         $entry = AuditEntry::query()->where('action', 'dsar_queue_viewed')->sole();
 
         $this->assertDatabaseHas('audit_trail', [
@@ -552,9 +554,9 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => $this->admin->name,
             'ip_address' => '127.0.0.1',
-            'request_id' => $response->headers->get('Correlation-Id'),
+            'user_agent' => 'Symfony',
+            'request_id' => $correlationId,
         ]);
-        $this->assertNotNull($entry->user_agent);
         $this->assertEquals($metadata, $entry->metadata);
     }
 

@@ -324,9 +324,11 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
             'metadata' => null,
         ]);
 
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
         $entry = AuditEntry::query()->where('action', 'dsar_admin_viewed')->sole();
-        $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
-        $this->assertNotNull($entry->user_agent);
+        $this->assertSame($correlationId, $entry->request_id);
+        $this->assertSame('Symfony', $entry->user_agent);
     }
 
     /**

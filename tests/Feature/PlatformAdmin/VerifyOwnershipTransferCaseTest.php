@@ -534,9 +534,11 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             'ip_address' => '127.0.0.1',
         ]);
 
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
         $entry = AuditEntry::query()->sole();
-        $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
-        $this->assertNotNull($entry->user_agent);
+        $this->assertSame($correlationId, $entry->request_id);
+        $this->assertSame('Symfony', $entry->user_agent);
     }
 
     /**
