@@ -340,9 +340,11 @@ abstract class PlatformAdminTestCase extends TestCase
 
         // recorded_at needs no assert: the column is NOT NULL, so the row
         // matched above could not exist without it.
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
         $entry = AuditEntry::query()->sole();
-        $this->assertSame($response->headers->get('Correlation-Id'), $entry->request_id);
-        $this->assertNotNull($entry->user_agent);
+        $this->assertSame($correlationId, $entry->request_id);
+        $this->assertSame('Symfony', $entry->user_agent);
     }
 
     /**
