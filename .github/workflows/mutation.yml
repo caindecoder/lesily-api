@@ -23,11 +23,11 @@ concurrency:
   group: mutation-main
   cancel-in-progress: true
 
-# Runner image pinned to ubuntu-24.04: GitHub moves ubuntu-latest to 26.04 from
-# 2026-10-19 (actions/runner-images#14748); 26.04 is trialled in its own PR.
+# Runner image pinned to ubuntu-26.04 (conventions plan sec 4.11): every job names
+# one image, never ubuntu-latest; an image change is its own PR with a full mutation run.
 jobs:
   mutation-full:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Observed: --threads=1 2h41m–4h12m (public 4-vCPU runner, s189–s195);
     # --threads=4 1h18m (public, s196); --threads=4 on the private 2-vCPU
     # runner 4h08m and FAILED (s198 — OQ-1-181); schema reuse at 2 workers on
@@ -74,10 +74,14 @@ jobs:
         # The standard runner is 4 vCPU / 16 GB on public repositories and 2 vCPU / 8 GB
         # on private ones; every timing pin in the conventions plan names the class
         # it was measured on. ParaTest's "Processes:" line in the CI test job is the
-        # same fact for that job.
+        # same fact for that job. On ubuntu-26.04 /tmp is a RAM-backed tmpfs capped
+        # at half the memory (actions/runner-images#14777), shared by Infection,
+        # Chromium and the DSAR export: its type and size are printed here, and its
+        # use after the run by the step before the report upload.
         run: |
           echo "vCPUs: $(nproc)"
           free -m
+          df -hT /tmp
       - name: Full mutation run (gated — minMsi/minCoveredMsi from infection.json5)
         # The full run is the latent-escape detector for diff-scoped PR runs
         # (/tdd-red amendment Q; R-053 finding 3.2) — it MUST fail loudly, never
@@ -134,6 +138,11 @@ jobs:
         # fails loudly (desired: that run's verdicts are unreadable).
         if: ${{ !cancelled() }}
         run: php scripts/check-mutation-kills.php infection.json
+      - name: Temp space and memory after the run (/tmp on RAM - see Runner class)
+        if: ${{ !cancelled() }}
+        run: |
+          df -hT /tmp
+          free -m
       - uses: actions/upload-artifact@v7
         if: always()
         with:

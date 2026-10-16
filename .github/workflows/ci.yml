@@ -6,11 +6,11 @@ on:
   push:
     branches: [main, staging, prod]
 
-# Runner image pinned to ubuntu-24.04: GitHub moves ubuntu-latest to 26.04 from
-# 2026-10-19 (actions/runner-images#14748); 26.04 is trialled in its own PR.
+# Runner image pinned to ubuntu-26.04 (conventions plan sec 4.11): every job names
+# one image, never ubuntu-latest; an image change is its own PR with a full mutation run.
 jobs:
   setup:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       composer-cache-hit: ${{ steps.composer-cache.outputs.cache-hit }}
     steps:
@@ -55,7 +55,7 @@ jobs:
 
   build:
     needs: setup
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
@@ -72,7 +72,7 @@ jobs:
 
   test:
     needs: setup
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     services:
       mysql:
         image: mysql:8.0
@@ -148,7 +148,7 @@ jobs:
 
   codecov:
     needs: test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       # The uploader reads the commit from git and maps the report's absolute
       # paths onto the checkout, so this job checks out to the same runner
@@ -169,7 +169,7 @@ jobs:
 
   quality:
     needs: setup
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       # Default (shallow) checkout: the only history user here was the diff-scoped
       # sec 2.14 gate (PR #99), whole-tree since OQ-1-170.
@@ -315,7 +315,7 @@ jobs:
   mutation-test:
     needs: test
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     services:
       mysql:
         image: mysql:8.0
@@ -414,7 +414,7 @@ jobs:
     # (GitHub policy since Sept 2021 — must be added to "Dependabot secrets" separately).
     # Without the token, scan fails with "Project not found". Master-action #101 (lesily-api side).
     if: github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       # fetch-depth 0 is REQUIRED and must stay: SonarCloud attributes new-code
       # lines by blame, and a shallow clone silently degrades that attribution.
@@ -449,7 +449,7 @@ jobs:
   openapi-diff:
     needs: build
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
