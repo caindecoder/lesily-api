@@ -167,8 +167,9 @@
         // are individual; a "::<line>" suffix pins ONE construct wherever the method also
         // carries real, killable mutants of the same mutator (a method-level entry would
         // silence 7 rows owned by T4-T6 plus 18 mutants the suite kills today). If a
-        // pinned method moves, the entry goes inert and the row re-escapes: the
-        // full-run ladder check detects that. It does NOT detect over-reach - a method-level entry
+        // pinned line moves, the entry goes inert: InfectionIgnoreEntriesPointAtLiveCodeTest
+        // fails on any entry whose class or method is gone or whose line starts no
+        // construct of its mutator's kind. It does NOT detect over-reach - a method-level entry
         // also silences mutants added to that method LATER - so a method-level entry is
         // re-read whenever its method changes (same caveat as the entries above).
         //
@@ -340,16 +341,9 @@
         // returns a whole-number float, which the non-strict int return type coerces
         // without loss - the (int) cast only satisfies Larastan. REMOVE WHEN
         // declare(strict_types=1) lands: the uncast float becomes a TypeError.
-        // L-NATIVE-COUNT: the admin DSAR queue's COUNT(*) arrives from pdo_mysql as a
-        // native int (PHP 8.1+, PDO::ATTR_STRINGIFY_FETCHES off), so the (int) on `open`
-        // only satisfies Larastan's int shape; the two SUM casts are earned (decimal
-        // strings, NULL over no rows - the empty-queue test kills them). Line-keyed so
-        // those two stay mutated. REMOVE WHEN the connection stringifies fetches or
-        // the driver changes: the uncast count would then reach DsarRequestQueue as text.
         "CastInt": {
             ignore: [
                 "App\\Compliance\\Dsar\\Entities\\DsarRequestRecord::daysRemaining",
-                "App\\Compliance\\Dsar\\UseCases\\Interactors\\ReviewDsarRequestQueueInteractor::countInProgress::79",
             ],
         },
         "AssignCoalesce": {
