@@ -68,6 +68,7 @@ class ReviewDsarRequestQueueInteractor
     {
         $tomorrow = $now->startOfDay()->addDay();
 
+        /** @var array{open: int, overdue: string|null, due_in_7_days: string|null} $counts */
         $counts = (array) $selected
             ->where('status', DsarRequestStatus::InProgress)
             ->selectRaw('count(*) as open')
@@ -78,7 +79,7 @@ class ReviewDsarRequestQueueInteractor
 
         // MySQL returns sums as decimal strings, and null over no rows.
         return [
-            'open' => (int) $counts['open'],
+            'open' => $counts['open'],
             'overdue' => (int) $counts['overdue'],
             'dueInSevenDays' => (int) $counts['due_in_7_days'],
         ];
