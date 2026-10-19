@@ -32,11 +32,11 @@ class RegisterOwnerInteractor
         private SessionIssuer $sessionIssuer,
     ) {}
 
-    public function execute(RegisterOwnerCommand $command, string $clientIp, string $deviceName): RegisterResult
+    public function execute(RegisterOwnerCommand $command, ?string $clientIp, string $deviceName): RegisterResult
     {
         // A consent record is evidence and is never minted without the client IP
         // it was given from (UC-1-069); an unresolvable IP is refused up front.
-        if ($clientIp === '') {
+        if (blank($clientIp)) {
             throw ValidationException::withMessages(['ip' => 'The ip field is required.']);
         }
 
