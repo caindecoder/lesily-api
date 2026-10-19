@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Auth\AccessLog;
 
+use App\Models\User;
 use Illuminate\Http\Response;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
@@ -42,6 +44,21 @@ class RecordSignInOutcomesTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_device_limit_is_reached_at_sign_in_then_a_failed_sign_in_is_logged(): void
+    {
+        // Given a user on a device-capped plan already holding three sessions
+        $user = $this->aRegisteredUser();
+        $this->atTheDeviceLimit($user);
+
+        // When they sign in from a fourth device
+        $this->signIn(self::LOGIN_PASSWORD)->assertForbidden();
+
+        // Then a failed sign-in is logged for the device limit
+        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $user);
+        $this->assertAnsweredAs($entry, Response::HTTP_FORBIDDEN, ApiErrorCode::DeviceLimitReached);
+    }
+
+    #[Test]
     public function when_a_user_without_two_factor_signs_in_then_a_successful_sign_in_is_logged(): void
     {
         // Given a registered user without two-factor authentication
@@ -62,6 +79,14 @@ class RecordSignInOutcomesTest extends AuthTestCase
     private function signIn(string $password, string $email = self::LOGIN_EMAIL): TestResponse
     {
         return $this->postJson('/api/v1/auth/login', ['email' => $email, 'password' => $password]);
+    }
+
+    private function atTheDeviceLimit(User $user): void
+    {
+        $this->memberOfCompanyOnPlan($user, BillingPlan::Pro);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->aSessionFor($user, 'tablet');
     }
 
     private function assertSeenOnce(AccessLogEntry $entry): void

@@ -4,6 +4,9 @@ namespace App\Foundation\Auth\UseCases;
 
 use App\Models\User;
 use App\Companies\Entities\Company;
+use App\Foundation\AccessLog\Enums\AccessEvent;
+use App\Foundation\AccessLog\Enums\AccessEventReason;
+use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
 use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
 
 /**
@@ -20,6 +23,8 @@ class DeviceLimitGuard
 {
     private const MAX_DEVICES = 3;
 
+    public function __construct(private readonly AccessLogRecorder $accessLog) {}
+
     public function enforce(User $user): void
     {
         if (! $this->onDeviceCappedPlan($user)) {
@@ -27,6 +32,8 @@ class DeviceLimitGuard
         }
 
         if (ActiveSessions::constrain($user)->count() >= self::MAX_DEVICES) {
+            $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $user);
+
             throw new DeviceLimitReachedException;
         }
     }
