@@ -9,6 +9,7 @@ use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Tests\Feature\Foundation\FoundationTestCase;
@@ -45,6 +46,31 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         // Then the refusal is the sign-in's own row, and no other
         $response->assertUnauthorized();
         $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::WrongPassword, $user);
+    }
+
+    #[Test]
+    #[DataProvider('provideAnswersThatAreNotRefusals')]
+    public function when_the_request_is_not_refused_then_nothing_is_logged(string $route, int $answeredWith): void
+    {
+        // Given errors render as production renders them
+        config(['app.debug' => false]);
+
+        // When a request is answered with something other than a refusal
+        $response = $this->getJson("/api/_test/{$route}");
+
+        // Then no access-log row is written
+        $response->assertStatus($answeredWith);
+        $this->assertDatabaseCount('access_log', 0);
+    }
+
+    /** @return array<string, array{string, int}> */
+    public static function provideAnswersThatAreNotRefusals(): array
+    {
+        return [
+            'served' => ['correlation-probe', Response::HTTP_OK],
+            'rejected as invalid' => ['error-validation', Response::HTTP_UNPROCESSABLE_ENTITY],
+            'failed on the server' => ['error-internal', Response::HTTP_INTERNAL_SERVER_ERROR],
+        ];
     }
 
     #[Test]
