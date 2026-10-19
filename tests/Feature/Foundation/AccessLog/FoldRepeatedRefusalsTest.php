@@ -27,6 +27,24 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_repeats_keep_arriving_then_the_window_still_closes_five_minutes_after_the_first(): void
+    {
+        // Given refusals at minute zero and minute three
+        $this->freezeTime();
+        $this->refuseAnonymously();
+        $this->travel(3)->minutes();
+        $this->refuseAnonymously();
+        $this->travel(3)->minutes();
+
+        // When the same refusal arrives at minute six
+        $response = $this->refuseAnonymously();
+
+        // Then the first row closed at minute five and the third refusal opens a new one
+        $response->assertUnauthorized();
+        $this->assertCountedRows([2, 1]);
+    }
+
+    #[Test]
     public function when_the_same_refusal_repeats_inside_the_window_then_one_row_counts_them(): void
     {
         // Given one refusal on record, a second short of five minutes ago
