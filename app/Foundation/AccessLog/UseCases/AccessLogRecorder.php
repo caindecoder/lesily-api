@@ -32,12 +32,19 @@ class AccessLogRecorder
 
     public function write(Request $request, Response $response): void
     {
-        $outcome = $this->outcome;
+        $outcome = $this->outcome ?? $this->refusal($response);
         $this->outcome = null;
 
         if ($outcome !== null) {
             $this->insertOrReport($outcome, $request, $response);
         }
+    }
+
+    protected function refusal(Response $response): ?AccessOutcome
+    {
+        $event = AccessEvent::refusalFor($response->getStatusCode());
+
+        return $event === null ? null : new AccessOutcome($event, null, null);
     }
 
     /** A failed write never fails the request; it is reported loudly instead. */
