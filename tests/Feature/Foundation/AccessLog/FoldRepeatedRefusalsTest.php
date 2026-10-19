@@ -43,6 +43,23 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_the_fold_cannot_be_written_then_the_refusal_still_answers_and_the_failure_is_reported(): void
+    {
+        // Given one refusal on record, and an access log that refuses updates
+        $this->refuseAnonymously();
+        $this->failAccessLogUpdates();
+        $logged = $this->collectLogRecords();
+
+        // When the same refusal arrives again
+        $response = $this->refuseAnonymously();
+
+        // Then the refusal still answers, the row is unchanged, and the lost count is reported
+        $response->assertUnauthorized();
+        $this->assertCountedRows([1]);
+        $this->assertRefusalFailureReported($logged, ['event' => 'unauthenticated', 'user_id' => null]);
+    }
+
+    #[Test]
     public function when_an_authentication_outcome_repeats_then_each_is_its_own_row(): void
     {
         // Given a failed sign-in on record
@@ -160,6 +177,15 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
             str_replace('{in}', $companyId, $request['uri']),
             headers: ['X-Company-Context' => $companyId],
         );
+    }
+
+    protected function failAccessLogUpdates(): void
+    {
+        AccessLogEntry::updating(fn () => throw $this->syntheticQueryException([
+            'sqlstate' => 'HY000',
+            'code' => 2006,
+            'message' => 'MySQL server has gone away',
+        ]));
     }
 
     protected function signInWrongly(string $email): TestResponse
