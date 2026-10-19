@@ -105,6 +105,20 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->level(AccessLogWriteFailedException::class, LogLevel::CRITICAL);
 
+        // Refusals the access log records; reporting them as errors only duplicated the row.
+        $exceptions->dontReport([
+            InvalidCredentialsException::class,
+            TwoFactorVerificationFailedException::class,
+            IncorrectPasswordException::class,
+            DeviceLimitReachedException::class,
+            CompanyAccessDeniedException::class,
+            FeatureUnavailableException::class,
+            RoleInsufficientException::class,
+            InviteEmailMismatchException::class,
+            DsarRequesterMismatchException::class,
+            LoginChallengeNotFoundException::class,
+        ]);
+
         $exceptions->render(fn (ValidationException $e) => EnvelopeBuilder::build(
             ApiErrorCode::ValidationFailed,
             $e->getMessage(),
