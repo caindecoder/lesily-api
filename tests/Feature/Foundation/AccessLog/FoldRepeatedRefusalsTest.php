@@ -2,15 +2,43 @@
 
 namespace Tests\Feature\Foundation\AccessLog;
 
+use App\Models\User;
 use Illuminate\Support\Arr;
+use Laravel\Sanctum\Sanctum;
+use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\Foundation\FoundationTestCase;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
+use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
 class FoldRepeatedRefusalsTest extends FoundationTestCase
 {
+    use WithRolePermissionFixtures;
+
+    /** @var array<string, User> */
+    protected array $people;
+
+    /** @var array<string, Company> */
+    protected array $companies;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->people = ['alice' => User::factory()->create(), 'bob' => User::factory()->create()];
+        $this->companies = [
+            'acme' => Company::factory()->onPlan(BillingPlan::Free)->create(),
+            'globex' => Company::factory()->onPlan(BillingPlan::Free)->create(),
+            'initech' => Company::factory()->onPlan(BillingPlan::Free)->create(),
+        ];
+        $this->joinCompany($this->companies['acme'], $this->people['alice']);
+        $this->joinCompany($this->companies['globex'], $this->people['alice']);
+        $this->joinCompany($this->companies['acme'], $this->people['bob']);
+    }
+
     /**
      * @param  array<string, string>  $first
      * @param  array<string, string>  $second
@@ -33,10 +61,12 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
     public static function provideRefusalsThatDifferInOneKey(): array
     {
         $anonymous = ['method' => 'GET', 'uri' => '/api/_test/authenticated-probe', 'from' => '203.0.113.7'];
+        $stranger = ['method' => 'GET', 'uri' => '/api/v1/companies/{in}', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'initech'];
 
         return [
             'another source address' => [$anonymous, [...$anonymous, 'from' => '203.0.113.8']],
             'another route' => [$anonymous, [...$anonymous, 'uri' => '/api/_test/company-context-probe']],
+            'another method' => [$stranger, [...$stranger, 'method' => 'PUT']],
         ];
     }
 
@@ -91,10 +121,23 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
         $this->assertCountedAgain($before);
     }
 
-    /** @param  array<string, string>  $request  method, uri and the client address it comes from */
+    /**
+     * @param  array<string, string>  $request  method, uri and the client address it comes from;
+     *                                          optionally the person it is sent `as` and the company it is `in`
+     */
     protected function refuse(array $request): TestResponse
     {
-        return $this->withServerVariables(['REMOTE_ADDR' => $request['from']])->json($request['method'], $request['uri']);
+        if (isset($request['as'])) {
+            Sanctum::actingAs($this->people[$request['as']]);
+        }
+
+        $companyId = isset($request['in']) ? $this->companies[$request['in']]->getKey() : '';
+
+        return $this->withServerVariables(['REMOTE_ADDR' => $request['from']])->json(
+            $request['method'],
+            str_replace('{in}', $companyId, $request['uri']),
+            headers: ['X-Company-Context' => $companyId],
+        );
     }
 
     protected function refuseAnonymously(): TestResponse
