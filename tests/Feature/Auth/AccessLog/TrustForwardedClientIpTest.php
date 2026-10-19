@@ -29,6 +29,21 @@ class TrustForwardedClientIpTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_another_forwarded_client_signs_in_then_it_has_its_own_limit(): void
+    {
+        // Given one client that has used its ten attempts through the proxy
+        foreach (range(1, 10) as $attempt) {
+            $this->attemptSignIn(self::CLIENT_IP, self::PROXY_IP)->assertUnprocessable();
+        }
+
+        // When another client signs in through the same proxy
+        $response = $this->attemptSignIn('198.51.100.9', self::PROXY_IP);
+
+        // Then it still reaches the sign-in check
+        $response->assertUnprocessable();
+    }
+
+    #[Test]
     public function when_a_forwarded_client_signs_in_then_its_address_is_logged(): void
     {
         // Given a registered user whose request reaches the app through a proxy
