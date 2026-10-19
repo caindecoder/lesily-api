@@ -196,6 +196,21 @@ class RecordSignInOutcomesTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_another_request_follows_a_sign_in_then_only_the_sign_in_is_logged(): void
+    {
+        // Given a user who has signed in
+        $user = $this->aRegisteredUser();
+        $this->signIn(self::LOGIN_PASSWORD);
+
+        // When another request follows that decides no access outcome
+        $response = $this->postJson('/api/v1/auth/login', []);
+
+        // Then the sign-in is still the only row
+        $response->assertUnprocessable();
+        $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $user);
+    }
+
+    #[Test]
     public function when_the_user_agent_is_over_long_then_it_is_logged_cut_short(): void
     {
         // Given a registered user whose client sends a 300-character user agent
