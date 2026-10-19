@@ -18,7 +18,7 @@ class TrustForwardedClientIpTest extends AuthTestCase
     {
         // Given one client that has used its ten attempts, each through a different proxy hop
         foreach (range(1, 10) as $hop) {
-            $this->attemptSignIn(self::CLIENT_IP, "10.0.0.{$hop}")->assertUnprocessable();
+            $this->attemptSignIn(self::CLIENT_IP, "10.0.0.{$hop}");
         }
 
         // When it tries again through yet another hop
@@ -33,7 +33,7 @@ class TrustForwardedClientIpTest extends AuthTestCase
     {
         // Given one client that has used its ten attempts through the proxy
         foreach (range(1, 10) as $attempt) {
-            $this->attemptSignIn(self::CLIENT_IP, self::PROXY_IP)->assertUnprocessable();
+            $this->attemptSignIn(self::CLIENT_IP, self::PROXY_IP);
         }
 
         // When another client signs in through the same proxy

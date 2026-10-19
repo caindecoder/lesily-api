@@ -7,10 +7,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
 use App\Foundation\Auth\Totp\TotpVerifier;
+use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\UseCases\DeviceLimitGuard;
+use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\Auth\UseCases\Results\SessionIssued;
+use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\Auth\UseCases\Commands\VerifyTwoFactorCommand;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
@@ -31,6 +34,7 @@ class VerifyTwoFactorInteractor
         private readonly TotpVerifier $totp,
         private readonly SessionIssuer $sessionIssuer,
         private readonly DeviceLimitGuard $deviceLimitGuard,
+        private readonly AccessLogRecorder $accessLog,
     ) {}
 
     public function execute(VerifyTwoFactorCommand $command): SessionIssued
@@ -61,6 +65,7 @@ class VerifyTwoFactorInteractor
         }
 
         $this->challenges->recordFailure($command->challengeId);
+        $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::WrongTwoFactorCode, $user);
 
         throw new TwoFactorVerificationFailedException;
     }

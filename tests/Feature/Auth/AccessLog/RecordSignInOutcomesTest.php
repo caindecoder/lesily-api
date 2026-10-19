@@ -22,9 +22,10 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $user = $this->aRegisteredUser();
 
         // When they sign in with the wrong password
-        $this->signIn('not-the-password')->assertUnauthorized();
+        $response = $this->signIn('not-the-password');
 
         // Then a failed sign-in is logged against them, with the refusal it answered
+        $response->assertUnauthorized();
         $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::WrongPassword, $user);
         $this->assertAnsweredAs($entry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
     }
@@ -36,9 +37,10 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $email = 'nobody@contoso.lk';
 
         // When the guest signs in with it
-        $this->signIn('any-password', $email)->assertUnauthorized();
+        $response = $this->signIn('any-password', $email);
 
         // Then a failed sign-in is logged against no user, and the typed email is kept nowhere
+        $response->assertUnauthorized();
         $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::UnknownAccount, null);
         $this->assertNotContains($email, $entry->getAttributes());
     }
@@ -51,11 +53,29 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $this->atTheDeviceLimit($user);
 
         // When they sign in from a fourth device
-        $this->signIn(self::LOGIN_PASSWORD)->assertForbidden();
+        $response = $this->signIn(self::LOGIN_PASSWORD);
 
         // Then a failed sign-in is logged for the device limit
+        $response->assertForbidden();
         $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $user);
         $this->assertAnsweredAs($entry, Response::HTTP_FORBIDDEN, ApiErrorCode::DeviceLimitReached);
+    }
+
+    #[Test]
+    public function when_the_second_factor_code_is_wrong_then_a_failed_sign_in_is_logged(): void
+    {
+        // Given a two-factor user with an open challenge and a code that does not verify
+        $user = $this->aTwoFactorUser();
+        $this->fakeTotpVerifier(false);
+        $challengeId = $this->openChallenge($user);
+
+        // When they submit it
+        $response = $this->verify($challengeId, '000000');
+
+        // Then a failed sign-in is logged for the wrong code
+        $response->assertUnauthorized();
+        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::WrongTwoFactorCode, $user);
+        $this->assertAnsweredAs($entry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::TwoFactorVerificationFailed);
     }
 
     #[Test]
@@ -83,9 +103,10 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $user = $this->aTwoFactorUser();
 
         // When they sign in with the right password
-        $this->signIn(self::LOGIN_PASSWORD)->assertAccepted();
+        $response = $this->signIn(self::LOGIN_PASSWORD);
 
         // Then a challenge is logged, not a completed sign-in
+        $response->assertAccepted();
         $entry = $this->assertAccessLogged(AccessEvent::LoginChallenged, null, $user);
         $this->assertAnsweredAs($entry, Response::HTTP_ACCEPTED, null);
     }
