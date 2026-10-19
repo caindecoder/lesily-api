@@ -42,6 +42,20 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
         $this->companies['dissolved']->delete();
     }
 
+    #[Test]
+    public function when_an_authentication_outcome_repeats_then_each_is_its_own_row(): void
+    {
+        // Given a failed sign-in on record
+        User::factory()->withEmail('carol@contoso.lk')->withPassword('Str0ng-Pass!')->create();
+        $this->signInWrongly('carol@contoso.lk');
+
+        // When the same sign-in fails again
+        $this->signInWrongly('carol@contoso.lk');
+
+        // Then each failure keeps a row of its own
+        $this->assertCountedRows([1, 1]);
+    }
+
     /**
      * @param  array<string, string>  $first
      * @param  array<string, string>  $second
@@ -146,6 +160,11 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
             str_replace('{in}', $companyId, $request['uri']),
             headers: ['X-Company-Context' => $companyId],
         );
+    }
+
+    protected function signInWrongly(string $email): TestResponse
+    {
+        return $this->postJson('/api/v1/auth/login', ['email' => $email, 'password' => 'not-my-password']);
     }
 
     protected function refuseAnonymously(): TestResponse

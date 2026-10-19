@@ -2,6 +2,7 @@
 
 namespace App\Foundation\AccessLog\UseCases;
 
+use Closure;
 use Throwable;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -34,13 +35,17 @@ class AccessLogRecorder
         $this->outcome = new AccessOutcome($event, $reason, $user?->getKey());
     }
 
+    /** A noted outcome is always its own row; a refusal folds into a recent twin. */
     public function write(Request $request, Response $response): void
     {
-        $outcome = $this->outcome ?? $this->refusal($request, $response);
+        $noted = $this->outcome;
         $this->outcome = null;
+        $refusal = $noted === null ? $this->refusal($request, $response) : null;
 
-        if ($outcome !== null) {
-            $this->insertOrReport($outcome, $request, $response);
+        if ($noted !== null) {
+            $this->writeOrReport($noted, fn () => $this->insert($noted, $request, $response));
+        } elseif ($refusal !== null) {
+            $this->writeOrReport($refusal, fn () => $this->fold($refusal, $request, $response));
         }
     }
 
@@ -56,16 +61,16 @@ class AccessLogRecorder
     }
 
     /** A failed write never fails the request; it is reported loudly instead. */
-    protected function insertOrReport(AccessOutcome $outcome, Request $request, Response $response): void
+    protected function writeOrReport(AccessOutcome $outcome, Closure $write): void
     {
         try {
-            $this->record($outcome, $request, $response);
+            $write();
         } catch (Throwable $failure) {
             report(new AccessLogWriteFailedException($outcome, $failure));
         }
     }
 
-    protected function record(AccessOutcome $outcome, Request $request, Response $response): void
+    protected function fold(AccessOutcome $outcome, Request $request, Response $response): void
     {
         $repeated = AccessLogEntry::query()
             ->where('event', $outcome->event)
