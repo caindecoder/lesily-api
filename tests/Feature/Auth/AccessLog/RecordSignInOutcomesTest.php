@@ -2,19 +2,27 @@
 
 namespace Tests\Feature\Auth\AccessLog;
 
+use ArrayObject;
 use App\Models\User;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Database\QueryException;
+use Illuminate\Log\Events\MessageLogged;
+use Tests\Concerns\InducesDatabaseFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
+use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 
 class RecordSignInOutcomesTest extends AuthTestCase
 {
+    use InducesDatabaseFailures;
+
     #[Test]
     public function when_the_password_is_wrong_then_a_failed_sign_in_is_logged(): void
     {
@@ -112,6 +120,24 @@ class RecordSignInOutcomesTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_log_write_fails_then_the_sign_in_still_answers_and_the_failure_is_reported(): void
+    {
+        // Given a registered user, and an access log that refuses every write
+        $user = $this->aRegisteredUser();
+        $this->failAccessLogWrites();
+        $logged = $this->collectLogRecords();
+
+        // When they sign in
+        $response = $this->signIn(self::LOGIN_PASSWORD);
+
+        // Then the sign-in answers as usual, nothing is logged, and the failure is reported as critical
+        $response->assertOk();
+        $this->assertSame(1, $user->tokens()->count());
+        $this->assertDatabaseCount('access_log', 0);
+        $this->assertWriteFailureReported($logged);
+    }
+
+    #[Test]
     public function when_a_user_without_two_factor_signs_in_then_a_successful_sign_in_is_logged(): void
     {
         // Given a registered user without two-factor authentication
@@ -181,6 +207,34 @@ class RecordSignInOutcomesTest extends AuthTestCase
     private function signIn(string $password, string $email = self::LOGIN_EMAIL): TestResponse
     {
         return $this->postJson('/api/v1/auth/login', ['email' => $email, 'password' => $password]);
+    }
+
+    private function failAccessLogWrites(): void
+    {
+        AccessLogEntry::creating(fn () => throw $this->syntheticQueryException([
+            'sqlstate' => 'HY000',
+            'code' => 2006,
+            'message' => 'MySQL server has gone away',
+        ]));
+    }
+
+    /** @return ArrayObject<int, MessageLogged> */
+    private function collectLogRecords(): ArrayObject
+    {
+        $logged = new ArrayObject;
+        Log::listen(fn (MessageLogged $record) => $logged->append($record));
+
+        return $logged;
+    }
+
+    /** @param  ArrayObject<int, MessageLogged>  $logged */
+    private function assertWriteFailureReported(ArrayObject $logged): void
+    {
+        $critical = array_values(array_filter($logged->getArrayCopy(), fn (MessageLogged $record): bool => $record->level === 'critical'));
+
+        $this->assertCount(1, $critical);
+        $this->assertInstanceOf(AccessLogWriteFailedException::class, $critical[0]->context['exception']);
+        $this->assertInstanceOf(QueryException::class, $critical[0]->context['exception']->getPrevious());
     }
 
     private function atTheDeviceLimit(User $user): void

@@ -2,6 +2,7 @@
 
 namespace App\Foundation\AccessLog\UseCases;
 
+use Throwable;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
@@ -12,6 +13,7 @@ use App\Foundation\AccessLog\Values\AccessOutcome;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
+use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 
 /**
  * The access log's one writer (slice-access-log AL1). A use case notes the outcome
@@ -34,7 +36,17 @@ class AccessLogRecorder
         $this->outcome = null;
 
         if ($outcome !== null) {
+            $this->insertOrReport($outcome, $request, $response);
+        }
+    }
+
+    /** A failed write never fails the request; it is reported loudly instead (SL8). */
+    private function insertOrReport(AccessOutcome $outcome, Request $request, Response $response): void
+    {
+        try {
             $this->insert($outcome, $request, $response);
+        } catch (Throwable $failure) {
+            report(new AccessLogWriteFailedException("Access log write failed: {$outcome->event->value}.", previous: $failure));
         }
     }
 

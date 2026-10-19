@@ -1,5 +1,6 @@
 <?php
 
+use Psr\Log\LogLevel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Foundation\Application;
@@ -54,6 +55,7 @@ use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 use App\Companies\Memberships\Exceptions\OwnerRemovalBlockedException;
+use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 use App\Companies\Exceptions\OwnershipTransferCaseNotVerifiedException;
 use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
 use App\Companies\Memberships\Exceptions\MembershipContentionException;
@@ -98,6 +100,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->level(AccessLogWriteFailedException::class, LogLevel::CRITICAL);
+
         $exceptions->render(fn (ValidationException $e) => EnvelopeBuilder::build(
             ApiErrorCode::ValidationFailed,
             $e->getMessage(),
