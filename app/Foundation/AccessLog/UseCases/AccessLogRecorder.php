@@ -25,7 +25,7 @@ use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
  */
 class AccessLogRecorder
 {
-    /** A refusal row takes repeats for this long after its first one (SL10). */
+    /** A refusal row takes repeats for this long after its first one. */
     protected const FOLD_WINDOW_MINUTES = 5;
 
     private ?AccessOutcome $outcome = null;
@@ -40,11 +40,16 @@ class AccessLogRecorder
     {
         $noted = $this->outcome;
         $this->outcome = null;
-        $refusal = $noted === null ? $this->refusal($request, $response) : null;
 
         if ($noted !== null) {
             $this->writeOrReport($noted, fn () => $this->insert($noted, $request, $response));
-        } elseif ($refusal !== null) {
+
+            return;
+        }
+
+        $refusal = $this->refusal($request, $response);
+
+        if ($refusal !== null) {
             $this->writeOrReport($refusal, fn () => $this->fold($refusal, $request, $response));
         }
     }
@@ -52,12 +57,17 @@ class AccessLogRecorder
     protected function refusal(Request $request, Response $response): ?AccessOutcome
     {
         $event = AccessEvent::refusalFor($response->getStatusCode());
+
+        if ($event === null) {
+            return null;
+        }
+
         /** @var ?User $actor */
         $actor = $request->user();
         /** @var ?Company $company set by AuthorizeCompany only once the actor's membership holds */
         $company = $request->attributes->get('company');
 
-        return $event === null ? null : new AccessOutcome($event, null, $actor?->getKey(), $company?->getKey());
+        return new AccessOutcome($event, null, $actor?->getKey(), $company?->getKey());
     }
 
     /** A failed write never fails the request; it is reported loudly instead. */
@@ -72,10 +82,12 @@ class AccessLogRecorder
 
     protected function fold(AccessOutcome $outcome, Request $request, Response $response): void
     {
+        /** @var Route $route */
+        $route = $request->route();
         $repeated = AccessLogEntry::query()
             ->where('event', $outcome->event)
             ->where('ip_address', $request->ip())
-            ->where('route', $request->route()?->uri())
+            ->where('route', $route->uri())
             ->where('http_method', $request->method())
             ->where('user_id', $outcome->userId)
             ->where('company_id', $outcome->companyId)
@@ -84,11 +96,9 @@ class AccessLogRecorder
 
         if ($repeated === null) {
             $this->insert($outcome, $request, $response);
-
-            return;
+        } else {
+            $repeated->increment('occurrences', 1, ['last_seen_at' => now()]);
         }
-
-        $repeated->increment('occurrences', 1, ['last_seen_at' => now()]);
     }
 
     protected function insert(AccessOutcome $outcome, Request $request, Response $response): void

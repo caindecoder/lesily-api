@@ -75,8 +75,8 @@ Route::get('company-context-probe', fn (Request $request) => response()->json([
     'company_id' => $request->company()->getKey(),
 ]))->middleware(['auth:sanctum', 'auth.company']);
 
-// Hidden-record probe (SLICE-access-log increment 2): a 404 answered inside the
-// member's own company, after AuthorizeCompany has bound it.
+// Hidden-record probe: a 404 answered inside the member's own company, after
+// AuthorizeCompany has bound it.
 Route::get('company-hidden-record-probe', fn () => throw new ModelNotFoundException)
     ->middleware(['auth:sanctum', 'auth.company']);
 
