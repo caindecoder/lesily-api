@@ -185,15 +185,18 @@ class RecordRefusedRequestsTest extends FoundationTestCase
     public function when_the_rate_limit_is_hit_then_a_rate_limited_refusal_is_logged(): void
     {
         // Given the one request a minute this route allows has been used
-        $this->getJson('/api/_test/rate-limit-general-probe');
+        $allowedId = $this->getJson('/api/_test/rate-limit-general-probe')->headers->get('Correlation-Id');
 
         // When another request follows
         $response = $this->getJson('/api/_test/rate-limit-general-probe');
 
-        // Then it is refused, and one rate-limited row records it
+        // Then it is refused, and one rate-limited row records it under its own request id
         $response->assertTooManyRequests();
         $entry = $this->assertRefusalLogged(AccessEvent::RateLimited, null, null);
         $this->assertAnsweredAs($entry, Response::HTTP_TOO_MANY_REQUESTS, ApiErrorCode::RateLimitExceeded);
+        $this->assertLoggedRequest($response, $entry, 'GET api/_test/rate-limit-general-probe');
+        $this->assertIsString($allowedId);
+        $this->assertNotSame($allowedId, $entry->request_id);
     }
 
     protected function assertRefusalLogged(AccessEvent $event, ?User $actor, ?Company $company): AccessLogEntry
