@@ -30,6 +30,7 @@ use App\Compliance\Dsar\Exceptions\DsarExportNotReadyException;
 use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
 use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
+use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use App\Companies\Memberships\Exceptions\AlreadyMemberException;
 use App\Compliance\Dsar\Exceptions\DsarDownloadExpiredException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
@@ -90,6 +91,8 @@ return Application::configure(basePath: dirname(__DIR__))
             | Request::HEADER_X_FORWARDED_PROTO,
         );
         $middleware->appendToGroup('api', AssignCorrelationId::class);
+        // Laravel sorts auth and throttle to the front; a refusal they answer still needs its id.
+        $middleware->prependToPriorityList(AuthenticatesRequests::class, AssignCorrelationId::class);
         $middleware->appendToGroup('api', RecordAccessOutcome::class);
         $middleware->alias([
             'auth.company' => AuthorizeCompany::class,
