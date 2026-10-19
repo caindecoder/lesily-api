@@ -63,13 +63,25 @@ class LogInInteractor
     private function authenticate(LoginCommand $command): User
     {
         $user = User::query()->where('email', $command->email)->first();
+        $failure = $this->failureReason($command, $user);
 
-        if ($user === null || ! Hash::check($command->password, $user->password)) {
-            $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::WrongPassword, $user);
+        if ($failure !== null) {
+            $this->accessLog->note(AccessEvent::LoginFailed, $failure, $user);
 
             throw new InvalidCredentialsException;
         }
 
+        /** @var User $user */
         return $user;
+    }
+
+    /** The access log tells the two apart; the client never can (one throw, one message). */
+    private function failureReason(LoginCommand $command, ?User $user): ?AccessEventReason
+    {
+        return match (true) {
+            $user === null => AccessEventReason::UnknownAccount,
+            ! Hash::check($command->password, $user->password) => AccessEventReason::WrongPassword,
+            default => null,
+        };
     }
 }

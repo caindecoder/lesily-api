@@ -28,6 +28,20 @@ class RecordSignInOutcomesTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_account_is_unknown_then_a_failed_sign_in_is_logged_without_the_email(): void
+    {
+        // Given no account for the email a guest types
+        $email = 'nobody@contoso.lk';
+
+        // When the guest signs in with it
+        $this->signIn('any-password', $email)->assertUnauthorized();
+
+        // Then a failed sign-in is logged against no user, and the typed email is kept nowhere
+        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::UnknownAccount, null);
+        $this->assertNotContains($email, $entry->getAttributes());
+    }
+
+    #[Test]
     public function when_a_user_without_two_factor_signs_in_then_a_successful_sign_in_is_logged(): void
     {
         // Given a registered user without two-factor authentication
