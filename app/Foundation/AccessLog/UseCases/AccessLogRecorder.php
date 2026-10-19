@@ -56,10 +56,23 @@ class AccessLogRecorder
     protected function insertOrReport(AccessOutcome $outcome, Request $request, Response $response): void
     {
         try {
-            $this->insert($outcome, $request, $response);
+            $this->record($outcome, $request, $response);
         } catch (Throwable $failure) {
             report(new AccessLogWriteFailedException($outcome, $failure));
         }
+    }
+
+    protected function record(AccessOutcome $outcome, Request $request, Response $response): void
+    {
+        $repeated = AccessLogEntry::query()->where('event', $outcome->event)->first();
+
+        if ($repeated === null) {
+            $this->insert($outcome, $request, $response);
+
+            return;
+        }
+
+        $repeated->increment('occurrences', 1, ['last_seen_at' => now()]);
     }
 
     protected function insert(AccessOutcome $outcome, Request $request, Response $response): void
