@@ -138,6 +138,23 @@ class RecordSignInOutcomesTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_session_cannot_be_issued_after_verification_then_no_successful_sign_in_is_logged(): void
+    {
+        // Given a two-factor user with an open challenge and a code that verifies, and a session issuer that fails
+        $user = $this->aTwoFactorUser();
+        $this->fakeTotpVerifier(true);
+        $challengeId = $this->openChallenge($user);
+        $this->bindThrowingSessionIssuer();
+
+        // When they submit the code
+        $response = $this->verify($challengeId, '123456');
+
+        // Then the verification fails and no successful sign-in is logged
+        $response->assertInternalServerError();
+        $this->assertNoAccessLogged(AccessEvent::LoginSucceeded);
+    }
+
+    #[Test]
     public function when_the_log_write_fails_then_the_sign_in_still_answers_and_the_failure_is_reported(): void
     {
         // Given a registered user, and an access log that refuses every write
