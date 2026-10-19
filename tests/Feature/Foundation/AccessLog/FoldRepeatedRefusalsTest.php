@@ -33,6 +33,7 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
             'acme' => Company::factory()->onPlan(BillingPlan::Free)->create(),
             'globex' => Company::factory()->onPlan(BillingPlan::Free)->create(),
             'initech' => Company::factory()->onPlan(BillingPlan::Free)->create(),
+            'umbrella' => Company::factory()->onPlan(BillingPlan::Free)->create(),
         ];
         $this->joinCompany($this->companies['acme'], $this->people['alice']);
         $this->joinCompany($this->companies['globex'], $this->people['alice']);
@@ -141,6 +142,36 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
         // Then the first row closed at minute five and the third refusal opens a new one
         $response->assertUnauthorized();
         $this->assertCountedRows([2, 1]);
+    }
+
+    /**
+     * @param  array<string, string>  $first
+     * @param  array<string, string>  $second
+     */
+    #[Test]
+    #[DataProvider('provideRefusalsThatRepeat')]
+    public function when_a_refusal_repeats_with_the_same_key_then_one_row_counts_both(array $first, array $second): void
+    {
+        // Given one refusal on record
+        $this->refuse($first);
+
+        // When the same refusal arrives straight after
+        $this->refuse($second);
+
+        // Then one row counts both
+        $this->assertCountedRows([2]);
+    }
+
+    /** @return array<string, array{array<string, string>, array<string, string>}> */
+    public static function provideRefusalsThatRepeat(): array
+    {
+        $member = ['method' => 'GET', 'uri' => '/api/_test/two-gate/pro-feature', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'acme'];
+        $stranger = ['method' => 'GET', 'uri' => '/api/v1/companies/{in}', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'initech'];
+
+        return [
+            'a member refused inside their company' => [$member, $member],
+            'the same route asked for another record' => [$stranger, [...$stranger, 'in' => 'umbrella']],
+        ];
     }
 
     #[Test]
