@@ -14,12 +14,14 @@ enum AccessEvent: string
     case OtherSessionsRevoked = 'other_sessions_revoked';
     case SessionRevoked = 'session_revoked';
     case Unauthenticated = 'unauthenticated';
+    case Forbidden = 'forbidden';
 
     /** The refusal a response status records when no use case noted an outcome. */
     public static function refusalFor(int $status): ?self
     {
         return match ($status) {
             Response::HTTP_UNAUTHORIZED => self::Unauthenticated,
+            Response::HTTP_FORBIDDEN => self::Forbidden,
             default => null,
         };
     }

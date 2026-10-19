@@ -6,13 +6,30 @@ use App\Models\User;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Tests\Feature\Foundation\FoundationTestCase;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
+use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
 class RecordRefusedRequestsTest extends FoundationTestCase
 {
+    use WithRolePermissionFixtures;
+
+    protected Company $company;
+
+    protected User $member;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->company = Company::factory()->onPlan(BillingPlan::Free)->create();
+        $this->member = User::factory()->create();
+        $this->joinCompany($this->company, $this->member);
+    }
+
     #[Test]
     public function when_a_request_carries_no_valid_token_then_an_unauthenticated_refusal_is_logged(): void
     {
@@ -28,6 +45,20 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         $this->assertAnsweredAs($entry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
         $this->assertLoggedRequest($response, $entry, 'GET api/_test/authenticated-probe');
         $this->assertSeenOnce($entry);
+    }
+
+    #[Test]
+    public function when_a_member_lacks_the_feature_then_a_forbidden_refusal_names_the_member_and_the_company(): void
+    {
+        // Given a member of a company on the Free plan
+
+        // When the member asks for a Pro feature in that company
+        $response = $this->attemptGatedAction('two-gate/pro-feature', $this->member, $this->company);
+
+        // Then it is refused, and the row names the member and the company
+        $response->assertForbidden();
+        $entry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->member, $this->company);
+        $this->assertAnsweredAs($entry, Response::HTTP_FORBIDDEN, ApiErrorCode::FeatureNotAvailable);
     }
 
     protected function assertRefusalLogged(AccessEvent $event, ?User $actor, ?Company $company): AccessLogEntry

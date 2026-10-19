@@ -15,5 +15,6 @@ readonly class AccessOutcome
         public AccessEvent $event,
         public ?AccessEventReason $reason,
         public ?string $userId,
+        public ?string $companyId = null,
     ) {}
 }
