@@ -69,6 +69,7 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
             'another route' => [$anonymous, [...$anonymous, 'uri' => '/api/_test/company-context-probe']],
             'another method' => [$stranger, [...$stranger, 'method' => 'PUT']],
             'another actor' => [$member, [...$member, 'as' => 'bob']],
+            'another company' => [$member, [...$member, 'in' => 'globex']],
         ];
     }
 

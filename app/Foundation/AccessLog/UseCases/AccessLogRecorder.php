@@ -73,6 +73,7 @@ class AccessLogRecorder
             ->where('route', $request->route()?->uri())
             ->where('http_method', $request->method())
             ->where('user_id', $outcome->userId)
+            ->where('company_id', $outcome->companyId)
             ->where('first_seen_at', '>', now()->subMinutes(self::FOLD_WINDOW_MINUTES))
             ->first();
 
