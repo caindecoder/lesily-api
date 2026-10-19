@@ -66,7 +66,7 @@ class RegisterOwnerInteractor
      *
      * @return array{string, string} [userId, companyId]
      */
-    private function persistRegistration(RegisterOwnerCommand $command, string $clientIp): array
+    protected function persistRegistration(RegisterOwnerCommand $command, string $clientIp): array
     {
         try {
             return DB::transaction(function () use ($command, $clientIp): array {

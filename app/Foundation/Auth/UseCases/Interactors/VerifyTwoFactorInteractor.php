@@ -93,7 +93,7 @@ class VerifyTwoFactorInteractor
      * read-modify-write race class as recordFailure/OQ-1-119). The loser blocks on the
      * lock, re-reads inside it, finds the code already gone, and returns false.
      */
-    private function consumeMatchingRecoveryCode(User $user, string $code): bool
+    protected function consumeMatchingRecoveryCode(User $user, string $code): bool
     {
         $matched = false;
 
@@ -118,7 +118,7 @@ class VerifyTwoFactorInteractor
      * the non-secret marker, atomically (Design-Y — the credential write lives outside
      * the event store; the two commit together so a marker can never outrun its column).
      */
-    private function consumeRecoveryCode(User $user, int $index): void
+    protected function consumeRecoveryCode(User $user, int $index): void
     {
         $remaining = $user->two_factor_recovery_codes ?? [];
         unset($remaining[$index]);

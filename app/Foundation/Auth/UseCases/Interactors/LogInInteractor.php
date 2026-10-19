@@ -61,7 +61,7 @@ class LogInInteractor
         return new SessionIssued($session, $user);
     }
 
-    private function authenticate(LoginCommand $command): User
+    protected function authenticate(LoginCommand $command): User
     {
         $user = User::query()->where('email', $command->email)->first();
         $failure = $this->failureReason($command, $user);

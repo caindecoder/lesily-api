@@ -38,7 +38,7 @@ class DeviceLimitGuard
         }
     }
 
-    private function onDeviceCappedPlan(User $user): bool
+    protected function onDeviceCappedPlan(User $user): bool
     {
         return $user->companies->contains(
             fn (Company $company): bool => $company->current_billing_plan?->enforcesDeviceLimit() ?? false
