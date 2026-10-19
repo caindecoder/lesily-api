@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Foundation\Application;
 use Illuminate\Auth\AuthenticationException;
@@ -78,6 +79,14 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // The host's edge proxy is the only way in; its X-Forwarded-For carries the client's address.
+        $middleware->trustProxies(
+            at: '*',
+            headers: Request::HEADER_X_FORWARDED_FOR
+            | Request::HEADER_X_FORWARDED_HOST
+            | Request::HEADER_X_FORWARDED_PORT
+            | Request::HEADER_X_FORWARDED_PROTO,
+        );
         $middleware->appendToGroup('api', AssignCorrelationId::class);
         $middleware->appendToGroup('api', RecordAccessOutcome::class);
         $middleware->alias([

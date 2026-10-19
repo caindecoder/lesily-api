@@ -146,14 +146,14 @@ class RegisterOwnerTest extends AuthTestCase
         ];
     }
 
-    // Sad — a registration whose client IP can't be resolved (no REMOTE_ADDR) is rejected
+    // Sad — a registration whose client IP can't be resolved (an empty REMOTE_ADDR) is rejected
     // with a clean 422, NOT a 500, and no consent record is minted without its IP.
     #[Test]
     public function when_the_client_ip_is_undeterminable_then_registration_is_rejected_as_invalid(): void
     {
         // Given a guest whose request carries no resolvable client IP
         // When they register
-        $response = $this->withServerVariables(['REMOTE_ADDR' => null])
+        $response = $this->withServerVariables(['REMOTE_ADDR' => ''])
             ->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
 
         // Then it is rejected as a validation error (a clean 4xx), not a server crash,
