@@ -4,10 +4,12 @@ namespace Tests\Feature\Foundation\AccessLog;
 
 use Closure;
 use Throwable;
+use RuntimeException;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\Foundation\FoundationTestCase;
+use App\Companies\Exceptions\StaleOwnershipException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
@@ -21,6 +23,31 @@ use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 
 class KeepRecordedRefusalsOutOfTheErrorLogTest extends FoundationTestCase
 {
+    /** @param  Closure(): Throwable  $failure */
+    #[Test]
+    #[DataProvider('provideExceptionsThatStayReported')]
+    public function when_any_other_exception_is_raised_then_it_is_still_reported(Closure $failure): void
+    {
+        // Given reports are captured
+        Exceptions::fake();
+        $exception = $failure();
+
+        // When the exception is reported
+        report($exception);
+
+        // Then it reaches the error log
+        Exceptions::assertReported($exception::class);
+    }
+
+    /** @return array<string, array{Closure(): Throwable}> */
+    public static function provideExceptionsThatStayReported(): array
+    {
+        return [
+            'a conflict the access log does not record' => [fn () => new StaleOwnershipException],
+            'a server failure' => [fn () => new RuntimeException('Induced failure.')],
+        ];
+    }
+
     /** @param  Closure(): Throwable  $refusal */
     #[Test]
     #[DataProvider('provideRecordedRefusals')]
