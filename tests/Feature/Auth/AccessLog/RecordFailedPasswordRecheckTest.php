@@ -62,7 +62,7 @@ class RecordFailedPasswordRecheckTest extends AuthTestCase
     }
 
     /** @param  array{0: string, 1: string, 2: string}  $action */
-    private function confirmWith(string $token, array $action, string $password): TestResponse
+    protected function confirmWith(string $token, array $action, string $password): TestResponse
     {
         [$method, $uri, $passwordField] = $action;
 

@@ -58,14 +58,14 @@ class TrustForwardedClientIpTest extends AuthTestCase
         $this->assertSame(self::CLIENT_IP, AccessLogEntry::query()->sole()->ip_address);
     }
 
-    private function attemptSignIn(string $clientIp, string $proxyIp): TestResponse
+    protected function attemptSignIn(string $clientIp, string $proxyIp): TestResponse
     {
         $this->forwardedFrom($clientIp, $proxyIp);
 
         return $this->postJson('/api/v1/auth/login', []);
     }
 
-    private function forwardedFrom(string $clientIp, string $proxyIp): void
+    protected function forwardedFrom(string $clientIp, string $proxyIp): void
     {
         $this->withServerVariables(['REMOTE_ADDR' => $proxyIp]);
         $this->withHeader('X-Forwarded-For', $clientIp);

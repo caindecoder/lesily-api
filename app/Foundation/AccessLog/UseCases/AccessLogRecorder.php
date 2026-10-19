@@ -41,7 +41,7 @@ class AccessLogRecorder
     }
 
     /** A failed write never fails the request; it is reported loudly instead. */
-    private function insertOrReport(AccessOutcome $outcome, Request $request, Response $response): void
+    protected function insertOrReport(AccessOutcome $outcome, Request $request, Response $response): void
     {
         try {
             $this->insert($outcome, $request, $response);
@@ -50,7 +50,7 @@ class AccessLogRecorder
         }
     }
 
-    private function insert(AccessOutcome $outcome, Request $request, Response $response): void
+    protected function insert(AccessOutcome $outcome, Request $request, Response $response): void
     {
         $origin = RequestOrigin::fromRequest($request);
         /** @var Route $route */
@@ -74,7 +74,7 @@ class AccessLogRecorder
     }
 
     /** The error envelope's code; a success body, or a body that is not JSON, has none. */
-    private function errorCode(Response $response): ?string
+    protected function errorCode(Response $response): ?string
     {
         if (! $response instanceof JsonResponse) {
             return null;

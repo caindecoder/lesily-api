@@ -77,7 +77,7 @@ class VerifyTwoFactorInteractor
      * (sessions slice R10). Shared by both completing factors (TOTP and recovery); the
      * stamp lives here, not in SessionIssuer, so a future token refresh won't bump it.
      */
-    private function issueSession(User $user, string $deviceName, ?AccessEventReason $factor): SessionIssued
+    protected function issueSession(User $user, string $deviceName, ?AccessEventReason $factor): SessionIssued
     {
         $user->last_logged_at = now();
         $user->save();

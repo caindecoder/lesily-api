@@ -77,7 +77,7 @@ class LogInInteractor
     }
 
     /** The access log tells the two apart; the client never can (one throw, one message). */
-    private function failureReason(LoginCommand $command, ?User $user): ?AccessEventReason
+    protected function failureReason(LoginCommand $command, ?User $user): ?AccessEventReason
     {
         return match (true) {
             $user === null => AccessEventReason::UnknownAccount,

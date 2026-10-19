@@ -292,12 +292,12 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $this->assertStringNotContainsString('RECOVER-ONE', (string) json_encode($entry->getAttributes()));
     }
 
-    private function signIn(string $password, string $email = self::LOGIN_EMAIL): TestResponse
+    protected function signIn(string $password, string $email = self::LOGIN_EMAIL): TestResponse
     {
         return $this->postJson('/api/v1/auth/login', ['email' => $email, 'password' => $password]);
     }
 
-    private function bindThrowingSessionIssuer(): void
+    protected function bindThrowingSessionIssuer(): void
     {
         $this->app->bind(SessionIssuer::class, fn (): SessionIssuer => new class extends SessionIssuer
         {
@@ -308,7 +308,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
         });
     }
 
-    private function failAccessLogWrites(): void
+    protected function failAccessLogWrites(): void
     {
         AccessLogEntry::creating(fn () => throw $this->syntheticQueryException([
             'sqlstate' => 'HY000',
@@ -318,7 +318,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
     }
 
     /** @return ArrayObject<int, MessageLogged> */
-    private function collectLogRecords(): ArrayObject
+    protected function collectLogRecords(): ArrayObject
     {
         $logged = new ArrayObject;
         Log::listen(fn (MessageLogged $record) => $logged->append($record));
@@ -327,7 +327,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
     }
 
     /** @param  ArrayObject<int, MessageLogged>  $logged */
-    private function assertWriteFailureReported(ArrayObject $logged, User $user): void
+    protected function assertWriteFailureReported(ArrayObject $logged, User $user): void
     {
         $critical = array_values(array_filter($logged->getArrayCopy(), fn (MessageLogged $record): bool => $record->level === 'critical'));
 
@@ -340,7 +340,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
         );
     }
 
-    private function atTheDeviceLimit(User $user): void
+    protected function atTheDeviceLimit(User $user): void
     {
         $this->memberOfCompanyOnPlan($user, BillingPlan::Pro);
         $this->aSessionFor($user, 'web');
@@ -348,7 +348,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $this->aSessionFor($user, 'tablet');
     }
 
-    private function assertSeenOnce(AccessLogEntry $entry): void
+    protected function assertSeenOnce(AccessLogEntry $entry): void
     {
         $this->assertSame(1, $entry->occurrences);
         $this->assertSame(now()->toDateTimeString(), $entry->first_seen_at->toDateTimeString());
