@@ -59,6 +59,20 @@ class AssignCorrelationIdTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_a_request_is_refused_by_the_rate_limit_then_the_refusal_carries_its_own_correlation_id(): void
+    {
+        // Given the one request a minute this route allows has been used
+        $allowedId = $this->getJson('/api/_test/rate-limit-general-probe')->headers->get('Correlation-Id');
+
+        // When another request follows
+        $response = $this->getJson('/api/_test/rate-limit-general-probe');
+
+        // Then the refusal carries an id of its own, not the earlier request's
+        $response->assertTooManyRequests();
+        $this->assertNotSame($allowedId, $this->assertRefusalCorrelated($response));
+    }
+
+    #[Test]
     public function when_health_endpoint_polled_then_correlation_id_is_not_assigned(): void
     {
         // Given (Betterstack polling the health endpoint, which opts out)
