@@ -4,13 +4,16 @@ namespace Tests\Concerns;
 
 use ArrayObject;
 use App\Models\User;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Database\QueryException;
 use Illuminate\Log\Events\MessageLogged;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
+use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 
 trait AssertsAccessLog
 {
@@ -63,6 +66,20 @@ trait AssertsAccessLog
         $this->assertSame(now()->toDateTimeString(), $entry->first_seen_at->toDateTimeString());
         $this->assertSame(now()->toDateTimeString(), $entry->last_seen_at->toDateTimeString());
         $this->assertNull($entry->company_id);
+    }
+
+    /**
+     * @param  ArrayObject<int, MessageLogged>  $logged
+     * @param  array<string, ?string>  $outcome
+     */
+    protected function assertRefusalFailureReported(ArrayObject $logged, array $outcome): void
+    {
+        $critical = array_values(array_filter($logged->getArrayCopy(), fn (MessageLogged $record): bool => $record->level === 'critical'));
+
+        $this->assertCount(1, $critical);
+        $this->assertInstanceOf(AccessLogWriteFailedException::class, $critical[0]->context['exception']);
+        $this->assertInstanceOf(QueryException::class, $critical[0]->context['exception']->getPrevious());
+        $this->assertSame($outcome, Arr::only($critical[0]->context, array_keys($outcome)));
     }
 
     protected function failAccessLogWrites(): void
