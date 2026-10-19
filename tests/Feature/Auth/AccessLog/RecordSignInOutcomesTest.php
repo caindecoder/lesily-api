@@ -144,6 +144,23 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $this->assertAnsweredAs($entry, Response::HTTP_ACCEPTED, null);
     }
 
+    #[Test]
+    public function when_the_code_is_verified_then_a_successful_sign_in_is_logged(): void
+    {
+        // Given a two-factor user with an open challenge and a code that verifies
+        $user = $this->aTwoFactorUser();
+        $this->fakeTotpVerifier(true);
+        $challengeId = $this->openChallenge($user);
+
+        // When they submit it
+        $response = $this->verify($challengeId, '123456');
+
+        // Then a successful sign-in is logged, on the verification route
+        $response->assertOk();
+        $entry = $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $user);
+        $this->assertSame('api/v1/auth/2fa/verify', $entry->route);
+    }
+
     private function signIn(string $password, string $email = self::LOGIN_EMAIL): TestResponse
     {
         return $this->postJson('/api/v1/auth/login', ['email' => $email, 'password' => $password]);

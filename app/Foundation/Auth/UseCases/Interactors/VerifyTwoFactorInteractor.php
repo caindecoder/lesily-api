@@ -81,6 +81,7 @@ class VerifyTwoFactorInteractor
     {
         $user->last_logged_at = now();
         $user->save();
+        $this->accessLog->note(AccessEvent::LoginSucceeded, null, $user);
 
         return new SessionIssued($this->sessionIssuer->issue($user, $deviceName), $user);
     }
