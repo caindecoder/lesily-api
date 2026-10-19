@@ -111,6 +111,21 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_the_same_refusal_comes_for_another_reason_then_it_gets_its_own_row(): void
+    {
+        // Given a member refused a secured action for the company's plan, and the company then upgraded
+        $request = ['method' => 'GET', 'uri' => '/api/_test/two-gate/secured', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'acme'];
+        $this->refuse($request);
+        $this->companies['acme']->update(['current_billing_plan' => BillingPlan::Pro]);
+
+        // When the member is refused the same action for their role
+        $this->refuse($request);
+
+        // Then each reason keeps a row of its own
+        $this->assertCountedRows([1, 1]);
+    }
+
+    #[Test]
     public function when_five_minutes_have_passed_since_the_first_refusal_then_a_new_row_is_opened(): void
     {
         // Given one refusal on record, five minutes ago to the second

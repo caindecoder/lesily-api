@@ -91,6 +91,7 @@ class AccessLogRecorder
             ->where('http_method', $request->method())
             ->where('user_id', $outcome->userId)
             ->where('company_id', $outcome->companyId)
+            ->where('error_code', $this->errorCode($response))
             ->where('first_seen_at', '>', now()->subMinutes(self::FOLD_WINDOW_MINUTES))
             ->first();
 
