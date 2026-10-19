@@ -15,6 +15,7 @@ enum AccessEvent: string
     case SessionRevoked = 'session_revoked';
     case Unauthenticated = 'unauthenticated';
     case Forbidden = 'forbidden';
+    case NotFound = 'not_found';
 
     /** The refusal a response status records when no use case noted an outcome. */
     public static function refusalFor(int $status): ?self
@@ -22,6 +23,7 @@ enum AccessEvent: string
         return match ($status) {
             Response::HTTP_UNAUTHORIZED => self::Unauthenticated,
             Response::HTTP_FORBIDDEN => self::Forbidden,
+            Response::HTTP_NOT_FOUND => self::NotFound,
             default => null,
         };
     }

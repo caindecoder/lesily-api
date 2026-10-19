@@ -61,6 +61,20 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         $this->assertAnsweredAs($entry, Response::HTTP_FORBIDDEN, ApiErrorCode::FeatureNotAvailable);
     }
 
+    #[Test]
+    public function when_a_route_finds_nothing_then_a_not_found_refusal_is_logged(): void
+    {
+        // Given (an anonymous client)
+
+        // When it asks a route for a record that does not exist
+        $response = $this->getJson('/api/_test/error-http-not-found');
+
+        // Then it is refused, and one not-found row records it
+        $response->assertNotFound();
+        $entry = $this->assertRefusalLogged(AccessEvent::NotFound, null, null);
+        $this->assertAnsweredAs($entry, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
+    }
+
     protected function assertRefusalLogged(AccessEvent $event, ?User $actor, ?Company $company): AccessLogEntry
     {
         $entry = AccessLogEntry::query()->sole();
