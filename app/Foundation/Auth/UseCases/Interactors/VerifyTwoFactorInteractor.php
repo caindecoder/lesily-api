@@ -42,6 +42,8 @@ class VerifyTwoFactorInteractor
         $challenge = $this->challenges->find($command->challengeId);
 
         if ($challenge === null) {
+            $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::ChallengeExpired, null);
+
             throw new LoginChallengeNotFoundException;
         }
 

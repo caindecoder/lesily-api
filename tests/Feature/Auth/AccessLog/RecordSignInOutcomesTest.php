@@ -79,6 +79,21 @@ class RecordSignInOutcomesTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_challenge_is_gone_then_a_failed_sign_in_is_logged_without_a_user(): void
+    {
+        // Given a challenge id that no longer resolves
+        $challengeId = 'a-challenge-that-has-expired';
+
+        // When a code is submitted against it
+        $response = $this->verify($challengeId, '000000');
+
+        // Then a failed sign-in is logged against no user
+        $response->assertNotFound();
+        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::ChallengeExpired, null);
+        $this->assertAnsweredAs($entry, Response::HTTP_NOT_FOUND, ApiErrorCode::TwoFactorChallengeNotFound);
+    }
+
+    #[Test]
     public function when_a_user_without_two_factor_signs_in_then_a_successful_sign_in_is_logged(): void
     {
         // Given a registered user without two-factor authentication

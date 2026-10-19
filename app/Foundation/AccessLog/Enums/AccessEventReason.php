@@ -8,4 +8,5 @@ enum AccessEventReason: string
     case UnknownAccount = 'unknown_account';
     case DeviceLimit = 'device_limit';
     case WrongTwoFactorCode = 'wrong_two_factor_code';
+    case ChallengeExpired = 'challenge_expired';
 }
