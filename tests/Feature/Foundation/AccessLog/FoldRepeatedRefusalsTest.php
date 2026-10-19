@@ -36,6 +36,7 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
 
         return [
             'another source address' => [$anonymous, [...$anonymous, 'from' => '203.0.113.8']],
+            'another route' => [$anonymous, [...$anonymous, 'uri' => '/api/_test/company-context-probe']],
         ];
     }
 
