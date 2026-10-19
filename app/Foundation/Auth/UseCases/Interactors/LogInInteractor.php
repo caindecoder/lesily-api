@@ -42,12 +42,10 @@ class LogInInteractor
         // token — login is suspended at "awaiting-2fa" until /2fa/verify. Non-enrolled users
         // get a session straight away (the existing 200 path, forward-compatible).
         if ($user->two_factor_confirmed_at !== null) {
+            $challengeId = $this->challenges->create($user->getKey());
             $this->accessLog->note(AccessEvent::LoginChallenged, null, $user);
 
-            return new ChallengeRequired(
-                $this->challenges->create($user->getKey()),
-                now()->addMinutes(LoginChallengeStore::TTL_MINUTES),
-            );
+            return new ChallengeRequired($challengeId, now()->addMinutes(LoginChallengeStore::TTL_MINUTES));
         }
 
         // A non-2FA user mints here, so the device cap is enforced here (UC-1-002 alt-5a)

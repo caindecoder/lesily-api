@@ -17,8 +17,10 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
+use App\Foundation\Auth\Totp\CacheLoginChallengeStore;
 use App\Foundation\Auth\UseCases\Results\IssuedSession;
 use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 
@@ -152,6 +154,27 @@ class RecordSignInOutcomesTest extends AuthTestCase
         // Then the verification fails and no successful sign-in is logged
         $response->assertInternalServerError();
         $this->assertNoAccessLogged(AccessEvent::LoginSucceeded);
+    }
+
+    #[Test]
+    public function when_the_challenge_cannot_be_opened_then_no_challenge_is_logged(): void
+    {
+        // Given a two-factor user, and a challenge store that fails
+        $this->aTwoFactorUser();
+        $this->app->bind(LoginChallengeStore::class, fn (): LoginChallengeStore => new class extends CacheLoginChallengeStore
+        {
+            public function create(string $userId): string
+            {
+                throw new RuntimeException('Induced challenge-store failure.');
+            }
+        });
+
+        // When they sign in with the right password
+        $response = $this->signIn(self::LOGIN_PASSWORD);
+
+        // Then the sign-in fails and no challenge is logged
+        $response->assertInternalServerError();
+        $this->assertNoAccessLogged(AccessEvent::LoginChallenged);
     }
 
     #[Test]
