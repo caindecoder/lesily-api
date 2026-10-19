@@ -24,6 +24,21 @@ class RecordSessionEndingsTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_other_sessions_cannot_be_revoked_then_no_revocation_is_logged(): void
+    {
+        // Given a signed-in user, and a session revoker that fails
+        $token = $this->aSessionFor($this->aRegisteredUser())->plainTextToken;
+        $this->bindThrowingTokenRevoker();
+
+        // When they log out their other devices
+        $response = $this->withToken($token)->postJson('/api/v1/auth/logout-all', ['password' => self::LOGIN_PASSWORD]);
+
+        // Then it fails and no revocation is logged
+        $response->assertInternalServerError();
+        $this->assertNoAccessLogged(AccessEvent::OtherSessionsRevoked);
+    }
+
+    #[Test]
     public function when_the_user_logs_out_then_the_logout_is_logged(): void
     {
         // Given a signed-in user
