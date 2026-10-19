@@ -2,12 +2,16 @@
 
 namespace Tests\Feature\Foundation\AccessLog;
 
+use ArrayObject;
 use App\Models\User;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Database\QueryException;
+use Illuminate\Log\Events\MessageLogged;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AccessLog\Enums\AccessEvent;
@@ -16,6 +20,7 @@ use Tests\Feature\Foundation\FoundationTestCase;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
+use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 
 class RecordRefusedRequestsTest extends FoundationTestCase
 {
@@ -32,6 +37,27 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         $this->company = Company::factory()->onPlan(BillingPlan::Free)->create();
         $this->member = User::factory()->create();
         $this->joinCompany($this->company, $this->member);
+    }
+
+    #[Test]
+    public function when_the_refusal_cannot_be_logged_then_it_still_answers_and_the_failure_is_reported(): void
+    {
+        // Given the access log refuses writes
+        $this->failAccessLogWrites();
+        $logged = $this->collectLogRecords();
+
+        // When the member asks for a feature the company's plan lacks
+        $response = $this->attemptGatedAction('two-gate/pro-feature', $this->member, $this->company);
+
+        // Then the refusal still answers, nothing is stored, and the lost row is reported
+        $response->assertForbidden();
+        $this->assertDatabaseCount('access_log', 0);
+        $this->assertRefusalFailureReported($logged, [
+            'event' => 'forbidden',
+            'reason' => null,
+            'user_id' => $this->member->getKey(),
+            'company_id' => $this->company->getKey(),
+        ]);
     }
 
     #[Test]
@@ -173,6 +199,20 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         $response->assertTooManyRequests();
         $entry = $this->assertRefusalLogged(AccessEvent::RateLimited, null, null);
         $this->assertAnsweredAs($entry, Response::HTTP_TOO_MANY_REQUESTS, ApiErrorCode::RateLimitExceeded);
+    }
+
+    /**
+     * @param  ArrayObject<int, MessageLogged>  $logged
+     * @param  array<string, ?string>  $outcome
+     */
+    protected function assertRefusalFailureReported(ArrayObject $logged, array $outcome): void
+    {
+        $critical = array_values(array_filter($logged->getArrayCopy(), fn (MessageLogged $record): bool => $record->level === 'critical'));
+
+        $this->assertCount(1, $critical);
+        $this->assertInstanceOf(AccessLogWriteFailedException::class, $critical[0]->context['exception']);
+        $this->assertInstanceOf(QueryException::class, $critical[0]->context['exception']->getPrevious());
+        $this->assertSame($outcome, Arr::only($critical[0]->context, array_keys($outcome)));
     }
 
     protected function assertRefusalLogged(AccessEvent $event, ?User $actor, ?Company $company): AccessLogEntry
