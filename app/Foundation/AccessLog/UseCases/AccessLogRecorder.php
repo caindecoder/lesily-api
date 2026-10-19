@@ -65,7 +65,7 @@ class AccessLogRecorder
             'status' => $response->getStatusCode(),
             'error_code' => $this->errorCode($response),
             'ip_address' => $origin->ip,
-            'user_agent' => $origin->userAgent,
+            'user_agent' => $origin->boundedUserAgent(),
             'request_id' => $origin->boundedRequestId(),
             'first_seen_at' => now(),
             'last_seen_at' => now(),

@@ -138,6 +138,21 @@ class RecordSignInOutcomesTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_user_agent_is_over_long_then_it_is_logged_cut_short(): void
+    {
+        // Given a registered user whose client sends a 300-character user agent
+        $this->aRegisteredUser();
+        $this->withHeader('User-Agent', str_repeat('a', 300));
+
+        // When they sign in
+        $response = $this->signIn(self::LOGIN_PASSWORD);
+
+        // Then the sign-in is logged with the user agent cut to the column's 255 characters
+        $response->assertOk();
+        $this->assertSame(str_repeat('a', 255), AccessLogEntry::query()->sole()->user_agent);
+    }
+
+    #[Test]
     public function when_a_user_without_two_factor_signs_in_then_a_successful_sign_in_is_logged(): void
     {
         // Given a registered user without two-factor authentication
