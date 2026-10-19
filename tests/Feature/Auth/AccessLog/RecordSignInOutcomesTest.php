@@ -13,7 +13,6 @@ use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Database\QueryException;
 use Illuminate\Log\Events\MessageLogged;
-use Tests\Concerns\InducesDatabaseFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Auth\UseCases\SessionIssuer;
@@ -27,8 +26,6 @@ use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 
 class RecordSignInOutcomesTest extends AuthTestCase
 {
-    use InducesDatabaseFailures;
-
     #[Test]
     public function when_the_password_is_wrong_then_a_failed_sign_in_is_logged(): void
     {
@@ -306,24 +303,6 @@ class RecordSignInOutcomesTest extends AuthTestCase
                 throw new RuntimeException('Induced session-issue failure.');
             }
         });
-    }
-
-    protected function failAccessLogWrites(): void
-    {
-        AccessLogEntry::creating(fn () => throw $this->syntheticQueryException([
-            'sqlstate' => 'HY000',
-            'code' => 2006,
-            'message' => 'MySQL server has gone away',
-        ]));
-    }
-
-    /** @return ArrayObject<int, MessageLogged> */
-    protected function collectLogRecords(): ArrayObject
-    {
-        $logged = new ArrayObject;
-        Log::listen(fn (MessageLogged $record) => $logged->append($record));
-
-        return $logged;
     }
 
     /** @param  ArrayObject<int, MessageLogged>  $logged */
