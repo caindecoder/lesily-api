@@ -41,4 +41,21 @@ class RecordSessionEndingsTest extends AuthTestCase
         $entry = $this->assertAccessLogged(AccessEvent::OtherSessionsRevoked, null, $user);
         $this->assertAnsweredAs($entry, Response::HTTP_OK, null);
     }
+
+    #[Test]
+    public function when_the_user_revokes_one_session_then_the_revocation_is_logged(): void
+    {
+        // Given a user signed in on two devices
+        $user = $this->aRegisteredUser();
+        $token = $this->aSessionFor($user, 'web')->plainTextToken;
+        $other = $this->aSessionFor($user, 'mobile')->accessToken->getKey();
+
+        // When they revoke the other device's session
+        $response = $this->withToken($token)->deleteJson("/api/v1/me/sessions/{$other}");
+
+        // Then the revocation is logged
+        $response->assertNoContent();
+        $entry = $this->assertAccessLogged(AccessEvent::SessionRevoked, null, $user);
+        $this->assertAnsweredAs($entry, Response::HTTP_NO_CONTENT, null);
+    }
 }
