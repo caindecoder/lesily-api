@@ -10,6 +10,20 @@ use App\Foundation\AccessLog\Enums\AccessEvent;
 class RecordSessionEndingsTest extends AuthTestCase
 {
     #[Test]
+    public function when_an_unknown_session_is_revoked_then_no_revocation_is_logged(): void
+    {
+        // Given a signed-in user
+        $token = $this->aSessionFor($this->aRegisteredUser())->plainTextToken;
+
+        // When they revoke a session that does not exist
+        $response = $this->withToken($token)->deleteJson('/api/v1/me/sessions/999999');
+
+        // Then it is not found and no revocation is logged
+        $response->assertNotFound();
+        $this->assertNoAccessLogged(AccessEvent::SessionRevoked);
+    }
+
+    #[Test]
     public function when_the_user_logs_out_then_the_logout_is_logged(): void
     {
         // Given a signed-in user

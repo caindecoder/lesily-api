@@ -556,6 +556,11 @@ abstract class AuthTestCase extends TestCase
         return $entry;
     }
 
+    protected function assertNoAccessLogged(AccessEvent $event): void
+    {
+        $this->assertFalse(AccessLogEntry::query()->where('event', $event)->exists(), "No {$event->value} row was expected.");
+    }
+
     protected function assertAnsweredAs(AccessLogEntry $entry, int $status, ?ApiErrorCode $errorCode): void
     {
         $this->assertSame($status, $entry->status);
