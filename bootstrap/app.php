@@ -30,6 +30,7 @@ use App\Compliance\Dsar\Exceptions\DsarExportNotReadyException;
 use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
 use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 use App\Foundation\Http\Exceptions\FeatureUnavailableException;
+use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use App\Companies\Memberships\Exceptions\AlreadyMemberException;
 use App\Compliance\Dsar\Exceptions\DsarDownloadExpiredException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
@@ -90,6 +91,8 @@ return Application::configure(basePath: dirname(__DIR__))
             | Request::HEADER_X_FORWARDED_PROTO,
         );
         $middleware->appendToGroup('api', AssignCorrelationId::class);
+        // Laravel sorts auth and throttle to the front; a refusal they answer still needs its id.
+        $middleware->prependToPriorityList(AuthenticatesRequests::class, AssignCorrelationId::class);
         $middleware->appendToGroup('api', RecordAccessOutcome::class);
         $middleware->alias([
             'auth.company' => AuthorizeCompany::class,
@@ -101,6 +104,20 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->level(AccessLogWriteFailedException::class, LogLevel::CRITICAL);
+
+        // Refusals the access log records; reporting them as errors only duplicated the row.
+        $exceptions->dontReport([
+            InvalidCredentialsException::class,
+            TwoFactorVerificationFailedException::class,
+            IncorrectPasswordException::class,
+            DeviceLimitReachedException::class,
+            CompanyAccessDeniedException::class,
+            FeatureUnavailableException::class,
+            RoleInsufficientException::class,
+            InviteEmailMismatchException::class,
+            DsarRequesterMismatchException::class,
+            LoginChallengeNotFoundException::class,
+        ]);
 
         $exceptions->render(fn (ValidationException $e) => EnvelopeBuilder::build(
             ApiErrorCode::ValidationFailed,

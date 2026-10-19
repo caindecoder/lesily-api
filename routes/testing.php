@@ -75,6 +75,11 @@ Route::get('company-context-probe', fn (Request $request) => response()->json([
     'company_id' => $request->company()->getKey(),
 ]))->middleware(['auth:sanctum', 'auth.company']);
 
+// Hidden-record probe: a 404 answered inside the member's own company, after
+// AuthorizeCompany has bound it.
+Route::get('company-hidden-record-probe', fn () => throw new ModelNotFoundException)
+    ->middleware(['auth:sanctum', 'auth.company']);
+
 // Authenticated-user probe (UC-1-002 / UC-1-004). Bare auth:sanctum (no company
 // context). Proves a token issued by login authenticates a guarded route as that
 // user, and — after logout (Task 2) — that the revoked token no longer does.

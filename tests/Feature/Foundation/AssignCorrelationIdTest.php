@@ -46,6 +46,34 @@ class AssignCorrelationIdTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_a_request_without_a_token_is_refused_then_the_refusal_carries_a_correlation_id(): void
+    {
+        // Given (no token is sent to an authenticated route)
+
+        // When
+        $response = $this->getJson('/api/_test/authenticated-probe');
+
+        // Then
+        $response->assertUnauthorized();
+        $this->assertRefusalCorrelated($response);
+    }
+
+    #[Test]
+    public function when_a_request_is_refused_by_the_rate_limit_then_the_refusal_carries_its_own_correlation_id(): void
+    {
+        // Given the one request a minute this route allows has been used
+        $allowedId = $this->getJson('/api/_test/rate-limit-general-probe')->headers->get('Correlation-Id');
+
+        // When another request follows
+        $response = $this->getJson('/api/_test/rate-limit-general-probe');
+
+        // Then the refusal carries an id of its own, not the earlier request's
+        $response->assertTooManyRequests();
+        $this->assertIsString($allowedId);
+        $this->assertNotSame($allowedId, $this->assertRefusalCorrelated($response));
+    }
+
+    #[Test]
     public function when_health_endpoint_polled_then_correlation_id_is_not_assigned(): void
     {
         // Given (Betterstack polling the health endpoint, which opts out)
@@ -93,6 +121,15 @@ class AssignCorrelationIdTest extends FoundationTestCase
     {
         $response->assertNotFound();
         $this->assertNotEmpty($response->headers->get('Correlation-Id'));
+    }
+
+    protected function assertRefusalCorrelated(TestResponse $response): string
+    {
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+        $response->assertJsonPath('correlation_id', $correlationId);
+
+        return $correlationId;
     }
 
     protected function assertNoCorrelationIdAssigned(TestResponse $response): void

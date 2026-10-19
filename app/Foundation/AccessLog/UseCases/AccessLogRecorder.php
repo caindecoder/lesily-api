@@ -2,11 +2,13 @@
 
 namespace App\Foundation\AccessLog\UseCases;
 
+use Closure;
 use Throwable;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
 use Illuminate\Http\JsonResponse;
+use App\Companies\Entities\Company;
 use Symfony\Component\HttpFoundation\Response;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\AccessLog\Values\AccessOutcome;
@@ -23,6 +25,9 @@ use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
  */
 class AccessLogRecorder
 {
+    /** A refusal row takes repeats for this long after its first one. */
+    protected const FOLD_WINDOW_MINUTES = 5;
+
     private ?AccessOutcome $outcome = null;
 
     public function note(AccessEvent $event, ?AccessEventReason $reason, ?User $user): void
@@ -30,23 +35,70 @@ class AccessLogRecorder
         $this->outcome = new AccessOutcome($event, $reason, $user?->getKey());
     }
 
+    /** A noted outcome is always its own row; a refusal folds into a recent twin. */
     public function write(Request $request, Response $response): void
     {
-        $outcome = $this->outcome;
+        $noted = $this->outcome;
         $this->outcome = null;
 
-        if ($outcome !== null) {
-            $this->insertOrReport($outcome, $request, $response);
+        if ($noted !== null) {
+            $this->writeOrReport($noted, fn () => $this->insert($noted, $request, $response));
+
+            return;
+        }
+
+        $refusal = $this->refusal($request, $response);
+
+        if ($refusal !== null) {
+            $this->writeOrReport($refusal, fn () => $this->fold($refusal, $request, $response));
         }
     }
 
+    protected function refusal(Request $request, Response $response): ?AccessOutcome
+    {
+        $event = AccessEvent::refusalFor($response->getStatusCode());
+
+        if ($event === null) {
+            return null;
+        }
+
+        /** @var ?User $actor */
+        $actor = $request->user();
+        /** @var ?Company $company set by AuthorizeCompany only once the actor's membership holds */
+        $company = $request->attributes->get('company');
+
+        return new AccessOutcome($event, null, $actor?->getKey(), $company?->getKey());
+    }
+
     /** A failed write never fails the request; it is reported loudly instead. */
-    protected function insertOrReport(AccessOutcome $outcome, Request $request, Response $response): void
+    protected function writeOrReport(AccessOutcome $outcome, Closure $write): void
     {
         try {
-            $this->insert($outcome, $request, $response);
+            $write();
         } catch (Throwable $failure) {
             report(new AccessLogWriteFailedException($outcome, $failure));
+        }
+    }
+
+    protected function fold(AccessOutcome $outcome, Request $request, Response $response): void
+    {
+        /** @var Route $route */
+        $route = $request->route();
+        $repeated = AccessLogEntry::query()
+            ->where('event', $outcome->event)
+            ->where('ip_address', $request->ip())
+            ->where('route', $route->uri())
+            ->where('http_method', $request->method())
+            ->where('user_id', $outcome->userId)
+            ->where('company_id', $outcome->companyId)
+            ->where('error_code', $this->errorCode($response))
+            ->where('first_seen_at', '>', now()->subMinutes(self::FOLD_WINDOW_MINUTES))
+            ->first();
+
+        if ($repeated === null) {
+            $this->insert($outcome, $request, $response);
+        } else {
+            $repeated->increment('occurrences', 1, ['last_seen_at' => now()]);
         }
     }
 
@@ -58,6 +110,7 @@ class AccessLogRecorder
         $seenAt = now();
 
         AccessLogEntry::query()->create([
+            'company_id' => $outcome->companyId,
             'user_id' => $outcome->userId,
             'event' => $outcome->event,
             'reason' => $outcome->reason,

@@ -16,7 +16,7 @@ class AccessLogWriteFailedException extends RuntimeException
     /**
      * The outcome that was not recorded, for the log record the report writes.
      *
-     * @return array{event: string, reason: ?string, user_id: ?string}
+     * @return array{event: string, reason: ?string, user_id: ?string, company_id: ?string}
      */
     public function context(): array
     {
@@ -24,6 +24,7 @@ class AccessLogWriteFailedException extends RuntimeException
             'event' => $this->outcome->event->value,
             'reason' => $this->outcome->reason?->value,
             'user_id' => $this->outcome->userId,
+            'company_id' => $this->outcome->companyId,
         ];
     }
 }
