@@ -46,7 +46,7 @@ class AccessLogRecorder
         try {
             $this->insert($outcome, $request, $response);
         } catch (Throwable $failure) {
-            report(new AccessLogWriteFailedException("Access log write failed: {$outcome->event->value}.", previous: $failure));
+            report(new AccessLogWriteFailedException($outcome, $failure));
         }
     }
 

@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth\AccessLog;
 use ArrayObject;
 use App\Models\User;
 use RuntimeException;
+use Illuminate\Support\Arr;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Testing\TestResponse;
@@ -192,7 +193,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $response->assertOk();
         $this->assertSame(1, $user->tokens()->count());
         $this->assertDatabaseCount('access_log', 0);
-        $this->assertWriteFailureReported($logged);
+        $this->assertWriteFailureReported($logged, $user);
     }
 
     #[Test]
@@ -327,13 +328,17 @@ class RecordSignInOutcomesTest extends AuthTestCase
     }
 
     /** @param  ArrayObject<int, MessageLogged>  $logged */
-    private function assertWriteFailureReported(ArrayObject $logged): void
+    private function assertWriteFailureReported(ArrayObject $logged, User $user): void
     {
         $critical = array_values(array_filter($logged->getArrayCopy(), fn (MessageLogged $record): bool => $record->level === 'critical'));
 
         $this->assertCount(1, $critical);
         $this->assertInstanceOf(AccessLogWriteFailedException::class, $critical[0]->context['exception']);
         $this->assertInstanceOf(QueryException::class, $critical[0]->context['exception']->getPrevious());
+        $this->assertSame(
+            ['event' => 'login_succeeded', 'reason' => null, 'user_id' => $user->getKey()],
+            Arr::only($critical[0]->context, ['event', 'reason', 'user_id']),
+        );
     }
 
     private function atTheDeviceLimit(User $user): void
