@@ -13,6 +13,7 @@ use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Tests\Feature\Foundation\FoundationTestCase;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
+use App\Foundation\AccessLog\Enums\AccessEventReason;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
 class RecordRefusedRequestsTest extends FoundationTestCase
@@ -30,6 +31,20 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         $this->company = Company::factory()->onPlan(BillingPlan::Free)->create();
         $this->member = User::factory()->create();
         $this->joinCompany($this->company, $this->member);
+    }
+
+    #[Test]
+    public function when_a_use_case_noted_the_outcome_then_no_refusal_is_logged_beside_it(): void
+    {
+        // Given a registered user
+        $user = User::factory()->withEmail('alice@contoso.lk')->withPassword('Str0ng-Pass!')->create();
+
+        // When they sign in with the wrong password
+        $response = $this->postJson('/api/v1/auth/login', ['email' => 'alice@contoso.lk', 'password' => 'not-my-password']);
+
+        // Then the refusal is the sign-in's own row, and no other
+        $response->assertUnauthorized();
+        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::WrongPassword, $user);
     }
 
     #[Test]
