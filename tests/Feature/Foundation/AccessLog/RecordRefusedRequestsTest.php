@@ -3,6 +3,8 @@
 namespace Tests\Feature\Foundation\AccessLog;
 
 use App\Models\User;
+use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
@@ -43,6 +45,20 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         $response->assertForbidden();
         $entry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->member, null);
         $this->assertAnsweredAs($entry, Response::HTTP_FORBIDDEN, ApiErrorCode::CompanyAccessDenied);
+    }
+
+    #[Test]
+    public function when_the_company_is_unknown_then_the_refusal_is_a_platform_row(): void
+    {
+        // Given (the member names a company id that does not exist)
+        Sanctum::actingAs($this->member);
+
+        // When the member asks for it
+        $response = $this->getJson('/api/_test/company-context-probe', ['X-Company-Context' => (string) Str::uuid7()]);
+
+        // Then it is refused, and the row names the member but no company
+        $response->assertNotFound();
+        $this->assertRefusalLogged(AccessEvent::NotFound, $this->member, null);
     }
 
     #[Test]
