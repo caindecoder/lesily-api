@@ -2,17 +2,12 @@
 
 namespace Tests\Feature\Auth\AccessLog;
 
-use ArrayObject;
 use App\Models\User;
 use RuntimeException;
-use Illuminate\Support\Arr;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Database\QueryException;
-use Illuminate\Log\Events\MessageLogged;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Auth\UseCases\SessionIssuer;
@@ -22,7 +17,6 @@ use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\Auth\Totp\CacheLoginChallengeStore;
 use App\Foundation\Auth\UseCases\Results\IssuedSession;
-use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 
 class RecordSignInOutcomesTest extends AuthTestCase
 {
@@ -189,7 +183,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
         // Then the sign-in answers as usual and the failure is reported as critical
         $response->assertOk();
         $this->assertSame(1, $user->tokens()->count());
-        $this->assertWriteFailureReported($logged, $user);
+        $this->assertWriteFailureReported($logged, ['event' => 'login_succeeded', 'reason' => null, 'user_id' => $user->getKey()]);
     }
 
     #[Test]
@@ -237,7 +231,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $entry = $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $user);
         $this->assertAnsweredAs($entry, Response::HTTP_OK, null);
         $this->assertLoggedRequest($response, $entry, 'POST api/v1/auth/login');
-        $this->assertSeenOnce($entry);
+        $this->assertSeenOnceAsAPlatformRow($entry);
     }
 
     #[Test]
@@ -303,20 +297,6 @@ class RecordSignInOutcomesTest extends AuthTestCase
                 throw new RuntimeException('Induced session-issue failure.');
             }
         });
-    }
-
-    /** @param  ArrayObject<int, MessageLogged>  $logged */
-    protected function assertWriteFailureReported(ArrayObject $logged, User $user): void
-    {
-        $critical = array_values(array_filter($logged->getArrayCopy(), fn (MessageLogged $record): bool => $record->level === 'critical'));
-
-        $this->assertCount(1, $critical);
-        $this->assertInstanceOf(AccessLogWriteFailedException::class, $critical[0]->context['exception']);
-        $this->assertInstanceOf(QueryException::class, $critical[0]->context['exception']->getPrevious());
-        $this->assertSame(
-            ['event' => 'login_succeeded', 'reason' => null, 'user_id' => $user->getKey()],
-            Arr::only($critical[0]->context, ['event', 'reason', 'user_id']),
-        );
     }
 
     protected function atTheDeviceLimit(User $user): void

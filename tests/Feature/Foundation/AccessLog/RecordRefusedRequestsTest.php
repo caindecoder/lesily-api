@@ -47,7 +47,7 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         // Then the refusal still answers, nothing is stored, and the lost row is reported
         $response->assertForbidden();
         $this->assertDatabaseCount('access_log', 0);
-        $this->assertRefusalFailureReported($logged, [
+        $this->assertWriteFailureReported($logged, [
             'event' => 'forbidden',
             'reason' => null,
             'user_id' => $this->member->getKey(),
@@ -112,7 +112,7 @@ class RecordRefusedRequestsTest extends FoundationTestCase
     #[Test]
     public function when_the_company_is_unknown_then_the_refusal_is_a_platform_row(): void
     {
-        // Given (the member names a company id that does not exist)
+        // Given the member is signed in
         Sanctum::actingAs($this->member);
 
         // When the member asks for it
@@ -150,7 +150,7 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         $entry = $this->assertRefusalLogged(AccessEvent::Unauthenticated, null, null);
         $this->assertAnsweredAs($entry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
         $this->assertLoggedRequest($response, $entry, 'GET api/_test/authenticated-probe');
-        $this->assertSeenOnce($entry);
+        $this->assertSeenOnceAsAPlatformRow($entry);
     }
 
     #[Test]

@@ -60,7 +60,7 @@ trait AssertsAccessLog
         $this->assertSame($endpoint, "{$entry->http_method} {$entry->route}");
     }
 
-    protected function assertSeenOnce(AccessLogEntry $entry): void
+    protected function assertSeenOnceAsAPlatformRow(AccessLogEntry $entry): void
     {
         $this->assertSame(1, $entry->occurrences);
         $this->assertSame(now()->toDateTimeString(), $entry->first_seen_at->toDateTimeString());
@@ -72,7 +72,7 @@ trait AssertsAccessLog
      * @param  ArrayObject<int, MessageLogged>  $logged
      * @param  array<string, ?string>  $outcome
      */
-    protected function assertRefusalFailureReported(ArrayObject $logged, array $outcome): void
+    protected function assertWriteFailureReported(ArrayObject $logged, array $outcome): void
     {
         $critical = array_values(array_filter($logged->getArrayCopy(), fn (MessageLogged $record): bool => $record->level === 'critical'));
 

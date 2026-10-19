@@ -54,10 +54,10 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
         // When the same refusal arrives again
         $response = $this->refuseAnonymously();
 
-        // Then the refusal still answers, the row is unchanged, and the lost count is reported
+        // Then the refusal still answers, the row still counts one, and the lost count is reported
         $response->assertUnauthorized();
         $this->assertCountedRows([1]);
-        $this->assertRefusalFailureReported($logged, ['event' => 'unauthenticated', 'user_id' => null]);
+        $this->assertWriteFailureReported($logged, ['event' => 'unauthenticated', 'user_id' => null]);
     }
 
     #[Test]
