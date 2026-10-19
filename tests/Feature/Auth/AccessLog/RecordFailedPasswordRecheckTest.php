@@ -31,6 +31,21 @@ class RecordFailedPasswordRecheckTest extends AuthTestCase
         $this->assertAnsweredAs($entry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::IncorrectPassword);
     }
 
+    #[Test]
+    #[DataProvider('passwordRecheckProvider')]
+    public function when_the_current_password_is_right_then_no_failed_recheck_is_logged(string $method, string $uri, string $passwordField): void
+    {
+        // Given a signed-in two-factor user
+        $token = $this->aSessionFor($this->aTwoFactorUser())->plainTextToken;
+
+        // When they confirm a sensitive action with their current password
+        $response = $this->confirmWith($token, [$method, $uri, $passwordField], self::LOGIN_PASSWORD);
+
+        // Then the action goes ahead and no failed re-check is logged
+        $response->assertSuccessful();
+        $this->assertNoAccessLogged(AccessEvent::ReauthFailed);
+    }
+
     /**
      * Every action that re-checks the signed-in user's password (PasswordVerifier's callers).
      *
