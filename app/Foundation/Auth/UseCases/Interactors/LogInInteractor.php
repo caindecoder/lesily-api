@@ -8,6 +8,7 @@ use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\UseCases\DeviceLimitGuard;
+use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\Auth\UseCases\Commands\LoginCommand;
 use App\Foundation\Auth\UseCases\Results\SessionIssued;
 use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
@@ -64,6 +65,8 @@ class LogInInteractor
         $user = User::query()->where('email', $command->email)->first();
 
         if ($user === null || ! Hash::check($command->password, $user->password)) {
+            $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::WrongPassword, $user);
+
             throw new InvalidCredentialsException;
         }
 

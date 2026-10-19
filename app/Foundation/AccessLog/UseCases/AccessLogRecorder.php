@@ -5,6 +5,7 @@ namespace App\Foundation\AccessLog\UseCases;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
+use Illuminate\Http\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\AccessLog\Values\AccessOutcome;
@@ -50,11 +51,25 @@ class AccessLogRecorder
             'http_method' => $request->method(),
             'route' => $route->uri(),
             'status' => $response->getStatusCode(),
+            'error_code' => $this->errorCode($response),
             'ip_address' => $origin->ip,
             'user_agent' => $origin->userAgent,
             'request_id' => $origin->boundedRequestId(),
             'first_seen_at' => now(),
             'last_seen_at' => now(),
         ]);
+    }
+
+    /** The error envelope's code; a success body, or a body that is not JSON, has none. */
+    private function errorCode(Response $response): ?string
+    {
+        if (! $response instanceof JsonResponse) {
+            return null;
+        }
+
+        /** @var array{error_code?: string} $body */
+        $body = $response->getData(true);
+
+        return $body['error_code'] ?? null;
     }
 }
