@@ -69,6 +69,7 @@ class AssignCorrelationIdTest extends FoundationTestCase
 
         // Then the refusal carries an id of its own, not the earlier request's
         $response->assertTooManyRequests();
+        $this->assertIsString($allowedId);
         $this->assertNotSame($allowedId, $this->assertRefusalCorrelated($response));
     }
 
