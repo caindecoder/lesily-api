@@ -55,6 +55,7 @@ class AccessLogRecorder
         $origin = RequestOrigin::fromRequest($request);
         /** @var Route $route */
         $route = $request->route();
+        $seenAt = now();
 
         AccessLogEntry::query()->create([
             'user_id' => $outcome->userId,
@@ -67,8 +68,8 @@ class AccessLogRecorder
             'ip_address' => $origin->ip,
             'user_agent' => $origin->boundedUserAgent(),
             'request_id' => $origin->boundedRequestId(),
-            'first_seen_at' => now(),
-            'last_seen_at' => now(),
+            'first_seen_at' => $seenAt,
+            'last_seen_at' => $seenAt,
         ]);
     }
 
