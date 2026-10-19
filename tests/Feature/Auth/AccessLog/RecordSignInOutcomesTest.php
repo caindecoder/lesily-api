@@ -161,6 +161,23 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $this->assertSame('api/v1/auth/2fa/verify', $entry->route);
     }
 
+    #[Test]
+    public function when_a_recovery_code_is_used_then_a_successful_sign_in_is_logged_with_that_reason(): void
+    {
+        // Given a two-factor user holding a recovery code, with an open challenge
+        $user = $this->aTwoFactorUser(['RECOVER-ONE']);
+        $this->fakeTotpVerifier(false);
+        $challengeId = $this->openChallenge($user);
+
+        // When they submit the recovery code
+        $response = $this->verify($challengeId, 'RECOVER-ONE');
+
+        // Then a successful sign-in is logged as a recovery-code sign-in, and the code is kept nowhere
+        $response->assertOk();
+        $entry = $this->assertAccessLogged(AccessEvent::LoginSucceeded, AccessEventReason::RecoveryCode, $user);
+        $this->assertNotContains('RECOVER-ONE', $entry->getAttributes());
+    }
+
     private function signIn(string $password, string $email = self::LOGIN_EMAIL): TestResponse
     {
         return $this->postJson('/api/v1/auth/login', ['email' => $email, 'password' => $password]);

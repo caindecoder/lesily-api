@@ -9,4 +9,5 @@ enum AccessEventReason: string
     case DeviceLimit = 'device_limit';
     case WrongTwoFactorCode = 'wrong_two_factor_code';
     case ChallengeExpired = 'challenge_expired';
+    case RecoveryCode = 'recovery_code';
 }
