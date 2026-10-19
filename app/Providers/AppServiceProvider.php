@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\Totp\Google2faTotpVerifier;
 use App\Foundation\Auth\Totp\CacheLoginChallengeStore;
+use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -27,6 +28,9 @@ class AppServiceProvider extends ServiceProvider
 
         // The 2FA login-challenge boundary (DIP, slice-2fa #02): bridges login -> /2fa/verify.
         $this->app->bind(LoginChallengeStore::class, CacheLoginChallengeStore::class);
+
+        // One recorder per request: the use case notes the outcome, the middleware writes it.
+        $this->app->scoped(AccessLogRecorder::class);
     }
 
     /**

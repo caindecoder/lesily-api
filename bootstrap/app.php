@@ -1,5 +1,7 @@
 <?php
 
+use Psr\Log\LogLevel;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Foundation\Application;
 use Illuminate\Auth\AuthenticationException;
@@ -14,6 +16,7 @@ use App\Companies\Exceptions\StaleOwnershipException;
 use App\Companies\Exceptions\TargetNotMemberException;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Foundation\Http\Middleware\EnsurePlatformAdmin;
+use App\Foundation\Http\Middleware\RecordAccessOutcome;
 use App\Foundation\Http\Middleware\EnsureIdempotencyKey;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
@@ -52,6 +55,7 @@ use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 use App\Companies\Memberships\Exceptions\OwnerRemovalBlockedException;
+use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 use App\Companies\Exceptions\OwnershipTransferCaseNotVerifiedException;
 use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
 use App\Companies\Memberships\Exceptions\MembershipContentionException;
@@ -77,7 +81,16 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // The host's edge proxy is the only way in; its X-Forwarded-For carries the client's address.
+        $middleware->trustProxies(
+            at: '*',
+            headers: Request::HEADER_X_FORWARDED_FOR
+            | Request::HEADER_X_FORWARDED_HOST
+            | Request::HEADER_X_FORWARDED_PORT
+            | Request::HEADER_X_FORWARDED_PROTO,
+        );
         $middleware->appendToGroup('api', AssignCorrelationId::class);
+        $middleware->appendToGroup('api', RecordAccessOutcome::class);
         $middleware->alias([
             'auth.company' => AuthorizeCompany::class,
             'feature' => EnsureFeatureAvailable::class,
@@ -87,6 +100,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->level(AccessLogWriteFailedException::class, LogLevel::CRITICAL);
+
         $exceptions->render(fn (ValidationException $e) => EnvelopeBuilder::build(
             ApiErrorCode::ValidationFailed,
             $e->getMessage(),

@@ -289,7 +289,7 @@
         },
         // L-EQUIV-MISC: whereKey(null) yields IS NULL on a PK (the same empty result);
         // where('user_id', null) matches nothing; the recovery loop's early `return;`
-        // (:99) only skips later iterations - $matched cannot change once true, and a
+        // (:108) only skips later iterations - $matched cannot change once true, and a
         // second iteration could consume another code only if two stored hashes matched
         // the same plaintext (bcrypt makes that unreachable).
         "ReturnRemoval": {
@@ -299,19 +299,19 @@
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode",
             ],
         },
-        // L-EQUIV-MISC: $user->refresh() at :92 matters only across concurrent requests
-        // (code review guards it; no single-process test can); $user->save() at :120 is
+        // L-EQUIV-MISC: $user->refresh() at :101 matters only across concurrent requests
+        // (code review guards it; no single-process test can); $user->save() at :129 is
         // masked by issueSession()'s later save on the same instance - equivalent only
         // for THIS caller, and the mutant does move the column write outside the
         // DB::transaction, so the call is a review-guarded invariant, not dead code
         // (never delete it under amendment Q). REMOVE WHEN consumeRecoveryCode() gains
         // a caller that does not save the user afterwards. Pinned so the Cache::lock
-        // (:91), consumeRecoveryCode() (:96), DB::transaction (:118) and ->persist()
-        // (:122) calls stay killable.
+        // (:100), consumeRecoveryCode() (:105), DB::transaction (:127) and ->persist()
+        // (:131) calls stay killable.
         "MethodCallRemoval": {
             ignore: [
-                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode::92",
-                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeRecoveryCode::120",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode::101",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeRecoveryCode::129",
             ],
         },
         // L-EQUIV-MISC: array_values() re-indexes the remaining codes for readers that

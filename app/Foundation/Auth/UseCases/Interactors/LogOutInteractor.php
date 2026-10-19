@@ -3,6 +3,8 @@
 namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
+use App\Foundation\AccessLog\Enums\AccessEvent;
+use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
 
 /**
  * The "Log Out" use case (UC-1-004): revokes the current session by deleting the request's
@@ -13,8 +15,11 @@ use App\Models\User;
  */
 class LogOutInteractor
 {
+    public function __construct(private readonly AccessLogRecorder $accessLog) {}
+
     public function execute(User $user): void
     {
         $user->currentAccessToken()->delete();
+        $this->accessLog->note(AccessEvent::LoggedOut, null, $user);
     }
 }

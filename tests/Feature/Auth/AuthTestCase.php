@@ -19,12 +19,15 @@ use App\Foundation\Auth\Totp\TotpVerifier;
 use Tests\Concerns\InducesProjectorFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Auth\UseCases\TokenRevoker;
+use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Events\UserPasswordReset;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\Auth\Events\UserPasswordChanged;
+use App\Foundation\AccessLog\Entities\AccessLogEntry;
+use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\Auth\Reactors\PasswordChangedNotificationReactor;
 
 abstract class AuthTestCase extends TestCase
@@ -536,5 +539,46 @@ abstract class AuthTestCase extends TestCase
                     throw new RuntimeException('Induced delivery-time reactor failure.');
                 }
             });
+    }
+
+    /**
+     * Assert the request left exactly one access-log row, for $user (null when no
+     * account was resolved), and return it for the column checks that follow.
+     */
+    protected function assertAccessLogged(AccessEvent $event, ?AccessEventReason $reason, ?User $user): AccessLogEntry
+    {
+        $entry = AccessLogEntry::query()->sole();
+
+        $this->assertSame($event, $entry->event);
+        $this->assertSame($reason, $entry->reason);
+        $this->assertSame($user?->getKey(), $entry->user_id);
+
+        return $entry;
+    }
+
+    protected function assertNoAccessLogged(AccessEvent $event): void
+    {
+        $this->assertFalse(AccessLogEntry::query()->where('event', $event)->exists(), "No {$event->value} row was expected.");
+    }
+
+    protected function assertAnsweredAs(AccessLogEntry $entry, int $status, ?ApiErrorCode $errorCode): void
+    {
+        $this->assertSame($status, $entry->status);
+        $this->assertSame($errorCode?->value, $entry->error_code);
+    }
+
+    /**
+     * Assert $entry carries the request $response answered: its correlation id, the
+     * client's address and user agent, and $endpoint as "<method> <route template>".
+     */
+    protected function assertLoggedRequest(TestResponse $response, AccessLogEntry $entry, string $endpoint): void
+    {
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+
+        $this->assertSame($correlationId, $entry->request_id);
+        $this->assertSame('127.0.0.1', $entry->ip_address);
+        $this->assertSame('Symfony', $entry->user_agent);
+        $this->assertSame($endpoint, "{$entry->http_method} {$entry->route}");
     }
 }

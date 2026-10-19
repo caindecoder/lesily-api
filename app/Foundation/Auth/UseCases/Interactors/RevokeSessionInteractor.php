@@ -3,6 +3,8 @@
 namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
+use App\Foundation\AccessLog\Enums\AccessEvent;
+use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
 
 /**
  * Revoke a single session: hard-delete one of the user's own Sanctum personal access
@@ -14,8 +16,11 @@ use App\Models\User;
  */
 class RevokeSessionInteractor
 {
+    public function __construct(private readonly AccessLogRecorder $accessLog) {}
+
     public function execute(User $user, string $tokenId): void
     {
         $user->tokens()->whereKey($tokenId)->firstOrFail()->delete();
+        $this->accessLog->note(AccessEvent::SessionRevoked, null, $user);
     }
 }

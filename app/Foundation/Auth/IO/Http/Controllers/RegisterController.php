@@ -23,7 +23,7 @@ class RegisterController extends Controller
     {
         $result = $interactor->execute(
             RegisterOwnerCommand::validateAndCreate($request),
-            (string) $request->ip(),
+            $request->ip(),
             // Register is UA-derived: pass null so a client-supplied deviceName in the body
             // can't name the token — the register contract has no deviceName field (per design).
             DeviceName::resolve(null, $request),

@@ -4,7 +4,9 @@ namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
 use App\Foundation\Auth\UseCases\TokenRevoker;
+use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Auth\UseCases\PasswordVerifier;
+use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
 use App\Foundation\Auth\UseCases\Commands\LogoutAllCommand;
 
 /**
@@ -21,12 +23,15 @@ class RevokeAllSessionsInteractor
     public function __construct(
         private TokenRevoker $tokenRevoker,
         private PasswordVerifier $passwordVerifier,
+        private AccessLogRecorder $accessLog,
     ) {}
 
     public function execute(User $user, LogoutAllCommand $command, string $currentTokenId): int
     {
         $this->passwordVerifier->verify($user, $command->password);
+        $revoked = $this->tokenRevoker->revokeAllForUserExcept($user, $currentTokenId);
+        $this->accessLog->note(AccessEvent::OtherSessionsRevoked, null, $user);
 
-        return $this->tokenRevoker->revokeAllForUserExcept($user, $currentTokenId);
+        return $revoked;
     }
 }

@@ -4,6 +4,9 @@ namespace App\Foundation\Auth\UseCases;
 
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
+use App\Foundation\AccessLog\Enums\AccessEvent;
+use App\Foundation\AccessLog\Enums\AccessEventReason;
+use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
 use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 
 /**
@@ -17,9 +20,13 @@ use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
  */
 class PasswordVerifier
 {
+    public function __construct(private readonly AccessLogRecorder $accessLog) {}
+
     public function verify(User $user, string $password): void
     {
         if (! Hash::check($password, $user->password)) {
+            $this->accessLog->note(AccessEvent::ReauthFailed, AccessEventReason::WrongPassword, $user);
+
             throw new IncorrectPasswordException;
         }
     }

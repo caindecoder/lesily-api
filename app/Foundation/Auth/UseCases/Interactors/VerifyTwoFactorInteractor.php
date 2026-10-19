@@ -7,10 +7,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
 use App\Foundation\Auth\Totp\TotpVerifier;
+use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\UseCases\DeviceLimitGuard;
+use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\Auth\UseCases\Results\SessionIssued;
+use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\Auth\UseCases\Commands\VerifyTwoFactorCommand;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
@@ -31,6 +34,7 @@ class VerifyTwoFactorInteractor
         private readonly TotpVerifier $totp,
         private readonly SessionIssuer $sessionIssuer,
         private readonly DeviceLimitGuard $deviceLimitGuard,
+        private readonly AccessLogRecorder $accessLog,
     ) {}
 
     public function execute(VerifyTwoFactorCommand $command): SessionIssued
@@ -38,6 +42,8 @@ class VerifyTwoFactorInteractor
         $challenge = $this->challenges->find($command->challengeId);
 
         if ($challenge === null) {
+            $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::ChallengeExpired, null);
+
             throw new LoginChallengeNotFoundException;
         }
 
@@ -51,16 +57,17 @@ class VerifyTwoFactorInteractor
         if ($this->totp->verify((string) $user->two_factor_secret, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return $this->issueSession($user, $command->deviceName);
+            return $this->issueSession($user, $command->deviceName, null);
         }
 
         if ($this->consumeMatchingRecoveryCode($user, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return $this->issueSession($user, $command->deviceName);
+            return $this->issueSession($user, $command->deviceName, AccessEventReason::RecoveryCode);
         }
 
         $this->challenges->recordFailure($command->challengeId);
+        $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::WrongTwoFactorCode, $user);
 
         throw new TwoFactorVerificationFailedException;
     }
@@ -70,12 +77,14 @@ class VerifyTwoFactorInteractor
      * (sessions slice R10). Shared by both completing factors (TOTP and recovery); the
      * stamp lives here, not in SessionIssuer, so a future token refresh won't bump it.
      */
-    private function issueSession(User $user, string $deviceName): SessionIssued
+    protected function issueSession(User $user, string $deviceName, ?AccessEventReason $factor): SessionIssued
     {
         $user->last_logged_at = now();
         $user->save();
+        $session = $this->sessionIssuer->issue($user, $deviceName);
+        $this->accessLog->note(AccessEvent::LoginSucceeded, $factor, $user);
 
-        return new SessionIssued($this->sessionIssuer->issue($user, $deviceName), $user);
+        return new SessionIssued($session, $user);
     }
 
     /**
@@ -84,7 +93,7 @@ class VerifyTwoFactorInteractor
      * read-modify-write race class as recordFailure/OQ-1-119). The loser blocks on the
      * lock, re-reads inside it, finds the code already gone, and returns false.
      */
-    private function consumeMatchingRecoveryCode(User $user, string $code): bool
+    protected function consumeMatchingRecoveryCode(User $user, string $code): bool
     {
         $matched = false;
 
@@ -109,7 +118,7 @@ class VerifyTwoFactorInteractor
      * the non-secret marker, atomically (Design-Y — the credential write lives outside
      * the event store; the two commit together so a marker can never outrun its column).
      */
-    private function consumeRecoveryCode(User $user, int $index): void
+    protected function consumeRecoveryCode(User $user, int $index): void
     {
         $remaining = $user->two_factor_recovery_codes ?? [];
         unset($remaining[$index]);
