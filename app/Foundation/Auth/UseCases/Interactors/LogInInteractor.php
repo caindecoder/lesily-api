@@ -57,9 +57,10 @@ class LogInInteractor
 
         $user->last_logged_at = now();
         $user->save();
+        $session = $this->sessionIssuer->issue($user, $command->deviceName);
         $this->accessLog->note(AccessEvent::LoginSucceeded, null, $user);
 
-        return new SessionIssued($this->sessionIssuer->issue($user, $command->deviceName), $user);
+        return new SessionIssued($session, $user);
     }
 
     private function authenticate(LoginCommand $command): User

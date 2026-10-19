@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth\AccessLog;
 
 use ArrayObject;
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Testing\TestResponse;
@@ -14,9 +15,11 @@ use Illuminate\Log\Events\MessageLogged;
 use Tests\Concerns\InducesDatabaseFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AccessLog\Enums\AccessEvent;
+use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
+use App\Foundation\Auth\UseCases\Results\IssuedSession;
 use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 
 class RecordSignInOutcomesTest extends AuthTestCase
@@ -117,6 +120,21 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $response->assertForbidden();
         $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $user);
         $this->assertSame('api/v1/auth/2fa/verify', $entry->route);
+    }
+
+    #[Test]
+    public function when_the_session_cannot_be_issued_then_no_successful_sign_in_is_logged(): void
+    {
+        // Given a registered user, and a session issuer that fails
+        $this->aRegisteredUser();
+        $this->bindThrowingSessionIssuer();
+
+        // When they sign in with the right password
+        $response = $this->signIn(self::LOGIN_PASSWORD);
+
+        // Then the sign-in fails and no successful sign-in is logged
+        $response->assertInternalServerError();
+        $this->assertNoAccessLogged(AccessEvent::LoginSucceeded);
     }
 
     #[Test]
@@ -222,6 +240,17 @@ class RecordSignInOutcomesTest extends AuthTestCase
     private function signIn(string $password, string $email = self::LOGIN_EMAIL): TestResponse
     {
         return $this->postJson('/api/v1/auth/login', ['email' => $email, 'password' => $password]);
+    }
+
+    private function bindThrowingSessionIssuer(): void
+    {
+        $this->app->bind(SessionIssuer::class, fn (): SessionIssuer => new class extends SessionIssuer
+        {
+            public function issue(User $user, string $deviceName): IssuedSession
+            {
+                throw new RuntimeException('Induced session-issue failure.');
+            }
+        });
     }
 
     private function failAccessLogWrites(): void
