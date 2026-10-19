@@ -31,6 +31,21 @@ class RecordRefusedRequestsTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_access_to_the_company_is_denied_then_the_refusal_is_a_platform_row(): void
+    {
+        // Given a company the member does not belong to
+        $otherCompany = Company::factory()->onPlan(BillingPlan::Free)->create();
+
+        // When the member asks for it
+        $response = $this->attemptGatedAction('company-context-probe', $this->member, $otherCompany);
+
+        // Then it is refused, and the row names the member but no company
+        $response->assertForbidden();
+        $entry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->member, null);
+        $this->assertAnsweredAs($entry, Response::HTTP_FORBIDDEN, ApiErrorCode::CompanyAccessDenied);
+    }
+
+    #[Test]
     public function when_a_request_carries_no_valid_token_then_an_unauthenticated_refusal_is_logged(): void
     {
         // Given the clock stands still
