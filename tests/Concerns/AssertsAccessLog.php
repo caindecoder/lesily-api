@@ -57,6 +57,14 @@ trait AssertsAccessLog
         $this->assertSame($endpoint, "{$entry->http_method} {$entry->route}");
     }
 
+    protected function assertSeenOnce(AccessLogEntry $entry): void
+    {
+        $this->assertSame(1, $entry->occurrences);
+        $this->assertSame(now()->toDateTimeString(), $entry->first_seen_at->toDateTimeString());
+        $this->assertSame(now()->toDateTimeString(), $entry->last_seen_at->toDateTimeString());
+        $this->assertNull($entry->company_id);
+    }
+
     protected function failAccessLogWrites(): void
     {
         AccessLogEntry::creating(fn () => throw $this->syntheticQueryException([

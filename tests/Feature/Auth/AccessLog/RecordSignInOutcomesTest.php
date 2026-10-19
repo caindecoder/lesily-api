@@ -326,12 +326,4 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $this->aSessionFor($user, 'mobile');
         $this->aSessionFor($user, 'tablet');
     }
-
-    protected function assertSeenOnce(AccessLogEntry $entry): void
-    {
-        $this->assertSame(1, $entry->occurrences);
-        $this->assertSame(now()->toDateTimeString(), $entry->first_seen_at->toDateTimeString());
-        $this->assertSame(now()->toDateTimeString(), $entry->last_seen_at->toDateTimeString());
-        $this->assertNull($entry->company_id);
-    }
 }
