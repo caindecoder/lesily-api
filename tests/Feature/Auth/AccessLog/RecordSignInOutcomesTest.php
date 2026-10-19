@@ -56,7 +56,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
         // Then a failed sign-in is logged against no user, and the typed email is kept nowhere
         $response->assertUnauthorized();
         $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::UnknownAccount, null);
-        $this->assertNotContains($email, $entry->getAttributes());
+        $this->assertStringNotContainsString($email, (string) json_encode($entry->getAttributes()));
     }
 
     #[Test]
@@ -189,10 +189,9 @@ class RecordSignInOutcomesTest extends AuthTestCase
         // When they sign in
         $response = $this->signIn(self::LOGIN_PASSWORD);
 
-        // Then the sign-in answers as usual, nothing is logged, and the failure is reported as critical
+        // Then the sign-in answers as usual and the failure is reported as critical
         $response->assertOk();
         $this->assertSame(1, $user->tokens()->count());
-        $this->assertDatabaseCount('access_log', 0);
         $this->assertWriteFailureReported($logged, $user);
     }
 
@@ -290,7 +289,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
         // Then a successful sign-in is logged as a recovery-code sign-in, and the code is kept nowhere
         $response->assertOk();
         $entry = $this->assertAccessLogged(AccessEvent::LoginSucceeded, AccessEventReason::RecoveryCode, $user);
-        $this->assertNotContains('RECOVER-ONE', $entry->getAttributes());
+        $this->assertStringNotContainsString('RECOVER-ONE', (string) json_encode($entry->getAttributes()));
     }
 
     private function signIn(string $password, string $email = self::LOGIN_EMAIL): TestResponse

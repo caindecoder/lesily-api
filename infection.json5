@@ -289,7 +289,7 @@
         },
         // L-EQUIV-MISC: whereKey(null) yields IS NULL on a PK (the same empty result);
         // where('user_id', null) matches nothing; the recovery loop's early `return;`
-        // (:99) only skips later iterations - $matched cannot change once true, and a
+        // (:108) only skips later iterations - $matched cannot change once true, and a
         // second iteration could consume another code only if two stored hashes matched
         // the same plaintext (bcrypt makes that unreachable).
         "ReturnRemoval": {

@@ -16,7 +16,7 @@ use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 
 /**
- * The access log's one writer (slice-access-log AL1). A use case notes the outcome
+ * The access log's one writer. A use case notes the outcome
  * it decided; RecordAccessOutcome writes the row once the response is known, with
  * the status and route the client was answered with. Bound scoped: the use case
  * and the middleware share one instance per request.
@@ -40,7 +40,7 @@ class AccessLogRecorder
         }
     }
 
-    /** A failed write never fails the request; it is reported loudly instead (SL8). */
+    /** A failed write never fails the request; it is reported loudly instead. */
     private function insertOrReport(AccessOutcome $outcome, Request $request, Response $response): void
     {
         try {

@@ -8,8 +8,8 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
 
 /**
- * One access_log row (ERD-1-11): an access outcome, never a data change. Rows are
- * written once; only a folded refusal's occurrences and last_seen_at may move (SL12).
+ * One access_log row: an access outcome, never a data change. Rows are written
+ * once; only a folded refusal's occurrences and last_seen_at may move.
  */
 class AccessLogEntry extends Model
 {

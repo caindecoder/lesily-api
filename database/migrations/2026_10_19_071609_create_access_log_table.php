@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
 
 /**
- * The access log (ERD-1-11 "access_log"): one row per access outcome. company_id
+ * The access log: one row per access outcome. company_id
  * and user_id are soft references — the log outlives the rows it names. No
  * created_at / updated_at: first_seen_at / last_seen_at carry the time.
  */

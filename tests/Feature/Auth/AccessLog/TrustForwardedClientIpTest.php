@@ -40,7 +40,7 @@ class TrustForwardedClientIpTest extends AuthTestCase
         $response = $this->attemptSignIn('198.51.100.9', self::PROXY_IP);
 
         // Then it still reaches the sign-in check
-        $response->assertUnprocessable();
+        $this->assertValidationRejected($response, 'email', 'The email field is required.');
     }
 
     #[Test]
