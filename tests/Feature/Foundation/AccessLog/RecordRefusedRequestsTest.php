@@ -62,6 +62,19 @@ class RecordRefusedRequestsTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_a_record_is_hidden_inside_the_company_then_the_refusal_names_the_company(): void
+    {
+        // Given (a member of the company)
+
+        // When the member asks for a record the company keeps out of sight
+        $response = $this->attemptGatedAction('company-hidden-record-probe', $this->member, $this->company);
+
+        // Then it is refused, and the row names the member and the company
+        $response->assertNotFound();
+        $this->assertRefusalLogged(AccessEvent::NotFound, $this->member, $this->company);
+    }
+
+    #[Test]
     public function when_a_request_carries_no_valid_token_then_an_unauthenticated_refusal_is_logged(): void
     {
         // Given the clock stands still
