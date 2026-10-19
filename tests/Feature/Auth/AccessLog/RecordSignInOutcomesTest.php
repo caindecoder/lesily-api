@@ -76,6 +76,20 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $this->assertSeenOnce($entry);
     }
 
+    #[Test]
+    public function when_a_two_factor_user_gives_the_right_password_then_a_challenge_is_logged(): void
+    {
+        // Given a user with two-factor authentication enabled
+        $user = $this->aTwoFactorUser();
+
+        // When they sign in with the right password
+        $this->signIn(self::LOGIN_PASSWORD)->assertAccepted();
+
+        // Then a challenge is logged, not a completed sign-in
+        $entry = $this->assertAccessLogged(AccessEvent::LoginChallenged, null, $user);
+        $this->assertAnsweredAs($entry, Response::HTTP_ACCEPTED, null);
+    }
+
     private function signIn(string $password, string $email = self::LOGIN_EMAIL): TestResponse
     {
         return $this->postJson('/api/v1/auth/login', ['email' => $email, 'password' => $password]);
