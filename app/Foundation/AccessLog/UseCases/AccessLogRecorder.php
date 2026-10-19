@@ -24,6 +24,9 @@ use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
  */
 class AccessLogRecorder
 {
+    /** A refusal row takes repeats for this long after its first one (SL10). */
+    protected const FOLD_WINDOW_MINUTES = 5;
+
     private ?AccessOutcome $outcome = null;
 
     public function note(AccessEvent $event, ?AccessEventReason $reason, ?User $user): void
@@ -64,7 +67,10 @@ class AccessLogRecorder
 
     protected function record(AccessOutcome $outcome, Request $request, Response $response): void
     {
-        $repeated = AccessLogEntry::query()->where('event', $outcome->event)->first();
+        $repeated = AccessLogEntry::query()
+            ->where('event', $outcome->event)
+            ->where('first_seen_at', '>', now()->subMinutes(self::FOLD_WINDOW_MINUTES))
+            ->first();
 
         if ($repeated === null) {
             $this->insert($outcome, $request, $response);

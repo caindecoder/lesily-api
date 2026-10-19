@@ -11,6 +11,22 @@ use App\Foundation\AccessLog\Entities\AccessLogEntry;
 class FoldRepeatedRefusalsTest extends FoundationTestCase
 {
     #[Test]
+    public function when_five_minutes_have_passed_since_the_first_refusal_then_a_new_row_is_opened(): void
+    {
+        // Given one refusal on record, five minutes ago to the second
+        $this->freezeTime();
+        $this->refuseAnonymously();
+        $this->travel(5)->minutes();
+
+        // When the same refusal arrives again
+        $response = $this->refuseAnonymously();
+
+        // Then it opens a row of its own
+        $response->assertUnauthorized();
+        $this->assertCountedRows([1, 1]);
+    }
+
+    #[Test]
     public function when_the_same_refusal_repeats_inside_the_window_then_one_row_counts_them(): void
     {
         // Given one refusal on record, a second short of five minutes ago
@@ -30,6 +46,12 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
     protected function refuseAnonymously(): TestResponse
     {
         return $this->getJson('/api/_test/authenticated-probe');
+    }
+
+    /** @param  list<int>  $occurrences  each row's count, oldest first */
+    protected function assertCountedRows(array $occurrences): void
+    {
+        $this->assertSame($occurrences, AccessLogEntry::query()->orderBy('first_seen_at')->pluck('occurrences')->all());
     }
 
     protected function assertCountedAgain(AccessLogEntry $before): void
