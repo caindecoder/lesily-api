@@ -94,6 +94,24 @@ class RecordSignInOutcomesTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_device_limit_is_reached_at_verification_then_a_failed_sign_in_is_logged(): void
+    {
+        // Given a two-factor user at the device limit with an open challenge
+        $user = $this->aTwoFactorUser();
+        $this->atTheDeviceLimit($user);
+        $this->fakeTotpVerifier(true);
+        $challengeId = $this->openChallenge($user);
+
+        // When they submit a valid code
+        $response = $this->verify($challengeId, '123456');
+
+        // Then a failed sign-in is logged for the device limit, on the verification route
+        $response->assertForbidden();
+        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $user);
+        $this->assertSame('api/v1/auth/2fa/verify', $entry->route);
+    }
+
+    #[Test]
     public function when_a_user_without_two_factor_signs_in_then_a_successful_sign_in_is_logged(): void
     {
         // Given a registered user without two-factor authentication
