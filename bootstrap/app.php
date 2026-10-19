@@ -14,6 +14,7 @@ use App\Companies\Exceptions\StaleOwnershipException;
 use App\Companies\Exceptions\TargetNotMemberException;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Foundation\Http\Middleware\EnsurePlatformAdmin;
+use App\Foundation\Http\Middleware\RecordAccessOutcome;
 use App\Foundation\Http\Middleware\EnsureIdempotencyKey;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
@@ -78,6 +79,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->appendToGroup('api', AssignCorrelationId::class);
+        $middleware->appendToGroup('api', RecordAccessOutcome::class);
         $middleware->alias([
             'auth.company' => AuthorizeCompany::class,
             'feature' => EnsureFeatureAvailable::class,

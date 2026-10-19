@@ -4,11 +4,13 @@ namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
+use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\UseCases\DeviceLimitGuard;
 use App\Foundation\Auth\UseCases\Commands\LoginCommand;
 use App\Foundation\Auth\UseCases\Results\SessionIssued;
+use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
 use App\Foundation\Auth\UseCases\Results\ChallengeRequired;
 use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 
@@ -28,6 +30,7 @@ class LogInInteractor
         private readonly LoginChallengeStore $challenges,
         private readonly SessionIssuer $sessionIssuer,
         private readonly DeviceLimitGuard $deviceLimitGuard,
+        private readonly AccessLogRecorder $accessLog,
     ) {}
 
     public function execute(LoginCommand $command): ChallengeRequired|SessionIssued
@@ -51,6 +54,7 @@ class LogInInteractor
 
         $user->last_logged_at = now();
         $user->save();
+        $this->accessLog->note(AccessEvent::LoginSucceeded, null, $user);
 
         return new SessionIssued($this->sessionIssuer->issue($user, $command->deviceName), $user);
     }
