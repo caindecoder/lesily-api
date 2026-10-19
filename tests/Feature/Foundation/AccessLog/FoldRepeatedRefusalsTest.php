@@ -37,6 +37,9 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
         $this->joinCompany($this->companies['acme'], $this->people['alice']);
         $this->joinCompany($this->companies['globex'], $this->people['alice']);
         $this->joinCompany($this->companies['acme'], $this->people['bob']);
+
+        $this->companies['dissolved'] = Company::factory()->create();
+        $this->companies['dissolved']->delete();
     }
 
     /**
@@ -63,6 +66,7 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
         $anonymous = ['method' => 'GET', 'uri' => '/api/_test/authenticated-probe', 'from' => '203.0.113.7'];
         $stranger = ['method' => 'GET', 'uri' => '/api/v1/companies/{in}', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'initech'];
         $member = ['method' => 'GET', 'uri' => '/api/_test/two-gate/pro-feature', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'acme'];
+        $outsider = ['method' => 'GET', 'uri' => '/api/_test/company-context-probe', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'initech'];
 
         return [
             'another source address' => [$anonymous, [...$anonymous, 'from' => '203.0.113.8']],
@@ -70,6 +74,7 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
             'another method' => [$stranger, [...$stranger, 'method' => 'PUT']],
             'another actor' => [$member, [...$member, 'as' => 'bob']],
             'another company' => [$member, [...$member, 'in' => 'globex']],
+            'another outcome' => [$outsider, [...$outsider, 'in' => 'dissolved']],
         ];
     }
 
