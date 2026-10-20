@@ -515,6 +515,28 @@ class ExportDsarSectionsTest extends DsarTestCase
         ], $this->exportedData($request)['notifications']);
     }
 
+    #[Test]
+    public function when_the_export_is_built_then_the_access_section_holds_their_sign_ins_and_refusals_oldest_first(): void
+    {
+        // Given a member refused twice here a minute apart, and — recorded after it — signed in an hour before
+        $member = $this->aCompanyMember($this->company);
+        $this->lookUpAMissingRequest($member, $this->company);
+        $this->travel(1)->minutes();
+        $this->lookUpAMissingRequest($member, $this->company);
+        $this->travel(-61)->minutes();
+        $this->signInThroughTheApi($member);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the sign-in and the counted refusal are exported, oldest first
+        $this->assertSame([
+            ['access_event' => 'login_succeeded', 'access_reason' => null, 'http_method' => 'POST', 'route' => 'api/v1/auth/login', 'ip_address' => '127.0.0.1', 'user_agent' => 'Symfony', 'occurrences' => 1, 'first_seen_at' => now()->toISOString(), 'last_seen_at' => now()->toISOString()],
+            ['access_event' => 'not_found', 'access_reason' => null, 'http_method' => 'GET', 'route' => 'api/v1/dsar-requests/{requestId}', 'ip_address' => '127.0.0.1', 'user_agent' => 'Symfony', 'occurrences' => 2, 'first_seen_at' => now()->addHour()->toISOString(), 'last_seen_at' => now()->addMinutes(61)->toISOString()],
+        ], $this->exportedData($request)['access_log']);
+    }
+
     /**
      * The next generated UUID is $id; those after it are random again.
      */

@@ -73,7 +73,7 @@ class ExportDsarReportTest extends DsarTestCase
     #[Test]
     public function when_a_section_has_no_entries_then_the_report_says_none_recorded(): void
     {
-        // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited, took part in no transfer, received no notice and switched none off
+        // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited, took part in no transfer, received no notice, switched none off and was never refused
         $request = $this->aSubmittedRequest($this->company, $this->member);
 
         // When their export is built
@@ -88,8 +88,9 @@ class ExportDsarReportTest extends DsarTestCase
             'Invitations', 'None recorded',
             'Ownership transfers', 'Transfers', 'None recorded', 'Cases', 'None recorded',
             'Notifications and preferences', 'Notifications', 'None recorded', 'Preferences', 'None recorded',
+            'Account access history', 'None recorded',
         ]);
-        $this->assertSame(8, substr_count($this->reportRenderer->html, 'None recorded'));
+        $this->assertSame(9, substr_count($this->reportRenderer->html, 'None recorded'));
     }
 
     /**

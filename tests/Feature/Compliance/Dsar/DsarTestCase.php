@@ -1348,6 +1348,23 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * $user signs in with their password — the access log records it.
+     */
+    protected function signInThroughTheApi(User $user): void
+    {
+        $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => 'password']);
+    }
+
+    /**
+     * $member looks up a DSAR request that does not exist in $company — the
+     * access log records the refusal.
+     */
+    protected function lookUpAMissingRequest(User $member, Company $company): void
+    {
+        $this->viewDsarRequest($member, $company, (string) Str::uuid7());
+    }
+
+    /**
      * Delivers the notices $eventClass leaves behind: none was sent inline,
      * then the captured reactor runs as a worker would. The caller arms
      * Notification::fake() before acting, so an inline send is seen.

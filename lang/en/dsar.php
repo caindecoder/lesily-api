@@ -25,6 +25,7 @@ return [
         'invitations' => ['title' => 'Invitations'],
         'ownership_transfers' => ['title' => 'Ownership transfers'],
         'notifications' => ['title' => 'Notifications and preferences'],
+        'access_log' => ['title' => 'Account access history'],
     ],
     'fields' => [
         'profile' => [
