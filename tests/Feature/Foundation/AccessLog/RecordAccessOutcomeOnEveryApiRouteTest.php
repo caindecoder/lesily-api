@@ -16,6 +16,21 @@ class RecordAccessOutcomeOnEveryApiRouteTest extends FoundationTestCase
     ];
 
     #[Test]
+    public function when_a_route_is_exempted_then_it_exists_and_skips_the_hook(): void
+    {
+        // Given the routes the application registers
+
+        // When they are walked
+        $walked = $this->walkApiRoutes();
+
+        // Then each exempted route is among them, without the hook
+        $this->assertSame(
+            array_fill_keys(self::EXEMPT_ROUTES, false),
+            array_intersect_key($walked, array_flip(self::EXEMPT_ROUTES)),
+        );
+    }
+
+    #[Test]
     public function when_the_routes_are_walked_then_every_api_route_records_its_access_outcome(): void
     {
         // Given the routes the application registers
