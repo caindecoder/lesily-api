@@ -1356,6 +1356,15 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * $user tries to sign in with a wrong password — the access log records
+     * the failure and its reason.
+     */
+    protected function signInWithAWrongPassword(User $user): void
+    {
+        $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => 'not-their-password']);
+    }
+
+    /**
      * $member looks up a DSAR request that does not exist in $company — the
      * access log records the refusal.
      */
