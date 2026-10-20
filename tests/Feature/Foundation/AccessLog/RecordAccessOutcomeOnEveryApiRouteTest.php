@@ -1,0 +1,53 @@
+<?php
+
+namespace Tests\Feature\Foundation\AccessLog;
+
+use Illuminate\Routing\Route;
+use Illuminate\Routing\Router;
+use PHPUnit\Framework\Attributes\Test;
+use Tests\Feature\Foundation\FoundationTestCase;
+use App\Foundation\Http\Middleware\RecordAccessOutcome;
+
+class RecordAccessOutcomeOnEveryApiRouteTest extends FoundationTestCase
+{
+    private const EXEMPT_ROUTES = [
+        'GET|HEAD api/documentation',
+        'GET|HEAD api/oauth2-callback',
+    ];
+
+    #[Test]
+    public function when_the_routes_are_walked_then_every_api_route_records_its_access_outcome(): void
+    {
+        // Given the routes the application registers
+
+        // When they are walked
+        $walked = $this->walkApiRoutes();
+
+        // Then every one outside the exemptions carries the hook
+        $this->assertEveryWalkedRouteRecordsItsOutcome($walked);
+    }
+
+    /** @return array<string, bool> */
+    protected function walkApiRoutes(): array
+    {
+        $router = $this->app->make(Router::class);
+
+        return collect($router->getRoutes()->getRoutes())
+            ->filter(fn (Route $route) => str_starts_with($route->uri(), 'api/'))
+            ->mapWithKeys(fn (Route $route) => [
+                implode('|', $route->methods()).' '.$route->uri() => in_array(RecordAccessOutcome::class, $router->gatherRouteMiddleware($route), true),
+            ])
+            ->all();
+    }
+
+    /** @param array<string, bool> $walked */
+    protected function assertEveryWalkedRouteRecordsItsOutcome(array $walked): void
+    {
+        $this->assertArrayHasKey('POST api/v1/auth/login', $walked);
+        $this->assertSame([], array_keys(array_filter(
+            $walked,
+            fn (bool $hooked, string $route) => ! $hooked && ! in_array($route, self::EXEMPT_ROUTES, true),
+            ARRAY_FILTER_USE_BOTH,
+        )));
+    }
+}
