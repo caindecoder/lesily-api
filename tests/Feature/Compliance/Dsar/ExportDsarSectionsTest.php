@@ -95,12 +95,14 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_co_workers_have_their_own_sign_ins_invitations_transfers_and_notices_then_none_of_theirs_is_exported(): void
+    public function when_co_workers_have_their_own_sign_ins_invitations_transfers_notices_and_access_records_then_none_of_theirs_is_exported(): void
     {
-        // Given a member beside a co-worker who signed in, was invited, is named on a case, was welcomed here, was told their password changed and switched an email off, and a transfer between two others
+        // Given a member beside a co-worker who signed in, was refused a lookup here, was invited, is named on a case, was welcomed here, was told their password changed and switched an email off, and a transfer between two others
         $member = $this->aCompanyMember($this->company);
         $coWorker = $this->aCompanyMember($this->company);
         $this->aSignInFor($coWorker, 'iPhone', now()->addDays(90));
+        $this->signInThroughTheApi($coWorker);
+        $this->lookUpAMissingRequest($coWorker, $this->company);
         $this->anInvitationTo($coWorker, $this->company);
         OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($coWorker)->create();
         $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $coWorker);
@@ -112,11 +114,11 @@ class ExportDsarSectionsTest extends DsarTestCase
         // When the member's export is built
         $this->runTheExportFor($request);
 
-        // Then none of the others' sign-ins, invitations, transfers, cases, notices or preferences is theirs
+        // Then none of the others' sign-ins, invitations, transfers, cases, notices, preferences or access records is theirs
         $exported = $this->exportedData($request);
         $this->assertSame(
-            [[], [], ['transfers' => [], 'cases' => []], ['notifications' => [], 'preferences' => []]],
-            [$exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers'], $exported['notifications']],
+            [[], [], ['transfers' => [], 'cases' => []], ['notifications' => [], 'preferences' => []], []],
+            [$exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers'], $exported['notifications'], $exported['access_log']],
         );
     }
 
