@@ -47,7 +47,7 @@ class RecordAccessOutcomeOnEveryApiRouteTest extends FoundationTestCase
         $router = $this->app->make(Router::class);
 
         return collect($router->getRoutes()->getRoutes())
-            ->filter(fn (Route $route) => str_starts_with($route->uri(), 'api/'))
+            ->filter(fn (Route $route) => str_starts_with($route->uri().'/', 'api/'))
             ->mapWithKeys(fn (Route $route) => [
                 implode('|', $route->methods()).' '.$route->uri() => in_array(
                     RecordAccessOutcome::class,
