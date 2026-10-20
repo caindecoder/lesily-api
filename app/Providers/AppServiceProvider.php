@@ -5,6 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use App\Companies\Entities\Company;
+use Illuminate\Foundation\DevCommands;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -41,6 +42,10 @@ class AppServiceProvider extends ServiceProvider
         // Eloquent strict mode outside production is the N+1 net; production keeps
         // the guards off and has no lazy-load signal yet (conv-plan §2.19 R1/R6).
         Model::shouldBeStrict(! $this->app->isProduction());
+
+        // package.json stays for puppeteer and lefthook, so the framework registers its
+        // Vite process; this API builds no assets.
+        DevCommands::except('vite');
 
         // The company AuthorizeCompany resolved and validated for this request —
         // the tenant context every tenant-scoped controller consumes
