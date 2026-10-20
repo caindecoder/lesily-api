@@ -13,8 +13,8 @@ class AccessLogSection implements DsarSectionProvider
     }
 
     /**
-     * The subject's sign-ins, sign-outs and refused requests in this company
-     * or with no company, oldest first — never the request id or anyone's id.
+     * The subject's access-log rows in this company or with no company,
+     * oldest first — never the request id or anyone's id.
      *
      * @return array<int, array<string, mixed>>
      */
