@@ -42,7 +42,6 @@ class RecordAccessOutcomeOnEveryApiRouteTest extends FoundationTestCase
         $this->assertEveryWalkedRouteRecordsItsOutcome($walked);
     }
 
-    /** @return array<string, bool> */
     protected function walkApiRoutes(): array
     {
         $router = $this->app->make(Router::class);
@@ -50,12 +49,15 @@ class RecordAccessOutcomeOnEveryApiRouteTest extends FoundationTestCase
         return collect($router->getRoutes()->getRoutes())
             ->filter(fn (Route $route) => str_starts_with($route->uri(), 'api/'))
             ->mapWithKeys(fn (Route $route) => [
-                implode('|', $route->methods()).' '.$route->uri() => in_array(RecordAccessOutcome::class, $router->gatherRouteMiddleware($route), true),
+                implode('|', $route->methods()).' '.$route->uri() => in_array(
+                    RecordAccessOutcome::class,
+                    $router->gatherRouteMiddleware($route),
+                    true,
+                ),
             ])
             ->all();
     }
 
-    /** @param array<string, bool> $walked */
     protected function assertEveryWalkedRouteRecordsItsOutcome(array $walked): void
     {
         $this->assertArrayHasKey('POST api/v1/auth/login', $walked);
