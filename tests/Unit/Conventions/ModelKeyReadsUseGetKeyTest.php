@@ -117,7 +117,7 @@ class ModelKeyReadsUseGetKeyTest extends RuleTestCase
         $this->analyse([$this->fixturePath($fixture)], []);
     }
 
-    private function fixturePath(string $fixture): string
+    protected function fixturePath(string $fixture): string
     {
         return __DIR__.'/Fixtures/ModelKeyReads/'.$fixture;
     }

@@ -60,21 +60,21 @@ class InfectionWorkersReuseTheMigratedSchemaTest extends FoundationTestCase
         $this->assertSchemaReused();
     }
 
-    private function markThisProcessAsAnOrdinaryRunner(): void
+    protected function markThisProcessAsAnOrdinaryRunner(): void
     {
         putenv('INFECTION');
         RefreshDatabaseState::$migrated = false;
         $this->withoutMockingConsoleOutput();
     }
 
-    private function markThisProcessAsAnInfectionWorker(): void
+    protected function markThisProcessAsAnInfectionWorker(): void
     {
         putenv('INFECTION=1');
         RefreshDatabaseState::$migrated = false;
         $this->withoutMockingConsoleOutput();
     }
 
-    private function plantMigrationMarker(): void
+    protected function plantMigrationMarker(): void
     {
         $this->app['db']->table('migrations')->insert(['migration' => self::MARKER, 'batch' => 999]);
     }

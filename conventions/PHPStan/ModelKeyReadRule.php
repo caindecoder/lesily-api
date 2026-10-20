@@ -42,14 +42,14 @@ final class ModelKeyReadRule implements Rule
         ];
     }
 
-    private function isIdRead(PropertyFetch $node, Scope $scope): bool
+    protected function isIdRead(PropertyFetch $node, Scope $scope): bool
     {
         return $node->name instanceof Identifier
             && $node->name->toString() === 'id'
             && ! $scope->isInExpressionAssign($node);
     }
 
-    private function isKeyed(Type $receiver): bool
+    protected function isKeyed(Type $receiver): bool
     {
         foreach (self::KEYED_TYPES as $keyedClass) {
             if ((new ObjectType($keyedClass))->isSuperTypeOf($receiver)->yes()) {

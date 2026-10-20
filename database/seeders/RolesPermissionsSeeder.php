@@ -50,7 +50,7 @@ class RolesPermissionsSeeder extends Seeder
     /**
      * @param  array<mixed>  $rows
      */
-    private function seedRoles(array $rows): void
+    protected function seedRoles(array $rows): void
     {
         foreach ($rows as $row) {
             Role::firstOrCreate(
@@ -63,7 +63,7 @@ class RolesPermissionsSeeder extends Seeder
     /**
      * @param  array<mixed>  $rows
      */
-    private function seedPermissions(array $rows): void
+    protected function seedPermissions(array $rows): void
     {
         foreach ($rows as $row) {
             Permission::firstOrCreate(
@@ -76,7 +76,7 @@ class RolesPermissionsSeeder extends Seeder
     /**
      * @param  array<mixed>  $grants
      */
-    private function seedRolePermissions(array $grants): void
+    protected function seedRolePermissions(array $grants): void
     {
         $roleIdByCode = Role::query()->pluck('id', 'code')->all();
         $permissionIdByCode = Permission::query()->pluck('id', 'code')->all();
@@ -96,7 +96,7 @@ class RolesPermissionsSeeder extends Seeder
     /**
      * @return array<mixed>
      */
-    private function loadYaml(string $path): array
+    protected function loadYaml(string $path): array
     {
         if (! is_file($path)) {
             throw SeederSourceException::missingFile($path);

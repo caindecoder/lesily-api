@@ -77,12 +77,12 @@ class LogoutTest extends AuthTestCase
      * PersonalAccessToken under a genuine Bearer token — Sanctum::actingAs yields a
      * TransientToken with no delete(), so the suite authenticates with real tokens.
      */
-    private function tokenFor(User $user, string $name = 'web'): string
+    protected function tokenFor(User $user, string $name = 'web'): string
     {
         return $user->createToken($name)->plainTextToken;
     }
 
-    private function logoutWith(string $token): TestResponse
+    protected function logoutWith(string $token): TestResponse
     {
         return $this->withToken($token)->postJson('/api/v1/auth/logout');
     }

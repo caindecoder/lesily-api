@@ -70,7 +70,7 @@ final class DeadIgnoreEntries
         return $dead;
     }
 
-    private function whyDead(string $mutator, string $entry): ?string
+    protected function whyDead(string $mutator, string $entry): ?string
     {
         $parts = explode('::', $entry);
         $class = $parts[0];
@@ -108,7 +108,7 @@ final class DeadIgnoreEntries
      * @param  ReflectionClass<object>  $reflection
      * @param  class-string<Node>  $construct
      */
-    private function constructStartsOn(ReflectionClass $reflection, string $method, string $construct, int $line): bool
+    protected function constructStartsOn(ReflectionClass $reflection, string $method, string $construct, int $line): bool
     {
         $nodes = (new ParserFactory)->createForHostVersion()->parse((string) file_get_contents((string) $reflection->getFileName())) ?? [];
         $finder = new NodeFinder;
@@ -126,7 +126,7 @@ final class DeadIgnoreEntries
         ) !== null;
     }
 
-    private function isCallStatement(Node\Stmt\Expression $statement): bool
+    protected function isCallStatement(Node\Stmt\Expression $statement): bool
     {
         return $statement->expr instanceof Node\Expr\MethodCall
             || $statement->expr instanceof Node\Expr\NullsafeMethodCall

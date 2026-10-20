@@ -173,7 +173,7 @@ class ForgotPasswordTest extends AuthTestCase
     /**
      * @param  array<string, mixed>  $payload
      */
-    private function forgotPassword(array $payload): TestResponse
+    protected function forgotPassword(array $payload): TestResponse
     {
         return $this->postJson('/api/v1/auth/forgot-password', $payload);
     }
@@ -184,7 +184,7 @@ class ForgotPasswordTest extends AuthTestCase
      * the per-IP limit can refuse the request that follows. (Empty or repeated emails would share one
      * per-email bucket and be refused by that limit first.)
      */
-    private function exhaustIpAllowance(int $allowed): void
+    protected function exhaustIpAllowance(int $allowed): void
     {
         for ($i = 0; $i < $allowed; $i++) {
             $this->forgotPassword(['email' => "guest{$i}@contoso.lk"])->assertNoContent();
@@ -194,7 +194,7 @@ class ForgotPasswordTest extends AuthTestCase
     /**
      * Three passing requests for $email — its whole 3/15min allowance, pinned at exactly three.
      */
-    private function exhaustEmailAllowance(string $email): void
+    protected function exhaustEmailAllowance(string $email): void
     {
         for ($attempt = 0; $attempt < 3; $attempt++) {
             $this->forgotPassword(['email' => $email])->assertNoContent();
@@ -207,7 +207,7 @@ class ForgotPasswordTest extends AuthTestCase
      * the keyed email; and the broker issued a single-use token row for that email. (Expiry
      * ENFORCEMENT — rejecting an expired token — is covered by the reset increment, part 2.)
      */
-    private function assertResetLinkSentTo(User $user): void
+    protected function assertResetLinkSentTo(User $user): void
     {
         Notification::assertSentTo(
             $user,

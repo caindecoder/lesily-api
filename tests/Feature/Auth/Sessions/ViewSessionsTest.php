@@ -124,7 +124,7 @@ class ViewSessionsTest extends AuthTestCase
         $this->assertSessionListed($response, $session->accessToken->getKey(), $deviceName);
     }
 
-    private function listSessions(string $token): TestResponse
+    protected function listSessions(string $token): TestResponse
     {
         return $this->withToken($token)->getJson('/api/v1/me/sessions');
     }
@@ -133,7 +133,7 @@ class ViewSessionsTest extends AuthTestCase
      * Mint a null-expiry token whose created_at predates the global expiration window —
      * Sanctum would refuse to authenticate it, so the active-session list must exclude it.
      */
-    private function aSessionPredatingTheWindow(User $user, string $name): NewAccessToken
+    protected function aSessionPredatingTheWindow(User $user, string $name): NewAccessToken
     {
         $session = $user->createToken($name); // null expires_at — relies on the global window
         $window = Config::integer('sanctum.expiration');

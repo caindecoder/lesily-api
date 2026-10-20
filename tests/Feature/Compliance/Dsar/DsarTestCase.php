@@ -430,7 +430,7 @@ abstract class DsarTestCase extends TestCase
      *
      * @return array<string, mixed>
      */
-    private function expectedRow(DsarRequestRecord $request, bool $downloadAvailable): array
+    protected function expectedRow(DsarRequestRecord $request, bool $downloadAvailable): array
     {
         return [
             'id' => $request->getKey(),
@@ -707,7 +707,7 @@ abstract class DsarTestCase extends TestCase
     /**
      * @param  array<string, mixed>  $query
      */
-    private function queryString(array $query): string
+    protected function queryString(array $query): string
     {
         return $query === [] ? '' : '?'.http_build_query($query);
     }
@@ -1005,7 +1005,7 @@ abstract class DsarTestCase extends TestCase
         ]);
     }
 
-    private function dsarRequestIn(TestResponse $response): DsarRequestRecord
+    protected function dsarRequestIn(TestResponse $response): DsarRequestRecord
     {
         $requestId = $response->json('data.id');
         $this->assertIsString($requestId);
@@ -1013,7 +1013,7 @@ abstract class DsarTestCase extends TestCase
         return DsarRequestRecord::query()->findOrFail($requestId);
     }
 
-    private function roleCodeOf(User $member, string $companyId): string
+    protected function roleCodeOf(User $member, string $companyId): string
     {
         $roleId = CompanyUser::query()
             ->where('company_id', $companyId)

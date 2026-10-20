@@ -111,7 +111,7 @@ class InvitationMailRenderTest extends MembershipsTestCase
         $this->assertSame(config('mail.from.address'), $envelope->replyTo[0]->address);
     }
 
-    private function anInvitationMail(): InvitationMail
+    protected function anInvitationMail(): InvitationMail
     {
         return new InvitationMail(
             companyName: 'Contoso',

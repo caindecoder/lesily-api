@@ -132,7 +132,7 @@ class RevokeSessionTest extends AuthTestCase
         $this->assertOnlyTargetSessionRevoked($response, $other, $current->plainTextToken);
     }
 
-    private function revokeSession(string $token, int|string $tokenId): TestResponse
+    protected function revokeSession(string $token, int|string $tokenId): TestResponse
     {
         return $this->withToken($token)->deleteJson("/api/v1/me/sessions/{$tokenId}");
     }
