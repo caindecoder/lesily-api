@@ -74,7 +74,7 @@ class Company extends AggregateRoot
             ));
         }
 
-        if ($this->hasSettingsChanges($command)) {
+        if ($command->hasSettingsChanges()) {
             $this->recordThat(new CompanySettingsUpdated(
                 timezone: $command->timezone,
                 fiscalYearStartMonth: $command->fiscalYearStartMonth,
@@ -86,14 +86,6 @@ class Company extends AggregateRoot
         }
 
         return $this;
-    }
-
-    protected function hasSettingsChanges(UpdateCompanyCommand $command): bool
-    {
-        return $command->timezone !== null
-            || $command->fiscalYearStartMonth !== null
-            || $command->workingDaysPerWeek !== null
-            || $command->defaultWorkHoursPerDay !== null;
     }
 
     public function trialExpire(): static
