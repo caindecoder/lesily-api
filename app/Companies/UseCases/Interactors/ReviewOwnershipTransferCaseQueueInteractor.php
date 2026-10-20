@@ -49,7 +49,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
      * @param  LengthAwarePaginator<int, OwnershipTransferCase>  $page
      * @return array<string, mixed>
      */
-    private function queryContextOf(OwnershipTransferCaseAdminFilters $filters, LengthAwarePaginator $page): array
+    protected function queryContextOf(OwnershipTransferCaseAdminFilters $filters, LengthAwarePaginator $page): array
     {
         return [
             'filters' => array_filter(
@@ -64,7 +64,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
     /**
      * @param  array<string, mixed>  $queryContext
      */
-    private function recordQueueRead(array $queryContext, User $admin, RequestOrigin $context): void
+    protected function recordQueueRead(array $queryContext, User $admin, RequestOrigin $context): void
     {
         // The queue read points at a PAGE, not a record.
         AuditEntry::query()->create([

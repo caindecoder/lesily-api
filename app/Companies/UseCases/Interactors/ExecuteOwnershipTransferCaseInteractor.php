@@ -46,7 +46,7 @@ class ExecuteOwnershipTransferCaseInteractor
         }
     }
 
-    private function executeLocked(ExecuteOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
+    protected function executeLocked(ExecuteOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
     {
         return DB::transaction(function () use ($command, $admin, $context): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()
@@ -87,7 +87,7 @@ class ExecuteOwnershipTransferCaseInteractor
      * carry caseId NULL and a sibling case cites its OWN event, so sole()
      * fail-louds on anything but exactly this case's record.
      */
-    private function transferEventIdFor(OwnershipTransferCase $case): int
+    protected function transferEventIdFor(OwnershipTransferCase $case): int
     {
         return LesilyStoredEvent::query()
             ->where('aggregate_uuid', $case->company_id)
@@ -97,7 +97,7 @@ class ExecuteOwnershipTransferCaseInteractor
             ->getKey();
     }
 
-    private function recordCaseExecuted(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
+    protected function recordCaseExecuted(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $case->company_id,

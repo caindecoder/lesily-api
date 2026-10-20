@@ -39,7 +39,7 @@ class ChangeMembershipRoleInteractor
         }
     }
 
-    private function executeLocked(Company $company, ChangeMembershipRoleCommand $command, string $membershipId): CompanyUser
+    protected function executeLocked(Company $company, ChangeMembershipRoleCommand $command, string $membershipId): CompanyUser
     {
         return DB::transaction(function () use ($company, $command, $membershipId): CompanyUser {
             $membership = CompanyUser::query()

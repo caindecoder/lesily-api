@@ -29,7 +29,7 @@ class RecoveryCodeGenerator
         return $codes;
     }
 
-    private function newCode(): string
+    protected function newCode(): string
     {
         return Str::upper(Str::random(4).'-'.Str::random(4));
     }

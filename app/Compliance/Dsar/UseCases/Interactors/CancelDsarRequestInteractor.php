@@ -42,7 +42,7 @@ class CancelDsarRequestInteractor
         });
     }
 
-    private function recordWithdrawn(DsarRequestRecord $request, User $actor, RequestOrigin $context): void
+    protected function recordWithdrawn(DsarRequestRecord $request, User $actor, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $request->company_id,
@@ -64,7 +64,7 @@ class CancelDsarRequestInteractor
         ]);
     }
 
-    private function cancelledEventIdFor(DsarRequestRecord $request): int
+    protected function cancelledEventIdFor(DsarRequestRecord $request): int
     {
         return LesilyStoredEvent::query()
             ->where('aggregate_uuid', $request->getKey())

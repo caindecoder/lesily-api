@@ -506,7 +506,7 @@ class ListInvoicesTest extends BillingTestCase
      *
      * @return array<string, InvoiceReadModel>
      */
-    private function threeInvoicesVaryingDateAndAmount(Company $company, SubscriptionReadModel $subscription): array
+    protected function threeInvoicesVaryingDateAndAmount(Company $company, SubscriptionReadModel $subscription): array
     {
         $rows = [
             'january-70000' => ['2026-01-10 09:00:00', 70000, 'INV-2026-000001'],
@@ -614,7 +614,7 @@ class ListInvoicesTest extends BillingTestCase
      *
      * @return array<string, bool|string>
      */
-    private function projectedRowShape(InvoiceReadModel $invoice): array
+    protected function projectedRowShape(InvoiceReadModel $invoice): array
     {
         $attributes = $invoice->refresh()->getAttributes();
 
@@ -634,7 +634,7 @@ class ListInvoicesTest extends BillingTestCase
      *
      * @return array<string, mixed>
      */
-    private static function planLineItem(int $amountCents): array
+    protected static function planLineItem(int $amountCents): array
     {
         return [
             'description' => 'Pro Plan — Monthly',
@@ -652,7 +652,7 @@ class ListInvoicesTest extends BillingTestCase
      *
      * @return array<string, InvoiceReadModel>
      */
-    private function oneInvoicePerStoredState(Company $company, SubscriptionReadModel $subscription): array
+    protected function oneInvoicePerStoredState(Company $company, SubscriptionReadModel $subscription): array
     {
         // The pending seed deliberately carries an open dispute: a stored-status
         // filter must ignore the has_dispute modifier (SM-1-04 §4 orthogonality).

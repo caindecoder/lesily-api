@@ -279,7 +279,7 @@ class PasswordChangedNotificationTest extends AuthTestCase
      * label — the change was accepted and the critical notice names the expected company
      * (the OQ-1-124 deterministic-label contract: default → oldest live membership → '').
      */
-    private function assertConfirmationNames(TestResponse $response, User $user, string $companyName): void
+    protected function assertConfirmationNames(TestResponse $response, User $user, string $companyName): void
     {
         $response->assertNoContent();
 
@@ -302,7 +302,7 @@ class PasswordChangedNotificationTest extends AuthTestCase
      * overwrites an explicitly-passed created_at — it lets a test invert insertion order vs
      * joined time.
      */
-    private function attachCompany(User $user, ?CarbonInterface $joinedAt = null): Company
+    protected function attachCompany(User $user, ?CarbonInterface $joinedAt = null): Company
     {
         $company = Company::factory()->named(fake()->unique()->company())->create();
         $company->users()->attach($user, ['role_id' => Role::factory()->create()->getKey()]);

@@ -32,7 +32,7 @@ class DsarReportPresenter
         ));
     }
 
-    private function coverOf(DsarRequestRecord $request): DsarReportCover
+    protected function coverOf(DsarRequestRecord $request): DsarReportCover
     {
         return new DsarReportCover(
             subjectName: $request->subject->name,
@@ -52,7 +52,7 @@ class DsarReportPresenter
      * @param  array<int|string, mixed>  $data
      * @return array<int, DsarReportTable>
      */
-    private function tablesOf(string $section, array $data, ?string $caption): array
+    protected function tablesOf(string $section, array $data, ?string $caption): array
     {
         if (! array_is_list($data)) {
             /** @var array<string, mixed> $data */
@@ -79,7 +79,7 @@ class DsarReportPresenter
      * @param  array<string, mixed>  $entry
      * @return array<int, DsarReportTable>
      */
-    private function entryTables(string $section, array $entry, ?string $caption): array
+    protected function entryTables(string $section, array $entry, ?string $caption): array
     {
         $fields = array_filter($entry, fn (mixed $value): bool => ! is_array($value));
         $tables = $fields === [] ? [] : [new DsarReportTable($caption, [], array_map(
@@ -98,12 +98,12 @@ class DsarReportPresenter
     /**
      * @param  array<string, mixed>  $entry
      */
-    private function isFlat(array $entry): bool
+    protected function isFlat(array $entry): bool
     {
         return array_filter($entry, is_array(...)) === [];
     }
 
-    private function label(string $section, string $field): string
+    protected function label(string $section, string $field): string
     {
         return __("dsar.fields.{$section}.{$field}");
     }
@@ -112,7 +112,7 @@ class DsarReportPresenter
      * A value as a person reads it: a time in words, Yes / No,
      * a dash for nothing, a code as its meaning with the code after it.
      */
-    private function readable(string $field, mixed $value): string
+    protected function readable(string $field, mixed $value): string
     {
         return match (true) {
             $value === null => '—',
@@ -122,14 +122,14 @@ class DsarReportPresenter
         };
     }
 
-    private function explained(string $field, string $code): string
+    protected function explained(string $field, string $code): string
     {
         $meaning = $this->meaningOf($field, $code);
 
         return $meaning === null ? $code : "{$meaning} ({$code})";
     }
 
-    private function meaningOf(string $field, string $code): ?string
+    protected function meaningOf(string $field, string $code): ?string
     {
         if (Lang::has("dsar.codes.{$field}.{$code}")) {
             return __("dsar.codes.{$field}.{$code}");
@@ -141,12 +141,12 @@ class DsarReportPresenter
     /**
      * @return array<string, string>
      */
-    private function roleNames(): array
+    protected function roleNames(): array
     {
         return $this->roleNames ??= Role::query()->pluck('name', 'code')->all();
     }
 
-    private function readableTime(CarbonInterface $time): string
+    protected function readableTime(CarbonInterface $time): string
     {
         return $time->utc()->format('j M Y, H:i').' UTC';
     }

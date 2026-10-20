@@ -266,7 +266,7 @@ class ListDsarRequestsTest extends DsarTestCase
      * @param  list<int>  $daysAgo
      * @return list<DsarRequestRecord>
      */
-    private function requestsMadeDaysAgo(array $daysAgo): array
+    protected function requestsMadeDaysAgo(array $daysAgo): array
     {
         return array_map(
             fn (int $days): DsarRequestRecord => DsarRequestRecord::factory()

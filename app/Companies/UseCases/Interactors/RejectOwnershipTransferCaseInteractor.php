@@ -38,7 +38,7 @@ class RejectOwnershipTransferCaseInteractor
         }
     }
 
-    private function executeLocked(RejectOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
+    protected function executeLocked(RejectOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
     {
         return DB::transaction(function () use ($command, $admin, $context): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()
@@ -63,7 +63,7 @@ class RejectOwnershipTransferCaseInteractor
         });
     }
 
-    private function recordCaseRejected(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
+    protected function recordCaseRejected(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $case->company_id,

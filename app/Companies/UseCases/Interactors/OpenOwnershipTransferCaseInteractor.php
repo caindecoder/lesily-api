@@ -42,7 +42,7 @@ class OpenOwnershipTransferCaseInteractor
         });
     }
 
-    private function recordCaseOpened(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
+    protected function recordCaseOpened(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $case->company_id,

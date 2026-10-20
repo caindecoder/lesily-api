@@ -33,7 +33,7 @@ class NotificationsSection implements DsarSectionProvider
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function notificationsOf(string $subjectUserId, string $companyId): array
+    protected function notificationsOf(string $subjectUserId, string $companyId): array
     {
         return User::query()->findOrFail($subjectUserId)
             ->notifications()
@@ -54,7 +54,7 @@ class NotificationsSection implements DsarSectionProvider
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function preferencesOf(string $subjectUserId): array
+    protected function preferencesOf(string $subjectUserId): array
     {
         return NotificationPreference::query()
             ->where('user_id', $subjectUserId)

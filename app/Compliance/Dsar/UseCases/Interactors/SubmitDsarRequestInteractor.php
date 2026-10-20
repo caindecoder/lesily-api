@@ -45,7 +45,7 @@ class SubmitDsarRequestInteractor
         }
     }
 
-    private function record(SubmitDsarRequestCommand $command, User $actor, RequestOrigin $context): DsarRequestRecord
+    protected function record(SubmitDsarRequestCommand $command, User $actor, RequestOrigin $context): DsarRequestRecord
     {
         $requestId = Str::uuid7()->toString();
         $requestedByRole = Role::query()
@@ -62,7 +62,7 @@ class SubmitDsarRequestInteractor
         return $request;
     }
 
-    private function recordRequested(DsarRequestRecord $request, User $actor, RequestOrigin $context): void
+    protected function recordRequested(DsarRequestRecord $request, User $actor, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $request->company_id,
@@ -84,7 +84,7 @@ class SubmitDsarRequestInteractor
         ]);
     }
 
-    private function submittedEventIdFor(DsarRequestRecord $request): int
+    protected function submittedEventIdFor(DsarRequestRecord $request): int
     {
         return LesilyStoredEvent::query()
             ->where('aggregate_uuid', $request->getKey())
@@ -97,7 +97,7 @@ class SubmitDsarRequestInteractor
      * A removed (soft-deleted) membership is not live; a missing one answers
      * 404 through ModelNotFoundException.
      */
-    private function liveMembership(string $companyId, string $userId): CompanyUser
+    protected function liveMembership(string $companyId, string $userId): CompanyUser
     {
         return CompanyUser::query()
             ->where('company_id', $companyId)

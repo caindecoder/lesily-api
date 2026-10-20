@@ -173,7 +173,7 @@ class LogoutAllTest extends AuthTestCase
         ];
     }
 
-    private function logoutAll(string $token, string $password): TestResponse
+    protected function logoutAll(string $token, string $password): TestResponse
     {
         return $this->withToken($token)->postJson('/api/v1/auth/logout-all', ['password' => $password]);
     }

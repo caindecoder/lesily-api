@@ -99,7 +99,7 @@ class InvoiceFilters extends Data
      * `within=from,to` — exactly two comma-separated ISO-8601 (Y-m-d) dates
      * (api-conventions §10.1 date-range convention; UC-1-120 error flow 4c).
      */
-    private static function isoDateRangeRule(): Closure
+    protected static function isoDateRangeRule(): Closure
     {
         return function (string $attribute, mixed $value, Closure $fail): void {
             /** @var string $value bail + string precede this rule */

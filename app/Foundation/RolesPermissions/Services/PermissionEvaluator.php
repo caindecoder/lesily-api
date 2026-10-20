@@ -31,7 +31,7 @@ class PermissionEvaluator
         return $this->canRoleDo($roleId, $permissionCode);
     }
 
-    private function canRoleDo(string $roleId, string $permissionCode): bool
+    protected function canRoleDo(string $roleId, string $permissionCode): bool
     {
         return Role::query()
             ->whereKey($roleId)

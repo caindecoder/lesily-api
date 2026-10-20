@@ -45,7 +45,7 @@ class DownloadDsarExportInteractor
         return new DsarExportFile($path, $fulfilledAt);
     }
 
-    private function recordDownloaded(DsarRequestRecord $request, User $actor, RequestOrigin $context): void
+    protected function recordDownloaded(DsarRequestRecord $request, User $actor, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $request->company_id,

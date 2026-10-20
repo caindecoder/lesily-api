@@ -49,6 +49,14 @@ class UpdateCompanyCommand extends Data
         return static::validateAndCreate($request->all());
     }
 
+    public function hasSettingsChanges(): bool
+    {
+        return $this->timezone !== null
+            || $this->fiscalYearStartMonth !== null
+            || $this->workingDaysPerWeek !== null
+            || $this->defaultWorkHoursPerDay !== null;
+    }
+
     /**
      * @return array<string, array<int, string>>
      */

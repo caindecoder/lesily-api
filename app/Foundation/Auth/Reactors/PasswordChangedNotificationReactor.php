@@ -34,7 +34,7 @@ class PasswordChangedNotificationReactor extends Reactor implements ShouldQueue
         $this->sendConfirmationTo($event->userId);
     }
 
-    private function sendConfirmationTo(string $userId): void
+    protected function sendConfirmationTo(string $userId): void
     {
         $user = User::query()->findOrFail($userId);
 

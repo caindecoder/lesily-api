@@ -70,7 +70,7 @@ class InvoiceAdminResource extends JsonResource
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function lineItems(): array
+    protected function lineItems(): array
     {
         return $this->resource->lineItems
             ->map(fn (InvoiceLineItem $line): array => [
@@ -97,7 +97,7 @@ class InvoiceAdminResource extends JsonResource
      *
      * @return array<string, mixed>
      */
-    private function companySummary(): array
+    protected function companySummary(): array
     {
         $company = $this->resource->company;
 

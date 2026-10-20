@@ -34,7 +34,7 @@ class SessionResource extends JsonResource
      * UI can mark "this device". currentAccessToken() is typed to the HasAbilities
      * contract; narrow to a PersonalAccessToken before comparing keys.
      */
-    private function isCurrentSession(Request $request): bool
+    protected function isCurrentSession(Request $request): bool
     {
         /** @var User|null $user */
         $user = $request->user();

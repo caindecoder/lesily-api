@@ -400,7 +400,7 @@ class InviteUserTest extends MembershipsTestCase
      * revoked WITH a reason — leaving all three revoke stamps set on the reused
      * row. Returns the membership id the next re-invite must scrub clean.
      */
-    private function aRevokedReinviteOfARemovedMember(Company $company, User $actor, string $email): string
+    protected function aRevokedReinviteOfARemovedMember(Company $company, User $actor, string $email): string
     {
         [, $membershipId] = $this->anAcceptedMembership($company, $actor, $email);
         $this->removeMember($actor, $company, $membershipId)->assertNoContent();
@@ -418,7 +418,7 @@ class InviteUserTest extends MembershipsTestCase
      * it: a stale revoked_at would hide the row from the roster's whereNull
      * filter and block the invitee's accept.
      */
-    private function assertReinvitedRowCleanPending(string $membershipId, User $actor, Company $company): void
+    protected function assertReinvitedRowCleanPending(string $membershipId, User $actor, Company $company): void
     {
         $this->assertDatabaseHas('invitations', [
             'id' => $membershipId,

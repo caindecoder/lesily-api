@@ -143,7 +143,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
      * values on the wire (agent-triage TA-1 — executed-but-unasserted
      * renderings are Infection-invisible: property reads mint no mutants).
      */
-    private function assertStateFieldsRendered(TestResponse $response, string $state): void
+    protected function assertStateFieldsRendered(TestResponse $response, string $state): void
     {
         match ($state) {
             'voided' => $this->assertVoidFieldsRendered($response),
@@ -153,7 +153,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         };
     }
 
-    private function assertVoidFieldsRendered(TestResponse $response): void
+    protected function assertVoidFieldsRendered(TestResponse $response): void
     {
         $response->assertJsonPath('data.void_reason', 'Issued in error - admin correction.');
         $response->assertJsonPath('data.void_source', 'admin-correction');
@@ -161,7 +161,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $this->assertNotNull($response->json('data.voided_by'));
     }
 
-    private function assertFailureFieldsRendered(TestResponse $response): void
+    protected function assertFailureFieldsRendered(TestResponse $response): void
     {
         $response->assertJsonPath('data.failure_count', 1);
         $response->assertJsonPath('data.last_failure_code', 'insufficient_funds');

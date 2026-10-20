@@ -81,7 +81,7 @@ class CacheLoginChallengeStore implements LoginChallengeStore
     /**
      * @return array{userId: string, attemptsRemaining: int, expiresAt: int}|null
      */
-    private function read(string $challengeId): ?array
+    protected function read(string $challengeId): ?array
     {
         $data = Cache::get($this->key($challengeId));
 
@@ -97,12 +97,12 @@ class CacheLoginChallengeStore implements LoginChallengeStore
         ];
     }
 
-    private function key(string $challengeId): string
+    protected function key(string $challengeId): string
     {
         return "2fa-challenge:{$challengeId}";
     }
 
-    private function lockKey(string $challengeId): string
+    protected function lockKey(string $challengeId): string
     {
         return "2fa-challenge-lock:{$challengeId}";
     }
