@@ -20,13 +20,19 @@
 # missing root aborts with exit 2 and no summary). ALWAYS ends with the summary line
 # CI parses; each root counts the files actually inspected.
 # Usage: sh scripts/check-method-visibility.sh [file...]   (no args = scan the six roots)
-# anchored at the line start or after `{` / `;` (a one-line class body is a declaration
-# too); a trailing `// private function` comment sits after `/`, so it never matches
-private_method='(^|[{;])[[:space:]]*((final|static|abstract)[[:space:]]+)*private[[:space:]]+((static|final|abstract)[[:space:]]+)*function[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\('
-# applied to the hits as a negative filter: the one exempt method name
-constructor='function[[:space:]]+__construct[[:space:]]*\('
-# applied to `grep -n` output (line:content), so the anchor sits after the number
-comment='^[0-9]+:[[:space:]]*(\*|/\*|//|#)'
+# anchored at the line start or after `{` / `}` / `;` (a one-line class body is a
+# declaration too) or an attribute's `]` (`#[\Override] private function`); a trailing
+# `// private function` comment sits after `/`, so it never matches; `&` allows a
+# by-reference return. Known limits: a declaration split across lines (`private` on one
+# line, `function` on the next) and a line that opens with a closed block comment
+# (`/* note */ private function`) are not seen - the matcher is line-based, like the five.
+private_method='(^|[{};]|\])[[:space:]]*((final|static|abstract)[[:space:]]+)*private[[:space:]]+((static|final|abstract)[[:space:]]+)*function[[:space:]]+&?[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\('
+# the one exempt method name, counted per MATCH on a hit line (a second declaration
+# beside a constructor on one line is still refused)
+constructor='function[[:space:]]+&?__construct[[:space:]]*\('
+# applied to `grep -n` output (line:content), so the anchor sits after the number; a
+# `#` opener is a comment only when it is not an attribute's `#[`
+comment='^[0-9]+:[[:space:]]*(\*|/\*|//|#($|[^[]))'
 # the whole-tree roots (phpstan.neon paths)
 roots='app tests database/factories database/seeders scripts conventions'
 
@@ -83,6 +89,21 @@ self_test 'M1 one-line class body' "$private_method" \
 self_test 'M1 not a trailing comment' "$private_method" \
   '    $this->foo(); private function bar(): void {}' \
   '    $x = 1; // private function foo()'
+self_test 'M1 one-line class body, a later member' "$private_method" \
+  'class ZzPlanted { public function a(): void {} private function foo(): void {} }' \
+  'class ZzPlanted { public function a(): void {} protected function foo(): void {} }'
+self_test 'M1 after an attribute' "$private_method" \
+  '    #[\Override] private function foo(): void' \
+  '    #[\Override] protected function foo(): void'
+self_test 'M1 by-reference return' "$private_method" \
+  '    private function &foo(): array' \
+  '    protected function &foo(): array'
+self_test 'M1 private then final' "$private_method" \
+  '    private final function foo(): void' \
+  '    protected final function foo(): void'
+self_test 'M1 private then abstract (in a trait)' "$private_method" \
+  '    private abstract function foo(): void;' \
+  '    protected abstract function foo(): void;'
 self_test 'M3 constructor exemption' "$constructor" \
   '    private function __construct(string $message)' \
   '    private function __constructor(): void'
@@ -104,6 +125,27 @@ self_test 'comment filter (/* form)' "$comment" \
 self_test 'comment filter (# form)' "$comment" \
   '12:    # private function foo()' \
   '12:    final private function foo(): void'
+self_test 'comment filter (# is not an attribute)' "$comment" \
+  '12:    #private function foo()' \
+  '12:    #[\Override] private function foo(): void'
+
+declarations_beyond_constructors() {
+  # $1 a hit line (line:content) -> the number of private declarations on it that are
+  # not __construct; a constructor beside another declaration still counts the other
+  content=${1#*:}
+  all=$(printf '%s\n' "$content" | grep -oiE "$private_method" | wc -l | tr -d ' ')
+  ctors=$(printf '%s\n' "$content" | grep -oiE "$constructor" | wc -l | tr -d ' ')
+  echo $((all - ctors))
+}
+expect_count() {
+  # $1 label, $2 a hit line, $3 the count it must yield
+  got=$(declarations_beyond_constructors "$2")
+  [ "$got" = "$3" ] || { echo "self-test failed - $1: counted $got, expected $3"; exit 2; }
+}
+expect_count 'M3 a plain private method' '12:    private function foo(): void' 1
+expect_count 'M3 the constructor alone' '12:    private function __construct(string $m)' 0
+expect_count 'M3 a method beside the constructor' '12:class ZzPlanted { private function __construct() {} private function hidden(): void {} }' 1
+expect_count 'M3 two methods on one line' '12:class ZzPlanted { private function a(): void {} private function b(): void {} }' 2
 
 classify() {
   # $1 path -> its root label, or `skip`
@@ -127,7 +169,11 @@ expect_root() {
   [ "$got" = "$2" ] || { echo "self-test failed - path classifier: $1 read as '$got', expected '$2'"; exit 2; }
 }
 expect_root 'app/Foundation/Http/Middleware/X.php' app
+expect_root './app/X.php' app
 expect_root './tests/TestCase.php' tests
+expect_root './database/factories/X.php' database
+expect_root './scripts/x.php' scripts
+expect_root './conventions/X.php' conventions
 expect_root 'tests/Feature/Foundation/X.php' tests
 expect_root 'database/factories/UserFactory.php' database
 expect_root 'database/seeders/RolesPermissionsSeeder.php' database
@@ -148,11 +194,18 @@ scanned_conventions=0
 
 report() {
   # $1 file
-  hits=$(grep -niE "$private_method" "$1" | grep -vE "$comment" | grep -viE "$constructor")
+  hits=$(grep -niE "$private_method" "$1" | grep -vE "$comment")
   [ -n "$hits" ] || return 0
-  n=$(printf '%s\n' "$hits" | wc -l | tr -d ' ')
-  printf '%s\n' "$hits" | sed "s|^|sec-2.23 violation - a private method (make it protected; only __construct behind a named constructor may be private): $1:|"
-  violations=$((violations + n))
+  OLDIFS=$IFS
+  IFS='
+'
+  for hit in $hits; do
+    n=$(declarations_beyond_constructors "$hit")
+    [ "$n" -gt 0 ] || continue
+    printf '%s\n' "$hit" | sed "s|^|sec-2.23 violation - a private method (make it protected; only __construct behind a named constructor may be private): $1:|"
+    violations=$((violations + n))
+  done
+  IFS=$OLDIFS
 }
 
 inspect() {
