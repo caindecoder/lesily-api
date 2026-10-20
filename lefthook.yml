@@ -69,3 +69,11 @@ pre-commit:
       # the hook runs. Logic in scripts/check-command-validation-placement.sh
       # (shared with the gating CI quality step); every matcher self-tested.
       run: sh scripts/check-command-validation-placement.sh
+    method-visibility:
+      glob: "**/*.php"
+      # Sec 2.23 (PROC-private-to-protected): a method is protected, never private -
+      # only __construct behind a named constructor may be private. Logic in
+      # scripts/check-method-visibility.sh (shared with the gating CI quality step);
+      # the script routes each staged file to its root (app, tests, database/factories,
+      # database/seeders, scripts, conventions) or skips it, so one glob serves all six.
+      run: sh scripts/check-method-visibility.sh {staged_files}
