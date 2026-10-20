@@ -101,6 +101,17 @@ return [
             'enabled' => 'Turned on',
             'changed_at' => 'Changed',
         ],
+        'access_log' => [
+            'access_event' => 'What happened',
+            'access_reason' => 'Why',
+            'http_method' => 'Request type',
+            'route' => 'Address requested',
+            'ip_address' => 'Network address (IP)',
+            'user_agent' => 'Browser or app',
+            'occurrences' => 'Times',
+            'first_seen_at' => 'First',
+            'last_seen_at' => 'Last',
+        ],
     ],
     'codes' => [
         'action' => [

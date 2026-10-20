@@ -264,7 +264,7 @@ class ExportDsarReportTest extends DsarTestCase
         $this->runTheExportFor($request);
 
         // Then the contents list names every section, and each follows under its title, in the same order
-        $titles = ['Your profile', 'Your membership', 'Consent records', 'Actions you took', 'Sign-ins', 'Invitations', 'Ownership transfers', 'Notifications and preferences'];
+        $titles = ['Your profile', 'Your membership', 'Consent records', 'Actions you took', 'Sign-ins', 'Invitations', 'Ownership transfers', 'Notifications and preferences', 'Account access history'];
         $this->assertReportShowsInOrder(['Contents', ...$titles, ...$titles]);
     }
 
@@ -297,7 +297,8 @@ class ExportDsarReportTest extends DsarTestCase
     /**
      * A member who joined through an invitation, consented, signed in, was
      * handed the company and named on a rejected case, received a notice,
-     * switched an email off — and then submitted their request themselves.
+     * switched an email off, signed in with their password, was refused a
+     * lookup — and then submitted their request themselves.
      */
     protected function aRequestFromAMemberWithAnEntryInEverySection(): DsarRequestRecord
     {
@@ -305,6 +306,8 @@ class ExportDsarReportTest extends DsarTestCase
         $this->acceptTheInvitation($this->anInvitationTo($member, $this->company), $member);
         $this->aConsentRecordedBy($member, $this->company);
         $this->aSignInFor($member, 'iPhone', now()->addDays(90));
+        $this->signInThroughTheApi($member);
+        $this->lookUpAMissingRequest($member, $this->company);
         $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $member);
         OwnershipTransferCase::factory()->forCompany($this->company->refresh())->proposedOwner($member)->closedRejected()->create();
         $this->aNotificationFor($member, NotificationType::TeamWelcome, $this->company);
