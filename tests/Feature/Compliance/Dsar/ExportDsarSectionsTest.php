@@ -65,7 +65,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_member_belongs_to_two_companies_then_only_this_companys_data_is_exported(): void
     {
-        // Given a member who joined another company first, under another role, with consent, an invitation, a transfer, a case, a notice and an audited submission in each — beside a co-worker's consent here
+        // Given a member who joined another company first, under another role, with consent, an invitation, a transfer, a case, a notice, a refused lookup and an audited submission in each — beside a co-worker's consent here
         $member = User::factory()->create();
         $other = Company::factory()->create();
         $other->users()->attach($member, ['role_id' => $this->seededRole('admin')->getKey()]);
@@ -80,6 +80,8 @@ class ExportDsarSectionsTest extends DsarTestCase
         OwnershipTransferCase::factory()->forCompany($other)->proposedOwner($member)->closedRejected()->create();
         $this->aNotificationFor($member, NotificationType::TeamWelcome, $this->company);
         $this->aNotificationFor($member, NotificationType::OwnershipReceived, $other);
+        $this->lookUpAMissingRequest($member, $this->company);
+        $this->lookUpAMissingRequest($member, $other);
         $this->aConsentRecordedBy($this->aCompanyMember($this->company), $this->company);
         $this->submitDsarRequest($member, $other)->assertCreated();
         $this->idempotencyKey = (string) Str::uuid();

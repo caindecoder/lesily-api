@@ -2,6 +2,7 @@
 
 namespace App\Compliance\Dsar\UseCases\Sections;
 
+use Illuminate\Database\Eloquent\Builder;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 
 class AccessLogSection implements DsarSectionProvider
@@ -12,8 +13,8 @@ class AccessLogSection implements DsarSectionProvider
     }
 
     /**
-     * The subject's sign-ins, sign-outs and refused requests, oldest first —
-     * never the request id or anyone's id.
+     * The subject's sign-ins, sign-outs and refused requests in this company
+     * or with no company, oldest first — never the request id or anyone's id.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -21,6 +22,7 @@ class AccessLogSection implements DsarSectionProvider
     {
         return AccessLogEntry::query()
             ->where('user_id', $subjectUserId)
+            ->where(fn (Builder $query): Builder => $query->where('company_id', $companyId)->orWhereNull('company_id'))
             ->orderBy('first_seen_at')
             ->orderBy('id')
             ->get()
