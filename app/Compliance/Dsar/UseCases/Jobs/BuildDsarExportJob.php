@@ -74,19 +74,19 @@ class BuildDsarExportJob implements ShouldQueue
      * A personal-data file outlives its request only as a fulfilled export —
      * any other file at its path is a leftover and goes (ruling N27).
      */
-    private function discardExportUnlessFulfilled(): void
+    protected function discardExportUnlessFulfilled(): void
     {
         if ($this->status() !== DsarRequestStatus::Fulfilled) {
             Storage::disk('dsar')->delete($this->filePath());
         }
     }
 
-    private function status(): DsarRequestStatus
+    protected function status(): DsarRequestStatus
     {
         return DsarRequestRecord::query()->findOrFail($this->requestId)->status;
     }
 
-    private function filePath(): string
+    protected function filePath(): string
     {
         return 'dsar/'.$this->companyId.'/'.$this->requestId.'.zip';
     }

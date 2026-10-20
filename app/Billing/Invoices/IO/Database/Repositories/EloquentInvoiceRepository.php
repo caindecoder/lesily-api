@@ -64,7 +64,7 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
      * @param  Builder<Invoice>  $query
      * @return Builder<Invoice>
      */
-    private function applyIssuedWithin(Builder $query, string $within): Builder
+    protected function applyIssuedWithin(Builder $query, string $within): Builder
     {
         [$from, $to] = explode(',', $within);
 
@@ -80,7 +80,7 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
      * @param  Builder<Invoice>  $query
      * @return Builder<Invoice>
      */
-    private function applySort(Builder $query, ?string $sort): Builder
+    protected function applySort(Builder $query, ?string $sort): Builder
     {
         $ordered = match ($sort) {
             'issued_at' => $query->orderBy('issued_at'),
@@ -103,7 +103,7 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
      * @param  Builder<Invoice>  $query
      * @return Builder<Invoice>
      */
-    private function applyStatusToken(Builder $query, string $status): Builder
+    protected function applyStatusToken(Builder $query, string $status): Builder
     {
         return match ($status) {
             'overdue' => $query

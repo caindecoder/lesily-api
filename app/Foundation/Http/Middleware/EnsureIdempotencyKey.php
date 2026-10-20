@@ -69,7 +69,7 @@ class EnsureIdempotencyKey
      * told to retry; a completed entry replays for a matching body or conflicts
      * for a different one.
      */
-    private function resolveExisting(string $compositeKey, string $requestHash): Response
+    protected function resolveExisting(string $compositeKey, string $requestHash): Response
     {
         $entry = $this->cache->lookup($compositeKey);
 
@@ -87,7 +87,7 @@ class EnsureIdempotencyKey
         return $this->replay($entry);
     }
 
-    private function compositeKey(Request $request, string $key): string
+    protected function compositeKey(Request $request, string $key): string
     {
         return sprintf(
             'idempotency:%s:%s:%s:%s',
@@ -98,7 +98,7 @@ class EnsureIdempotencyKey
         );
     }
 
-    private function requestHash(Request $request): string
+    protected function requestHash(Request $request): string
     {
         return hash('sha256', $request->getQueryString().'|'.$request->getContent());
     }
@@ -106,7 +106,7 @@ class EnsureIdempotencyKey
     /**
      * @return array{request_hash: string, status: int, body: string, content_type: string}
      */
-    private function snapshot(Response $response, string $requestHash): array
+    protected function snapshot(Response $response, string $requestHash): array
     {
         return [
             'request_hash' => $requestHash,
@@ -119,7 +119,7 @@ class EnsureIdempotencyKey
     /**
      * @param  array{request_hash: string, status: int, body: string, content_type: string}  $cached
      */
-    private function replay(array $cached): Response
+    protected function replay(array $cached): Response
     {
         return response($cached['body'], $cached['status'])
             ->header('Content-Type', $cached['content_type'])

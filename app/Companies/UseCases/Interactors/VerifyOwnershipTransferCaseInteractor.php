@@ -44,7 +44,7 @@ class VerifyOwnershipTransferCaseInteractor
         }
     }
 
-    private function executeLocked(VerifyOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
+    protected function executeLocked(VerifyOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
     {
         return DB::transaction(function () use ($command, $admin, $context): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()->lockForUpdate()->findOrFail($command->caseId);
@@ -74,7 +74,7 @@ class VerifyOwnershipTransferCaseInteractor
         });
     }
 
-    private function guardCaseIsOpen(OwnershipTransferCase $case): void
+    protected function guardCaseIsOpen(OwnershipTransferCase $case): void
     {
         if ($case->status !== OwnershipTransferCaseStatus::Open) {
             throw new OwnershipTransferCaseNotOpenException($case->status);
@@ -86,7 +86,7 @@ class VerifyOwnershipTransferCaseInteractor
      * (UC-1-113 error flow 3c) — decided against the case row, never the
      * payload, so a membership elsewhere can never satisfy it.
      */
-    private function guardTargetIsLiveMember(OwnershipTransferCase $case, string $newOwnerUserId): void
+    protected function guardTargetIsLiveMember(OwnershipTransferCase $case, string $newOwnerUserId): void
     {
         $membership = CompanyUser::query()
             ->where('company_id', $case->company_id)
@@ -105,7 +105,7 @@ class VerifyOwnershipTransferCaseInteractor
      * sole(): a missing or ambiguous record rolls the whole verification
      * back rather than stamping an evidence chain with the wrong id.
      */
-    private function verificationEventIdFor(OwnershipTransferCase $case): int
+    protected function verificationEventIdFor(OwnershipTransferCase $case): int
     {
         return LesilyStoredEvent::query()
             ->where('aggregate_uuid', $case->company_id)
@@ -115,7 +115,7 @@ class VerifyOwnershipTransferCaseInteractor
             ->getKey();
     }
 
-    private function recordCaseVerified(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
+    protected function recordCaseVerified(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $case->company_id,

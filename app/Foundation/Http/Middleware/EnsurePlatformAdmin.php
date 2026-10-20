@@ -38,7 +38,7 @@ class EnsurePlatformAdmin
      * Strict membership over the normalized allowlist, so blank segments fail
      * closed.
      */
-    private function isAllowlisted(Request $request): bool
+    protected function isAllowlisted(Request $request): bool
     {
         return in_array($request->user()?->getKey() ?? '', $this->platformAdmins->userIds(), true);
     }

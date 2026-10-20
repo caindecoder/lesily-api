@@ -28,7 +28,7 @@ class ReviewDsarRequestAsAdminInteractor
         });
     }
 
-    private function recordAdminRead(DsarRequestRecord $request, User $admin, RequestOrigin $context): void
+    protected function recordAdminRead(DsarRequestRecord $request, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $request->company_id,

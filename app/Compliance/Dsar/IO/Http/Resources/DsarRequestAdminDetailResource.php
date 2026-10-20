@@ -31,7 +31,7 @@ class DsarRequestAdminDetailResource extends JsonResource
      *
      * @return list<array{event: string, at: ?string}>
      */
-    private function timeline(): array
+    protected function timeline(): array
     {
         $moments = [
             'requested' => $this->resource->requested_at,

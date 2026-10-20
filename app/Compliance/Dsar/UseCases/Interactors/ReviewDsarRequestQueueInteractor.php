@@ -46,7 +46,7 @@ class ReviewDsarRequestQueueInteractor
      *
      * @return Builder<DsarRequestRecord>
      */
-    private function selectedBy(DsarRequestAdminFilters $filters, CarbonImmutable $now): Builder
+    protected function selectedBy(DsarRequestAdminFilters $filters, CarbonImmutable $now): Builder
     {
         return DsarRequestRecord::query()
             ->when($filters->status, fn (Builder $query, string $status) => $query->where('status', $status))
@@ -64,7 +64,7 @@ class ReviewDsarRequestQueueInteractor
      * @param  Builder<DsarRequestRecord>  $selected
      * @return array{open: int, overdue: int, dueInSevenDays: int}
      */
-    private function countInProgress(Builder $selected, CarbonImmutable $now): array
+    protected function countInProgress(Builder $selected, CarbonImmutable $now): array
     {
         $tomorrow = $now->startOfDay()->addDay();
 
@@ -89,7 +89,7 @@ class ReviewDsarRequestQueueInteractor
      * @param  LengthAwarePaginator<int, DsarRequestRecord>  $page
      * @return array<string, mixed>
      */
-    private function queryContextOf(DsarRequestAdminFilters $filters, LengthAwarePaginator $page): array
+    protected function queryContextOf(DsarRequestAdminFilters $filters, LengthAwarePaginator $page): array
     {
         return [
             'filters' => array_filter(
@@ -112,7 +112,7 @@ class ReviewDsarRequestQueueInteractor
      *
      * @param  array<string, mixed>  $queryContext
      */
-    private function recordQueueRead(array $queryContext, User $admin, RequestOrigin $context): void
+    protected function recordQueueRead(array $queryContext, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'event_class' => 'DsarRequestQueueViewed',

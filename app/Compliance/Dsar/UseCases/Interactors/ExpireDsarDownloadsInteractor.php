@@ -44,7 +44,7 @@ class ExpireDsarDownloadsInteractor
      * Whether the request's aggregate recorded the expiry — one a concurrent
      * run already recorded is neither audited nor counted again.
      */
-    private function expire(string $requestId, CarbonInterface $at): bool
+    protected function expire(string $requestId, CarbonInterface $at): bool
     {
         return DB::transaction(function () use ($requestId, $at): bool {
             $request = DsarRequest::retrieve($requestId)->expireDownload($at);

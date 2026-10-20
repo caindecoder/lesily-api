@@ -93,7 +93,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             ->first();
     }
 
-    private function activeMembers(string $companyId, MembershipFilters $filters): Builder
+    protected function activeMembers(string $companyId, MembershipFilters $filters): Builder
     {
         return DB::table('company_user')
             ->join('users', 'users.id', '=', 'company_user.user_id')
@@ -118,7 +118,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             ]);
     }
 
-    private function pendingInvitations(string $companyId, MembershipFilters $filters): Builder
+    protected function pendingInvitations(string $companyId, MembershipFilters $filters): Builder
     {
         return DB::table('invitations')
             ->join('roles', 'roles.id', '=', 'invitations.role_id')
@@ -145,7 +145,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             ]);
     }
 
-    private function applyMemberSearch(Builder $query, ?string $search): void
+    protected function applyMemberSearch(Builder $query, ?string $search): void
     {
         if ($search === null) {
             return;
@@ -158,7 +158,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             ->orWhere('users.email', 'like', "%{$term}%"));
     }
 
-    private function applyInvitationSearch(Builder $query, ?string $search): void
+    protected function applyInvitationSearch(Builder $query, ?string $search): void
     {
         if ($search === null) {
             return;
@@ -173,7 +173,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
      * LIKE metacharacters in user input are inert — a literal `_`/`%` search
      * must not wildcard-over-match (MySQL's default escape is \).
      */
-    private function literalLikeTerm(string $search): string
+    protected function literalLikeTerm(string $search): string
     {
         return addcslashes($search, '%_\\');
     }

@@ -45,7 +45,7 @@ class FlagMissedDsarDeadlinesInteractor
      * Whether the request's aggregate recorded the breach — one a concurrent
      * run already recorded is neither audited nor counted again.
      */
-    private function flag(string $requestId, CarbonInterface $at): bool
+    protected function flag(string $requestId, CarbonInterface $at): bool
     {
         return DB::transaction(function () use ($requestId, $at): bool {
             $request = DsarRequest::retrieve($requestId)->flagSlaBreach($at);

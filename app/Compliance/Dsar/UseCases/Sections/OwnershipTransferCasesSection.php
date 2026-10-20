@@ -35,7 +35,7 @@ class OwnershipTransferCasesSection implements DsarSectionProvider
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function transfers(string $subjectUserId, string $companyId): array
+    protected function transfers(string $subjectUserId, string $companyId): array
     {
         return LesilyStoredEvent::query()
             ->whereForCompany($companyId)
@@ -56,7 +56,7 @@ class OwnershipTransferCasesSection implements DsarSectionProvider
     /**
      * @return array<int, array<string, string|null>>
      */
-    private function cases(string $subjectUserId, string $companyId): array
+    protected function cases(string $subjectUserId, string $companyId): array
     {
         return OwnershipTransferCase::query()
             ->forCompanyId($companyId)

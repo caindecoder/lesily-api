@@ -39,7 +39,7 @@ class RemoveUserFromCompanyInteractor
         }
     }
 
-    private function executeLocked(Company $company, RemoveUserFromCompanyCommand $command, string $membershipId): void
+    protected function executeLocked(Company $company, RemoveUserFromCompanyCommand $command, string $membershipId): void
     {
         DB::transaction(function () use ($company, $command, $membershipId): void {
             $membership = CompanyUser::query()

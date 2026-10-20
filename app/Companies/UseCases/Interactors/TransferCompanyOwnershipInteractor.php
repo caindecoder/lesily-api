@@ -45,7 +45,7 @@ class TransferCompanyOwnershipInteractor
         }
     }
 
-    private function executeLocked(Company $company, TransferCompanyOwnershipCommand $command, string $expectedOwnerUserId): CompanyUser
+    protected function executeLocked(Company $company, TransferCompanyOwnershipCommand $command, string $expectedOwnerUserId): CompanyUser
     {
         return DB::transaction(function () use ($company, $command, $expectedOwnerUserId): CompanyUser {
             $lockedCompany = Company::query()
@@ -81,7 +81,7 @@ class TransferCompanyOwnershipInteractor
      * @param  array<int, string>  $userIds
      * @return array<string, CompanyUser> keyed by user_id
      */
-    private function lockedMemberships(Company $company, array $userIds): array
+    protected function lockedMemberships(Company $company, array $userIds): array
     {
         $memberships = [];
 

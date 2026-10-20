@@ -75,7 +75,7 @@ class SystemNotification extends Notification
     /**
      * @param  User  $notifiable
      */
-    private function mailOptedOut(object $notifiable): bool
+    protected function mailOptedOut(object $notifiable): bool
     {
         return NotificationPreference::query()
             ->where('user_id', $notifiable->getKey())

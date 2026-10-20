@@ -30,7 +30,7 @@ class ReviewOwnershipTransferCaseAsAdminInteractor
         });
     }
 
-    private function recordCaseRead(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
+    protected function recordCaseRead(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $case->company_id,

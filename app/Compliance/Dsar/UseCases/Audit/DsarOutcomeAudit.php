@@ -43,7 +43,7 @@ class DsarOutcomeAudit
     /**
      * @param  class-string  $eventClass
      */
-    private function storedEventIdOf(DsarRequestRecord $request, string $eventClass): int
+    protected function storedEventIdOf(DsarRequestRecord $request, string $eventClass): int
     {
         return LesilyStoredEvent::query()
             ->where('aggregate_uuid', $request->getKey())

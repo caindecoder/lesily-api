@@ -54,7 +54,7 @@ class DsarNotificationReactor extends Reactor implements ShouldQueue
         }
     }
 
-    private function deadlineMissedAlert(DsarRequestRecord $request): SystemNotification
+    protected function deadlineMissedAlert(DsarRequestRecord $request): SystemNotification
     {
         $company = Company::query()->findOrFail($request->company_id);
 
@@ -68,7 +68,7 @@ class DsarNotificationReactor extends Reactor implements ShouldQueue
      * One notice each to the request's subject and to whoever asked for it —
      * one in all when they are the same person.
      */
-    private function notifyAbout(ShouldBeStored $event, NotificationType $type): void
+    protected function notifyAbout(ShouldBeStored $event, NotificationType $type): void
     {
         $request = DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid());
         $company = Company::query()->findOrFail($request->company_id);

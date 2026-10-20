@@ -77,7 +77,7 @@ class InviteUserInteractor
         return $invitation;
     }
 
-    private function removedMembershipId(Company $company, ?string $userId): ?string
+    protected function removedMembershipId(Company $company, ?string $userId): ?string
     {
         if ($userId === null) {
             return null;

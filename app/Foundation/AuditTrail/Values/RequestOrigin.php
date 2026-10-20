@@ -32,7 +32,7 @@ readonly class RequestOrigin
         return $this->bounded($this->requestId);
     }
 
-    private function bounded(?string $value): ?string
+    protected function bounded(?string $value): ?string
     {
         return $value === null ? null : Str::limit($value, 255, '');
     }

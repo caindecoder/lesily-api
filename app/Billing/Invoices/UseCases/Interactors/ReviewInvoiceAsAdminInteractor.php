@@ -45,7 +45,7 @@ class ReviewInvoiceAsAdminInteractor
      * Immutable by convention — no update/delete path exists (UC-1-066
      * enforces the invariant mechanically in its own slice).
      */
-    private function recordAdminReview(Invoice $invoice, User $admin, RequestOrigin $context): void
+    protected function recordAdminReview(Invoice $invoice, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $invoice->company_id,

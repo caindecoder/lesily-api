@@ -88,7 +88,7 @@ class Company extends AggregateRoot
         return $this;
     }
 
-    private function hasSettingsChanges(UpdateCompanyCommand $command): bool
+    protected function hasSettingsChanges(UpdateCompanyCommand $command): bool
     {
         return $command->timezone !== null
             || $command->fiscalYearStartMonth !== null

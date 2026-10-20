@@ -103,7 +103,7 @@ class InvoiceProjector extends Projector
     /**
      * @param  array<string, mixed>  $item
      */
-    private function insertLineItem(InvoiceCreated $event, array $item): void
+    protected function insertLineItem(InvoiceCreated $event, array $item): void
     {
         InvoiceLineItem::query()->create([
             'company_id' => $event->companyId,
