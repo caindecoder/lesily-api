@@ -7,10 +7,12 @@ use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Lang;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Entities\NotificationPreference;
@@ -137,18 +139,20 @@ class ExportDsarReportTest extends DsarTestCase
     /**
      * @return array<string, array{string, string}>
      */
-    public static function provideAuditCodes(): array
+    public static function provideLoggedCodes(): array
     {
         return [
             ...collect(AuditAction::cases())->mapWithKeys(fn (AuditAction $action): array => ["action {$action->value}" => ['action', $action->value]])->all(),
             ...collect(AuditSubjectType::cases())->mapWithKeys(fn (AuditSubjectType $type): array => ["subject type {$type->value}" => ['subject_type', $type->value]])->all(),
+            ...collect(AccessEvent::cases())->mapWithKeys(fn (AccessEvent $event): array => ["access event {$event->value}" => ['access_event', $event->value]])->all(),
+            ...collect(AccessEventReason::cases())->mapWithKeys(fn (AccessEventReason $reason): array => ["access reason {$reason->value}" => ['access_reason', $reason->value]])->all(),
         ];
     }
 
-    #[Test, DataProvider('provideAuditCodes')]
-    public function when_any_audit_code_is_exported_then_the_report_has_words_for_it(string $field, string $code): void
+    #[Test, DataProvider('provideLoggedCodes')]
+    public function when_any_logged_code_is_exported_then_the_report_has_words_for_it(string $field, string $code): void
     {
-        // Given an export whose section holds the audit code
+        // Given an export whose section holds the logged code
         $request = $this->aSubmittedRequest($this->company, $this->member);
         $this->withSections($this->aSectionHolding('profile', [$field => $code]));
 

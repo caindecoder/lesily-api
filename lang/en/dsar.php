@@ -187,5 +187,26 @@ return [
         'channel' => [
             'mail' => 'Email',
         ],
+        'access_event' => [
+            'login_succeeded' => 'Signed in',
+            'login_challenged' => 'Asked for a two-step sign-in code',
+            'login_failed' => 'Sign-in failed',
+            'reauth_failed' => 'Password check failed',
+            'logged_out' => 'Signed out',
+            'other_sessions_revoked' => 'Signed out of all other devices',
+            'session_revoked' => 'Signed out of another device',
+            'unauthenticated' => 'Refused: not signed in',
+            'forbidden' => 'Refused: not allowed',
+            'not_found' => 'Refused: not found',
+            'rate_limited' => 'Refused: too many requests',
+        ],
+        'access_reason' => [
+            'wrong_password' => 'Wrong password',
+            'unknown_account' => 'No account with that email',
+            'device_limit' => 'Too many devices signed in',
+            'wrong_two_factor_code' => 'Wrong two-step code',
+            'challenge_expired' => 'The two-step sign-in expired',
+            'recovery_code' => 'Used a recovery code',
+        ],
     ],
 ];
