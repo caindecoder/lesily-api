@@ -24,10 +24,7 @@ class RecordAccessOutcomeOnEveryApiRouteTest extends FoundationTestCase
         $walked = $this->walkApiRoutes();
 
         // Then each exempted route is among them, without the hook
-        $this->assertSame(
-            array_fill_keys(self::EXEMPT_ROUTES, false),
-            array_intersect_key($walked, array_flip(self::EXEMPT_ROUTES)),
-        );
+        $this->assertExemptionsExistWithoutTheHook($walked);
     }
 
     #[Test]
@@ -61,6 +58,16 @@ class RecordAccessOutcomeOnEveryApiRouteTest extends FoundationTestCase
     protected function identityOf(Route $route): string
     {
         return implode('|', $route->methods()).' '.ltrim($route->getDomain().'/'.$route->uri(), '/');
+    }
+
+    protected function assertExemptionsExistWithoutTheHook(array $walked): void
+    {
+        $expected = array_fill_keys(self::EXEMPT_ROUTES, false);
+        $exempted = array_intersect_key($walked, $expected);
+        ksort($expected);
+        ksort($exempted);
+
+        $this->assertSame($expected, $exempted);
     }
 
     protected function assertEveryWalkedRouteRecordsItsOutcome(array $walked): void
