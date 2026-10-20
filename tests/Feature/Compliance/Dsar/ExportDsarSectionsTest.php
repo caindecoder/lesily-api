@@ -65,7 +65,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_member_belongs_to_two_companies_then_only_this_companys_data_is_exported(): void
     {
-        // Given a member who joined another company first, under another role, with consent, an invitation, a transfer, a case, a notice and an audited submission in each — beside a co-worker's consent here
+        // Given a member who joined another company first, under another role, with consent, an invitation, a transfer, a case, a notice, a refused lookup and an audited submission in each — beside a co-worker's consent here
         $member = User::factory()->create();
         $other = Company::factory()->create();
         $other->users()->attach($member, ['role_id' => $this->seededRole('admin')->getKey()]);
@@ -80,6 +80,8 @@ class ExportDsarSectionsTest extends DsarTestCase
         OwnershipTransferCase::factory()->forCompany($other)->proposedOwner($member)->closedRejected()->create();
         $this->aNotificationFor($member, NotificationType::TeamWelcome, $this->company);
         $this->aNotificationFor($member, NotificationType::OwnershipReceived, $other);
+        $this->lookUpAMissingRequest($member, $this->company);
+        $this->lookUpAMissingRequest($member, $other);
         $this->aConsentRecordedBy($this->aCompanyMember($this->company), $this->company);
         $this->submitDsarRequest($member, $other)->assertCreated();
         $this->idempotencyKey = (string) Str::uuid();
@@ -93,12 +95,14 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_co_workers_have_their_own_sign_ins_invitations_transfers_and_notices_then_none_of_theirs_is_exported(): void
+    public function when_co_workers_have_their_own_sign_ins_invitations_transfers_notices_and_access_records_then_none_of_theirs_is_exported(): void
     {
-        // Given a member beside a co-worker who signed in, was invited, is named on a case, was welcomed here, was told their password changed and switched an email off, and a transfer between two others
+        // Given a member beside a co-worker who signed in, was refused a lookup here, was invited, is named on a case, was welcomed here, was told their password changed and switched an email off, and a transfer between two others
         $member = $this->aCompanyMember($this->company);
         $coWorker = $this->aCompanyMember($this->company);
         $this->aSignInFor($coWorker, 'iPhone', now()->addDays(90));
+        $this->signInThroughTheApi($coWorker);
+        $this->lookUpAMissingRequest($coWorker, $this->company);
         $this->anInvitationTo($coWorker, $this->company);
         OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($coWorker)->create();
         $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $coWorker);
@@ -110,11 +114,11 @@ class ExportDsarSectionsTest extends DsarTestCase
         // When the member's export is built
         $this->runTheExportFor($request);
 
-        // Then none of the others' sign-ins, invitations, transfers, cases, notices or preferences is theirs
+        // Then none of the others' sign-ins, invitations, transfers, cases, notices, preferences or access records is theirs
         $exported = $this->exportedData($request);
         $this->assertSame(
-            [[], [], ['transfers' => [], 'cases' => []], ['notifications' => [], 'preferences' => []]],
-            [$exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers'], $exported['notifications']],
+            [[], [], ['transfers' => [], 'cases' => []], ['notifications' => [], 'preferences' => []], []],
+            [$exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers'], $exported['notifications'], $exported['access_log']],
         );
     }
 
@@ -172,7 +176,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_a_section_has_no_entries_then_it_is_exported_empty(): void
     {
-        // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited, took part in no transfer, received no notice and switched none off
+        // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited, took part in no transfer, received no notice, switched none off and was never refused
         $member = $this->aCompanyMember($this->company);
         $request = $this->aSubmittedRequest($this->company, $member);
 
@@ -182,8 +186,8 @@ class ExportDsarSectionsTest extends DsarTestCase
         // Then those sections are present and empty
         $exported = $this->exportedData($request);
         $this->assertSame(
-            [[], [], [], [], ['transfers' => [], 'cases' => []], ['notifications' => [], 'preferences' => []]],
-            [$exported['consent_records'], $exported['audit_trail'], $exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers'], $exported['notifications']],
+            [[], [], [], [], ['transfers' => [], 'cases' => []], ['notifications' => [], 'preferences' => []], []],
+            [$exported['consent_records'], $exported['audit_trail'], $exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers'], $exported['notifications'], $exported['access_log']],
         );
     }
 
@@ -513,6 +517,30 @@ class ExportDsarSectionsTest extends DsarTestCase
                 ['notification_type' => 'team_welcome', 'channel' => 'mail', 'enabled' => false, 'changed_at' => now()->toISOString()],
             ],
         ], $this->exportedData($request)['notifications']);
+    }
+
+    #[Test]
+    public function when_the_export_is_built_then_the_access_section_holds_their_sign_ins_and_refusals_oldest_first(): void
+    {
+        // Given a member refused twice here a minute apart, and — recorded after it — who mistyped their password an hour before, then signed in
+        $member = $this->aCompanyMember($this->company);
+        $this->lookUpAMissingRequest($member, $this->company);
+        $this->travel(1)->minutes();
+        $this->lookUpAMissingRequest($member, $this->company);
+        $this->travel(-61)->minutes();
+        $this->signInWithAWrongPassword($member);
+        $this->signInThroughTheApi($member);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the failed and the successful sign-in and the counted refusal are exported, oldest first
+        $this->assertSame([
+            ['access_event' => 'login_failed', 'access_reason' => 'wrong_password', 'http_method' => 'POST', 'route' => 'api/v1/auth/login', 'ip_address' => '127.0.0.1', 'user_agent' => 'Symfony', 'occurrences' => 1, 'first_seen_at' => now()->toISOString(), 'last_seen_at' => now()->toISOString()],
+            ['access_event' => 'login_succeeded', 'access_reason' => null, 'http_method' => 'POST', 'route' => 'api/v1/auth/login', 'ip_address' => '127.0.0.1', 'user_agent' => 'Symfony', 'occurrences' => 1, 'first_seen_at' => now()->toISOString(), 'last_seen_at' => now()->toISOString()],
+            ['access_event' => 'not_found', 'access_reason' => null, 'http_method' => 'GET', 'route' => 'api/v1/dsar-requests/{requestId}', 'ip_address' => '127.0.0.1', 'user_agent' => 'Symfony', 'occurrences' => 2, 'first_seen_at' => now()->addHour()->toISOString(), 'last_seen_at' => now()->addMinutes(61)->toISOString()],
+        ], $this->exportedData($request)['access_log']);
     }
 
     /**

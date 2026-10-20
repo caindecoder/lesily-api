@@ -1348,6 +1348,32 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * $user signs in with their password — the access log records it.
+     */
+    protected function signInThroughTheApi(User $user): void
+    {
+        $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => 'password']);
+    }
+
+    /**
+     * $user tries to sign in with a wrong password — the access log records
+     * the failure and its reason.
+     */
+    protected function signInWithAWrongPassword(User $user): void
+    {
+        $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => 'not-their-password']);
+    }
+
+    /**
+     * $member looks up a DSAR request that does not exist in $company — the
+     * access log records the refusal.
+     */
+    protected function lookUpAMissingRequest(User $member, Company $company): void
+    {
+        $this->viewDsarRequest($member, $company, (string) Str::uuid7());
+    }
+
+    /**
      * Delivers the notices $eventClass leaves behind: none was sent inline,
      * then the captured reactor runs as a worker would. The caller arms
      * Notification::fake() before acting, so an inline send is seen.
@@ -1702,9 +1728,10 @@ abstract class DsarTestCase extends TestCase
     /**
      * Every section of $exported belongs to $company alone: $member's
      * membership of it, the consent they gave in it, the audit entries they
-     * acted in there, and — of its invitations, transfers, cases and notices —
-     * only the pending invitation, the transfer that made them owner, the open
-     * case naming them and the notice about $company.
+     * acted in there, and — of its invitations, transfers, cases, notices and
+     * refusals — only the pending invitation, the transfer that made them
+     * owner, the open case naming them, the notice about $company and the
+     * lookup refused there.
      *
      * @param  array<string, mixed>  $exported
      */
@@ -1720,12 +1747,13 @@ abstract class DsarTestCase extends TestCase
             array_column($exported['audit_trail'], 'subject_id'),
         );
         $this->assertSame(
-            [[1], ['new_owner'], ['open'], [$company->name]],
+            [[1], ['new_owner'], ['open'], [$company->name], ['not_found']],
             [
                 array_map(fn (array $invitation): int => count($invitation['timeline']), $exported['invitations']),
                 array_column($exported['ownership_transfers']['transfers'], 'role'),
                 array_column($exported['ownership_transfers']['cases'], 'status'),
                 array_column($exported['notifications']['notifications'], 'company_name'),
+                array_column($exported['access_log'], 'access_event'),
             ],
         );
     }

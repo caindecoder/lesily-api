@@ -25,6 +25,7 @@ return [
         'invitations' => ['title' => 'Invitations'],
         'ownership_transfers' => ['title' => 'Ownership transfers'],
         'notifications' => ['title' => 'Notifications and preferences'],
+        'access_log' => ['title' => 'Account access history'],
     ],
     'fields' => [
         'profile' => [
@@ -100,6 +101,17 @@ return [
             'enabled' => 'Turned on',
             'changed_at' => 'Changed',
         ],
+        'access_log' => [
+            'access_event' => 'What happened',
+            'access_reason' => 'Why',
+            'http_method' => 'Request type',
+            'route' => 'Address requested',
+            'ip_address' => 'Network address (IP)',
+            'user_agent' => 'Browser or app',
+            'occurrences' => 'Times',
+            'first_seen_at' => 'First',
+            'last_seen_at' => 'Last',
+        ],
     ],
     'codes' => [
         'action' => [
@@ -174,6 +186,27 @@ return [
         ],
         'channel' => [
             'mail' => 'Email',
+        ],
+        'access_event' => [
+            'login_succeeded' => 'Signed in',
+            'login_challenged' => 'Asked for a two-step sign-in code',
+            'login_failed' => 'Sign-in failed',
+            'reauth_failed' => 'Password check failed',
+            'logged_out' => 'Signed out',
+            'other_sessions_revoked' => 'Signed out of all other devices',
+            'session_revoked' => 'Signed out of another device',
+            'unauthenticated' => 'Refused: not signed in',
+            'forbidden' => 'Refused: not allowed',
+            'not_found' => 'Refused: not found',
+            'rate_limited' => 'Refused: too many requests',
+        ],
+        'access_reason' => [
+            'wrong_password' => 'Wrong password',
+            'unknown_account' => 'No account with that email',
+            'device_limit' => 'Too many devices signed in',
+            'wrong_two_factor_code' => 'Wrong two-step code',
+            'challenge_expired' => 'The two-step sign-in expired',
+            'recovery_code' => 'Used a recovery code',
         ],
     ],
 ];

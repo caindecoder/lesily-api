@@ -7,10 +7,12 @@ use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Lang;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
+use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Entities\NotificationPreference;
@@ -73,7 +75,7 @@ class ExportDsarReportTest extends DsarTestCase
     #[Test]
     public function when_a_section_has_no_entries_then_the_report_says_none_recorded(): void
     {
-        // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited, took part in no transfer, received no notice and switched none off
+        // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited, took part in no transfer, received no notice, switched none off and was never refused
         $request = $this->aSubmittedRequest($this->company, $this->member);
 
         // When their export is built
@@ -88,8 +90,9 @@ class ExportDsarReportTest extends DsarTestCase
             'Invitations', 'None recorded',
             'Ownership transfers', 'Transfers', 'None recorded', 'Cases', 'None recorded',
             'Notifications and preferences', 'Notifications', 'None recorded', 'Preferences', 'None recorded',
+            'Account access history', 'None recorded',
         ]);
-        $this->assertSame(8, substr_count($this->reportRenderer->html, 'None recorded'));
+        $this->assertSame(9, substr_count($this->reportRenderer->html, 'None recorded'));
     }
 
     /**
@@ -136,18 +139,20 @@ class ExportDsarReportTest extends DsarTestCase
     /**
      * @return array<string, array{string, string}>
      */
-    public static function provideAuditCodes(): array
+    public static function provideLoggedCodes(): array
     {
         return [
             ...collect(AuditAction::cases())->mapWithKeys(fn (AuditAction $action): array => ["action {$action->value}" => ['action', $action->value]])->all(),
             ...collect(AuditSubjectType::cases())->mapWithKeys(fn (AuditSubjectType $type): array => ["subject type {$type->value}" => ['subject_type', $type->value]])->all(),
+            ...collect(AccessEvent::cases())->mapWithKeys(fn (AccessEvent $event): array => ["access event {$event->value}" => ['access_event', $event->value]])->all(),
+            ...collect(AccessEventReason::cases())->mapWithKeys(fn (AccessEventReason $reason): array => ["access reason {$reason->value}" => ['access_reason', $reason->value]])->all(),
         ];
     }
 
-    #[Test, DataProvider('provideAuditCodes')]
-    public function when_any_audit_code_is_exported_then_the_report_has_words_for_it(string $field, string $code): void
+    #[Test, DataProvider('provideLoggedCodes')]
+    public function when_any_logged_code_is_exported_then_the_report_has_words_for_it(string $field, string $code): void
     {
-        // Given an export whose section holds the audit code
+        // Given an export whose section holds the logged code
         $request = $this->aSubmittedRequest($this->company, $this->member);
         $this->withSections($this->aSectionHolding('profile', [$field => $code]));
 
@@ -263,7 +268,7 @@ class ExportDsarReportTest extends DsarTestCase
         $this->runTheExportFor($request);
 
         // Then the contents list names every section, and each follows under its title, in the same order
-        $titles = ['Your profile', 'Your membership', 'Consent records', 'Actions you took', 'Sign-ins', 'Invitations', 'Ownership transfers', 'Notifications and preferences'];
+        $titles = ['Your profile', 'Your membership', 'Consent records', 'Actions you took', 'Sign-ins', 'Invitations', 'Ownership transfers', 'Notifications and preferences', 'Account access history'];
         $this->assertReportShowsInOrder(['Contents', ...$titles, ...$titles]);
     }
 
@@ -296,7 +301,8 @@ class ExportDsarReportTest extends DsarTestCase
     /**
      * A member who joined through an invitation, consented, signed in, was
      * handed the company and named on a rejected case, received a notice,
-     * switched an email off — and then submitted their request themselves.
+     * switched an email off, signed in with their password, was refused a
+     * lookup — and then submitted their request themselves.
      */
     protected function aRequestFromAMemberWithAnEntryInEverySection(): DsarRequestRecord
     {
@@ -304,6 +310,8 @@ class ExportDsarReportTest extends DsarTestCase
         $this->acceptTheInvitation($this->anInvitationTo($member, $this->company), $member);
         $this->aConsentRecordedBy($member, $this->company);
         $this->aSignInFor($member, 'iPhone', now()->addDays(90));
+        $this->signInThroughTheApi($member);
+        $this->lookUpAMissingRequest($member, $this->company);
         $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $member);
         OwnershipTransferCase::factory()->forCompany($this->company->refresh())->proposedOwner($member)->closedRejected()->create();
         $this->aNotificationFor($member, NotificationType::TeamWelcome, $this->company);

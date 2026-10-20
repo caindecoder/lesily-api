@@ -12,6 +12,7 @@ use App\Compliance\Dsar\UseCases\Sections\ProfileSection;
 use App\Compliance\Dsar\UseCases\Sections\SignInsSection;
 use App\Compliance\Dsar\IO\Pdf\ChromiumDsarReportRenderer;
 use App\Compliance\Dsar\IO\Console\FlagMissedDsarDeadlines;
+use App\Compliance\Dsar\UseCases\Sections\AccessLogSection;
 use App\Compliance\Dsar\UseCases\Sections\AuditTrailSection;
 use App\Compliance\Dsar\UseCases\Sections\MembershipSection;
 use App\Compliance\Dsar\UseCases\Sections\InvitationsSection;
@@ -43,6 +44,7 @@ class ComplianceDsarServiceProvider extends ServiceProvider
             $app->make(InvitationsSection::class),
             $app->make(OwnershipTransferCasesSection::class),
             $app->make(NotificationsSection::class),
+            $app->make(AccessLogSection::class),
         ]));
     }
 
