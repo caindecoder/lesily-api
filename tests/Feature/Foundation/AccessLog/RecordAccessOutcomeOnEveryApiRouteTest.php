@@ -49,13 +49,18 @@ class RecordAccessOutcomeOnEveryApiRouteTest extends FoundationTestCase
         return collect($router->getRoutes()->getRoutes())
             ->filter(fn (Route $route) => str_starts_with($route->uri().'/', 'api/'))
             ->mapWithKeys(fn (Route $route) => [
-                implode('|', $route->methods()).' '.$route->uri() => in_array(
+                $this->identityOf($route) => in_array(
                     RecordAccessOutcome::class,
                     $router->gatherRouteMiddleware($route),
                     true,
                 ),
             ])
             ->all();
+    }
+
+    protected function identityOf(Route $route): string
+    {
+        return implode('|', $route->methods()).' '.ltrim($route->getDomain().'/'.$route->uri(), '/');
     }
 
     protected function assertEveryWalkedRouteRecordsItsOutcome(array $walked): void
