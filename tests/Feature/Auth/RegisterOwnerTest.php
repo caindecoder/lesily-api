@@ -24,7 +24,7 @@ class RegisterOwnerTest extends AuthTestCase
 
     private const EXISTING_BR = 'PV-99999999';
 
-    private const EXISTING_EPF = 'A-9999999';
+    private const EXISTING_EPF = 'A-999999';
 
     protected function setUp(): void
     {
@@ -77,6 +77,9 @@ class RegisterOwnerTest extends AuthTestCase
             'missing BR number' => [['brNumber' => ''], 'brNumber', 'The BR (Business Registration) number is required.'],
             'over-long BR number' => [['brNumber' => str_repeat('b', 256)], 'brNumber', 'The br number field must not be greater than 255 characters.'],
             'missing EPF number' => [['epfNumber' => ''], 'epfNumber', 'The EPF employer number is required.'],
+            'EPF with two letters' => [['epfNumber' => 'AB/12345'], 'epfNumber', 'Invalid EPF number format.'],
+            'EPF with seven digits' => [['epfNumber' => 'A/1234567'], 'epfNumber', 'Invalid EPF number format.'],
+            'EPF with no letter' => [['epfNumber' => '12345'], 'epfNumber', 'Invalid EPF number format.'],
             'over-long EPF number' => [['epfNumber' => str_repeat('e', 256)], 'epfNumber', 'The epf number field must not be greater than 255 characters.'],
             'missing country' => [['country' => ''], 'country', 'The country field is required.'],
             'country beyond two characters' => [['country' => 'LKA'], 'country', 'The country field must be 2 characters.'],
@@ -295,6 +298,11 @@ class RegisterOwnerTest extends AuthTestCase
     public static function acceptedValueProvider(): array
     {
         return [
+            'EPF as on the registration form' => [['epfNumber' => 'A/099999']],
+            'EPF with a space' => [['epfNumber' => 'A 85000']],
+            'EPF with a hyphen' => [['epfNumber' => 'A-12345']],
+            'EPF run together' => [['epfNumber' => 'A12345']],
+            'EPF in lower case' => [['epfNumber' => 'a/12345']],
             'phone in local form' => [['emergencyContactPhone' => '0712345678']],
             'phone with the country code' => [['emergencyContactPhone' => '+94712345678']],
             'phone with the country code and spaces' => [['emergencyContactPhone' => '+94 71 234 5678']],

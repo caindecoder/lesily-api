@@ -2,6 +2,9 @@
 
 namespace App\Companies\UseCases\Commands;
 
+use App\Companies\UseCases\Rules\EpfNumber;
+use Illuminate\Contracts\Validation\ValidationRule;
+
 /**
  * Rule-builders and messages for the company-registration fields, applied by
  * RegisterOwnerCommand at the HTTP seam. BR/EPF global uniqueness is a 409
@@ -26,11 +29,11 @@ trait CompanyRegistrationRules
     }
 
     /**
-     * @return array<int, string>
+     * @return array<int, string|ValidationRule>
      */
     protected static function epfNumberRules(): array
     {
-        return ['required', 'string', 'max:255'];
+        return ['required', 'string', 'max:255', new EpfNumber];
     }
 
     /**
