@@ -51,12 +51,25 @@ class Company extends Model
     ];
 
     /**
+     * The plan the company is held to: the stored plan, or Enterprise while it is on its
+     * trial with no plan stored — the trial unlocks every plan feature.
+     */
+    public function planInForce(): ?BillingPlan
+    {
+        if ($this->current_billing_plan === null && $this->status === CompanyStatus::Trial) {
+            return BillingPlan::Enterprise;
+        }
+
+        return $this->current_billing_plan;
+    }
+
+    /**
      * The billing gate: a feature is available when the plan grants it, or when an
      * active add-on does (plan checked first, then add-ons).
      */
     public function canUseFeature(Feature $feature): bool
     {
-        $planFeatures = $this->current_billing_plan?->features() ?? [];
+        $planFeatures = $this->planInForce()?->features() ?? [];
 
         if (in_array($feature, $planFeatures, strict: true)) {
             return true;

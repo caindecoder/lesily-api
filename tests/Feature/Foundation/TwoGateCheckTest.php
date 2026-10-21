@@ -161,6 +161,33 @@ class TwoGateCheckTest extends FoundationTestCase
     }
 
     #[Test]
+    #[DataProvider('provideTrialGrantedFeatures')]
+    public function when_a_company_is_on_trial_then_every_plan_feature_is_granted(string $route): void
+    {
+        // Given a company on its trial, no plan chosen yet
+        $company = Company::factory()->onTrial()->create();
+        $user = User::factory()->create();
+        $this->joinCompany($company, $user);
+
+        // When it asks for a plan-gated feature
+        $response = $this->attemptGatedAction($route, $user, $company);
+
+        // Then the trial grants it, as the top plan would
+        $this->assertGatedActionProceeded($response);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideTrialGrantedFeatures(): array
+    {
+        return [
+            'the starter-tier feature' => ['two-gate/starter-feature'],
+            'the pro-tier feature' => ['two-gate/pro-feature'],
+        ];
+    }
+
+    #[Test]
     public function when_an_addon_grants_a_feature_the_plan_excludes_then_access_is_allowed(): void
     {
         // Given (Free plan lacks TemplateEngine, but the Template Engine add-on grants it)
