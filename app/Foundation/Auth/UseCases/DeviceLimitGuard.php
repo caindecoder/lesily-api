@@ -12,7 +12,8 @@ use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
 /**
  * Enforces the Pro/Enterprise concurrent-device limit before a session is minted
  * (UC-1-002 alt-5a). The cap is per-account: it applies when the user is a member of at
- * least one company on a device-capped plan, and counts only ACTIVE sessions (the shared
+ * least one company whose plan in force is device-capped (a trial counts as the top plan),
+ * and counts only ACTIVE sessions (the shared
  * ActiveSessions definition — the same set the session list shows, so the list and the
  * cap can never disagree). A capped account at its limit is rejected with
  * DeviceLimitReachedException (403) before SessionIssuer runs, so the existing sessions
@@ -41,7 +42,7 @@ class DeviceLimitGuard
     protected function onDeviceCappedPlan(User $user): bool
     {
         return $user->companies->contains(
-            fn (Company $company): bool => $company->current_billing_plan?->enforcesDeviceLimit() ?? false
+            fn (Company $company): bool => $company->planInForce()?->enforcesDeviceLimit() ?? false
         );
     }
 }

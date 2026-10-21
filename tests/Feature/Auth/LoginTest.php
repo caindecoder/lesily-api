@@ -138,6 +138,28 @@ class LoginTest extends AuthTestCase
         $this->assertNull($user->refresh()->last_logged_at, 'A capped login must not stamp last_logged_at.');
     }
 
+    // Sad — a company on its trial acts as the top plan, so its members meet the device cap too.
+    #[Test]
+    public function when_a_trial_company_member_at_the_limit_logs_in_then_it_is_rejected(): void
+    {
+        // Given a member of a company on its trial, holding three active sessions
+        $user = $this->aRegisteredUser();
+        $this->memberOfTrialCompany($user);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->aSessionFor($user, 'tablet');
+
+        // When they log in from a fourth device
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        // Then it is rejected, no fourth session is minted, and "last seen" is not bumped
+        $this->assertDeviceLimitRejected($response, $user, 3);
+        $this->assertNull($user->refresh()->last_logged_at, 'A capped login must not stamp last_logged_at.');
+    }
+
     /**
      * The two device-capped tiers — Pro and Enterprise both enforce the 3-device
      * concurrent limit (S14); Free and Starter are uncapped.

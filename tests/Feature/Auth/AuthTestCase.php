@@ -234,6 +234,12 @@ abstract class AuthTestCase extends TestCase
             ->users()->attach($user, ['role_id' => Role::factory()->create()->getKey()]);
     }
 
+    protected function memberOfTrialCompany(User $user): void
+    {
+        Company::factory()->onTrial()->create()
+            ->users()->attach($user, ['role_id' => Role::factory()->create()->getKey()]);
+    }
+
     protected function memberOfExpiredTrialCompany(User $user): void
     {
         Company::factory()->trialExpired()->create()
