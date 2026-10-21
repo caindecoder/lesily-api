@@ -6,8 +6,8 @@ use DomainException;
 
 class UnsupportedCountryException extends DomainException
 {
-    public static function forCountry(string $country): self
+    public static function notSupported(): self
     {
-        return new self("No country defaults are seeded for [{$country}].");
+        return new self('Selected country is not supported.');
     }
 }

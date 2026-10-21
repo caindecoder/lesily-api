@@ -104,7 +104,7 @@ class RegisterOwnerTest extends AuthTestCase
     // and nothing new is persisted.
     #[Test]
     #[DataProvider('duplicateFieldProvider')]
-    public function when_a_registration_field_is_already_registered_then_it_conflicts(array $override, string $expectedCode): void
+    public function when_a_registration_field_is_already_registered_then_it_conflicts(array $override, string $expectedCode, string $expectedMessage): void
     {
         // Given an account already holds these identifiers
         $this->givenAnExistingOwnerAccount();
@@ -115,19 +115,19 @@ class RegisterOwnerTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), ...$override]);
 
         // Then the registration conflicts, creates nothing new and welcomes nobody
-        $this->assertConflict($response, $expectedCode);
+        $this->assertConflict($response, $expectedCode, $expectedMessage);
         $this->assertNothingCreatedOrSent($usersBefore, $companiesBefore);
     }
 
     /**
-     * @return array<string, array{0: array<string, mixed>, 1: string}>
+     * @return array<string, array{0: array<string, mixed>, 1: string, 2: string}>
      */
     public static function duplicateFieldProvider(): array
     {
         return [
-            'email' => [['email' => self::EXISTING_EMAIL], 'EMAIL_REGISTERED'],
-            'business registration number' => [['brNumber' => self::EXISTING_BR], 'BR_NUMBER_REGISTERED'],
-            'employer provident fund number' => [['epfNumber' => self::EXISTING_EPF], 'EPF_NUMBER_REGISTERED'],
+            'email' => [['email' => self::EXISTING_EMAIL], 'EMAIL_REGISTERED', 'This email is already registered. Try logging in.'],
+            'business registration number' => [['brNumber' => self::EXISTING_BR], 'BR_NUMBER_REGISTERED', 'This BR number is already registered.'],
+            'employer provident fund number' => [['epfNumber' => self::EXISTING_EPF], 'EPF_NUMBER_REGISTERED', 'This EPF number is already registered.'],
         ];
     }
 
@@ -135,7 +135,7 @@ class RegisterOwnerTest extends AuthTestCase
     // guard reports the first in its own order (email, then BR, then EPF).
     #[Test]
     #[DataProvider('collidingFieldsProvider')]
-    public function when_several_registration_fields_are_already_registered_then_the_first_conflict_in_guard_order_is_reported(array $override, string $expectedCode): void
+    public function when_several_registration_fields_are_already_registered_then_the_first_conflict_in_guard_order_is_reported(array $override, string $expectedCode, string $expectedMessage): void
     {
         // Given an account already holds these identifiers
         $this->givenAnExistingOwnerAccount();
@@ -146,18 +146,18 @@ class RegisterOwnerTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), ...$override]);
 
         // Then the first conflict in guard order is reported and nothing is created or sent
-        $this->assertConflict($response, $expectedCode);
+        $this->assertConflict($response, $expectedCode, $expectedMessage);
         $this->assertNothingCreatedOrSent($usersBefore, $companiesBefore);
     }
 
     /**
-     * @return array<string, array{0: array<string, mixed>, 1: string}>
+     * @return array<string, array{0: array<string, mixed>, 1: string, 2: string}>
      */
     public static function collidingFieldsProvider(): array
     {
         return [
-            'email and BR both taken' => [['email' => self::EXISTING_EMAIL, 'brNumber' => self::EXISTING_BR], 'EMAIL_REGISTERED'],
-            'BR and EPF both taken' => [['brNumber' => self::EXISTING_BR, 'epfNumber' => self::EXISTING_EPF], 'BR_NUMBER_REGISTERED'],
+            'email and BR both taken' => [['email' => self::EXISTING_EMAIL, 'brNumber' => self::EXISTING_BR], 'EMAIL_REGISTERED', 'This email is already registered. Try logging in.'],
+            'BR and EPF both taken' => [['brNumber' => self::EXISTING_BR, 'epfNumber' => self::EXISTING_EPF], 'BR_NUMBER_REGISTERED', 'This BR number is already registered.'],
         ];
     }
 
@@ -183,7 +183,7 @@ class RegisterOwnerTest extends AuthTestCase
     // That backstop must surface the same field-specific 409, never a 500.
     #[Test]
     #[DataProvider('duplicateFieldProvider')]
-    public function when_a_race_slips_past_the_uniqueness_guard_then_the_database_backstop_still_conflicts(array $override, string $expectedCode): void
+    public function when_a_race_slips_past_the_uniqueness_guard_then_the_database_backstop_still_conflicts(array $override, string $expectedCode, string $expectedMessage): void
     {
         // Given an account already holds these identifiers, and the pre-tx guard is
         // bypassed to reproduce the concurrent race that slips past check-then-act
@@ -196,7 +196,7 @@ class RegisterOwnerTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), ...$override]);
 
         // Then the database backstop conflicts identically and creates nothing new
-        $this->assertConflict($response, $expectedCode);
+        $this->assertConflict($response, $expectedCode, $expectedMessage);
         $this->assertNoNewAccounts($usersBefore, $companiesBefore);
     }
 
@@ -246,6 +246,7 @@ class RegisterOwnerTest extends AuthTestCase
         // Then the request is rejected and the half-built account is rolled back
         $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'UNSUPPORTED_COUNTRY');
+        $response->assertJsonPath('message', 'Selected country is not supported.');
         $this->assertNothingPersisted();
     }
 
@@ -327,6 +328,20 @@ class RegisterOwnerTest extends AuthTestCase
             'relationship lawyer' => [['emergencyContactRelationship' => 'lawyer']],
             'relationship other' => [['emergencyContactRelationship' => 'other']],
         ];
+    }
+
+    #[Test]
+    public function when_another_company_already_has_the_name_then_the_owner_is_still_registered(): void
+    {
+        // Given a company already registered under the same name
+        Company::factory()->named('Contoso')->create();
+
+        // When a guest registers a company of that name
+        $response = $this->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
+
+        // Then the owner is registered beside the existing company of that name
+        $this->assertRegistrationSucceeded($response);
+        $this->assertSame(2, Company::query()->where('name', 'Contoso')->count());
     }
 
     // Edge — register is UA-derived (no deviceName on the register contract, per design):
@@ -497,10 +512,11 @@ class RegisterOwnerTest extends AuthTestCase
         Company::factory()->registeredAs(self::EXISTING_BR, self::EXISTING_EPF)->create();
     }
 
-    protected function assertConflict(TestResponse $response, string $expectedCode): void
+    protected function assertConflict(TestResponse $response, string $expectedCode, string $expectedMessage): void
     {
         $response->assertConflict();
         $response->assertJsonPath('error_code', $expectedCode);
+        $response->assertJsonPath('message', $expectedMessage);
         $response->assertJsonPath('errors', []);
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
         $this->assertNotEmpty($response->json('correlation_id'));
