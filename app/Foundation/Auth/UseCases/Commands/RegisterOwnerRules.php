@@ -4,7 +4,9 @@ namespace App\Foundation\Auth\UseCases\Commands;
 
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
+use Illuminate\Contracts\Validation\ValidationRule;
 use App\Companies\Memberships\Enums\EmergencyContactRelationship;
+use App\Companies\Memberships\UseCases\Rules\SriLankanPhoneNumber;
 
 /**
  * Shared rule-builders and messages for the owner-signup command — the
@@ -46,11 +48,11 @@ trait RegisterOwnerRules
     }
 
     /**
-     * @return array<int, string>
+     * @return array<int, string|ValidationRule>
      */
     protected static function phoneRules(): array
     {
-        return ['required', 'string', 'max:255', 'phone:LK'];
+        return ['required', 'string', 'max:255', new SriLankanPhoneNumber];
     }
 
     /**
@@ -71,7 +73,6 @@ trait RegisterOwnerRules
             'acceptedTos.required' => 'You must agree to the Terms of Service to continue.',
             'acceptedTos.accepted' => 'You must agree to the Terms of Service to continue.',
             'emergencyContactEmail.email' => 'The emergency contact email must be a valid email address.',
-            'emergencyContactPhone.phone' => 'The emergency contact phone must be a valid phone number.',
         ];
     }
 }

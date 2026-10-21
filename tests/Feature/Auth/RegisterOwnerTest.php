@@ -94,6 +94,8 @@ class RegisterOwnerTest extends AuthTestCase
             'missing emergency contact phone' => [['emergencyContactPhone' => ''], 'emergencyContactPhone', 'The emergency contact phone field is required.'],
             'phone not a number' => [['emergencyContactPhone' => '12345'], 'emergencyContactPhone', 'The emergency contact phone must be a valid phone number.'],
             'phone outside Sri Lanka' => [['emergencyContactPhone' => '+442071838750'], 'emergencyContactPhone', 'The emergency contact phone must be a valid phone number.'],
+            'phone outside Sri Lanka with its country named' => [['emergencyContactPhone' => '+442071838750', 'emergencyContactPhone_country' => 'GB'], 'emergencyContactPhone', 'The emergency contact phone must be a valid phone number.'],
+            'phone outside Sri Lanka with the country key redirected' => [['emergencyContactPhone' => '+442071838750', 'LK' => 'GB'], 'emergencyContactPhone', 'The emergency contact phone must be a valid phone number.'],
             'missing relationship' => [['emergencyContactRelationship' => ''], 'emergencyContactRelationship', 'The emergency contact relationship field is required.'],
             'relationship not on the list' => [['emergencyContactRelationship' => 'cousin'], 'emergencyContactRelationship', 'The selected emergency contact relationship is invalid.'],
         ];
