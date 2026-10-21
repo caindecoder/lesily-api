@@ -2,6 +2,7 @@
 
 namespace App\Companies\UseCases\Commands;
 
+use App\Companies\UseCases\Rules\BrNumber;
 use App\Companies\UseCases\Rules\EpfNumber;
 use Illuminate\Contracts\Validation\ValidationRule;
 
@@ -21,11 +22,11 @@ trait CompanyRegistrationRules
     }
 
     /**
-     * @return array<int, string>
+     * @return array<int, string|ValidationRule>
      */
     protected static function brNumberRules(): array
     {
-        return ['required', 'string', 'max:255'];
+        return ['required', 'string', 'max:255', new BrNumber];
     }
 
     /**

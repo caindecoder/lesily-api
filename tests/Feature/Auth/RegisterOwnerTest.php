@@ -75,6 +75,11 @@ class RegisterOwnerTest extends AuthTestCase
             'missing company name' => [['companyName' => ''], 'companyName', 'The company name field is required.'],
             'over-long company name' => [['companyName' => str_repeat('a', 256)], 'companyName', 'The company name field must not be greater than 255 characters.'],
             'missing BR number' => [['brNumber' => ''], 'brNumber', 'The BR (Business Registration) number is required.'],
+            'BR with no digit' => [['brNumber' => 'PVABC'], 'brNumber', 'Invalid BR number format.'],
+            'BR with a symbol' => [['brNumber' => 'PV#1234'], 'brNumber', 'Invalid BR number format.'],
+            'company BR with a letter in its digits' => [['brNumber' => 'PV 12A45'], 'brNumber', 'Invalid BR number format.'],
+            'company BR over eight digits' => [['brNumber' => 'PV 123456789'], 'brNumber', 'Invalid BR number format.'],
+            'legacy BR malformed' => [['brNumber' => 'N(PVS) X1'], 'brNumber', 'Invalid BR number format.'],
             'over-long BR number' => [['brNumber' => str_repeat('b', 256)], 'brNumber', 'The br number field must not be greater than 255 characters.'],
             'missing EPF number' => [['epfNumber' => ''], 'epfNumber', 'The EPF employer number is required.'],
             'EPF with two letters' => [['epfNumber' => 'AB/12345'], 'epfNumber', 'Invalid EPF number format.'],
@@ -298,6 +303,15 @@ class RegisterOwnerTest extends AuthTestCase
     public static function acceptedValueProvider(): array
     {
         return [
+            'BR of a private company' => [['brNumber' => 'PV 7935']],
+            'BR padded to eight digits' => [['brNumber' => 'PV00302809']],
+            'BR with a hyphen' => [['brNumber' => 'PV-12345678']],
+            'BR of a public company with its suffixes' => [['brNumber' => 'PV 7617 PB/PQ']],
+            'BR of a quoted company' => [['brNumber' => 'PQ 160']],
+            'BR of a guarantee company' => [['brNumber' => 'GA 2336']],
+            'BR in the legacy form' => [['brNumber' => 'N(PVS) 17333']],
+            'BR from a provincial registry' => [['brNumber' => 'WP/RBN/1234']],
+            'BR from a provincial registry starting like a prefix' => [['brNumber' => 'GAMPAHA/123']],
             'EPF as on the registration form' => [['epfNumber' => 'A/099999']],
             'EPF with a space' => [['epfNumber' => 'A 85000']],
             'EPF with a hyphen' => [['epfNumber' => 'A-12345']],
