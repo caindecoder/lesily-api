@@ -67,10 +67,10 @@ class TwoGateCheckTest extends FoundationTestCase
     }
 
     #[Test]
-    public function when_a_company_has_no_billing_plan_then_a_plan_gated_feature_is_denied(): void
+    public function when_a_companys_trial_has_expired_then_a_plan_gated_feature_is_denied(): void
     {
-        // Given (a company that has not chosen a plan — e.g. still on trial)
-        $company = Company::factory()->withoutPlan()->create();
+        // Given a company whose trial ended without a plan being chosen
+        $company = Company::factory()->trialExpired()->create();
         $user = User::factory()->create();
         $this->joinCompany($company, $user);
 
