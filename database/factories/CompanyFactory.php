@@ -30,6 +30,7 @@ class CompanyFactory extends Factory
             'country' => 'LK',
             'owner_id' => User::factory(),
             'current_billing_plan' => BillingPlan::Free,
+            'status' => CompanyStatus::Trial,
         ];
     }
 
@@ -61,6 +62,17 @@ class CompanyFactory extends Factory
     }
 
     /**
+     * A company on its 30-day trial as signup creates it: trial status, no plan stored.
+     */
+    public function onTrial(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => CompanyStatus::Trial,
+            'current_billing_plan' => null,
+        ]);
+    }
+
+    /**
      * A company mid-trial with a pinned expiry — gives trial_ends_at a real
      * value so its wire serialization has teeth (UC-1-032 exact contract).
      */
@@ -73,8 +85,8 @@ class CompanyFactory extends Factory
     }
 
     /**
-     * A company that has not chosen a plan yet (e.g. on trial) — the billing gate
-     * must treat the absent plan as granting no plan-tier features.
+     * A company with no plan stored. Its status stays trial, so the gates hold it to the
+     * top plan — state onTrial() or trialExpired() when that matters.
      */
     public function withoutPlan(): static
     {

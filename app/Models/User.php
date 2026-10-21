@@ -79,7 +79,7 @@ class User extends Authenticatable implements CanResetPassword, HasLocalePrefere
     /**
      * The companies this user is a member of — the company_user pivot, the inverse of
      * Company::users(). The device-limit guard reads each membership's
-     * current_billing_plan to decide whether the per-account concurrent-device cap
+     * Company::planInForce() to decide whether the per-account concurrent-device cap
      * applies (UC-1-002 alt-5a). wherePivotNull: a removed (soft-deleted, UC-1-024)
      * membership is not a live membership — belongsToMany reads must filter the pivot
      * column explicitly (the CompanyUser SoftDeletes global scope does not reach it). R7.

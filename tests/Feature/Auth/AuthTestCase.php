@@ -234,14 +234,15 @@ abstract class AuthTestCase extends TestCase
             ->users()->attach($user, ['role_id' => Role::factory()->create()->getKey()]);
     }
 
-    /**
-     * Make $user a member of a company that has not chosen a plan yet (a trial company,
-     * current_billing_plan = null). An absent plan enforces no device cap, so this arranges
-     * the "trial member is uncapped" path (UC-1-002 alt-5a — null plan).
-     */
-    protected function memberOfPlanlessCompany(User $user): void
+    protected function memberOfTrialCompany(User $user): void
     {
-        Company::factory()->withoutPlan()->create()
+        Company::factory()->onTrial()->create()
+            ->users()->attach($user, ['role_id' => Role::factory()->create()->getKey()]);
+    }
+
+    protected function memberOfExpiredTrialCompany(User $user): void
+    {
+        Company::factory()->trialExpired()->create()
             ->users()->attach($user, ['role_id' => Role::factory()->create()->getKey()]);
     }
 
