@@ -7,7 +7,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Translation\PotentiallyTranslatedString;
 
 /**
- * The BR number (R-060, ruling S1): a number that starts like a Registrar of Companies
+ * The BR number (R-060): a number that starts like a Registrar of Companies
  * number must be one; any other — a provincial business-name number, which has no
  * national format — must be letters, digits, spaces, "/" and "-" with at least one digit.
  */
