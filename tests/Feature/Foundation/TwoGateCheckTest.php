@@ -36,6 +36,18 @@ class TwoGateCheckTest extends FoundationTestCase
         $this->assertFeatureUpgradePromptReturned($response, $expectedTier);
     }
 
+    /**
+     * @return array<string, array{string, BillingPlan, string}>
+     */
+    public static function provideUnderTieredFeatures(): array
+    {
+        return [
+            'free company, starter-tier feature' => ['two-gate/starter-feature', BillingPlan::Free, 'Starter'],
+            'free company, pro-tier feature' => ['two-gate/pro-feature', BillingPlan::Free, 'Pro'],
+            'starter company, pro-tier feature' => ['two-gate/pro-feature', BillingPlan::Starter, 'Pro'],
+        ];
+    }
+
     #[Test]
     public function when_a_members_role_lacks_the_required_permission_then_a_permission_denial_is_returned(): void
     {
@@ -131,6 +143,49 @@ class TwoGateCheckTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_a_plan_less_company_has_an_addon_granting_a_feature_then_access_is_allowed(): void
+    {
+        // Given (a company with no plan in force — its trial expired — that holds the Template Engine add-on)
+        $company = Company::factory()->trialExpired()->withAddon(Addon::TemplateEngine)->create();
+        $user = User::factory()->create();
+        $this->joinCompany($company, $user);
+
+        // When it attempts the add-on-granted feature
+        $response = $this->attemptGatedAction('two-gate/templates', $user, $company);
+
+        // Then access is allowed — the absent plan must not short-circuit the add-on path
+        $this->assertGatedActionProceeded($response);
+    }
+
+    #[Test]
+    public function when_a_member_of_a_free_and_a_pro_company_acts_in_the_free_one_then_the_upgrade_prompt_is_returned(): void
+    {
+        // Given one member, one role, in a Free company and a Pro company
+        $user = User::factory()->create();
+        [$freeCompany] = $this->memberOfAFreeAndAProCompany($user);
+
+        // When the member attempts a Pro feature in the Free company's context
+        $response = $this->attemptGatedAction('two-gate/secured', $user, $freeCompany);
+
+        // Then that company's plan decides, not the user's other membership
+        $this->assertFeatureUpgradePromptReturned($response, 'Pro');
+    }
+
+    #[Test]
+    public function when_a_member_of_a_free_and_a_pro_company_acts_in_the_pro_one_then_access_proceeds(): void
+    {
+        // Given one member, one role, in a Free company and a Pro company
+        $user = User::factory()->create();
+        [, $proCompany] = $this->memberOfAFreeAndAProCompany($user);
+
+        // When the member attempts a Pro feature in the Pro company's context
+        $response = $this->attemptGatedAction('two-gate/secured', $user, $proCompany);
+
+        // Then that company's plan decides, not the user's other membership
+        $this->assertGatedActionProceeded($response);
+    }
+
+    #[Test]
     #[DataProvider('provideGrantedFeatures')]
     public function when_a_companys_plan_grants_a_feature_then_access_proceeds(string $route, BillingPlan $plan): void
     {
@@ -203,41 +258,6 @@ class TwoGateCheckTest extends FoundationTestCase
     }
 
     #[Test]
-    public function when_a_plan_less_company_has_an_addon_granting_a_feature_then_access_is_allowed(): void
-    {
-        // Given (a company with no plan in force — its trial expired — that holds the Template Engine add-on)
-        $company = Company::factory()->trialExpired()->withAddon(Addon::TemplateEngine)->create();
-        $user = User::factory()->create();
-        $this->joinCompany($company, $user);
-
-        // When it attempts the add-on-granted feature
-        $response = $this->attemptGatedAction('two-gate/templates', $user, $company);
-
-        // Then access is allowed — the absent plan must not short-circuit the add-on path
-        $this->assertGatedActionProceeded($response);
-    }
-
-    #[Test]
-    public function when_the_same_member_acts_in_companies_on_different_tiers_then_feature_access_follows_each_company(): void
-    {
-        // Given (one member, one role, in a Free company and a Pro company)
-        $user = User::factory()->create();
-        $role = Role::factory()->code('member')->withPermissions(['manage_security'])->create();
-        $freeCompany = Company::factory()->onPlan(BillingPlan::Free)->create();
-        $proCompany = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $this->attachMember($freeCompany, $user, $role);
-        $this->attachMember($proCompany, $user, $role);
-
-        // When the member attempts a Pro+ feature in each company context
-        $inFreeContext = $this->attemptGatedAction('two-gate/secured', $user, $freeCompany);
-        $inProContext = $this->attemptGatedAction('two-gate/secured', $user, $proCompany);
-
-        // Then access follows each company's plan, not the user
-        $this->assertFeatureUpgradePromptReturned($inFreeContext, 'Pro');
-        $this->assertGatedActionProceeded($inProContext);
-    }
-
-    #[Test]
     public function when_both_gates_pass_then_the_gated_action_proceeds(): void
     {
         // Given (Pro company + member whose role grants manage_security)
@@ -251,18 +271,6 @@ class TwoGateCheckTest extends FoundationTestCase
 
         // Then
         $this->assertGatedActionProceeded($response);
-    }
-
-    /**
-     * @return array<string, array{string, BillingPlan, string}>
-     */
-    public static function provideUnderTieredFeatures(): array
-    {
-        return [
-            'free company, starter-tier feature' => ['two-gate/starter-feature', BillingPlan::Free, 'Starter'],
-            'free company, pro-tier feature' => ['two-gate/pro-feature', BillingPlan::Free, 'Pro'],
-            'starter company, pro-tier feature' => ['two-gate/pro-feature', BillingPlan::Starter, 'Pro'],
-        ];
     }
 
     protected function assertFeatureUpgradePromptReturned(TestResponse $response, string $tier): void
@@ -292,5 +300,19 @@ class TwoGateCheckTest extends FoundationTestCase
     {
         $response->assertOk();
         $response->assertJsonPath('ok', true);
+    }
+
+    /**
+     * @return array{Company, Company}
+     */
+    protected function memberOfAFreeAndAProCompany(User $user): array
+    {
+        $role = Role::factory()->code('member')->withPermissions(['manage_security'])->create();
+        $freeCompany = Company::factory()->onPlan(BillingPlan::Free)->create();
+        $proCompany = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $this->attachMember($freeCompany, $user, $role);
+        $this->attachMember($proCompany, $user, $role);
+
+        return [$freeCompany, $proCompany];
     }
 }
