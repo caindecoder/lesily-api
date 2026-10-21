@@ -84,8 +84,8 @@ class CompanyFactory extends Factory
     }
 
     /**
-     * A company that has not chosen a plan yet (e.g. on trial) — the billing gate
-     * must treat the absent plan as granting no plan-tier features.
+     * A company with no plan stored. The status column defaults to trial, so the gates
+     * hold it to the top plan — state onTrial() or trialExpired() when that matters.
      */
     public function withoutPlan(): static
     {
