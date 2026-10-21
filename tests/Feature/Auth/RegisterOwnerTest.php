@@ -43,7 +43,7 @@ class RegisterOwnerTest extends AuthTestCase
     // Sad (validation) — a malformed payload is rejected before any aggregate runs.
     #[Test]
     #[DataProvider('invalidPayloadProvider')]
-    public function when_the_registration_payload_is_invalid_then_it_is_rejected(array $override, string $invalidField, string $expectedMessage): void
+    public function when_the_registration_payload_is_invalid_then_it_is_rejected_and_nothing_is_created(array $override, string $invalidField, string $expectedMessage): void
     {
         // Given an otherwise-valid signup with one invalid field
         $payload = [...$this->validRegistrationPayload(), ...$override];
@@ -51,8 +51,8 @@ class RegisterOwnerTest extends AuthTestCase
         // When the guest submits it
         $response = $this->postJson('/api/v1/auth/register', $payload);
 
-        // Then registration is rejected and the offending field is reported
-        $this->assertValidationRejected($response, $invalidField, $expectedMessage);
+        // Then registration is rejected, the offending field is reported and nothing is created or sent
+        $this->assertRejectedAndNothingCreated($response, $invalidField, $expectedMessage);
     }
 
     /**
@@ -467,6 +467,13 @@ class RegisterOwnerTest extends AuthTestCase
         {
             public function ensureUnique(RegisterOwnerCommand $command): void {}
         });
+    }
+
+    protected function assertRejectedAndNothingCreated(TestResponse $response, string $invalidField, string $expectedMessage): void
+    {
+        $this->assertValidationRejected($response, $invalidField, $expectedMessage);
+        $this->assertNothingPersisted();
+        Notification::assertNothingSent();
     }
 
     protected function assertNothingPersisted(): void
