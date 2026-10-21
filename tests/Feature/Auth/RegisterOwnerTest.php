@@ -84,6 +84,8 @@ class RegisterOwnerTest extends AuthTestCase
             'missing emergency contact email' => [['emergencyContactEmail' => ''], 'emergencyContactEmail', 'The emergency contact email field is required.'],
             'emergency contact email not an email' => [['emergencyContactEmail' => 'kamala-at-contoso'], 'emergencyContactEmail', 'The emergency contact email must be a valid email address.'],
             'missing emergency contact phone' => [['emergencyContactPhone' => ''], 'emergencyContactPhone', 'The emergency contact phone field is required.'],
+            'missing relationship' => [['emergencyContactRelationship' => ''], 'emergencyContactRelationship', 'The emergency contact relationship field is required.'],
+            'relationship not on the list' => [['emergencyContactRelationship' => 'cousin'], 'emergencyContactRelationship', 'The selected emergency contact relationship is invalid.'],
         ];
     }
 
@@ -269,6 +271,35 @@ class RegisterOwnerTest extends AuthTestCase
 
         // Then it is not throttled by the other IP's exhausted quota
         $response->assertUnprocessable();
+    }
+
+    #[Test]
+    #[DataProvider('acceptedValueProvider')]
+    public function when_a_field_takes_an_accepted_form_then_the_owner_is_registered(array $override): void
+    {
+        // Given a signup whose field takes one of its accepted forms
+        $payload = [...$this->validRegistrationPayload(), ...$override];
+
+        // When the guest submits it
+        $response = $this->postJson('/api/v1/auth/register', $payload);
+
+        // Then the owner is registered
+        $this->assertRegistrationSucceeded($response);
+    }
+
+    /**
+     * @return array<string, array{0: array<string, string>}>
+     */
+    public static function acceptedValueProvider(): array
+    {
+        return [
+            'relationship spouse' => [['emergencyContactRelationship' => 'spouse']],
+            'relationship parent' => [['emergencyContactRelationship' => 'parent']],
+            'relationship sibling' => [['emergencyContactRelationship' => 'sibling']],
+            'relationship business partner' => [['emergencyContactRelationship' => 'business_partner']],
+            'relationship lawyer' => [['emergencyContactRelationship' => 'lawyer']],
+            'relationship other' => [['emergencyContactRelationship' => 'other']],
+        ];
     }
 
     // Edge — register is UA-derived (no deviceName on the register contract, per design):

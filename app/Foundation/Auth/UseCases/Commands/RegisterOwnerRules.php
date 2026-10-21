@@ -2,6 +2,10 @@
 
 namespace App\Foundation\Auth\UseCases\Commands;
 
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Enum;
+use App\Companies\Memberships\Enums\EmergencyContactRelationship;
+
 /**
  * Shared rule-builders and messages for the owner-signup command — the
  * user-identity and emergency-contact fields. The messages are the use cases' own
@@ -47,6 +51,14 @@ trait RegisterOwnerRules
     protected static function phoneRules(): array
     {
         return ['required', 'string', 'max:255'];
+    }
+
+    /**
+     * @return array<int, string|Enum>
+     */
+    protected static function relationshipRules(): array
+    {
+        return ['required', 'string', Rule::enum(EmergencyContactRelationship::class)];
     }
 
     /**

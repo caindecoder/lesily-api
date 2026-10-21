@@ -3,6 +3,7 @@
 namespace App\Foundation\Auth\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
+use Illuminate\Validation\Rules\Enum;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 use App\Companies\UseCases\Commands\CompanyRegistrationRules;
 
@@ -40,7 +41,7 @@ class RegisterOwnerCommand extends Data
     public string $emergencyContactRelationship;
 
     /**
-     * @return array<string, array<int, string>>
+     * @return array<string, array<int, string|Enum>>
      */
     public static function rules(ValidationContext $context): array
     {
@@ -56,7 +57,7 @@ class RegisterOwnerCommand extends Data
             'emergencyContactName' => self::ownerNameRules(),
             'emergencyContactEmail' => self::ownerEmailRules(),
             'emergencyContactPhone' => self::phoneRules(),
-            'emergencyContactRelationship' => self::ownerNameRules(),
+            'emergencyContactRelationship' => self::relationshipRules(),
         ];
     }
 
