@@ -104,6 +104,33 @@ class TwoGateCheckTest extends FoundationTestCase
     }
 
     #[Test]
+    #[DataProvider('provideFeaturesNoPlanGrants')]
+    public function when_a_trial_company_asks_for_a_feature_no_plan_grants_then_the_gate_fails_closed(string $route): void
+    {
+        // Given a company on its trial that has bought no add-on
+        $company = Company::factory()->onTrial()->create();
+        $user = User::factory()->create();
+        $this->joinCompany($company, $user);
+
+        // When it asks for a feature that no plan grants
+        $response = $this->attemptGatedAction($route, $user, $company);
+
+        // Then the trial does not open it
+        $this->assertFailsClosed($response);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideFeaturesNoPlanGrants(): array
+    {
+        return [
+            'add-on-only, not bought' => ['two-gate/templates'],
+            'deprecated' => ['two-gate/deprecated'],
+        ];
+    }
+
+    #[Test]
     #[DataProvider('provideGrantedFeatures')]
     public function when_a_companys_plan_grants_a_feature_then_access_proceeds(string $route, BillingPlan $plan): void
     {
