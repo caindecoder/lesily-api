@@ -358,14 +358,13 @@ class LoginTest extends AuthTestCase
         $this->assertSessionIssued($response, $user, 4);
     }
 
-    // Edge — a member of a planless (trial) company is uncapped: an absent plan enforces no
-    // device cap, so a fourth concurrent device logs in (UC-1-002 alt-5a — null plan → uncapped).
+    // Edge — once the trial has expired with no plan chosen, the account is uncapped again.
     #[Test]
-    public function when_a_planless_company_member_exceeds_three_devices_then_login_is_allowed(): void
+    public function when_an_expired_trial_company_member_exceeds_three_devices_then_login_is_allowed(): void
     {
-        // Given a member of a company with no plan chosen yet (trial), holding three active sessions
+        // Given a member of a company whose trial ended without a plan, holding three active sessions
         $user = $this->aRegisteredUser();
-        $this->memberOfPlanlessCompany($user);
+        $this->memberOfExpiredTrialCompany($user);
         $this->aSessionFor($user, 'web');
         $this->aSessionFor($user, 'mobile');
         $this->aSessionFor($user, 'tablet');
@@ -376,7 +375,7 @@ class LoginTest extends AuthTestCase
             'password' => self::LOGIN_PASSWORD,
         ]);
 
-        // Then login still succeeds — a null plan does not enforce the cap
+        // Then login still succeeds — no plan and no trial carries no device cap
         $this->assertSessionIssued($response, $user, 4);
     }
 
