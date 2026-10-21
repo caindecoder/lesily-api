@@ -84,6 +84,8 @@ class RegisterOwnerTest extends AuthTestCase
             'missing emergency contact email' => [['emergencyContactEmail' => ''], 'emergencyContactEmail', 'The emergency contact email field is required.'],
             'emergency contact email not an email' => [['emergencyContactEmail' => 'kamala-at-contoso'], 'emergencyContactEmail', 'The emergency contact email must be a valid email address.'],
             'missing emergency contact phone' => [['emergencyContactPhone' => ''], 'emergencyContactPhone', 'The emergency contact phone field is required.'],
+            'phone not a number' => [['emergencyContactPhone' => '12345'], 'emergencyContactPhone', 'The emergency contact phone must be a valid phone number.'],
+            'phone outside Sri Lanka' => [['emergencyContactPhone' => '+442071838750'], 'emergencyContactPhone', 'The emergency contact phone must be a valid phone number.'],
             'missing relationship' => [['emergencyContactRelationship' => ''], 'emergencyContactRelationship', 'The emergency contact relationship field is required.'],
             'relationship not on the list' => [['emergencyContactRelationship' => 'cousin'], 'emergencyContactRelationship', 'The selected emergency contact relationship is invalid.'],
         ];
@@ -293,6 +295,9 @@ class RegisterOwnerTest extends AuthTestCase
     public static function acceptedValueProvider(): array
     {
         return [
+            'phone in local form' => [['emergencyContactPhone' => '0712345678']],
+            'phone with the country code' => [['emergencyContactPhone' => '+94712345678']],
+            'phone with the country code and spaces' => [['emergencyContactPhone' => '+94 71 234 5678']],
             'relationship spouse' => [['emergencyContactRelationship' => 'spouse']],
             'relationship parent' => [['emergencyContactRelationship' => 'parent']],
             'relationship sibling' => [['emergencyContactRelationship' => 'sibling']],

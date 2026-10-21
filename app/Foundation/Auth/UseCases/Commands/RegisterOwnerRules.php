@@ -50,7 +50,7 @@ trait RegisterOwnerRules
      */
     protected static function phoneRules(): array
     {
-        return ['required', 'string', 'max:255'];
+        return ['required', 'string', 'max:255', 'phone:LK'];
     }
 
     /**
@@ -71,6 +71,7 @@ trait RegisterOwnerRules
             'acceptedTos.required' => 'You must agree to the Terms of Service to continue.',
             'acceptedTos.accepted' => 'You must agree to the Terms of Service to continue.',
             'emergencyContactEmail.email' => 'The emergency contact email must be a valid email address.',
+            'emergencyContactPhone.phone' => 'The emergency contact phone must be a valid phone number.',
         ];
     }
 }
