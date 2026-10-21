@@ -3,10 +3,9 @@
 namespace App\Foundation\Auth\UseCases\Commands;
 
 /**
- * Shared rule-builders for the owner-signup command — the user-identity and
- * emergency-contact fields. Shape-level only (max:255 bounds every varchar-backed
- * field against poison events); the rejection guards land RED-first with the
- * slice-05 sad scenarios.
+ * Shared rule-builders and messages for the owner-signup command — the
+ * user-identity and emergency-contact fields. The messages are the use cases' own
+ * words (UC-1-001, UC-1-029, UC-1-069).
  */
 trait RegisterOwnerRules
 {
@@ -48,5 +47,18 @@ trait RegisterOwnerRules
     protected static function phoneRules(): array
     {
         return ['required', 'string', 'max:255'];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected static function ownerMessages(): array
+    {
+        return [
+            'password.min' => 'Password must be at least 8 characters.',
+            'acceptedTos.required' => 'You must agree to the Terms of Service to continue.',
+            'acceptedTos.accepted' => 'You must agree to the Terms of Service to continue.',
+            'emergencyContactEmail.email' => 'The emergency contact email must be a valid email address.',
+        ];
     }
 }

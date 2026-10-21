@@ -3,10 +3,9 @@
 namespace App\Companies\UseCases\Commands;
 
 /**
- * Rule-builders for the company-registration fields, applied by
- * RegisterOwnerCommand at the HTTP seam. These are shape-level only:
- * BR/EPF global uniqueness is a 409 conflict enforced by RegistrationUniquenessGuard
- * (slice #05), not a 422 validation rule here.
+ * Rule-builders and messages for the company-registration fields, applied by
+ * RegisterOwnerCommand at the HTTP seam. BR/EPF global uniqueness is a 409
+ * conflict enforced by RegistrationUniquenessGuard, not a 422 validation rule here.
  */
 trait CompanyRegistrationRules
 {
@@ -40,5 +39,16 @@ trait CompanyRegistrationRules
     protected static function countryRules(): array
     {
         return ['required', 'string', 'size:2'];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected static function companyRegistrationMessages(): array
+    {
+        return [
+            'brNumber.required' => 'The BR (Business Registration) number is required.',
+            'epfNumber.required' => 'The EPF employer number is required.',
+        ];
     }
 }

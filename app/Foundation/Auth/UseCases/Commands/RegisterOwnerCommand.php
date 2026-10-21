@@ -7,10 +7,8 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
 use App\Companies\UseCases\Commands\CompanyRegistrationRules;
 
 /**
- * The fused owner-signup payload (UC-1-001 + UC-1-031 + UC-1-029 + UC-1-069 per
- * slice-company-onboarding §2 / system-architecture §3.2.1). Shape-level rules
- * only — the cross-record guards (unique email, unique BR/EPF, password strength,
- * confirmation) are the HTTP-seam sad paths of slice increment 05.
+ * The fused owner-signup payload (UC-1-001 + UC-1-031 + UC-1-029 + UC-1-069).
+ * Uniqueness of email, BR and EPF is a 409 from RegistrationUniquenessGuard, not a rule here.
  */
 class RegisterOwnerCommand extends Data
 {
@@ -60,5 +58,13 @@ class RegisterOwnerCommand extends Data
             'emergencyContactPhone' => self::phoneRules(),
             'emergencyContactRelationship' => self::ownerNameRules(),
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function messages(): array
+    {
+        return [...self::ownerMessages(), ...self::companyRegistrationMessages()];
     }
 }
