@@ -30,6 +30,7 @@ class CompanyFactory extends Factory
             'country' => 'LK',
             'owner_id' => User::factory(),
             'current_billing_plan' => BillingPlan::Free,
+            'status' => CompanyStatus::Trial,
         ];
     }
 
@@ -84,8 +85,8 @@ class CompanyFactory extends Factory
     }
 
     /**
-     * A company with no plan stored. The status column defaults to trial, so the gates
-     * hold it to the top plan — state onTrial() or trialExpired() when that matters.
+     * A company with no plan stored. Its status stays trial, so the gates hold it to the
+     * top plan — state onTrial() or trialExpired() when that matters.
      */
     public function withoutPlan(): static
     {

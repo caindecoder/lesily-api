@@ -205,8 +205,8 @@ class TwoGateCheckTest extends FoundationTestCase
     #[Test]
     public function when_a_plan_less_company_has_an_addon_granting_a_feature_then_access_is_allowed(): void
     {
-        // Given (a plan-less trial company that holds the Template Engine add-on)
-        $company = Company::factory()->withoutPlan()->withAddon(Addon::TemplateEngine)->create();
+        // Given (a company with no plan in force — its trial expired — that holds the Template Engine add-on)
+        $company = Company::factory()->trialExpired()->withAddon(Addon::TemplateEngine)->create();
         $user = User::factory()->create();
         $this->joinCompany($company, $user);
 
