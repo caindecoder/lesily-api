@@ -2,11 +2,16 @@
 
 namespace App\Foundation\Auth\UseCases\Commands;
 
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Enum;
+use Illuminate\Contracts\Validation\ValidationRule;
+use App\Companies\Memberships\Enums\EmergencyContactRelationship;
+use App\Companies\Memberships\UseCases\Rules\SriLankanPhoneNumber;
+
 /**
- * Shared rule-builders for the owner-signup command — the user-identity and
- * emergency-contact fields. Shape-level only (max:255 bounds every varchar-backed
- * field against poison events); the rejection guards land RED-first with the
- * slice-05 sad scenarios.
+ * Shared rule-builders and messages for the owner-signup command — the
+ * user-identity and emergency-contact fields. The messages are the use cases' own
+ * words (UC-1-001, UC-1-029, UC-1-069).
  */
 trait RegisterOwnerRules
 {
@@ -43,10 +48,31 @@ trait RegisterOwnerRules
     }
 
     /**
-     * @return array<int, string>
+     * @return array<int, string|ValidationRule>
      */
     protected static function phoneRules(): array
     {
-        return ['required', 'string', 'max:255'];
+        return ['required', 'string', 'max:255', new SriLankanPhoneNumber];
+    }
+
+    /**
+     * @return array<int, string|Enum>
+     */
+    protected static function relationshipRules(): array
+    {
+        return ['required', 'string', Rule::enum(EmergencyContactRelationship::class)];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected static function ownerMessages(): array
+    {
+        return [
+            'password.min' => 'Password must be at least 8 characters.',
+            'acceptedTos.required' => 'You must agree to the Terms of Service to continue.',
+            'acceptedTos.accepted' => 'You must agree to the Terms of Service to continue.',
+            'emergencyContactEmail.email' => 'The emergency contact email must be a valid email address.',
+        ];
     }
 }

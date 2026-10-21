@@ -13,6 +13,7 @@
         "laravel/tinker": "^3.0",
         "nyholm/psr7": "^1.8",
         "pragmarx/google2fa": "^9.0",
+        "propaganistas/laravel-phone": "^6.1",
         "railsware/mailtrap-php": "^3.11",
         "sentry/sentry-laravel": "^4.25",
         "spatie/browsershot": "^5.4",

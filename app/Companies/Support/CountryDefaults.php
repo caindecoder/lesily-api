@@ -27,7 +27,7 @@ class CountryDefaults
                 'workingDaysPerWeek' => 5,
                 'defaultWorkHoursPerDay' => 8.0,
             ],
-            default => throw UnsupportedCountryException::forCountry($country),
+            default => throw UnsupportedCountryException::notSupported(),
         };
     }
 }

@@ -24,7 +24,7 @@ class RegisterOwnerTest extends AuthTestCase
 
     private const EXISTING_BR = 'PV-99999999';
 
-    private const EXISTING_EPF = 'A-9999999';
+    private const EXISTING_EPF = 'A-999999';
 
     protected function setUp(): void
     {
@@ -43,7 +43,7 @@ class RegisterOwnerTest extends AuthTestCase
     // Sad (validation) — a malformed payload is rejected before any aggregate runs.
     #[Test]
     #[DataProvider('invalidPayloadProvider')]
-    public function when_the_registration_payload_is_invalid_then_it_is_rejected(array $override, string $invalidField, string $expectedMessage): void
+    public function when_the_registration_payload_is_invalid_then_it_is_rejected_and_nothing_is_created(array $override, string $invalidField, string $expectedMessage): void
     {
         // Given an otherwise-valid signup with one invalid field
         $payload = [...$this->validRegistrationPayload(), ...$override];
@@ -51,8 +51,8 @@ class RegisterOwnerTest extends AuthTestCase
         // When the guest submits it
         $response = $this->postJson('/api/v1/auth/register', $payload);
 
-        // Then registration is rejected and the offending field is reported
-        $this->assertValidationRejected($response, $invalidField, $expectedMessage);
+        // Then registration is rejected, the offending field is reported and nothing is created or sent
+        $this->assertRejectedAndNothingCreated($response, $invalidField, $expectedMessage);
     }
 
     /**
@@ -65,22 +65,49 @@ class RegisterOwnerTest extends AuthTestCase
     {
         return [
             'missing password' => [['password' => ''], 'password', 'The password field is required.'],
-            'weak password' => [['password' => 'short'], 'password', 'The password field must be at least 8 characters.'],
-            'terms null' => [['acceptedTos' => null], 'acceptedTos', 'The accepted tos field is required.'],
-            'terms not accepted' => [['acceptedTos' => false], 'acceptedTos', 'The accepted tos field must be accepted.'],
+            'weak password' => [['password' => 'short'], 'password', 'Password must be at least 8 characters.'],
+            'terms null' => [['acceptedTos' => null], 'acceptedTos', 'You must agree to the Terms of Service to continue.'],
+            'terms not accepted' => [['acceptedTos' => false], 'acceptedTos', 'You must agree to the Terms of Service to continue.'],
             'missing name' => [['name' => ''], 'name', 'The name field is required.'],
             'over-long name' => [['name' => str_repeat('a', 256)], 'name', 'The name field must not be greater than 255 characters.'],
             'missing email' => [['email' => ''], 'email', 'The email field is required.'],
+            'owner email not an email' => [['email' => 'nimal-at-contoso'], 'email', 'The email field must be a valid email address.'],
             'missing company name' => [['companyName' => ''], 'companyName', 'The company name field is required.'],
             'over-long company name' => [['companyName' => str_repeat('a', 256)], 'companyName', 'The company name field must not be greater than 255 characters.'],
-            'missing BR number' => [['brNumber' => ''], 'brNumber', 'The br number field is required.'],
+            'missing BR number' => [['brNumber' => ''], 'brNumber', 'The BR (Business Registration) number is required.'],
+            'BR with no digit' => [['brNumber' => 'PVABC'], 'brNumber', 'Invalid BR number format.'],
+            'BR with a symbol' => [['brNumber' => 'PV#1234'], 'brNumber', 'Invalid BR number format.'],
+            'company BR with a letter in its digits' => [['brNumber' => 'PV 12A45'], 'brNumber', 'Invalid BR number format.'],
+            'company BR over eight digits' => [['brNumber' => 'PV 123456789'], 'brNumber', 'Invalid BR number format.'],
+            'legacy BR malformed' => [['brNumber' => 'N(PVS) X1'], 'brNumber', 'Invalid BR number format.'],
+            'public company BR with a letter in its digits' => [['brNumber' => 'PB 12A45'], 'brNumber', 'Invalid BR number format.'],
+            'guarantee company BR over eight digits' => [['brNumber' => 'GL 123456789'], 'brNumber', 'Invalid BR number format.'],
+            'guarantee company BR with a letter in its digits' => [['brNumber' => 'GA 12A45'], 'brNumber', 'Invalid BR number format.'],
+            'quoted company BR with a malformed suffix' => [['brNumber' => 'PQ 1234 PBX'], 'brNumber', 'Invalid BR number format.'],
+            'legacy BR over eight digits' => [['brNumber' => 'N(PVS) 123456789'], 'brNumber', 'Invalid BR number format.'],
+            'legacy BR with trailing characters' => [['brNumber' => 'N(PVS) 123X'], 'brNumber', 'Invalid BR number format.'],
+            'BR that is not text' => [['brNumber' => ['PV 7935']], 'brNumber', 'The br number field must be a string.'],
             'over-long BR number' => [['brNumber' => str_repeat('b', 256)], 'brNumber', 'The br number field must not be greater than 255 characters.'],
-            'missing EPF number' => [['epfNumber' => ''], 'epfNumber', 'The epf number field is required.'],
+            'missing EPF number' => [['epfNumber' => ''], 'epfNumber', 'The EPF employer number is required.'],
+            'EPF with two letters' => [['epfNumber' => 'AB/12345'], 'epfNumber', 'Invalid EPF number format.'],
+            'EPF with seven digits' => [['epfNumber' => 'A/1234567'], 'epfNumber', 'Invalid EPF number format.'],
+            'EPF with no letter' => [['epfNumber' => '12345'], 'epfNumber', 'Invalid EPF number format.'],
+            'EPF with no digits' => [['epfNumber' => 'A/'], 'epfNumber', 'Invalid EPF number format.'],
+            'EPF that is not text' => [['epfNumber' => ['A/12345']], 'epfNumber', 'The epf number field must be a string.'],
             'over-long EPF number' => [['epfNumber' => str_repeat('e', 256)], 'epfNumber', 'The epf number field must not be greater than 255 characters.'],
             'missing country' => [['country' => ''], 'country', 'The country field is required.'],
             'country beyond two characters' => [['country' => 'LKA'], 'country', 'The country field must be 2 characters.'],
             'missing emergency contact name' => [['emergencyContactName' => ''], 'emergencyContactName', 'The emergency contact name field is required.'],
+            'missing emergency contact email' => [['emergencyContactEmail' => ''], 'emergencyContactEmail', 'The emergency contact email field is required.'],
+            'emergency contact email not an email' => [['emergencyContactEmail' => 'kamala-at-contoso'], 'emergencyContactEmail', 'The emergency contact email must be a valid email address.'],
             'missing emergency contact phone' => [['emergencyContactPhone' => ''], 'emergencyContactPhone', 'The emergency contact phone field is required.'],
+            'phone not a number' => [['emergencyContactPhone' => '12345'], 'emergencyContactPhone', 'The emergency contact phone must be a valid phone number.'],
+            'phone that is not text' => [['emergencyContactPhone' => ['0712345678']], 'emergencyContactPhone', 'The emergency contact phone field must be a string.'],
+            'phone outside Sri Lanka' => [['emergencyContactPhone' => '+442071838750'], 'emergencyContactPhone', 'The emergency contact phone must be a valid phone number.'],
+            'phone outside Sri Lanka with its country named' => [['emergencyContactPhone' => '+442071838750', 'emergencyContactPhone_country' => 'GB'], 'emergencyContactPhone', 'The emergency contact phone must be a valid phone number.'],
+            'phone outside Sri Lanka with the country key redirected' => [['emergencyContactPhone' => '+442071838750', 'LK' => 'GB'], 'emergencyContactPhone', 'The emergency contact phone must be a valid phone number.'],
+            'missing relationship' => [['emergencyContactRelationship' => ''], 'emergencyContactRelationship', 'The emergency contact relationship field is required.'],
+            'relationship not on the list' => [['emergencyContactRelationship' => 'cousin'], 'emergencyContactRelationship', 'The selected emergency contact relationship is invalid.'],
         ];
     }
 
@@ -89,7 +116,7 @@ class RegisterOwnerTest extends AuthTestCase
     // and nothing new is persisted.
     #[Test]
     #[DataProvider('duplicateFieldProvider')]
-    public function when_a_registration_field_is_already_registered_then_it_conflicts(array $override, string $expectedCode): void
+    public function when_a_registration_field_is_already_registered_then_it_conflicts(array $override, string $expectedCode, string $expectedMessage): void
     {
         // Given an account already holds these identifiers
         $this->givenAnExistingOwnerAccount();
@@ -100,19 +127,19 @@ class RegisterOwnerTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), ...$override]);
 
         // Then the registration conflicts, creates nothing new and welcomes nobody
-        $this->assertConflict($response, $expectedCode);
+        $this->assertConflict($response, $expectedCode, $expectedMessage);
         $this->assertNothingCreatedOrSent($usersBefore, $companiesBefore);
     }
 
     /**
-     * @return array<string, array{0: array<string, mixed>, 1: string}>
+     * @return array<string, array{0: array<string, mixed>, 1: string, 2: string}>
      */
     public static function duplicateFieldProvider(): array
     {
         return [
-            'email' => [['email' => self::EXISTING_EMAIL], 'EMAIL_REGISTERED'],
-            'business registration number' => [['brNumber' => self::EXISTING_BR], 'BR_NUMBER_REGISTERED'],
-            'employer provident fund number' => [['epfNumber' => self::EXISTING_EPF], 'EPF_NUMBER_REGISTERED'],
+            'email' => [['email' => self::EXISTING_EMAIL], 'EMAIL_REGISTERED', 'This email is already registered. Try logging in.'],
+            'business registration number' => [['brNumber' => self::EXISTING_BR], 'BR_NUMBER_REGISTERED', 'This BR number is already registered.'],
+            'employer provident fund number' => [['epfNumber' => self::EXISTING_EPF], 'EPF_NUMBER_REGISTERED', 'This EPF number is already registered.'],
         ];
     }
 
@@ -120,7 +147,7 @@ class RegisterOwnerTest extends AuthTestCase
     // guard reports the first in its own order (email, then BR, then EPF).
     #[Test]
     #[DataProvider('collidingFieldsProvider')]
-    public function when_several_registration_fields_are_already_registered_then_the_first_conflict_in_guard_order_is_reported(array $override, string $expectedCode): void
+    public function when_several_registration_fields_are_already_registered_then_the_first_conflict_in_guard_order_is_reported(array $override, string $expectedCode, string $expectedMessage): void
     {
         // Given an account already holds these identifiers
         $this->givenAnExistingOwnerAccount();
@@ -131,18 +158,18 @@ class RegisterOwnerTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), ...$override]);
 
         // Then the first conflict in guard order is reported and nothing is created or sent
-        $this->assertConflict($response, $expectedCode);
+        $this->assertConflict($response, $expectedCode, $expectedMessage);
         $this->assertNothingCreatedOrSent($usersBefore, $companiesBefore);
     }
 
     /**
-     * @return array<string, array{0: array<string, mixed>, 1: string}>
+     * @return array<string, array{0: array<string, mixed>, 1: string, 2: string}>
      */
     public static function collidingFieldsProvider(): array
     {
         return [
-            'email and BR both taken' => [['email' => self::EXISTING_EMAIL, 'brNumber' => self::EXISTING_BR], 'EMAIL_REGISTERED'],
-            'BR and EPF both taken' => [['brNumber' => self::EXISTING_BR, 'epfNumber' => self::EXISTING_EPF], 'BR_NUMBER_REGISTERED'],
+            'email and BR both taken' => [['email' => self::EXISTING_EMAIL, 'brNumber' => self::EXISTING_BR], 'EMAIL_REGISTERED', 'This email is already registered. Try logging in.'],
+            'BR and EPF both taken' => [['brNumber' => self::EXISTING_BR, 'epfNumber' => self::EXISTING_EPF], 'BR_NUMBER_REGISTERED', 'This BR number is already registered.'],
         ];
     }
 
@@ -168,7 +195,7 @@ class RegisterOwnerTest extends AuthTestCase
     // That backstop must surface the same field-specific 409, never a 500.
     #[Test]
     #[DataProvider('duplicateFieldProvider')]
-    public function when_a_race_slips_past_the_uniqueness_guard_then_the_database_backstop_still_conflicts(array $override, string $expectedCode): void
+    public function when_a_race_slips_past_the_uniqueness_guard_then_the_database_backstop_still_conflicts(array $override, string $expectedCode, string $expectedMessage): void
     {
         // Given an account already holds these identifiers, and the pre-tx guard is
         // bypassed to reproduce the concurrent race that slips past check-then-act
@@ -181,7 +208,7 @@ class RegisterOwnerTest extends AuthTestCase
         $response = $this->postJson('/api/v1/auth/register', [...$this->validRegistrationPayload(), ...$override]);
 
         // Then the database backstop conflicts identically and creates nothing new
-        $this->assertConflict($response, $expectedCode);
+        $this->assertConflict($response, $expectedCode, $expectedMessage);
         $this->assertNoNewAccounts($usersBefore, $companiesBefore);
     }
 
@@ -231,6 +258,7 @@ class RegisterOwnerTest extends AuthTestCase
         // Then the request is rejected and the half-built account is rolled back
         $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'UNSUPPORTED_COUNTRY');
+        $response->assertJsonPath('message', 'Selected country is not supported.');
         $this->assertNothingPersisted();
     }
 
@@ -266,6 +294,68 @@ class RegisterOwnerTest extends AuthTestCase
 
         // Then it is not throttled by the other IP's exhausted quota
         $response->assertUnprocessable();
+    }
+
+    #[Test]
+    #[DataProvider('acceptedValueProvider')]
+    public function when_a_field_takes_an_accepted_form_then_the_owner_is_registered(array $override): void
+    {
+        // Given a signup whose field takes one of its accepted forms
+        $payload = [...$this->validRegistrationPayload(), ...$override];
+
+        // When the guest submits it
+        $response = $this->postJson('/api/v1/auth/register', $payload);
+
+        // Then the owner is registered
+        $this->assertRegistrationSucceeded($response);
+    }
+
+    /**
+     * @return array<string, array{0: array<string, string>}>
+     */
+    public static function acceptedValueProvider(): array
+    {
+        return [
+            'BR of a private company' => [['brNumber' => 'PV 7935']],
+            'BR padded to eight digits' => [['brNumber' => 'PV00302809']],
+            'BR with a hyphen' => [['brNumber' => 'PV-12345678']],
+            'BR of a public company with its suffixes' => [['brNumber' => 'PV 7617 PB/PQ']],
+            'BR of a quoted company' => [['brNumber' => 'PQ 160']],
+            'BR of a guarantee company' => [['brNumber' => 'GA 2336']],
+            'BR in the legacy form' => [['brNumber' => 'N(PVS) 17333']],
+            'BR in the legacy form without a space' => [['brNumber' => 'N(PVS)17333']],
+            'BR in lower case' => [['brNumber' => 'pv 7935']],
+            'BR from a provincial registry' => [['brNumber' => 'WP/RBN/1234']],
+            'BR from a provincial registry starting like a prefix' => [['brNumber' => 'GAMPAHA/123']],
+            'EPF as on the registration form' => [['epfNumber' => 'A/099999']],
+            'EPF with a space' => [['epfNumber' => 'A 85000']],
+            'EPF with a hyphen' => [['epfNumber' => 'A-12345']],
+            'EPF run together' => [['epfNumber' => 'A12345']],
+            'EPF in lower case' => [['epfNumber' => 'a/12345']],
+            'phone in local form' => [['emergencyContactPhone' => '0712345678']],
+            'phone with the country code' => [['emergencyContactPhone' => '+94712345678']],
+            'phone with the country code and spaces' => [['emergencyContactPhone' => '+94 71 234 5678']],
+            'relationship spouse' => [['emergencyContactRelationship' => 'spouse']],
+            'relationship parent' => [['emergencyContactRelationship' => 'parent']],
+            'relationship sibling' => [['emergencyContactRelationship' => 'sibling']],
+            'relationship business partner' => [['emergencyContactRelationship' => 'business_partner']],
+            'relationship lawyer' => [['emergencyContactRelationship' => 'lawyer']],
+            'relationship other' => [['emergencyContactRelationship' => 'other']],
+        ];
+    }
+
+    #[Test]
+    public function when_another_company_already_has_the_name_then_the_owner_is_still_registered(): void
+    {
+        // Given a company already registered under the same name
+        Company::factory()->named('Contoso')->create();
+
+        // When a guest registers a company of that name
+        $response = $this->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
+
+        // Then the owner is registered beside the existing company of that name
+        $this->assertRegistrationSucceeded($response);
+        $this->assertSame(2, Company::query()->where('name', 'Contoso')->count());
     }
 
     // Edge — register is UA-derived (no deviceName on the register contract, per design):
@@ -436,10 +526,11 @@ class RegisterOwnerTest extends AuthTestCase
         Company::factory()->registeredAs(self::EXISTING_BR, self::EXISTING_EPF)->create();
     }
 
-    protected function assertConflict(TestResponse $response, string $expectedCode): void
+    protected function assertConflict(TestResponse $response, string $expectedCode, string $expectedMessage): void
     {
         $response->assertConflict();
         $response->assertJsonPath('error_code', $expectedCode);
+        $response->assertJsonPath('message', $expectedMessage);
         $response->assertJsonPath('errors', []);
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
         $this->assertNotEmpty($response->json('correlation_id'));
@@ -467,6 +558,13 @@ class RegisterOwnerTest extends AuthTestCase
         {
             public function ensureUnique(RegisterOwnerCommand $command): void {}
         });
+    }
+
+    protected function assertRejectedAndNothingCreated(TestResponse $response, string $invalidField, string $expectedMessage): void
+    {
+        $this->assertValidationRejected($response, $invalidField, $expectedMessage);
+        $this->assertNothingPersisted();
+        Notification::assertNothingSent();
     }
 
     protected function assertNothingPersisted(): void

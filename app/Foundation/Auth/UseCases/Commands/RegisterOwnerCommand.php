@@ -3,14 +3,14 @@
 namespace App\Foundation\Auth\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
+use Illuminate\Validation\Rules\Enum;
+use Illuminate\Contracts\Validation\ValidationRule;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 use App\Companies\UseCases\Commands\CompanyRegistrationRules;
 
 /**
- * The fused owner-signup payload (UC-1-001 + UC-1-031 + UC-1-029 + UC-1-069 per
- * slice-company-onboarding §2 / system-architecture §3.2.1). Shape-level rules
- * only — the cross-record guards (unique email, unique BR/EPF, password strength,
- * confirmation) are the HTTP-seam sad paths of slice increment 05.
+ * The fused owner-signup payload (UC-1-001 + UC-1-031 + UC-1-029 + UC-1-069).
+ * Uniqueness of email, BR and EPF is a 409 from RegistrationUniquenessGuard, not a rule here.
  */
 class RegisterOwnerCommand extends Data
 {
@@ -42,7 +42,7 @@ class RegisterOwnerCommand extends Data
     public string $emergencyContactRelationship;
 
     /**
-     * @return array<string, array<int, string>>
+     * @return array<string, array<int, string|Enum|ValidationRule>>
      */
     public static function rules(ValidationContext $context): array
     {
@@ -58,7 +58,15 @@ class RegisterOwnerCommand extends Data
             'emergencyContactName' => self::ownerNameRules(),
             'emergencyContactEmail' => self::ownerEmailRules(),
             'emergencyContactPhone' => self::phoneRules(),
-            'emergencyContactRelationship' => self::ownerNameRules(),
+            'emergencyContactRelationship' => self::relationshipRules(),
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function messages(): array
+    {
+        return [...self::ownerMessages(), ...self::companyRegistrationMessages()];
     }
 }

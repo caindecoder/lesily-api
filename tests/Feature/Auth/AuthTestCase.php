@@ -115,7 +115,7 @@ abstract class AuthTestCase extends TestCase
             'acceptedTos' => true,
             'companyName' => 'Contoso',
             'brNumber' => 'PV-12345678',
-            'epfNumber' => 'A-1234567',
+            'epfNumber' => 'A-123456',
             'country' => 'LK',
             'emergencyContactName' => 'Kamala Perera',
             'emergencyContactEmail' => 'kamala@contoso.lk',
