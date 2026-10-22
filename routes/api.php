@@ -95,7 +95,7 @@ Route::get('/v1/auth/email/verify/{id}/{hash}', EmailVerificationController::cla
     ->middleware(['signed', 'throttle:auth-tier'])
     ->name('verification.verify');
 
-// Resend the verification email (UC-1-001 alt-6a; slice-registration-completion RG4-RG6).
+// Resend the verification email to the signed-in person; nothing is sent once verified.
 Route::post('/v1/auth/email/verification-notification', ResendVerificationEmailController::class)
     ->middleware(['auth:sanctum', 'throttle:email-verification', 'throttle:auth-tier']);
 

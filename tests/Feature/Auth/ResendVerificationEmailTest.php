@@ -142,13 +142,6 @@ class ResendVerificationEmailTest extends AuthTestCase
         return $this->postJson(self::RESEND_URL);
     }
 
-    protected function useUpSharedSignInLimit(): void
-    {
-        for ($attempt = 0; $attempt < 10; $attempt++) {
-            $this->postJson('/api/v1/auth/login', []);
-        }
-    }
-
     protected function askForNewLinkAs(User $person): TestResponse
     {
         Sanctum::actingAs($person);
@@ -156,16 +149,23 @@ class ResendVerificationEmailTest extends AuthTestCase
         return $this->postJson(self::RESEND_URL);
     }
 
-    protected function assertNewLinkSentTo(TestResponse $response, User $person, int $times): void
+    protected function useUpSharedSignInLimit(): void
     {
-        $response->assertNoContent();
-        Notification::assertSentToTimes($person, EmailVerificationLinkNotification::class, $times);
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $this->postJson('/api/v1/auth/login', []);
+        }
     }
 
     protected function assertNothingSent(TestResponse $response): void
     {
         $response->assertNoContent();
         Notification::assertNothingSent();
+    }
+
+    protected function assertNewLinkSentTo(TestResponse $response, User $person, int $times): void
+    {
+        $response->assertNoContent();
+        Notification::assertSentToTimes($person, EmailVerificationLinkNotification::class, $times);
     }
 
     protected function assertNewLinkQueuedFor(TestResponse $response, User $person): void
