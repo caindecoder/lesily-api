@@ -83,5 +83,9 @@ class AppServiceProvider extends ServiceProvider
         // spam from one compromised or abusive account without letting a shared office IP
         // starve legitimate admins (D9/OQ-1-029; questionnaire §S14 special rate limits).
         RateLimiter::for('invitations', fn (Request $request) => Limit::perHour(20)->by((string) $request->user()?->getAuthIdentifier()));
+
+        // One fresh verification link per signed-in person per minute (WF-1-005's 60-second
+        // cooldown; slice-registration-completion RG6), keyed by the person, not the IP.
+        RateLimiter::for('email-verification', fn (Request $request) => Limit::perMinute(1)->by((string) $request->user()?->getAuthIdentifier()));
     }
 }

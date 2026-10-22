@@ -97,7 +97,7 @@ Route::get('/v1/auth/email/verify/{id}/{hash}', EmailVerificationController::cla
 
 // Resend the verification email (UC-1-001 alt-6a; slice-registration-completion RG4-RG6).
 Route::post('/v1/auth/email/verification-notification', ResendVerificationEmailController::class)
-    ->middleware('auth:sanctum');
+    ->middleware(['auth:sanctum', 'throttle:email-verification']);
 
 // Set up 2FA — enable step (UC-1-006), Pro+ via the feature gate. Generates a TOTP
 // secret + otpauth:// URI and stages it in a short-TTL cache; nothing persists to the

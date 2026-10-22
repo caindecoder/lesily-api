@@ -39,6 +39,20 @@ class ResendVerificationEmailTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_person_asks_again_within_the_minute_then_they_are_told_how_long_to_wait(): void
+    {
+        // Given the owner has just asked for a new link
+        Notification::fake();
+        $this->askForNewLinkAs($this->owner);
+
+        // When they ask again inside the same minute
+        $response = $this->askForNewLinkAs($this->owner);
+
+        // Then the request is refused with how long to wait
+        $this->assertThrottled($response);
+    }
+
+    #[Test]
     public function when_the_email_is_already_verified_then_nothing_is_sent(): void
     {
         // Given a person whose email is already verified
