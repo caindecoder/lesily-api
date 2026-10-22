@@ -53,6 +53,20 @@ class ResendVerificationEmailTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_shared_sign_in_limit_for_the_ip_is_used_up_then_the_resend_is_refused(): void
+    {
+        // Given the IP has used up the sign-in limit it shares with the resend
+        Notification::fake();
+        $this->useUpSharedSignInLimit();
+
+        // When the owner asks for a new link from that IP
+        $response = $this->askForNewLinkAs($this->owner);
+
+        // Then the request is refused with how long to wait
+        $this->assertThrottled($response);
+    }
+
+    #[Test]
     public function when_the_email_is_already_verified_then_nothing_is_sent(): void
     {
         // Given a person whose email is already verified
@@ -126,6 +140,13 @@ class ResendVerificationEmailTest extends AuthTestCase
     protected function askForNewLinkWithoutSigningIn(): TestResponse
     {
         return $this->postJson(self::RESEND_URL);
+    }
+
+    protected function useUpSharedSignInLimit(): void
+    {
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $this->postJson('/api/v1/auth/login', []);
+        }
     }
 
     protected function askForNewLinkAs(User $person): TestResponse
