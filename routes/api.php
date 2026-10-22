@@ -32,6 +32,7 @@ use App\Billing\Subscriptions\IO\Http\Controllers\SubscriptionsController;
 use App\Billing\Invoices\IO\Http\Controllers\PlatformAdminInvoicesController;
 use App\Companies\Memberships\IO\Http\Controllers\AcceptInvitationController;
 use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
+use App\Foundation\Auth\IO\Http\Controllers\ResendVerificationEmailController;
 use App\Compliance\Dsar\IO\Http\Controllers\PlatformAdminDsarRequestsController;
 use App\Companies\IO\Http\Controllers\PlatformAdminOwnershipTransferCasesController;
 
@@ -93,6 +94,10 @@ Route::post('/v1/auth/logout-all', LogoutAllController::class)
 Route::get('/v1/auth/email/verify/{id}/{hash}', EmailVerificationController::class)
     ->middleware(['signed', 'throttle:auth-tier'])
     ->name('verification.verify');
+
+// Resend the verification email (UC-1-001 alt-6a; slice-registration-completion RG4-RG6).
+Route::post('/v1/auth/email/verification-notification', ResendVerificationEmailController::class)
+    ->middleware('auth:sanctum');
 
 // Set up 2FA — enable step (UC-1-006), Pro+ via the feature gate. Generates a TOTP
 // secret + otpauth:// URI and stages it in a short-TTL cache; nothing persists to the
