@@ -5,8 +5,10 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Notifications\SendQueuedNotifications;
 use App\Foundation\Auth\Notifications\EmailVerificationLinkNotification;
 
 class ResendVerificationEmailTest extends AuthTestCase
@@ -49,6 +51,19 @@ class ResendVerificationEmailTest extends AuthTestCase
         $this->assertNewLinkSentTo($response, $this->owner, 1);
     }
 
+    #[Test]
+    public function when_an_unverified_owner_asks_for_a_new_link_then_the_email_is_queued_not_sent_inline(): void
+    {
+        // Given the email can only go out through the queue
+        Queue::fake();
+
+        // When the unverified owner asks for a new verification link
+        $response = $this->askForNewLinkAs($this->owner);
+
+        // Then the link waits on the queue instead of being sent inside the request
+        $this->assertNewLinkQueuedFor($response, $this->owner);
+    }
+
     protected function askForNewLinkWithoutSigningIn(): TestResponse
     {
         return $this->postJson(self::RESEND_URL);
@@ -65,5 +80,15 @@ class ResendVerificationEmailTest extends AuthTestCase
     {
         $response->assertNoContent();
         Notification::assertSentToTimes($person, EmailVerificationLinkNotification::class, $times);
+    }
+
+    protected function assertNewLinkQueuedFor(TestResponse $response, User $person): void
+    {
+        $response->assertNoContent();
+        Queue::assertPushed(
+            SendQueuedNotifications::class,
+            fn (SendQueuedNotifications $job) => $job->notification instanceof EmailVerificationLinkNotification
+                && $job->notifiables->contains($person),
+        );
     }
 }
