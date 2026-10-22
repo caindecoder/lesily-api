@@ -57,8 +57,8 @@ class AppServiceProvider extends ServiceProvider
 
         // auth-tier: one 10/min per-IP bucket shared by every route that mounts
         // throttle:auth-tier — the public credential surface (register, login,
-        // reset-password, 2FA verify) and the authenticated credential checks; see
-        // routes/api.php. Anti-brute-force per api-1-auth-onboarding §register.
+        // reset-password, 2FA verify), the authenticated credential checks and the
+        // verification-email resend; see routes/api.php. Anti-brute-force per api-1-auth-onboarding §register.
         // Distinct from the per-tenant-tier general-API limiter (OQ-1-098), which
         // resolves the limit from the company's plan.
         RateLimiter::for('auth-tier', fn (Request $request) => Limit::perMinute(10)->by((string) $request->ip()));
@@ -83,5 +83,9 @@ class AppServiceProvider extends ServiceProvider
         // spam from one compromised or abusive account without letting a shared office IP
         // starve legitimate admins (D9/OQ-1-029; questionnaire §S14 special rate limits).
         RateLimiter::for('invitations', fn (Request $request) => Limit::perHour(20)->by((string) $request->user()?->getAuthIdentifier()));
+
+        // One fresh verification link per signed-in person per minute, keyed by the person,
+        // not the IP. Mounted before auth-tier, so a refused repeat spends no shared budget.
+        RateLimiter::for('email-verification', fn (Request $request) => Limit::perMinute(1)->by((string) $request->user()?->getAuthIdentifier()));
     }
 }

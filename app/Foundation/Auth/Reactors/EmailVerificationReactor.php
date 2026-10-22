@@ -20,8 +20,9 @@ use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
  *
  * Listens to UserSignedUpAsOwner — the slice's genesis event — rather than
  * cd-auth's UserSignedUp, which belongs to the later non-owner signup path.
- * Reuses Laravel's native VerifyEmail notification, which builds the signed
- * `verification.verify` URL; nothing is gated on verified status this slice.
+ * The user model sends EmailVerificationLinkNotification (Laravel's VerifyEmail,
+ * queued), which builds the signed `verification.verify` URL; nothing is gated on
+ * verified status.
  */
 class EmailVerificationReactor extends Reactor implements ShouldQueue
 {
