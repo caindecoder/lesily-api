@@ -9,11 +9,11 @@ use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
-use Illuminate\Auth\Notifications\VerifyEmail;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Events\UserEmailVerified;
 use Spatie\EventSourcing\StoredEvents\HandleStoredEventJob;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Foundation\Auth\Notifications\EmailVerificationLinkNotification;
 
 class EmailVerificationTest extends AuthTestCase
 {
@@ -171,6 +171,6 @@ class EmailVerificationTest extends AuthTestCase
     {
         $owner = User::query()->where('email', $email)->sole();
 
-        Notification::assertSentTo($owner, VerifyEmail::class);
+        Notification::assertSentTo($owner, EmailVerificationLinkNotification::class);
     }
 }

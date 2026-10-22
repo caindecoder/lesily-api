@@ -6,5 +6,8 @@ use App\Models\User;
 
 class ResendVerificationEmailInteractor
 {
-    public function execute(User $user): void {}
+    public function execute(User $user): void
+    {
+        $user->sendEmailVerificationNotification();
+    }
 }

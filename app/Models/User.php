@@ -17,6 +17,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use App\Foundation\Auth\Notifications\PasswordResetLinkNotification;
+use App\Foundation\Auth\Notifications\EmailVerificationLinkNotification;
 use Illuminate\Auth\Passwords\CanResetPassword as CanResetPasswordTrait;
 
 /**
@@ -57,6 +58,11 @@ class User extends Authenticatable implements CanResetPassword, HasLocalePrefere
     public function sendPasswordResetNotification($token): void
     {
         $this->notify(new PasswordResetLinkNotification($token));
+    }
+
+    public function sendEmailVerificationNotification(): void
+    {
+        $this->notify(new EmailVerificationLinkNotification);
     }
 
     /**
