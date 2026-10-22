@@ -83,6 +83,21 @@ class ResendVerificationEmailTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_minute_has_passed_then_the_person_may_ask_again(): void
+    {
+        // Given the owner asked for a link and the minute has since passed
+        Notification::fake();
+        $this->askForNewLinkAs($this->owner);
+        $this->travel(61)->seconds();
+
+        // When they ask again
+        $response = $this->askForNewLinkAs($this->owner);
+
+        // Then a second fresh link is sent
+        $this->assertNewLinkSentTo($response, $this->owner, 2);
+    }
+
+    #[Test]
     public function when_an_unverified_owner_asks_for_a_new_link_then_a_fresh_link_is_sent(): void
     {
         // Given the owner has not verified their email
