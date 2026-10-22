@@ -67,6 +67,22 @@ class ResendVerificationEmailTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_one_person_has_used_their_minute_then_another_person_on_the_same_ip_may_ask(): void
+    {
+        // Given the owner has used their one link this minute, and a second
+        // unverified person shares the owner's IP
+        Notification::fake();
+        $this->askForNewLinkAs($this->owner);
+        $other = User::factory()->unverified()->create();
+
+        // When the second person asks for a new link
+        $response = $this->askForNewLinkAs($other);
+
+        // Then a fresh link is sent to them
+        $this->assertNewLinkSentTo($response, $other, 1);
+    }
+
+    #[Test]
     public function when_an_unverified_owner_asks_for_a_new_link_then_a_fresh_link_is_sent(): void
     {
         // Given the owner has not verified their email
