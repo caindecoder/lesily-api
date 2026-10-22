@@ -8,6 +8,10 @@ class ResendVerificationEmailInteractor
 {
     public function execute(User $user): void
     {
+        if ($user->hasVerifiedEmail()) {
+            return;
+        }
+
         $user->sendEmailVerificationNotification();
     }
 }

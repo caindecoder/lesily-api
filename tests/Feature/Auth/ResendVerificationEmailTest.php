@@ -39,6 +39,20 @@ class ResendVerificationEmailTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_email_is_already_verified_then_nothing_is_sent(): void
+    {
+        // Given a person whose email is already verified
+        Notification::fake();
+        $verified = User::factory()->create();
+
+        // When they ask for a new verification link
+        $response = $this->askForNewLinkAs($verified);
+
+        // Then the request succeeds and nothing is sent
+        $this->assertNothingSent($response);
+    }
+
+    #[Test]
     public function when_an_unverified_owner_asks_for_a_new_link_then_a_fresh_link_is_sent(): void
     {
         // Given the owner has not verified their email
@@ -80,6 +94,12 @@ class ResendVerificationEmailTest extends AuthTestCase
     {
         $response->assertNoContent();
         Notification::assertSentToTimes($person, EmailVerificationLinkNotification::class, $times);
+    }
+
+    protected function assertNothingSent(TestResponse $response): void
+    {
+        $response->assertNoContent();
+        Notification::assertNothingSent();
     }
 
     protected function assertNewLinkQueuedFor(TestResponse $response, User $person): void
