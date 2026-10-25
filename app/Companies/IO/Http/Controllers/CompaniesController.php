@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Companies\IO\Http\Resources\CompanyResource;
+use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use App\Companies\UseCases\Commands\UpdateCompanyCommand;
 use App\Companies\UseCases\Interactors\UpdateCompanyDetailsInteractor;
 
@@ -21,6 +22,11 @@ class CompaniesController
 {
     public function store(Request $request): JsonResponse
     {
+        /** @var User $actor — guaranteed by auth:sanctum */
+        $actor = $request->user();
+
+        CreateCompanyCommand::validateAndCreate([...$request->all(), 'ownerUserId' => $actor->getKey()]);
+
         return new JsonResponse(null, Response::HTTP_CREATED);
     }
 
