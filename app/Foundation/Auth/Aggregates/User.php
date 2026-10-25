@@ -77,7 +77,7 @@ class User extends AggregateRoot
 
     public function setEmergencyContact(string $companyId, SetEmergencyContactCommand $command): static
     {
-        return $this->recordThat(new UserMembershipEmergencyContactSet(
+        return $this->forCompany($companyId)->recordThat(new UserMembershipEmergencyContactSet(
             userId: $this->uuid(),
             companyId: $companyId,
             name: $command->name,

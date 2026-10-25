@@ -9,9 +9,12 @@ use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Consent\Events\ConsentRecorded;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
  * UC-1-031 "second company" — POST /api/v1/companies: a signed-in person opens
@@ -222,6 +225,99 @@ class AddCompanyTest extends CompaniesTestCase
         // Then the company is still added beside the first
         $response->assertCreated();
         $this->assertSame(2, Company::query()->where('name', 'Contoso')->count());
+    }
+
+    #[Test]
+    public function when_an_owner_adds_another_company_then_it_opens_on_its_own_trial_with_its_contact_and_consent(): void
+    {
+        // Given a signed-in owner of Contoso, whose contact there is Kamala Perera
+
+        // When they add Fabrikam with John Silva as its contact
+        $response = $this->addCompany();
+
+        // Then Fabrikam opens on its own trial, owned by them, with its own contact
+        // and consent filed under it, and nothing else about them changes
+        $companyId = $response->json('data.id');
+        $this->assertIsString($companyId);
+        $this->assertCompanyAddedOnTrial($response);
+        $this->assertOwnedOnItsOwnTrial($companyId);
+        $this->assertContactKeptPerCompany($companyId);
+        $this->assertConsentRecordedFor($companyId);
+        $this->assertNothingElseChanged();
+    }
+
+    protected function assertCompanyAddedOnTrial(TestResponse $response): void
+    {
+        $response->assertCreated();
+        $response->assertJsonPath('data.name', 'Fabrikam');
+        $response->assertJsonPath('data.status', 'trial');
+        $response->assertJsonPath('data.plan', null);
+    }
+
+    protected function assertOwnedOnItsOwnTrial(string $companyId): void
+    {
+        $this->assertDatabaseHas('companies', [
+            'id' => $companyId,
+            'owner_id' => $this->owner->getKey(),
+            'trial_ends_at' => '2026-07-08 00:00:00',
+        ]);
+        $this->assertDatabaseHas('subscriptions', [
+            'company_id' => $companyId,
+            'status' => 'trial',
+            'trial_ends_at' => '2026-07-08 00:00:00',
+        ]);
+        $this->assertDatabaseHas('company_user', [
+            'company_id' => $companyId,
+            'user_id' => $this->owner->getKey(),
+            'role_id' => $this->seededRole('owner')->getKey(),
+        ]);
+    }
+
+    protected function assertContactKeptPerCompany(string $companyId): void
+    {
+        $this->assertDatabaseHas('company_user', [
+            'company_id' => $companyId,
+            'user_id' => $this->owner->getKey(),
+            'emergency_contact_name' => 'John Silva',
+            'emergency_contact_email' => 'john@fabrikam.lk',
+            'emergency_contact_phone' => '+94712345678',
+            'emergency_contact_relationship' => 'parent',
+        ]);
+        $this->assertDatabaseHas('company_user', [
+            'company_id' => $this->companyA->getKey(),
+            'user_id' => $this->owner->getKey(),
+            'emergency_contact_name' => 'Kamala Perera',
+        ]);
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->whereForCompany($companyId)
+            ->where('event_class', UserMembershipEmergencyContactSet::class)
+            ->count());
+    }
+
+    protected function assertConsentRecordedFor(string $companyId): void
+    {
+        $this->assertSame(2, LesilyStoredEvent::query()
+            ->whereForCompany($companyId)
+            ->where('event_class', ConsentRecorded::class)
+            ->count());
+
+        foreach (['tos', 'privacy'] as $policyType) {
+            $consent = LesilyStoredEvent::query()
+                ->whereForCompany($companyId)
+                ->where('event_class', ConsentRecorded::class)
+                ->where('event_properties->policyType', $policyType)
+                ->sole();
+
+            $this->assertSame('v1.0', $consent->event_properties['version']);
+            $this->assertSame($this->owner->getKey(), $consent->event_properties['userId']);
+            $this->assertSame('127.0.0.1', $consent->event_properties['ip']);
+        }
+    }
+
+    protected function assertNothingElseChanged(): void
+    {
+        $this->assertNull($this->owner->refresh()->default_company_id);
+        Notification::assertNothingSent();
     }
 
     protected function assertConflictReported(TestResponse $response, ApiErrorCode $code, string $message): void

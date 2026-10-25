@@ -26,12 +26,14 @@ class CompaniesController
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
-        $interactor->execute(
+        $company = $interactor->execute(
             CreateCompanyCommand::validateAndCreate([...$request->all(), 'ownerUserId' => $actor->getKey()]),
             $request->ip(),
         );
 
-        return new JsonResponse(null, Response::HTTP_CREATED);
+        return (new CompanyResource($company))
+            ->response()
+            ->setStatusCode(Response::HTTP_CREATED);
     }
 
     public function show(Request $request): CompanyResource
