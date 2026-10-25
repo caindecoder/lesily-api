@@ -20,6 +20,7 @@ use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 use App\Foundation\Auth\Exceptions\UserAlreadyRegisteredException;
 use App\Foundation\Auth\UseCases\Commands\UpdateUserProfileCommand;
 use App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand;
+use App\Companies\Memberships\UseCases\Commands\SetEmergencyContactCommand;
 
 /**
  * The sole identity stream for a users row (slice C1). Owner signup is the genesis;
@@ -74,15 +75,15 @@ class User extends AggregateRoot
             ));
     }
 
-    public function setEmergencyContact(string $companyId, RegisterOwnerCommand $command): static
+    public function setEmergencyContact(string $companyId, SetEmergencyContactCommand $command): static
     {
         return $this->recordThat(new UserMembershipEmergencyContactSet(
             userId: $this->uuid(),
             companyId: $companyId,
-            name: $command->emergencyContactName,
-            email: $command->emergencyContactEmail,
-            phone: $command->emergencyContactPhone,
-            relationship: $command->emergencyContactRelationship,
+            name: $command->name,
+            email: $command->email,
+            phone: $command->phone,
+            relationship: $command->relationship,
         ));
     }
 

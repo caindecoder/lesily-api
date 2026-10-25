@@ -5,11 +5,9 @@ namespace App\Companies\UseCases\Commands;
 use Spatie\LaravelData\Data;
 
 /**
- * Genesis payload for the Company aggregate (CD-1-02) — an internal command
- * built via ::from() by RegisterOwnerInteractor. The registration fields are
- * validated once, at the HTTP seam (RegisterOwnerCommand carries the
- * CompanyRegistrationRules); BR/EPF global uniqueness is a cross-record guard
- * there too (slice increment 05), and ownerUserId is server-minted.
+ * A company opened for its owner (UC-1-031, UC-1-029, UC-1-069) — the input of
+ * CreateCompanyInteractor and of the Company aggregate's genesis. Signup builds it
+ * via ::from() from its own validated payload; ownerUserId is server-set.
  */
 class CreateCompanyCommand extends Data
 {
@@ -22,4 +20,14 @@ class CreateCompanyCommand extends Data
     public string $country;
 
     public string $ownerUserId;
+
+    public string $emergencyContactName;
+
+    public string $emergencyContactEmail;
+
+    public string $emergencyContactPhone;
+
+    public string $emergencyContactRelationship;
+
+    public bool $acceptedTos;
 }

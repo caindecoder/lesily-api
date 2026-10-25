@@ -2,34 +2,31 @@
 
 namespace App\Foundation\Auth\UseCases\Interactors;
 
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
-use App\Consent\Aggregates\Consent;
-use App\Companies\Aggregates\Company;
 use App\Models\User as UserReadModel;
 use App\Foundation\Auth\Aggregates\User;
 use Illuminate\Validation\ValidationException;
 use App\Foundation\Auth\UseCases\SessionIssuer;
-use App\Billing\Subscriptions\Aggregates\Subscription;
-use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Foundation\Auth\UseCases\Results\RegisterResult;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
+use App\Companies\UseCases\Interactors\CreateCompanyInteractor;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
-use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 
 /**
- * The fused owner-signup use case (system-architecture §3.2.1, Pattern A): every
- * aggregate of the registration commits in ONE transaction — a Company without an
- * owner, or a Subscription without a Company, must be impossible.
+ * The fused owner-signup use case (system-architecture §3.2.1): the owner and their
+ * first company commit in ONE transaction — a Company without an owner, or a
+ * Subscription without a Company, must be impossible. The company is opened by
+ * CreateCompanyInteractor inside this transaction (Pattern B).
  */
 class RegisterOwnerInteractor
 {
     public function __construct(
         private RegistrationUniquenessGuard $uniqueness,
         private SessionIssuer $sessionIssuer,
+        private CreateCompanyInteractor $createCompany,
     ) {}
 
     public function execute(RegisterOwnerCommand $command, ?string $clientIp, string $deviceName): RegisterResult
@@ -73,35 +70,11 @@ class RegisterOwnerInteractor
                 $userId = Str::uuid7()->toString();
                 $companyId = Str::uuid7()->toString();
 
-                // Persist order follows the FK chain (users → companies → company_user;
-                // owner_id is a RESTRICT FK per #02): the owner user first, then the
-                // company (whose projection also enrolls the owner pivot), and only
-                // then the emergency contact, which projects onto that pivot row.
-                // One transaction throughout — atomicity is unchanged.
-                $owner = User::retrieve($userId)->createOwner($companyId, $command);
-                $owner->persist();
+                // The owner first — companies.owner_id is a RESTRICT FK to users (#02) —
+                // and the company opened with the id the owner's genesis already names.
+                User::retrieve($userId)->createOwner($companyId, $command)->persist();
 
-                Company::retrieve($companyId)
-                    ->create($this->buildCreateCompanyCommand($command, $userId))
-                    ->persist();
-
-                $owner->setEmergencyContact($companyId, $command)->persist();
-
-                Consent::retrieve(Str::uuid7()->toString())
-                    ->record(RecordConsentCommand::from([
-                        'userId' => $userId,
-                        'companyId' => $companyId,
-                        'policyVersions' => config('lesily.policies'),
-                        'ip' => $clientIp,
-                    ]))
-                    ->persist();
-
-                Subscription::retrieve(Str::uuid7()->toString())
-                    ->startTrial(StartTrialCommand::from([
-                        'companyId' => $companyId,
-                        'trialEndsAt' => CarbonImmutable::now()->addDays(Company::TRIAL_DAYS),
-                    ]))
-                    ->persist();
+                $this->createCompany->execute($this->buildCreateCompanyCommand($command, $userId), $clientIp, $companyId);
 
                 return [$userId, $companyId];
             });
@@ -121,6 +94,11 @@ class RegisterOwnerInteractor
             'epfNumber' => $command->epfNumber,
             'country' => $command->country,
             'ownerUserId' => $ownerUserId,
+            'emergencyContactName' => $command->emergencyContactName,
+            'emergencyContactEmail' => $command->emergencyContactEmail,
+            'emergencyContactPhone' => $command->emergencyContactPhone,
+            'emergencyContactRelationship' => $command->emergencyContactRelationship,
+            'acceptedTos' => $command->acceptedTos,
         ]);
     }
 }
