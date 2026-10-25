@@ -110,6 +110,34 @@ class AddCompanyTest extends CompaniesTestCase
         ];
     }
 
+    /**
+     * @param  array<string, mixed>  $override
+     */
+    #[Test]
+    #[DataProvider('provideTakenRegistrationNumbers')]
+    public function when_the_br_or_epf_number_is_already_registered_then_it_conflicts_and_nothing_is_created(array $override, ApiErrorCode $expectedCode, string $expectedMessage): void
+    {
+        // Given a signed-in owner reusing a number their first company holds
+
+        // When they add a company
+        $response = $this->addCompany($override);
+
+        // Then it conflicts on that number and no company is added
+        $this->assertConflictReported($response, $expectedCode, $expectedMessage);
+        $this->assertNoCompanyAdded();
+    }
+
+    /**
+     * @return array<string, array{0: array<string, string>, 1: ApiErrorCode, 2: string}>
+     */
+    public static function provideTakenRegistrationNumbers(): array
+    {
+        return [
+            'business registration number' => [['brNumber' => self::COMPANY_A_BR], ApiErrorCode::BrNumberRegistered, 'This BR number is already registered.'],
+            'employer provident fund number' => [['epfNumber' => self::COMPANY_A_EPF], ApiErrorCode::EpfNumberRegistered, 'This EPF number is already registered.'],
+        ];
+    }
+
     protected function enrolOwnerWithContact(Company $company, User $owner): void
     {
         $company->users()->attach($owner, [
@@ -154,6 +182,12 @@ class AddCompanyTest extends CompaniesTestCase
             'emergencyContactRelationship' => 'parent',
             'acceptedTos' => true,
         ];
+    }
+
+    protected function assertConflictReported(TestResponse $response, ApiErrorCode $code, string $message): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, $code);
+        $response->assertJsonPath('message', $message);
     }
 
     protected function assertNoCompanyAdded(): void

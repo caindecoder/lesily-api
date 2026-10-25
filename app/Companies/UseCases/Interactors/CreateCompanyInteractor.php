@@ -12,6 +12,8 @@ use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
+use Illuminate\Database\UniqueConstraintViolationException;
+use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Companies\Memberships\UseCases\Commands\SetEmergencyContactCommand;
 
@@ -24,10 +26,27 @@ use App\Companies\Memberships\UseCases\Commands\SetEmergencyContactCommand;
  */
 class CreateCompanyInteractor
 {
-    public function execute(CreateCompanyCommand $command, string $clientIp, ?string $companyId = null): Company
+    public function __construct(
+        private RegistrationUniquenessGuard $uniqueness,
+    ) {}
+
+    public function execute(CreateCompanyCommand $command, ?string $clientIp, ?string $companyId = null): Company
     {
         $companyId ??= Str::uuid7()->toString();
 
+        try {
+            $this->open($command, $clientIp, $companyId);
+        } catch (UniqueConstraintViolationException $violation) {
+            // A taken BR / EPF is refused by its UNIQUE index (AC2); the same field
+            // 409 as signup's guard, and an unmapped violation re-raises untouched.
+            throw $this->uniqueness->conflictFor($violation) ?? $violation;
+        }
+
+        return Company::query()->findOrFail($companyId);
+    }
+
+    protected function open(CreateCompanyCommand $command, ?string $clientIp, string $companyId): void
+    {
         DB::transaction(function () use ($command, $clientIp, $companyId): void {
             CompanyAggregate::retrieve($companyId)->create($command)->persist();
 
@@ -56,7 +75,5 @@ class CreateCompanyInteractor
                 ]))
                 ->persist();
         });
-
-        return Company::query()->findOrFail($companyId);
     }
 }
