@@ -4,6 +4,8 @@ namespace App\Companies\IO\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Http\JsonResponse;
 use App\Companies\IO\Http\Resources\CompanyResource;
 use App\Companies\UseCases\Commands\UpdateCompanyCommand;
 use App\Companies\UseCases\Interactors\UpdateCompanyDetailsInteractor;
@@ -17,6 +19,11 @@ use App\Companies\UseCases\Interactors\UpdateCompanyDetailsInteractor;
  */
 class CompaniesController
 {
+    public function store(Request $request): JsonResponse
+    {
+        return new JsonResponse(null, Response::HTTP_CREATED);
+    }
+
     public function show(Request $request): CompanyResource
     {
         return new CompanyResource($request->company());

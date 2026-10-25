@@ -198,6 +198,10 @@ Route::put('/v1/me/default-company', [DefaultCompanyController::class, 'update']
 Route::delete('/v1/me/default-company', [DefaultCompanyController::class, 'destroy'])
     ->middleware('auth:sanctum');
 
+// Add another company (UC-1-031) — any signed-in person; no company context.
+Route::post('/v1/companies', [CompaniesController::class, 'store'])
+    ->middleware('auth:sanctum');
+
 // View company details (UC-1-032) — the first route-param company endpoint:
 // the resolver reads {companyId} first, header fallback (slice-companies R8;
 // the URL is authoritative here). Repository-direct read, no event. Gate order
