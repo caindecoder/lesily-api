@@ -13,7 +13,8 @@ use App\Companies\UseCases\Interactors\CreateCompanyInteractor;
 use App\Companies\UseCases\Interactors\UpdateCompanyDetailsInteractor;
 
 /**
- * The company resource — details view (UC-1-032) and update (UC-1-033).
+ * The company resource — add another company (UC-1-031), details view (UC-1-032)
+ * and update (UC-1-033).
  * Repository-direct read (cd-companies §5): AuthorizeCompany resolves +
  * membership-checks the company upstream, so show only shapes it; update
  * refuses immutable fields at the command whitelist then records events through

@@ -6,8 +6,8 @@ use Spatie\EventSourcing\StoredEvents\ShouldBeStored;
 
 /**
  * Owner-signup genesis on the User identity stream (slice C1 — the sole signup
- * stream; the owner company_user pivot is projected from this event, never from a
- * separate membership genesis). Carries the password HASH, never the plaintext
+ * stream; the owner company_user pivot is projected from CompanyCreated, never from
+ * a separate membership genesis). Carries the password HASH, never the plaintext
  * (UC-1-001 minimal guarantee). `companyName` is denormalised onto the event so the
  * after-commit welcome reactor needs no companies projection — that row is not yet
  * written when this fires (the owner persists first, per the owner_id FK chain).

@@ -13,7 +13,10 @@ use App\Consent\Events\ConsentRecorded;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use Illuminate\Database\UniqueConstraintViolationException;
+use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
+use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -48,6 +51,7 @@ class AddCompanyTest extends CompaniesTestCase
             ->ownedBy($this->owner)
             ->create();
         $this->enrolOwnerWithContact($this->companyA, $this->owner);
+        $this->owner->forceFill(['default_company_id' => $this->companyA->getKey()])->save();
         $this->idempotencyKey = (string) Str::uuid();
     }
 
@@ -101,10 +105,14 @@ class AddCompanyTest extends CompaniesTestCase
     public static function provideInvalidCompanyDetails(): array
     {
         return [
-            'missing name' => [['name' => ''], 'name', 'The name field is required.'],
+            'missing name' => [['name' => ''], 'name', 'The company name field is required.'],
+            'over-long name' => [['name' => str_repeat('a', 256)], 'name', 'The company name field must not be greater than 255 characters.'],
             'missing BR number' => [['brNumber' => ''], 'brNumber', 'The BR (Business Registration) number is required.'],
+            'BR number in the wrong format' => [['brNumber' => 'PVABC'], 'brNumber', 'Invalid BR number format.'],
             'missing EPF number' => [['epfNumber' => ''], 'epfNumber', 'The EPF employer number is required.'],
+            'EPF number in the wrong format' => [['epfNumber' => 'AB/12345'], 'epfNumber', 'Invalid EPF number format.'],
             'missing country' => [['country' => ''], 'country', 'The country field is required.'],
+            'country beyond two characters' => [['country' => 'LKA'], 'country', 'The country field must be 2 characters.'],
             'missing emergency contact name' => [['emergencyContactName' => ''], 'emergencyContactName', 'The emergency contact name field is required.'],
             'emergency contact email not an email' => [['emergencyContactEmail' => 'john-at-fabrikam'], 'emergencyContactEmail', 'The emergency contact email must be a valid email address.'],
             'phone not a number' => [['emergencyContactPhone' => '12345'], 'emergencyContactPhone', 'The emergency contact phone must be a valid phone number.'],
@@ -139,6 +147,131 @@ class AddCompanyTest extends CompaniesTestCase
             'business registration number' => [['brNumber' => self::COMPANY_A_BR], ApiErrorCode::BrNumberRegistered, 'This BR number is already registered.'],
             'employer provident fund number' => [['epfNumber' => self::COMPANY_A_EPF], ApiErrorCode::EpfNumberRegistered, 'This EPF number is already registered.'],
         ];
+    }
+
+    #[Test]
+    public function when_the_country_is_not_supported_then_it_is_rejected_and_nothing_is_created(): void
+    {
+        // Given a signed-in owner choosing a country with no seeded defaults
+
+        // When they add a company
+        $response = $this->addCompany(['country' => 'ZZ']);
+
+        // Then it is rejected and the half-opened company is rolled back
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::UnsupportedCountry);
+        $response->assertJsonPath('message', 'Selected country is not supported.');
+        $this->assertNoCompanyAdded();
+    }
+
+    #[Test]
+    public function when_a_unique_violation_cannot_be_mapped_then_the_original_error_is_not_masked(): void
+    {
+        // Given a signed-in owner reusing their first company's BR number, and a
+        // translator that maps no index
+        $this->app->instance(RegistrationUniquenessGuard::class, new class extends RegistrationUniquenessGuard
+        {
+            public function conflictFor(UniqueConstraintViolationException $violation): ?RegistrationConflictException
+            {
+                return null;
+            }
+        });
+
+        // When they add a company
+        $response = $this->addCompany(['brNumber' => self::COMPANY_A_BR]);
+
+        // Then the original database fault surfaces, never a masked conflict
+        $response->assertInternalServerError();
+        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
+        $this->assertNoCompanyAdded();
+    }
+
+    #[Test]
+    public function when_the_client_ip_is_undeterminable_then_the_company_is_rejected_as_invalid(): void
+    {
+        // Given a signed-in owner whose request carries no resolvable client IP
+        $this->withServerVariables(['REMOTE_ADDR' => '']);
+
+        // When they add a company
+        $response = $this->addCompany();
+
+        // Then it is rejected as invalid and no company is added
+        $this->assertValidationRejected($response, 'ip', 'The ip field is required.');
+        $this->assertNoCompanyAdded();
+    }
+
+    #[Test]
+    public function when_both_the_br_and_epf_numbers_are_taken_then_the_br_conflict_is_reported(): void
+    {
+        // Given a signed-in owner reusing both numbers their first company holds
+
+        // When they add a company
+        $response = $this->addCompany(['brNumber' => self::COMPANY_A_BR, 'epfNumber' => self::COMPANY_A_EPF]);
+
+        // Then the BR conflict is the one reported and no company is added
+        $this->assertConflictReported($response, ApiErrorCode::BrNumberRegistered, 'This BR number is already registered.');
+        $this->assertNoCompanyAdded();
+    }
+
+    #[Test]
+    public function when_another_company_already_has_the_name_then_the_company_is_still_added(): void
+    {
+        // Given a signed-in owner whose first company is named Contoso
+
+        // When they add a company with the same name
+        $response = $this->addCompany(['name' => 'Contoso']);
+
+        // Then the company is still added beside the first
+        $response->assertCreated();
+        $this->assertSame(2, Company::query()->where('name', 'Contoso')->count());
+    }
+
+    #[Test]
+    public function when_the_request_names_another_owner_then_the_signed_in_person_still_owns_the_company(): void
+    {
+        // Given a signed-in owner whose request names someone else as the owner
+        $someoneElse = User::factory()->create();
+
+        // When they add a company
+        $response = $this->addCompany(['ownerUserId' => $someoneElse->getKey()]);
+
+        // Then the signed-in person owns it, and nothing is opened for the other user
+        $companyId = $response->json('data.id');
+        $this->assertIsString($companyId);
+        $this->assertOwnedOnItsOwnTrial($companyId);
+        $this->assertDatabaseMissing('company_user', ['user_id' => $someoneElse->getKey()]);
+    }
+
+    #[Test]
+    public function when_the_owner_has_not_verified_their_email_then_the_company_is_still_added(): void
+    {
+        // Given a signed-in owner who has not verified their email yet
+        $this->owner->forceFill(['email_verified_at' => null])->save();
+
+        // When they add a company
+        $response = $this->addCompany();
+
+        // Then it is added — verification blocks nothing
+        $response->assertCreated();
+        $this->assertSame(2, Company::query()->where('owner_id', $this->owner->getKey())->count());
+    }
+
+    #[Test]
+    public function when_an_owner_adds_another_company_then_it_opens_on_its_own_trial_with_its_contact_and_consent(): void
+    {
+        // Given a signed-in owner of Contoso, whose contact there is Kamala Perera
+
+        // When they add Fabrikam with John Silva as its contact
+        $response = $this->addCompany();
+
+        // Then Fabrikam opens on its own trial, owned by them, with its own contact
+        // and consent filed under it, and nothing else about them changes
+        $companyId = $response->json('data.id');
+        $this->assertIsString($companyId);
+        $this->assertCompanyAddedOnTrial($response);
+        $this->assertOwnedOnItsOwnTrial($companyId);
+        $this->assertContactKeptPerCompany($companyId);
+        $this->assertConsentRecordedFor($companyId);
+        $this->assertNothingElseChanged();
     }
 
     protected function enrolOwnerWithContact(Company $company, User $owner): void
@@ -185,65 +318,6 @@ class AddCompanyTest extends CompaniesTestCase
             'emergencyContactRelationship' => 'parent',
             'acceptedTos' => true,
         ];
-    }
-
-    #[Test]
-    public function when_the_client_ip_is_undeterminable_then_the_company_is_rejected_as_invalid(): void
-    {
-        // Given a signed-in owner whose request carries no resolvable client IP
-        $this->withServerVariables(['REMOTE_ADDR' => '']);
-
-        // When they add a company
-        $response = $this->addCompany();
-
-        // Then it is rejected as invalid and no company is added
-        $this->assertValidationRejected($response, 'ip', 'The ip field is required.');
-        $this->assertNoCompanyAdded();
-    }
-
-    #[Test]
-    public function when_both_the_br_and_epf_numbers_are_taken_then_the_br_conflict_is_reported(): void
-    {
-        // Given a signed-in owner reusing both numbers their first company holds
-
-        // When they add a company
-        $response = $this->addCompany(['brNumber' => self::COMPANY_A_BR, 'epfNumber' => self::COMPANY_A_EPF]);
-
-        // Then the BR conflict is the one reported and no company is added
-        $this->assertConflictReported($response, ApiErrorCode::BrNumberRegistered, 'This BR number is already registered.');
-        $this->assertNoCompanyAdded();
-    }
-
-    #[Test]
-    public function when_another_company_already_has_the_name_then_the_company_is_still_added(): void
-    {
-        // Given a signed-in owner whose first company is named Contoso
-
-        // When they add a company with the same name
-        $response = $this->addCompany(['name' => 'Contoso']);
-
-        // Then the company is still added beside the first
-        $response->assertCreated();
-        $this->assertSame(2, Company::query()->where('name', 'Contoso')->count());
-    }
-
-    #[Test]
-    public function when_an_owner_adds_another_company_then_it_opens_on_its_own_trial_with_its_contact_and_consent(): void
-    {
-        // Given a signed-in owner of Contoso, whose contact there is Kamala Perera
-
-        // When they add Fabrikam with John Silva as its contact
-        $response = $this->addCompany();
-
-        // Then Fabrikam opens on its own trial, owned by them, with its own contact
-        // and consent filed under it, and nothing else about them changes
-        $companyId = $response->json('data.id');
-        $this->assertIsString($companyId);
-        $this->assertCompanyAddedOnTrial($response);
-        $this->assertOwnedOnItsOwnTrial($companyId);
-        $this->assertContactKeptPerCompany($companyId);
-        $this->assertConsentRecordedFor($companyId);
-        $this->assertNothingElseChanged();
     }
 
     protected function assertCompanyAddedOnTrial(TestResponse $response): void
@@ -316,7 +390,7 @@ class AddCompanyTest extends CompaniesTestCase
 
     protected function assertNothingElseChanged(): void
     {
-        $this->assertNull($this->owner->refresh()->default_company_id);
+        $this->assertSame($this->companyA->getKey(), $this->owner->refresh()->default_company_id);
         Notification::assertNothingSent();
     }
 

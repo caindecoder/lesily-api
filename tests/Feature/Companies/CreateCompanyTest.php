@@ -18,10 +18,10 @@ use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
- * Create-company genesis at the domain seam (conv-plan §2.14 Rule C): register
- * mints fresh UUIDs, so the re-genesis and unsupported-country guards below are
- * unreachable via HTTP — they protect future callers (UC-1-031 additional-company
- * path) and replay integrity, and are provable only at this seam.
+ * Create-company genesis at the domain seam (conv-plan §2.14 Rule C): both callers
+ * of CreateCompanyInteractor (signup, POST /companies) mint fresh UUIDs, so the
+ * re-genesis guard below is unreachable via HTTP — it protects replay integrity and
+ * any later caller, and is provable only at this seam.
  */
 class CreateCompanyTest extends CompaniesTestCase
 {

@@ -57,9 +57,9 @@ class RegisterOwnerInteractor
     }
 
     /**
-     * Persist the fused owner-signup aggregates atomically and return the generated ids.
-     * The DB UNIQUE backstop maps a concurrent duplicate to the field-specific 409; an
-     * unmapped violation re-raises untouched.
+     * Persist the owner and their first company atomically and return the generated
+     * ids. A concurrent duplicate email is mapped here to its 409 (a BR / EPF one is
+     * mapped inside CreateCompanyInteractor); an unmapped violation re-raises untouched.
      *
      * @return array{string, string} [userId, companyId]
      */
@@ -79,9 +79,9 @@ class RegisterOwnerInteractor
                 return [$userId, $companyId];
             });
         } catch (UniqueConstraintViolationException $violation) {
-            // A concurrent signup slipped past the pre-tx guard; the DB UNIQUE index
-            // is the backstop. Surface the same field-specific conflict — or re-raise
-            // an unmapped violation untouched, so a genuine fault is never masked as a 409.
+            // A concurrent signup slipped past the pre-tx guard on email; the DB UNIQUE
+            // index is the backstop. Surface the same conflict — or re-raise an unmapped
+            // violation untouched, so a genuine fault is never masked as a 409.
             throw $this->uniqueness->conflictFor($violation) ?? $violation;
         }
     }
@@ -98,7 +98,6 @@ class RegisterOwnerInteractor
             'emergencyContactEmail' => $command->emergencyContactEmail,
             'emergencyContactPhone' => $command->emergencyContactPhone,
             'emergencyContactRelationship' => $command->emergencyContactRelationship,
-            'acceptedTos' => $command->acceptedTos,
         ]);
     }
 }

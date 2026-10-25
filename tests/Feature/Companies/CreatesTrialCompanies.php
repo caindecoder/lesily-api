@@ -36,7 +36,6 @@ trait CreatesTrialCompanies
             'emergencyContactEmail' => 'kamala@contoso.lk',
             'emergencyContactPhone' => '+94771234567',
             'emergencyContactRelationship' => 'spouse',
-            'acceptedTos' => true,
         ]);
     }
 }

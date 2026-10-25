@@ -7,9 +7,10 @@ use App\Companies\UseCases\Rules\EpfNumber;
 use Illuminate\Contracts\Validation\ValidationRule;
 
 /**
- * Rule-builders and messages for the company-registration fields, applied by
- * RegisterOwnerCommand at the HTTP seam. BR/EPF global uniqueness is a 409
- * conflict enforced by RegistrationUniquenessGuard, not a 422 validation rule here.
+ * Rule-builders and messages for the company-registration fields, applied at the
+ * HTTP seam by RegisterOwnerCommand (signup) and CreateCompanyCommand (POST
+ * /companies). BR/EPF global uniqueness is a 409 conflict mapped by
+ * RegistrationUniquenessGuard, not a 422 validation rule here.
  */
 trait CompanyRegistrationRules
 {

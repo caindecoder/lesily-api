@@ -9,8 +9,9 @@ use App\Companies\Memberships\Enums\EmergencyContactRelationship;
 use App\Companies\Memberships\UseCases\Rules\SriLankanPhoneNumber;
 
 /**
- * Shared rule-builders and messages for the owner-signup command — the
- * user-identity and emergency-contact fields. The messages are the use cases' own
+ * Shared rule-builders and messages for the user-identity and emergency-contact
+ * fields — used by the owner-signup command and, for the contact and ToS fields, by
+ * CreateCompanyCommand. The messages are the use cases' own
  * words (UC-1-001, UC-1-029, UC-1-069).
  */
 trait RegisterOwnerRules

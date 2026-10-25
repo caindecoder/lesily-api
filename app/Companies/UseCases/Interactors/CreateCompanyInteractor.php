@@ -44,8 +44,8 @@ class CreateCompanyInteractor
         try {
             $this->open($command, $clientIp, $companyId);
         } catch (UniqueConstraintViolationException $violation) {
-            // A taken BR / EPF is refused by its UNIQUE index (AC2); the same field
-            // 409 as signup's guard, and an unmapped violation re-raises untouched.
+            // A taken BR / EPF is refused by its UNIQUE index: the same field 409 as
+            // signup's guard, and an unmapped violation re-raises untouched.
             throw $this->uniqueness->conflictFor($violation) ?? $violation;
         }
 

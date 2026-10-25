@@ -11,13 +11,14 @@ use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 /**
  * Rejects an owner signup whose email / BR / EPF is already taken, BEFORE the
  * register transaction opens — so a conflict never writes a partial account. The
- * read-model lookups back the field-specific 409s; the DB UNIQUE constraints
- * remain the race-condition backstop.
+ * DB UNIQUE constraints back it for a signup that races past the check, and are the
+ * only BR / EPF check when a signed-in person adds a company (CreateCompanyInteractor
+ * maps their violation through conflictFor).
  */
 class RegistrationUniquenessGuard
 {
-    // Laravel's default unique-index names ({table}_{column}_unique); the DB
-    // backstop reports these when a concurrent signup races past ensureUnique().
+    // Laravel's default unique-index names ({table}_{column}_unique), as the DB
+    // reports them in a UniqueConstraintViolationException.
     private const EMAIL_INDEX = 'users_email_unique';
 
     private const BR_NUMBER_INDEX = 'companies_br_number_unique';

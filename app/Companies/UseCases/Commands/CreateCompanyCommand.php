@@ -12,7 +12,8 @@ use App\Foundation\Auth\UseCases\Commands\RegisterOwnerRules;
  * A company opened for its owner (UC-1-031, UC-1-029, UC-1-069) — the input of
  * CreateCompanyInteractor and of the Company aggregate's genesis. POST /companies
  * validates it at the HTTP boundary; signup builds it via ::from() from its own
- * validated payload. ownerUserId is server-set and carries no rule.
+ * validated payload. ownerUserId is server-set and carries no rule; acceptedTos is
+ * a rule with no property — accepted at the boundary, never read after it.
  */
 class CreateCompanyCommand extends Data
 {
@@ -37,8 +38,6 @@ class CreateCompanyCommand extends Data
 
     public string $emergencyContactRelationship;
 
-    public bool $acceptedTos;
-
     /**
      * @return array<string, array<int, string|Enum|ValidationRule>>
      */
@@ -55,6 +54,14 @@ class CreateCompanyCommand extends Data
             'emergencyContactRelationship' => self::relationshipRules(),
             'acceptedTos' => self::acceptedTosRules(),
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function attributes(): array
+    {
+        return ['name' => 'company name'];
     }
 
     /**
