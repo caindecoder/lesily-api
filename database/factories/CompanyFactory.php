@@ -115,6 +115,13 @@ class CompanyFactory extends Factory
         });
     }
 
+    public function ownedBy(User $owner): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'owner_id' => $owner->getKey(),
+        ]);
+    }
+
     public function registeredAs(string $brNumber, string $epfNumber): static
     {
         return $this->state(fn (array $attributes): array => [

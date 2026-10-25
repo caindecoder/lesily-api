@@ -32,6 +32,10 @@ trait CreatesTrialCompanies
             'epfNumber' => "EPF-{$companyId}",
             'country' => 'LK',
             'ownerUserId' => $ownerUserId ?? User::factory()->create()->getKey(),
+            'emergencyContactName' => 'Kamala Perera',
+            'emergencyContactEmail' => 'kamala@contoso.lk',
+            'emergencyContactPhone' => '+94771234567',
+            'emergencyContactRelationship' => 'spouse',
         ]);
     }
 }

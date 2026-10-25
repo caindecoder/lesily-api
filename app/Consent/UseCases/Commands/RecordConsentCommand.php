@@ -9,7 +9,7 @@ use Spatie\LaravelData\Data;
  * agreed to, and the client IP captured atomically with the record (UC-1-069).
  *
  * A Spatie\LaravelData command (aggregate-takes-Command standing convention,
- * locked company-onboarding #02), built via ::from() by RegisterOwnerInteractor
+ * locked company-onboarding #02), built via ::from() by CreateCompanyInteractor
  * from server-minted ids, config-sourced policy versions and the resolved
  * client IP — the interactor guards the IP before opening the transaction.
  */
