@@ -198,9 +198,11 @@ Route::put('/v1/me/default-company', [DefaultCompanyController::class, 'update']
 Route::delete('/v1/me/default-company', [DefaultCompanyController::class, 'destroy'])
     ->middleware('auth:sanctum');
 
-// Add another company (UC-1-031) — any signed-in person; no company context.
+// Add another company (UC-1-031) — any signed-in person; no company context. The
+// key is required: a replayed create would open a second company. No throttle
+// (tiered limits — OQ-1-098); no creation limit yet (OQ-1-191).
 Route::post('/v1/companies', [CompaniesController::class, 'store'])
-    ->middleware('auth:sanctum');
+    ->middleware(['auth:sanctum', 'idempotency-key:required']);
 
 // View company details (UC-1-032) — the first route-param company endpoint:
 // the resolver reads {companyId} first, header fallback (slice-companies R8;

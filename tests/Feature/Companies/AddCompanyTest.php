@@ -4,10 +4,13 @@ namespace Tests\Feature\Companies;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
+use App\Foundation\Http\Responses\ApiErrorCode;
 
 /**
  * UC-1-031 "second company" — POST /api/v1/companies: a signed-in person opens
@@ -57,6 +60,20 @@ class AddCompanyTest extends CompaniesTestCase
         $this->assertNoCompanyAdded();
     }
 
+    #[Test]
+    public function when_no_idempotency_key_is_sent_then_the_company_is_refused(): void
+    {
+        // Given a signed-in owner whose request carries no idempotency key
+        $this->idempotencyKey = null;
+
+        // When they add a company
+        $response = $this->addCompany();
+
+        // Then it is refused before any work and no company is added
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::IdempotencyKeyRequired);
+        $this->assertNoCompanyAdded();
+    }
+
     protected function enrolOwnerWithContact(Company $company, User $owner): void
     {
         $company->users()->attach($owner, [
@@ -66,6 +83,18 @@ class AddCompanyTest extends CompaniesTestCase
             'emergency_contact_phone' => '+94771234567',
             'emergency_contact_relationship' => 'spouse',
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $override
+     */
+    protected function addCompany(array $override = []): TestResponse
+    {
+        Sanctum::actingAs($this->owner);
+
+        $headers = $this->idempotencyKey === null ? [] : ['Idempotency-Key' => $this->idempotencyKey];
+
+        return $this->postJson('/api/v1/companies', [...$this->validCompanyPayload(), ...$override], $headers);
     }
 
     protected function addCompanyAsGuest(): TestResponse
