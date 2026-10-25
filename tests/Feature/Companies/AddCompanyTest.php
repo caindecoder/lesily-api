@@ -184,6 +184,20 @@ class AddCompanyTest extends CompaniesTestCase
         ];
     }
 
+    #[Test]
+    public function when_the_client_ip_is_undeterminable_then_the_company_is_rejected_as_invalid(): void
+    {
+        // Given a signed-in owner whose request carries no resolvable client IP
+        $this->withServerVariables(['REMOTE_ADDR' => '']);
+
+        // When they add a company
+        $response = $this->addCompany();
+
+        // Then it is rejected as invalid and no company is added
+        $this->assertValidationRejected($response, 'ip', 'The ip field is required.');
+        $this->assertNoCompanyAdded();
+    }
+
     protected function assertConflictReported(TestResponse $response, ApiErrorCode $code, string $message): void
     {
         $this->assertRefusedWith($response, Response::HTTP_CONFLICT, $code);

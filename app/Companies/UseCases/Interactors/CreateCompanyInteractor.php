@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Consent\Aggregates\Consent;
 use App\Foundation\Auth\Aggregates\User;
+use Illuminate\Validation\ValidationException;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Companies\Aggregates\Company as CompanyAggregate;
@@ -32,6 +33,12 @@ class CreateCompanyInteractor
 
     public function execute(CreateCompanyCommand $command, ?string $clientIp, ?string $companyId = null): Company
     {
+        // A consent record is evidence and is never minted without the client IP
+        // it was given from (UC-1-069).
+        if (blank($clientIp)) {
+            throw ValidationException::withMessages(['ip' => 'The ip field is required.']);
+        }
+
         $companyId ??= Str::uuid7()->toString();
 
         try {
@@ -45,7 +52,7 @@ class CreateCompanyInteractor
         return Company::query()->findOrFail($companyId);
     }
 
-    protected function open(CreateCompanyCommand $command, ?string $clientIp, string $companyId): void
+    protected function open(CreateCompanyCommand $command, string $clientIp, string $companyId): void
     {
         DB::transaction(function () use ($command, $clientIp, $companyId): void {
             CompanyAggregate::retrieve($companyId)->create($command)->persist();
