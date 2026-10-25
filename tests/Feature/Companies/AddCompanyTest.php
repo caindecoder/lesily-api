@@ -198,6 +198,19 @@ class AddCompanyTest extends CompaniesTestCase
         $this->assertNoCompanyAdded();
     }
 
+    #[Test]
+    public function when_both_the_br_and_epf_numbers_are_taken_then_the_br_conflict_is_reported(): void
+    {
+        // Given a signed-in owner reusing both numbers their first company holds
+
+        // When they add a company
+        $response = $this->addCompany(['brNumber' => self::COMPANY_A_BR, 'epfNumber' => self::COMPANY_A_EPF]);
+
+        // Then the BR conflict is the one reported and no company is added
+        $this->assertConflictReported($response, ApiErrorCode::BrNumberRegistered, 'This BR number is already registered.');
+        $this->assertNoCompanyAdded();
+    }
+
     protected function assertConflictReported(TestResponse $response, ApiErrorCode $code, string $message): void
     {
         $this->assertRefusedWith($response, Response::HTTP_CONFLICT, $code);
