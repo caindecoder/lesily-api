@@ -211,6 +211,19 @@ class AddCompanyTest extends CompaniesTestCase
         $this->assertNoCompanyAdded();
     }
 
+    #[Test]
+    public function when_another_company_already_has_the_name_then_the_company_is_still_added(): void
+    {
+        // Given a signed-in owner whose first company is named Contoso
+
+        // When they add a company with the same name
+        $response = $this->addCompany(['name' => 'Contoso']);
+
+        // Then the company is still added beside the first
+        $response->assertCreated();
+        $this->assertSame(2, Company::query()->where('name', 'Contoso')->count());
+    }
+
     protected function assertConflictReported(TestResponse $response, ApiErrorCode $code, string $message): void
     {
         $this->assertRefusedWith($response, Response::HTTP_CONFLICT, $code);
