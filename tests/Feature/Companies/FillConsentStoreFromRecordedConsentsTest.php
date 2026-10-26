@@ -42,6 +42,23 @@ class FillConsentStoreFromRecordedConsentsTest extends CompaniesTestCase
     }
 
     #[Test]
+    public function when_the_fill_runs_again_then_no_consent_is_copied_twice(): void
+    {
+        // Given an owner's consents that the fill migration has already copied
+        $this->anOwnerWhoConsentedAt('2026-06-08 09:00:00');
+        DB::table('consent_records')->delete();
+        $this->runFillMigration();
+        $copied = ConsentRecord::query()->orderBy('stored_event_id')->get()->map->getAttributes()->all();
+
+        // When the fill migration runs again
+        $this->runFillMigration();
+
+        // Then the store holds the same two rows, ids included
+        $this->assertCount(2, $copied);
+        $this->assertSame($copied, ConsentRecord::query()->orderBy('stored_event_id')->get()->map->getAttributes()->all());
+    }
+
+    #[Test]
     public function when_consents_were_recorded_before_the_store_then_the_fill_copies_each_with_its_time_and_ip(): void
     {
         // Given two owners who consented in their own companies on different days,
