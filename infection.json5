@@ -133,6 +133,7 @@
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUser2FAEnabled",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUser2FADisabled",
                 "App\\Foundation\\Auth\\Reactors\\EmailVerificationReactor::onUserSignedUpAsOwner",
+                "App\\Consent\\Projectors\\ConsentRecordProjector::onConsentRecorded",
                 // OQ-1-172 PR-0 L-RELATIONS: lazy relations resolved from Model scope
                 // (Model::getRelationValue calls $this->company() / $this->settings() from
                 // inside the class, so protected still resolves); no with()/load() names
