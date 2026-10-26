@@ -443,7 +443,7 @@ class AddCompanyTest extends CompaniesTestCase
     }
 
     /**
-     * @return list<array<string, mixed>>
+     * @return array<int, array<string, mixed>>
      */
     protected function consentRowsOf(string $companyId): array
     {

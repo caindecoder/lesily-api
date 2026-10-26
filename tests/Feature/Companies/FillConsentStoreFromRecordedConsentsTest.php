@@ -94,7 +94,7 @@ class FillConsentStoreFromRecordedConsentsTest extends CompaniesTestCase
     }
 
     /**
-     * @return list<int>
+     * @return array<int, mixed>
      */
     protected function consentEventIds(): array
     {
@@ -106,7 +106,7 @@ class FillConsentStoreFromRecordedConsentsTest extends CompaniesTestCase
     }
 
     /**
-     * @return list<list<mixed>>
+     * @return array<int, array<int, mixed>>
      */
     protected function storedConsents(): array
     {
