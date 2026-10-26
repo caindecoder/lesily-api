@@ -9,6 +9,7 @@ use Spatie\LaravelPdf\Facades\Pdf;
 use Illuminate\Support\Facades\View;
 use Illuminate\Filesystem\Filesystem;
 use PHPUnit\Framework\Attributes\Test;
+use Symfony\Component\Process\Process;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Dsar\UseCases\Reports\DsarReport;
 use App\Compliance\Dsar\UseCases\Reports\DsarReportCover;
@@ -85,15 +86,15 @@ class RenderDsarReportPdfTest extends DsarTestCase
     #[Test, DataProvider('provideWebSchemes')]
     public function when_the_report_references_a_web_resource_then_it_is_never_fetched(string $scheme): void
     {
-        // Given a report template that loads an image from a listening web address
-        $listener = stream_socket_server('tcp://127.0.0.1:0') ?: throw new RuntimeException('No socket to listen on.');
-        $this->aReportTemplateLoading($scheme.'://'.stream_socket_get_name($listener, false).'/pixel.png');
+        // Given a report template that loads an image from a web server answering every request
+        $server = $this->aWebServerAnsweringEveryRequest();
+        $this->aReportTemplateLoading($scheme.'://'.$this->addressOf($server).'/pixel.png');
 
         // When the registered renderer renders a report
         $this->theRegisteredReportRenderer()->render($this->aReport());
 
-        // Then nothing ever connected to that address
-        $this->assertNoConnectionWaitingOn($listener);
+        // Then nothing ever connected to that server
+        $this->assertNothingConnectedTo($server);
     }
 
     /**
@@ -183,13 +184,29 @@ class RenderDsarReportPdfTest extends DsarTestCase
     }
 
     /**
-     * @param  resource  $listener
+     * PHP's built-in server on a free loopback port over an empty directory: every
+     * request is answered at once, so a fetch never leaves Chromium waiting.
      */
-    protected function assertNoConnectionWaitingOn($listener): void
+    protected function aWebServerAnsweringEveryRequest(): Process
     {
-        $waiting = [$listener];
-        $unwatched = null;
+        $server = new Process([PHP_BINARY, '-S', '127.0.0.1:0', '-t', $this->anEmptyWorkDirectory()]);
+        $server->start();
+        $this->beforeApplicationDestroyed(fn () => $server->stop(0));
+        $server->waitUntil(fn (string $type, string $output): bool => str_contains($output, 'started'));
 
-        $this->assertSame(0, stream_select($waiting, $unwatched, $unwatched, 0));
+        return $server;
+    }
+
+    protected function addressOf(Process $server): string
+    {
+        $address = Str::match('/127\.0\.0\.1:\d+/', $server->getErrorOutput().$server->getOutput());
+        $this->assertNotSame('', $address, 'The server announces the address it listens on.');
+
+        return $address;
+    }
+
+    protected function assertNothingConnectedTo(Process $server): void
+    {
+        $this->assertStringNotContainsString('Accepted', $server->getErrorOutput().$server->getOutput());
     }
 }
