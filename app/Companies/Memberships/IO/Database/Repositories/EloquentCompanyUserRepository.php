@@ -6,6 +6,7 @@ use stdClass;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Query\Builder;
+use App\Companies\Entities\CompanyUser;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterface;
@@ -90,6 +91,15 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
     {
         return $this->activeMembers($companyId, MembershipFilters::from([]))
             ->where('company_user.id', $membershipId)
+            ->first();
+    }
+
+    public function findWithEmergencyContact(string $companyId, string $userId): ?CompanyUser
+    {
+        return CompanyUser::query()
+            ->where('company_id', $companyId)
+            ->where('user_id', $userId)
+            ->whereNotNull('emergency_contact_name')
             ->first();
     }
 

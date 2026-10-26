@@ -42,6 +42,20 @@ use App\Companies\Memberships\IO\Database\Repositories\EloquentCompanyUserReposi
  */
 abstract class MembershipsTestCase extends CompaniesTestCase
 {
+    protected const CONTACT = [
+        'name' => 'Kamala Perera',
+        'email' => 'kamala@contoso.lk',
+        'phone' => '+94771234567',
+        'relationship' => 'spouse',
+    ];
+
+    protected const UPDATED_CONTACT = [
+        'name' => 'John Silva',
+        'email' => 'john@fabrikam.lk',
+        'phone' => '+94712345678',
+        'relationship' => 'parent',
+    ];
+
     use InducesDatabaseFailures;
     use WithRolePermissionFixtures;
 
@@ -75,6 +89,60 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     protected function seededRole(string $code): Role
     {
         return Role::query()->where('code', $code)->sole();
+    }
+
+    /**
+     * A fresh user attached to $company as its seeded owner, holding $contact as the
+     * company's emergency contact (attached through CompanyUser, so its casts apply).
+     *
+     * @param  array<string, string>  $contact
+     */
+    protected function anOwnerWithContact(Company $company, array $contact = self::CONTACT): User
+    {
+        $owner = User::factory()->create();
+        $this->enrolAsOwner($company, $owner, $contact);
+
+        return $owner;
+    }
+
+    /**
+     * @param  array<string, string>  $contact
+     */
+    protected function enrolAsOwner(Company $company, User $owner, array $contact): void
+    {
+        $company->users()->attach($owner, [
+            'role_id' => $this->seededRole('owner')->getKey(),
+            'emergency_contact_name' => $contact['name'],
+            'emergency_contact_email' => $contact['email'],
+            'emergency_contact_phone' => $contact['phone'],
+            'emergency_contact_relationship' => $contact['relationship'],
+        ]);
+    }
+
+    protected function viewEmergencyContact(User $actor, string $companyId): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/companies/'.$companyId.'/emergency-contact');
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideRolesWithoutThePermission(): array
+    {
+        return [
+            'admin' => ['admin'],
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'auditor' => ['auditor'],
+            'employee' => ['employee'],
+        ];
+    }
+
+    protected function viewEmergencyContactAsGuest(string $companyId): TestResponse
+    {
+        return $this->getJson('/api/v1/companies/'.$companyId.'/emergency-contact');
     }
 
     /**
