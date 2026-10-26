@@ -12,6 +12,7 @@ owner:
   - users.change-role
   - users.revoke-invitation
   - users.remove
+  - users.set-emergency-contact
   - companies.view
   - companies.update
   - companies.transfer-ownership

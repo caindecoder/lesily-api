@@ -33,6 +33,12 @@
   description: Remove a user's access to the company.
   module: users
 
+- code: users.set-emergency-contact
+  id: 0193abcd-2222-7000-8000-00000000000e
+  name: Set Emergency Contact
+  description: View and update the owner's emergency contact for the company.
+  module: users
+
 - code: companies.view
   id: 0193abcd-2222-7000-8000-000000000004
   name: View Company
