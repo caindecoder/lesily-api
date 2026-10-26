@@ -185,7 +185,7 @@ class EnableTwoFactorTest extends AuthTestCase
         // When they confirm with a valid code
         $codes = $this->confirm($user, $company, '123456')->json('data.recovery_codes');
 
-        // Then the repeat is dropped and ten distinct codes come back, in the order drawn
+        // Then the repeat is replaced by the next draw and ten distinct codes come back, in the order drawn
         $this->assertSame($expectedCodes, $codes);
     }
 

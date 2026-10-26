@@ -93,8 +93,8 @@ class RenderDsarReportPdfTest extends DsarTestCase
         // When the registered renderer renders a report
         $this->theRegisteredReportRenderer()->render($this->aReport());
 
-        // Then nothing ever connected to that server
-        $this->assertNothingConnectedTo($server);
+        // Then nothing but the readiness request ever reached that server
+        $this->assertNothingElseConnectedTo($server);
     }
 
     /**
@@ -185,28 +185,55 @@ class RenderDsarReportPdfTest extends DsarTestCase
 
     /**
      * PHP's built-in server on a free loopback port over an empty directory: every
-     * request is answered at once, so a fetch never leaves Chromium waiting.
+     * request is answered at once, so a fetch never leaves Chromium waiting. One
+     * readiness request shows the log records each connection. The server lives as
+     * long as the test, and is stopped before its directory is deleted.
      */
     protected function aWebServerAnsweringEveryRequest(): Process
     {
-        $server = new Process([PHP_BINARY, '-S', '127.0.0.1:0', '-t', $this->anEmptyWorkDirectory()]);
+        $docroot = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-web-'.Str::random(8);
+        mkdir($docroot);
+        $server = (new Process([PHP_BINARY, '-S', '127.0.0.1:0', '-t', $docroot]))->setTimeout(null);
         $server->start();
-        $this->beforeApplicationDestroyed(fn () => $server->stop(0));
-        $server->waitUntil(fn (string $type, string $output): bool => str_contains($output, 'started'));
+        $this->beforeApplicationDestroyed(function () use ($server, $docroot): void {
+            $server->stop(0);
+            (new Filesystem)->deleteDirectory($docroot);
+        });
+        $announced = '';
+        $server->waitUntil(function (string $type, string $output) use (&$announced): bool {
+            $announced .= $output;
+
+            return str_contains($announced, 'started');
+        });
+        $this->requestOnce($this->addressOf($server));
+
+        if (! str_contains($this->logOf($server), 'Accepted')) {
+            throw new RuntimeException('The server does not log its connections.');
+        }
 
         return $server;
     }
 
     protected function addressOf(Process $server): string
     {
-        $address = Str::match('/127\.0\.0\.1:\d+/', $server->getErrorOutput().$server->getOutput());
-        $this->assertNotSame('', $address, 'The server announces the address it listens on.');
-
-        return $address;
+        return Str::match('/127\.0\.0\.1:[1-9]\d*/', $this->logOf($server)) ?: throw new RuntimeException('The server announced no address.');
     }
 
-    protected function assertNothingConnectedTo(Process $server): void
+    protected function requestOnce(string $address): void
     {
-        $this->assertStringNotContainsString('Accepted', $server->getErrorOutput().$server->getOutput());
+        $client = stream_socket_client('tcp://'.$address) ?: throw new RuntimeException('No connection to the server.');
+        fwrite($client, "GET / HTTP/1.0\r\n\r\n");
+        stream_get_contents($client);
+        fclose($client);
+    }
+
+    protected function logOf(Process $server): string
+    {
+        return $server->getErrorOutput().$server->getOutput();
+    }
+
+    protected function assertNothingElseConnectedTo(Process $server): void
+    {
+        $this->assertSame(1, substr_count($this->logOf($server), 'Accepted'), 'Only the readiness request reached the server.');
     }
 }

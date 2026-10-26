@@ -117,6 +117,7 @@ class AddCompanyTest extends CompaniesTestCase
             'emergency contact email not an email' => [['emergencyContactEmail' => 'john-at-fabrikam'], 'emergencyContactEmail', 'The emergency contact email must be a valid email address.'],
             'phone not a number' => [['emergencyContactPhone' => '12345'], 'emergencyContactPhone', 'The emergency contact phone must be a valid phone number.'],
             'relationship not on the list' => [['emergencyContactRelationship' => 'cousin'], 'emergencyContactRelationship', 'The selected emergency contact relationship is invalid.'],
+            'terms null' => [['acceptedTos' => null], 'acceptedTos', 'You must agree to the Terms of Service to continue.'],
             'terms not accepted' => [['acceptedTos' => false], 'acceptedTos', 'You must agree to the Terms of Service to continue.'],
         ];
     }

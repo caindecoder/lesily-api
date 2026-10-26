@@ -41,7 +41,7 @@ trait RegisterOwnerRules
     }
 
     /**
-     * `accepted` is an implicit rule — it already rejects a missing value.
+     * `accepted` also fails a missing or empty value, so `required` adds nothing.
      *
      * @return array<int, string>
      */
