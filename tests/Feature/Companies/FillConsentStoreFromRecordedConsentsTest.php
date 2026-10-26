@@ -48,14 +48,14 @@ class FillConsentStoreFromRecordedConsentsTest extends CompaniesTestCase
         $this->anOwnerWhoConsentedAt('2026-06-08 09:00:00');
         DB::table('consent_records')->delete();
         $this->runFillMigration();
-        $copied = ConsentRecord::query()->orderBy('stored_event_id')->get()->map->getAttributes()->all();
+        $copied = $this->consentRowsWithIds();
 
         // When the fill migration runs again
         $this->runFillMigration();
 
         // Then the store holds the same two rows, ids included
         $this->assertCount(2, $copied);
-        $this->assertSame($copied, ConsentRecord::query()->orderBy('stored_event_id')->get()->map->getAttributes()->all());
+        $this->assertSame($copied, $this->consentRowsWithIds());
     }
 
     #[Test]
@@ -122,6 +122,18 @@ class FillConsentStoreFromRecordedConsentsTest extends CompaniesTestCase
                 $record->ip_address,
                 $record->consented_at->toDateTimeString(),
             ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    protected function consentRowsWithIds(): array
+    {
+        return ConsentRecord::query()
+            ->orderBy('stored_event_id')
+            ->get()
+            ->map(fn (ConsentRecord $record): array => $record->getAttributes())
             ->all();
     }
 
