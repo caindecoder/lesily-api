@@ -118,6 +118,24 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_owner_of_two_companies_updates_one_then_the_other_keeps_its_contact(): void
+    {
+        // Given one owner of company A and company B, both naming Kamala
+        $companyA = Company::factory()->create();
+        $owner = $this->anOwnerWithContact($companyA);
+        $companyB = Company::factory()->create();
+        $this->enrolAsOwner($companyB, $owner, self::CONTACT);
+
+        // When the owner sets company B's contact to John
+        $response = $this->updateEmergencyContact($owner, $companyB->getKey(), self::UPDATED_CONTACT);
+
+        // Then company B has John, recorded for B, and company A still has Kamala
+        $response->assertOk();
+        $this->assertContactRecorded($companyB, $owner, self::UPDATED_CONTACT);
+        $this->assertContactUnchanged($companyA, $owner, self::CONTACT);
+    }
+
+    #[Test]
     public function when_the_owner_has_no_contact_yet_then_the_update_sets_it(): void
     {
         // Given a company whose owner keeps no emergency contact
