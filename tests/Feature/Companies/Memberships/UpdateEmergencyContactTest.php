@@ -163,9 +163,26 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
         // When the owner submits one
         $response = $this->updateEmergencyContact($owner, $company->getKey(), self::UPDATED_CONTACT);
 
-        // Then it is set
+        // Then it is recorded for the company, stored and returned
         $response->assertOk();
-        $this->assertSame(self::UPDATED_CONTACT, $this->storedContact($company, $owner));
+        $response->assertExactJson(['data' => self::UPDATED_CONTACT]);
+        $this->assertContactRecorded($company, $owner, self::UPDATED_CONTACT);
+    }
+
+    #[Test]
+    public function when_the_name_is_as_long_as_allowed_then_it_is_stored_whole(): void
+    {
+        // Given a company whose owner keeps an emergency contact
+        $company = Company::factory()->create();
+        $owner = $this->anOwnerWithContact($company);
+        $longest = [...self::UPDATED_CONTACT, 'name' => str_repeat('a', 255)];
+
+        // When the owner submits a contact whose name is 255 characters long
+        $response = $this->updateEmergencyContact($owner, $company->getKey(), $longest);
+
+        // Then the whole name is stored, its ciphertext longer than a varchar holds
+        $response->assertOk();
+        $this->assertSame($longest, $this->storedContact($company, $owner));
     }
 
     #[Test]
