@@ -20,13 +20,10 @@ class RecoveryCodeGenerator
 
         while (count($codes) < $count) {
             $code = $this->newCode();
-
-            if (! in_array($code, $codes, strict: true)) {
-                $codes[] = $code;
-            }
+            $codes[$code] = $code;
         }
 
-        return $codes;
+        return array_values($codes);
     }
 
     protected function newCode(): string
