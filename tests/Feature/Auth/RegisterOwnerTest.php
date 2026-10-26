@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanyUser;
 use App\Consent\Events\ConsentRecorded;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -509,15 +510,15 @@ class RegisterOwnerTest extends AuthTestCase
         $ownerRole = Role::findByCode('owner');
 
         $this->assertNotNull($ownerRole);
-        $this->assertDatabaseHas('company_user', [
-            'user_id' => $owner->getKey(),
-            'company_id' => $company->getKey(),
-            'role_id' => $ownerRole->getKey(),
-            'emergency_contact_name' => 'Kamala Perera',
-            'emergency_contact_email' => 'kamala@contoso.lk',
-            'emergency_contact_phone' => '+94771234567',
-            'emergency_contact_relationship' => 'spouse',
-        ]);
+        $membership = CompanyUser::query()
+            ->where('user_id', $owner->getKey())
+            ->where('company_id', $company->getKey())
+            ->where('role_id', $ownerRole->getKey())
+            ->sole();
+        $this->assertSame(
+            ['Kamala Perera', 'kamala@contoso.lk', '+94771234567', 'spouse'],
+            [$membership->emergency_contact_name, $membership->emergency_contact_email, $membership->emergency_contact_phone, $membership->emergency_contact_relationship],
+        );
     }
 
     protected function givenAnExistingOwnerAccount(): void

@@ -11,6 +11,7 @@ use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
@@ -183,6 +184,27 @@ abstract class MembershipsTestCase extends CompaniesTestCase
             'phone' => $membership->emergency_contact_phone,
             'relationship' => $membership->emergency_contact_relationship,
         ];
+    }
+
+    /**
+     * The four raw emergency-contact columns hold ciphertext that decrypts to
+     * $expected — read past the model's casts.
+     *
+     * @param  array<string, string>  $expected
+     */
+    protected function assertStoredEncrypted(Company $company, User $owner, array $expected): void
+    {
+        $raw = (array) DB::table('company_user')
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $owner->getKey())
+            ->sole(['emergency_contact_name as name', 'emergency_contact_email as email', 'emergency_contact_phone as phone', 'emergency_contact_relationship as relationship']);
+
+        $this->assertCount(4, $expected);
+        foreach ($expected as $field => $plain) {
+            $this->assertIsString($raw[$field]);
+            $this->assertNotSame($plain, $raw[$field]);
+            $this->assertSame($plain, Crypt::decryptString($raw[$field]));
+        }
     }
 
     /**

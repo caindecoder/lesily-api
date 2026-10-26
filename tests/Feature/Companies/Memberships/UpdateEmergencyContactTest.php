@@ -151,6 +151,21 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_contact_is_saved_then_the_row_holds_no_plain_text(): void
+    {
+        // Given a company whose owner keeps an emergency contact
+        $company = Company::factory()->create();
+        $owner = $this->anOwnerWithContact($company);
+
+        // When the owner submits a new contact
+        $response = $this->updateEmergencyContact($owner, $company->getKey(), self::UPDATED_CONTACT);
+
+        // Then each of the four stored columns is encrypted
+        $response->assertOk();
+        $this->assertStoredEncrypted($company, $owner, self::UPDATED_CONTACT);
+    }
+
+    #[Test]
     public function when_the_owner_updates_the_contact_then_it_is_recorded_stored_and_returned(): void
     {
         // Given a company whose owner keeps an emergency contact

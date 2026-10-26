@@ -26,6 +26,19 @@ class CompanyUser extends Pivot
     protected $table = 'company_user';
 
     /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'emergency_contact_name' => 'encrypted',
+            'emergency_contact_email' => 'encrypted',
+            'emergency_contact_phone' => 'encrypted',
+            'emergency_contact_relationship' => 'encrypted',
+        ];
+    }
+
+    /**
      * @return BelongsTo<User, $this>
      */
     public function user(): BelongsTo
