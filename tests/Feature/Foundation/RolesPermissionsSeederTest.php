@@ -93,8 +93,8 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         $afterSecond = $this->tableCounts();
 
         // Then every table's row count is stable across runs (idempotent — no duplicates)
-        // 13 permissions / 34 grants — the two dsar grants are held by owner and admin.
-        $this->assertSame(['roles' => 8, 'permissions' => 13, 'role_permission' => 34], $afterFirst);
+        // 14 permissions / 35 grants — the two dsar grants are held by owner and admin.
+        $this->assertSame(['roles' => 8, 'permissions' => 14, 'role_permission' => 35], $afterFirst);
         $this->assertSame($afterFirst, $afterSecond);
     }
 
@@ -163,9 +163,9 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         // Then per-role grant counts match the locked matrix, and manager has none
         $expected = [
             'platform_super_admin' => 0,
-            // owner +1 for companies.transfer-ownership, the only owner-exclusive
-            // grant (UC-1-028, slice-11R T3, s170).
-            'owner' => 13,
+            // owner +2 for its two owner-exclusive grants, companies.transfer-ownership
+            // (UC-1-028) and users.set-emergency-contact (UC-1-029).
+            'owner' => 14,
             'admin' => 11,
             'hr_officer' => 4,
             // 1 since billing.view came out too (matrix §Module-6 ❌ — F2/D-A,

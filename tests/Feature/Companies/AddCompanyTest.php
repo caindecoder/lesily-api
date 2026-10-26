@@ -9,6 +9,7 @@ use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanyUser;
 use App\Consent\Events\ConsentRecorded;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -350,23 +351,36 @@ class AddCompanyTest extends CompaniesTestCase
 
     protected function assertContactKeptPerCompany(string $companyId): void
     {
-        $this->assertDatabaseHas('company_user', [
-            'company_id' => $companyId,
-            'user_id' => $this->owner->getKey(),
-            'emergency_contact_name' => 'John Silva',
-            'emergency_contact_email' => 'john@fabrikam.lk',
-            'emergency_contact_phone' => '+94712345678',
-            'emergency_contact_relationship' => 'parent',
-        ]);
-        $this->assertDatabaseHas('company_user', [
-            'company_id' => $this->companyA->getKey(),
-            'user_id' => $this->owner->getKey(),
-            'emergency_contact_name' => 'Kamala Perera',
-        ]);
+        $this->assertSame(
+            ['John Silva', 'john@fabrikam.lk', '+94712345678', 'parent'],
+            $this->ownerContactFor($companyId),
+        );
+        $this->assertSame('Kamala Perera', $this->ownerContactFor($this->companyA->getKey())[0]);
         $this->assertSame(1, LesilyStoredEvent::query()
             ->whereForCompany($companyId)
             ->where('event_class', UserMembershipEmergencyContactSet::class)
             ->count());
+    }
+
+    /**
+     * The owner's contact for the company as name, email, phone, relationship —
+     * read through CompanyUser so its casts decrypt it.
+     *
+     * @return array{?string, ?string, ?string, ?string}
+     */
+    protected function ownerContactFor(string $companyId): array
+    {
+        $membership = CompanyUser::query()
+            ->where('company_id', $companyId)
+            ->where('user_id', $this->owner->getKey())
+            ->sole();
+
+        return [
+            $membership->emergency_contact_name,
+            $membership->emergency_contact_email,
+            $membership->emergency_contact_phone,
+            $membership->emergency_contact_relationship,
+        ];
     }
 
     protected function assertConsentRecordedFor(string $companyId): void

@@ -11,6 +11,7 @@ use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
@@ -29,6 +30,7 @@ use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
+use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
 use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterface;
@@ -42,6 +44,20 @@ use App\Companies\Memberships\IO\Database\Repositories\EloquentCompanyUserReposi
  */
 abstract class MembershipsTestCase extends CompaniesTestCase
 {
+    protected const CONTACT = [
+        'name' => 'Kamala Perera',
+        'email' => 'kamala@contoso.lk',
+        'phone' => '+94771234567',
+        'relationship' => 'spouse',
+    ];
+
+    protected const UPDATED_CONTACT = [
+        'name' => 'John Silva',
+        'email' => 'john@fabrikam.lk',
+        'phone' => '+94712345678',
+        'relationship' => 'parent',
+    ];
+
     use InducesDatabaseFailures;
     use WithRolePermissionFixtures;
 
@@ -75,6 +91,154 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     protected function seededRole(string $code): Role
     {
         return Role::query()->where('code', $code)->sole();
+    }
+
+    /**
+     * A fresh user attached to $company as its seeded owner, holding $contact as the
+     * company's emergency contact (attached through CompanyUser, so its casts apply).
+     *
+     * @param  array<string, string>  $contact
+     */
+    protected function anOwnerWithContact(Company $company, array $contact = self::CONTACT): User
+    {
+        return $this->aMemberWithContact($company, 'owner', $contact);
+    }
+
+    /**
+     * A fresh user attached to $company under the seeded $roleCode, holding $contact —
+     * a former owner keeps the contact they set (UC-1-028 ownership transfer).
+     *
+     * @param  array<string, string>  $contact
+     */
+    protected function aMemberWithContact(Company $company, string $roleCode, array $contact): User
+    {
+        $member = User::factory()->create();
+        $company->users()->attach($member, ['role_id' => $this->seededRole($roleCode)->getKey(), ...$this->contactColumns($contact)]);
+
+        return $member;
+    }
+
+    /**
+     * @param  array<string, string>  $contact
+     */
+    protected function enrolAsOwner(Company $company, User $owner, array $contact): void
+    {
+        $company->users()->attach($owner, ['role_id' => $this->seededRole('owner')->getKey(), ...$this->contactColumns($contact)]);
+    }
+
+    /**
+     * @param  array<string, string>  $contact
+     * @return array<string, string>
+     */
+    protected function contactColumns(array $contact): array
+    {
+        return [
+            'emergency_contact_name' => $contact['name'],
+            'emergency_contact_email' => $contact['email'],
+            'emergency_contact_phone' => $contact['phone'],
+            'emergency_contact_relationship' => $contact['relationship'],
+        ];
+    }
+
+    protected function viewEmergencyContact(User $actor, string $companyId): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/companies/'.$companyId.'/emergency-contact');
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideRolesWithoutThePermission(): array
+    {
+        return [
+            'admin' => ['admin'],
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'auditor' => ['auditor'],
+            'employee' => ['employee'],
+        ];
+    }
+
+    protected function viewEmergencyContactAsGuest(string $companyId): TestResponse
+    {
+        return $this->getJson('/api/v1/companies/'.$companyId.'/emergency-contact');
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function updateEmergencyContact(User $actor, string $companyId, array $payload): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->putJson('/api/v1/companies/'.$companyId.'/emergency-contact', $payload);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function updateEmergencyContactAsGuest(string $companyId, array $payload): TestResponse
+    {
+        return $this->putJson('/api/v1/companies/'.$companyId.'/emergency-contact', $payload);
+    }
+
+    /**
+     * The owner's emergency contact for $company, read back through CompanyUser so
+     * its casts apply.
+     *
+     * @return array<string, string|null>
+     */
+    protected function storedContact(Company $company, User $owner): array
+    {
+        $membership = CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $owner->getKey())
+            ->sole();
+
+        return [
+            'name' => $membership->emergency_contact_name,
+            'email' => $membership->emergency_contact_email,
+            'phone' => $membership->emergency_contact_phone,
+            'relationship' => $membership->emergency_contact_relationship,
+        ];
+    }
+
+    /**
+     * The four raw emergency-contact columns hold ciphertext that decrypts to
+     * $expected — read past the model's casts.
+     *
+     * @param  array<string, string>  $expected
+     */
+    protected function assertStoredEncrypted(Company $company, User $owner, array $expected): void
+    {
+        $raw = (array) DB::table('company_user')
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $owner->getKey())
+            ->sole(['emergency_contact_name as name', 'emergency_contact_email as email', 'emergency_contact_phone as phone', 'emergency_contact_relationship as relationship']);
+
+        $this->assertCount(4, $expected);
+        foreach ($expected as $field => $plain) {
+            $this->assertIsString($raw[$field]);
+            $this->assertNotSame($plain, $raw[$field]);
+            $this->assertSame($plain, Crypt::decryptString($raw[$field]));
+        }
+    }
+
+    /**
+     * A refused update left the contact as it was and recorded no contact event
+     * for the company.
+     *
+     * @param  array<string, string>  $expected
+     */
+    protected function assertContactUnchanged(Company $company, User $owner, array $expected): void
+    {
+        $this->assertSame($expected, $this->storedContact($company, $owner));
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->whereForCompany($company->getKey())
+            ->where('event_class', UserMembershipEmergencyContactSet::class)
+            ->count());
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Companies\Memberships\UseCases\Repositories;
 
 use stdClass;
 use Illuminate\Support\Collection;
+use App\Companies\Entities\CompanyUser;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 
@@ -35,4 +36,10 @@ interface CompanyUserRepositoryInterface
      * cross-tenant (UC-1-023 R-E s112 — the 200 envelope echoes this row).
      */
     public function findById(string $companyId, string $membershipId): ?stdClass;
+
+    /**
+     * The person's active membership of the company when it holds an emergency
+     * contact, as the model so its casts apply, or null when no contact is set.
+     */
+    public function findWithEmergencyContact(string $companyId, string $userId): ?CompanyUser;
 }
