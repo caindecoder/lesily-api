@@ -18,6 +18,10 @@ use App\Compliance\Dsar\Exceptions\DsarReportRenderingFailedException;
 
 class RenderDsarReportPdfTest extends DsarTestCase
 {
+    protected const SERVER_WAIT_SECONDS = 10;
+
+    protected string $serverLog;
+
     #[Test]
     public function when_chromium_fails_then_rendering_fails_with_the_report_error(): void
     {
@@ -87,14 +91,14 @@ class RenderDsarReportPdfTest extends DsarTestCase
     public function when_the_report_references_a_web_resource_then_it_is_never_fetched(string $scheme): void
     {
         // Given a report template that loads an image from a web server answering every request
-        $server = $this->aWebServerAnsweringEveryRequest();
-        $this->aReportTemplateLoading($scheme.'://'.$this->addressOf($server).'/pixel.png');
+        $address = $this->aWebServerAnsweringEveryRequest();
+        $this->aReportTemplateLoading($scheme.'://'.$address.'/pixel.png');
 
         // When the registered renderer renders a report
         $this->theRegisteredReportRenderer()->render($this->aReport());
 
         // Then nothing but the readiness request ever reached that server
-        $this->assertNothingElseConnectedTo($server);
+        $this->assertNothingElseConnected();
     }
 
     /**
@@ -185,55 +189,77 @@ class RenderDsarReportPdfTest extends DsarTestCase
 
     /**
      * PHP's built-in server on a free loopback port over an empty directory: every
-     * request is answered at once, so a fetch never leaves Chromium waiting. One
-     * readiness request shows the log records each connection. The server lives as
-     * long as the test, and is stopped before its directory is deleted.
+     * request is answered at once, so a fetch never leaves Chromium waiting. Its log
+     * (one "Accepted" line per connection) goes straight to a file, never through the
+     * process's output, and every wait is bounded. One readiness request shows the log
+     * records each connection. The server lives as long as the test, and is stopped
+     * before its directory is deleted. Returns the server's address.
      */
-    protected function aWebServerAnsweringEveryRequest(): Process
+    protected function aWebServerAnsweringEveryRequest(): string
     {
-        $docroot = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-web-'.Str::random(8);
-        mkdir($docroot);
-        $server = (new Process([PHP_BINARY, '-S', '127.0.0.1:0', '-t', $docroot]))->setTimeout(null);
-        $server->start();
-        $this->beforeApplicationDestroyed(function () use ($server, $docroot): void {
+        $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-web-'.Str::random(8);
+        mkdir($directory.DIRECTORY_SEPARATOR.'docroot', recursive: true);
+        $this->serverLog = $directory.DIRECTORY_SEPARATOR.'server.log';
+        $address = $this->aFreeLoopbackAddress();
+        $server = Process::fromShellCommandline('"${:PHP}" -S "${:ADDRESS}" -t "${:DOCROOT}" 2> "${:LOG}"')
+            ->disableOutput()
+            ->setTimeout(null);
+        $server->start(null, ['PHP' => PHP_BINARY, 'ADDRESS' => $address, 'DOCROOT' => $directory.DIRECTORY_SEPARATOR.'docroot', 'LOG' => $this->serverLog]);
+        $this->beforeApplicationDestroyed(function () use ($server, $directory): void {
             $server->stop(0);
-            (new Filesystem)->deleteDirectory($docroot);
+            (new Filesystem)->deleteDirectory($directory);
         });
-        $announced = '';
-        $server->waitUntil(function (string $type, string $output) use (&$announced): bool {
-            $announced .= $output;
+        $this->requestOnceWhenListening($address);
+        $this->waitForTheLogToRecordTheReadinessRequest();
 
-            return str_contains($announced, 'started');
-        });
-        $this->requestOnce($this->addressOf($server));
+        return $address;
+    }
 
-        if (! str_contains($this->logOf($server), 'Accepted')) {
-            throw new RuntimeException('The server does not log its connections.');
+    protected function aFreeLoopbackAddress(): string
+    {
+        $probe = stream_socket_server('tcp://127.0.0.1:0') ?: throw new RuntimeException('No free loopback port.');
+        $address = stream_socket_get_name($probe, false) ?: throw new RuntimeException('The probe socket has no address.');
+        fclose($probe);
+
+        return $address;
+    }
+
+    protected function requestOnceWhenListening(string $address): void
+    {
+        $deadline = microtime(true) + self::SERVER_WAIT_SECONDS;
+
+        while (! $client = @stream_socket_client('tcp://'.$address, timeout: 0.2)) {
+            if (microtime(true) > $deadline) {
+                throw new RuntimeException('The server never started listening on '.$address.'.');
+            }
+            usleep(50_000);
         }
 
-        return $server;
-    }
-
-    protected function addressOf(Process $server): string
-    {
-        return Str::match('/127\.0\.0\.1:[1-9]\d*/', $this->logOf($server)) ?: throw new RuntimeException('The server announced no address.');
-    }
-
-    protected function requestOnce(string $address): void
-    {
-        $client = stream_socket_client('tcp://'.$address) ?: throw new RuntimeException('No connection to the server.');
+        stream_set_timeout($client, self::SERVER_WAIT_SECONDS);
         fwrite($client, "GET / HTTP/1.0\r\n\r\n");
         stream_get_contents($client);
         fclose($client);
     }
 
-    protected function logOf(Process $server): string
+    protected function waitForTheLogToRecordTheReadinessRequest(): void
     {
-        return $server->getErrorOutput().$server->getOutput();
+        $deadline = microtime(true) + self::SERVER_WAIT_SECONDS;
+
+        while (! str_contains($this->serverLogContents(), 'Accepted')) {
+            if (microtime(true) > $deadline) {
+                throw new RuntimeException('The server does not log its connections.');
+            }
+            usleep(50_000);
+        }
     }
 
-    protected function assertNothingElseConnectedTo(Process $server): void
+    protected function serverLogContents(): string
     {
-        $this->assertSame(1, substr_count($this->logOf($server), 'Accepted'), 'Only the readiness request reached the server.');
+        return (string) @file_get_contents($this->serverLog);
+    }
+
+    protected function assertNothingElseConnected(): void
+    {
+        $this->assertSame(1, substr_count($this->serverLogContents(), 'Accepted'), 'Only the readiness request reached the server.');
     }
 }

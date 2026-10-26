@@ -238,7 +238,7 @@ Route::get('/v1/companies/{companyId}/emergency-contact', [MembershipsController
 
 // Replace the owner's emergency contact for the company (UC-1-029) — through the
 // event-sourced Auth User (UserMembershipEmergencyContactSet); same gates as the view.
-// No idempotency-key — a PUT is naturally idempotent (the s122 sibling ruling). No throttle.
+// No idempotency-key — a PUT is naturally idempotent. No throttle.
 Route::put('/v1/companies/{companyId}/emergency-contact', [MembershipsController::class, 'setEmergencyContact'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:users.set-emergency-contact']);
 
