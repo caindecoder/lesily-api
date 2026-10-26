@@ -9,6 +9,7 @@ use Illuminate\Testing\TestResponse;
 use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
+use App\Consent\Entities\ConsentRecord;
 use App\Consent\Events\ConsentRecorded;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -423,6 +424,7 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertCompanyOnTrialWithOwner('nimal@contoso.lk');
         $this->assertOwnerEnrolledWithEmergencyContact('nimal@contoso.lk');
         $this->assertConsentRecorded('nimal@contoso.lk');
+        $this->assertConsentStored('nimal@contoso.lk');
         $this->assertCompanySettingsSeeded('nimal@contoso.lk');
     }
 
@@ -498,6 +500,31 @@ class RegisterOwnerTest extends AuthTestCase
             $this->assertSame('v1.0', $consent->event_properties['version']);
             $this->assertSame($owner->getKey(), $consent->event_properties['userId']);
             $this->assertSame('127.0.0.1', $consent->event_properties['ip']);
+        }
+    }
+
+    protected function assertConsentStored(string $ownerEmail): void
+    {
+        $owner = User::query()->where('email', $ownerEmail)->sole();
+        $company = Company::query()->where('owner_id', $owner->getKey())->sole();
+
+        $this->assertSame(2, ConsentRecord::query()->where('company_id', $company->getKey())->count());
+
+        foreach (['tos', 'privacy'] as $policyType) {
+            $record = ConsentRecord::query()
+                ->where('company_id', $company->getKey())
+                ->where('policy_type', $policyType)
+                ->sole();
+            $event = LesilyStoredEvent::query()
+                ->whereForCompany($company->getKey())
+                ->where('event_class', ConsentRecorded::class)
+                ->where('event_properties->policyType', $policyType)
+                ->sole();
+
+            $this->assertSame(
+                [$owner->getKey(), 'v1.0', '127.0.0.1', '2026-06-08 00:00:00', $event->getKey()],
+                [$record->user_id, $record->version, $record->ip_address, $record->consented_at->toDateTimeString(), $record->stored_event_id],
+            );
         }
     }
 
