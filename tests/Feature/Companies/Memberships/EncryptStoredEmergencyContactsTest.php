@@ -36,6 +36,35 @@ class EncryptStoredEmergencyContactsTest extends MembershipsTestCase
         // Given an owner whose contact was stored as plain text, past the casts
         $company = Company::factory()->create();
         $owner = $this->aCompanyMember($company, 'owner');
+        $this->storePlainContact($company, $owner);
+
+        // When the data migration runs
+        $this->runDataMigration();
+
+        // Then each column holds ciphertext of its old value, which the model reads back
+        $this->assertStoredEncrypted($company, $owner, self::CONTACT);
+        $this->assertSame(self::CONTACT, $this->storedContact($company, $owner));
+    }
+
+    #[Test]
+    public function when_the_migration_runs_again_then_each_contact_stays_encrypted_once(): void
+    {
+        // Given an owner whose plain-text contact the data migration has already encrypted
+        $company = Company::factory()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        $this->storePlainContact($company, $owner);
+        $this->runDataMigration();
+
+        // When the data migration runs again
+        $this->runDataMigration();
+
+        // Then the model still reads the contact back, not a second layer of ciphertext
+        $this->assertSame(self::CONTACT, $this->storedContact($company, $owner));
+        $this->assertStoredEncrypted($company, $owner, self::CONTACT);
+    }
+
+    protected function storePlainContact(Company $company, User $owner): void
+    {
         DB::table('company_user')
             ->where('company_id', $company->getKey())
             ->where('user_id', $owner->getKey())
@@ -45,13 +74,6 @@ class EncryptStoredEmergencyContactsTest extends MembershipsTestCase
                 'emergency_contact_phone' => self::CONTACT['phone'],
                 'emergency_contact_relationship' => self::CONTACT['relationship'],
             ]);
-
-        // When the data migration runs
-        $this->runDataMigration();
-
-        // Then each column holds ciphertext of its old value, which the model reads back
-        $this->assertStoredEncrypted($company, $owner, self::CONTACT);
-        $this->assertSame(self::CONTACT, $this->storedContact($company, $owner));
     }
 
     protected function runDataMigration(): void

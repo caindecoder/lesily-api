@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Contracts\Encryption\DecryptException;
 
 // Contacts written before the columns were encrypted are encrypted in place, in the
 // format the model's `encrypted` cast reads (Crypt::encryptString). No DDL here.
@@ -46,9 +47,25 @@ return new class extends Migration
         $values = [];
 
         foreach (self::COLUMNS as $column) {
-            $values[$column] = $row->{$column} === null ? null : Crypt::encryptString($row->{$column});
+            $value = $row->{$column};
+            $values[$column] = $value === null || $this->isEncrypted($value) ? $value : Crypt::encryptString($value);
         }
 
         return $values;
+    }
+
+    /**
+     * MySQL runs this outside a transaction, so a re-run after a partial failure or a
+     * rollback meets values it already encrypted; those are left as they are.
+     */
+    protected function isEncrypted(string $value): bool
+    {
+        try {
+            Crypt::decryptString($value);
+
+            return true;
+        } catch (DecryptException) {
+            return false;
+        }
     }
 };
