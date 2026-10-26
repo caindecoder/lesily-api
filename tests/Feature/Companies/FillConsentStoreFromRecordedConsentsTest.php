@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Consent\Entities\ConsentRecord;
 use App\Consent\Events\ConsentRecorded;
 use Illuminate\Database\Migrations\Migration;
+use App\Companies\Events\CompanyDetailsUpdated;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -37,8 +38,9 @@ class FillConsentStoreFromRecordedConsentsTest extends CompaniesTestCase
         // When the fill migration runs
         $this->runFillMigration();
 
-        // Then the consent store stays empty
+        // Then the consent store stays empty, beside the one event the fill passed over
         $this->assertDatabaseCount('consent_records', 0);
+        $this->assertSame(1, LesilyStoredEvent::query()->where('event_class', CompanyDetailsUpdated::class)->count());
     }
 
     #[Test]
