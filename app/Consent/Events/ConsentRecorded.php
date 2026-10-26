@@ -6,9 +6,8 @@ use Spatie\EventSourcing\StoredEvents\ShouldBeStored;
 
 /**
  * Version-stamped, append-only consent record (UC-1-069, PDPA). The stored event
- * IS the consent record this slice — the queryable consent_records projection is
- * deferred to the audit/compliance slice (session-070 note). The event's own
- * created_at carries the consent timestamp.
+ * is the source; ConsentRecordProjector copies it into consent_records. The
+ * event's own created_at carries the consent timestamp.
  */
 class ConsentRecorded extends ShouldBeStored
 {

@@ -338,7 +338,7 @@ class ExportDsarSectionsTest extends DsarTestCase
 
         // Then
         $this->assertSame([
-            ['policy_type' => 'terms', 'version' => '2026-03', 'ip_address' => '203.0.113.7', 'recorded_at' => now()->toISOString()],
+            ['policy_type' => 'tos', 'version' => '2026-03', 'ip_address' => '203.0.113.7', 'recorded_at' => now()->toISOString()],
             ['policy_type' => 'privacy', 'version' => '2026-04', 'ip_address' => '203.0.113.7', 'recorded_at' => now()->toISOString()],
         ], $this->exportedData($request)['consent_records']);
     }

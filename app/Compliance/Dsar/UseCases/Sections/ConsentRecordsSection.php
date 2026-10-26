@@ -2,10 +2,7 @@
 
 namespace App\Compliance\Dsar\UseCases\Sections;
 
-use Carbon\CarbonImmutable;
-use App\Consent\Events\ConsentRecorded;
-use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
-use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Consent\Entities\ConsentRecord;
 
 class ConsentRecordsSection implements DsarSectionProvider
 {
@@ -15,24 +12,23 @@ class ConsentRecordsSection implements DsarSectionProvider
     }
 
     /**
-     * Each consent the subject gave in this company — the stored
-     * ConsentRecorded IS the record (UC-1-069), oldest first.
+     * Each consent the subject gave in this company, from the consent store
+     * (UC-1-069), oldest first.
      *
      * @return array<int, array<string, mixed>>
      */
     public function collect(string $subjectUserId, string $companyId): array
     {
-        return LesilyStoredEvent::query()
-            ->whereForCompany($companyId)
-            ->where('event_class', ConsentRecorded::class)
-            ->where('event_properties->userId', $subjectUserId)
-            ->orderBy('id')
+        return ConsentRecord::query()
+            ->where('company_id', $companyId)
+            ->where('user_id', $subjectUserId)
+            ->orderBy('stored_event_id')
             ->get()
-            ->map(fn (EloquentStoredEvent $consent): array => [
-                'policy_type' => $consent->event_properties['policyType'],
-                'version' => $consent->event_properties['version'],
-                'ip_address' => $consent->event_properties['ip'],
-                'recorded_at' => CarbonImmutable::parse($consent->getAttribute('created_at'))->toISOString(),
+            ->map(fn (ConsentRecord $consent): array => [
+                'policy_type' => $consent->policy_type,
+                'version' => $consent->version,
+                'ip_address' => $consent->ip_address,
+                'recorded_at' => $consent->consented_at->toISOString(),
             ])
             ->all();
     }
