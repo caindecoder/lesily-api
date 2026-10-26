@@ -148,7 +148,7 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
         $reloaded = User::query()->whereKey($user->getKey())->firstOrFail();
         $stored = $reloaded->two_factor_recovery_codes ?? [];
 
-        $this->assertCount(10, $returned);
+        $this->assertSame(range(0, 9), array_keys($returned), 'Ten regenerated codes come back as a list.');
         $this->assertCount(10, array_unique($returned), 'Regenerated codes must be distinct.');
         $this->assertSame([], array_intersect($returned, $stored), 'No plaintext code may appear in storage.');
         foreach ($returned as $index => $code) {

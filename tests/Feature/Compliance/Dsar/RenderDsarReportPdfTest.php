@@ -9,6 +9,7 @@ use Spatie\LaravelPdf\Facades\Pdf;
 use Illuminate\Support\Facades\View;
 use Illuminate\Filesystem\Filesystem;
 use PHPUnit\Framework\Attributes\Test;
+use Symfony\Component\Process\Process;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Dsar\UseCases\Reports\DsarReport;
 use App\Compliance\Dsar\UseCases\Reports\DsarReportCover;
@@ -85,15 +86,15 @@ class RenderDsarReportPdfTest extends DsarTestCase
     #[Test, DataProvider('provideWebSchemes')]
     public function when_the_report_references_a_web_resource_then_it_is_never_fetched(string $scheme): void
     {
-        // Given a report template that loads an image from a listening web address
-        $listener = stream_socket_server('tcp://127.0.0.1:0') ?: throw new RuntimeException('No socket to listen on.');
-        $this->aReportTemplateLoading($scheme.'://'.stream_socket_get_name($listener, false).'/pixel.png');
+        // Given a report template that loads an image from a web server answering every request
+        $server = $this->aWebServerAnsweringEveryRequest();
+        $this->aReportTemplateLoading($scheme.'://'.$this->addressOf($server).'/pixel.png');
 
         // When the registered renderer renders a report
         $this->theRegisteredReportRenderer()->render($this->aReport());
 
-        // Then nothing ever connected to that address
-        $this->assertNoConnectionWaitingOn($listener);
+        // Then nothing but the readiness request ever reached that server
+        $this->assertNothingElseConnectedTo($server);
     }
 
     /**
@@ -183,13 +184,56 @@ class RenderDsarReportPdfTest extends DsarTestCase
     }
 
     /**
-     * @param  resource  $listener
+     * PHP's built-in server on a free loopback port over an empty directory: every
+     * request is answered at once, so a fetch never leaves Chromium waiting. One
+     * readiness request shows the log records each connection. The server lives as
+     * long as the test, and is stopped before its directory is deleted.
      */
-    protected function assertNoConnectionWaitingOn($listener): void
+    protected function aWebServerAnsweringEveryRequest(): Process
     {
-        $waiting = [$listener];
-        $unwatched = null;
+        $docroot = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-web-'.Str::random(8);
+        mkdir($docroot);
+        $server = (new Process([PHP_BINARY, '-S', '127.0.0.1:0', '-t', $docroot]))->setTimeout(null);
+        $server->start();
+        $this->beforeApplicationDestroyed(function () use ($server, $docroot): void {
+            $server->stop(0);
+            (new Filesystem)->deleteDirectory($docroot);
+        });
+        $announced = '';
+        $server->waitUntil(function (string $type, string $output) use (&$announced): bool {
+            $announced .= $output;
 
-        $this->assertSame(0, stream_select($waiting, $unwatched, $unwatched, 0));
+            return str_contains($announced, 'started');
+        });
+        $this->requestOnce($this->addressOf($server));
+
+        if (! str_contains($this->logOf($server), 'Accepted')) {
+            throw new RuntimeException('The server does not log its connections.');
+        }
+
+        return $server;
+    }
+
+    protected function addressOf(Process $server): string
+    {
+        return Str::match('/127\.0\.0\.1:[1-9]\d*/', $this->logOf($server)) ?: throw new RuntimeException('The server announced no address.');
+    }
+
+    protected function requestOnce(string $address): void
+    {
+        $client = stream_socket_client('tcp://'.$address) ?: throw new RuntimeException('No connection to the server.');
+        fwrite($client, "GET / HTTP/1.0\r\n\r\n");
+        stream_get_contents($client);
+        fclose($client);
+    }
+
+    protected function logOf(Process $server): string
+    {
+        return $server->getErrorOutput().$server->getOutput();
+    }
+
+    protected function assertNothingElseConnectedTo(Process $server): void
+    {
+        $this->assertSame(1, substr_count($this->logOf($server), 'Accepted'), 'Only the readiness request reached the server.');
     }
 }

@@ -41,11 +41,13 @@ trait RegisterOwnerRules
     }
 
     /**
+     * `accepted` also fails a missing or empty value, so `required` adds nothing.
+     *
      * @return array<int, string>
      */
     protected static function acceptedTosRules(): array
     {
-        return ['required', 'accepted'];
+        return ['accepted'];
     }
 
     /**
@@ -71,7 +73,6 @@ trait RegisterOwnerRules
     {
         return [
             'password.min' => 'Password must be at least 8 characters.',
-            'acceptedTos.required' => 'You must agree to the Terms of Service to continue.',
             'acceptedTos.accepted' => 'You must agree to the Terms of Service to continue.',
             'emergencyContactEmail.email' => 'The emergency contact email must be a valid email address.',
         ];

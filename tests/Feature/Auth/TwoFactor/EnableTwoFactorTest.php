@@ -173,6 +173,23 @@ class EnableTwoFactorTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_a_recovery_code_draw_repeats_then_the_repeat_is_replaced(): void
+    {
+        // Given (a Pro member completing enrollment, whose second recovery-code draw repeats the first)
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $user = $this->aMemberOf($company);
+        $this->fakeTotpVerifier(verifies: true);
+        $this->enable($user, $company);
+        $expectedCodes = $this->recoveryCodeDrawsRepeatingTheFirst();
+
+        // When they confirm with a valid code
+        $codes = $this->confirm($user, $company, '123456')->json('data.recovery_codes');
+
+        // Then the repeat is replaced by the next draw and ten distinct codes come back, in the order drawn
+        $this->assertSame($expectedCodes, $codes);
+    }
+
+    #[Test]
     public function when_enrollment_starts_then_a_provisioning_uri_and_secret_are_returned_without_persisting(): void
     {
         // Given (a Pro member who has not yet enabled 2FA)
@@ -336,13 +353,33 @@ class EnableTwoFactorTest extends AuthTestCase
     protected function assertRecoveryCodesHashed(User $user, array $returnedCodes): void
     {
         $stored = User::query()->whereKey($user->getKey())->firstOrFail()->two_factor_recovery_codes ?? [];
-        $this->assertCount(10, $returnedCodes);
+        $this->assertSame(range(0, 9), array_keys($returnedCodes), 'Ten recovery codes come back as a list.');
         $this->assertCount(10, array_unique($returnedCodes), 'Recovery codes must be distinct.');
         $this->assertSame([], array_intersect($returnedCodes, $stored), 'No plaintext code may appear in storage.');
         foreach ($returnedCodes as $index => $code) {
             $this->assertMatchesRegularExpression('/^[A-Z0-9]{4}-[A-Z0-9]{4}$/', $code, 'Every recovery code takes the XXXX-XXXX shape.');
             $this->assertTrue(Hash::check($code, $stored[$index]), 'Every returned code must verify against its stored hash.');
         }
+    }
+
+    /**
+     * Scripts the four-character draws so the second code repeats the first, and
+     * returns the ten distinct codes a confirm should hand back. Only the generator
+     * draws four characters; every other draw (the validator's placeholder, once
+     * per process) stays random.
+     *
+     * @return list<string>
+     */
+    protected function recoveryCodeDrawsRepeatingTheFirst(): array
+    {
+        $codes = array_map(fn (int $draw): string => sprintf('AAAA-%04d', $draw), range(1, 10));
+        $halves = array_merge(...array_map(fn (string $code): array => explode('-', $code), [$codes[0], ...$codes]));
+        Str::createRandomStringsUsing(function (int $length) use (&$halves): string {
+            return ($length === 4 ? array_shift($halves) : null) ?? Str::password($length, symbols: false);
+        });
+        $this->beforeApplicationDestroyed(fn () => Str::createRandomStringsNormally());
+
+        return $codes;
     }
 
     protected function assertEnableMarkerCarriesNoSecret(string $stagedSecret): void
