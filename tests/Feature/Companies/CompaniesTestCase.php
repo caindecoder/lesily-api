@@ -4,14 +4,17 @@ namespace Tests\Feature\Companies;
 
 use Tests\TestCase;
 use App\Models\User;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use App\Consent\Aggregates\Consent;
 use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanySettings;
 use Tests\Concerns\InducesProjectorFailures;
 use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class CompaniesTestCase extends TestCase
@@ -42,6 +45,22 @@ abstract class CompaniesTestCase extends TestCase
         $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
 
         return $user;
+    }
+
+    /**
+     * $user's consent to the live policy versions in $company, recorded the
+     * event-sourced way from one IP.
+     */
+    protected function aConsentRecordedBy(User $user, Company $company): void
+    {
+        Consent::retrieve(Str::uuid7()->toString())
+            ->record(RecordConsentCommand::from([
+                'userId' => $user->getKey(),
+                'companyId' => $company->getKey(),
+                'policyVersions' => config('lesily.policies'),
+                'ip' => '198.51.100.4',
+            ]))
+            ->persist();
     }
 
     /**
