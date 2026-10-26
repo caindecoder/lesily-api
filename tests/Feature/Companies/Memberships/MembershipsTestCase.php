@@ -101,10 +101,21 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      */
     protected function anOwnerWithContact(Company $company, array $contact = self::CONTACT): User
     {
-        $owner = User::factory()->create();
-        $this->enrolAsOwner($company, $owner, $contact);
+        return $this->aMemberWithContact($company, 'owner', $contact);
+    }
 
-        return $owner;
+    /**
+     * A fresh user attached to $company under the seeded $roleCode, holding $contact —
+     * a former owner keeps the contact they set (UC-1-028 ownership transfer).
+     *
+     * @param  array<string, string>  $contact
+     */
+    protected function aMemberWithContact(Company $company, string $roleCode, array $contact): User
+    {
+        $member = User::factory()->create();
+        $company->users()->attach($member, ['role_id' => $this->seededRole($roleCode)->getKey(), ...$this->contactColumns($contact)]);
+
+        return $member;
     }
 
     /**
@@ -112,13 +123,21 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      */
     protected function enrolAsOwner(Company $company, User $owner, array $contact): void
     {
-        $company->users()->attach($owner, [
-            'role_id' => $this->seededRole('owner')->getKey(),
+        $company->users()->attach($owner, ['role_id' => $this->seededRole('owner')->getKey(), ...$this->contactColumns($contact)]);
+    }
+
+    /**
+     * @param  array<string, string>  $contact
+     * @return array<string, string>
+     */
+    protected function contactColumns(array $contact): array
+    {
+        return [
             'emergency_contact_name' => $contact['name'],
             'emergency_contact_email' => $contact['email'],
             'emergency_contact_phone' => $contact['phone'],
             'emergency_contact_relationship' => $contact['relationship'],
-        ]);
+        ];
     }
 
     protected function viewEmergencyContact(User $actor, string $companyId): TestResponse

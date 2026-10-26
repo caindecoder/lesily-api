@@ -105,6 +105,22 @@ class ViewEmergencyContactTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_another_member_keeps_a_contact_then_the_owner_is_shown_only_their_own(): void
+    {
+        // Given a former owner, now an admin, who keeps John, and the owner who keeps Kamala
+        $company = Company::factory()->create();
+        $this->aMemberWithContact($company, 'admin', self::UPDATED_CONTACT);
+        $owner = $this->anOwnerWithContact($company);
+
+        // When the owner asks for the company's contact
+        $response = $this->viewEmergencyContact($owner, $company->getKey());
+
+        // Then the owner's own contact is returned
+        $response->assertOk();
+        $response->assertExactJson(['data' => self::CONTACT]);
+    }
+
+    #[Test]
     public function when_the_owner_views_the_contact_then_it_is_returned(): void
     {
         // Given a company whose owner keeps an emergency contact

@@ -166,7 +166,8 @@ class MembershipProjector extends Projector
     public function onUserMembershipEmergencyContactSet(UserMembershipEmergencyContactSet $event): void
     {
         // Saved through the model so its encrypted casts apply — a query update skips them.
-        CompanyUser::query()
+        // withTrashed for replay fidelity (onUserMembershipRoleChanged parity).
+        CompanyUser::withTrashed()
             ->where('company_id', $event->companyId)
             ->where('user_id', $event->userId)
             ->sole()

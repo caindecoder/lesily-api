@@ -136,6 +136,24 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_another_member_keeps_a_contact_then_only_the_owners_is_replaced(): void
+    {
+        // Given a former owner, now an admin, who keeps Kamala, and the owner who keeps Kamala too
+        $company = Company::factory()->create();
+        $formerOwner = $this->aMemberWithContact($company, 'admin', self::CONTACT);
+        $owner = $this->anOwnerWithContact($company);
+
+        // When the owner sets the company's contact to John
+        $response = $this->updateEmergencyContact($owner, $company->getKey(), self::UPDATED_CONTACT);
+
+        // Then the owner's contact is John and the former owner still keeps Kamala
+        $response->assertOk();
+        $response->assertExactJson(['data' => self::UPDATED_CONTACT]);
+        $this->assertSame(self::UPDATED_CONTACT, $this->storedContact($company, $owner));
+        $this->assertSame(self::CONTACT, $this->storedContact($company, $formerOwner));
+    }
+
+    #[Test]
     public function when_the_owner_has_no_contact_yet_then_the_update_sets_it(): void
     {
         // Given a company whose owner keeps no emergency contact
