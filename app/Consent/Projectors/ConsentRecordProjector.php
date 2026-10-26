@@ -15,7 +15,7 @@ class ConsentRecordProjector extends Projector
 {
     public function onConsentRecorded(ConsentRecorded $event): void
     {
-        ConsentRecord::query()->firstOrCreate(['stored_event_id' => $event->storedEventId()], [
+        ConsentRecord::query()->createOrFirst(['stored_event_id' => $event->storedEventId()], [
             'user_id' => $event->userId,
             'company_id' => $event->companyId,
             'policy_type' => $event->policyType,
