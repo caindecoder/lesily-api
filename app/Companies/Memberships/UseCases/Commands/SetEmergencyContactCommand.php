@@ -4,9 +4,11 @@ namespace App\Companies\Memberships\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rules\Enum;
+use Spatie\LaravelData\Attributes\WithCast;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerRules;
+use App\Companies\Memberships\UseCases\Casts\SriLankanE164Cast;
 
 /**
  * An owner's emergency contact for one company (UC-1-029) — validated at the
@@ -21,6 +23,7 @@ class SetEmergencyContactCommand extends Data
 
     public string $email;
 
+    #[WithCast(SriLankanE164Cast::class)]
     public string $phone;
 
     public string $relationship;

@@ -395,6 +395,20 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertLastLoggedAtStamped($owner);
     }
 
+    #[Test]
+    public function when_an_owner_signs_up_with_a_local_phone_then_it_is_stored_in_international_form(): void
+    {
+        // Given a guest whose emergency contact's phone is written the local way
+        $payload = [...$this->validRegistrationPayload(), 'emergencyContactPhone' => '0771234567'];
+
+        // When the guest registers as owner
+        $response = $this->postJson('/api/v1/auth/register', $payload);
+
+        // Then the contact's phone is stored as +94771234567
+        $this->assertRegistrationSucceeded($response);
+        $this->assertOwnerEnrolledWithEmergencyContact('nimal@contoso.lk');
+    }
+
     // Happy — the walking skeleton: one POST stands up the whole owner account.
     #[Test]
     public function when_a_valid_owner_registers_then_the_company_starts_its_trial_with_the_owner_enrolled(): void

@@ -151,6 +151,35 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
     }
 
     #[Test]
+    #[DataProvider('provideLocalPhoneForms')]
+    public function when_the_phone_is_written_in_a_local_form_then_it_is_stored_in_international_form(string $phone): void
+    {
+        // Given a company whose owner keeps an emergency contact
+        $company = Company::factory()->create();
+        $owner = $this->anOwnerWithContact($company);
+
+        // When the owner submits a contact whose phone is written the local way
+        $response = $this->updateEmergencyContact($owner, $company->getKey(), [...self::UPDATED_CONTACT, 'phone' => $phone]);
+
+        // Then the phone is recorded, stored and returned as +94712345678
+        $response->assertOk();
+        $response->assertJsonPath('data.phone', '+94712345678');
+        $this->assertContactRecorded($company, $owner, self::UPDATED_CONTACT);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideLocalPhoneForms(): array
+    {
+        return [
+            'leading zero' => ['0712345678'],
+            'leading zero with spaces' => ['071 234 5678'],
+            'country code with spaces' => ['+94 71 234 5678'],
+        ];
+    }
+
+    #[Test]
     public function when_the_contact_is_saved_then_the_row_holds_no_plain_text(): void
     {
         // Given a company whose owner keeps an emergency contact
