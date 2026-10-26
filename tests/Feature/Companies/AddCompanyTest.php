@@ -10,6 +10,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
+use App\Consent\Entities\ConsentRecord;
 use App\Consent\Events\ConsentRecorded;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -258,6 +259,24 @@ class AddCompanyTest extends CompaniesTestCase
     }
 
     #[Test]
+    public function when_an_owner_who_consented_for_their_first_company_adds_another_then_those_consents_are_kept_unchanged(): void
+    {
+        // Given an owner who consented to both policies for Contoso
+        $this->aConsentRecordedBy($this->owner, $this->companyA);
+        $contosoConsents = $this->consentRowsOf($this->companyA->getKey());
+
+        // When they add Fabrikam
+        $response = $this->addCompany();
+
+        // Then Contoso's consent rows are exactly as they were, and Fabrikam has its own
+        $companyId = $response->json('data.id');
+        $this->assertIsString($companyId);
+        $this->assertCount(2, $contosoConsents);
+        $this->assertSame($contosoConsents, $this->consentRowsOf($this->companyA->getKey()));
+        $this->assertConsentStoredFor($companyId);
+    }
+
+    #[Test]
     public function when_an_owner_adds_another_company_then_it_opens_on_its_own_trial_with_its_contact_and_consent(): void
     {
         // Given a signed-in owner of Contoso, whose contact there is Kamala Perera
@@ -273,6 +292,7 @@ class AddCompanyTest extends CompaniesTestCase
         $this->assertOwnedOnItsOwnTrial($companyId);
         $this->assertContactKeptPerCompany($companyId);
         $this->assertConsentRecordedFor($companyId);
+        $this->assertConsentStoredFor($companyId);
         $this->assertNothingElseChanged();
     }
 
@@ -401,6 +421,38 @@ class AddCompanyTest extends CompaniesTestCase
             $this->assertSame($this->owner->getKey(), $consent->event_properties['userId']);
             $this->assertSame('127.0.0.1', $consent->event_properties['ip']);
         }
+    }
+
+    protected function assertConsentStoredFor(string $companyId): void
+    {
+        $this->assertSame(2, ConsentRecord::query()->where('company_id', $companyId)->count());
+
+        foreach (['tos', 'privacy'] as $policyType) {
+            $record = ConsentRecord::query()->where('company_id', $companyId)->where('policy_type', $policyType)->sole();
+            $event = LesilyStoredEvent::query()
+                ->whereForCompany($companyId)
+                ->where('event_class', ConsentRecorded::class)
+                ->where('event_properties->policyType', $policyType)
+                ->sole();
+
+            $this->assertSame(
+                [$this->owner->getKey(), 'v1.0', '127.0.0.1', '2026-06-08 00:00:00', $event->getKey()],
+                [$record->user_id, $record->version, $record->ip_address, $record->consented_at->toDateTimeString(), $record->stored_event_id],
+            );
+        }
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    protected function consentRowsOf(string $companyId): array
+    {
+        return ConsentRecord::query()
+            ->where('company_id', $companyId)
+            ->orderBy('stored_event_id')
+            ->get()
+            ->map(fn (ConsentRecord $record): array => $record->getAttributes())
+            ->all();
     }
 
     protected function assertNothingElseChanged(): void

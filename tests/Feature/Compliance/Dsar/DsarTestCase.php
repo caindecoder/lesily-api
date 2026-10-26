@@ -1332,7 +1332,7 @@ abstract class DsarTestCase extends TestCase
             ->record(RecordConsentCommand::from([
                 'userId' => $user->getKey(),
                 'companyId' => $company->getKey(),
-                'policyVersions' => ['terms' => '2026-03', 'privacy' => '2026-04'],
+                'policyVersions' => ['tos' => '2026-03', 'privacy' => '2026-04'],
                 'ip' => '203.0.113.7',
             ]))
             ->persist();
