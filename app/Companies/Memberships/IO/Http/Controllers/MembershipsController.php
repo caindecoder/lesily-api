@@ -11,8 +11,10 @@ use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 use App\Companies\Memberships\IO\Http\Resources\MembershipResource;
 use App\Companies\Memberships\IO\Http\Resources\MembershipCollection;
 use App\Companies\Memberships\IO\Http\Resources\EmergencyContactResource;
+use App\Companies\Memberships\UseCases\Commands\SetEmergencyContactCommand;
 use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
 use App\Companies\Memberships\UseCases\Commands\RemoveUserFromCompanyCommand;
+use App\Companies\Memberships\UseCases\Interactors\SetEmergencyContactInteractor;
 use App\Companies\Memberships\UseCases\Interactors\ChangeMembershipRoleInteractor;
 use App\Companies\Memberships\UseCases\Interactors\RemoveUserFromCompanyInteractor;
 use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterface;
@@ -45,6 +47,16 @@ class MembershipsController
             ?? throw new ModelNotFoundException;
 
         return new EmergencyContactResource($membership);
+    }
+
+    public function setEmergencyContact(Request $request, SetEmergencyContactInteractor $interactor): EmergencyContactResource
+    {
+        /** @var User $actor — guaranteed by auth:sanctum */
+        $actor = $request->user();
+
+        $command = SetEmergencyContactCommand::validateAndCreate($request->only(['name', 'email', 'phone', 'relationship']));
+
+        return new EmergencyContactResource($interactor->execute($request->company(), $actor, $command));
     }
 
     public function update(Request $request, string $membershipId, ChangeMembershipRoleInteractor $interactor): JsonResponse

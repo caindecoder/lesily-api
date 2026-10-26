@@ -236,6 +236,12 @@ Route::patch('/v1/companies/{companyId}/owner', CompanyOwnershipController::clas
 Route::get('/v1/companies/{companyId}/emergency-contact', [MembershipsController::class, 'emergencyContact'])
     ->middleware(['auth:sanctum', 'auth.company', 'permission:users.set-emergency-contact']);
 
+// Replace the owner's emergency contact for the company (UC-1-029) — through the
+// event-sourced Auth User (UserMembershipEmergencyContactSet); same gates as the view.
+// No idempotency-key — a PUT is naturally idempotent (the s122 sibling ruling). No throttle.
+Route::put('/v1/companies/{companyId}/emergency-contact', [MembershipsController::class, 'setEmergencyContact'])
+    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.set-emergency-contact']);
+
 // Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
 // a pending invitation is created and the invite email dispatched inline. auth:sanctum
 // -> auth.company -> permission:users.invite (D4 — seeded to owner/admin/hr_officer)

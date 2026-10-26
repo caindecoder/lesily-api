@@ -29,6 +29,7 @@ use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
+use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Companies\Memberships\UseCases\Interactors\AcceptInvitationInteractor;
 use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterface;
@@ -143,6 +144,60 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     protected function viewEmergencyContactAsGuest(string $companyId): TestResponse
     {
         return $this->getJson('/api/v1/companies/'.$companyId.'/emergency-contact');
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function updateEmergencyContact(User $actor, string $companyId, array $payload): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->putJson('/api/v1/companies/'.$companyId.'/emergency-contact', $payload);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function updateEmergencyContactAsGuest(string $companyId, array $payload): TestResponse
+    {
+        return $this->putJson('/api/v1/companies/'.$companyId.'/emergency-contact', $payload);
+    }
+
+    /**
+     * The owner's emergency contact for $company, read back through CompanyUser so
+     * its casts apply.
+     *
+     * @return array<string, string|null>
+     */
+    protected function storedContact(Company $company, User $owner): array
+    {
+        $membership = CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $owner->getKey())
+            ->sole();
+
+        return [
+            'name' => $membership->emergency_contact_name,
+            'email' => $membership->emergency_contact_email,
+            'phone' => $membership->emergency_contact_phone,
+            'relationship' => $membership->emergency_contact_relationship,
+        ];
+    }
+
+    /**
+     * A refused update left the contact as it was and recorded no contact event
+     * for the company.
+     *
+     * @param  array<string, string>  $expected
+     */
+    protected function assertContactUnchanged(Company $company, User $owner, array $expected): void
+    {
+        $this->assertSame($expected, $this->storedContact($company, $owner));
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->whereForCompany($company->getKey())
+            ->where('event_class', UserMembershipEmergencyContactSet::class)
+            ->count());
     }
 
     /**
