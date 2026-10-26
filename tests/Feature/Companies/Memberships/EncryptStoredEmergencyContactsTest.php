@@ -56,8 +56,11 @@ class EncryptStoredEmergencyContactsTest extends MembershipsTestCase
 
     protected function runDataMigration(): void
     {
-        /** @var Migration $migration */
         $migration = require database_path('migrations/'.self::DATA_MIGRATION);
+
+        if (! $migration instanceof Migration || ! method_exists($migration, 'up')) {
+            $this->fail('The data migration must return a migration with up().');
+        }
 
         $migration->up();
     }
