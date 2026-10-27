@@ -82,6 +82,19 @@ class ViewRolesTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_roles_are_listed_then_permissions_load_without_a_query_per_role(): void
+    {
+        // Given an owner
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+
+        // When the owner lists the company's roles with the statements recorded
+        [$response, $permissionQueries] = $this->viewRolesRecordingPermissionQueries($owner, $company);
+
+        // Then the six roles cost fewer permission statements than there are roles
+        $this->assertPermissionsLoadedOnce($response, $permissionQueries);
+    }
+
+    #[Test]
     public function when_owner_lists_roles_then_the_six_assignable_roles_arrive_in_order_with_permissions_and_counts(): void
     {
         // Given an owner, an admin and two employees in one company
@@ -143,6 +156,29 @@ class ViewRolesTest extends MembershipsTestCase
         Sanctum::actingAs($actor);
 
         return $this->getJson('/api/v1/roles', ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * The list call with every statement recorded, and how many of them read role_permission.
+     *
+     * @return array{TestResponse, int}
+     */
+    protected function viewRolesRecordingPermissionQueries(User $actor, Company $company): array
+    {
+        $response = null;
+        $recorded = $this->recordedQueriesDuring(function () use (&$response, $actor, $company): void {
+            $response = $this->viewRoles($actor, $company);
+        });
+        $this->assertInstanceOf(TestResponse::class, $response);
+
+        return [$response, collect($recorded['queries'])->filter(fn (array $query): bool => str_contains($query['sql'], 'role_permission'))->count()];
+    }
+
+    protected function assertPermissionsLoadedOnce(TestResponse $response, int $permissionQueries): void
+    {
+        $response->assertOk();
+        $this->assertCount(6, $response->json('data'));
+        $this->assertLessThan(6, $permissionQueries);
     }
 
     /**
