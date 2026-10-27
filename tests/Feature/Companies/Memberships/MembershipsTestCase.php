@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
+use App\Consent\Entities\ConsentRecord;
+use App\Consent\Events\ConsentRecorded;
 use Tests\Concerns\InducesDatabaseFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Events\QueryExecuted;
@@ -268,6 +270,38 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         Sanctum::actingAs($actor);
 
         return $this->getJson('/api/v1/companies/'.$company->getKey());
+    }
+
+    /**
+     * A signed-in member accepts the live policy versions for $company.
+     */
+    protected function acceptConsent(User $actor, Company $company): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->postJson('/api/v1/companies/'.$company->getKey().'/consents');
+    }
+
+    /**
+     * $member's consent to each live policy version in $company was recorded as a
+     * ConsentRecorded event and copied into the consent store, both from $ip.
+     */
+    protected function assertLiveConsentsRecorded(User $member, Company $company, string $ip): void
+    {
+        foreach (['tos', 'privacy'] as $policyType) {
+            $event = LesilyStoredEvent::query()
+                ->whereForCompany($company->getKey())
+                ->where('event_class', ConsentRecorded::class)
+                ->where('event_properties->policyType', $policyType)
+                ->where('event_properties->version', config("lesily.policies.{$policyType}"))
+                ->sole();
+            $record = ConsentRecord::query()->where('stored_event_id', $event->getKey())->sole();
+
+            $this->assertSame(
+                [$member->getKey(), $ip, $member->getKey(), $ip],
+                [$event->event_properties['userId'], $event->event_properties['ip'], $record->user_id, $record->ip_address],
+            );
+        }
     }
 
     /**

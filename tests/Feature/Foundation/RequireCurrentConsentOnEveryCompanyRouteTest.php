@@ -10,7 +10,7 @@ use App\Foundation\Http\Middleware\EnsureCurrentConsent;
 
 /**
  * UC-1-069 — every company route asks for the live policy versions, except the
- * person's data rights and their own 2FA setup.
+ * person's data rights, their own 2FA setup and the accept itself.
  */
 class RequireCurrentConsentOnEveryCompanyRouteTest extends FoundationTestCase
 {
@@ -22,6 +22,7 @@ class RequireCurrentConsentOnEveryCompanyRouteTest extends FoundationTestCase
         'POST api/v1/dsar-requests',
         'POST api/v1/auth/2fa/enable',
         'POST api/v1/auth/2fa/confirm',
+        'POST api/v1/companies/{companyId}/consents',
     ];
 
     #[Test]

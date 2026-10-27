@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Companies\IO\Http\Controllers\CompaniesController;
+use App\Consent\IO\Http\Controllers\AcceptConsentController;
 use App\Foundation\Auth\IO\Http\Controllers\LoginController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutController;
 use App\Foundation\Auth\IO\Http\Controllers\ProfileController;
@@ -241,6 +242,11 @@ Route::get('/v1/companies/{companyId}/emergency-contact', [MembershipsController
 // No idempotency-key — a PUT is naturally idempotent. No throttle.
 Route::put('/v1/companies/{companyId}/emergency-contact', [MembershipsController::class, 'setEmergencyContact'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.set-emergency-contact']);
+
+// Accept the live Terms of Service and Privacy Policy versions for the company
+// (UC-1-069) — any member, the request IP recorded; open past the consent gate.
+Route::post('/v1/companies/{companyId}/consents', AcceptConsentController::class)
+    ->middleware(['auth:sanctum', 'auth.company']);
 
 // Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
 // a pending invitation is created and the invite email dispatched inline. auth:sanctum
