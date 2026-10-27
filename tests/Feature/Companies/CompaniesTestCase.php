@@ -34,7 +34,8 @@ abstract class CompaniesTestCase extends TestCase
 
     /**
      * A fresh user made a live member of $company under a seeded role — the
-     * company_user pivot row the company-scoped gates read.
+     * company_user pivot row the company-scoped gates read — who accepted the
+     * live policy versions there.
      */
     protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
     {

@@ -68,6 +68,20 @@ class RequireCurrentConsentTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_member_accepted_the_live_versions_twice_then_the_company_request_proceeds(): void
+    {
+        // Given a member who accepted the live policy versions a second time
+        $member = $this->aCompanyMember($this->company);
+        $this->aConsentRecordedBy($member, $this->company);
+
+        // When they request the company
+        $response = $this->viewCompany($member, $this->company);
+
+        // Then the request proceeds
+        $response->assertOk();
+    }
+
+    #[Test]
     public function when_refused_then_the_member_can_still_read_their_own_profile(): void
     {
         // Given a member refused by a new privacy policy version

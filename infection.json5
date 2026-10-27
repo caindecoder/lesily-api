@@ -55,6 +55,9 @@
         "PublicVisibility": {
             ignore: [
                 "App\\Foundation\\RolesPermissions\\Entities\\Role::findByCode",
+                // The re-consent gate's check (UC-1-069): the same Model::__callStatic
+                // equivalent class as Role::findByCode — protected is still reached.
+                "App\\Consent\\Entities\\ConsentRecord::livePoliciesAcceptedBy",
                 "App\\Companies\\Projectors\\CompanyProjector::onCompanyCreated",
                 "App\\Companies\\Projectors\\CompanyProjector::onCompanyTrialExpired",
                 "App\\Billing\\Subscriptions\\Projectors\\SubscriptionProjector::onSubscriptionTrialStarted",
