@@ -29,9 +29,13 @@ trait WithRolePermissionFixtures
         );
     }
 
+    /**
+     * $user joins $company under $role and accepts the live policy versions there.
+     */
     protected function attachMember(Company $company, User $user, Role $role): void
     {
         $company->users()->attach($user, ['role_id' => $role->getKey()]);
+        $this->aConsentRecordedBy($user, $company);
     }
 
     /**

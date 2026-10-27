@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\Foundation\FoundationTestCase;
 use App\Companies\Exceptions\StaleOwnershipException;
+use App\Foundation\Http\Exceptions\ConsentRequiredException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
@@ -73,6 +74,7 @@ class KeepRecordedRefusalsOutOfTheErrorLogTest extends FoundationTestCase
             'incorrect password' => [fn () => new IncorrectPasswordException],
             'device limit reached' => [fn () => new DeviceLimitReachedException],
             'company access denied' => [fn () => new CompanyAccessDeniedException],
+            'consent required' => [fn () => new ConsentRequiredException],
             'feature unavailable' => [fn () => new FeatureUnavailableException('Pro', '/settings/billing/upgrade')],
             'role insufficient' => [fn () => new RoleInsufficientException('companies.update')],
             'invite email mismatch' => [fn () => new InviteEmailMismatchException],

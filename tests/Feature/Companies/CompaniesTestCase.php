@@ -4,17 +4,15 @@ namespace Tests\Feature\Companies;
 
 use Tests\TestCase;
 use App\Models\User;
-use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
-use App\Consent\Aggregates\Consent;
 use Illuminate\Testing\TestResponse;
+use App\Consent\Events\ConsentRecorded;
 use App\Companies\Entities\CompanySettings;
 use Tests\Concerns\InducesProjectorFailures;
 use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\RolesPermissions\Entities\Role;
-use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class CompaniesTestCase extends TestCase
@@ -36,31 +34,17 @@ abstract class CompaniesTestCase extends TestCase
 
     /**
      * A fresh user made a live member of $company under a seeded role — the
-     * company_user pivot row the company-scoped gates read.
+     * company_user pivot row the company-scoped gates read — who accepted the
+     * live policy versions there.
      */
     protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
     {
         $user = User::factory()->create();
 
         $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
+        $this->aConsentRecordedBy($user, $company);
 
         return $user;
-    }
-
-    /**
-     * $user's consent to the live policy versions in $company, recorded the
-     * event-sourced way from one IP.
-     */
-    protected function aConsentRecordedBy(User $user, Company $company): void
-    {
-        Consent::retrieve(Str::uuid7()->toString())
-            ->record(RecordConsentCommand::from([
-                'userId' => $user->getKey(),
-                'companyId' => $company->getKey(),
-                'policyVersions' => config('lesily.policies'),
-                'ip' => '198.51.100.4',
-            ]))
-            ->persist();
     }
 
     /**
@@ -135,7 +119,7 @@ abstract class CompaniesTestCase extends TestCase
 
         $this->assertSame($expectedName, $company->name);
         $this->assertSame('Asia/Colombo', $settings->timezone);
-        $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
+        $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
     }
 
     /**
@@ -219,7 +203,7 @@ abstract class CompaniesTestCase extends TestCase
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', CompanyDetailsUpdated::class)
             ->whereForCompany($company->getKey())->count());
-        $this->assertSame(1, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
+        $this->assertSame(1, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
     }
 
     /**
@@ -236,7 +220,7 @@ abstract class CompaniesTestCase extends TestCase
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', CompanySettingsUpdated::class)
             ->whereForCompany($company->getKey())->count());
-        $this->assertSame(1, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
+        $this->assertSame(1, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
     }
 
     /**
@@ -252,7 +236,7 @@ abstract class CompaniesTestCase extends TestCase
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', CompanySettingsUpdated::class)
             ->whereForCompany($company->getKey())->count());
-        $this->assertSame(2, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
+        $this->assertSame(2, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
     }
 
     /**

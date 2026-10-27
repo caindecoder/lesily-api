@@ -54,6 +54,7 @@ abstract class BillingTestCase extends TestCase
         $user = User::factory()->create();
 
         $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
+        $this->aConsentRecordedBy($user, $company);
 
         return $user;
     }

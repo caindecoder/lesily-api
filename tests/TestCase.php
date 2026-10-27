@@ -2,10 +2,15 @@
 
 namespace Tests;
 
+use App\Models\User;
+use Illuminate\Support\Str;
+use App\Companies\Entities\Company;
+use App\Consent\Aggregates\Consent;
 use Illuminate\Testing\TestResponse;
 use Database\Seeders\RolesPermissionsSeeder;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Consent\UseCases\Commands\RecordConsentCommand;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
@@ -39,6 +44,22 @@ abstract class TestCase extends BaseTestCase
     protected function seedRbacCatalog(): void
     {
         RolesPermissionsSeeder::fromDefaultPaths()->run();
+    }
+
+    /**
+     * $user's consent to the live policy versions in $company, recorded the
+     * event-sourced way from one IP.
+     */
+    protected function aConsentRecordedBy(User $user, Company $company): void
+    {
+        Consent::retrieve(Str::uuid7()->toString())
+            ->record(RecordConsentCommand::from([
+                'userId' => $user->getKey(),
+                'companyId' => $company->getKey(),
+                'policyVersions' => config('lesily.policies'),
+                'ip' => '198.51.100.4',
+            ]))
+            ->persist();
     }
 
     /**
