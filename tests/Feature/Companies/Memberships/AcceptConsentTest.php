@@ -52,6 +52,38 @@ class AcceptConsentTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_a_member_accepts_in_one_company_then_another_company_stays_refused(): void
+    {
+        // Given a member of two companies facing a new privacy policy version
+        $member = $this->aCompanyMember($this->company);
+        $second = Company::factory()->create();
+        $this->attachMember($second, $member, $this->seededRole('employee'));
+        config(['lesily.policies.privacy' => 'v1.1']);
+
+        // When they accept the policies for the first company
+        $this->acceptConsent($member, $this->company);
+
+        // Then the new version is kept for the first company only
+        $this->assertDatabaseHas('consent_records', ['user_id' => $member->getKey(), 'company_id' => $this->company->getKey(), 'version' => 'v1.1']);
+        $this->assertDatabaseMissing('consent_records', ['user_id' => $member->getKey(), 'company_id' => $second->getKey(), 'version' => 'v1.1']);
+    }
+
+    #[Test]
+    public function when_an_invited_member_accepts_then_the_company_opens_to_them(): void
+    {
+        // Given someone who joined by invitation and then accepted the policies
+        $admin = $this->aCompanyMember($this->company, 'admin');
+        [$joiner] = $this->anAcceptedMembership($this->company, $admin, 'nimal@contoso.lk');
+        $this->acceptConsent($joiner, $this->company);
+
+        // When they request the company
+        $response = $this->viewCompany($joiner, $this->company);
+
+        // Then the request proceeds
+        $response->assertOk();
+    }
+
+    #[Test]
     public function when_a_member_accepts_then_both_live_versions_are_recorded_with_the_ip(): void
     {
         // Given a member facing new versions of both policies, from a known address

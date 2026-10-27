@@ -37,6 +37,37 @@ class RequireCurrentConsentTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_an_invited_member_has_no_consent_then_the_company_request_is_refused(): void
+    {
+        // Given someone who joined the company by accepting an invitation
+        $admin = $this->aCompanyMember($this->company, 'admin');
+        [$joiner] = $this->anAcceptedMembership($this->company, $admin, 'nimal@contoso.lk');
+
+        // When they request the company
+        $response = $this->viewCompany($joiner, $this->company);
+
+        // Then the request is refused until they accept
+        $this->assertConsentRequired($response);
+    }
+
+    #[Test]
+    public function when_the_member_accepted_the_live_versions_in_another_company_only_then_the_company_request_is_refused(): void
+    {
+        // Given a member of two companies who accepted a new privacy policy version in the second only
+        $member = $this->aCompanyMember($this->company);
+        $second = Company::factory()->create();
+        $this->attachMember($second, $member, $this->seededRole('employee'));
+        config(['lesily.policies.privacy' => 'v1.1']);
+        $this->aConsentRecordedBy($member, $second);
+
+        // When they request the first company
+        $response = $this->viewCompany($member, $this->company);
+
+        // Then the request is refused until they accept there too
+        $this->assertConsentRequired($response);
+    }
+
+    #[Test]
     public function when_refused_then_the_member_can_still_read_their_own_profile(): void
     {
         // Given a member refused by a new privacy policy version
