@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
+use Illuminate\Support\Arr;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
@@ -10,6 +11,8 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\RolesPermissions\Entities\Role;
+use App\Foundation\RolesPermissions\Entities\Permission;
 
 class ViewRolesTest extends MembershipsTestCase
 {
@@ -54,6 +57,37 @@ class ViewRolesTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_owner_lists_roles_then_the_six_assignable_roles_arrive_in_order_with_permissions_and_counts(): void
+    {
+        // Given an owner, an admin and two employees in one company
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $this->aMembership($company, 'admin');
+        $this->aMembership($company, 'employee');
+        $this->aMembership($company, 'employee');
+
+        // When the owner lists the company's roles
+        $response = $this->viewRoles($owner, $company);
+
+        // Then each role arrives in display order with its permission and member counts
+        $this->assertRoleSummaries($response, [
+            'owner' => [15, 1],
+            'admin' => [12, 1],
+            'hr_officer' => [5, 0],
+            'payroll_officer' => [1, 0],
+            'auditor' => [5, 0],
+            'employee' => [1, 2],
+        ]);
+        // And the HR officer role is described with its permissions by module
+        $this->assertRoleDescribed($response, $this->seededRole('hr_officer'), [
+            'companies.view',
+            'roles.view',
+            'users.invite',
+            'users.revoke-invitation',
+            'users.view',
+        ]);
+    }
+
+    #[Test]
     #[DataProvider('provideRolesWithRolesView')]
     public function when_viewing_role_lists_roles_then_the_list_is_returned(string $roleCode): void
     {
@@ -84,6 +118,44 @@ class ViewRolesTest extends MembershipsTestCase
         Sanctum::actingAs($actor);
 
         return $this->getJson('/api/v1/roles', ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * @param  array<string, array{int, int}>  $expected  role code => [permissions_count, members_count], in display order
+     */
+    protected function assertRoleSummaries(TestResponse $response, array $expected): void
+    {
+        $response->assertOk();
+        $this->assertSame($expected, collect($response->json('data'))
+            ->mapWithKeys(fn (array $role): array => [$role['code'] => [$role['permissions_count'], $role['members_count']]])
+            ->all());
+    }
+
+    /**
+     * @param  list<string>  $permissionCodes
+     */
+    protected function assertRoleDescribed(TestResponse $response, Role $role, array $permissionCodes): void
+    {
+        $described = collect($response->json('data'))->firstWhere('code', $role->code);
+        $this->assertSame([
+            'id' => $role->getKey(),
+            'code' => $role->code,
+            'name' => $role->name,
+            'description' => $role->description,
+            'scope' => $role->scope,
+            'is_assignable' => true,
+            'is_system' => true,
+            'sort_order' => $role->sort_order,
+        ], Arr::except($described, ['permissions', 'permissions_count', 'members_count']));
+        $this->assertSame($permissionCodes, array_column($described['permissions'], 'code'));
+        $permission = Permission::query()->where('code', $permissionCodes[0])->sole();
+        $this->assertSame([
+            'id' => $permission->getKey(),
+            'code' => $permission->code,
+            'name' => $permission->name,
+            'description' => $permission->description,
+            'module' => $permission->module,
+        ], $described['permissions'][0]);
     }
 
     /**

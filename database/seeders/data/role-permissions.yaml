@@ -21,6 +21,7 @@ owner:
   - audit.view
   - dsar.request-for-others
   - dsar.view-all
+  - roles.view
 
 admin:
   - users.invite
