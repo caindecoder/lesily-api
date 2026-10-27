@@ -28,7 +28,6 @@ class BulkInviteUsersCommand extends Data
 
         return [
             'invitations' => ['required', 'array', 'list', 'max:20'],
-            'invitations.*' => ['array'],
             ...$rowRules,
         ];
     }

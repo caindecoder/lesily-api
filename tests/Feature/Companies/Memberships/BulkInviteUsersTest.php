@@ -15,6 +15,20 @@ use App\Companies\Memberships\Mail\InvitationMail;
 class BulkInviteUsersTest extends MembershipsTestCase
 {
     #[Test]
+    public function when_the_request_carries_no_token_then_it_is_unauthenticated(): void
+    {
+        // Given a company with an admin
+        [$company] = $this->aCompanyWithMember('admin');
+
+        // When a batch is posted with no token
+        $response = $this->postJson('/api/v1/invitations/bulk', ['invitations' => $this->rowsFor(['newuser@contoso.lk'])], ['X-Company-Context' => $company->getKey()]);
+
+        // Then the request is unauthenticated and nothing is created
+        $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
+        $this->assertNoInvitationCreated();
+    }
+
+    #[Test]
     public function when_the_actor_belongs_to_another_company_then_company_access_is_denied(): void
     {
         // Given an admin of one company and a second company they never joined
@@ -45,7 +59,7 @@ class BulkInviteUsersTest extends MembershipsTestCase
     }
 
     /**
-     * @param  ?list<array{email: string, roleCode: string}>  $rows
+     * @param  ?array<array-key, array{email: string, roleCode: string}>  $rows
      */
     #[Test]
     #[DataProvider('provideBadBatchSizes')]
@@ -63,11 +77,11 @@ class BulkInviteUsersTest extends MembershipsTestCase
     }
 
     /**
-     * @param  array<string, string>  $malformedRow
+     * @param  array<string, string>|string  $malformedRow
      */
     #[Test]
     #[DataProvider('provideMalformedRows')]
-    public function when_a_row_is_malformed_then_the_batch_is_refused_naming_that_row(array $malformedRow, string $invalidField, string $message): void
+    public function when_a_row_is_malformed_then_the_batch_is_refused_naming_that_row(array|string $malformedRow, string $invalidField, string $message): void
     {
         // Given an admin of a company
         [$company, $admin] = $this->aCompanyWithMember('admin');
@@ -85,11 +99,12 @@ class BulkInviteUsersTest extends MembershipsTestCase
     }
 
     /**
-     * @return array<string, array{array<string, string>, string, string}>
+     * @return array<string, array{array<string, string>|string, string, string}>
      */
     public static function provideMalformedRows(): array
     {
         return [
+            'a row that is not an object' => ['not-a-row', 'invitations.1.email', 'The invitations.1.email field is required.'],
             'malformed email' => [['email' => 'not-an-email', 'roleCode' => 'employee'], 'invitations.1.email', 'The invitations.1.email field must be a valid email address.'],
             'empty email' => [['email' => '', 'roleCode' => 'employee'], 'invitations.1.email', 'The invitations.1.email field is required.'],
             'missing email' => [['roleCode' => 'employee'], 'invitations.1.email', 'The invitations.1.email field is required.'],
@@ -119,13 +134,14 @@ class BulkInviteUsersTest extends MembershipsTestCase
     {
         // Given an admin who has sent 18 of the 20 invitations allowed this hour
         [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->freezeTime();
         $this->exhaustInviteLimit($admin, $company, 18);
 
         // When they bulk invite five more
         $response = $this->bulkInvite($admin, $company, $this->batchOf(5));
 
-        // Then the batch is throttled and nothing more is invited or mailed
-        $this->assertThrottled($response);
+        // Then the batch is refused until the hour is up and nothing more is invited or mailed
+        $this->assertAllowanceRefusedFor($response, 3600);
         $this->assertInvitationsSentInTotal(18);
     }
 
@@ -189,8 +205,8 @@ class BulkInviteUsersTest extends MembershipsTestCase
         // When they bulk invite one more
         $response = $this->bulkInvite($admin, $company, $this->rowsFor(['too-soon@contoso.lk']));
 
-        // Then the batch is throttled and nothing more is invited or mailed
-        $this->assertThrottled($response);
+        // Then the batch is refused for the last second and nothing more is invited or mailed
+        $this->assertAllowanceRefusedFor($response, 1);
         $this->assertInvitationsSentInTotal(20);
     }
 
@@ -294,7 +310,7 @@ class BulkInviteUsersTest extends MembershipsTestCase
     }
 
     /**
-     * @return array<string, array{?list<array{email: string, roleCode: string}>, string}>
+     * @return array<string, array{?array<array-key, array{email: string, roleCode: string}>, string}>
      */
     public static function provideBadBatchSizes(): array
     {
@@ -304,6 +320,7 @@ class BulkInviteUsersTest extends MembershipsTestCase
             'missing' => [null, 'The invitations field is required.'],
             'empty' => [[], 'The invitations field is required.'],
             'twenty-one rows' => [$twentyOne, 'The invitations field must not have more than 20 items.'],
+            'rows keyed by name, not a list' => [['first' => ['email' => 'first@contoso.lk', 'roleCode' => 'employee']], 'The invitations field must be a list.'],
         ];
     }
 
@@ -313,6 +330,14 @@ class BulkInviteUsersTest extends MembershipsTestCase
     protected function batchOf(int $size): array
     {
         return $this->rowsFor(array_map(fn (int $i): string => sprintf('batch-%02d@contoso.lk', $i), range(1, $size)));
+    }
+
+    protected function assertAllowanceRefusedFor(TestResponse $response, int $seconds): void
+    {
+        $this->assertThrottled($response);
+        $response->assertJsonPath('message', 'Too many requests. Please try again later.');
+        $response->assertJsonPath('retry_after', $seconds);
+        $response->assertHeader('Retry-After', (string) $seconds);
     }
 
     protected function assertInvitationsSentInTotal(int $expected): void

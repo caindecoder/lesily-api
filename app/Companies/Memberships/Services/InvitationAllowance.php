@@ -23,11 +23,20 @@ class InvitationAllowance
     {
         $key = $this->counterKey($actor);
 
-        if (RateLimiter::remaining($key, self::PER_HOUR) < $invitations) {
+        if ($this->wouldExceed($key, $invitations)) {
             throw new InvitationAllowanceExceededException(RateLimiter::availableIn($key));
         }
 
         RateLimiter::increment($key, self::HOUR_IN_SECONDS, $invitations);
+    }
+
+    /**
+     * The middleware's own check: a counter whose window has closed is reset, never
+     * read as spent.
+     */
+    protected function wouldExceed(string $key, int $invitations): bool
+    {
+        return RateLimiter::tooManyAttempts($key, self::PER_HOUR - $invitations + 1);
     }
 
     /**

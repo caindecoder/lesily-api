@@ -272,7 +272,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     /**
      * $rows null sends a body without the invitations key.
      *
-     * @param  ?array<int, array<string, string>>  $rows
+     * @param  ?array<array-key, mixed>  $rows
      */
     protected function bulkInvite(User $actor, Company $company, ?array $rows): TestResponse
     {
