@@ -2,12 +2,19 @@
 
 namespace App\Companies\Memberships\IO\Http\Controllers;
 
-use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use App\Companies\Memberships\IO\Http\Resources\RoleResource;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use App\Companies\Memberships\UseCases\Repositories\RoleRepositoryInterface;
 
 class RolesController
 {
-    public function index(): JsonResponse
+    public function __construct(private readonly RoleRepositoryInterface $roles) {}
+
+    public function index(Request $request): AnonymousResourceCollection
     {
-        return response()->json(['data' => []]);
+        return RoleResource::collection(
+            $this->roles->listAssignableForCompany($request->company()->getKey())
+        );
     }
 }

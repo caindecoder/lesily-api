@@ -34,12 +34,14 @@ admin:
   - audit.view
   - dsar.request-for-others
   - dsar.view-all
+  - roles.view
 
 hr_officer:
   - users.invite
   - users.view
   - users.revoke-invitation
   - companies.view
+  - roles.view
 
 # payroll_officer: NO users.view — the matrix (§Module-3 users.view row) denies it;
 # the roster is the company-membership list, not the payroll-facing employee
@@ -55,6 +57,7 @@ auditor:
   - companies.view
   - billing.view
   - audit.view
+  - roles.view
 
 employee:
   - companies.view
