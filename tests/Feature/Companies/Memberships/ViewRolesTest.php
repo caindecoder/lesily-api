@@ -91,7 +91,7 @@ class ViewRolesTest extends MembershipsTestCase
         [$response, $permissionQueries] = $this->viewRolesRecordingPermissionQueries($owner, $company);
 
         // Then the six roles cost fewer permission statements than there are roles
-        $this->assertPermissionsLoadedOnce($response, $permissionQueries);
+        $this->assertListedWithFewerPermissionQueriesThanRoles($response, $permissionQueries);
     }
 
     #[Test]
@@ -159,8 +159,6 @@ class ViewRolesTest extends MembershipsTestCase
     }
 
     /**
-     * The list call with every statement recorded, and how many of them read role_permission.
-     *
      * @return array{TestResponse, int}
      */
     protected function viewRolesRecordingPermissionQueries(User $actor, Company $company): array
@@ -174,7 +172,7 @@ class ViewRolesTest extends MembershipsTestCase
         return [$response, collect($recorded['queries'])->filter(fn (array $query): bool => str_contains($query['sql'], 'role_permission'))->count()];
     }
 
-    protected function assertPermissionsLoadedOnce(TestResponse $response, int $permissionQueries): void
+    protected function assertListedWithFewerPermissionQueriesThanRoles(TestResponse $response, int $permissionQueries): void
     {
         $response->assertOk();
         $this->assertCount(6, $response->json('data'));
