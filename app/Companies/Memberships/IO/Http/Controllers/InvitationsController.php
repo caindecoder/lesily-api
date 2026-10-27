@@ -32,6 +32,11 @@ class InvitationsController
         return (new InvitationResource($invitation))->response($request)->setStatusCode(Response::HTTP_CREATED);
     }
 
+    public function bulkStore(Request $request): JsonResponse
+    {
+        return response()->json(['data' => []]);
+    }
+
     public function resend(Request $request, string $invitationId, ResendInvitationInteractor $interactor): JsonResponse
     {
         /** @var User $actor — guaranteed by auth:sanctum */

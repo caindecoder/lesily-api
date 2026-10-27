@@ -133,18 +133,6 @@ class InviteUserTest extends MembershipsTestCase
         $this->assertNoInvitationCreated();
     }
 
-    /**
-     * @return array<string, array{string}>
-     */
-    public static function provideNonInvitingRoles(): array
-    {
-        return [
-            'payroll officer' => ['payroll_officer'],
-            'employee' => ['employee'],
-            'auditor' => ['auditor'],
-        ];
-    }
-
     #[Test]
     public function when_the_hourly_invite_allowance_is_spent_then_the_next_invite_is_throttled(): void
     {

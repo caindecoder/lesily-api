@@ -256,6 +256,9 @@ Route::post('/v1/companies/{companyId}/consents', AcceptConsentController::class
 Route::post('/v1/invitations', [InvitationsController::class, 'store'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.invite', 'throttle:invitations']);
 
+Route::post('/v1/invitations/bulk', [InvitationsController::class, 'bulkStore'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.invite']);
+
 // Resend rotates the token + resets the 7-day expiry on a live pending invitation
 // (UC-1-021). Shares the invitations mail-spam budget with invite (R5 session 110).
 Route::post('/v1/invitations/{invitationId}/resend', [InvitationsController::class, 'resend'])

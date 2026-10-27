@@ -258,6 +258,37 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
+     * @return array<string, array{string}>
+     */
+    public static function provideNonInvitingRoles(): array
+    {
+        return [
+            'payroll officer' => ['payroll_officer'],
+            'employee' => ['employee'],
+            'auditor' => ['auditor'],
+        ];
+    }
+
+    /**
+     * @param  array<int, array<string, string>>  $rows
+     */
+    protected function bulkInvite(User $actor, Company $company, array $rows): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->postJson('/api/v1/invitations/bulk', ['invitations' => $rows], ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * @param  list<string>  $emails
+     * @return list<array{email: string, roleCode: string}>
+     */
+    protected function rowsFor(array $emails, string $roleCode = 'employee'): array
+    {
+        return array_map(fn (string $email): array => ['email' => $email, 'roleCode' => $roleCode], $emails);
+    }
+
+    /**
      * A signed-in member requests $company's details — a company route every role can read.
      */
     protected function viewCompany(User $actor, Company $company): TestResponse
