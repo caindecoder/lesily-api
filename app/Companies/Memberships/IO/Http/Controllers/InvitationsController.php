@@ -8,6 +8,7 @@ use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Companies\Memberships\UseCases\Commands\InviteUserCommand;
 use App\Companies\Memberships\IO\Http\Resources\InvitationResource;
+use App\Companies\Memberships\UseCases\Commands\BulkInviteUsersCommand;
 use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
 use App\Companies\Memberships\UseCases\Interactors\InviteUserInteractor;
 use App\Companies\Memberships\UseCases\Interactors\ResendInvitationInteractor;
@@ -34,6 +35,8 @@ class InvitationsController
 
     public function bulkStore(Request $request): JsonResponse
     {
+        BulkInviteUsersCommand::validateAndCreate($request);
+
         return response()->json(['data' => []]);
     }
 

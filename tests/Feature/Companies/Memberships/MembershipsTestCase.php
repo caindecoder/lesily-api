@@ -270,13 +270,17 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
-     * @param  array<int, array<string, string>>  $rows
+     * $rows null sends a body without the invitations key.
+     *
+     * @param  ?array<int, array<string, string>>  $rows
      */
-    protected function bulkInvite(User $actor, Company $company, array $rows): TestResponse
+    protected function bulkInvite(User $actor, Company $company, ?array $rows): TestResponse
     {
         Sanctum::actingAs($actor);
 
-        return $this->postJson('/api/v1/invitations/bulk', ['invitations' => $rows], ['X-Company-Context' => $company->getKey()]);
+        $body = $rows === null ? [] : ['invitations' => $rows];
+
+        return $this->postJson('/api/v1/invitations/bulk', $body, ['X-Company-Context' => $company->getKey()]);
     }
 
     /**
