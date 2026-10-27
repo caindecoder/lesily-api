@@ -84,6 +84,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $company = Company::factory()->onPlan($plan)->create();
         $actor = User::factory()->create();
         $this->attachMember($company, $actor, $this->seededRole($roleCode));
+        $this->aConsentRecordedBy($actor, $company);
 
         return [$company, $actor];
     }
@@ -114,6 +115,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     {
         $member = User::factory()->create();
         $company->users()->attach($member, ['role_id' => $this->seededRole($roleCode)->getKey(), ...$this->contactColumns($contact)]);
+        $this->aConsentRecordedBy($member, $company);
 
         return $member;
     }
@@ -124,6 +126,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     protected function enrolAsOwner(Company $company, User $owner, array $contact): void
     {
         $company->users()->attach($owner, ['role_id' => $this->seededRole('owner')->getKey(), ...$this->contactColumns($contact)]);
+        $this->aConsentRecordedBy($owner, $company);
     }
 
     /**
@@ -650,6 +653,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     {
         $user = User::factory()->create();
         $this->attachMember($company, $user, $this->seededRole($roleCode));
+        $this->aConsentRecordedBy($user, $company);
 
         return [$user, $this->membershipIdOf($company, $user)];
     }

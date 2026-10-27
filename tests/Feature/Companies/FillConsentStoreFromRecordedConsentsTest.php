@@ -3,13 +3,14 @@
 namespace Tests\Feature\Companies;
 
 use App\Models\User;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Consent\Entities\ConsentRecord;
 use App\Consent\Events\ConsentRecorded;
+use App\Companies\Events\CompanyCreated;
 use Illuminate\Database\Migrations\Migration;
-use App\Companies\Events\CompanyDetailsUpdated;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -18,6 +19,8 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class FillConsentStoreFromRecordedConsentsTest extends CompaniesTestCase
 {
+    use CreatesTrialCompanies;
+
     protected const string FILL_MIGRATION = '2026_10_26_152314_fill_consent_records_from_recorded_consents.php';
 
     protected function setUp(): void
@@ -30,17 +33,15 @@ class FillConsentStoreFromRecordedConsentsTest extends CompaniesTestCase
     #[Test]
     public function when_no_consent_was_ever_recorded_then_the_fill_adds_nothing(): void
     {
-        // Given a company whose only recorded event is a details update
-        $company = Company::factory()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
-        $this->updateCompanyDetails($owner, $company->getKey(), ['name' => 'Fabrikam']);
+        // Given a company whose only recorded events are its genesis
+        $this->createCompanyOnTrial(Str::uuid7()->toString());
 
         // When the fill migration runs
         $this->runFillMigration();
 
-        // Then the consent store stays empty, beside the one event the fill passed over
+        // Then the consent store stays empty, beside the genesis the fill passed over
         $this->assertDatabaseCount('consent_records', 0);
-        $this->assertSame(1, LesilyStoredEvent::query()->where('event_class', CompanyDetailsUpdated::class)->count());
+        $this->assertSame(1, LesilyStoredEvent::query()->where('event_class', CompanyCreated::class)->count());
     }
 
     #[Test]
@@ -90,7 +91,6 @@ class FillConsentStoreFromRecordedConsentsTest extends CompaniesTestCase
         $this->travelTo($time);
         $company = Company::factory()->create();
         $owner = $this->aCompanyMember($company, 'owner');
-        $this->aConsentRecordedBy($owner, $company);
 
         return [$owner, $company];
     }
