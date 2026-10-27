@@ -52,7 +52,7 @@ class AcceptConsentTest extends MembershipsTestCase
     }
 
     #[Test]
-    public function when_a_member_accepts_in_one_company_then_another_company_stays_refused(): void
+    public function when_a_member_accepts_in_one_company_then_only_that_company_holds_the_new_version(): void
     {
         // Given a member of two companies facing a new privacy policy version
         $member = $this->aCompanyMember($this->company);

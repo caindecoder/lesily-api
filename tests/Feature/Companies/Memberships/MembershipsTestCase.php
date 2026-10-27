@@ -258,11 +258,6 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
-     * Request the roster as $actor acting in $company's context (UC-1-017).
-     *
-     * @param  array<string, mixed>  $query
-     */
-    /**
      * A signed-in member requests $company's details — a company route every role can read.
      */
     protected function viewCompany(User $actor, Company $company): TestResponse
@@ -317,6 +312,11 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
+    /**
+     * Request the roster as $actor acting in $company's context (UC-1-017).
+     *
+     * @param  array<string, mixed>  $query
+     */
     protected function viewMemberships(User $actor, Company $company, array $query = []): TestResponse
     {
         Sanctum::actingAs($actor);
