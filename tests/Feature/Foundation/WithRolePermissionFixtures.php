@@ -32,6 +32,7 @@ trait WithRolePermissionFixtures
     protected function attachMember(Company $company, User $user, Role $role): void
     {
         $company->users()->attach($user, ['role_id' => $role->getKey()]);
+        $this->aConsentRecordedBy($user, $company);
     }
 
     /**

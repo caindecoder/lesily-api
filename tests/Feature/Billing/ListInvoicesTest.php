@@ -270,6 +270,7 @@ class ListInvoicesTest extends BillingTestCase
 
         $companyA = Company::factory()->onPlan(BillingPlan::Pro)->create();
         $companyA->users()->attach($owner, ['role_id' => $this->seededRole('owner')->getKey()]);
+        $this->aConsentRecordedBy($owner, $companyA);
         $subscriptionA = $this->aTrialSubscriptionFor($companyA, CarbonImmutable::now()->addDays(30));
         $first = $this->anIssuedInvoiceFor($companyA, $subscriptionA, ['invoiceNumber' => 'INV-2026-000202']);
         $second = $this->aPaidInvoiceFor($companyA, $subscriptionA, ['invoiceNumber' => 'INV-2026-000203']);

@@ -219,7 +219,7 @@ Route::get('/v1/companies/{companyId}', [CompaniesController::class, 'show'])
 // whitelist (422). No idempotency-key — naturally idempotent, and the sibling company/
 // membership writes omit it (s122 ruling). No throttle (tiered limits — OQ-1-098).
 Route::put('/v1/companies/{companyId}', [CompaniesController::class, 'update'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:companies.update']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:companies.update']);
 
 // Transfer company ownership (UC-1-028) — the Owner hands the seat to an existing
 // member through the event-sourced Company aggregate (CompanyOwnershipTransferred);
@@ -228,55 +228,55 @@ Route::put('/v1/companies/{companyId}', [CompaniesController::class, 'update'])
 // the post-lock state guard is the dedup (s122 sibling ruling; ruled s170). No
 // throttle (tiered limits — OQ-1-098).
 Route::patch('/v1/companies/{companyId}/owner', CompanyOwnershipController::class)
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:companies.transfer-ownership']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:companies.transfer-ownership']);
 
 // View the owner's emergency contact for the company (UC-1-029) — the company from the
 // URL (param-first resolver), users.set-emergency-contact seeded owner-only; 404 when
 // none is set. Repository-direct read. No throttle (tiered limits — OQ-1-098).
 Route::get('/v1/companies/{companyId}/emergency-contact', [MembershipsController::class, 'emergencyContact'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.set-emergency-contact']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.set-emergency-contact']);
 
 // Replace the owner's emergency contact for the company (UC-1-029) — through the
 // event-sourced Auth User (UserMembershipEmergencyContactSet); same gates as the view.
 // No idempotency-key — a PUT is naturally idempotent. No throttle.
 Route::put('/v1/companies/{companyId}/emergency-contact', [MembershipsController::class, 'setEmergencyContact'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.set-emergency-contact']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.set-emergency-contact']);
 
 // Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
 // a pending invitation is created and the invite email dispatched inline. auth:sanctum
 // -> auth.company -> permission:users.invite (D4 — seeded to owner/admin/hr_officer)
 // -> throttle:invitations (20/hr per actor, D9).
 Route::post('/v1/invitations', [InvitationsController::class, 'store'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.invite', 'throttle:invitations']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.invite', 'throttle:invitations']);
 
 // Resend rotates the token + resets the 7-day expiry on a live pending invitation
 // (UC-1-021). Shares the invitations mail-spam budget with invite (R5 session 110).
 Route::post('/v1/invitations/{invitationId}/resend', [InvitationsController::class, 'resend'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.invite', 'throttle:invitations']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.invite', 'throttle:invitations']);
 
 // Revoke a pending invitation (UC-1-022) — the token is dead thereafter; accepted/
 // revoked/expired collapse to 422 INVITE_NOT_PENDING (R-B s111). No throttle: revoke
 // sends no mail, so it stays outside the invitations spam budget (R-D s111).
 Route::delete('/v1/invitations/{invitationId}', [InvitationsController::class, 'destroy'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.revoke-invitation']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.revoke-invitation']);
 
 // View the company roster (UC-1-017) — active memberships with user + role, paginated
 // per api-conventions §9. Read-only (no aggregate/event — cd-users §read-only-via-repository).
 Route::get('/v1/memberships', [MembershipsController::class, 'index'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.view']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.view']);
 
 // Change a member's role (UC-1-023) — event-sourced UserMembershipRoleChanged updates
 // company_user.role_id. Owner-role target → 422 OWNER_TRANSFER_REQUIRED; self-change →
 // 422 SELF_ROLE_CHANGE_BLOCKED (R-A/R-B s112). No throttle (R-H s112 — revoke parity).
 Route::patch('/v1/memberships/{membershipId}', [MembershipsController::class, 'update'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.change-role']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.change-role']);
 
 // Remove a member from the company (UC-1-024) — event-sourced UserRemovedFromCompany
 // soft-deletes the company_user pivot + revokes the removed member's sessions. Owner
 // target → 422 OWNER_TRANSFER_REQUIRED; self → 422 SELF_REMOVAL_BLOCKED (self before
 // owner). No throttle (R-H s112 — revoke parity).
 Route::delete('/v1/memberships/{membershipId}', [MembershipsController::class, 'destroy'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:users.remove']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.remove']);
 
 // Accept an invitation (UC-1-019) — guest-or-authenticated: the emailed single-use token
 // authenticates the new-user path; an existing-email invitee must additionally hold a
@@ -292,27 +292,27 @@ Route::post('/v1/invitations/accept/{token}', AcceptInvitationController::class)
 // [view+manage], admin/auditor read-only). Repository-free — no interactor (cd-subscriptions §5, gate I1).
 // No throttle (tiered limits — OQ-1-098).
 Route::get('/v1/plans', [PlansController::class, 'index'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:billing.view']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:billing.view']);
 
 // The company's subscription state (UC-1-041, slice-plans-billing T2). Singular —
 // every company has exactly one Subscription (api-1-subscriptions §2). Pure read,
 // no interactor (cd-subscriptions §5, gate I1). No throttle (tiered — OQ-1-098).
 Route::get('/v1/subscription', [SubscriptionsController::class, 'show'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:billing.view']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:billing.view']);
 
 // The company's invoice history (UC-1-120, slice-plans-billing T4) — paginated
 // per api-conventions §9, filter whitelist per §10.1 (unknown params 422 — the
 // s134 F-a ruling covers company_id tenant-override attempts too). Pure read,
 // no interactor (cd-invoices §5, gate I1). No throttle (tiered — OQ-1-098).
 Route::get('/v1/invoices', [InvoicesController::class, 'index'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:billing.view']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:billing.view']);
 
 // A paid invoice's PDF receipt (UC-1-121, slice-plans-billing T5) — regenerated
 // on demand, never stored (R3); status ∈ {paid, refunded} AND no open dispute
 // (s129 F7); the ONE binary-response endpoint in chunk-1 (api-1-invoices §4.5).
 // Pure read, no interactor (cd-invoices §5, gate I1). No throttle (OQ-1-098).
 Route::get('/v1/invoices/{invoiceId}/receipt', [InvoicesController::class, 'receipt'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:billing.view']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:billing.view']);
 
 // A platform admin's cross-tenant invoice review (UC-1-122, slice-plans-billing
 // T7) — the FIRST real /api/v1/admin/* route: auth:sanctum + platform.admin

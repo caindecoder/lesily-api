@@ -356,6 +356,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         // Given an employee who cannot view the roster (employee lacks users.view)
         [$company, $admin] = $this->aCompanyWithMember();
         [$bob, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $this->aConsentRecordedBy($bob, $company);
         $this->assertRefusedWith(
             $this->viewMemberships($bob, $company),
             Response::HTTP_FORBIDDEN,
