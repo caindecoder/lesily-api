@@ -57,6 +57,31 @@ class ViewRolesTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_members_are_removed_or_in_another_company_then_they_are_not_counted(): void
+    {
+        // Given a company with an owner, an HR officer and a removed employee
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $this->aMembership($company, 'hr_officer');
+        $this->aRemovedMembership($company, User::factory()->create());
+        // And another company with an employee and an HR officer
+        [$otherCompany] = $this->aCompanyWithMember('employee');
+        $this->aMembership($otherCompany, 'hr_officer');
+
+        // When the owner lists the company's roles
+        $response = $this->viewRoles($owner, $company);
+
+        // Then only the company's live members are counted
+        $this->assertRoleSummaries($response, [
+            'owner' => [15, 1],
+            'admin' => [12, 0],
+            'hr_officer' => [5, 1],
+            'payroll_officer' => [1, 0],
+            'auditor' => [5, 0],
+            'employee' => [1, 0],
+        ]);
+    }
+
+    #[Test]
     public function when_owner_lists_roles_then_the_six_assignable_roles_arrive_in_order_with_permissions_and_counts(): void
     {
         // Given an owner, an admin and two employees in one company

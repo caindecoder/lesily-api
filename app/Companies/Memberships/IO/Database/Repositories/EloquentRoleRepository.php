@@ -17,7 +17,7 @@ class EloquentRoleRepository implements RoleRepositoryInterface
             ->where('is_assignable', true)
             ->with(['permissions' => fn (BelongsToMany $permissions) => $permissions->orderBy('module')->orderBy('code')])
             ->withCount('permissions')
-            ->addSelect(['members_count' => $this->membersHoldingTheRole()])
+            ->addSelect(['members_count' => $this->membersHoldingTheRoleIn($companyId)])
             ->orderBy('sort_order')
             ->get();
     }
@@ -25,10 +25,11 @@ class EloquentRoleRepository implements RoleRepositoryInterface
     /**
      * @return Builder<CompanyUser>
      */
-    protected function membersHoldingTheRole(): Builder
+    protected function membersHoldingTheRoleIn(string $companyId): Builder
     {
         return CompanyUser::query()
             ->selectRaw('count(*)')
-            ->whereColumn('company_user.role_id', 'roles.id');
+            ->whereColumn('company_user.role_id', 'roles.id')
+            ->where('company_user.company_id', $companyId);
     }
 }
