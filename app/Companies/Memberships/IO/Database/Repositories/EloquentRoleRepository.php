@@ -15,7 +15,7 @@ class EloquentRoleRepository implements RoleRepositoryInterface
     {
         return Role::query()
             ->where('is_assignable', true)
-            ->with(['permissions' => fn (Relation $permissions) => $permissions->orderBy('module')->orderBy('code')])
+            ->with(['permissions' => fn (Relation $permissions) => $permissions->orderBy('code')])
             ->withCount('permissions')
             ->addSelect(['members_count' => $this->membersHoldingTheRoleIn($companyId)])
             ->orderBy('sort_order')

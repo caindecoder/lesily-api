@@ -17,6 +17,19 @@ use App\Foundation\RolesPermissions\Entities\Permission;
 class ViewRolesTest extends MembershipsTestCase
 {
     #[Test]
+    public function when_request_has_no_token_then_unauthenticated(): void
+    {
+        // Given a company with an owner member
+        [$company] = $this->aCompanyWithMember('owner');
+
+        // When its roles are requested with no token
+        $response = $this->getJson('/api/v1/roles', ['X-Company-Context' => $company->getKey()]);
+
+        // Then the request is unauthenticated
+        $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
+    }
+
+    #[Test]
     public function when_outsider_lists_roles_then_company_access_denied(): void
     {
         // Given an owner of one company and a second company they never joined
@@ -79,6 +92,20 @@ class ViewRolesTest extends MembershipsTestCase
             'auditor' => [5, 0],
             'employee' => [1, 0],
         ]);
+    }
+
+    #[Test]
+    public function when_a_role_moves_in_the_display_order_then_the_list_follows_it(): void
+    {
+        // Given an owner, and the employee role moved to the front of the display order
+        [$company, $owner] = $this->aCompanyWithMember('owner');
+        $this->seededRole('employee')->update(['sort_order' => 0]);
+
+        // When the owner lists the company's roles
+        $response = $this->viewRoles($owner, $company);
+
+        // Then the employee role is listed first
+        $this->assertRoleCodesInOrder($response, ['employee', 'owner', 'admin', 'hr_officer', 'payroll_officer', 'auditor']);
     }
 
     #[Test]
@@ -176,6 +203,7 @@ class ViewRolesTest extends MembershipsTestCase
     {
         $response->assertOk();
         $this->assertCount(6, $response->json('data'));
+        $this->assertGreaterThan(0, $permissionQueries);
         $this->assertLessThan(6, $permissionQueries);
     }
 
