@@ -275,7 +275,7 @@ Route::get('/v1/memberships', [MembershipsController::class, 'index'])
 // View the company's roles (UC-1-030) — the assignable system roles, each with its
 // permissions and the number of this company's members holding it; non-paginated {data: [...]}.
 Route::get('/v1/roles', [RolesController::class, 'index'])
-    ->middleware(['auth:sanctum', 'auth.company', 'consent']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:roles.view']);
 
 // Change a member's role (UC-1-023) — event-sourced UserMembershipRoleChanged updates
 // company_user.role_id. Owner-role target → 422 OWNER_TRANSFER_REQUIRED; self-change →
