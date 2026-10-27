@@ -12,6 +12,7 @@ use App\Billing\Invoices\IO\Http\Controllers\InvoicesController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutAllController;
 use App\Companies\IO\Http\Controllers\CompanyOwnershipController;
 use App\Billing\Subscriptions\IO\Http\Controllers\PlansController;
+use App\Companies\Memberships\IO\Http\Controllers\RolesController;
 use App\Foundation\Auth\IO\Http\Controllers\MyCompaniesController;
 use App\Compliance\Dsar\IO\Http\Controllers\DsarDownloadController;
 use App\Compliance\Dsar\IO\Http\Controllers\DsarRequestsController;
@@ -270,6 +271,11 @@ Route::delete('/v1/invitations/{invitationId}', [InvitationsController::class, '
 // per api-conventions §9. Read-only (no aggregate/event — cd-users §read-only-via-repository).
 Route::get('/v1/memberships', [MembershipsController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.view']);
+
+// View the company's roles (UC-1-030) — the assignable system roles, each with its
+// permissions and the number of this company's members holding it; non-paginated {data: [...]}.
+Route::get('/v1/roles', [RolesController::class, 'index'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:roles.view']);
 
 // Change a member's role (UC-1-023) — event-sourced UserMembershipRoleChanged updates
 // company_user.role_id. Owner-role target → 422 OWNER_TRANSFER_REQUIRED; self-change →
