@@ -8,6 +8,8 @@ use App\Foundation\RolesPermissions\Entities\Role;
 
 /**
  * @mixin Role
+ *
+ * @property-read int $members_count
  */
 class RoleResource extends JsonResource
 {

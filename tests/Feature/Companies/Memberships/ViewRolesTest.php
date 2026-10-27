@@ -187,7 +187,9 @@ class ViewRolesTest extends MembershipsTestCase
     protected function assertRoleSummaries(TestResponse $response, array $expected): void
     {
         $response->assertOk();
-        $this->assertSame($expected, collect($response->json('data'))
+        /** @var list<array<string, mixed>> $roles */
+        $roles = $response->json('data');
+        $this->assertSame($expected, collect($roles)
             ->mapWithKeys(fn (array $role): array => [$role['code'] => [$role['permissions_count'], $role['members_count']]])
             ->all());
     }
@@ -197,7 +199,10 @@ class ViewRolesTest extends MembershipsTestCase
      */
     protected function assertRoleDescribed(TestResponse $response, Role $role, array $permissionCodes): void
     {
-        $described = collect($response->json('data'))->firstWhere('code', $role->code);
+        /** @var list<array<string, mixed>> $roles */
+        $roles = $response->json('data');
+        $described = collect($roles)->firstWhere('code', $role->code);
+        $this->assertIsArray($described);
         $this->assertSame([
             'id' => $role->getKey(),
             'code' => $role->code,

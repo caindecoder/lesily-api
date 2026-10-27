@@ -6,7 +6,7 @@ use App\Companies\Entities\CompanyUser;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use App\Foundation\RolesPermissions\Entities\Role;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use App\Companies\Memberships\UseCases\Repositories\RoleRepositoryInterface;
 
 class EloquentRoleRepository implements RoleRepositoryInterface
@@ -15,7 +15,7 @@ class EloquentRoleRepository implements RoleRepositoryInterface
     {
         return Role::query()
             ->where('is_assignable', true)
-            ->with(['permissions' => fn (BelongsToMany $permissions) => $permissions->orderBy('module')->orderBy('code')])
+            ->with(['permissions' => fn (Relation $permissions) => $permissions->orderBy('module')->orderBy('code')])
             ->withCount('permissions')
             ->addSelect(['members_count' => $this->membersHoldingTheRoleIn($companyId)])
             ->orderBy('sort_order')
