@@ -109,10 +109,8 @@ class BulkInviteUsersTest extends MembershipsTestCase
         $response = $this->bulkInvite($admin, $company, $this->rowsFor(['not-an-email', 'also-not-an-email']));
 
         // Then every malformed row is named and nothing is created
-        $this->assertRowsRejected($response, [
-            'invitations.0.email' => 'The invitations.0.email field must be a valid email address.',
-            'invitations.1.email' => 'The invitations.1.email field must be a valid email address.',
-        ]);
+        $this->assertValidationRejected($response, 'invitations.0.email', 'The invitations.0.email field must be a valid email address.');
+        $this->assertValidationRejected($response, 'invitations.1.email', 'The invitations.1.email field must be a valid email address.');
         $this->assertNoInvitationCreated();
     }
 
@@ -342,15 +340,5 @@ class BulkInviteUsersTest extends MembershipsTestCase
             $this->assertPendingInvitationCreated($company, $email, 'employee');
             $this->assertCount(1, Mail::queued(InvitationMail::class, fn (InvitationMail $mail): bool => $mail->hasTo($email)));
         }
-    }
-
-    /**
-     * @param  array<string, string>  $messagesByField
-     */
-    protected function assertRowsRejected(TestResponse $response, array $messagesByField): void
-    {
-        $response->assertUnprocessable();
-        $response->assertJsonPath('error_code', ApiErrorCode::ValidationFailed->value);
-        $response->assertJsonValidationErrors($messagesByField);
     }
 }
