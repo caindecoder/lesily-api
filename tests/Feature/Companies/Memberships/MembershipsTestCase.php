@@ -284,6 +284,30 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
+     * Every row came back sent, in input order, each one stored as a pending
+     * invitation with its own role and mailed once.
+     *
+     * @param  list<array{email: string, roleCode: string}>  $rows
+     */
+    protected function assertBatchSent(TestResponse $response, Company $company, array $rows): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data', array_map(fn (array $row): array => [
+            'email' => $row['email'],
+            'role_code' => $row['roleCode'],
+            'status' => 'sent',
+            'error_code' => null,
+            'message' => null,
+        ], $rows));
+
+        foreach ($rows as $row) {
+            $this->assertPendingInvitationCreated($company, $row['email'], $row['roleCode']);
+        }
+
+        Mail::assertQueued(InvitationMail::class, count($rows));
+    }
+
+    /**
      * @param  list<string>  $emails
      * @return list<array{email: string, roleCode: string}>
      */

@@ -11,6 +11,8 @@ use App\Companies\Memberships\IO\Http\Resources\InvitationResource;
 use App\Companies\Memberships\UseCases\Commands\BulkInviteUsersCommand;
 use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
 use App\Companies\Memberships\UseCases\Interactors\InviteUserInteractor;
+use App\Companies\Memberships\IO\Http\Resources\BulkInvitationResultResource;
+use App\Companies\Memberships\UseCases\Interactors\BulkInviteUsersInteractor;
 use App\Companies\Memberships\UseCases\Interactors\ResendInvitationInteractor;
 use App\Companies\Memberships\UseCases\Interactors\RevokeInvitationInteractor;
 
@@ -33,11 +35,16 @@ class InvitationsController
         return (new InvitationResource($invitation))->response($request)->setStatusCode(Response::HTTP_CREATED);
     }
 
-    public function bulkStore(Request $request): JsonResponse
+    public function bulkStore(Request $request, BulkInviteUsersInteractor $interactor): JsonResponse
     {
-        BulkInviteUsersCommand::validateAndCreate($request);
+        $command = BulkInviteUsersCommand::validateAndCreate($request);
 
-        return response()->json(['data' => []]);
+        /** @var User $actor — guaranteed by auth:sanctum */
+        $actor = $request->user();
+
+        $results = $interactor->execute($request->company(), $actor, $command);
+
+        return BulkInvitationResultResource::collection($results)->response($request);
     }
 
     public function resend(Request $request, string $invitationId, ResendInvitationInteractor $interactor): JsonResponse

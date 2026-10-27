@@ -2,11 +2,15 @@
 
 namespace Tests\Feature\Companies\Memberships;
 
+use App\Models\User;
 use Illuminate\Http\Response;
+use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Companies\Memberships\Mail\InvitationMail;
 
 class BulkInviteUsersTest extends MembershipsTestCase
 {
@@ -112,6 +116,87 @@ class BulkInviteUsersTest extends MembershipsTestCase
         $this->assertNoInvitationCreated();
     }
 
+    #[Test]
+    public function when_an_email_repeats_in_the_batch_then_the_repeat_is_skipped(): void
+    {
+        // Given an admin of a company
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+
+        // When the admin submits the same email twice in one batch
+        $response = $this->bulkInvite($admin, $company, $this->rowsFor(['nimal@contoso.lk', 'nimal@contoso.lk']));
+
+        // Then the repeat is skipped as already invited and the email is invited once
+        $this->assertRowSkipped($response, 1, 'This email has already been invited to this company.');
+        $this->assertInvitedAndMailedOnce($company, ['nimal@contoso.lk']);
+    }
+
+    #[Test]
+    public function when_some_rows_are_members_or_already_invited_then_those_rows_are_skipped_and_the_rest_sent(): void
+    {
+        // Given an admin, a member of the company and an email already invited
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $member = User::factory()->withEmail('member@contoso.lk')->create();
+        $this->attachMember($company, $member, $this->seededRole('employee'));
+        $this->aPendingInvitation($company, $admin, 'pending@contoso.lk');
+
+        // When the admin bulk invites two new emails, the member and the invited email
+        $response = $this->bulkInvite($admin, $company, $this->rowsFor([
+            'nimal@contoso.lk', 'member@contoso.lk', 'pending@contoso.lk', 'sunil@contoso.lk',
+        ]));
+
+        // Then the member and the invited rows are skipped with their reasons, and
+        // only the new emails gain an invitation and a mail
+        $this->assertRowSkipped($response, 1, 'This user is already a member of this company.');
+        $this->assertRowSkipped($response, 2, 'This email has already been invited to this company.');
+        $this->assertInvitedAndMailedOnce($company, ['nimal@contoso.lk', 'pending@contoso.lk', 'sunil@contoso.lk']);
+        $this->assertDatabaseMissing('invitations', ['email' => 'member@contoso.lk']);
+    }
+
+    #[Test]
+    #[DataProvider('provideInvitingRoles')]
+    public function when_an_owner_admin_or_hr_officer_bulk_invites_then_the_rows_are_sent(string $roleCode): void
+    {
+        // Given a member whose role carries users.invite
+        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        $rows = $this->rowsFor(['nimal@contoso.lk', 'sunil@contoso.lk']);
+
+        // When they bulk invite two new emails
+        $response = $this->bulkInvite($actor, $company, $rows);
+
+        // Then both rows are sent
+        $this->assertBatchSent($response, $company, $rows);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideInvitingRoles(): array
+    {
+        return [
+            'owner' => ['owner'],
+            'admin' => ['admin'],
+            'hr officer' => ['hr_officer'],
+        ];
+    }
+
+    #[Test]
+    public function when_valid_rows_are_submitted_then_each_is_invited_with_its_own_role_and_mailed(): void
+    {
+        // Given an admin of a company and three new emails, each with its own role
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $rows = [
+            ['email' => 'nimal@contoso.lk', 'roleCode' => 'employee'],
+            ['email' => 'sunil@contoso.lk', 'roleCode' => 'hr_officer'],
+            ['email' => 'kumari@contoso.lk', 'roleCode' => 'auditor'],
+        ];
+
+        // When the admin bulk invites them
+        $response = $this->bulkInvite($admin, $company, $rows);
+
+        // Then each row is sent in order, invited with its own role and mailed
+        $this->assertBatchSent($response, $company, $rows);
+    }
+
     /**
      * @return array<string, array{?list<array{email: string, roleCode: string}>, string}>
      */
@@ -124,6 +209,27 @@ class BulkInviteUsersTest extends MembershipsTestCase
             'empty' => [[], 'The invitations field is required.'],
             'twenty-one rows' => [$twentyOne, 'The invitations field must not have more than 20 items.'],
         ];
+    }
+
+    protected function assertRowSkipped(TestResponse $response, int $index, string $message): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath("data.{$index}.status", 'skipped');
+        $response->assertJsonPath("data.{$index}.error_code", ApiErrorCode::AlreadyMember->value);
+        $response->assertJsonPath("data.{$index}.message", $message);
+    }
+
+    /**
+     * Each email holds exactly one pending invitation in the company and was mailed once.
+     *
+     * @param  list<string>  $emails
+     */
+    protected function assertInvitedAndMailedOnce(Company $company, array $emails): void
+    {
+        foreach ($emails as $email) {
+            $this->assertPendingInvitationCreated($company, $email, 'employee');
+            $this->assertCount(1, Mail::queued(InvitationMail::class, fn (InvitationMail $mail): bool => $mail->hasTo($email)));
+        }
     }
 
     /**
