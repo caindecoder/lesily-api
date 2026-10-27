@@ -121,6 +121,7 @@ return Application::configure(basePath: dirname(__DIR__))
             InviteEmailMismatchException::class,
             DsarRequesterMismatchException::class,
             LoginChallengeNotFoundException::class,
+            InvitationAllowanceExceededException::class,
         ]);
 
         $exceptions->render(fn (ValidationException $e) => EnvelopeBuilder::build(
