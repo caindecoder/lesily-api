@@ -9,6 +9,7 @@ enum ApiErrorCode: string
     case ValidationFailed = 'VALIDATION_FAILED';
     case Unauthenticated = 'UNAUTHENTICATED';
     case CompanyAccessDenied = 'COMPANY_ACCESS_DENIED';
+    case ConsentRequired = 'CONSENT_REQUIRED';
     case FeatureNotAvailable = 'FEATURE_NOT_AVAILABLE';
     case RoleInsufficient = 'ROLE_INSUFFICIENT';
     case AlreadyMember = 'ALREADY_MEMBER';
@@ -55,6 +56,7 @@ enum ApiErrorCode: string
             self::ValidationFailed => Response::HTTP_UNPROCESSABLE_ENTITY,
             self::Unauthenticated => Response::HTTP_UNAUTHORIZED,
             self::CompanyAccessDenied => Response::HTTP_FORBIDDEN,
+            self::ConsentRequired => Response::HTTP_FORBIDDEN,
             self::FeatureNotAvailable => Response::HTTP_FORBIDDEN,
             self::RoleInsufficient => Response::HTTP_FORBIDDEN,
             self::AlreadyMember => Response::HTTP_UNPROCESSABLE_ENTITY,

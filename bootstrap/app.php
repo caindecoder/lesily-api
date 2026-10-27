@@ -17,11 +17,13 @@ use App\Companies\Exceptions\TargetNotMemberException;
 use App\Foundation\Http\Middleware\AssignCorrelationId;
 use App\Foundation\Http\Middleware\EnsurePlatformAdmin;
 use App\Foundation\Http\Middleware\RecordAccessOutcome;
+use App\Foundation\Http\Middleware\EnsureCurrentConsent;
 use App\Foundation\Http\Middleware\EnsureIdempotencyKey;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Companies\Exceptions\SelfTransferBlockedException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
+use App\Foundation\Http\Exceptions\ConsentRequiredException;
 use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use App\Foundation\Auth\Exceptions\InvalidResetLinkException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
@@ -95,6 +97,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->appendToGroup('api', RecordAccessOutcome::class);
         $middleware->alias([
             'auth.company' => AuthorizeCompany::class,
+            'consent' => EnsureCurrentConsent::class,
             'feature' => EnsureFeatureAvailable::class,
             'permission' => EnsurePermission::class,
             'idempotency-key' => EnsureIdempotencyKey::class,
@@ -111,6 +114,7 @@ return Application::configure(basePath: dirname(__DIR__))
             IncorrectPasswordException::class,
             DeviceLimitReachedException::class,
             CompanyAccessDeniedException::class,
+            ConsentRequiredException::class,
             FeatureUnavailableException::class,
             RoleInsufficientException::class,
             InviteEmailMismatchException::class,
@@ -349,6 +353,11 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(fn (CompanyAccessDeniedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::CompanyAccessDenied,
+            $e->getMessage(),
+        ));
+
+        $exceptions->render(fn (ConsentRequiredException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::ConsentRequired,
             $e->getMessage(),
         ));
 

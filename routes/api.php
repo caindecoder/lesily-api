@@ -207,10 +207,10 @@ Route::post('/v1/companies', [CompaniesController::class, 'store'])
 // View company details (UC-1-032) — the first route-param company endpoint:
 // the resolver reads {companyId} first, header fallback (slice-companies R8;
 // the URL is authoritative here). Repository-direct read, no event. Gate order
-// per api-conventions §7: auth → company-scope → permission (companies.view is
+// per api-conventions §7: auth → company-scope → consent → permission (companies.view is
 // seeded to every role except manager). No throttle (tiered limits — OQ-1-098).
 Route::get('/v1/companies/{companyId}', [CompaniesController::class, 'show'])
-    ->middleware(['auth:sanctum', 'auth.company', 'permission:companies.view']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:companies.view']);
 
 // Update company details (UC-1-033) — Owner/Admin edit name + settings through
 // the event-sourced Company aggregate (CompanyDetailsUpdated + CompanySettingsUpdated).

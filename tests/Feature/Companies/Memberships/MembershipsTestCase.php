@@ -261,6 +261,29 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      *
      * @param  array<string, mixed>  $query
      */
+    /**
+     * A signed-in member requests $company's details — a company route every role can read.
+     */
+    protected function viewCompany(User $actor, Company $company): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/companies/'.$company->getKey());
+    }
+
+    /**
+     * The request was refused until the live policy versions are accepted — 403
+     * CONSENT_REQUIRED with the re-consent words (UC-1-069).
+     */
+    protected function assertConsentRequired(TestResponse $response): void
+    {
+        $response->assertForbidden();
+        $response->assertJsonPath('error_code', 'CONSENT_REQUIRED');
+        $response->assertJsonPath('message', 'Our Terms of Service or Privacy Policy has been updated. Please review and accept to continue.');
+        $response->assertJsonPath('errors', []);
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
     protected function viewMemberships(User $actor, Company $company, array $query = []): TestResponse
     {
         Sanctum::actingAs($actor);

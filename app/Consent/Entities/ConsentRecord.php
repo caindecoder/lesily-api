@@ -2,8 +2,11 @@
 
 namespace App\Consent\Entities;
 
+use App\Models\User;
 use Carbon\CarbonImmutable;
+use App\Companies\Entities\Company;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 
 /**
@@ -39,4 +42,27 @@ class ConsentRecord extends Model
         'stored_event_id' => 'integer',
         'consented_at' => 'immutable_datetime',
     ];
+
+    /**
+     * Whether $user has accepted every live policy version (config lesily.policies)
+     * in $company.
+     */
+    public static function livePoliciesAcceptedBy(User $user, Company $company): bool
+    {
+        /** @var array<string, string> $livePolicies */
+        $livePolicies = config('lesily.policies');
+
+        $acceptedPolicies = static::query()
+            ->where('user_id', $user->getKey())
+            ->where('company_id', $company->getKey())
+            ->where(function (Builder $query) use ($livePolicies): void {
+                foreach ($livePolicies as $policy => $version) {
+                    $query->orWhere(fn (Builder $query) => $query->where('policy_type', $policy)->where('version', $version));
+                }
+            })
+            ->distinct()
+            ->count('policy_type');
+
+        return $acceptedPolicies === count($livePolicies);
+    }
 }
