@@ -117,6 +117,104 @@ class BulkInviteUsersTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_batch_exceeds_the_allowance_left_this_hour_then_nothing_is_sent(): void
+    {
+        // Given an admin who has sent 18 of the 20 invitations allowed this hour
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->exhaustInviteLimit($admin, $company, 18);
+
+        // When they bulk invite five more
+        $response = $this->bulkInvite($admin, $company, $this->batchOf(5));
+
+        // Then the batch is throttled and nothing more is invited or mailed
+        $this->assertThrottled($response);
+        $this->assertInvitationsSentInTotal(18);
+    }
+
+    #[Test]
+    public function when_a_malformed_batch_is_refused_then_it_spends_no_allowance(): void
+    {
+        // Given an admin whose twenty-row batch was refused for one malformed row
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $refused = $this->batchOf(20);
+        $refused[19]['email'] = 'not-an-email';
+        $this->bulkInvite($admin, $company, $refused);
+        $rows = $this->batchOf(20);
+
+        // When they send the corrected batch
+        $response = $this->bulkInvite($admin, $company, $rows);
+
+        // Then all twenty rows are sent
+        $this->assertBatchSent($response, $company, $rows);
+    }
+
+    #[Test]
+    public function when_the_batch_fits_exactly_the_allowance_left_then_every_row_is_sent(): void
+    {
+        // Given an admin who has sent 18 of the 20 invitations allowed this hour
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->exhaustInviteLimit($admin, $company, 18);
+        $rows = $this->batchOf(2);
+
+        // When they bulk invite the last two
+        $response = $this->bulkInvite($admin, $company, $rows);
+
+        // Then both rows are sent, twenty in all
+        $this->assertRowsSentInOrder($response, $rows);
+        $this->assertInvitationsSentInTotal(20);
+    }
+
+    #[Test]
+    public function when_a_batch_has_spent_the_allowance_then_a_single_invite_is_throttled(): void
+    {
+        // Given an admin who has bulk invited twenty this hour
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->bulkInvite($admin, $company, $this->batchOf(20));
+
+        // When they invite one more on its own
+        $response = $this->invite($admin, $company, ['email' => 'one-more@contoso.lk', 'roleCode' => 'employee']);
+
+        // Then the single invite is throttled and nothing more is invited or mailed
+        $this->assertThrottled($response);
+        $this->assertInvitationsSentInTotal(20);
+    }
+
+    #[Test]
+    public function when_the_hour_has_not_passed_then_the_allowance_stays_spent(): void
+    {
+        // Given an admin who bulk invited twenty one second short of an hour ago
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->freezeTime();
+        $this->bulkInvite($admin, $company, $this->batchOf(20));
+        $this->travel(3599)->seconds();
+
+        // When they bulk invite one more
+        $response = $this->bulkInvite($admin, $company, $this->rowsFor(['too-soon@contoso.lk']));
+
+        // Then the batch is throttled and nothing more is invited or mailed
+        $this->assertThrottled($response);
+        $this->assertInvitationsSentInTotal(20);
+    }
+
+    #[Test]
+    public function when_the_hour_has_passed_then_the_allowance_is_restored(): void
+    {
+        // Given an admin who bulk invited twenty exactly an hour ago
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->freezeTime();
+        $this->bulkInvite($admin, $company, $this->batchOf(20));
+        $this->travel(3600)->seconds();
+        $rows = $this->rowsFor(['next-hour@contoso.lk']);
+
+        // When they bulk invite one more
+        $response = $this->bulkInvite($admin, $company, $rows);
+
+        // Then the row is sent, twenty-one in all
+        $this->assertRowsSentInOrder($response, $rows);
+        $this->assertInvitationsSentInTotal(21);
+    }
+
+    #[Test]
     public function when_an_email_repeats_in_the_batch_then_the_repeat_is_skipped(): void
     {
         // Given an admin of a company
@@ -209,6 +307,20 @@ class BulkInviteUsersTest extends MembershipsTestCase
             'empty' => [[], 'The invitations field is required.'],
             'twenty-one rows' => [$twentyOne, 'The invitations field must not have more than 20 items.'],
         ];
+    }
+
+    /**
+     * @return list<array{email: string, roleCode: string}>
+     */
+    protected function batchOf(int $size): array
+    {
+        return $this->rowsFor(array_map(fn (int $i): string => sprintf('batch-%02d@contoso.lk', $i), range(1, $size)));
+    }
+
+    protected function assertInvitationsSentInTotal(int $expected): void
+    {
+        $this->assertDatabaseCount('invitations', $expected);
+        Mail::assertQueued(InvitationMail::class, $expected);
     }
 
     protected function assertRowSkipped(TestResponse $response, int $index, string $message): void

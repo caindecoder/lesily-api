@@ -291,6 +291,20 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      */
     protected function assertBatchSent(TestResponse $response, Company $company, array $rows): void
     {
+        $this->assertRowsSentInOrder($response, $rows);
+
+        foreach ($rows as $row) {
+            $this->assertPendingInvitationCreated($company, $row['email'], $row['roleCode']);
+        }
+
+        Mail::assertQueued(InvitationMail::class, count($rows));
+    }
+
+    /**
+     * @param  list<array{email: string, roleCode: string}>  $rows
+     */
+    protected function assertRowsSentInOrder(TestResponse $response, array $rows): void
+    {
         $response->assertOk();
         $response->assertJsonPath('data', array_map(fn (array $row): array => [
             'email' => $row['email'],
@@ -299,12 +313,6 @@ abstract class MembershipsTestCase extends CompaniesTestCase
             'error_code' => null,
             'message' => null,
         ], $rows));
-
-        foreach ($rows as $row) {
-            $this->assertPendingInvitationCreated($company, $row['email'], $row['roleCode']);
-        }
-
-        Mail::assertQueued(InvitationMail::class, count($rows));
     }
 
     /**
