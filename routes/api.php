@@ -254,9 +254,9 @@ Route::post('/v1/companies/{companyId}/consents', AcceptConsentController::class
 // Invite a user to the company (UC-1-018) — Owner/Admin/HR-Officer email an invite;
 // a pending invitation is created and the invite email dispatched inline. auth:sanctum
 // -> auth.company -> consent -> permission:users.invite (D4 — seeded to owner/admin/
-// hr_officer) -> throttle:invitations (20/hr per actor, D9).
+// hr_officer); the use case spends 1 of the actor's 20/hr allowance (InvitationAllowance, D9).
 Route::post('/v1/invitations', [InvitationsController::class, 'store'])
-    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.invite', 'throttle:invitations']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.invite']);
 
 // Bulk invite (UC-1-020) — up to 20 rows, each a single invite; a malformed row refuses
 // the batch, a member or invited email is skipped. No throttle middleware: the batch

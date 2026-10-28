@@ -14,6 +14,7 @@ use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
+use App\Companies\Memberships\Services\InvitationAllowance;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class InviteUserTest extends MembershipsTestCase
@@ -131,6 +132,26 @@ class InviteUserTest extends MembershipsTestCase
         // Then the invite is denied for the missing permission and nothing is created
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
         $this->assertNoInvitationCreated();
+    }
+
+    #[Test]
+    public function when_invites_fail_validation_then_they_spend_no_allowance(): void
+    {
+        // Given an admin whose twenty invites were all refused as malformed
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        for ($i = 0; $i < InvitationAllowance::PER_HOUR; $i++) {
+            $this->invite($admin, $company, ['email' => 'not-an-email', 'roleCode' => 'employee']);
+        }
+
+        // When they send a well-formed invite within the hour
+        $response = $this->invite($admin, $company, [
+            'email' => 'well-formed@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then it is sent, the malformed ones having cost nothing
+        $response->assertCreated();
+        $this->assertDatabaseCount('invitations', 1);
     }
 
     #[Test]
