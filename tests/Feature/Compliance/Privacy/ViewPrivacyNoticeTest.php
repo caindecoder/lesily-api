@@ -84,6 +84,21 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         $this->assertThirteenItemsInOrder($response);
     }
 
+    #[Test]
+    public function when_the_notice_is_viewed_then_the_controller_item_names_the_company_and_its_owner(): void
+    {
+        // Given an employee of Contoso, whose owner is Asha Perera
+        $employee = User::factory()->create();
+        $this->attachMember($this->company, $employee, $this->seededRole('employee'));
+
+        // When they view the privacy notice
+        $response = $this->viewNotice($employee, $this->company);
+
+        // Then item 1 names Contoso, its BR number and country, with Asha Perera as the contact
+        // And item 2 says no data protection officer is designated
+        $this->assertControllerItems($response);
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -118,5 +133,30 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
             'statutory_or_contractual' => 'Is providing the data required?',
             'automated_decisions' => 'Automated decisions',
         ], array_column($response->json('data'), 'heading', 'key'));
+    }
+
+    protected function assertControllerItems(TestResponse $response): void
+    {
+        $items = $this->itemsOf($response);
+
+        $this->assertSame([
+            'Contoso (Pvt) Ltd, BR number PV-00012345, Sri Lanka',
+            'Contact: Asha Perera, asha@contoso.lk',
+        ], $items['controller']['body']);
+        $this->assertSame([
+            'No data protection officer has been designated; contact the controller above',
+        ], $items['dpo']['body']);
+    }
+
+    /**
+     * The notice's items keyed by their key.
+     *
+     * @return array<string, array{key: string, heading: string, body: list<string>}>
+     */
+    protected function itemsOf(TestResponse $response): array
+    {
+        $response->assertOk();
+
+        return array_column($response->json('data'), null, 'key');
     }
 }

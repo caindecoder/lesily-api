@@ -35,7 +35,37 @@ class PrivacyNoticeResource extends JsonResource
         return array_map(fn (string $key): array => [
             'key' => $key,
             'heading' => __("privacy.notice.{$key}.heading"),
-            'body' => [],
+            'body' => $this->bodyOf($key),
         ], self::ITEMS);
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    protected function bodyOf(string $key): array
+    {
+        return match ($key) {
+            'controller' => $this->controllerLines(),
+            'dpo' => [__('privacy.notice.dpo.body')],
+            default => [],
+        };
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    protected function controllerLines(): array
+    {
+        $company = $this->resource;
+        $owner = $company->owner();
+
+        return [
+            __('privacy.notice.controller.company', [
+                'name' => $company->name,
+                'br_number' => $company->br_number,
+                'country' => __("privacy.countries.{$company->country}"),
+            ]),
+            __('privacy.notice.controller.contact', ['name' => $owner->name, 'email' => $owner->email]),
+        ];
     }
 }

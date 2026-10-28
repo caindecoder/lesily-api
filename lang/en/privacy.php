@@ -99,9 +99,20 @@ return [
         'email_delivery_service' => 'Email delivery service',
     ],
 
+    'countries' => [
+        'LK' => 'Sri Lanka',
+    ],
+
     'notice' => [
-        'controller' => ['heading' => 'Who controls your data'],
-        'dpo' => ['heading' => 'Data protection officer'],
+        'controller' => [
+            'heading' => 'Who controls your data',
+            'company' => ':name, BR number :br_number, :country',
+            'contact' => 'Contact: :name, :email',
+        ],
+        'dpo' => [
+            'heading' => 'Data protection officer',
+            'body' => 'No data protection officer has been designated; contact the controller above',
+        ],
         'purposes' => ['heading' => 'Purposes and legal basis'],
         'legitimate_interests' => ['heading' => 'Legitimate interests'],
         'data_categories' => ['heading' => 'Personal data we process'],
