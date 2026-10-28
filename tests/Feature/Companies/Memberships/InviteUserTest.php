@@ -172,6 +172,27 @@ class InviteUserTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_an_invite_is_refused_as_already_member_then_it_still_spends_the_allowance(): void
+    {
+        // Given an admin who has sent nineteen invites this hour
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $member = User::factory()->withEmail('member@contoso.lk')->create();
+        $this->attachMember($company, $member, $this->seededRole('employee'));
+        $this->exhaustInviteLimit($admin, $company, InvitationAllowance::PER_HOUR - 1);
+        // And whose twentieth invited an existing member and was refused
+        $this->invite($admin, $company, ['email' => 'member@contoso.lk', 'roleCode' => 'employee']);
+
+        // When they send one more invite within the hour
+        $response = $this->invite($admin, $company, [
+            'email' => 'one-too-many@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then it is throttled — the refused invite was spent
+        $this->assertThrottled($response);
+    }
+
+    #[Test]
     public function when_the_invitation_projection_fails_then_no_invitation_is_recorded_or_mailed(): void
     {
         // Given an admin and an invitations projection that fails mid-invite
