@@ -93,6 +93,20 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
         $this->assertFoundationRegister($response);
     }
 
+    #[Test]
+    #[DataProvider('provideOtherRolesHoldingTheRegisterPermission')]
+    public function when_another_role_holding_the_permission_views_the_register_then_the_same_activities_are_listed(string $roleCode): void
+    {
+        // Given a member whose role carries privacy.view-register
+        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+
+        // When they view the processing register
+        $response = $this->viewRegister($actor, $company);
+
+        // Then they see the same Foundation processing activities as the owner
+        $this->assertFoundationRegister($response);
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -103,6 +117,17 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
             'payroll officer' => ['payroll_officer'],
             'employee' => ['employee'],
             'manager' => ['manager'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideOtherRolesHoldingTheRegisterPermission(): array
+    {
+        return [
+            'admin' => ['admin'],
+            'auditor' => ['auditor'],
         ];
     }
 
