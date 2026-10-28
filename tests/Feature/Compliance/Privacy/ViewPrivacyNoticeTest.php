@@ -88,6 +88,24 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         ], $this->itemsOf($response)['controller']['body']);
     }
 
+    #[Test]
+    public function when_the_owner_also_owns_another_company_then_only_this_company_appears(): void
+    {
+        // Given Asha Perera also owns Fabrikam
+        $fabrikam = Company::factory()
+            ->named('Fabrikam (Pvt) Ltd')
+            ->registeredAs('PV-00099999', 'EPF-0099999')
+            ->ownedBy($this->owner)
+            ->create();
+        $this->attachMember($fabrikam, $this->owner, $this->seededRole('owner'));
+
+        // When she views Contoso's privacy notice
+        $response = $this->viewNotice($this->owner, $this->company);
+
+        // Then only Contoso appears; nothing of Fabrikam does
+        $this->assertOnlyThisCompanyAppears($response);
+    }
+
     #[Test, DataProvider('provideEveryRole')]
     public function when_any_member_views_the_notice_then_all_thirteen_items_appear_in_order(string $roleCode): void
     {
@@ -164,6 +182,16 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         $this->assertSame([
             'No data protection officer has been designated; contact the controller above',
         ], $items['dpo']['body']);
+    }
+
+    protected function assertOnlyThisCompanyAppears(TestResponse $response): void
+    {
+        $this->assertSame(
+            'Contoso (Pvt) Ltd, BR number PV-00012345, Sri Lanka',
+            $this->itemsOf($response)['controller']['body'][0],
+        );
+        $this->assertStringNotContainsString('Fabrikam', $response->getContent() ?: '');
+        $this->assertStringNotContainsString('PV-00099999', $response->getContent() ?: '');
     }
 
     /**
