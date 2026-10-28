@@ -28,8 +28,8 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
     #[Test]
     public function when_the_caller_is_not_a_member_of_the_company_then_company_access_is_denied(): void
     {
-        // Given an owner of one company and a second company they never joined
-        [, $outsider] = $this->aCompanyWithMember();
+        // Given an auditor of one company and a second company they never joined
+        [, $outsider] = $this->aCompanyWithMember('auditor');
         [$otherCompany] = $this->aCompanyWithMember();
 
         // When they view the second company's processing register
@@ -42,12 +42,12 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
     #[Test]
     public function when_a_member_owes_a_new_policy_version_then_consent_is_required(): void
     {
-        // Given an owner who accepted the policies, then a new privacy policy version is published
-        [$company, $owner] = $this->aCompanyWithMember();
+        // Given an admin who accepted the policies, then a new privacy policy version is published
+        [$company, $admin] = $this->aCompanyWithMember('admin');
         config(['lesily.policies.privacy' => 'v1.1']);
 
         // When they view the processing register
-        $response = $this->viewRegister($owner, $company);
+        $response = $this->viewRegister($admin, $company);
 
         // Then the register is refused until they accept
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::ConsentRequired);
@@ -147,7 +147,8 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
         ], array_column($entries, 'key'));
         $this->assertAccountsActivities(array_slice($entries, 0, 2));
         $this->assertCompaniesActivities(array_slice($entries, 2, 3));
-        $this->assertBillingAndAuditActivities(array_slice($entries, 5, 3));
+        $this->assertBillingActivities(array_slice($entries, 5, 1));
+        $this->assertAuditActivities(array_slice($entries, 6, 2));
     }
 
     protected function assertAccountsActivities(array $entries): void
@@ -208,7 +209,7 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
         ], $entries[2]);
     }
 
-    protected function assertBillingAndAuditActivities(array $entries): void
+    protected function assertBillingActivities(array $entries): void
     {
         $this->assertSame([
             'key' => 'billing.invoices',
@@ -220,6 +221,10 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
             'retention' => '10 years (Companies Act), anonymized when the company is deleted',
             'third_parties' => ['Payment processor', 'Hosting provider'],
         ], $entries[0]);
+    }
+
+    protected function assertAuditActivities(array $entries): void
+    {
         $this->assertSame([
             'key' => 'audit.audit_trail',
             'module' => 'Audit and privacy',
@@ -229,7 +234,7 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
             'legal_basis' => 'Legal obligation',
             'retention' => 'Kept indefinitely; never deleted',
             'third_parties' => ['Hosting provider'],
-        ], $entries[1]);
+        ], $entries[0]);
         $this->assertSame([
             'key' => 'audit.access_requests',
             'module' => 'Audit and privacy',
@@ -239,6 +244,6 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
             'legal_basis' => 'Legal obligation',
             'retention' => 'The export is deleted 7 days after it is ready; the request is kept with the audit trail',
             'third_parties' => ['Hosting provider'],
-        ], $entries[2]);
+        ], $entries[1]);
     }
 }
