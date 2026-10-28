@@ -31,6 +31,7 @@ use App\Companies\Memberships\IO\Http\Controllers\InvitationsController;
 use App\Companies\Memberships\IO\Http\Controllers\MembershipsController;
 use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
 use App\Billing\Subscriptions\IO\Http\Controllers\SubscriptionsController;
+use App\Compliance\Privacy\IO\Http\Controllers\ProcessingRegisterController;
 use App\Billing\Invoices\IO\Http\Controllers\PlatformAdminInvoicesController;
 use App\Companies\Memberships\IO\Http\Controllers\AcceptInvitationController;
 use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
@@ -282,6 +283,10 @@ Route::get('/v1/memberships', [MembershipsController::class, 'index'])
 // permissions and the number of this company's members holding it; non-paginated {data: [...]}.
 Route::get('/v1/roles', [RolesController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:roles.view']);
+
+// View the processing register (UC-1-073) — every module's processing activities; non-paginated {data: [...]}.
+Route::get('/v1/privacy/processing-register', [ProcessingRegisterController::class, 'index'])
+    ->middleware(['auth:sanctum']);
 
 // Change a member's role (UC-1-023) — event-sourced UserMembershipRoleChanged updates
 // company_user.role_id. Owner-role target → 422 OWNER_TRANSFER_REQUIRED; self-change →
