@@ -25,6 +25,7 @@ use App\Foundation\Auth\IO\Http\Controllers\DefaultCompanyController;
 use App\Foundation\Auth\IO\Http\Controllers\ForgotPasswordController;
 use App\Foundation\Auth\IO\Http\Controllers\EnableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
+use App\Compliance\Privacy\IO\Http\Controllers\PrivacyNoticeController;
 use App\Foundation\Auth\IO\Http\Controllers\ConfirmTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\DisableTwoFactorController;
 use App\Companies\Memberships\IO\Http\Controllers\InvitationsController;
@@ -287,6 +288,10 @@ Route::get('/v1/roles', [RolesController::class, 'index'])
 // View the processing register (UC-1-073) — every module's processing activities; non-paginated {data: [...]}.
 Route::get('/v1/privacy/processing-register', [ProcessingRegisterController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:privacy.view-register']);
+
+// View the privacy notice (UC-1-074) — the 13 Schedule V items; every member, open past the consent gate.
+Route::get('/v1/privacy/notice', [PrivacyNoticeController::class, 'show'])
+    ->middleware(['auth:sanctum']);
 
 // Change a member's role (UC-1-023) — event-sourced UserMembershipRoleChanged updates
 // company_user.role_id. Owner-role target → 422 OWNER_TRANSFER_REQUIRED; self-change →
