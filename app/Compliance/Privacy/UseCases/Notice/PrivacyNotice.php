@@ -26,6 +26,19 @@ class PrivacyNotice
     ];
 
     /**
+     * The fixed items' lines, by key; their words are in lang/en/privacy.php.
+     */
+    protected const array FIXED_LINES = [
+        'dpo' => ['none_designated'],
+        'withdraw_consent' => ['how'],
+        'cross_border_transfer' => ['where'],
+        'data_subject_rights' => ['access', 'correction_erasure_objection', 'answer_time'],
+        'complaint' => ['authority'],
+        'statutory_or_contractual' => ['contract', 'law'],
+        'automated_decisions' => ['none'],
+    ];
+
+    /**
      * @param  list<ProcessingActivity>  $activities
      */
     public function __construct(protected Company $company, protected array $activities) {}
@@ -68,10 +81,7 @@ class PrivacyNotice
      */
     protected function fixedLines(string $key): array
     {
-        /** @var list<string> $lines */
-        $lines = __("privacy.notice.{$key}.body");
-
-        return $lines;
+        return array_map(fn (string $line): mixed => __("privacy.notice.{$key}.lines.{$line}"), self::FIXED_LINES[$key]);
     }
 
     /**
