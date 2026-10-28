@@ -173,10 +173,11 @@ class ResendInvitationTest extends MembershipsTestCase
     {
         // Given an admin who has sent nineteen invites this hour, one of them since revoked
         [$company, $admin] = $this->aCompanyWithMember();
-        $revokedId = $this->aRevokedInvitation($company, $admin, 'revoked@contoso.lk');
+        $this->aRevokedInvitation($company, $admin, 'revoked@contoso.lk');
+        $revoked = $this->theInvitation($company, 'revoked@contoso.lk');
         $this->exhaustInviteLimit($admin, $company, 18);
-        // And whose resend of the revoked invitation was refused
-        $this->resendInvitation($admin, $company, $revokedId);
+        // And who resent the revoked invitation
+        $refused = $this->resendInvitation($admin, $company, $revoked->getKey());
 
         // When they send one more invite within the hour
         $response = $this->invite($admin, $company, [
@@ -186,6 +187,8 @@ class ResendInvitationTest extends MembershipsTestCase
 
         // Then it is throttled — the refused resend was spent
         $this->assertThrottled($response);
+        // And that resend had been refused as not pending, not throttled
+        $this->assertRefusedWith($refused, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteNotPending);
     }
 
     #[Test]

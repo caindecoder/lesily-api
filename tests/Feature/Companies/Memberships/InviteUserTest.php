@@ -198,8 +198,8 @@ class InviteUserTest extends MembershipsTestCase
         $member = User::factory()->withEmail('member@contoso.lk')->create();
         $this->attachMember($company, $member, $this->seededRole('employee'));
         $this->exhaustInviteLimit($admin, $company, InvitationAllowance::PER_HOUR - 1);
-        // And whose twentieth invited an existing member and was refused
-        $this->invite($admin, $company, ['email' => 'member@contoso.lk', 'roleCode' => 'employee']);
+        // And whose twentieth invited an existing member
+        $refused = $this->invite($admin, $company, ['email' => 'member@contoso.lk', 'roleCode' => 'employee']);
 
         // When they send one more invite within the hour
         $response = $this->invite($admin, $company, [
@@ -209,6 +209,8 @@ class InviteUserTest extends MembershipsTestCase
 
         // Then it is throttled — the refused invite was spent
         $this->assertThrottled($response);
+        // And that invite had been refused as an existing member, not throttled
+        $this->assertRefusedWith($refused, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::AlreadyMember);
     }
 
     #[Test]
