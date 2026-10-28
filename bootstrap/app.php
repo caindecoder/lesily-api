@@ -446,8 +446,8 @@ return Application::configure(basePath: dirname(__DIR__))
             ['retry_after' => $e->retryAfter],
         )->withHeaders(['Retry-After' => (string) $e->retryAfter]));
 
-        // A bulk invite larger than the invitations left this hour (UC-1-020 2b) —
-        // the same 429 the throttle middleware gives a single invite.
+        // An invite, resend or bulk batch past the actor's invitations left this hour
+        // (UC-1-018, UC-1-020 2b, UC-1-021) — the same 429 the throttle middleware gives.
         $exceptions->render(fn (InvitationAllowanceExceededException $e) => EnvelopeBuilder::build(
             ApiErrorCode::RateLimitExceeded,
             $e->getMessage(),
