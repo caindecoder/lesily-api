@@ -153,6 +153,22 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         $this->assertListItems($items);
     }
 
+    #[Test]
+    public function when_the_notice_is_viewed_then_the_fixed_items_carry_the_drafted_wording(): void
+    {
+        // Given an employee of Contoso
+        $employee = User::factory()->create();
+        $this->attachMember($this->company, $employee, $this->seededRole('employee'));
+
+        // When they view the privacy notice
+        $items = $this->itemsOf($this->viewNotice($employee, $this->company));
+
+        // Then the consent, rights and complaint items carry the drafted wording
+        $this->assertRightsItems($items);
+        // And so do the transfer, requirement and automated-decision items
+        $this->assertDisclosureItems($items);
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -265,6 +281,41 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
             'Error monitoring',
             'Payment processor',
         ], $items['recipients']['body']);
+    }
+
+    /**
+     * @param  array<string, array{key: string, heading: string, body: list<string>}>  $items
+     */
+    protected function assertRightsItems(array $items): void
+    {
+        $this->assertSame([
+            'Where processing relies on your consent, you can withdraw it at any time by contacting the controller above; this does not affect processing done before.',
+        ], $items['withdraw_consent']['body']);
+        $this->assertSame([
+            'You can ask for a copy of your data in Lesily (Privacy → Access requests).',
+            'To have your data corrected or erased, or to object to its processing, contact the controller above.',
+            'The controller answers within 21 working days.',
+        ], $items['data_subject_rights']['body']);
+        $this->assertSame([
+            'You can complain to the Data Protection Authority of Sri Lanka if you believe your data has been handled unlawfully.',
+        ], $items['complaint']['body']);
+    }
+
+    /**
+     * @param  array<string, array{key: string, heading: string, body: list<string>}>  $items
+     */
+    protected function assertDisclosureItems(array $items): void
+    {
+        $this->assertSame([
+            'Lesily stores and processes your data in Singapore.',
+        ], $items['cross_border_transfer']['body']);
+        $this->assertSame([
+            "Most of this data is needed to run your account under the company's contract; without it you cannot use Lesily.",
+            'Some records are kept because the law requires them.',
+        ], $items['statutory_or_contractual']['body']);
+        $this->assertSame([
+            'No decision about you is made solely by automated means, and no profiling takes place.',
+        ], $items['automated_decisions']['body']);
     }
 
     protected function assertOnlyThisCompanyAppears(TestResponse $response): void

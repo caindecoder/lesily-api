@@ -57,7 +57,6 @@ class PrivacyNoticeResource extends JsonResource
     {
         return match ($key) {
             'controller' => $this->controllerLines(),
-            'dpo' => [__('privacy.notice.dpo.body')],
             'purposes' => $this->activityLines($key, $this->activities, fn (ProcessingActivity $activity): array => [
                 'purpose' => __("privacy.activities.{$activity->key()}.purpose"),
                 'basis' => __("privacy.legal_bases.{$activity->legalBasis->value}"),
@@ -70,8 +69,19 @@ class PrivacyNoticeResource extends JsonResource
             ]),
             'data_categories' => $this->dataCategoryLines(),
             'recipients' => $this->recipientLines(),
-            default => [],
+            default => $this->fixedLines($key),
         };
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    protected function fixedLines(string $key): array
+    {
+        /** @var list<string> $lines */
+        $lines = __("privacy.notice.{$key}.body");
+
+        return $lines;
     }
 
     /**

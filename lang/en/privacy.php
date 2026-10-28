@@ -112,7 +112,7 @@ return [
         ],
         'dpo' => [
             'heading' => 'Data protection officer',
-            'body' => 'No data protection officer has been designated; contact the controller above',
+            'body' => ['No data protection officer has been designated; contact the controller above'],
         ],
         'purposes' => [
             'heading' => 'Purposes and legal basis',
@@ -123,16 +123,41 @@ return [
             'line' => ':activity: :purpose',
         ],
         'data_categories' => ['heading' => 'Personal data we process'],
-        'withdraw_consent' => ['heading' => 'Withdrawing consent'],
+        'withdraw_consent' => [
+            'heading' => 'Withdrawing consent',
+            'body' => ['Where processing relies on your consent, you can withdraw it at any time by contacting the controller above; this does not affect processing done before.'],
+        ],
         'recipients' => ['heading' => 'Who receives your data'],
-        'cross_border_transfer' => ['heading' => 'Where your data is processed'],
+        'cross_border_transfer' => [
+            'heading' => 'Where your data is processed',
+            'body' => ['Lesily stores and processes your data in Singapore.'],
+        ],
         'retention' => [
             'heading' => 'How long it is kept',
             'line' => ':activity: :retention',
         ],
-        'data_subject_rights' => ['heading' => 'Your rights and how to use them'],
-        'complaint' => ['heading' => 'Complaints'],
-        'statutory_or_contractual' => ['heading' => 'Is providing the data required?'],
-        'automated_decisions' => ['heading' => 'Automated decisions'],
+        'data_subject_rights' => [
+            'heading' => 'Your rights and how to use them',
+            'body' => [
+                'You can ask for a copy of your data in Lesily (Privacy → Access requests).',
+                'To have your data corrected or erased, or to object to its processing, contact the controller above.',
+                'The controller answers within 21 working days.',
+            ],
+        ],
+        'complaint' => [
+            'heading' => 'Complaints',
+            'body' => ['You can complain to the Data Protection Authority of Sri Lanka if you believe your data has been handled unlawfully.'],
+        ],
+        'statutory_or_contractual' => [
+            'heading' => 'Is providing the data required?',
+            'body' => [
+                "Most of this data is needed to run your account under the company's contract; without it you cannot use Lesily.",
+                'Some records are kept because the law requires them.',
+            ],
+        ],
+        'automated_decisions' => [
+            'heading' => 'Automated decisions',
+            'body' => ['No decision about you is made solely by automated means, and no profiling takes place.'],
+        ],
     ],
 ];
