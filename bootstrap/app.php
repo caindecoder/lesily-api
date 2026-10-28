@@ -452,7 +452,10 @@ return Application::configure(basePath: dirname(__DIR__))
             ApiErrorCode::RateLimitExceeded,
             $e->getMessage(),
             ['retry_after' => $e->retryAfter],
-        )->withHeaders(['Retry-After' => (string) $e->retryAfter]));
+        )->withHeaders([
+            'Retry-After' => (string) $e->retryAfter,
+            'X-RateLimit-Reset' => (string) (time() + $e->retryAfter),
+        ]));
 
         $exceptions->render(function (ThrottleRequestsException $e) {
             // Laravel's ThrottleRequests middleware is the only source of this exception and
