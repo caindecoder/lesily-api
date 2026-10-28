@@ -39,7 +39,7 @@ class BulkInviteUsersInteractor
     protected function inviteRow(Company $company, User $actor, array $row): BulkInviteRowResult
     {
         try {
-            $this->inviteUser->execute($company, $actor, InviteUserCommand::from($row));
+            $this->inviteUser->invite($company, $actor, InviteUserCommand::from($row));
         } catch (AlreadyMemberException $refusal) {
             return new BulkInviteRowResult($row['email'], $row['roleCode'], $refusal->getMessage());
         }

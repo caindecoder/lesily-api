@@ -10,8 +10,10 @@ use Illuminate\Support\Facades\Mail;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
 use App\Companies\Memberships\Aggregates\UserMembership;
+use App\Companies\Memberships\Services\InvitationAllowance;
 use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
 use App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand;
+use App\Companies\Memberships\Exceptions\InvitationAllowanceExceededException;
 
 /**
  * Resend a pending invitation (UC-1-021): guard live-pending (R1 s110 — the
@@ -23,8 +25,15 @@ use App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand;
  */
 class ResendInvitationInteractor
 {
+    public function __construct(private InvitationAllowance $allowance) {}
+
+    /**
+     * @throws InvitationAllowanceExceededException
+     */
     public function execute(Company $company, User $actor, string $invitationId): Invitation
     {
+        $this->allowance->spend($actor, 1);
+
         $invitation = Invitation::query()
             ->where('company_id', $company->getKey())
             ->whereKey($invitationId)

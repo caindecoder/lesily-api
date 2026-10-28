@@ -703,7 +703,10 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     {
         $response->assertTooManyRequests();
         $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
-        $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
+        $retryAfter = $response->json('retry_after');
+        $this->assertIsInt($retryAfter);
+        $this->assertGreaterThan(0, $retryAfter, 'A throttled response must carry retry guidance.');
+        $this->assertEqualsWithDelta(time() + $retryAfter, (int) $response->headers->get('X-RateLimit-Reset'), 5, 'X-RateLimit-Reset must be the epoch when the window resets.');
     }
 
     /**

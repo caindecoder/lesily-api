@@ -15,7 +15,6 @@ use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\Totp\Google2faTotpVerifier;
 use App\Foundation\Auth\Totp\CacheLoginChallengeStore;
 use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
-use App\Companies\Memberships\Services\InvitationAllowance;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -79,12 +78,6 @@ class AppServiceProvider extends ServiceProvider
             )),
             Limit::perMinute(10)->by('ip:'.(string) $request->ip()),
         ]);
-
-        // Invites are keyed by the ACTING user (not IP): 20/hr per actor caps invite-email
-        // spam from one compromised or abusive account without letting a shared office IP
-        // starve legitimate admins (D9/OQ-1-029; questionnaire §S14 special rate limits).
-        // Bulk invite spends the same counter per row (InvitationAllowance).
-        RateLimiter::for('invitations', fn (Request $request) => Limit::perHour(InvitationAllowance::PER_HOUR)->by((string) $request->user()?->getAuthIdentifier()));
 
         // One fresh verification link per signed-in person per minute, keyed by the person,
         // not the IP. Mounted before auth-tier, so a refused repeat spends no shared budget.

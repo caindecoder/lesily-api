@@ -14,6 +14,7 @@ use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
+use App\Companies\Memberships\Services\InvitationAllowance;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class InviteUserTest extends MembershipsTestCase
@@ -134,6 +135,26 @@ class InviteUserTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_invites_fail_validation_then_they_spend_no_allowance(): void
+    {
+        // Given an admin whose twenty invites were all refused as malformed
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        for ($i = 0; $i < InvitationAllowance::PER_HOUR; $i++) {
+            $this->invite($admin, $company, ['email' => 'not-an-email', 'roleCode' => 'employee']);
+        }
+
+        // When they send a well-formed invite within the hour
+        $response = $this->invite($admin, $company, [
+            'email' => 'well-formed@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then it is sent, the malformed ones having cost nothing
+        $response->assertCreated();
+        $this->assertDatabaseCount('invitations', 1);
+    }
+
+    #[Test]
     public function when_the_hourly_invite_allowance_is_spent_then_the_next_invite_is_throttled(): void
     {
         // Given an admin who has spent the full hourly invite allowance
@@ -148,6 +169,48 @@ class InviteUserTest extends MembershipsTestCase
 
         // Then the invite is throttled
         $this->assertThrottled($response);
+    }
+
+    #[Test]
+    public function when_another_admin_has_spent_their_allowance_then_this_admin_can_still_invite(): void
+    {
+        // Given two admins of one company, the first of whom has spent the hourly allowance
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $otherAdmin = User::factory()->create();
+        $this->attachMember($company, $otherAdmin, $this->seededRole('admin'));
+        $this->exhaustInviteLimit($admin, $company);
+
+        // When the second admin sends an invite within the hour
+        $response = $this->invite($otherAdmin, $company, [
+            'email' => 'from-the-other-admin@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then it is sent — each admin has their own allowance
+        $response->assertCreated();
+    }
+
+    #[Test]
+    public function when_an_invite_is_refused_as_already_member_then_it_still_spends_the_allowance(): void
+    {
+        // Given an admin who has sent nineteen invites this hour
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $member = User::factory()->withEmail('member@contoso.lk')->create();
+        $this->attachMember($company, $member, $this->seededRole('employee'));
+        $this->exhaustInviteLimit($admin, $company, InvitationAllowance::PER_HOUR - 1);
+        // And whose twentieth invited an existing member
+        $refused = $this->invite($admin, $company, ['email' => 'member@contoso.lk', 'roleCode' => 'employee']);
+
+        // When they send one more invite within the hour
+        $response = $this->invite($admin, $company, [
+            'email' => 'one-too-many@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then it is throttled — the refused invite was spent
+        $this->assertThrottled($response);
+        // And that invite had been refused as an existing member, not throttled
+        $this->assertRefusedWith($refused, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::AlreadyMember);
     }
 
     #[Test]

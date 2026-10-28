@@ -169,6 +169,29 @@ class ResendInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_a_resend_is_refused_as_not_pending_then_it_still_spends_the_allowance(): void
+    {
+        // Given an admin who has sent nineteen invites this hour, one of them since revoked
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aRevokedInvitation($company, $admin, 'revoked@contoso.lk');
+        $revoked = $this->theInvitation($company, 'revoked@contoso.lk');
+        $this->exhaustInviteLimit($admin, $company, 18);
+        // And who resent the revoked invitation
+        $refused = $this->resendInvitation($admin, $company, $revoked->getKey());
+
+        // When they send one more invite within the hour
+        $response = $this->invite($admin, $company, [
+            'email' => 'one-too-many@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then it is throttled — the refused resend was spent
+        $this->assertThrottled($response);
+        // And that resend had been refused as not pending, not throttled
+        $this->assertRefusedWith($refused, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteNotPending);
+    }
+
+    #[Test]
     public function when_the_resend_projection_fails_then_the_token_is_not_rotated_or_mailed(): void
     {
         // Given a pending invitation and an invitations projection that fails mid-resend

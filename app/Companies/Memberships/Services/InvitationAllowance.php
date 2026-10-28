@@ -7,8 +7,10 @@ use Illuminate\Support\Facades\RateLimiter;
 use App\Companies\Memberships\Exceptions\InvitationAllowanceExceededException;
 
 /**
- * The actor's hourly invitation allowance, shared by single invite and resend
- * (the `invitations` throttle) and bulk invite, which spends one per row.
+ * The actor's hourly invitation allowance, spent by single invite and resend (one
+ * each) and bulk invite (one per row). Keyed by the acting user, not the IP: it caps
+ * one account's invite email without a shared office IP starving other admins
+ * (D9/OQ-1-029; questionnaire §S14 special rate limits).
  */
 class InvitationAllowance
 {
@@ -31,20 +33,15 @@ class InvitationAllowance
     }
 
     /**
-     * The middleware's own check: a counter whose window has closed is reset, never
-     * read as spent.
+     * A counter whose window has closed is reset, never read as spent.
      */
     protected function wouldExceed(string $key, int $invitations): bool
     {
         return RateLimiter::tooManyAttempts($key, self::PER_HOUR - $invitations + 1);
     }
 
-    /**
-     * The key the throttle middleware stores the `invitations` limit under:
-     * md5 of the limiter name and the limit's key, the acting user's id.
-     */
     protected function counterKey(User $actor): string
     {
-        return md5('invitations'.$actor->getAuthIdentifier());
+        return sprintf('invitations:%s', $actor->getAuthIdentifier());
     }
 }

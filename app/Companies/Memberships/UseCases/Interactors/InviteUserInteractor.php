@@ -12,9 +12,11 @@ use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Companies\Memberships\Aggregates\UserMembership;
+use App\Companies\Memberships\Services\InvitationAllowance;
 use App\Companies\Memberships\Exceptions\AlreadyMemberException;
 use App\Companies\Memberships\UseCases\Commands\InviteUserCommand;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
+use App\Companies\Memberships\Exceptions\InvitationAllowanceExceededException;
 
 /**
  * Invite a user to the company (UC-1-018): guard, mint the bearer token, record
@@ -24,7 +26,22 @@ use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
  */
 class InviteUserInteractor
 {
+    public function __construct(private InvitationAllowance $allowance) {}
+
+    /**
+     * @throws InvitationAllowanceExceededException
+     */
     public function execute(Company $company, User $actor, InviteUserCommand $command): Invitation
+    {
+        $this->allowance->spend($actor, 1);
+
+        return $this->invite($company, $actor, $command);
+    }
+
+    /**
+     * The invite itself, with no allowance spent — bulk invite spends its batch first.
+     */
+    public function invite(Company $company, User $actor, InviteUserCommand $command): Invitation
     {
         $userId = User::query()->where('email', $command->email)->value('id');
 
