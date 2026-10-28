@@ -1,7 +1,8 @@
 <?php
 
 // The processing register's wording (UC-1-073). English only for now; the
-// Sinhala and Tamil registers add lang/si and lang/ta. Lawyer review: MA-7.
+// Sinhala and Tamil registers add lang/si and lang/ta. The wording awaits
+// legal review.
 $keptUntilAccountClosure = 'Kept while the company account is open; after it closes, deleted on the account-closure schedule, with financial records kept as the law requires';
 
 return [
