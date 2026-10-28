@@ -54,6 +54,22 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::CompanyAccessDenied);
     }
 
+    #[Test]
+    public function when_a_member_owes_a_new_policy_version_then_the_notice_still_reads(): void
+    {
+        // Given an employee of Contoso
+        $employee = User::factory()->create();
+        $this->attachMember($this->company, $employee, $this->seededRole('employee'));
+        // And a new privacy-policy version is live that they have not accepted
+        config(['lesily.policies.privacy' => 'v1.1']);
+
+        // When they view the privacy notice
+        $response = $this->viewNotice($employee, $this->company);
+
+        // Then they still read all thirteen items
+        $this->assertThirteenItemsInOrder($response);
+    }
+
     #[Test, DataProvider('provideEveryRole')]
     public function when_any_member_views_the_notice_then_all_thirteen_items_appear_in_order(string $roleCode): void
     {
