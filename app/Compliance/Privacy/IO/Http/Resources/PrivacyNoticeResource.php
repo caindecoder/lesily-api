@@ -12,7 +12,7 @@ use App\Compliance\Privacy\UseCases\Notice\PrivacyNotice;
 class PrivacyNoticeResource extends JsonResource
 {
     /**
-     * @return list<array{key: string, heading: mixed, body: list<mixed>}>
+     * @return list<array{key: string, heading: mixed, body: array<int, mixed>}>
      */
     public function toArray(Request $request): array
     {

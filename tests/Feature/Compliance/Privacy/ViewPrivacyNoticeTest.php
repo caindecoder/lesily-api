@@ -186,6 +186,7 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
     protected function assertThirteenItemsInOrder(TestResponse $response): void
     {
         $response->assertOk();
+        $this->assertSame(['data'], array_keys($response->json()));
         $this->assertSame([
             'controller' => 'Who controls your data',
             'dpo' => 'Data protection officer',
@@ -318,7 +319,8 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
             'Contoso (Pvt) Ltd, BR number PV-00012345, Sri Lanka',
             $this->itemsOf($response)['controller']['body'][0],
         );
-        $body = $response->getContent() ?: '';
+        $body = $response->getContent();
+        $this->assertIsString($body);
         $this->assertStringNotContainsString('Fabrikam', $body);
         $this->assertStringNotContainsString('PV-00099999', $body);
     }

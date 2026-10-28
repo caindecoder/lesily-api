@@ -33,7 +33,7 @@ class PrivacyNotice
     /**
      * The 13 Schedule V items in order, each its lines written for a person to read.
      *
-     * @return array<string, list<mixed>>
+     * @return array<string, array<int, mixed>>
      */
     public function items(): array
     {
@@ -41,7 +41,7 @@ class PrivacyNotice
     }
 
     /**
-     * @return list<mixed>
+     * @return array<int, mixed>
      */
     protected function linesOf(string $key): array
     {
@@ -96,9 +96,9 @@ class PrivacyNotice
     /**
      * One line per activity: the item's line worded with the activity's name and $replacements.
      *
-     * @param  list<ProcessingActivity>  $activities
+     * @param  array<int, ProcessingActivity>  $activities
      * @param  callable(ProcessingActivity): array<string, mixed>  $replacements
-     * @return list<mixed>
+     * @return array<int, mixed>
      */
     protected function activityLines(string $item, array $activities, callable $replacements): array
     {
@@ -109,28 +109,28 @@ class PrivacyNotice
     }
 
     /**
-     * @return list<ProcessingActivity>
+     * @return array<int, ProcessingActivity>
      */
     protected function activitiesOnLegitimateInterests(): array
     {
-        return array_values(array_filter(
+        return array_filter(
             $this->activities,
             fn (ProcessingActivity $activity): bool => $activity->legalBasis === LegalBasis::LegitimateInterests,
-        ));
+        );
     }
 
     /**
-     * @return list<mixed>
+     * @return array<int, mixed>
      */
     protected function dataCategoryLines(): array
     {
         $categories = array_merge(...array_map(fn (ProcessingActivity $activity): array => $activity->dataCategories, $this->activities));
 
-        return array_map(fn (string $category): mixed => __("privacy.data_categories.{$category}"), array_values(array_unique($categories)));
+        return array_map(fn (string $category): mixed => __("privacy.data_categories.{$category}"), array_unique($categories));
     }
 
     /**
-     * @return list<mixed>
+     * @return array<int, mixed>
      */
     protected function recipientLines(): array
     {
@@ -139,6 +139,6 @@ class PrivacyNotice
             $this->activities,
         ));
 
-        return array_map(fn (string $party): mixed => __("privacy.third_parties.{$party}"), array_values(array_unique($parties)));
+        return array_map(fn (string $party): mixed => __("privacy.third_parties.{$party}"), array_unique($parties));
     }
 }
