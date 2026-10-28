@@ -64,6 +64,19 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
     }
 
+    #[Test]
+    public function when_a_write_verb_is_sent_then_the_method_is_not_allowed(): void
+    {
+        // Given an owner of a company
+        [$company, $owner] = $this->aCompanyWithMember();
+
+        // When they try to PATCH the processing register
+        $response = $this->sendToRegister('PATCH', $owner, $company);
+
+        // Then the register is not editable
+        $this->assertRefusedWith($response, Response::HTTP_METHOD_NOT_ALLOWED, ApiErrorCode::HttpError);
+    }
+
     /**
      * @return array<string, array{string}>
      */
