@@ -48,6 +48,13 @@ abstract class PrivacyTestCase extends TestCase
         return $this->getJson('/api/v1/privacy/processing-register', ['X-Company-Context' => $company->getKey()]);
     }
 
+    protected function viewNotice(User $actor, Company $company): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/privacy/notice', ['X-Company-Context' => $company->getKey()]);
+    }
+
     protected function sendToRegister(string $verb, User $actor, Company $company): TestResponse
     {
         Sanctum::actingAs($actor);

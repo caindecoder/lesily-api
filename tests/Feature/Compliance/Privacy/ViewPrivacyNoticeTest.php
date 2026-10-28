@@ -38,4 +38,17 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         // Then the request is unauthenticated
         $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
     }
+
+    #[Test]
+    public function when_the_caller_is_not_a_member_of_the_company_then_company_access_is_denied(): void
+    {
+        // Given an employee of another company, never a member of Contoso
+        [, $outsider] = $this->aCompanyWithMember('employee');
+
+        // When they view Contoso's privacy notice
+        $response = $this->viewNotice($outsider, $this->company);
+
+        // Then company access is denied
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::CompanyAccessDenied);
+    }
 }

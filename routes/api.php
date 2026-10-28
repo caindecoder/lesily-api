@@ -291,7 +291,7 @@ Route::get('/v1/privacy/processing-register', [ProcessingRegisterController::cla
 
 // View the privacy notice (UC-1-074) — the 13 Schedule V items; every member, open past the consent gate.
 Route::get('/v1/privacy/notice', [PrivacyNoticeController::class, 'show'])
-    ->middleware(['auth:sanctum']);
+    ->middleware(['auth:sanctum', 'auth.company']);
 
 // Change a member's role (UC-1-023) — event-sourced UserMembershipRoleChanged updates
 // company_user.role_id. Owner-role target → 422 OWNER_TRANSFER_REQUIRED; self-change →
