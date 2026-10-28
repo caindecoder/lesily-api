@@ -22,6 +22,7 @@ owner:
   - dsar.request-for-others
   - dsar.view-all
   - roles.view
+  - privacy.view-register
 
 admin:
   - users.invite
@@ -36,6 +37,7 @@ admin:
   - dsar.request-for-others
   - dsar.view-all
   - roles.view
+  - privacy.view-register
 
 hr_officer:
   - users.invite
@@ -59,6 +61,7 @@ auditor:
   - billing.view
   - audit.view
   - roles.view
+  - privacy.view-register
 
 employee:
   - companies.view
