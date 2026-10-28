@@ -14,6 +14,8 @@ abstract class PrivacyTestCase extends TestCase
 {
     use WithRolePermissionFixtures;
 
+    protected const string KEPT_UNTIL_ACCOUNT_CLOSURE = 'Kept while the company account is open; after it closes, deleted on the account-closure schedule, with financial records kept as the law requires';
+
     protected function setUp(): void
     {
         parent::setUp();

@@ -12,8 +12,6 @@ use App\Foundation\Http\Responses\ApiErrorCode;
 
 class ViewPrivacyNoticeTest extends PrivacyTestCase
 {
-    protected const string KEPT_UNTIL_ACCOUNT_CLOSURE = 'Kept while the company account is open; after it closes, deleted on the account-closure schedule, with financial records kept as the law requires';
-
     protected User $owner;
 
     protected Company $company;
@@ -145,12 +143,12 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         $this->attachMember($this->company, $employee, $this->seededRole('employee'));
 
         // When they view the privacy notice
-        $items = $this->itemsOf($this->viewNotice($employee, $this->company));
+        $response = $this->viewNotice($employee, $this->company);
 
         // Then the purposes, legitimate interests and retention items name every Foundation activity
-        $this->assertActivityItems($items);
+        $this->assertActivityItems($response);
         // And the data and recipients items list each category once
-        $this->assertListItems($items);
+        $this->assertListItems($response);
     }
 
     #[Test]
@@ -161,12 +159,12 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         $this->attachMember($this->company, $employee, $this->seededRole('employee'));
 
         // When they view the privacy notice
-        $items = $this->itemsOf($this->viewNotice($employee, $this->company));
+        $response = $this->viewNotice($employee, $this->company);
 
         // Then the consent, rights and complaint items carry the drafted wording
-        $this->assertRightsItems($items);
+        $this->assertRightsItems($response);
         // And so do the transfer, requirement and automated-decision items
-        $this->assertDisclosureItems($items);
+        $this->assertDisclosureItems($response);
     }
 
     /**
@@ -218,11 +216,10 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         ], $items['dpo']['body']);
     }
 
-    /**
-     * @param  array<string, array{key: string, heading: string, body: list<string>}>  $items
-     */
-    protected function assertActivityItems(array $items): void
+    protected function assertActivityItems(TestResponse $response): void
     {
+        $items = $this->itemsOf($response);
+
         $this->assertSame([
             'Sign-in and account: Sign members in and keep their accounts secure (Contract)',
             'Sign-in and refusal records: Protect accounts and the service against misuse (Legitimate interests)',
@@ -249,11 +246,10 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         ], $items['retention']['body']);
     }
 
-    /**
-     * @param  array<string, array{key: string, heading: string, body: list<string>}>  $items
-     */
-    protected function assertListItems(array $items): void
+    protected function assertListItems(TestResponse $response): void
     {
+        $items = $this->itemsOf($response);
+
         $this->assertSame([
             'Name',
             'Email address',
@@ -283,11 +279,10 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         ], $items['recipients']['body']);
     }
 
-    /**
-     * @param  array<string, array{key: string, heading: string, body: list<string>}>  $items
-     */
-    protected function assertRightsItems(array $items): void
+    protected function assertRightsItems(TestResponse $response): void
     {
+        $items = $this->itemsOf($response);
+
         $this->assertSame([
             'Where processing relies on your consent, you can withdraw it at any time by contacting the controller above; this does not affect processing done before.',
         ], $items['withdraw_consent']['body']);
@@ -301,11 +296,10 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         ], $items['complaint']['body']);
     }
 
-    /**
-     * @param  array<string, array{key: string, heading: string, body: list<string>}>  $items
-     */
-    protected function assertDisclosureItems(array $items): void
+    protected function assertDisclosureItems(TestResponse $response): void
     {
+        $items = $this->itemsOf($response);
+
         $this->assertSame([
             'Lesily stores and processes your data in Singapore.',
         ], $items['cross_border_transfer']['body']);
@@ -324,8 +318,9 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
             'Contoso (Pvt) Ltd, BR number PV-00012345, Sri Lanka',
             $this->itemsOf($response)['controller']['body'][0],
         );
-        $this->assertStringNotContainsString('Fabrikam', $response->getContent() ?: '');
-        $this->assertStringNotContainsString('PV-00099999', $response->getContent() ?: '');
+        $body = $response->getContent() ?: '';
+        $this->assertStringNotContainsString('Fabrikam', $body);
+        $this->assertStringNotContainsString('PV-00099999', $body);
     }
 
     /**

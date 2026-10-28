@@ -10,8 +10,6 @@ use App\Foundation\Http\Responses\ApiErrorCode;
 
 class ViewProcessingRegisterTest extends PrivacyTestCase
 {
-    protected const string KEPT_UNTIL_ACCOUNT_CLOSURE = 'Kept while the company account is open; after it closes, deleted on the account-closure schedule, with financial records kept as the law requires';
-
     #[Test]
     public function when_no_token_is_sent_then_the_request_is_unauthenticated(): void
     {
