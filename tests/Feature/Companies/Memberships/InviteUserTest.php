@@ -172,6 +172,25 @@ class InviteUserTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_another_admin_has_spent_their_allowance_then_this_admin_can_still_invite(): void
+    {
+        // Given two admins of one company, the first of whom has spent the hourly allowance
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $otherAdmin = User::factory()->create();
+        $this->attachMember($company, $otherAdmin, $this->seededRole('admin'));
+        $this->exhaustInviteLimit($admin, $company);
+
+        // When the second admin sends an invite within the hour
+        $response = $this->invite($otherAdmin, $company, [
+            'email' => 'from-the-other-admin@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then it is sent — each admin has their own allowance
+        $response->assertCreated();
+    }
+
+    #[Test]
     public function when_an_invite_is_refused_as_already_member_then_it_still_spends_the_allowance(): void
     {
         // Given an admin who has sent nineteen invites this hour
