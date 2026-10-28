@@ -1,8 +1,8 @@
 <?php
 
-// The processing register's wording (UC-1-073). English only for now; the
-// Sinhala and Tamil registers add lang/si and lang/ta. The wording awaits
-// legal review.
+// The processing register's (UC-1-073) and the privacy notice's (UC-1-074)
+// wording. English only for now; the Sinhala and Tamil registers add lang/si
+// and lang/ta. The wording awaits legal review.
 $keptUntilAccountClosure = 'Kept while the company account is open; after it closes, deleted on the account-closure schedule, with financial records kept as the law requires';
 
 return [
@@ -97,5 +97,67 @@ return [
         'payment_processor' => 'Payment processor',
         'error_monitoring' => 'Error monitoring',
         'email_delivery_service' => 'Email delivery service',
+    ],
+
+    'countries' => [
+        'LK' => 'Sri Lanka',
+    ],
+
+    'notice' => [
+        'controller' => [
+            'heading' => 'Who controls your data',
+            'company' => ':name, BR number :br_number, :country',
+            'contact' => 'Contact: :name, :email',
+            'no_contact' => 'No contact is on record; ask your employer',
+        ],
+        'dpo' => [
+            'heading' => 'Data protection officer',
+            'body' => ['No data protection officer has been designated; contact the controller above'],
+        ],
+        'purposes' => [
+            'heading' => 'Purposes and legal basis',
+            'line' => ':activity: :purpose (:basis)',
+        ],
+        'legitimate_interests' => [
+            'heading' => 'Legitimate interests',
+            'line' => ':activity: :purpose',
+        ],
+        'data_categories' => ['heading' => 'Personal data we process'],
+        'withdraw_consent' => [
+            'heading' => 'Withdrawing consent',
+            'body' => ['Where processing relies on your consent, you can withdraw it at any time by contacting the controller above; this does not affect processing done before.'],
+        ],
+        'recipients' => ['heading' => 'Who receives your data'],
+        'cross_border_transfer' => [
+            'heading' => 'Where your data is processed',
+            'body' => ['Lesily stores and processes your data in Singapore.'],
+        ],
+        'retention' => [
+            'heading' => 'How long it is kept',
+            'line' => ':activity: :retention',
+        ],
+        'data_subject_rights' => [
+            'heading' => 'Your rights and how to use them',
+            'body' => [
+                'You can ask for a copy of your data in Lesily (Privacy → Access requests).',
+                'To have your data corrected or erased, or to object to its processing, contact the controller above.',
+                'The controller answers within 21 working days.',
+            ],
+        ],
+        'complaint' => [
+            'heading' => 'Complaints',
+            'body' => ['You can complain to the Data Protection Authority of Sri Lanka if you believe your data has been handled unlawfully.'],
+        ],
+        'statutory_or_contractual' => [
+            'heading' => 'Is providing the data required?',
+            'body' => [
+                "Most of this data is needed to run your account under the company's contract; without it you cannot use Lesily.",
+                'Some records are kept because the law requires them.',
+            ],
+        ],
+        'automated_decisions' => [
+            'heading' => 'Automated decisions',
+            'body' => ['No decision about you is made solely by automated means, and no profiling takes place.'],
+        ],
     ],
 ];

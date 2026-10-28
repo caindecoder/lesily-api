@@ -14,6 +14,8 @@ abstract class PrivacyTestCase extends TestCase
 {
     use WithRolePermissionFixtures;
 
+    protected const string KEPT_UNTIL_ACCOUNT_CLOSURE = 'Kept while the company account is open; after it closes, deleted on the account-closure schedule, with financial records kept as the law requires';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -46,6 +48,13 @@ abstract class PrivacyTestCase extends TestCase
         Sanctum::actingAs($actor);
 
         return $this->getJson('/api/v1/privacy/processing-register', ['X-Company-Context' => $company->getKey()]);
+    }
+
+    protected function viewNotice(User $actor, Company $company): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/privacy/notice', ['X-Company-Context' => $company->getKey()]);
     }
 
     protected function sendToRegister(string $verb, User $actor, Company $company): TestResponse
