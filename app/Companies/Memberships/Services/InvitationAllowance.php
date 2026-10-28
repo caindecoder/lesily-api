@@ -42,6 +42,6 @@ class InvitationAllowance
 
     protected function counterKey(User $actor): string
     {
-        return 'invitations:'.$actor->getAuthIdentifier();
+        return sprintf('invitations:%s', $actor->getAuthIdentifier());
     }
 }
