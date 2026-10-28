@@ -22,6 +22,7 @@ owner:
   - dsar.request-for-others
   - dsar.view-all
   - roles.view
+  - privacy.view-register
 
 admin:
   - users.invite
