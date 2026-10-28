@@ -68,6 +68,7 @@ use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 use App\Companies\Exceptions\OwnershipTransferCaseAlreadyClosedException;
 use App\Companies\Memberships\Exceptions\InvitationAcceptContentionException;
+use App\Companies\Memberships\Exceptions\InvitationAllowanceExceededException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -120,6 +121,7 @@ return Application::configure(basePath: dirname(__DIR__))
             InviteEmailMismatchException::class,
             DsarRequesterMismatchException::class,
             LoginChallengeNotFoundException::class,
+            InvitationAllowanceExceededException::class,
         ]);
 
         $exceptions->render(fn (ValidationException $e) => EnvelopeBuilder::build(
@@ -440,6 +442,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // into the replay path once the winner completes.
         $exceptions->render(fn (IdempotencyKeyProcessingException $e) => EnvelopeBuilder::build(
             ApiErrorCode::IdempotencyKeyProcessing,
+            $e->getMessage(),
+            ['retry_after' => $e->retryAfter],
+        )->withHeaders(['Retry-After' => (string) $e->retryAfter]));
+
+        // A bulk invite larger than the invitations left this hour (UC-1-020 2b) —
+        // the same 429 the throttle middleware gives a single invite.
+        $exceptions->render(fn (InvitationAllowanceExceededException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::RateLimitExceeded,
             $e->getMessage(),
             ['retry_after' => $e->retryAfter],
         )->withHeaders(['Retry-After' => (string) $e->retryAfter]));

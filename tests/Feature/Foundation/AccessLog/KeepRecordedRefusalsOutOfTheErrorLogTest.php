@@ -21,6 +21,7 @@ use App\Compliance\Dsar\Exceptions\DsarRequesterMismatchException;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
+use App\Companies\Memberships\Exceptions\InvitationAllowanceExceededException;
 
 class KeepRecordedRefusalsOutOfTheErrorLogTest extends FoundationTestCase
 {
@@ -80,6 +81,7 @@ class KeepRecordedRefusalsOutOfTheErrorLogTest extends FoundationTestCase
             'invite email mismatch' => [fn () => new InviteEmailMismatchException],
             'DSAR requester mismatch' => [fn () => new DsarRequesterMismatchException],
             'login challenge not found' => [fn () => new LoginChallengeNotFoundException],
+            'invitation allowance exceeded' => [fn () => new InvitationAllowanceExceededException(60)],
         ];
     }
 }

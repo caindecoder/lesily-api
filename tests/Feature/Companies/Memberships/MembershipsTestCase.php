@@ -258,6 +258,73 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
+     * @return array<string, array{string}>
+     */
+    public static function provideNonInvitingRoles(): array
+    {
+        return [
+            'payroll officer' => ['payroll_officer'],
+            'employee' => ['employee'],
+            'auditor' => ['auditor'],
+        ];
+    }
+
+    /**
+     * $rows null sends a body without the invitations key.
+     *
+     * @param  ?array<array-key, mixed>  $rows
+     */
+    protected function bulkInvite(User $actor, Company $company, ?array $rows): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        $body = $rows === null ? [] : ['invitations' => $rows];
+
+        return $this->postJson('/api/v1/invitations/bulk', $body, ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * Every row came back sent, in input order, each one stored as a pending
+     * invitation with its own role and mailed once.
+     *
+     * @param  list<array{email: string, roleCode: string}>  $rows
+     */
+    protected function assertBatchSent(TestResponse $response, Company $company, array $rows): void
+    {
+        $this->assertRowsSentInOrder($response, $rows);
+
+        foreach ($rows as $row) {
+            $this->assertPendingInvitationCreated($company, $row['email'], $row['roleCode']);
+        }
+
+        Mail::assertQueued(InvitationMail::class, count($rows));
+    }
+
+    /**
+     * @param  list<array{email: string, roleCode: string}>  $rows
+     */
+    protected function assertRowsSentInOrder(TestResponse $response, array $rows): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data', array_map(fn (array $row): array => [
+            'email' => $row['email'],
+            'role_code' => $row['roleCode'],
+            'status' => 'sent',
+            'error_code' => null,
+            'message' => null,
+        ], $rows));
+    }
+
+    /**
+     * @param  list<string>  $emails
+     * @return list<array{email: string, roleCode: string}>
+     */
+    protected function rowsFor(array $emails, string $roleCode = 'employee'): array
+    {
+        return array_map(fn (string $email): array => ['email' => $email, 'roleCode' => $roleCode], $emails);
+    }
+
+    /**
      * A signed-in member requests $company's details — a company route every role can read.
      */
     protected function viewCompany(User $actor, Company $company): TestResponse
