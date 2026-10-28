@@ -12,6 +12,8 @@ use App\Foundation\Http\Responses\ApiErrorCode;
 
 class ViewPrivacyNoticeTest extends PrivacyTestCase
 {
+    protected const string KEPT_UNTIL_ACCOUNT_CLOSURE = 'Kept while the company account is open; after it closes, deleted on the account-closure schedule, with financial records kept as the law requires';
+
     protected User $owner;
 
     protected Company $company;
@@ -135,6 +137,22 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         $this->assertControllerItems($response);
     }
 
+    #[Test]
+    public function when_the_notice_is_viewed_then_the_register_items_cover_every_foundation_activity(): void
+    {
+        // Given an employee of Contoso
+        $employee = User::factory()->create();
+        $this->attachMember($this->company, $employee, $this->seededRole('employee'));
+
+        // When they view the privacy notice
+        $items = $this->itemsOf($this->viewNotice($employee, $this->company));
+
+        // Then the purposes, legitimate interests and retention items name every Foundation activity
+        $this->assertActivityItems($items);
+        // And the data and recipients items list each category once
+        $this->assertListItems($items);
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -182,6 +200,71 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         $this->assertSame([
             'No data protection officer has been designated; contact the controller above',
         ], $items['dpo']['body']);
+    }
+
+    /**
+     * @param  array<string, array{key: string, heading: string, body: list<string>}>  $items
+     */
+    protected function assertActivityItems(array $items): void
+    {
+        $this->assertSame([
+            'Sign-in and account: Sign members in and keep their accounts secure (Contract)',
+            'Sign-in and refusal records: Protect accounts and the service against misuse (Legitimate interests)',
+            "Company account: Run the company's account, its members and their roles (Contract)",
+            "Owner's emergency contact: Keep the company running if its owner dies or cannot act (Legitimate interests)",
+            'Consent records: Prove which policy versions each member accepted (Legal obligation)',
+            "Invoices: Bill the company's subscription (Contract)",
+            'Audit trail: Account for every change to personal data (Legal obligation)',
+            "Access requests: Answer members' requests for a copy of their data (Legal obligation)",
+        ], $items['purposes']['body']);
+        $this->assertSame([
+            'Sign-in and refusal records: Protect accounts and the service against misuse',
+            "Owner's emergency contact: Keep the company running if its owner dies or cannot act",
+        ], $items['legitimate_interests']['body']);
+        $this->assertSame([
+            'Sign-in and account: While the account is open; after it closes, deleted on the account-closure schedule',
+            'Sign-in and refusal records: 1 year on Free and Starter, 3 years on Pro, 7 years on Enterprise',
+            'Company account: '.self::KEPT_UNTIL_ACCOUNT_CLOSURE,
+            "Owner's emergency contact: ".self::KEPT_UNTIL_ACCOUNT_CLOSURE,
+            'Consent records: '.self::KEPT_UNTIL_ACCOUNT_CLOSURE,
+            'Invoices: 10 years (Companies Act), anonymized when the company is deleted',
+            'Audit trail: Kept indefinitely; never deleted',
+            'Access requests: The export is deleted 7 days after it is ready; the request is kept with the audit trail',
+        ], $items['retention']['body']);
+    }
+
+    /**
+     * @param  array<string, array{key: string, heading: string, body: list<string>}>  $items
+     */
+    protected function assertListItems(array $items): void
+    {
+        $this->assertSame([
+            'Name',
+            'Email address',
+            'Password (hashed)',
+            'Two-factor secret (encrypted)',
+            'Sign-in sessions',
+            'Sign-in records',
+            'Refused-request records',
+            'IP address',
+            'Company identity (name, BR number, EPF number, country)',
+            'Memberships and roles',
+            'Invitations (email address)',
+            "Emergency contact's name, phone and relationship (encrypted)",
+            'Accepted policy versions',
+            'Invoices',
+            'Billing address',
+            'Payment references',
+            'Who changed what, and when',
+            'Access requests',
+            'Access request exports',
+        ], $items['data_categories']['body']);
+        $this->assertSame([
+            'Hosting provider',
+            'Email delivery service',
+            'Error monitoring',
+            'Payment processor',
+        ], $items['recipients']['body']);
     }
 
     protected function assertOnlyThisCompanyAppears(TestResponse $response): void
