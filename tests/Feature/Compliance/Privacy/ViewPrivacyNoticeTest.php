@@ -70,6 +70,24 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         $this->assertThirteenItemsInOrder($response);
     }
 
+    #[Test]
+    public function when_the_company_has_no_owner_then_the_controller_item_says_no_contact_is_on_record(): void
+    {
+        // Given a company where no member holds the owner role
+        $company = Company::factory()->named('Northwind (Pvt) Ltd')->registeredAs('PV-00054321', 'EPF-0054321')->create();
+        $employee = User::factory()->create();
+        $this->attachMember($company, $employee, $this->seededRole('employee'));
+
+        // When its employee views the privacy notice
+        $response = $this->viewNotice($employee, $company);
+
+        // Then item 1 names the company and says no contact is on record
+        $this->assertSame([
+            'Northwind (Pvt) Ltd, BR number PV-00054321, Sri Lanka',
+            'No contact is on record; ask your employer',
+        ], $this->itemsOf($response)['controller']['body']);
+    }
+
     #[Test, DataProvider('provideEveryRole')]
     public function when_any_member_views_the_notice_then_all_thirteen_items_appear_in_order(string $roleCode): void
     {

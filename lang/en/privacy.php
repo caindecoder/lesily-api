@@ -108,6 +108,7 @@ return [
             'heading' => 'Who controls your data',
             'company' => ':name, BR number :br_number, :country',
             'contact' => 'Contact: :name, :email',
+            'no_contact' => 'No contact is on record; ask your employer',
         ],
         'dpo' => [
             'heading' => 'Data protection officer',

@@ -65,7 +65,9 @@ class PrivacyNoticeResource extends JsonResource
                 'br_number' => $company->br_number,
                 'country' => __("privacy.countries.{$company->country}"),
             ]),
-            __('privacy.notice.controller.contact', ['name' => $owner->name, 'email' => $owner->email]),
+            $owner === null
+                ? __('privacy.notice.controller.no_contact')
+                : __('privacy.notice.controller.contact', ['name' => $owner->name, 'email' => $owner->email]),
         ];
     }
 }
