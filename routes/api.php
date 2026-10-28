@@ -286,7 +286,7 @@ Route::get('/v1/roles', [RolesController::class, 'index'])
 
 // View the processing register (UC-1-073) — every module's processing activities; non-paginated {data: [...]}.
 Route::get('/v1/privacy/processing-register', [ProcessingRegisterController::class, 'index'])
-    ->middleware(['auth:sanctum', 'auth.company', 'consent']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:privacy.view-register']);
 
 // Change a member's role (UC-1-023) — event-sourced UserMembershipRoleChanged updates
 // company_user.role_id. Owner-role target → 422 OWNER_TRANSFER_REQUIRED; self-change →

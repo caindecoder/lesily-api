@@ -4,6 +4,7 @@ namespace Tests\Feature\Compliance\Privacy;
 
 use Illuminate\Http\Response;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 
 class ViewProcessingRegisterTest extends PrivacyTestCase
@@ -47,5 +48,32 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
 
         // Then the register is refused until they accept
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::ConsentRequired);
+    }
+
+    #[Test]
+    #[DataProvider('provideRolesWithoutRegisterPermission')]
+    public function when_a_role_without_the_register_permission_views_it_then_the_role_is_insufficient(string $roleCode): void
+    {
+        // Given a member whose role does not carry privacy.view-register
+        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+
+        // When they view the processing register
+        $response = $this->viewRegister($actor, $company);
+
+        // Then the register is refused for the missing permission
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideRolesWithoutRegisterPermission(): array
+    {
+        return [
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'employee' => ['employee'],
+            'manager' => ['manager'],
+        ];
     }
 }
