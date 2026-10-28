@@ -1,8 +1,8 @@
 <?php
 
-// The processing register's wording (UC-1-073). English only for now; the
-// Sinhala and Tamil registers add lang/si and lang/ta. The wording awaits
-// legal review.
+// The processing register's (UC-1-073) and the privacy notice's (UC-1-074)
+// wording. English only for now; the Sinhala and Tamil registers add lang/si
+// and lang/ta. The wording awaits legal review.
 $keptUntilAccountClosure = 'Kept while the company account is open; after it closes, deleted on the account-closure schedule, with financial records kept as the law requires';
 
 return [
@@ -97,5 +97,21 @@ return [
         'payment_processor' => 'Payment processor',
         'error_monitoring' => 'Error monitoring',
         'email_delivery_service' => 'Email delivery service',
+    ],
+
+    'notice' => [
+        'controller' => ['heading' => 'Who controls your data'],
+        'dpo' => ['heading' => 'Data protection officer'],
+        'purposes' => ['heading' => 'Purposes and legal basis'],
+        'legitimate_interests' => ['heading' => 'Legitimate interests'],
+        'data_categories' => ['heading' => 'Personal data we process'],
+        'withdraw_consent' => ['heading' => 'Withdrawing consent'],
+        'recipients' => ['heading' => 'Who receives your data'],
+        'cross_border_transfer' => ['heading' => 'Where your data is processed'],
+        'retention' => ['heading' => 'How long it is kept'],
+        'data_subject_rights' => ['heading' => 'Your rights and how to use them'],
+        'complaint' => ['heading' => 'Complaints'],
+        'statutory_or_contractual' => ['heading' => 'Is providing the data required?'],
+        'automated_decisions' => ['heading' => 'Automated decisions'],
     ],
 ];

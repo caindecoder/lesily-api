@@ -2,12 +2,13 @@
 
 namespace App\Compliance\Privacy\IO\Http\Controllers;
 
-use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use App\Compliance\Privacy\IO\Http\Resources\PrivacyNoticeResource;
 
 class PrivacyNoticeController
 {
-    public function show(): JsonResponse
+    public function show(Request $request): PrivacyNoticeResource
     {
-        return new JsonResponse(['data' => []]);
+        return new PrivacyNoticeResource($request->company());
     }
 }
