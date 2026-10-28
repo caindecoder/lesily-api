@@ -4,7 +4,9 @@ namespace Tests\Feature\Compliance\Privacy;
 
 use Tests\TestCase;
 use App\Models\User;
+use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Illuminate\Testing\TestResponse;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
@@ -37,5 +39,12 @@ abstract class PrivacyTestCase extends TestCase
     protected function seededRole(string $code): Role
     {
         return Role::query()->where('code', $code)->sole();
+    }
+
+    protected function viewRegister(User $actor, Company $company): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->getJson('/api/v1/privacy/processing-register', ['X-Company-Context' => $company->getKey()]);
     }
 }
