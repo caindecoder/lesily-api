@@ -265,9 +265,10 @@ Route::post('/v1/invitations/bulk', [InvitationsController::class, 'bulkStore'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.invite']);
 
 // Resend rotates the token + resets the 7-day expiry on a live pending invitation
-// (UC-1-021). Shares the invitations mail-spam budget with invite (R5 session 110).
+// (UC-1-021). The use case spends 1 of the invitations allowance it shares with
+// invite (R5 session 110; InvitationAllowance).
 Route::post('/v1/invitations/{invitationId}/resend', [InvitationsController::class, 'resend'])
-    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.invite', 'throttle:invitations']);
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.invite']);
 
 // Revoke a pending invitation (UC-1-022) — the token is dead thereafter; accepted/
 // revoked/expired collapse to 422 INVITE_NOT_PENDING (R-B s111). No throttle: revoke
