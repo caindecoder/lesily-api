@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Log;
 use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Symfony\Component\HttpFoundation\Response;
-use App\Foundation\Http\Exceptions\FeatureUnavailableException;
+use App\Foundation\Billing\Exceptions\FeatureUnavailableException;
 
 /**
  * The billing gate (first of the two gates per api-conventions §11). Denies the

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Foundation\Http\Exceptions;
+namespace App\Foundation\Billing\Exceptions;
 
 use Exception;
 
