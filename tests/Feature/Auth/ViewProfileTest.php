@@ -48,6 +48,7 @@ class ViewProfileTest extends AuthTestCase
             'unverified email' => User::factory()->unverified()->create(),
             '2fa enrolled but unconfirmed' => User::factory()->withUnconfirmedTwoFactor()->create(),
             'sinhala locale' => User::factory()->locale('si')->create(),
+            'linked to google' => User::factory()->linkedToGoogle()->create(),
             default => User::factory()->create(),
         };
 
@@ -70,6 +71,8 @@ class ViewProfileTest extends AuthTestCase
             'no default company yields null' => ['plain', 'default_company_id', null],
             'never logged in yields null' => ['plain', 'last_logged_at', null],
             'non-english locale passes through untranslated' => ['sinhala locale', 'locale', 'si'],
+            'never linked to google is not linked' => ['plain', 'google_linked', false],
+            'linked to google is linked' => ['linked to google', 'google_linked', true],
         ];
     }
 

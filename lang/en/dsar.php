@@ -37,6 +37,7 @@ return [
             'last_logged_at' => 'Last signed in',
             'created_at' => 'Account created',
             'two_factor_enabled' => 'Two-step sign-in turned on',
+            'google_account_id' => 'Linked Google account ID',
         ],
         'membership' => [
             'company' => 'Company',

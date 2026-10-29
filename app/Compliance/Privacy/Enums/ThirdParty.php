@@ -8,4 +8,5 @@ enum ThirdParty: string
     case PaymentProcessor = 'payment_processor';
     case ErrorMonitoring = 'error_monitoring';
     case EmailDeliveryService = 'email_delivery_service';
+    case SignInProvider = 'sign_in_provider';
 }

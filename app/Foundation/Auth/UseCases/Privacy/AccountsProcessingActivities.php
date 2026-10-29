@@ -15,9 +15,9 @@ class AccountsProcessingActivities implements ProcessingActivityProvider
             new ProcessingActivity(
                 module: 'accounts',
                 activity: 'sign_in',
-                dataCategories: ['name', 'email', 'password', 'two_factor_secret', 'sign_in_sessions'],
+                dataCategories: ['name', 'email', 'password', 'two_factor_secret', 'sign_in_sessions', 'google_account_id'],
                 legalBasis: LegalBasis::Contract,
-                thirdParties: [ThirdParty::HostingProvider, ThirdParty::EmailDeliveryService, ThirdParty::ErrorMonitoring],
+                thirdParties: [ThirdParty::HostingProvider, ThirdParty::EmailDeliveryService, ThirdParty::ErrorMonitoring, ThirdParty::SignInProvider],
             ),
             new ProcessingActivity(
                 module: 'accounts',

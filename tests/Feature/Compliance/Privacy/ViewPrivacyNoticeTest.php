@@ -257,6 +257,7 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
             'Password (hashed)',
             'Two-factor secret (encrypted)',
             'Sign-in sessions',
+            'Linked Google account ID',
             'Sign-in records',
             'Refused-request records',
             'IP address',
@@ -276,6 +277,7 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
             'Hosting provider',
             'Email delivery service',
             'Error monitoring',
+            'Sign-in provider',
             'Payment processor',
         ], $items['recipients']['body']);
     }

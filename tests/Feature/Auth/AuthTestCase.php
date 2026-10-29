@@ -390,6 +390,7 @@ abstract class AuthTestCase extends TestCase
             'email_verified' => true,
             'locale' => $user->locale,
             'two_factor_enabled' => true,
+            'google_linked' => false,
             'default_company_id' => $user->default_company_id,
             'last_logged_at' => $user->last_logged_at?->toJSON(),
             'created_at' => $user->created_at?->toJSON(),

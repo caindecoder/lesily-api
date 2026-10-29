@@ -377,8 +377,9 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_export_is_built_then_the_profile_section_holds_the_persons_profile(): void
     {
-        // Given a member with two-factor sign-in, an unverified email, who last signed in yesterday
-        $member = User::factory()->unverified()->withTwoFactor()->lastLoggedAt('2026-09-30 18:00:00')->create();
+        // Given a member with two-factor sign-in, a linked Google account, an unverified email, who last signed in yesterday
+        $member = User::factory()->unverified()->withTwoFactor()->linkedToGoogle('109876543210')
+            ->lastLoggedAt('2026-09-30 18:00:00')->create();
         $this->company->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
         $request = $this->aSubmittedRequest($this->company, $member);
 
@@ -395,6 +396,7 @@ class ExportDsarSectionsTest extends DsarTestCase
             'last_logged_at' => '2026-09-30T18:00:00.000000Z',
             'created_at' => $member->created_at?->toISOString(),
             'two_factor_enabled' => true,
+            'google_account_id' => '109876543210',
         ], $this->exportedData($request)['profile']);
     }
 
