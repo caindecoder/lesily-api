@@ -1,14 +1,21 @@
 <?php
 
-namespace App\Foundation\Http\Exceptions;
+namespace App\Foundation\Billing\Exceptions;
 
 use Exception;
+use App\Foundation\Billing\Enums\Feature;
+use App\Foundation\Billing\Enums\BillingPlan;
 
 class FeatureUnavailableException extends Exception
 {
     public function __construct(public ?string $upgradeTo, public string $upgradeUrl)
     {
         parent::__construct('This feature is not available on your current plan.');
+    }
+
+    public static function forFeature(Feature $feature): self
+    {
+        return new self(BillingPlan::lowestPlanWith($feature)?->label(), '/settings/billing/upgrade');
     }
 
     /**

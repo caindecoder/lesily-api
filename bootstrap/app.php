@@ -30,11 +30,14 @@ use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 use App\Compliance\Dsar\Exceptions\DsarExportNotReadyException;
 use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
+use App\Foundation\Auth\Exceptions\GoogleAccountInUseException;
+use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
 use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
-use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use App\Companies\Memberships\Exceptions\AlreadyMemberException;
 use App\Compliance\Dsar\Exceptions\DsarDownloadExpiredException;
+use App\Foundation\Auth\Exceptions\GoogleAlreadyLinkedException;
+use App\Foundation\Auth\Exceptions\GoogleEmailMismatchException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
 use App\Billing\Invoices\Exceptions\ReceiptNotAvailableException;
@@ -44,6 +47,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use App\Companies\Exceptions\OwnershipTransferContentionException;
 use App\Compliance\Dsar\Exceptions\DsarRequesterMismatchException;
 use App\Compliance\Dsar\Exceptions\DsarRequestInProgressException;
+use App\Foundation\Billing\Exceptions\FeatureUnavailableException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use App\Companies\Exceptions\OwnershipTransferCaseNotOpenException;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
@@ -122,6 +126,8 @@ return Application::configure(basePath: dirname(__DIR__))
             DsarRequesterMismatchException::class,
             LoginChallengeNotFoundException::class,
             InvitationAllowanceExceededException::class,
+            GoogleTokenInvalidException::class,
+            GoogleEmailMismatchException::class,
         ]);
 
         $exceptions->render(fn (ValidationException $e) => EnvelopeBuilder::build(
@@ -191,6 +197,30 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (IncorrectPasswordException $e) => EnvelopeBuilder::build(
             ApiErrorCode::IncorrectPassword,
             'Incorrect password. Please try again.',
+        ));
+
+        // A Google ID token that is forged, expired or issued for another app. Its
+        // own 401 code, like INCORRECT_PASSWORD, so the client does not read it as a lost session.
+        $exceptions->render(fn (GoogleTokenInvalidException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::GoogleTokenInvalid,
+            'Google could not confirm this sign-in. Please try again.',
+        ));
+
+        // A Google account that is not the user's own, Google-verified email.
+        $exceptions->render(fn (GoogleEmailMismatchException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::GoogleEmailMismatch,
+            $e->getMessage(),
+        ));
+
+        // One Google account links to one Lesily user (users_google_id_unique).
+        $exceptions->render(fn (GoogleAccountInUseException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::GoogleAccountInUse,
+            'This Google account is already linked to another Lesily login.',
+        ));
+
+        $exceptions->render(fn (GoogleAlreadyLinkedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::GoogleAlreadyLinked,
+            'Your Lesily login is already linked to a Google account.',
         ));
 
         // A reset submit whose token the broker rejected — never issued, expired (>60 min), or already

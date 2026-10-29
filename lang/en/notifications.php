@@ -16,6 +16,10 @@ return [
         'subject' => 'Your password was changed',
         'body' => "Your Lesily password was just changed. If you didn't change it, reset your password now.",
     ],
+    'google_account_linked' => [
+        'subject' => 'Google account linked to your Lesily login',
+        'body' => "A Google account was just linked to your Lesily login, so you can sign in with Google. If you didn't link it, change your password and unlink Google from your profile.",
+    ],
     'team_welcome' => [
         'subject' => 'Welcome to :company',
         'body' => "You've joined :company on Lesily. Sign in to get started.",

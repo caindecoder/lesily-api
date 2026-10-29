@@ -9,8 +9,8 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
-use App\Foundation\Http\Exceptions\FeatureUnavailableException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use App\Foundation\Billing\Exceptions\FeatureUnavailableException;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 
 Route::get('correlation-probe', fn () => response()->json([

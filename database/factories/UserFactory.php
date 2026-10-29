@@ -29,6 +29,7 @@ class UserFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
+            'google_id' => null,
             'remember_token' => Str::random(10),
             'locale' => 'en',
             'last_logged_at' => null,
@@ -67,6 +68,13 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes): array => [
             'email' => $email,
+        ]);
+    }
+
+    public function linkedToGoogle(string $googleId = 'google-subject-linked'): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'google_id' => $googleId,
         ]);
     }
 

@@ -27,6 +27,7 @@ class ProfileSection implements DsarSectionProvider
             'last_logged_at' => $user->last_logged_at?->toISOString(),
             'created_at' => $user->created_at?->toISOString(),
             'two_factor_enabled' => $user->two_factor_confirmed_at !== null,
+            'google_account_id' => $user->google_id,
         ];
     }
 }

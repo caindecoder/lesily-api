@@ -37,6 +37,7 @@ return [
             'last_logged_at' => 'Last signed in',
             'created_at' => 'Account created',
             'two_factor_enabled' => 'Two-step sign-in turned on',
+            'google_account_id' => 'Linked Google account ID',
         ],
         'membership' => [
             'company' => 'Company',
@@ -177,6 +178,7 @@ return [
             'account_security_alert' => 'Security alert',
             'general_account_notice' => 'Account notice',
             'password_changed' => 'Password changed',
+            'google_account_linked' => 'Google account linked',
             'team_welcome' => 'Welcome to the team',
             'ownership_received' => 'You became the owner',
             'dsar_export_ready' => 'Data export ready',

@@ -10,6 +10,7 @@ use App\Foundation\Auth\Events\UserPasswordReset;
 use App\Foundation\Auth\Events\UserProfileUpdated;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
+use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 
@@ -86,5 +87,12 @@ class UserProjector extends Projector
         UserReadModel::query()
             ->whereKey($event->userId)
             ->update(['two_factor_confirmed_at' => null]);
+    }
+
+    public function onUserGoogleOAuthLinked(UserGoogleOAuthLinked $event): void
+    {
+        UserReadModel::query()
+            ->whereKey($event->userId)
+            ->update(['google_id' => $event->googleSubjectId]);
     }
 }

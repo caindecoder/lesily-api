@@ -3,9 +3,11 @@
 namespace App\Providers;
 
 use Illuminate\Support\Str;
+use Google\Auth\AccessToken;
 use Illuminate\Http\Request;
 use App\Companies\Entities\Company;
 use Illuminate\Foundation\DevCommands;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -15,6 +17,8 @@ use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\Totp\Google2faTotpVerifier;
 use App\Foundation\Auth\Totp\CacheLoginChallengeStore;
 use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
+use App\Foundation\Auth\IO\Google\GoogleAuthIdTokenVerifier;
+use App\Foundation\Auth\UseCases\Google\GoogleIdTokenVerifier;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -29,6 +33,13 @@ class AppServiceProvider extends ServiceProvider
 
         // The 2FA login-challenge boundary (DIP, slice-2fa #02): bridges login -> /2fa/verify.
         $this->app->bind(LoginChallengeStore::class, CacheLoginChallengeStore::class);
+
+        // The Google ID-token boundary: production checks tokens with
+        // google/auth against our web client id; feature tests bind a double.
+        $this->app->bind(GoogleIdTokenVerifier::class, fn (): GoogleAuthIdTokenVerifier => new GoogleAuthIdTokenVerifier(
+            new AccessToken,
+            Config::string('services.google.client_id'),
+        ));
 
         // One recorder per request: the use case notes the outcome, the middleware writes it.
         $this->app->scoped(AccessLogRecorder::class);

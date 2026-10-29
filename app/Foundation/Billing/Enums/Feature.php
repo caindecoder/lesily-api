@@ -16,6 +16,7 @@ enum Feature: string
     case EmployeeDirectory = 'employee_directory';
     case TwoFactorAuth = 'two_factor_auth';
     case TemplateEngine = 'template_engine';
+    case GoogleOAuth = 'google_oauth';
 
     // Deprecated — retained as a case (never hard-removed per S10b) but granted by
     // no plan or add-on, so the billing gate fails closed on it.

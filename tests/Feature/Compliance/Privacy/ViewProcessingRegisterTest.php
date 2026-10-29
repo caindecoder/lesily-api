@@ -155,11 +155,11 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
             'key' => 'accounts.sign_in',
             'module' => 'Accounts',
             'activity' => 'Sign-in and account',
-            'data_categories' => ['Name', 'Email address', 'Password (hashed)', 'Two-factor secret (encrypted)', 'Sign-in sessions'],
+            'data_categories' => ['Name', 'Email address', 'Password (hashed)', 'Two-factor secret (encrypted)', 'Sign-in sessions', 'Linked Google account ID'],
             'purpose' => 'Sign members in and keep their accounts secure',
             'legal_basis' => 'Contract',
             'retention' => 'While the account is open; after it closes, deleted on the account-closure schedule',
-            'third_parties' => ['Hosting provider', 'Email delivery service', 'Error monitoring'],
+            'third_parties' => ['Hosting provider', 'Email delivery service', 'Error monitoring', 'Sign-in provider'],
         ], $entries[0]);
         $this->assertSame([
             'key' => 'accounts.security_records',

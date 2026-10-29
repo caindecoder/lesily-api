@@ -17,6 +17,7 @@ use App\Foundation\Auth\IO\Http\Controllers\MyCompaniesController;
 use App\Compliance\Dsar\IO\Http\Controllers\DsarDownloadController;
 use App\Compliance\Dsar\IO\Http\Controllers\DsarRequestsController;
 use App\Foundation\Auth\IO\Http\Controllers\ViewSessionsController;
+use App\Foundation\Auth\IO\Http\Controllers\GoogleAccountController;
 use App\Foundation\Auth\IO\Http\Controllers\ResetPasswordController;
 use App\Foundation\Auth\IO\Http\Controllers\RevokeSessionController;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
@@ -189,6 +190,10 @@ Route::delete('/v1/me/sessions/{tokenId}', RevokeSessionController::class)
 // no sensitive body (unlike register, OQ-1-114). On success the password write is event-sourced
 // (UserPasswordChanged -> UserProjector) and every OTHER session is revoked; the current survives -> 204.
 Route::put('/v1/me/password', ChangePasswordController::class)
+    ->middleware(['auth:sanctum', 'throttle:auth-tier', 'idempotency-key:required']);
+
+// Link Google from the profile.
+Route::post('/v1/me/google', [GoogleAccountController::class, 'store'])
     ->middleware(['auth:sanctum', 'throttle:auth-tier', 'idempotency-key:required']);
 
 // Default company (UC-1-139) — the persisted switcher preference, a plain

@@ -167,6 +167,7 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         return [
             'a security alert' => [NotificationType::AccountSecurityAlert],
             'a password change' => [NotificationType::PasswordChanged],
+            'a Google account link' => [NotificationType::GoogleAccountLinked],
             'an ownership handover' => [NotificationType::OwnershipReceived],
             'a ready data export' => [NotificationType::DsarExportReady],
             'a failed data export' => [NotificationType::DsarExportFailed],

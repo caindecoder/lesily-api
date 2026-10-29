@@ -135,6 +135,8 @@
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserProfileUpdated",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUser2FAEnabled",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUser2FADisabled",
+                "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserGoogleOAuthLinked",
+                "App\\Foundation\\Auth\\Reactors\\GoogleAccountNotificationReactor::onUserGoogleOAuthLinked",
                 "App\\Foundation\\Auth\\Reactors\\EmailVerificationReactor::onUserSignedUpAsOwner",
                 "App\\Consent\\Projectors\\ConsentRecordProjector::onConsentRecorded",
                 // OQ-1-172 PR-0 L-RELATIONS: lazy relations resolved from Model scope
@@ -210,6 +212,10 @@
                 "App\\Foundation\\Auth\\UseCases\\Commands\\RegenerateRecoveryCodesCommand::rules::23",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ResetPasswordCommand::rules::21",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\VerifyTwoFactorCommand::rules::28",
+                // The one-key [required, string] on a typed string property: return [] is
+                // re-inferred to the same rules by Spatie. REMOVE WHEN
+                // idToken gains a rule beyond required+type.
+                "App\\Foundation\\Auth\\UseCases\\Commands\\LinkGoogleAccountCommand::rules::17",
                 // L-CHROMIUM: addChromiumArguments(['disable-dev-shm-usage']) is container
                 // tuning (cd-invoices.md:34 names it as config); the rendered PDF bytes are
                 // identical either way. Pinned so loadMissing('lineItems') at :24 stays killable.

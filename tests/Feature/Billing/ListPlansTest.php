@@ -146,7 +146,7 @@ class ListPlansTest extends BillingTestCase
             [
                 'code' => 'starter',
                 'label' => 'Starter',
-                'features' => ['employee_directory'],
+                'features' => ['employee_directory', 'google_oauth'],
                 'monthly_price_cents' => 35000,
                 'annual_price_cents' => null,
                 'currency' => 'LKR',
@@ -154,7 +154,7 @@ class ListPlansTest extends BillingTestCase
             [
                 'code' => 'pro',
                 'label' => 'Pro',
-                'features' => ['employee_directory', 'two_factor_auth'],
+                'features' => ['employee_directory', 'google_oauth', 'two_factor_auth'],
                 'monthly_price_cents' => 60000,
                 'annual_price_cents' => 51000,
                 'currency' => 'LKR',
@@ -162,7 +162,7 @@ class ListPlansTest extends BillingTestCase
             [
                 'code' => 'enterprise',
                 'label' => 'Enterprise',
-                'features' => ['employee_directory', 'two_factor_auth'],
+                'features' => ['employee_directory', 'google_oauth', 'two_factor_auth'],
                 'monthly_price_cents' => 75000,
                 'annual_price_cents' => 60000,
                 'currency' => 'LKR',

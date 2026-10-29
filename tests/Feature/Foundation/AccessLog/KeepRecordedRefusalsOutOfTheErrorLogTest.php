@@ -14,10 +14,12 @@ use App\Foundation\Http\Exceptions\ConsentRequiredException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
+use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
 use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
-use App\Foundation\Http\Exceptions\FeatureUnavailableException;
+use App\Foundation\Auth\Exceptions\GoogleEmailMismatchException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
 use App\Compliance\Dsar\Exceptions\DsarRequesterMismatchException;
+use App\Foundation\Billing\Exceptions\FeatureUnavailableException;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
@@ -82,6 +84,8 @@ class KeepRecordedRefusalsOutOfTheErrorLogTest extends FoundationTestCase
             'DSAR requester mismatch' => [fn () => new DsarRequesterMismatchException],
             'login challenge not found' => [fn () => new LoginChallengeNotFoundException],
             'invitation allowance exceeded' => [fn () => new InvitationAllowanceExceededException(60)],
+            'google token invalid' => [fn () => new GoogleTokenInvalidException],
+            'google email mismatch' => [fn () => GoogleEmailMismatchException::notTheUsersEmail()],
         ];
     }
 }

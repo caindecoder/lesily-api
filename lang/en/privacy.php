@@ -70,6 +70,7 @@ return [
         'password' => 'Password (hashed)',
         'two_factor_secret' => 'Two-factor secret (encrypted)',
         'sign_in_sessions' => 'Sign-in sessions',
+        'google_account_id' => 'Linked Google account ID',
         'sign_in_records' => 'Sign-in records',
         'refused_request_records' => 'Refused-request records',
         'ip_address' => 'IP address',
@@ -97,6 +98,7 @@ return [
         'payment_processor' => 'Payment processor',
         'error_monitoring' => 'Error monitoring',
         'email_delivery_service' => 'Email delivery service',
+        'sign_in_provider' => 'Sign-in provider',
     ],
 
     'countries' => [
