@@ -177,6 +177,7 @@ return [
             'account_security_alert' => 'Security alert',
             'general_account_notice' => 'Account notice',
             'password_changed' => 'Password changed',
+            'google_account_linked' => 'Google account linked',
             'team_welcome' => 'Welcome to the team',
             'ownership_received' => 'You became the owner',
             'dsar_export_ready' => 'Data export ready',
