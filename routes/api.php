@@ -194,7 +194,7 @@ Route::put('/v1/me/password', ChangePasswordController::class)
 
 // Link Google from the profile (UC-1-003 P1).
 Route::post('/v1/me/google', [GoogleAccountController::class, 'store'])
-    ->middleware(['auth:sanctum', 'idempotency-key:required']);
+    ->middleware(['auth:sanctum', 'throttle:auth-tier', 'idempotency-key:required']);
 
 // Default company (UC-1-139) — the persisted switcher preference, a plain
 // users.default_company_id write (NOT event-sourced — slice-companies B2).

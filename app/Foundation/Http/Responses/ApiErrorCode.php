@@ -23,6 +23,8 @@ enum ApiErrorCode: string
     case IncorrectPassword = 'INCORRECT_PASSWORD';
     case GoogleTokenInvalid = 'GOOGLE_TOKEN_INVALID';
     case GoogleEmailMismatch = 'GOOGLE_EMAIL_MISMATCH';
+    case GoogleAccountInUse = 'GOOGLE_ACCOUNT_IN_USE';
+    case GoogleAlreadyLinked = 'GOOGLE_ALREADY_LINKED';
     case ResetLinkInvalid = 'RESET_LINK_INVALID';
     case InviteInvalid = 'INVITE_INVALID';
     case InviteNotPending = 'INVITE_NOT_PENDING';
@@ -72,6 +74,8 @@ enum ApiErrorCode: string
             self::IncorrectPassword => Response::HTTP_UNAUTHORIZED,
             self::GoogleTokenInvalid => Response::HTTP_UNAUTHORIZED,
             self::GoogleEmailMismatch => Response::HTTP_FORBIDDEN,
+            self::GoogleAccountInUse => Response::HTTP_CONFLICT,
+            self::GoogleAlreadyLinked => Response::HTTP_CONFLICT,
             self::ResetLinkInvalid => Response::HTTP_UNPROCESSABLE_ENTITY,
             self::InviteInvalid => Response::HTTP_UNPROCESSABLE_ENTITY,
             self::InviteNotPending => Response::HTTP_UNPROCESSABLE_ENTITY,

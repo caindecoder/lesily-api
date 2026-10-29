@@ -71,6 +71,13 @@ class UserFactory extends Factory
         ]);
     }
 
+    public function linkedToGoogle(string $googleId = 'google-subject-linked'): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'google_id' => $googleId,
+        ]);
+    }
+
     /**
      * A deterministic display name — for roster ordering/search assertions
      * (UC-1-017) where faker's random names would make expectations flaky.

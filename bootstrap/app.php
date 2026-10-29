@@ -30,11 +30,13 @@ use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 use App\Compliance\Dsar\Exceptions\DsarExportNotReadyException;
 use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
+use App\Foundation\Auth\Exceptions\GoogleAccountInUseException;
 use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
 use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use App\Companies\Memberships\Exceptions\AlreadyMemberException;
 use App\Compliance\Dsar\Exceptions\DsarDownloadExpiredException;
+use App\Foundation\Auth\Exceptions\GoogleAlreadyLinkedException;
 use App\Foundation\Auth\Exceptions\GoogleEmailMismatchException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
@@ -208,6 +210,17 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (GoogleEmailMismatchException $e) => EnvelopeBuilder::build(
             ApiErrorCode::GoogleEmailMismatch,
             $e->getMessage(),
+        ));
+
+        // One Google account links to one Lesily user (users_google_id_unique; UC-1-003 P1a).
+        $exceptions->render(fn (GoogleAccountInUseException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::GoogleAccountInUse,
+            'This Google account is already linked to another Lesily login.',
+        ));
+
+        $exceptions->render(fn (GoogleAlreadyLinkedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::GoogleAlreadyLinked,
+            'Your Lesily login is already linked to a Google account.',
         ));
 
         // A reset submit whose token the broker rejected — never issued, expired (>60 min), or already

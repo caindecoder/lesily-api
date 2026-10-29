@@ -12,10 +12,12 @@ use App\Foundation\Auth\Events\UserPasswordReset;
 use App\Foundation\Auth\Events\UserProfileUpdated;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
+use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
 use App\Foundation\Auth\Events\User2FARecoveryCodeUsed;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
 use App\Foundation\Auth\Events\User2FARecoveryCodesRegenerated;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
+use App\Foundation\Auth\Exceptions\GoogleAlreadyLinkedException;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 use App\Foundation\Auth\Exceptions\UserAlreadyRegisteredException;
 use App\Foundation\Auth\UseCases\Commands\UpdateUserProfileCommand;
@@ -35,6 +37,8 @@ class User extends AggregateRoot
     protected bool $verified = false;
 
     protected bool $twoFactorEnabled = false;
+
+    protected bool $googleLinked = false;
 
     public function createOwner(string $companyId, RegisterOwnerCommand $command): static
     {
@@ -108,6 +112,19 @@ class User extends AggregateRoot
         return $this->recordThat(new User2FAEnabled(
             userId: $this->uuid(),
             confirmedAt: CarbonImmutable::now(),
+        ));
+    }
+
+    public function linkGoogleOAuth(string $googleSubjectId): static
+    {
+        if ($this->googleLinked) {
+            throw new GoogleAlreadyLinkedException;
+        }
+
+        return $this->recordThat(new UserGoogleOAuthLinked(
+            userId: $this->uuid(),
+            googleSubjectId: $googleSubjectId,
+            linkedAt: CarbonImmutable::now(),
         ));
     }
 
@@ -222,5 +239,10 @@ class User extends AggregateRoot
     protected function applyUser2FADisabled(User2FADisabled $event): void
     {
         $this->twoFactorEnabled = false;
+    }
+
+    protected function applyUserGoogleOAuthLinked(UserGoogleOAuthLinked $event): void
+    {
+        $this->googleLinked = true;
     }
 }

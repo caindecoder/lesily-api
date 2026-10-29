@@ -3,6 +3,8 @@
 namespace Tests\Feature\Auth\Google;
 
 use App\Models\User;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
@@ -12,6 +14,7 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class LinkGoogleAccountTest extends AuthTestCase
@@ -131,6 +134,142 @@ class LinkGoogleAccountTest extends AuthTestCase
         $response->assertJsonPath('upgrade_to', 'Starter');
     }
 
+    #[Test]
+    public function when_the_google_account_is_linked_to_another_user_then_the_link_is_refused(): void
+    {
+        // Given Bob linked to a Google account that now carries Alice's email, and Alice on a Starter company
+        User::factory()->linkedToGoogle(self::GOOGLE_SUBJECT)->create();
+        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
+
+        // When Alice links that same Google account
+        $response = $this->linkGoogle($this->alice);
+
+        // Then the link is refused and nothing is linked to Alice
+        $this->assertLinkRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::GoogleAccountInUse);
+    }
+
+    #[Test]
+    public function when_the_user_is_already_linked_then_the_link_is_refused_and_the_existing_link_is_kept(): void
+    {
+        // Given Alice on a Starter company, already linked to her Google account
+        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
+        $this->linkGoogle($this->alice);
+
+        // When Alice links Google again
+        $response = $this->linkGoogle($this->alice);
+
+        // Then the second link is refused and the first one stands, recorded once
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::GoogleAlreadyLinked);
+        $this->assertAccountLinkedTo(self::GOOGLE_SUBJECT);
+    }
+
+    #[Test]
+    public function when_too_many_link_attempts_are_made_then_the_request_is_throttled(): void
+    {
+        // Given Alice spending the shared per-IP auth-tier allowance on invalid Google tokens
+        $this->fakeGoogleIdTokenVerifier(null);
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $this->linkGoogle($this->alice);
+        }
+
+        // When she tries once more
+        $response = $this->linkGoogle($this->alice);
+
+        // Then the over-limit attempt is throttled
+        $this->assertThrottled($response);
+    }
+
+    #[Test]
+    public function when_the_google_email_differs_only_in_case_then_the_account_is_linked(): void
+    {
+        // Given Alice on a Starter company, whose Google account spells her email in capitals
+        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(Str::upper(self::LOGIN_EMAIL)));
+
+        // When Alice links that Google account
+        $response = $this->linkGoogle($this->alice);
+
+        // Then it is linked — email case is not identity
+        $this->assertLinkedTo($response, self::GOOGLE_SUBJECT);
+    }
+
+    #[Test]
+    public function when_one_of_several_companies_can_use_google_sign_in_then_the_account_is_linked(): void
+    {
+        // Given Alice on a Free company and a Starter one
+        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Free);
+        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
+
+        // When Alice links her Google account
+        $response = $this->linkGoogle($this->alice);
+
+        // Then one company granting Google sign-in is enough
+        $this->assertLinkedTo($response, self::GOOGLE_SUBJECT);
+    }
+
+    #[Test]
+    #[DataProvider('provideGoogleSignInPlans')]
+    public function when_the_company_plan_allows_google_sign_in_then_the_account_is_linked(string $plan): void
+    {
+        // Given Alice on a company whose plan in force grants Google sign-in
+        match ($plan) {
+            'trial' => $this->memberOfTrialCompany($this->alice),
+            default => $this->memberOfCompanyOnPlan($this->alice, BillingPlan::from($plan)),
+        };
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
+
+        // When Alice links her Google account
+        $response = $this->linkGoogle($this->alice);
+
+        // Then it is linked
+        $this->assertLinkedTo($response, self::GOOGLE_SUBJECT);
+    }
+
+    #[Test]
+    public function when_the_projection_fails_then_the_link_is_rolled_back(): void
+    {
+        // Given Alice on a Starter company, holding her own verified Google account, and a failing users projection
+        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
+        $this->induceProjectorFailureFor(UserGoogleOAuthLinked::class);
+
+        // When Alice links her Google account
+        $response = $this->linkGoogle($this->alice);
+
+        // Then the failure leaves no stored link and no linked account
+        $response->assertInternalServerError();
+        $this->assertNull($this->alice->fresh()?->google_id);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
+    }
+
+    #[Test]
+    public function when_a_verified_google_account_with_the_users_email_is_linked_then_the_link_is_recorded(): void
+    {
+        // Given Alice on a Starter company, holding her own verified Google account
+        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
+
+        // When Alice links that Google account
+        $response = $this->linkGoogle($this->alice);
+
+        // Then the link is recorded as a stored event and projected onto her account
+        $this->assertLinkedTo($response, self::GOOGLE_SUBJECT);
+    }
+
+    /** @return array<string, array{string}> */
+    public static function provideGoogleSignInPlans(): array
+    {
+        return [
+            'starter' => [BillingPlan::Starter->value],
+            'pro' => [BillingPlan::Pro->value],
+            'enterprise' => [BillingPlan::Enterprise->value],
+            'trial' => ['trial'],
+        ];
+    }
+
     /** @return array<string, array{string}> */
     public static function provideUsersWithoutGoogleSignIn(): array
     {
@@ -150,6 +289,23 @@ class LinkGoogleAccountTest extends AuthTestCase
             'empty' => [['idToken' => ''], 'The id token field is required.'],
             'not a string' => [['idToken' => 123], 'The id token field must be a string.'],
         ];
+    }
+
+    protected function assertLinkedTo(TestResponse $response, string $googleSubject): void
+    {
+        $response->assertNoContent();
+        $this->assertAccountLinkedTo($googleSubject);
+    }
+
+    protected function assertAccountLinkedTo(string $googleSubject): void
+    {
+        $this->assertSame($googleSubject, $this->alice->fresh()?->google_id);
+
+        $linked = LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->sole();
+        $this->assertSame(
+            ['userId' => $this->alice->getKey(), 'googleSubjectId' => $googleSubject],
+            Arr::only($linked->event_properties, ['userId', 'googleSubjectId']),
+        );
     }
 
     protected function aRemovedStarterMembership(): void
