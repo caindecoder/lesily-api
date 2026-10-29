@@ -21,6 +21,7 @@ enum ApiErrorCode: string
     case TwoFactorVerificationFailed = 'TWO_FACTOR_VERIFICATION_FAILED';
     case TwoFactorNotEnabled = 'TWO_FACTOR_NOT_ENABLED';
     case IncorrectPassword = 'INCORRECT_PASSWORD';
+    case GoogleTokenInvalid = 'GOOGLE_TOKEN_INVALID';
     case ResetLinkInvalid = 'RESET_LINK_INVALID';
     case InviteInvalid = 'INVITE_INVALID';
     case InviteNotPending = 'INVITE_NOT_PENDING';
@@ -68,6 +69,7 @@ enum ApiErrorCode: string
             self::TwoFactorVerificationFailed => Response::HTTP_UNAUTHORIZED,
             self::TwoFactorNotEnabled => Response::HTTP_UNPROCESSABLE_ENTITY,
             self::IncorrectPassword => Response::HTTP_UNAUTHORIZED,
+            self::GoogleTokenInvalid => Response::HTTP_UNAUTHORIZED,
             self::ResetLinkInvalid => Response::HTTP_UNPROCESSABLE_ENTITY,
             self::InviteInvalid => Response::HTTP_UNPROCESSABLE_ENTITY,
             self::InviteNotPending => Response::HTTP_UNPROCESSABLE_ENTITY,

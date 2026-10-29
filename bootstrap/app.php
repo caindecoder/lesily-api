@@ -30,6 +30,7 @@ use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 use App\Compliance\Dsar\Exceptions\DsarExportNotReadyException;
 use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
+use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
 use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use App\Companies\Memberships\Exceptions\AlreadyMemberException;
@@ -122,6 +123,7 @@ return Application::configure(basePath: dirname(__DIR__))
             DsarRequesterMismatchException::class,
             LoginChallengeNotFoundException::class,
             InvitationAllowanceExceededException::class,
+            GoogleTokenInvalidException::class,
         ]);
 
         $exceptions->render(fn (ValidationException $e) => EnvelopeBuilder::build(
@@ -191,6 +193,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (IncorrectPasswordException $e) => EnvelopeBuilder::build(
             ApiErrorCode::IncorrectPassword,
             'Incorrect password. Please try again.',
+        ));
+
+        // A Google ID token that is forged, expired or issued for another app (UC-1-003 P1a). Its
+        // own 401 code, like INCORRECT_PASSWORD, so the client does not read it as a lost session.
+        $exceptions->render(fn (GoogleTokenInvalidException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::GoogleTokenInvalid,
+            'Google could not confirm this sign-in. Please try again.',
         ));
 
         // A reset submit whose token the broker rejected — never issued, expired (>60 min), or already

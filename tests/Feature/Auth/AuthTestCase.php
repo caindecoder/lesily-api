@@ -26,6 +26,9 @@ use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\Auth\Events\UserPasswordChanged;
+use App\Foundation\Auth\UseCases\Google\GoogleIdentity;
+use App\Foundation\Auth\UseCases\Google\GoogleIdTokenVerifier;
+use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
 use App\Foundation\Auth\Reactors\PasswordChangedNotificationReactor;
 
 abstract class AuthTestCase extends TestCase
@@ -96,6 +99,20 @@ abstract class AuthTestCase extends TestCase
             public function verify(string $secret, string $code): bool
             {
                 return $this->verifies;
+            }
+        });
+    }
+
+    /** Bind a Google ID-token verifier double: it reads the given identity, or refuses the token when null. */
+    protected function fakeGoogleIdTokenVerifier(?GoogleIdentity $identity): void
+    {
+        $this->app->instance(GoogleIdTokenVerifier::class, new class($identity) implements GoogleIdTokenVerifier
+        {
+            public function __construct(private ?GoogleIdentity $identity) {}
+
+            public function verify(string $idToken): GoogleIdentity
+            {
+                return $this->identity ?? throw new GoogleTokenInvalidException;
             }
         });
     }
@@ -451,6 +468,14 @@ abstract class AuthTestCase extends TestCase
         return $this->withToken($token)->putJson('/api/v1/me/password', $payload, [
             'Idempotency-Key' => $idempotencyKey ?? (string) Str::uuid(),
         ]);
+    }
+
+    /** @param  array<string, mixed>  $payload */
+    protected function linkGoogle(User $actor, array $payload = ['idToken' => 'a-google-id-token']): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->postJson('/api/v1/me/google', $payload, ['Idempotency-Key' => (string) Str::uuid()]);
     }
 
     /**
