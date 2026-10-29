@@ -45,6 +45,8 @@ abstract class AuthTestCase extends TestCase
 
     protected const NEW_PASSWORD = 'New-Str0ng-Pass!';
 
+    protected const GOOGLE_SUBJECT = '109876543210';
+
     /**
      * Arrange a registered, login-ready user. The raw password is hashed by the
      * model's `hashed` cast on save, so the user authenticates with $password.
@@ -115,6 +117,11 @@ abstract class AuthTestCase extends TestCase
                 return $this->identity ?? throw new GoogleTokenInvalidException;
             }
         });
+    }
+
+    protected function aGoogleIdentityFor(string $email, bool $emailVerified = true): GoogleIdentity
+    {
+        return new GoogleIdentity(self::GOOGLE_SUBJECT, $email, $emailVerified, 'Alice Perera');
     }
 
     /**

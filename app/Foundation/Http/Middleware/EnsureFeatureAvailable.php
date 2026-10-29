@@ -28,15 +28,13 @@ class EnsureFeatureAvailable
             return $next($request);
         }
 
-        $upgradePlan = BillingPlan::lowestPlanWith($required);
-
-        if ($upgradePlan === null) {
+        if (BillingPlan::lowestPlanWith($required) === null) {
             Log::warning('Feature gate failed closed: feature offered by no plan or add-on.', [
                 'feature' => $required->value,
                 'company_id' => $company->getKey(),
             ]);
         }
 
-        throw new FeatureUnavailableException($upgradePlan?->label(), '/settings/billing/upgrade');
+        throw FeatureUnavailableException::forFeature($required);
     }
 }

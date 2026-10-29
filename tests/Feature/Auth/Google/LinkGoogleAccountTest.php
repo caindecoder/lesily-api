@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth\Google;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
+use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
@@ -79,6 +80,68 @@ class LinkGoogleAccountTest extends AuthTestCase
         $this->assertLinkRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::GoogleTokenInvalid);
     }
 
+    #[Test]
+    public function when_the_google_email_is_not_the_users_email_then_the_link_is_refused(): void
+    {
+        // Given Alice on a Starter company, holding a Google account for another email
+        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor('alice@gmail.com'));
+
+        // When Alice links that Google account
+        $response = $this->linkGoogle($this->alice);
+
+        // Then the link is refused, naming the email to use, and nothing is linked
+        $this->assertLinkRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::GoogleEmailMismatch);
+        $response->assertJsonPath('message', 'Use the Google account for your Lesily email address.');
+    }
+
+    #[Test]
+    public function when_google_has_not_verified_the_email_then_the_link_is_refused(): void
+    {
+        // Given Alice on a Starter company, holding a Google account for her email that Google has not verified
+        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL, false));
+
+        // When Alice links that Google account
+        $response = $this->linkGoogle($this->alice);
+
+        // Then the link is refused, asking for a verified email, and nothing is linked
+        $this->assertLinkRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::GoogleEmailMismatch);
+        $response->assertJsonPath('message', 'Google has not verified this email address. Verify it with Google first.');
+    }
+
+    #[Test]
+    #[DataProvider('provideUsersWithoutGoogleSignIn')]
+    public function when_no_company_of_the_user_can_use_google_sign_in_then_the_upgrade_refusal_is_returned(string $memberships): void
+    {
+        // Given Alice with no live company whose plan grants Google sign-in, holding her own verified Google account
+        match ($memberships) {
+            'only a free company' => $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Free),
+            'an expired trial' => $this->memberOfExpiredTrialCompany($this->alice),
+            'removed from her starter company' => $this->aRemovedStarterMembership(),
+            'no company' => null,
+        };
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
+
+        // When Alice links that Google account
+        $response = $this->linkGoogle($this->alice);
+
+        // Then the upgrade refusal names Starter and nothing is linked
+        $this->assertLinkRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::FeatureNotAvailable);
+        $response->assertJsonPath('upgrade_to', 'Starter');
+    }
+
+    /** @return array<string, array{string}> */
+    public static function provideUsersWithoutGoogleSignIn(): array
+    {
+        return [
+            'only a free company' => ['only a free company'],
+            'an expired trial' => ['an expired trial'],
+            'removed from her starter company' => ['removed from her starter company'],
+            'no company' => ['no company'],
+        ];
+    }
+
     /** @return array<string, array{array<string, mixed>, string}> */
     public static function provideMalformedIdTokens(): array
     {
@@ -87,6 +150,12 @@ class LinkGoogleAccountTest extends AuthTestCase
             'empty' => [['idToken' => ''], 'The id token field is required.'],
             'not a string' => [['idToken' => 123], 'The id token field must be a string.'],
         ];
+    }
+
+    protected function aRemovedStarterMembership(): void
+    {
+        $this->seedRbacCatalog();
+        $this->aRemovedMembershipIn(Company::factory()->onPlan(BillingPlan::Starter)->create(), $this->alice);
     }
 
     protected function assertLinkRefusedWith(TestResponse $response, int $expectedStatus, ApiErrorCode $code): void

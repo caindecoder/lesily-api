@@ -35,6 +35,7 @@ use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use App\Companies\Memberships\Exceptions\AlreadyMemberException;
 use App\Compliance\Dsar\Exceptions\DsarDownloadExpiredException;
+use App\Foundation\Auth\Exceptions\GoogleEmailMismatchException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
 use App\Billing\Invoices\Exceptions\ReceiptNotAvailableException;
@@ -124,6 +125,7 @@ return Application::configure(basePath: dirname(__DIR__))
             LoginChallengeNotFoundException::class,
             InvitationAllowanceExceededException::class,
             GoogleTokenInvalidException::class,
+            GoogleEmailMismatchException::class,
         ]);
 
         $exceptions->render(fn (ValidationException $e) => EnvelopeBuilder::build(
@@ -200,6 +202,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (GoogleTokenInvalidException $e) => EnvelopeBuilder::build(
             ApiErrorCode::GoogleTokenInvalid,
             'Google could not confirm this sign-in. Please try again.',
+        ));
+
+        // A Google account that is not the user's own, Google-verified email (UC-1-003 P1a, G9).
+        $exceptions->render(fn (GoogleEmailMismatchException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::GoogleEmailMismatch,
+            $e->getMessage(),
         ));
 
         // A reset submit whose token the broker rejected — never issued, expired (>60 min), or already
