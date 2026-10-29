@@ -213,7 +213,7 @@
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ResetPasswordCommand::rules::21",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\VerifyTwoFactorCommand::rules::28",
                 // The one-key [required, string] on a typed string property: return [] is
-                // re-inferred to the same rules by Spatie (SLICE-google-oauth-inc-1). REMOVE WHEN
+                // re-inferred to the same rules by Spatie. REMOVE WHEN
                 // idToken gains a rule beyond required+type.
                 "App\\Foundation\\Auth\\UseCases\\Commands\\LinkGoogleAccountCommand::rules::17",
                 // L-CHROMIUM: addChromiumArguments(['disable-dev-shm-usage']) is container

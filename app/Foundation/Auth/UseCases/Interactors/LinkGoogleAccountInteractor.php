@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
+use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Auth\UseCases\Google\GoogleIdTokenVerifier;
 use App\Foundation\Auth\Exceptions\GoogleAccountInUseException;
 use App\Foundation\Auth\Exceptions\GoogleEmailMismatchException;
@@ -36,15 +37,16 @@ class LinkGoogleAccountInteractor
             throw FeatureUnavailableException::forFeature(Feature::GoogleOAuth);
         }
 
-        DB::transaction(function () use ($user, $identity): void {
-            $aggregate = UserAggregate::retrieve($user->getKey())->linkGoogleOAuth($identity->subject);
-
-            if (User::query()->where('google_id', $identity->subject)->exists()) {
-                throw new GoogleAccountInUseException;
-            }
-
-            $aggregate->persist();
-        });
+        try {
+            DB::transaction(function () use ($user, $identity): void {
+                UserAggregate::retrieve($user->getKey())->linkGoogleOAuth($identity->subject)->persist();
+            });
+        } catch (UniqueConstraintViolationException $violation) {
+            // One Google account links to one user; the index answers even a concurrent link.
+            throw str_contains($violation->getMessage(), 'users_google_id_unique')
+                ? new GoogleAccountInUseException
+                : $violation;
+        }
     }
 
     protected function hasCompanyWithGoogleSignIn(User $user): bool

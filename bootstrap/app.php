@@ -199,20 +199,20 @@ return Application::configure(basePath: dirname(__DIR__))
             'Incorrect password. Please try again.',
         ));
 
-        // A Google ID token that is forged, expired or issued for another app (UC-1-003 P1a). Its
+        // A Google ID token that is forged, expired or issued for another app. Its
         // own 401 code, like INCORRECT_PASSWORD, so the client does not read it as a lost session.
         $exceptions->render(fn (GoogleTokenInvalidException $e) => EnvelopeBuilder::build(
             ApiErrorCode::GoogleTokenInvalid,
             'Google could not confirm this sign-in. Please try again.',
         ));
 
-        // A Google account that is not the user's own, Google-verified email (UC-1-003 P1a, G9).
+        // A Google account that is not the user's own, Google-verified email.
         $exceptions->render(fn (GoogleEmailMismatchException $e) => EnvelopeBuilder::build(
             ApiErrorCode::GoogleEmailMismatch,
             $e->getMessage(),
         ));
 
-        // One Google account links to one Lesily user (users_google_id_unique; UC-1-003 P1a).
+        // One Google account links to one Lesily user (users_google_id_unique).
         $exceptions->render(fn (GoogleAccountInUseException $e) => EnvelopeBuilder::build(
             ApiErrorCode::GoogleAccountInUse,
             'This Google account is already linked to another Lesily login.',

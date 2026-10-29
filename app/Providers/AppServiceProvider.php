@@ -34,7 +34,7 @@ class AppServiceProvider extends ServiceProvider
         // The 2FA login-challenge boundary (DIP, slice-2fa #02): bridges login -> /2fa/verify.
         $this->app->bind(LoginChallengeStore::class, CacheLoginChallengeStore::class);
 
-        // The Google ID-token boundary (DIP, SLICE-google-oauth): production checks tokens with
+        // The Google ID-token boundary: production checks tokens with
         // google/auth against our web client id; feature tests bind a double.
         $this->app->bind(GoogleIdTokenVerifier::class, fn (): GoogleAuthIdTokenVerifier => new GoogleAuthIdTokenVerifier(
             new AccessToken,

@@ -192,7 +192,7 @@ Route::delete('/v1/me/sessions/{tokenId}', RevokeSessionController::class)
 Route::put('/v1/me/password', ChangePasswordController::class)
     ->middleware(['auth:sanctum', 'throttle:auth-tier', 'idempotency-key:required']);
 
-// Link Google from the profile (UC-1-003 P1).
+// Link Google from the profile.
 Route::post('/v1/me/google', [GoogleAccountController::class, 'store'])
     ->middleware(['auth:sanctum', 'throttle:auth-tier', 'idempotency-key:required']);
 
