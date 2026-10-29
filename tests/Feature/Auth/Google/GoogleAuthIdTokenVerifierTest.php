@@ -55,6 +55,19 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
         $this->verifierFor(self::CLIENT_ID)->verify($token);
     }
 
+    #[Test]
+    public function when_the_token_is_not_a_signed_jwt_then_it_is_refused(): void
+    {
+        // Given a token whose header is not JSON
+        $token = JWT::urlsafeB64Encode('not-json').'.e30.c2lnbmF0dXJl';
+
+        // Then it is refused as an invalid Google token
+        $this->expectException(GoogleTokenInvalidException::class);
+
+        // When the verifier checks it
+        $this->verifierFor(self::CLIENT_ID)->verify($token);
+    }
+
     /** @param  array<string, mixed>  $wrongClaim */
     #[Test]
     #[DataProvider('provideWrongClaims')]
@@ -75,6 +88,7 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
     {
         return [
             'issued for another app' => [['aud' => 'another-app.apps.googleusercontent.com']],
+            'without an email' => [['email' => null]],
             'expired' => [['iat' => time() - 7200, 'exp' => time() - 3600]],
             'issued by someone else' => [['iss' => 'https://accounts.example.com']],
         ];
@@ -91,6 +105,20 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
 
         // When the verifier checks it
         $this->verifierFor('')->verify($token);
+    }
+
+    #[Test]
+    public function when_the_token_carries_no_name_then_the_identity_is_read_without_one(): void
+    {
+        // Given a token Google signed without the profile scope's name
+        $token = $this->aSignedToken(['name' => null]);
+
+        // When the verifier checks it
+        $identity = $this->verifierFor(self::CLIENT_ID)->verify($token);
+
+        // Then the identity is read, its name empty
+        $this->assertSame('109876543210', $identity->subject);
+        $this->assertSame('', $identity->name);
     }
 
     #[Test]
@@ -117,7 +145,7 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
     /** @param  array<string, mixed>  $claimOverrides */
     protected function aSignedToken(array $claimOverrides = [], ?PrivateKey $signingKey = null): string
     {
-        return JWT::encode([
+        return JWT::encode(array_filter([
             'iss' => 'https://accounts.google.com',
             'aud' => self::CLIENT_ID,
             'sub' => '109876543210',
@@ -127,7 +155,7 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
             'iat' => time(),
             'exp' => time() + 3600,
             ...$claimOverrides,
-        ], ($signingKey ?? $this->googleKey)->toString('PKCS8'), 'RS256', self::KEY_ID);
+        ], fn (mixed $claim): bool => $claim !== null), ($signingKey ?? $this->googleKey)->toString('PKCS8'), 'RS256', self::KEY_ID);
     }
 
     protected function aNewRsaKey(): PrivateKey

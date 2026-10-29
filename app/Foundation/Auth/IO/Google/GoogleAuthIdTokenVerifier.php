@@ -38,7 +38,7 @@ class GoogleAuthIdTokenVerifier implements GoogleIdTokenVerifier
                 subject: Arr::string($claims, 'sub'),
                 email: Arr::string($claims, 'email'),
                 emailVerified: Arr::boolean($claims, 'email_verified'),
-                name: Arr::string($claims, 'name'),
+                name: Arr::string($claims, 'name', ''),
             );
         } catch (UnexpectedValueException|InvalidArgumentException|DomainException) {
             throw new GoogleTokenInvalidException;

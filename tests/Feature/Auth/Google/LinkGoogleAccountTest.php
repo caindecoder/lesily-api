@@ -122,7 +122,7 @@ class LinkGoogleAccountTest extends AuthTestCase
             'only a free company' => $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Free),
             'an expired trial' => $this->memberOfExpiredTrialCompany($this->alice),
             'removed from her starter company' => $this->aRemovedStarterMembership(),
-            'no company' => null,
+            default => null,
         };
         $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
 
