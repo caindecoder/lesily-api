@@ -3,6 +3,7 @@
 namespace App\Foundation\Auth\IO\Google;
 
 use DomainException;
+use RuntimeException;
 use Illuminate\Support\Arr;
 use Google\Auth\AccessToken;
 use InvalidArgumentException;
@@ -10,6 +11,7 @@ use UnexpectedValueException;
 use App\Foundation\Auth\UseCases\Google\GoogleIdentity;
 use App\Foundation\Auth\UseCases\Google\GoogleIdTokenVerifier;
 use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
+use App\Foundation\Auth\Exceptions\GoogleSignInUnavailableException;
 
 class GoogleAuthIdTokenVerifier implements GoogleIdTokenVerifier
 {
@@ -42,6 +44,9 @@ class GoogleAuthIdTokenVerifier implements GoogleIdTokenVerifier
             );
         } catch (UnexpectedValueException|InvalidArgumentException|DomainException) {
             throw new GoogleTokenInvalidException;
+        } catch (RuntimeException $unreachable) {
+            // A non-200 key download and every Guzzle transfer error land here; the token was never judged.
+            throw new GoogleSignInUnavailableException('Google sign-in is temporarily unavailable.', previous: $unreachable);
         }
     }
 }

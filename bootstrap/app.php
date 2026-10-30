@@ -56,6 +56,7 @@ use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
 use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
 use App\Companies\Memberships\Exceptions\InvalidInvitationException;
+use App\Foundation\Auth\Exceptions\GoogleSignInUnavailableException;
 use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
 use App\Companies\Memberships\Exceptions\SelfRemovalBlockedException;
 use App\Compliance\Dsar\Exceptions\DsarRequestNotInProgressException;
@@ -226,6 +227,12 @@ return Application::configure(basePath: dirname(__DIR__))
             ApiErrorCode::GoogleAlreadyLinked,
             $e->getMessage(),
         ));
+
+        // Google's signing keys could not be fetched — a retry hint, never a 401 that reads as a bad token.
+        $exceptions->render(fn (GoogleSignInUnavailableException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::GoogleSignInUnavailable,
+            'Google sign-in is temporarily unavailable. Try again shortly, or sign in with your password.',
+        )->withHeaders(['Retry-After' => '30']));
 
         $exceptions->render(fn (EmailNotVerifiedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::EmailNotVerified,

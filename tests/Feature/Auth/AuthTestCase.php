@@ -33,6 +33,7 @@ use App\Foundation\Auth\UseCases\Google\GoogleIdentity;
 use App\Foundation\Auth\UseCases\Results\IssuedSession;
 use App\Foundation\Auth\UseCases\Google\GoogleIdTokenVerifier;
 use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
+use App\Foundation\Auth\Exceptions\GoogleSignInUnavailableException;
 use App\Foundation\Auth\Reactors\PasswordChangedNotificationReactor;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -120,6 +121,18 @@ abstract class AuthTestCase extends TestCase
             public function verify(string $idToken): GoogleIdentity
             {
                 return $this->identity ?? throw new GoogleTokenInvalidException;
+            }
+        });
+    }
+
+    /** Bind a Google ID-token verifier double for a Google whose signing keys cannot be fetched. */
+    protected function fakeUnavailableGoogle(): void
+    {
+        $this->app->instance(GoogleIdTokenVerifier::class, new class implements GoogleIdTokenVerifier
+        {
+            public function verify(string $idToken): GoogleIdentity
+            {
+                throw new GoogleSignInUnavailableException('Google sign-in is temporarily unavailable.');
             }
         });
     }

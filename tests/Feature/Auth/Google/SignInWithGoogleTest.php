@@ -6,17 +6,20 @@ use App\Models\User;
 use Illuminate\Http\Response;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
+use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
 use App\Foundation\Auth\UseCases\Google\GoogleIdentity;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Notifications\SystemNotification;
+use App\Foundation\Auth\Exceptions\GoogleSignInUnavailableException;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class SignInWithGoogleTest extends AuthTestCase
@@ -185,6 +188,23 @@ class SignInWithGoogleTest extends AuthTestCase
         // Then the device cap refuses it and the refusal is logged
         $this->assertDeviceLimitRejected($response, $this->alice, 3);
         $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $this->alice);
+    }
+
+    #[Test]
+    public function when_googles_keys_cannot_be_fetched_then_sign_in_is_temporarily_unavailable(): void
+    {
+        // Given a Google whose signing keys cannot be fetched
+        Exceptions::fake();
+        $this->fakeUnavailableGoogle();
+
+        // When a Google sign-in arrives
+        $response = $this->signInWithGoogle();
+
+        // Then the app is told to retry shortly, the outage is reported, and no access outcome is logged
+        $this->assertRefusedWith($response, Response::HTTP_SERVICE_UNAVAILABLE, ApiErrorCode::GoogleSignInUnavailable);
+        $response->assertHeader('Retry-After', '30');
+        Exceptions::assertReported(GoogleSignInUnavailableException::class);
+        $this->assertSame(0, AccessLogEntry::query()->count());
     }
 
     #[Test]
