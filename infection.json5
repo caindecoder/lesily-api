@@ -136,6 +136,7 @@
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUser2FAEnabled",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUser2FADisabled",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserGoogleOAuthLinked",
+                "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserGoogleOAuthUnlinked",
                 "App\\Foundation\\Auth\\Reactors\\GoogleAccountNotificationReactor::onUserGoogleOAuthLinked",
                 "App\\Foundation\\Auth\\Reactors\\EmailVerificationReactor::onUserSignedUpAsOwner",
                 "App\\Consent\\Projectors\\ConsentRecordProjector::onConsentRecorded",

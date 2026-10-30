@@ -3,7 +3,9 @@
 namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use App\Foundation\Auth\UseCases\PasswordVerifier;
+use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\Auth\Exceptions\GoogleNotLinkedException;
 use App\Foundation\Auth\UseCases\Commands\UnlinkGoogleAccountCommand;
 
@@ -18,5 +20,9 @@ class UnlinkGoogleAccountInteractor
         }
 
         $this->passwordVerifier->verify($user, $command->password);
+
+        DB::transaction(function () use ($user): void {
+            UserAggregate::retrieve($user->getKey())->unlinkGoogleOAuth()->persist();
+        });
     }
 }

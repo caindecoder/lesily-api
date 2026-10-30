@@ -29,6 +29,7 @@ use Illuminate\Auth\Passwords\CanResetPassword as CanResetPasswordTrait;
  * @property array<int, string>|null $two_factor_recovery_codes
  * @property Carbon|null $two_factor_confirmed_at
  * @property string|null $google_id
+ * @property Carbon|null $google_unlinked_at
  */
 #[Fillable(['name', 'email', 'password', 'locale'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_confirmed_at'])]
@@ -81,6 +82,7 @@ class User extends Authenticatable implements CanResetPassword, HasLocalePrefere
             'two_factor_secret' => 'encrypted',
             'two_factor_recovery_codes' => 'array',
             'two_factor_confirmed_at' => 'datetime',
+            'google_unlinked_at' => 'datetime',
         ];
     }
 

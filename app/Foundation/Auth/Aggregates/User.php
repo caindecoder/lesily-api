@@ -14,6 +14,7 @@ use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
 use App\Foundation\Auth\Events\User2FARecoveryCodeUsed;
+use App\Foundation\Auth\Events\UserGoogleOAuthUnlinked;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
 use App\Foundation\Auth\Events\User2FARecoveryCodesRegenerated;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
@@ -125,6 +126,14 @@ class User extends AggregateRoot
             userId: $this->uuid(),
             googleSubjectId: $googleSubjectId,
             linkedAt: CarbonImmutable::now(),
+        ));
+    }
+
+    public function unlinkGoogleOAuth(): static
+    {
+        return $this->recordThat(new UserGoogleOAuthUnlinked(
+            userId: $this->uuid(),
+            unlinkedAt: CarbonImmutable::now(),
         ));
     }
 
@@ -244,5 +253,10 @@ class User extends AggregateRoot
     protected function applyUserGoogleOAuthLinked(UserGoogleOAuthLinked $event): void
     {
         $this->googleLinked = true;
+    }
+
+    protected function applyUserGoogleOAuthUnlinked(UserGoogleOAuthUnlinked $event): void
+    {
+        $this->googleLinked = false;
     }
 }

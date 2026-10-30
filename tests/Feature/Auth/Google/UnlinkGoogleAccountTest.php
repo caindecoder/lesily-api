@@ -3,11 +3,14 @@
 namespace Tests\Feature\Auth\Google;
 
 use App\Models\User;
+use Illuminate\Support\Arr;
 use Illuminate\Http\Response;
+use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\Auth\Events\UserGoogleOAuthUnlinked;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class UnlinkGoogleAccountTest extends AuthTestCase
@@ -116,6 +119,36 @@ class UnlinkGoogleAccountTest extends AuthTestCase
         $this->assertThrottled($response);
     }
 
+    #[Test]
+    public function when_the_projection_fails_then_the_unlink_is_rolled_back(): void
+    {
+        // Given Alice signed in on two devices, and a failing users projection
+        $token = $this->aSessionFor($this->alice)->plainTextToken;
+        $this->aSessionFor($this->alice, 'mobile');
+        $this->induceProjectorFailureFor(UserGoogleOAuthUnlinked::class);
+
+        // When she unlinks Google with her password
+        $response = $this->unlinkGoogle($token);
+
+        // Then the failure leaves no stored unlink and Google still linked
+        $response->assertInternalServerError();
+        $this->assertStillLinked(2);
+    }
+
+    #[Test]
+    public function when_google_is_unlinked_with_the_password_then_the_link_is_removed_and_remembered(): void
+    {
+        // Given Alice signed in and linked to Google
+        $this->freezeTime();
+        $token = $this->aSessionFor($this->alice)->plainTextToken;
+
+        // When she unlinks Google with her password
+        $response = $this->unlinkGoogle($token);
+
+        // Then the link is gone, the unlink is remembered, and the stored event is the record
+        $this->assertUnlinked($response);
+    }
+
     /** @return array<string, array{array<string, mixed>, string}> */
     public static function provideInvalidUnlinkPayloads(): array
     {
@@ -123,6 +156,21 @@ class UnlinkGoogleAccountTest extends AuthTestCase
             'missing' => [[], 'The password field is required.'],
             'not a string' => [['password' => 123], 'The password field must be a string.'],
         ];
+    }
+
+    protected function assertUnlinked(TestResponse $response): void
+    {
+        $response->assertNoContent();
+
+        $stored = $this->alice->fresh();
+        $this->assertNull($stored?->google_id, 'The unlink must clear the Google link.');
+        $this->assertSame(now()->toAtomString(), $stored?->google_unlinked_at?->toAtomString(), 'The unlink must be remembered (G12).');
+
+        $unlinked = LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthUnlinked::class)->sole();
+        $this->assertEquals(
+            ['userId' => $this->alice->getKey(), 'unlinkedAt' => now()->toAtomString()],
+            Arr::only($unlinked->event_properties, ['userId', 'unlinkedAt']),
+        );
     }
 
     protected function assertStillLinked(int $sessions): void
