@@ -9,12 +9,14 @@ use phpseclib3\Crypt\RSA;
 use Google\Auth\AccessToken;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
+use Illuminate\Support\Facades\File;
 use phpseclib3\Crypt\RSA\PrivateKey;
 use PHPUnit\Framework\Attributes\Test;
 use Psr\Http\Message\ResponseInterface;
 use GuzzleHttp\Exception\ConnectException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Auth\IO\Google\GoogleAuthIdTokenVerifier;
+use App\Foundation\Auth\UseCases\Google\GoogleIdTokenVerifier;
 use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
 use App\Foundation\Auth\Exceptions\GoogleSignInUnavailableException;
 
@@ -142,6 +144,27 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
 
         // When the verifier checks a well-signed token
         $verifier->verify($this->aSignedToken());
+    }
+
+    #[Test]
+    public function when_keys_were_fetched_once_then_a_later_request_reuses_them(): void
+    {
+        // Given the production verifier, configured for our client, Google's keys and a key cache
+        $cachePath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'google-certs-'.uniqid();
+        config([
+            'services.google.client_id' => self::CLIENT_ID,
+            'services.google.certs_location' => $this->certsLocation,
+            'services.google.certs_cache_path' => $cachePath,
+        ]);
+        app(GoogleIdTokenVerifier::class)->verify($this->aSignedToken());
+        unlink($this->certsLocation);
+
+        // When a later request verifies a token after Google's keys have gone away
+        $identity = app(GoogleIdTokenVerifier::class)->verify($this->aSignedToken());
+
+        // Then the keys come from the cache
+        $this->assertSame('alice@contoso.lk', $identity->email);
+        File::deleteDirectory($cachePath);
     }
 
     #[Test]
