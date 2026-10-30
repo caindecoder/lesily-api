@@ -136,6 +136,20 @@ class UnlinkGoogleAccountTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_google_is_unlinked_then_the_users_other_sessions_are_revoked(): void
+    {
+        // Given Alice signed in on two devices
+        $current = $this->aSessionFor($this->alice)->plainTextToken;
+        $other = $this->aSessionFor($this->alice, 'mobile')->plainTextToken;
+
+        // When she unlinks Google with her password on the current device
+        $response = $this->unlinkGoogle($current);
+
+        // Then the other device no longer authenticates and the current session survives
+        $this->assertOtherSessionsRevoked($response, $current, $other);
+    }
+
+    #[Test]
     public function when_google_is_unlinked_with_the_password_then_the_link_is_removed_and_remembered(): void
     {
         // Given Alice signed in and linked to Google

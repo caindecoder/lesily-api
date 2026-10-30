@@ -203,16 +203,4 @@ class DisableTwoFactorTest extends AuthTestCase
         $this->assertSame(['userId', 'disabledAt'], array_keys($properties), 'The marker must carry only non-secret metadata (Design-Y).');
         $this->assertSame($user->getKey(), $properties['userId'] ?? null, 'The marker must be scoped to the disabling user.');
     }
-
-    /**
-     * Disabling 2FA succeeded (204), revoked the user's OTHER sessions — the other device no
-     * longer authenticates (forgetGuards forces a fresh DB re-check) — and kept the current
-     * session alive. Goes RED if the revoke is removed (the other token would still authenticate).
-     */
-    protected function assertOtherSessionsRevoked(TestResponse $response, string $currentToken, string $otherToken): void
-    {
-        $response->assertNoContent();
-        $this->assertUnauthenticated($this->probeWith($otherToken));
-        $this->probeWith($currentToken)->assertOk();
-    }
 }

@@ -484,6 +484,17 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
+     * The action succeeded (204), the user's other device no longer authenticates, and the
+     * current session survives. Shared by the 2FA disable (UC-1-007) and Google unlink suites.
+     */
+    protected function assertOtherSessionsRevoked(TestResponse $response, string $currentToken, string $otherToken): void
+    {
+        $response->assertNoContent();
+        $this->assertUnauthenticated($this->probeWith($otherToken));
+        $this->probeWith($currentToken)->assertOk();
+    }
+
+    /**
      * Submit a password change to the self-service endpoint (which requires an idempotency key).
      * Shared by the change-password (UC-1-016) and password-changed-notification suites.
      *
