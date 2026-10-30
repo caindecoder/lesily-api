@@ -138,6 +138,7 @@
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserGoogleOAuthLinked",
                 "App\\Foundation\\Auth\\Projectors\\UserProjector::onUserGoogleOAuthUnlinked",
                 "App\\Foundation\\Auth\\Reactors\\GoogleAccountNotificationReactor::onUserGoogleOAuthLinked",
+                "App\\Foundation\\Auth\\Reactors\\GoogleAccountNotificationReactor::onUserGoogleOAuthUnlinked",
                 "App\\Foundation\\Auth\\Reactors\\EmailVerificationReactor::onUserSignedUpAsOwner",
                 "App\\Consent\\Projectors\\ConsentRecordProjector::onConsentRecorded",
                 // OQ-1-172 PR-0 L-RELATIONS: lazy relations resolved from Model scope

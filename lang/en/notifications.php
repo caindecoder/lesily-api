@@ -20,6 +20,10 @@ return [
         'subject' => 'Google account linked to your Lesily login',
         'body' => "A Google account was just linked to your Lesily login, so you can sign in with Google. If you didn't link it, change your password and unlink Google from your profile.",
     ],
+    'google_account_unlinked' => [
+        'subject' => 'Google account unlinked from your Lesily login',
+        'body' => "Google was just unlinked from your Lesily login, and you were signed out on your other devices. Sign in with your email and password; you can link Google again from your profile. If you didn't unlink it, change your password now.",
+    ],
     'team_welcome' => [
         'subject' => 'Welcome to :company',
         'body' => "You've joined :company on Lesily. Sign in to get started.",

@@ -8,6 +8,7 @@ enum NotificationType: string
     case GeneralAccountNotice = 'general_account_notice';
     case PasswordChanged = 'password_changed';
     case GoogleAccountLinked = 'google_account_linked';
+    case GoogleAccountUnlinked = 'google_account_unlinked';
     case TeamWelcome = 'team_welcome';
     case OwnershipReceived = 'ownership_received';
     case DsarExportReady = 'dsar_export_ready';
@@ -31,6 +32,7 @@ enum NotificationType: string
             self::AccountSecurityAlert => true,
             self::PasswordChanged => true,
             self::GoogleAccountLinked => true,
+            self::GoogleAccountUnlinked => true,
             self::OwnershipReceived => true,
             self::DsarExportReady => true,
             self::DsarExportFailed => true,

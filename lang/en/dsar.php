@@ -179,6 +179,7 @@ return [
             'general_account_notice' => 'Account notice',
             'password_changed' => 'Password changed',
             'google_account_linked' => 'Google account linked',
+            'google_account_unlinked' => 'Google account unlinked',
             'team_welcome' => 'Welcome to the team',
             'ownership_received' => 'You became the owner',
             'dsar_export_ready' => 'Data export ready',
