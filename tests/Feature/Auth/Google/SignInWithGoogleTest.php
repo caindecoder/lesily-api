@@ -11,6 +11,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
+use App\Foundation\Auth\UseCases\Google\GoogleIdentity;
 
 class SignInWithGoogleTest extends AuthTestCase
 {
@@ -69,6 +70,65 @@ class SignInWithGoogleTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_no_account_uses_the_verified_google_email_then_signup_is_offered_prefilled_and_nothing_is_created(): void
+    {
+        // Given a verified Google account whose email no Lesily account uses
+        $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('a-new-subject', 'nimal@gmail.com', true, 'Nimal Silva'));
+        $users = User::query()->count();
+
+        // When a Google sign-in arrives for it
+        $response = $this->signInWithGoogle();
+
+        // Then signup is offered pre-filled from Google, nothing is created, and the failure is logged
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::GoogleAccountNotRegistered);
+        $googleEmail = $response->json('google_email');
+        $googleName = $response->json('google_name');
+        $this->assertIsString($googleEmail);
+        $this->assertIsString($googleName);
+        $this->assertSame(['nimal@gmail.com', 'Nimal Silva'], [$googleEmail, $googleName]);
+        $this->assertSame($users, User::query()->count());
+        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::UnknownAccount, null);
+        $this->assertAnsweredAs($entry, Response::HTTP_NOT_FOUND, ApiErrorCode::GoogleAccountNotRegistered);
+    }
+
+    #[Test]
+    #[DataProvider('provideUnverifiedGoogleEmails')]
+    public function when_google_has_not_verified_the_email_then_no_account_is_matched_by_it(string $email): void
+    {
+        // Given a Google account not linked to Lesily whose email Google has not verified
+        $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('a-new-subject', $email, false, 'Someone'));
+        $users = User::query()->count();
+
+        // When a Google sign-in arrives for it
+        $response = $this->signInWithGoogle();
+
+        // Then it is refused the same way whether or not an account uses the email, and nothing changes
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::EmailNotVerified);
+        $response->assertJsonPath('message', 'Verify your email, or sign in with your password.');
+        $response->assertJsonMissingPath('google_email');
+        $this->assertNothingSignedIn($this->alice);
+        $this->assertSame($users, User::query()->count());
+        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::EmailNotVerified, null);
+    }
+
+    #[Test]
+    public function when_the_account_is_linked_to_a_different_google_account_then_sign_in_is_refused(): void
+    {
+        // Given Alice linked to one Google account, on a Starter company, and a token from another Google account with her email
+        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('another-google-subject', self::LOGIN_EMAIL, true, 'Alice Perera'));
+
+        // When a Google sign-in arrives with that token
+        $response = $this->signInWithGoogle();
+
+        // Then it is refused, Alice keeps her own link, and the mismatch is logged
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::GoogleAlreadyLinked);
+        $response->assertJsonPath('message', 'This account is linked to a different Google account. Sign in with your password.');
+        $this->assertNothingSignedIn($this->alice);
+        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::GoogleAccountMismatch, $this->alice);
+    }
+
+    #[Test]
     public function when_a_google_linked_user_signs_in_then_a_session_is_issued(): void
     {
         // Given Alice linked to Google on a Starter company, holding a valid token for that account
@@ -83,5 +143,14 @@ class SignInWithGoogleTest extends AuthTestCase
         $this->assertSignedInWithoutLink($response, $this->alice);
         $this->assertLastLoggedAtStamped($this->alice);
         $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $this->alice);
+    }
+
+    /** @return array<string, array{string}> */
+    public static function provideUnverifiedGoogleEmails(): array
+    {
+        return [
+            'an account uses it' => [self::LOGIN_EMAIL],
+            'no account uses it' => ['nimal@gmail.com'],
+        ];
     }
 }

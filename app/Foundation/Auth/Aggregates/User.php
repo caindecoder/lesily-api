@@ -118,7 +118,7 @@ class User extends AggregateRoot
     public function linkGoogleOAuth(string $googleSubjectId): static
     {
         if ($this->googleLinked) {
-            throw new GoogleAlreadyLinkedException;
+            throw GoogleAlreadyLinkedException::alreadyLinked();
         }
 
         return $this->recordThat(new UserGoogleOAuthLinked(

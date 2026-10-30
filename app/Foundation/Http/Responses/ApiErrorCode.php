@@ -25,6 +25,8 @@ enum ApiErrorCode: string
     case GoogleEmailMismatch = 'GOOGLE_EMAIL_MISMATCH';
     case GoogleAccountInUse = 'GOOGLE_ACCOUNT_IN_USE';
     case GoogleAlreadyLinked = 'GOOGLE_ALREADY_LINKED';
+    case GoogleAccountNotRegistered = 'GOOGLE_ACCOUNT_NOT_REGISTERED';
+    case EmailNotVerified = 'EMAIL_NOT_VERIFIED';
     case ResetLinkInvalid = 'RESET_LINK_INVALID';
     case InviteInvalid = 'INVITE_INVALID';
     case InviteNotPending = 'INVITE_NOT_PENDING';
@@ -76,6 +78,8 @@ enum ApiErrorCode: string
             self::GoogleEmailMismatch => Response::HTTP_FORBIDDEN,
             self::GoogleAccountInUse => Response::HTTP_CONFLICT,
             self::GoogleAlreadyLinked => Response::HTTP_CONFLICT,
+            self::GoogleAccountNotRegistered => Response::HTTP_NOT_FOUND,
+            self::EmailNotVerified => Response::HTTP_FORBIDDEN,
             self::ResetLinkInvalid => Response::HTTP_UNPROCESSABLE_ENTITY,
             self::InviteInvalid => Response::HTTP_UNPROCESSABLE_ENTITY,
             self::InviteNotPending => Response::HTTP_UNPROCESSABLE_ENTITY,

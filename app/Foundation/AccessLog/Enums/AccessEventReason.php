@@ -11,4 +11,6 @@ enum AccessEventReason: string
     case ChallengeExpired = 'challenge_expired';
     case RecoveryCode = 'recovery_code';
     case InvalidGoogleToken = 'invalid_google_token';
+    case EmailNotVerified = 'email_not_verified';
+    case GoogleAccountMismatch = 'google_account_mismatch';
 }

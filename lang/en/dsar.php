@@ -210,6 +210,8 @@ return [
             'challenge_expired' => 'The two-step sign-in expired',
             'recovery_code' => 'Used a recovery code',
             'invalid_google_token' => 'Google could not confirm the sign-in',
+            'email_not_verified' => 'Email not verified',
+            'google_account_mismatch' => 'The account is linked to a different Google account',
         ],
     ],
 ];
