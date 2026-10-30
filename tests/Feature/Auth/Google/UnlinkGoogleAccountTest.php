@@ -1,0 +1,118 @@
+<?php
+
+namespace Tests\Feature\Auth\Google;
+
+use App\Models\User;
+use Illuminate\Http\Response;
+use Tests\Feature\Auth\AuthTestCase;
+use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+
+class UnlinkGoogleAccountTest extends AuthTestCase
+{
+    protected User $alice;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config(['app.debug' => false]);
+        $this->alice = User::factory()
+            ->withEmail(self::LOGIN_EMAIL)
+            ->withPassword(self::LOGIN_PASSWORD)
+            ->linkedToGoogle(self::GOOGLE_SUBJECT)
+            ->create();
+    }
+
+    #[Test]
+    public function when_not_signed_in_then_the_unlink_is_refused_as_unauthenticated(): void
+    {
+        // Given no session
+
+        // When an unlink is attempted
+        $response = $this->deleteJson('/api/v1/me/google', ['password' => self::LOGIN_PASSWORD]);
+
+        // Then the Sanctum guard refuses it before any work runs
+        $this->assertUnauthenticated($response);
+    }
+
+    #[Test]
+    public function when_no_idempotency_key_is_sent_then_the_unlink_is_refused(): void
+    {
+        // Given Alice signed in
+        $token = $this->aSessionFor($this->alice)->plainTextToken;
+
+        // When the unlink carries no Idempotency-Key header
+        $response = $this->withToken($token)->deleteJson('/api/v1/me/google', ['password' => self::LOGIN_PASSWORD]);
+
+        // Then the mutation is refused before any work runs
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::IdempotencyKeyRequired);
+        $this->assertStillLinked(1);
+    }
+
+    /** @param  array<string, mixed>  $payload */
+    #[Test]
+    #[DataProvider('provideInvalidUnlinkPayloads')]
+    public function when_the_password_is_missing_then_the_unlink_is_rejected(array $payload, string $expectedMessage): void
+    {
+        // Given Alice signed in
+        $token = $this->aSessionFor($this->alice)->plainTextToken;
+
+        // When she unlinks without a usable password
+        $response = $this->unlinkGoogle($token, $payload);
+
+        // Then the request is rejected as a validation error naming the password
+        $this->assertValidationRejected($response, 'password', $expectedMessage);
+    }
+
+    #[Test]
+    public function when_google_is_not_linked_then_the_unlink_is_refused(): void
+    {
+        // Given Bob, never linked to Google, signed in on two devices
+        $bob = $this->aRegisteredUser('bob@contoso.lk');
+        $token = $this->aSessionFor($bob)->plainTextToken;
+        $this->aSessionFor($bob, 'mobile');
+
+        // When he unlinks Google with his correct password
+        $response = $this->unlinkGoogle($token);
+
+        // Then there is nothing to unlink, and nothing changes
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::GoogleNotLinked);
+        $response->assertJsonPath('message', 'Google is not linked to this account.');
+        $this->assertSame(2, $bob->tokens()->count(), 'A not-linked refusal must end no session.');
+    }
+
+    #[Test]
+    public function when_too_many_unlink_attempts_are_made_then_the_request_is_throttled(): void
+    {
+        // Given Alice spending the shared per-IP auth-tier allowance on wrong passwords
+        $token = $this->aSessionFor($this->alice)->plainTextToken;
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $this->unlinkGoogle($token, ['password' => 'not-my-password']);
+        }
+
+        // When she tries once more
+        $response = $this->unlinkGoogle($token, ['password' => 'not-my-password']);
+
+        // Then the over-limit attempt is throttled
+        $this->assertThrottled($response);
+    }
+
+    /** @return array<string, array{array<string, mixed>, string}> */
+    public static function provideInvalidUnlinkPayloads(): array
+    {
+        return [
+            'missing' => [[], 'The password field is required.'],
+            'not a string' => [['password' => 123], 'The password field must be a string.'],
+        ];
+    }
+
+    protected function assertStillLinked(int $sessions): void
+    {
+        $this->assertSame(self::GOOGLE_SUBJECT, $this->alice->fresh()?->google_id, 'A refused unlink must keep the link.');
+        $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $this->alice->getKey())->count());
+        $this->assertSame($sessions, $this->alice->tokens()->count(), 'A refused unlink must end no session.');
+    }
+}

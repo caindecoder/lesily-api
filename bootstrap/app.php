@@ -23,6 +23,7 @@ use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Companies\Exceptions\SelfTransferBlockedException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
+use App\Foundation\Auth\Exceptions\GoogleNotLinkedException;
 use App\Foundation\Http\Exceptions\ConsentRequiredException;
 use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use App\Foundation\Auth\Exceptions\EmailNotVerifiedException;
@@ -226,6 +227,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (GoogleAlreadyLinkedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::GoogleAlreadyLinked,
             $e->getMessage(),
+        ));
+
+        // An unlink on an account with no Google link (UC-1-003 P2a). 422 — there is nothing to unlink.
+        $exceptions->render(fn (GoogleNotLinkedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::GoogleNotLinked,
+            'Google is not linked to this account.',
         ));
 
         // Google's signing keys could not be fetched — a retry hint, never a 401 that reads as a bad token.

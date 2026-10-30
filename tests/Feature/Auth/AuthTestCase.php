@@ -504,6 +504,12 @@ abstract class AuthTestCase extends TestCase
         return $this->postJson('/api/v1/me/google', $payload, ['Idempotency-Key' => (string) Str::uuid()]);
     }
 
+    /** @param  array<string, mixed>  $payload */
+    protected function unlinkGoogle(string $token, array $payload = ['password' => self::LOGIN_PASSWORD]): TestResponse
+    {
+        return $this->withToken($token)->deleteJson('/api/v1/me/google', $payload, ['Idempotency-Key' => (string) Str::uuid()]);
+    }
+
     /** @return array<string, array{array<string, mixed>, string}> */
     public static function provideMalformedIdTokens(): array
     {
