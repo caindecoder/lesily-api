@@ -248,8 +248,9 @@ class LinkGoogleAccountTest extends AuthTestCase
 
         // Then she is linked again, the unlink marker is cleared, and the re-link is recorded
         $response->assertNoContent();
-        $this->assertSame(self::GOOGLE_SUBJECT, $this->alice->fresh()?->google_id);
-        $this->assertNull($this->alice->fresh()?->google_unlinked_at, 'A re-link must turn Google sign-in back on (G12).');
+        $stored = User::query()->whereKey($this->alice->getKey())->firstOrFail();
+        $this->assertSame(self::GOOGLE_SUBJECT, $stored->google_id);
+        $this->assertNull($stored->google_unlinked_at, 'A re-link must turn Google sign-in back on (G12).');
         $this->assertSame(2, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
     }
 

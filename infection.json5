@@ -319,12 +319,12 @@
         // DB::transaction, so the call is a review-guarded invariant, not dead code
         // (never delete it under amendment Q). REMOVE WHEN consumeRecoveryCode() gains
         // a caller that does not save the user afterwards. Pinned so the Cache::lock
-        // (:98), consumeRecoveryCode() (:103), DB::transaction (:125) and ->persist()
-        // (:129) calls stay killable.
+        // (:106), consumeRecoveryCode() (:111), DB::transaction (:133) and ->persist()
+        // (:137) calls stay killable.
         "MethodCallRemoval": {
             ignore: [
-                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode::99",
-                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeRecoveryCode::127",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode::107",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeRecoveryCode::135",
             ],
         },
         // L-EQUIV-MISC: array_values() re-indexes the remaining codes for readers that

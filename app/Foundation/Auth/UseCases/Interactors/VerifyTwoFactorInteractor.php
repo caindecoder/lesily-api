@@ -51,7 +51,7 @@ class VerifyTwoFactorInteractor
 
         $user = User::query()->findOrFail($challenge->userId);
 
-        // A pending first link meets an unlink made during the challenge (G12, GU3): refused before any factor is spent.
+        // A pending link meets an unlink made during the challenge (G12): refused before a factor is spent.
         if ($challenge->pendingGoogleSubjectId !== null && $user->google_unlinked_at !== null) {
             $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::GoogleUnlinked, $user);
 
