@@ -191,6 +191,10 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
         return [
             'google answers an error' => [fn (): ResponseInterface => new Response(500)],
             'google is unreachable' => [fn (): ResponseInterface => throw new ConnectException('Connection refused', new Request('GET', self::GOOGLE_CERTS_URL))],
+            'google answers without keys' => [fn (): ResponseInterface => new Response(200, [], '{}')],
+            'google answers with something other than JSON' => [fn (): ResponseInterface => new Response(200, [], '<html>maintenance</html>')],
+            'google answers with a key without its algorithm' => [fn (): ResponseInterface => new Response(200, [], '{"keys":[{"kty":"RSA","kid":"test-key"}]}')],
+            'google answers with keys of two algorithms' => [fn (): ResponseInterface => new Response(200, [], '{"keys":[{"kty":"RSA","kid":"a","alg":"RS256"},{"kty":"EC","kid":"b","alg":"ES256"}]}')],
         ];
     }
 
