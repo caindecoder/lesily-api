@@ -94,7 +94,7 @@ class UserProjector extends Projector
     {
         UserReadModel::query()
             ->whereKey($event->userId)
-            ->update(['google_id' => $event->googleSubjectId]);
+            ->update(['google_id' => $event->googleSubjectId, 'google_unlinked_at' => null]);
     }
 
     public function onUserGoogleOAuthUnlinked(UserGoogleOAuthUnlinked $event): void
