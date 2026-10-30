@@ -58,19 +58,25 @@ class VerifyTwoFactorInteractor
         if ($this->totp->verify((string) $user->two_factor_secret, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return $this->finisher->finish(new PendingSession($user, $command->deviceName));
+            return $this->finish(new PendingSession($user, $command->deviceName, googleSubjectToLink: $challenge->pendingGoogleSubjectId));
         }
 
         if ($this->consumeMatchingRecoveryCode($user, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return $this->finisher->finish(new PendingSession($user, $command->deviceName, AccessEventReason::RecoveryCode));
+            return $this->finish(new PendingSession($user, $command->deviceName, AccessEventReason::RecoveryCode, $challenge->pendingGoogleSubjectId));
         }
 
         $this->challenges->recordFailure($command->challengeId);
         $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::WrongTwoFactorCode, $user);
 
         throw new TwoFactorVerificationFailedException;
+    }
+
+    /** A first-time Google link pending in the challenge commits with the session (G13). */
+    protected function finish(PendingSession $pending): SessionIssued
+    {
+        return DB::transaction(fn (): SessionIssued => $this->finisher->finish($pending));
     }
 
     /**

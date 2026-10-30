@@ -238,7 +238,7 @@
         // :50 so its allowance spend stays killable; invite's spend sits in execute().
         "IncrementInteger": {
             ignore: [
-                "App\\Foundation\\Auth\\Totp\\CacheLoginChallengeStore::recordFailure::53",
+                "App\\Foundation\\Auth\\Totp\\CacheLoginChallengeStore::recordFailure::55",
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\RegenerateRecoveryCodesInteractor::execute",
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode",
                 "App\\Companies\\Memberships\\UseCases\\Interactors\\InviteUserInteractor::invite",
@@ -247,7 +247,7 @@
         },
         "DecrementInteger": {
             ignore: [
-                "App\\Foundation\\Auth\\Totp\\CacheLoginChallengeStore::recordFailure::53",
+                "App\\Foundation\\Auth\\Totp\\CacheLoginChallengeStore::recordFailure::55",
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\RegenerateRecoveryCodesInteractor::execute",
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode",
             ],
@@ -321,8 +321,8 @@
         // (:131) calls stay killable.
         "MethodCallRemoval": {
             ignore: [
-                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode::87",
-                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeRecoveryCode::115",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode::93",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeRecoveryCode::121",
             ],
         },
         // L-EQUIV-MISC: array_values() re-indexes the remaining codes for readers that

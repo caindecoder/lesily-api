@@ -116,6 +116,22 @@ class LoginChallengeStoreTest extends TestCase
     }
 
     #[Test]
+    public function when_a_challenge_carries_a_pending_google_link_then_it_survives_a_failed_attempt(): void
+    {
+        // Given a challenge opened with a pending Google link, then failed once
+        $challengeId = $this->store()->create((string) Str::uuid(), 'a-google-subject');
+        $this->store()->recordFailure($challengeId);
+
+        // When the challenge is resolved
+        $challenge = $this->store()->find($challengeId);
+
+        // Then it still carries the pending link, one attempt down
+        $this->assertNotNull($challenge);
+        $this->assertSame('a-google-subject', $challenge->pendingGoogleSubjectId);
+        $this->assertSame(LoginChallengeStore::MAX_ATTEMPTS - 1, $challenge->attemptsRemaining);
+    }
+
+    #[Test]
     public function when_a_challenge_is_created_then_it_resolves_to_its_user(): void
     {
         // Given a challenge opened for a user

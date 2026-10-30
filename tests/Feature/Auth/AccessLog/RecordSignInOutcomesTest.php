@@ -153,7 +153,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $this->aTwoFactorUser();
         $this->app->bind(LoginChallengeStore::class, fn (): LoginChallengeStore => new class extends CacheLoginChallengeStore
         {
-            public function create(string $userId): string
+            public function create(string $userId, ?string $pendingGoogleSubjectId = null): string
             {
                 throw new RuntimeException('Induced challenge-store failure.');
             }

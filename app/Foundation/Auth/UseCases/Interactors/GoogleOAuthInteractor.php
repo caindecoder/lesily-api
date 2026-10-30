@@ -9,6 +9,7 @@ use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Auth\UseCases\PendingSession;
 use App\Foundation\Auth\UseCases\SignInFinisher;
+use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\UseCases\DeviceLimitGuard;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\Auth\UseCases\Google\GoogleIdentity;
@@ -32,6 +33,7 @@ class GoogleOAuthInteractor
     public function __construct(
         protected readonly GoogleIdTokenVerifier $verifier,
         protected readonly AccessLogRecorder $accessLog,
+        protected readonly LoginChallengeStore $challenges,
         protected readonly DeviceLimitGuard $deviceLimitGuard,
         protected readonly SignInFinisher $finisher,
     ) {}
@@ -46,6 +48,14 @@ class GoogleOAuthInteractor
 
         if ($googleSubjectToLink !== null) {
             $this->refuseUnverifiedEmail($user);
+        }
+
+        // A 2FA user's first link waits for the second factor (G13): it rides in the challenge.
+        if ($user->two_factor_confirmed_at !== null) {
+            $challengeId = $this->challenges->create($user->getKey(), $googleSubjectToLink);
+            $this->accessLog->note(AccessEvent::LoginChallenged, null, $user);
+
+            return new ChallengeRequired($challengeId, now()->addMinutes(LoginChallengeStore::TTL_MINUTES));
         }
 
         $this->deviceLimitGuard->enforce($user);

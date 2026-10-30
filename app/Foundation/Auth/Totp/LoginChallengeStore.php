@@ -15,8 +15,8 @@ interface LoginChallengeStore
 
     public const int MAX_ATTEMPTS = 5;
 
-    /** Open a challenge for the authenticated user; returns the opaque challenge id. */
-    public function create(string $userId): string;
+    /** Open a challenge for the authenticated user (with a first-time Google link to record at verify); returns the opaque challenge id. */
+    public function create(string $userId, ?string $pendingGoogleSubjectId = null): string;
 
     /** Resolve a live challenge, or null if it expired / was never created / is spent. */
     public function find(string $challengeId): ?TwoFactorChallenge;

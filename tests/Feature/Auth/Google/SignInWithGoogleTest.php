@@ -11,6 +11,7 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
 use App\Foundation\Auth\UseCases\Google\GoogleIdentity;
@@ -187,6 +188,24 @@ class SignInWithGoogleTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_a_two_factor_challenge_is_abandoned_then_nothing_is_linked(): void
+    {
+        // Given Dave, enrolled in 2FA and not linked, challenged by a first Google sign-in
+        $dave = $this->aTwoFactorUnlinkedStarterUser();
+        $challengeId = $this->signInWithGoogle()->json('data.challenge_id');
+        $this->assertIsString($challengeId);
+
+        // When the challenge expires before the second factor arrives
+        $this->travel(LoginChallengeStore::TTL_MINUTES + 1)->minutes();
+        $this->fakeTotpVerifier(true);
+        $response = $this->verify($challengeId, '123456');
+
+        // Then the verify is refused and Google is never linked
+        $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::TwoFactorChallengeNotFound);
+        $this->assertNull($dave->fresh()?->google_id);
+    }
+
+    #[Test]
     public function when_a_google_linked_user_with_an_unverified_email_signs_in_then_a_session_is_issued(): void
     {
         // Given Bob linked to Google with an unverified Lesily email, on a Starter company
@@ -214,6 +233,45 @@ class SignInWithGoogleTest extends AuthTestCase
         // Then the sign-in fails and the link is not recorded either
         $response->assertInternalServerError();
         $this->assertNull($carol->fresh()?->google_id);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
+    }
+
+    #[Test]
+    public function when_a_wrong_second_factor_is_entered_then_the_pending_link_survives_to_the_right_one(): void
+    {
+        // Given Dave challenged by a first Google sign-in, who then enters a wrong code
+        $this->freezeTime();
+        $dave = $this->aTwoFactorUnlinkedStarterUser();
+        $challengeId = $this->signInWithGoogle()->json('data.challenge_id');
+        $this->assertIsString($challengeId);
+        $this->fakeTotpVerifier(false);
+        $this->verify($challengeId, '000000')->assertUnauthorized();
+
+        // When Dave enters the right code
+        $this->fakeTotpVerifier(true);
+        $response = $this->verify($challengeId, '123456');
+
+        // Then he is signed in and Google is linked with that session
+        $response->assertOk();
+        $this->assertGoogleLinkedWith($dave, 'daves-google-subject');
+    }
+
+    #[Test]
+    public function when_an_already_linked_two_factor_user_passes_the_challenge_then_no_second_link_is_recorded(): void
+    {
+        // Given Erin, linked to Google and enrolled in 2FA, challenged by a Google sign-in
+        $erin = User::factory()->withEmail('erin@contoso.lk')->withTwoFactor()->linkedToGoogle('erins-google-subject')->create();
+        $this->memberOfCompanyOnPlan($erin, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('erins-google-subject', 'erin@contoso.lk', true, 'Erin'));
+        $challengeId = $this->signInWithGoogle()->json('data.challenge_id');
+        $this->assertIsString($challengeId);
+
+        // When Erin passes the second factor
+        $this->fakeTotpVerifier(true);
+        $response = $this->verify($challengeId, '123456');
+
+        // Then she is signed in and no link is recorded
+        $response->assertOk();
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
     }
 
@@ -268,6 +326,42 @@ class SignInWithGoogleTest extends AuthTestCase
         $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $carol);
     }
 
+    #[Test]
+    public function when_a_two_factor_user_signs_in_with_google_then_a_challenge_is_issued_and_nothing_is_linked_yet(): void
+    {
+        // Given Dave, enrolled in 2FA and not linked, on a Starter company
+        $dave = $this->aTwoFactorUnlinkedStarterUser();
+
+        // When Dave signs in with Google for the first time
+        $response = $this->signInWithGoogle();
+
+        // Then the login challenge is returned, nothing is linked yet, and the challenge is logged
+        $response->assertAccepted();
+        $challengeId = $response->json('data.challenge_id');
+        $this->assertIsString($challengeId);
+        $this->assertNothingSignedIn($dave);
+        $this->assertAccessLogged(AccessEvent::LoginChallenged, null, $dave);
+    }
+
+    #[Test]
+    public function when_the_second_factor_passes_then_google_is_linked_with_the_session(): void
+    {
+        // Given Dave challenged by a first Google sign-in
+        $this->freezeTime();
+        $dave = $this->aTwoFactorUnlinkedStarterUser();
+        $challengeId = $this->signInWithGoogle()->json('data.challenge_id');
+        $this->assertIsString($challengeId);
+
+        // When Dave passes the second factor
+        $this->fakeTotpVerifier(true);
+        $response = $this->verify($challengeId, '123456');
+
+        // Then he is signed in and Google is linked with that session
+        $response->assertOk();
+        $this->assertSame(1, $dave->tokens()->count());
+        $this->assertGoogleLinkedWith($dave, 'daves-google-subject');
+    }
+
     /** @return array<string, array{string}> */
     public static function provideUnverifiedGoogleEmails(): array
     {
@@ -275,6 +369,15 @@ class SignInWithGoogleTest extends AuthTestCase
             'an account uses it' => [self::LOGIN_EMAIL],
             'no account uses it' => ['nimal@gmail.com'],
         ];
+    }
+
+    protected function aTwoFactorUnlinkedStarterUser(): User
+    {
+        $dave = User::factory()->withEmail('dave@contoso.lk')->withTwoFactor()->create();
+        $this->memberOfCompanyOnPlan($dave, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('daves-google-subject', 'dave@contoso.lk', true, 'Dave'));
+
+        return $dave;
     }
 
     protected function aVerifiedUnlinkedStarterUser(): User
