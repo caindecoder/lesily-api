@@ -9,6 +9,7 @@ use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Events\UserGoogleOAuthUnlinked;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -58,7 +59,7 @@ class UnlinkGoogleAccountTest extends AuthTestCase
     /** @param  array<string, mixed>  $payload */
     #[Test]
     #[DataProvider('provideInvalidUnlinkPayloads')]
-    public function when_the_password_is_missing_then_the_unlink_is_rejected(array $payload, string $expectedMessage): void
+    public function when_the_password_is_missing_or_malformed_then_the_unlink_is_rejected(array $payload, string $expectedMessage): void
     {
         // Given Alice signed in
         $token = $this->aSessionFor($this->alice)->plainTextToken;
@@ -66,8 +67,9 @@ class UnlinkGoogleAccountTest extends AuthTestCase
         // When she unlinks without a usable password
         $response = $this->unlinkGoogle($token, $payload);
 
-        // Then the request is rejected as a validation error naming the password
+        // Then the request is rejected as a validation error naming the password, and Google stays linked
         $this->assertValidationRejected($response, 'password', $expectedMessage);
+        $this->assertStillLinked(1);
     }
 
     #[Test]
@@ -82,9 +84,23 @@ class UnlinkGoogleAccountTest extends AuthTestCase
         $response = $this->unlinkGoogle($token);
 
         // Then there is nothing to unlink, and nothing changes
-        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::GoogleNotLinked);
-        $response->assertJsonPath('message', 'Google is not linked to this account.');
-        $this->assertSame(2, $bob->tokens()->count(), 'A not-linked refusal must end no session.');
+        $this->assertNotLinkedRefusal($response, $bob);
+    }
+
+    #[Test]
+    public function when_google_is_not_linked_then_the_password_is_never_checked(): void
+    {
+        // Given Bob, never linked to Google, signed in on two devices
+        $bob = $this->aRegisteredUser('bob@contoso.lk');
+        $token = $this->aSessionFor($bob)->plainTextToken;
+        $this->aSessionFor($bob, 'mobile');
+
+        // When he unlinks Google with a wrong password
+        $response = $this->unlinkGoogle($token, ['password' => 'not-my-password']);
+
+        // Then the not-linked refusal answers first and no failed re-check is logged
+        $this->assertNotLinkedRefusal($response, $bob);
+        $this->assertNoAccessLogged(AccessEvent::ReauthFailed);
     }
 
     #[Test]
@@ -185,6 +201,15 @@ class UnlinkGoogleAccountTest extends AuthTestCase
             ['userId' => $this->alice->getKey(), 'unlinkedAt' => now()->toAtomString()],
             Arr::only($unlinked->event_properties, ['userId', 'unlinkedAt']),
         );
+    }
+
+    protected function assertNotLinkedRefusal(TestResponse $response, User $user): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::GoogleNotLinked);
+        $response->assertJsonPath('message', 'Google is not linked to this account.');
+        $this->assertSame(2, $user->tokens()->count(), 'A not-linked refusal must end no session.');
+        $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $user->getKey())->count());
+        $this->assertNull($user->fresh()?->google_unlinked_at, 'A not-linked refusal must not mark an unlink.');
     }
 
     protected function assertStillLinked(int $sessions): void

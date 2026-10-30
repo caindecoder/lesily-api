@@ -484,8 +484,9 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
-     * The action succeeded (204), the user's other device no longer authenticates, and the
-     * current session survives. Shared by the 2FA disable (UC-1-007) and Google unlink suites.
+     * The action succeeded (204), the user's other device no longer authenticates (probeWith forgets
+     * the guards, forcing a fresh DB re-check), and the current session survives. Shared by the
+     * change-password (UC-1-016), 2FA disable (UC-1-007) and Google unlink suites.
      */
     protected function assertOtherSessionsRevoked(TestResponse $response, string $currentToken, string $otherToken): void
     {

@@ -302,7 +302,7 @@
         },
         // L-EQUIV-MISC: whereKey(null) yields IS NULL on a PK (the same empty result);
         // where('user_id', null) matches nothing; the recovery loop's early `return;`
-        // (:108) only skips later iterations - $matched cannot change once true, and a
+        // (:114) only skips later iterations - $matched cannot change once true, and a
         // second iteration could consume another code only if two stored hashes matched
         // the same plaintext (bcrypt makes that unreachable).
         "ReturnRemoval": {
@@ -312,8 +312,8 @@
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode",
             ],
         },
-        // L-EQUIV-MISC: $user->refresh() at :99 matters only across concurrent requests
-        // (code review guards it; no single-process test can); $user->save() at :127 is
+        // L-EQUIV-MISC: $user->refresh() at :107 matters only across concurrent requests
+        // (code review guards it; no single-process test can); $user->save() at :135 is
         // masked by SignInFinisher::finish()'s later save on the same instance - equivalent only
         // for THIS caller, and the mutant does move the column write outside the
         // DB::transaction, so the call is a review-guarded invariant, not dead code

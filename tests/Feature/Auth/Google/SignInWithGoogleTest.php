@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth\Google;
 
 use App\Models\User;
 use Illuminate\Http\Response;
+use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
@@ -145,19 +146,20 @@ class SignInWithGoogleTest extends AuthTestCase
     #[Test]
     public function when_the_account_unlinked_google_then_a_google_sign_in_is_refused(): void
     {
-        // Given Erin, who unlinked Google, on a Starter company, and her verified Google account
+        // Given Erin, who unlinked Google, on a Free company only, and her verified Google account
         $erin = User::factory()->withEmail('erin@contoso.lk')->unlinkedFromGoogle()->create();
-        $this->memberOfCompanyOnPlan($erin, BillingPlan::Starter);
+        $this->memberOfCompanyOnPlan($erin, BillingPlan::Free);
         $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('erins-google-subject', 'erin@contoso.lk', true, 'Erin'));
 
         // When a Google sign-in arrives with that token
         $response = $this->signInWithGoogle();
 
-        // Then it is refused until she re-links from her profile, nothing is linked, and the refusal is logged
+        // Then the unlink answers before the plan, nothing is linked, and the refusal is logged
         $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::GoogleSignInUnlinked);
         $response->assertJsonPath('message', 'Google sign-in is off for this account. Sign in with your password, then link Google from your profile.');
         $this->assertNothingSignedIn($erin);
-        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::GoogleUnlinked, $erin);
+        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::GoogleUnlinked, $erin);
+        $this->assertAnsweredAs($entry, Response::HTTP_CONFLICT, ApiErrorCode::GoogleSignInUnlinked);
     }
 
     #[Test]
@@ -278,28 +280,8 @@ class SignInWithGoogleTest extends AuthTestCase
         // When the second factor arrives
         $response = $this->verify($challengeId, '123456');
 
-        // Then the pending link is refused: no session, no second link, and the refusal is logged
-        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::GoogleSignInUnlinked);
-        $this->assertSame(0, $dave->tokens()->count(), 'A refused verify must issue no token.');
-        $this->assertNull($dave->fresh()?->google_id);
-        $this->assertSame(1, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
-        $this->assertLoginFailedFor($dave, AccessEventReason::GoogleUnlinked);
-    }
-
-    #[Test]
-    public function when_a_user_who_unlinked_google_passes_a_password_sign_in_challenge_then_a_session_is_issued(): void
-    {
-        // Given Frank, enrolled in 2FA, who unlinked Google, with a password sign-in challenge open
-        $frank = User::factory()->withEmail('frank@contoso.lk')->withTwoFactor()->unlinkedFromGoogle()->create();
-        $challengeId = $this->openChallenge($frank);
-        $this->fakeTotpVerifier(true);
-
-        // When the second factor arrives
-        $response = $this->verify($challengeId, '123456');
-
-        // Then the unlink never blocks a password sign-in
-        $response->assertOk();
-        $this->assertSame(1, $frank->tokens()->count());
+        // Then the pending link is refused before the factor is spent: no session, no second link, and the refusal is logged
+        $this->assertPendingLinkRefused($response, $dave, $challengeId);
     }
 
     #[Test]
@@ -397,6 +379,22 @@ class SignInWithGoogleTest extends AuthTestCase
         // Then he is signed in and Google is linked with that session
         $response->assertOk();
         $this->assertGoogleLinkedWith($dave, 'daves-google-subject');
+    }
+
+    #[Test]
+    public function when_a_user_who_unlinked_google_passes_a_password_sign_in_challenge_then_a_session_is_issued(): void
+    {
+        // Given Frank, enrolled in 2FA, who unlinked Google, with a password sign-in challenge open
+        $frank = User::factory()->withEmail('frank@contoso.lk')->withTwoFactor()->unlinkedFromGoogle()->create();
+        $challengeId = $this->openChallenge($frank);
+        $this->fakeTotpVerifier(true);
+
+        // When the second factor arrives
+        $response = $this->verify($challengeId, '123456');
+
+        // Then the unlink never blocks a password sign-in
+        $response->assertOk();
+        $this->assertSame(1, $frank->tokens()->count());
     }
 
     #[Test]
@@ -530,11 +528,17 @@ class SignInWithGoogleTest extends AuthTestCase
         ];
     }
 
-    protected function assertLoginFailedFor(User $user, AccessEventReason $reason): void
+    protected function assertPendingLinkRefused(TestResponse $response, User $user, string $challengeId): void
     {
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::GoogleSignInUnlinked);
+        $this->assertSame(0, $user->tokens()->count(), 'A refused verify must issue no token.');
+        $this->assertNull($user->fresh()?->google_id);
+        $this->assertSame(1, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
+        $this->assertNotNull(app(LoginChallengeStore::class)->find($challengeId), 'The refusal must spend no factor.');
+
         $failed = AccessLogEntry::query()->where('event', AccessEvent::LoginFailed)->sole();
-        $this->assertSame($reason, $failed->reason);
-        $this->assertSame($user->getKey(), $failed->user_id);
+        $this->assertSame([AccessEventReason::GoogleUnlinked, $user->getKey()], [$failed->reason, $failed->user_id]);
+        $this->assertAnsweredAs($failed, Response::HTTP_CONFLICT, ApiErrorCode::GoogleSignInUnlinked);
     }
 
     protected function aGoogleChallenge(): string
