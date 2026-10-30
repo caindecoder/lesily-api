@@ -34,7 +34,7 @@ class GoogleAuthIdTokenVerifier implements GoogleIdTokenVerifier
                 'audience' => $this->clientId,
                 'certsLocation' => $this->certsLocation,
                 // google/auth's own key has a '|', which its FileSystemCacheItemPool refuses.
-                'cacheKey' => 'google_id_token_certs_'.sha1($this->certsLocation),
+                'cacheKey' => 'google_id_token_certs_'.hash('sha256', $this->certsLocation),
                 'throwException' => true,
             ]);
 
