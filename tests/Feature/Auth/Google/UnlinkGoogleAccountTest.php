@@ -85,6 +85,22 @@ class UnlinkGoogleAccountTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_password_is_wrong_then_google_stays_linked(): void
+    {
+        // Given Alice signed in on two devices
+        $token = $this->aSessionFor($this->alice)->plainTextToken;
+        $this->aSessionFor($this->alice, 'mobile');
+
+        // When she unlinks Google with a wrong password
+        $response = $this->unlinkGoogle($token, ['password' => 'not-my-password']);
+
+        // Then it is refused and Google stays linked
+        $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::IncorrectPassword);
+        $response->assertJsonPath('message', 'Incorrect password. Please try again.');
+        $this->assertStillLinked(2);
+    }
+
+    #[Test]
     public function when_too_many_unlink_attempts_are_made_then_the_request_is_throttled(): void
     {
         // Given Alice spending the shared per-IP auth-tier allowance on wrong passwords
