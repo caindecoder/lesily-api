@@ -10,4 +10,8 @@ enum AccessEventReason: string
     case WrongTwoFactorCode = 'wrong_two_factor_code';
     case ChallengeExpired = 'challenge_expired';
     case RecoveryCode = 'recovery_code';
+    case InvalidGoogleToken = 'invalid_google_token';
+    case EmailNotVerified = 'email_not_verified';
+    case GoogleAccountMismatch = 'google_account_mismatch';
+    case PlanNotEligible = 'plan_not_eligible';
 }

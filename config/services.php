@@ -37,6 +37,8 @@ return [
 
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID', ''),
+        'certs_location' => env('GOOGLE_CERTS_LOCATION', 'https://www.googleapis.com/oauth2/v3/certs'),
+        'certs_cache_path' => env('GOOGLE_CERTS_CACHE_PATH', storage_path('framework/cache/google-certs')),
     ],
 
 ];

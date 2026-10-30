@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Cache;
  */
 class CacheLoginChallengeStore implements LoginChallengeStore
 {
-    public function create(string $userId): string
+    public function create(string $userId, ?string $pendingGoogleSubjectId = null): string
     {
         $challengeId = Str::uuid7()->toString();
         $expiresAt = now()->addMinutes(self::TTL_MINUTES);
@@ -24,6 +24,7 @@ class CacheLoginChallengeStore implements LoginChallengeStore
             'userId' => $userId,
             'attemptsRemaining' => self::MAX_ATTEMPTS,
             'expiresAt' => $expiresAt->getTimestamp(),
+            'pendingGoogleSubjectId' => $pendingGoogleSubjectId,
         ], $expiresAt);
 
         return $challengeId;
@@ -40,6 +41,7 @@ class CacheLoginChallengeStore implements LoginChallengeStore
         return new TwoFactorChallenge(
             userId: $data['userId'],
             attemptsRemaining: $data['attemptsRemaining'],
+            pendingGoogleSubjectId: $data['pendingGoogleSubjectId'],
         );
     }
 
@@ -65,11 +67,7 @@ class CacheLoginChallengeStore implements LoginChallengeStore
                 return;
             }
 
-            Cache::put($this->key($challengeId), [
-                'userId' => $data['userId'],
-                'attemptsRemaining' => $remaining,
-                'expiresAt' => $data['expiresAt'],
-            ], CarbonImmutable::createFromTimestamp($data['expiresAt']));
+            Cache::put($this->key($challengeId), [...$data, 'attemptsRemaining' => $remaining], CarbonImmutable::createFromTimestamp($data['expiresAt']));
         });
     }
 
@@ -79,7 +77,7 @@ class CacheLoginChallengeStore implements LoginChallengeStore
     }
 
     /**
-     * @return array{userId: string, attemptsRemaining: int, expiresAt: int}|null
+     * @return array{userId: string, attemptsRemaining: int, expiresAt: int, pendingGoogleSubjectId: ?string}|null
      */
     protected function read(string $challengeId): ?array
     {
@@ -89,11 +87,12 @@ class CacheLoginChallengeStore implements LoginChallengeStore
             return null;
         }
 
-        /** @var array{userId: string, attemptsRemaining: int, expiresAt: int} $data */
+        /** @var array{userId: string, attemptsRemaining: int, expiresAt: int, pendingGoogleSubjectId?: ?string} $data */
         return [
             'userId' => $data['userId'],
             'attemptsRemaining' => $data['attemptsRemaining'],
             'expiresAt' => $data['expiresAt'],
+            'pendingGoogleSubjectId' => $data['pendingGoogleSubjectId'] ?? null,
         ];
     }
 

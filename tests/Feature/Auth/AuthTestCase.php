@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use Tests\TestCase;
 use App\Models\User;
 use RuntimeException;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
@@ -20,16 +21,21 @@ use App\Foundation\Auth\Totp\TotpVerifier;
 use Tests\Concerns\InducesProjectorFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Auth\UseCases\TokenRevoker;
+use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Events\UserPasswordReset;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\Auth\Events\UserPasswordChanged;
+use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
 use App\Foundation\Auth\UseCases\Google\GoogleIdentity;
+use App\Foundation\Auth\UseCases\Results\IssuedSession;
 use App\Foundation\Auth\UseCases\Google\GoogleIdTokenVerifier;
 use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
+use App\Foundation\Auth\Exceptions\GoogleSignInUnavailableException;
 use App\Foundation\Auth\Reactors\PasswordChangedNotificationReactor;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class AuthTestCase extends TestCase
 {
@@ -115,6 +121,18 @@ abstract class AuthTestCase extends TestCase
             public function verify(string $idToken): GoogleIdentity
             {
                 return $this->identity ?? throw new GoogleTokenInvalidException;
+            }
+        });
+    }
+
+    /** Bind a Google ID-token verifier double for a Google whose signing keys cannot be fetched. */
+    protected function fakeUnavailableGoogle(): void
+    {
+        $this->app->instance(GoogleIdTokenVerifier::class, new class implements GoogleIdTokenVerifier
+        {
+            public function verify(string $idToken): GoogleIdentity
+            {
+                throw new GoogleSignInUnavailableException('Google sign-in is temporarily unavailable.');
             }
         });
     }
@@ -371,7 +389,7 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
-     * The one logical happy-path assertion (E20): the body is EXACTLY the nine-field
+     * The one logical happy-path assertion (E20): the body is EXACTLY the ten-field
      * {data} envelope built from the user's persisted row. Exactness IS the leak-guard —
      * password, two_factor_secret, two_factor_recovery_codes and remember_token can
      * never serialize without failing this. Callers arrange a verified, 2FA-confirmed
@@ -484,6 +502,86 @@ abstract class AuthTestCase extends TestCase
         Sanctum::actingAs($actor);
 
         return $this->postJson('/api/v1/me/google', $payload, ['Idempotency-Key' => (string) Str::uuid()]);
+    }
+
+    /** @return array<string, array{array<string, mixed>, string}> */
+    public static function provideMalformedIdTokens(): array
+    {
+        return [
+            'missing' => [[], 'The id token field is required.'],
+            'empty' => [['idToken' => ''], 'The id token field is required.'],
+            'not a string' => [['idToken' => 123], 'The id token field must be a string.'],
+        ];
+    }
+
+    /** @return array<string, array{string}> */
+    public static function provideUsersWithoutGoogleSignIn(): array
+    {
+        return [
+            'only a free company' => ['only a free company'],
+            'an expired trial' => ['an expired trial'],
+            'removed from her starter company' => ['removed from her starter company'],
+            'no company' => ['no company'],
+        ];
+    }
+
+    protected function withoutGoogleSignIn(User $user, string $memberships): void
+    {
+        match ($memberships) {
+            'only a free company' => $this->memberOfCompanyOnPlan($user, BillingPlan::Free),
+            'an expired trial' => $this->memberOfExpiredTrialCompany($user),
+            'removed from her starter company' => $this->aRemovedStarterMembershipFor($user),
+            default => null,
+        };
+    }
+
+    protected function aRemovedStarterMembershipFor(User $user): void
+    {
+        $this->seedRbacCatalog();
+        $this->aRemovedMembershipIn(Company::factory()->onPlan(BillingPlan::Starter)->create(), $user);
+    }
+
+    /** @param  array<string, mixed>  $overrides */
+    protected function signInWithGoogle(array $overrides = []): TestResponse
+    {
+        return $this->postJson('/api/v1/auth/google', [...['idToken' => 'a-google-id-token', 'deviceName' => 'Pixel 8'], ...$overrides]);
+    }
+
+    protected function assertSignedInWithoutLink(TestResponse $response, User $user): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data.user.email', $user->email);
+        $this->assertTokenNamed($user, 'Pixel 8');
+        $this->assertSame($user->google_id, $user->fresh()?->google_id);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
+    }
+
+    protected function bindThrowingSessionIssuer(): void
+    {
+        $this->app->bind(SessionIssuer::class, fn (): SessionIssuer => new class extends SessionIssuer
+        {
+            public function issue(User $user, string $deviceName): IssuedSession
+            {
+                throw new RuntimeException('Induced session-issue failure.');
+            }
+        });
+    }
+
+    protected function assertGoogleLinkedWith(User $user, string $googleSubject): void
+    {
+        $linked = LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->sole();
+        $this->assertEquals(
+            ['userId' => $user->getKey(), 'googleSubjectId' => $googleSubject, 'linkedAt' => now()->toAtomString()],
+            Arr::only($linked->event_properties, ['userId', 'googleSubjectId', 'linkedAt']),
+        );
+        $this->assertSame($googleSubject, $user->fresh()?->google_id);
+    }
+
+    protected function assertNothingSignedIn(User $user): void
+    {
+        $this->assertSame(0, $user->tokens()->count(), 'A refused sign-in must issue no token.');
+        $this->assertSame($user->google_id, $user->fresh()?->google_id);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
     }
 
     /**

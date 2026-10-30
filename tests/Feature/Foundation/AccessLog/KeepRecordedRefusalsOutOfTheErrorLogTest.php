@@ -11,6 +11,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\Foundation\FoundationTestCase;
 use App\Companies\Exceptions\StaleOwnershipException;
 use App\Foundation\Http\Exceptions\ConsentRequiredException;
+use App\Foundation\Auth\Exceptions\EmailNotVerifiedException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
 use App\Foundation\Auth\Exceptions\DeviceLimitReachedException;
@@ -22,6 +23,7 @@ use App\Compliance\Dsar\Exceptions\DsarRequesterMismatchException;
 use App\Foundation\Billing\Exceptions\FeatureUnavailableException;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
+use App\Foundation\Auth\Exceptions\GoogleAccountNotRegisteredException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Companies\Memberships\Exceptions\InvitationAllowanceExceededException;
 
@@ -86,6 +88,8 @@ class KeepRecordedRefusalsOutOfTheErrorLogTest extends FoundationTestCase
             'invitation allowance exceeded' => [fn () => new InvitationAllowanceExceededException(60)],
             'google token invalid' => [fn () => new GoogleTokenInvalidException],
             'google email mismatch' => [fn () => GoogleEmailMismatchException::notTheUsersEmail()],
+            'google account not registered' => [fn () => new GoogleAccountNotRegisteredException('nimal@gmail.com', 'Nimal Silva')],
+            'email not verified' => [fn () => new EmailNotVerifiedException],
         ];
     }
 }

@@ -25,6 +25,7 @@ use App\Companies\Exceptions\SelfTransferBlockedException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
 use App\Foundation\Http\Exceptions\ConsentRequiredException;
 use Illuminate\Routing\Exceptions\InvalidSignatureException;
+use App\Foundation\Auth\Exceptions\EmailNotVerifiedException;
 use App\Foundation\Auth\Exceptions\InvalidResetLinkException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
 use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
@@ -55,6 +56,7 @@ use App\Foundation\Http\Exceptions\IdempotencyKeyConflictException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyRequiredException;
 use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
 use App\Companies\Memberships\Exceptions\InvalidInvitationException;
+use App\Foundation\Auth\Exceptions\GoogleSignInUnavailableException;
 use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
 use App\Companies\Memberships\Exceptions\SelfRemovalBlockedException;
 use App\Compliance\Dsar\Exceptions\DsarRequestNotInProgressException;
@@ -66,6 +68,7 @@ use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 use App\Companies\Exceptions\OwnershipTransferCaseNotVerifiedException;
 use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
 use App\Companies\Memberships\Exceptions\MembershipContentionException;
+use App\Foundation\Auth\Exceptions\GoogleAccountNotRegisteredException;
 use App\Companies\Memberships\Exceptions\OwnerTransferRequiredException;
 use App\Companies\Memberships\Exceptions\SelfRoleChangeBlockedException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
@@ -128,6 +131,8 @@ return Application::configure(basePath: dirname(__DIR__))
             InvitationAllowanceExceededException::class,
             GoogleTokenInvalidException::class,
             GoogleEmailMismatchException::class,
+            GoogleAccountNotRegisteredException::class,
+            EmailNotVerifiedException::class,
         ]);
 
         $exceptions->render(fn (ValidationException $e) => EnvelopeBuilder::build(
@@ -220,7 +225,25 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(fn (GoogleAlreadyLinkedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::GoogleAlreadyLinked,
-            'Your Lesily login is already linked to a Google account.',
+            $e->getMessage(),
+        ));
+
+        // Google's signing keys could not be fetched — a retry hint, never a 401 that reads as a bad token.
+        $exceptions->render(fn (GoogleSignInUnavailableException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::GoogleSignInUnavailable,
+            'Google sign-in is temporarily unavailable. Try again shortly, or sign in with your password.',
+        )->withHeaders(['Retry-After' => '30']));
+
+        $exceptions->render(fn (EmailNotVerifiedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::EmailNotVerified,
+            $e->getMessage(),
+        ));
+
+        // Google's verified email and name ride with the refusal so the app opens signup pre-filled (G5).
+        $exceptions->render(fn (GoogleAccountNotRegisteredException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::GoogleAccountNotRegistered,
+            $e->getMessage(),
+            $e->responseExtras(),
         ));
 
         // A reset submit whose token the broker rejected — never issued, expired (>60 min), or already

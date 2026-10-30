@@ -25,6 +25,8 @@ enum ApiErrorCode: string
     case GoogleEmailMismatch = 'GOOGLE_EMAIL_MISMATCH';
     case GoogleAccountInUse = 'GOOGLE_ACCOUNT_IN_USE';
     case GoogleAlreadyLinked = 'GOOGLE_ALREADY_LINKED';
+    case GoogleAccountNotRegistered = 'GOOGLE_ACCOUNT_NOT_REGISTERED';
+    case EmailNotVerified = 'EMAIL_NOT_VERIFIED';
     case ResetLinkInvalid = 'RESET_LINK_INVALID';
     case InviteInvalid = 'INVITE_INVALID';
     case InviteNotPending = 'INVITE_NOT_PENDING';
@@ -47,6 +49,7 @@ enum ApiErrorCode: string
     case IdempotencyKeyProcessing = 'IDEMPOTENCY_KEY_PROCESSING';
     case StateGuardViolation = 'STATE_GUARD_VIOLATION';
     case ReceiptGenerationUnavailable = 'RECEIPT_GENERATION_UNAVAILABLE';
+    case GoogleSignInUnavailable = 'GOOGLE_SIGN_IN_UNAVAILABLE';
     case DsarInProgress = 'DSAR_IN_PROGRESS';
     case DsarRequesterMismatch = 'DSAR_REQUESTER_MISMATCH';
     case DsarNotReady = 'DSAR_NOT_READY';
@@ -76,6 +79,8 @@ enum ApiErrorCode: string
             self::GoogleEmailMismatch => Response::HTTP_FORBIDDEN,
             self::GoogleAccountInUse => Response::HTTP_CONFLICT,
             self::GoogleAlreadyLinked => Response::HTTP_CONFLICT,
+            self::GoogleAccountNotRegistered => Response::HTTP_NOT_FOUND,
+            self::EmailNotVerified => Response::HTTP_FORBIDDEN,
             self::ResetLinkInvalid => Response::HTTP_UNPROCESSABLE_ENTITY,
             self::InviteInvalid => Response::HTTP_UNPROCESSABLE_ENTITY,
             self::InviteNotPending => Response::HTTP_UNPROCESSABLE_ENTITY,
@@ -98,6 +103,7 @@ enum ApiErrorCode: string
             self::IdempotencyKeyProcessing => Response::HTTP_CONFLICT,
             self::StateGuardViolation => Response::HTTP_CONFLICT,
             self::ReceiptGenerationUnavailable => Response::HTTP_SERVICE_UNAVAILABLE,
+            self::GoogleSignInUnavailable => Response::HTTP_SERVICE_UNAVAILABLE,
             self::DsarInProgress => Response::HTTP_CONFLICT,
             self::DsarRequesterMismatch => Response::HTTP_FORBIDDEN,
             self::DsarNotReady => Response::HTTP_CONFLICT,

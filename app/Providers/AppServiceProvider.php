@@ -13,6 +13,7 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use Illuminate\Support\Facades\RateLimiter;
+use Google\Auth\Cache\FileSystemCacheItemPool;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\Totp\Google2faTotpVerifier;
 use App\Foundation\Auth\Totp\CacheLoginChallengeStore;
@@ -36,9 +37,11 @@ class AppServiceProvider extends ServiceProvider
 
         // The Google ID-token boundary: production checks tokens with
         // google/auth against our web client id; feature tests bind a double.
+        // Google's signing keys are cached on disk across requests, for as long as Google's Cache-Control allows.
         $this->app->bind(GoogleIdTokenVerifier::class, fn (): GoogleAuthIdTokenVerifier => new GoogleAuthIdTokenVerifier(
-            new AccessToken,
+            new AccessToken(cache: new FileSystemCacheItemPool(Config::string('services.google.certs_cache_path'))),
             Config::string('services.google.client_id'),
+            Config::string('services.google.certs_location'),
         ));
 
         // One recorder per request: the use case notes the outcome, the middleware writes it.

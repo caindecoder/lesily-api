@@ -2,15 +2,23 @@
 
 namespace Tests\Feature\Auth\Google;
 
+use Closure;
 use Tests\TestCase;
 use Firebase\JWT\JWT;
 use phpseclib3\Crypt\RSA;
 use Google\Auth\AccessToken;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Psr7\Response;
+use Illuminate\Support\Facades\File;
 use phpseclib3\Crypt\RSA\PrivateKey;
 use PHPUnit\Framework\Attributes\Test;
+use Psr\Http\Message\ResponseInterface;
+use GuzzleHttp\Exception\ConnectException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Auth\IO\Google\GoogleAuthIdTokenVerifier;
+use App\Foundation\Auth\UseCases\Google\GoogleIdTokenVerifier;
 use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
+use App\Foundation\Auth\Exceptions\GoogleSignInUnavailableException;
 
 /**
  * @testclass-carveout: adapter — certification of the real google/auth ID-token check against
@@ -23,9 +31,13 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
 
     protected const KEY_ID = 'test-key';
 
+    protected const GOOGLE_CERTS_URL = 'https://www.googleapis.com/oauth2/v3/certs';
+
     protected PrivateKey $googleKey;
 
     protected string $certsLocation;
+
+    protected string $cachePath;
 
     protected function setUp(): void
     {
@@ -33,11 +45,13 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
 
         $this->googleKey = $this->aNewRsaKey();
         $this->certsLocation = $this->aKeySetFileFor($this->googleKey);
+        $this->cachePath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'google-certs-'.uniqid();
     }
 
     protected function tearDown(): void
     {
         @unlink($this->certsLocation);
+        File::deleteDirectory($this->cachePath);
 
         parent::tearDown();
     }
@@ -107,6 +121,21 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
         $this->verifierFor('')->verify($token);
     }
 
+    /** @param  Closure(): ResponseInterface  $googleAnswers */
+    #[Test]
+    #[DataProvider('provideKeyFetchFailures')]
+    public function when_googles_keys_cannot_be_fetched_then_verification_reports_sign_in_unavailable(Closure $googleAnswers): void
+    {
+        // Given Google's key endpoint failing to hand out its keys
+        $verifier = new GoogleAuthIdTokenVerifier(new AccessToken($googleAnswers), self::CLIENT_ID, self::GOOGLE_CERTS_URL);
+
+        // Then sign-in is reported unavailable, not the token invalid
+        $this->expectException(GoogleSignInUnavailableException::class);
+
+        // When the verifier checks a well-signed token
+        $verifier->verify($this->aSignedToken());
+    }
+
     #[Test]
     public function when_the_token_carries_no_name_then_the_identity_is_read_without_one(): void
     {
@@ -119,6 +148,25 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
         // Then the identity is read, its name empty
         $this->assertSame('109876543210', $identity->subject);
         $this->assertSame('', $identity->name);
+    }
+
+    #[Test]
+    public function when_keys_were_fetched_once_then_a_later_request_reuses_them(): void
+    {
+        // Given the production verifier, configured for our client, Google's keys and a key cache, used once
+        config([
+            'services.google.client_id' => self::CLIENT_ID,
+            'services.google.certs_location' => $this->certsLocation,
+            'services.google.certs_cache_path' => $this->cachePath,
+        ]);
+        app(GoogleIdTokenVerifier::class)->verify($this->aSignedToken());
+        unlink($this->certsLocation);
+
+        // When a later request verifies a token after Google's keys have gone away
+        $identity = app(GoogleIdTokenVerifier::class)->verify($this->aSignedToken());
+
+        // Then the keys come from the cache
+        $this->assertSame('alice@contoso.lk', $identity->email);
     }
 
     #[Test]
@@ -135,6 +183,19 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
         $this->assertSame('alice@contoso.lk', $identity->email);
         $this->assertTrue($identity->emailVerified);
         $this->assertSame('Alice Perera', $identity->name);
+    }
+
+    /** @return array<string, array{Closure(): ResponseInterface}> */
+    public static function provideKeyFetchFailures(): array
+    {
+        return [
+            'google answers an error' => [fn (): ResponseInterface => new Response(500)],
+            'google is unreachable' => [fn (): ResponseInterface => throw new ConnectException('Connection refused', new Request('GET', self::GOOGLE_CERTS_URL))],
+            'google answers without keys' => [fn (): ResponseInterface => new Response(200, [], '{}')],
+            'google answers with something other than JSON' => [fn (): ResponseInterface => new Response(200, [], '<html>maintenance</html>')],
+            'google answers with a key without its algorithm' => [fn (): ResponseInterface => new Response(200, [], '{"keys":[{"kty":"RSA","kid":"test-key"}]}')],
+            'google answers with keys of two algorithms' => [fn (): ResponseInterface => new Response(200, [], '{"keys":[{"kty":"RSA","kid":"a","alg":"RS256"},{"kty":"EC","kid":"b","alg":"ES256"}]}')],
+        ];
     }
 
     protected function verifierFor(string $clientId): GoogleAuthIdTokenVerifier

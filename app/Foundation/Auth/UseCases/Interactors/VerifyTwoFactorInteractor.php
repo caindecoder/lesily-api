@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\AccessLog\Enums\AccessEvent;
-use App\Foundation\Auth\UseCases\SessionIssuer;
+use App\Foundation\Auth\UseCases\PendingSession;
+use App\Foundation\Auth\UseCases\SignInFinisher;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\UseCases\DeviceLimitGuard;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
@@ -32,7 +33,7 @@ class VerifyTwoFactorInteractor
     public function __construct(
         private readonly LoginChallengeStore $challenges,
         private readonly TotpVerifier $totp,
-        private readonly SessionIssuer $sessionIssuer,
+        private readonly SignInFinisher $finisher,
         private readonly DeviceLimitGuard $deviceLimitGuard,
         private readonly AccessLogRecorder $accessLog,
     ) {}
@@ -57,13 +58,13 @@ class VerifyTwoFactorInteractor
         if ($this->totp->verify((string) $user->two_factor_secret, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return $this->issueSession($user, $command->deviceName, null);
+            return $this->finish(new PendingSession($user, $command->deviceName), $challenge->pendingGoogleSubjectId);
         }
 
         if ($this->consumeMatchingRecoveryCode($user, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return $this->issueSession($user, $command->deviceName, AccessEventReason::RecoveryCode);
+            return $this->finish(new PendingSession($user, $command->deviceName, AccessEventReason::RecoveryCode), $challenge->pendingGoogleSubjectId);
         }
 
         $this->challenges->recordFailure($command->challengeId);
@@ -72,19 +73,16 @@ class VerifyTwoFactorInteractor
         throw new TwoFactorVerificationFailedException;
     }
 
-    /**
-     * Stamp the user's "last seen" and mint the session, naming the token for the device
-     * (sessions slice R10). Shared by both completing factors (TOTP and recovery); the
-     * stamp lives here, not in SessionIssuer, so a future token refresh won't bump it.
-     */
-    protected function issueSession(User $user, string $deviceName, ?AccessEventReason $factor): SessionIssued
+    /** A first-time Google link pending in the challenge commits with the session (G13). */
+    protected function finish(PendingSession $pending, ?string $googleSubjectToLink): SessionIssued
     {
-        $user->last_logged_at = now();
-        $user->save();
-        $session = $this->sessionIssuer->issue($user, $deviceName);
-        $this->accessLog->note(AccessEvent::LoginSucceeded, $factor, $user);
+        return DB::transaction(function () use ($pending, $googleSubjectToLink): SessionIssued {
+            if ($googleSubjectToLink !== null) {
+                UserAggregate::retrieve($pending->user->getKey())->linkGoogleOAuth($googleSubjectToLink)->persist();
+            }
 
-        return new SessionIssued($session, $user);
+            return $this->finisher->finish($pending);
+        });
     }
 
     /**

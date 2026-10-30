@@ -112,7 +112,7 @@ class ViewProfileTest extends AuthTestCase
         // When the user requests GET /api/v1/me
         $response = $this->viewProfile($user);
 
-        // Then the response is exactly the nine-field profile envelope — nothing more (the leak-guard)
+        // Then the response is exactly the ten-field profile envelope — nothing more (the leak-guard)
         $this->assertExactProfileEnvelope($response, $user);
     }
 

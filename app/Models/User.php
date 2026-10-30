@@ -7,6 +7,7 @@ use Laravel\Sanctum\HasApiTokens;
 use App\Companies\Entities\Company;
 use Database\Factories\UserFactory;
 use Illuminate\Notifications\Notifiable;
+use App\Foundation\Billing\Enums\Feature;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Contracts\Auth\CanResetPassword;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -97,6 +98,13 @@ class User extends Authenticatable implements CanResetPassword, HasLocalePrefere
     {
         return $this->belongsToMany(Company::class, 'company_user', 'user_id', 'company_id')
             ->wherePivotNull('deleted_at');
+    }
+
+    /** At least one live company's plan in force (a trial counts) or add-ons grant $feature. */
+    public function hasCompanyThatCanUse(Feature $feature): bool
+    {
+        return $this->companies()->with('addons')->get()
+            ->contains(fn (Company $company): bool => $company->canUseFeature($feature));
     }
 
     /**

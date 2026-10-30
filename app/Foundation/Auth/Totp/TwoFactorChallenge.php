@@ -12,5 +12,6 @@ class TwoFactorChallenge
     public function __construct(
         public readonly string $userId,
         public readonly int $attemptsRemaining,
+        public readonly ?string $pendingGoogleSubjectId = null,
     ) {}
 }
