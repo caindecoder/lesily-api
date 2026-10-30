@@ -209,6 +209,7 @@ return [
             'wrong_two_factor_code' => 'Wrong two-step code',
             'challenge_expired' => 'The two-step sign-in expired',
             'recovery_code' => 'Used a recovery code',
+            'invalid_google_token' => 'Google could not confirm the sign-in',
         ],
     ],
 ];

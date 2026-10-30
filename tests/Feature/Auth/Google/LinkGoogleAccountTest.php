@@ -331,16 +331,6 @@ class LinkGoogleAccountTest extends AuthTestCase
         ];
     }
 
-    /** @return array<string, array{array<string, mixed>, string}> */
-    public static function provideMalformedIdTokens(): array
-    {
-        return [
-            'missing' => [[], 'The id token field is required.'],
-            'empty' => [['idToken' => ''], 'The id token field is required.'],
-            'not a string' => [['idToken' => 123], 'The id token field must be a string.'],
-        ];
-    }
-
     protected function assertLinkedTo(TestResponse $response, string $googleSubject): void
     {
         $response->assertNoContent();

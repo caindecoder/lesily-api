@@ -26,10 +26,12 @@ use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\Auth\Events\UserPasswordChanged;
+use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
 use App\Foundation\Auth\UseCases\Google\GoogleIdentity;
 use App\Foundation\Auth\UseCases\Google\GoogleIdTokenVerifier;
 use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
 use App\Foundation\Auth\Reactors\PasswordChangedNotificationReactor;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class AuthTestCase extends TestCase
 {
@@ -371,7 +373,7 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
-     * The one logical happy-path assertion (E20): the body is EXACTLY the nine-field
+     * The one logical happy-path assertion (E20): the body is EXACTLY the ten-field
      * {data} envelope built from the user's persisted row. Exactness IS the leak-guard —
      * password, two_factor_secret, two_factor_recovery_codes and remember_token can
      * never serialize without failing this. Callers arrange a verified, 2FA-confirmed
@@ -484,6 +486,38 @@ abstract class AuthTestCase extends TestCase
         Sanctum::actingAs($actor);
 
         return $this->postJson('/api/v1/me/google', $payload, ['Idempotency-Key' => (string) Str::uuid()]);
+    }
+
+    /** @return array<string, array{array<string, mixed>, string}> */
+    public static function provideMalformedIdTokens(): array
+    {
+        return [
+            'missing' => [[], 'The id token field is required.'],
+            'empty' => [['idToken' => ''], 'The id token field is required.'],
+            'not a string' => [['idToken' => 123], 'The id token field must be a string.'],
+        ];
+    }
+
+    /** @param  array<string, mixed>  $overrides */
+    protected function signInWithGoogle(array $overrides = []): TestResponse
+    {
+        return $this->postJson('/api/v1/auth/google', [...['idToken' => 'a-google-id-token', 'deviceName' => 'Pixel 8'], ...$overrides]);
+    }
+
+    protected function assertSignedInWithoutLink(TestResponse $response, User $user): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data.user.email', $user->email);
+        $this->assertTokenNamed($user, 'Pixel 8');
+        $this->assertSame($user->google_id, $user->fresh()?->google_id);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
+    }
+
+    protected function assertNothingSignedIn(User $user): void
+    {
+        $this->assertSame(0, $user->tokens()->count(), 'A refused sign-in must issue no token.');
+        $this->assertSame($user->google_id, $user->fresh()?->google_id);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
     }
 
     /**

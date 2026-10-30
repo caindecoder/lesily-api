@@ -13,6 +13,7 @@ use App\Foundation\Auth\IO\Http\Controllers\LogoutAllController;
 use App\Companies\IO\Http\Controllers\CompanyOwnershipController;
 use App\Billing\Subscriptions\IO\Http\Controllers\PlansController;
 use App\Companies\Memberships\IO\Http\Controllers\RolesController;
+use App\Foundation\Auth\IO\Http\Controllers\GoogleOAuthController;
 use App\Foundation\Auth\IO\Http\Controllers\MyCompaniesController;
 use App\Compliance\Dsar\IO\Http\Controllers\DsarDownloadController;
 use App\Compliance\Dsar\IO\Http\Controllers\DsarRequestsController;
@@ -59,6 +60,10 @@ Route::post('/v1/auth/register', RegisterController::class)
 // the same auth-tier per-IP limit (10/min) as register. Token-only (cd-auth token-only
 // banner): the credential check issues a Sanctum token, no domain event.
 Route::post('/v1/auth/login', LoginController::class)
+    ->middleware('throttle:auth-tier');
+
+// Sign in with a Google ID token (UC-1-003) — public, the login's auth-tier limit.
+Route::post('/v1/auth/google', GoogleOAuthController::class)
     ->middleware('throttle:auth-tier');
 
 // Forgot password (UC-1-008) — a guest requests a reset link. Public; enumeration-safe (always

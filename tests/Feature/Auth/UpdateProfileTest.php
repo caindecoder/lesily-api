@@ -279,7 +279,7 @@ class UpdateProfileTest extends AuthTestCase
     }
 
     /**
-     * The update succeeded end-to-end: the response is EXACTLY the nine-field envelope
+     * The update succeeded end-to-end: the response is EXACTLY the ten-field envelope
      * built from the refreshed row (the promoted leak-guard) AND the row now carries the
      * new values — the value pins go RED if the write never lands (the envelope alone
      * would self-consistently echo the old row).
