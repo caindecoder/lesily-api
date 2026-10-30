@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use App\Foundation\AccessLog\Enums\AccessEvent;
-use App\Foundation\Auth\UseCases\SessionIssuer;
+use App\Foundation\Auth\UseCases\PendingSession;
+use App\Foundation\Auth\UseCases\SignInFinisher;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\UseCases\DeviceLimitGuard;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
@@ -32,7 +33,7 @@ class VerifyTwoFactorInteractor
     public function __construct(
         private readonly LoginChallengeStore $challenges,
         private readonly TotpVerifier $totp,
-        private readonly SessionIssuer $sessionIssuer,
+        private readonly SignInFinisher $finisher,
         private readonly DeviceLimitGuard $deviceLimitGuard,
         private readonly AccessLogRecorder $accessLog,
     ) {}
@@ -57,34 +58,19 @@ class VerifyTwoFactorInteractor
         if ($this->totp->verify((string) $user->two_factor_secret, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return $this->issueSession($user, $command->deviceName, null);
+            return $this->finisher->finish(new PendingSession($user, $command->deviceName));
         }
 
         if ($this->consumeMatchingRecoveryCode($user, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return $this->issueSession($user, $command->deviceName, AccessEventReason::RecoveryCode);
+            return $this->finisher->finish(new PendingSession($user, $command->deviceName, AccessEventReason::RecoveryCode));
         }
 
         $this->challenges->recordFailure($command->challengeId);
         $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::WrongTwoFactorCode, $user);
 
         throw new TwoFactorVerificationFailedException;
-    }
-
-    /**
-     * Stamp the user's "last seen" and mint the session, naming the token for the device
-     * (sessions slice R10). Shared by both completing factors (TOTP and recovery); the
-     * stamp lives here, not in SessionIssuer, so a future token refresh won't bump it.
-     */
-    protected function issueSession(User $user, string $deviceName, ?AccessEventReason $factor): SessionIssued
-    {
-        $user->last_logged_at = now();
-        $user->save();
-        $session = $this->sessionIssuer->issue($user, $deviceName);
-        $this->accessLog->note(AccessEvent::LoginSucceeded, $factor, $user);
-
-        return new SessionIssued($session, $user);
     }
 
     /**

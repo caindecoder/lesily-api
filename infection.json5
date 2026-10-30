@@ -321,8 +321,8 @@
         // (:131) calls stay killable.
         "MethodCallRemoval": {
             ignore: [
-                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode::101",
-                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeRecoveryCode::129",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode::87",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeRecoveryCode::115",
             ],
         },
         // L-EQUIV-MISC: array_values() re-indexes the remaining codes for readers that

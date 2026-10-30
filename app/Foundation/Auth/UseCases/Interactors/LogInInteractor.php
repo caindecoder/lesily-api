@@ -5,7 +5,8 @@ namespace App\Foundation\Auth\UseCases\Interactors;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use App\Foundation\AccessLog\Enums\AccessEvent;
-use App\Foundation\Auth\UseCases\SessionIssuer;
+use App\Foundation\Auth\UseCases\PendingSession;
+use App\Foundation\Auth\UseCases\SignInFinisher;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\Auth\UseCases\DeviceLimitGuard;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
@@ -29,7 +30,7 @@ class LogInInteractor
 {
     public function __construct(
         private readonly LoginChallengeStore $challenges,
-        private readonly SessionIssuer $sessionIssuer,
+        private readonly SignInFinisher $finisher,
         private readonly DeviceLimitGuard $deviceLimitGuard,
         private readonly AccessLogRecorder $accessLog,
     ) {}
@@ -53,12 +54,7 @@ class LogInInteractor
         // bumped last_logged_at. 2FA users mint at /2fa/verify, where the cap is enforced too.
         $this->deviceLimitGuard->enforce($user);
 
-        $user->last_logged_at = now();
-        $user->save();
-        $session = $this->sessionIssuer->issue($user, $command->deviceName);
-        $this->accessLog->note(AccessEvent::LoginSucceeded, null, $user);
-
-        return new SessionIssued($session, $user);
+        return $this->finisher->finish(new PendingSession($user, $command->deviceName));
     }
 
     protected function authenticate(LoginCommand $command): User
