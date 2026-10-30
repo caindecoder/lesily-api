@@ -214,6 +214,7 @@ return [
             'email_not_verified' => 'Email not verified',
             'google_account_mismatch' => 'The account is linked to a different Google account',
             'plan_not_eligible' => 'No company on a plan with Google sign-in',
+            'google_unlinked' => 'Google sign-in was unlinked from the account',
         ],
     ],
 ];

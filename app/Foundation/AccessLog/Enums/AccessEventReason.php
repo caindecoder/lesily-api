@@ -14,4 +14,5 @@ enum AccessEventReason: string
     case EmailNotVerified = 'email_not_verified';
     case GoogleAccountMismatch = 'google_account_mismatch';
     case PlanNotEligible = 'plan_not_eligible';
+    case GoogleUnlinked = 'google_unlinked';
 }

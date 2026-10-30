@@ -142,6 +142,24 @@ class SignInWithGoogleTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_account_unlinked_google_then_a_google_sign_in_is_refused(): void
+    {
+        // Given Erin, who unlinked Google, on a Starter company, and her verified Google account
+        $erin = User::factory()->withEmail('erin@contoso.lk')->unlinkedFromGoogle()->create();
+        $this->memberOfCompanyOnPlan($erin, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('erins-google-subject', 'erin@contoso.lk', true, 'Erin'));
+
+        // When a Google sign-in arrives with that token
+        $response = $this->signInWithGoogle();
+
+        // Then it is refused until she re-links from her profile, nothing is linked, and the refusal is logged
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::GoogleSignInUnlinked);
+        $response->assertJsonPath('message', 'Google sign-in is off for this account. Sign in with your password, then link Google from your profile.');
+        $this->assertNothingSignedIn($erin);
+        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::GoogleUnlinked, $erin);
+    }
+
+    #[Test]
     #[DataProvider('provideUsersWithoutGoogleSignIn')]
     public function when_no_company_can_use_google_sign_in_then_sign_in_is_refused_with_the_upgrade_plan(string $memberships): void
     {
