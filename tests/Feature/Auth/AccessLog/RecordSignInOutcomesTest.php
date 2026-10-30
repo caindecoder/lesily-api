@@ -10,13 +10,11 @@ use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AccessLog\Enums\AccessEvent;
-use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\Auth\Totp\CacheLoginChallengeStore;
-use App\Foundation\Auth\UseCases\Results\IssuedSession;
 
 class RecordSignInOutcomesTest extends AuthTestCase
 {
@@ -286,17 +284,6 @@ class RecordSignInOutcomesTest extends AuthTestCase
     protected function signIn(string $password, string $email = self::LOGIN_EMAIL): TestResponse
     {
         return $this->postJson('/api/v1/auth/login', ['email' => $email, 'password' => $password]);
-    }
-
-    protected function bindThrowingSessionIssuer(): void
-    {
-        $this->app->bind(SessionIssuer::class, fn (): SessionIssuer => new class extends SessionIssuer
-        {
-            public function issue(User $user, string $deviceName): IssuedSession
-            {
-                throw new RuntimeException('Induced session-issue failure.');
-            }
-        });
     }
 
     protected function atTheDeviceLimit(User $user): void

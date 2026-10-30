@@ -4,7 +4,7 @@ namespace App\Foundation\Auth\UseCases\Interactors;
 
 use Exception;
 use App\Models\User;
-use RuntimeException;
+use Illuminate\Support\Facades\DB;
 use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Auth\UseCases\PendingSession;
@@ -42,15 +42,17 @@ class GoogleOAuthInteractor
         $user = $this->match($identity);
         $this->refuseWithoutGoogleSignInPlan($user);
 
-        if ($user->google_id === null) {
-            $this->refuseUnverifiedEmail($user);
+        $googleSubjectToLink = $user->google_id === null ? $identity->subject : null;
 
-            throw new RuntimeException('Not implemented');
+        if ($googleSubjectToLink !== null) {
+            $this->refuseUnverifiedEmail($user);
         }
 
         $this->deviceLimitGuard->enforce($user);
 
-        return $this->finisher->finish(new PendingSession($user, $command->deviceName));
+        return DB::transaction(fn (): SessionIssued => $this->finisher->finish(
+            new PendingSession($user, $command->deviceName, googleSubjectToLink: $googleSubjectToLink),
+        ));
     }
 
     protected function verify(string $idToken): GoogleIdentity

@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use Tests\TestCase;
 use App\Models\User;
 use RuntimeException;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
@@ -20,6 +21,7 @@ use App\Foundation\Auth\Totp\TotpVerifier;
 use Tests\Concerns\InducesProjectorFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Auth\UseCases\TokenRevoker;
+use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Events\UserPasswordReset;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
@@ -28,6 +30,7 @@ use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
 use App\Foundation\Auth\UseCases\Google\GoogleIdentity;
+use App\Foundation\Auth\UseCases\Results\IssuedSession;
 use App\Foundation\Auth\UseCases\Google\GoogleIdTokenVerifier;
 use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
 use App\Foundation\Auth\Reactors\PasswordChangedNotificationReactor;
@@ -538,6 +541,27 @@ abstract class AuthTestCase extends TestCase
         $this->assertTokenNamed($user, 'Pixel 8');
         $this->assertSame($user->google_id, $user->fresh()?->google_id);
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
+    }
+
+    protected function bindThrowingSessionIssuer(): void
+    {
+        $this->app->bind(SessionIssuer::class, fn (): SessionIssuer => new class extends SessionIssuer
+        {
+            public function issue(User $user, string $deviceName): IssuedSession
+            {
+                throw new RuntimeException('Induced session-issue failure.');
+            }
+        });
+    }
+
+    protected function assertGoogleLinkedWith(User $user, string $googleSubject): void
+    {
+        $linked = LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->sole();
+        $this->assertEquals(
+            ['userId' => $user->getKey(), 'googleSubjectId' => $googleSubject, 'linkedAt' => now()->toAtomString()],
+            Arr::only($linked->event_properties, ['userId', 'googleSubjectId', 'linkedAt']),
+        );
+        $this->assertSame($googleSubject, $user->fresh()?->google_id);
     }
 
     protected function assertNothingSignedIn(User $user): void

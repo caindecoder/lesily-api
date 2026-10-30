@@ -6,12 +6,17 @@ use App\Models\User;
 use Illuminate\Http\Response;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
+use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
 use App\Foundation\Auth\UseCases\Google\GoogleIdentity;
+use App\Foundation\Notifications\Enums\NotificationType;
+use App\Foundation\Notifications\Notifications\SystemNotification;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class SignInWithGoogleTest extends AuthTestCase
 {
@@ -197,6 +202,22 @@ class SignInWithGoogleTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_session_cannot_be_issued_then_the_first_link_is_not_recorded(): void
+    {
+        // Given Carol, verified and not linked, on a Starter company, and a session mint that fails
+        $carol = $this->aVerifiedUnlinkedStarterUser();
+        $this->bindThrowingSessionIssuer();
+
+        // When Carol signs in with Google for the first time
+        $response = $this->signInWithGoogle();
+
+        // Then the sign-in fails and the link is not recorded either
+        $response->assertInternalServerError();
+        $this->assertNull($carol->fresh()?->google_id);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
+    }
+
+    #[Test]
     public function when_a_google_linked_user_signs_in_then_a_session_is_issued(): void
     {
         // Given Alice linked to Google on a Starter company, holding a valid token for that account
@@ -228,6 +249,25 @@ class SignInWithGoogleTest extends AuthTestCase
         $this->assertSignedInWithoutLink($response, $this->alice);
     }
 
+    #[Test]
+    public function when_a_verified_user_signs_in_with_google_for_the_first_time_then_google_is_linked_with_the_session(): void
+    {
+        // Given Carol, verified and not linked, on a Starter company, holding her own verified Google account
+        $this->freezeTime();
+        Notification::fake();
+        $carol = $this->aVerifiedUnlinkedStarterUser();
+
+        // When Carol signs in with Google for the first time
+        $response = $this->signInWithGoogle();
+
+        // Then a session is issued, Google is linked with it, Carol is told, and the success is logged
+        $response->assertOk();
+        $this->assertTokenNamed($carol, 'Pixel 8');
+        $this->assertGoogleLinkedWith($carol, 'carols-google-subject');
+        Notification::assertSentTo($carol, SystemNotification::class, fn (SystemNotification $notification): bool => $notification->type === NotificationType::GoogleAccountLinked);
+        $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $carol);
+    }
+
     /** @return array<string, array{string}> */
     public static function provideUnverifiedGoogleEmails(): array
     {
@@ -235,5 +275,14 @@ class SignInWithGoogleTest extends AuthTestCase
             'an account uses it' => [self::LOGIN_EMAIL],
             'no account uses it' => ['nimal@gmail.com'],
         ];
+    }
+
+    protected function aVerifiedUnlinkedStarterUser(): User
+    {
+        $carol = User::factory()->withEmail('carol@contoso.lk')->create();
+        $this->memberOfCompanyOnPlan($carol, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('carols-google-subject', 'carol@contoso.lk', true, 'Carol'));
+
+        return $carol;
     }
 }
