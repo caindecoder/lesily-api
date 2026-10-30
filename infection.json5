@@ -231,8 +231,8 @@
         },
         // L-LOCKS: Cache::lock lease/wait seconds (5 -> 4/6) - array cache + a single
         // process cannot observe the difference; OQ-1-119 prescribes the lock, not a
-        // count (P5 tuning). recordFailure is pinned to :53 so the attemptsRemaining
-        // decrement at :60 stays killable.
+        // count (P5 tuning). recordFailure is pinned to :55 so the attemptsRemaining
+        // decrement at :62 stays killable.
         // L-TOKEN: Str::random(40) invite/resend token length - no design surface pins
         // 40 (P5 tuning; LeaveDates never pins Str::random lengths). Resend is pinned to
         // :50 so its allowance spend stays killable; invite's spend sits in execute().
@@ -310,19 +310,19 @@
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode",
             ],
         },
-        // L-EQUIV-MISC: $user->refresh() at :101 matters only across concurrent requests
-        // (code review guards it; no single-process test can); $user->save() at :129 is
-        // masked by issueSession()'s later save on the same instance - equivalent only
+        // L-EQUIV-MISC: $user->refresh() at :99 matters only across concurrent requests
+        // (code review guards it; no single-process test can); $user->save() at :127 is
+        // masked by SignInFinisher::finish()'s later save on the same instance - equivalent only
         // for THIS caller, and the mutant does move the column write outside the
         // DB::transaction, so the call is a review-guarded invariant, not dead code
         // (never delete it under amendment Q). REMOVE WHEN consumeRecoveryCode() gains
         // a caller that does not save the user afterwards. Pinned so the Cache::lock
-        // (:100), consumeRecoveryCode() (:105), DB::transaction (:127) and ->persist()
-        // (:131) calls stay killable.
+        // (:98), consumeRecoveryCode() (:103), DB::transaction (:125) and ->persist()
+        // (:129) calls stay killable.
         "MethodCallRemoval": {
             ignore: [
-                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode::93",
-                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeRecoveryCode::121",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode::99",
+                "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeRecoveryCode::127",
             ],
         },
         // L-EQUIV-MISC: array_values() re-indexes the remaining codes for readers that

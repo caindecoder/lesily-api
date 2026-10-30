@@ -58,13 +58,13 @@ class VerifyTwoFactorInteractor
         if ($this->totp->verify((string) $user->two_factor_secret, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return $this->finish(new PendingSession($user, $command->deviceName, googleSubjectToLink: $challenge->pendingGoogleSubjectId));
+            return $this->finish(new PendingSession($user, $command->deviceName), $challenge->pendingGoogleSubjectId);
         }
 
         if ($this->consumeMatchingRecoveryCode($user, $command->code)) {
             $this->challenges->forget($command->challengeId);
 
-            return $this->finish(new PendingSession($user, $command->deviceName, AccessEventReason::RecoveryCode, $challenge->pendingGoogleSubjectId));
+            return $this->finish(new PendingSession($user, $command->deviceName, AccessEventReason::RecoveryCode), $challenge->pendingGoogleSubjectId);
         }
 
         $this->challenges->recordFailure($command->challengeId);
@@ -74,9 +74,15 @@ class VerifyTwoFactorInteractor
     }
 
     /** A first-time Google link pending in the challenge commits with the session (G13). */
-    protected function finish(PendingSession $pending): SessionIssued
+    protected function finish(PendingSession $pending, ?string $googleSubjectToLink): SessionIssued
     {
-        return DB::transaction(fn (): SessionIssued => $this->finisher->finish($pending));
+        return DB::transaction(function () use ($pending, $googleSubjectToLink): SessionIssued {
+            if ($googleSubjectToLink !== null) {
+                UserAggregate::retrieve($pending->user->getKey())->linkGoogleOAuth($googleSubjectToLink)->persist();
+            }
+
+            return $this->finisher->finish($pending);
+        });
     }
 
     /**

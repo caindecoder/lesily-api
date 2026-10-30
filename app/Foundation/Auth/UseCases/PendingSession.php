@@ -12,6 +12,5 @@ class PendingSession
         public readonly User $user,
         public readonly string $deviceName,
         public readonly ?AccessEventReason $factor = null,
-        public readonly ?string $googleSubjectToLink = null,
     ) {}
 }

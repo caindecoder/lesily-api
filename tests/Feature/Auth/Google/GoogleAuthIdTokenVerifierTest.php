@@ -37,17 +37,21 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
 
     protected string $certsLocation;
 
+    protected string $cachePath;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->googleKey = $this->aNewRsaKey();
         $this->certsLocation = $this->aKeySetFileFor($this->googleKey);
+        $this->cachePath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'google-certs-'.uniqid();
     }
 
     protected function tearDown(): void
     {
         @unlink($this->certsLocation);
+        File::deleteDirectory($this->cachePath);
 
         parent::tearDown();
     }
@@ -117,20 +121,6 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
         $this->verifierFor('')->verify($token);
     }
 
-    #[Test]
-    public function when_the_token_carries_no_name_then_the_identity_is_read_without_one(): void
-    {
-        // Given a token Google signed without the profile scope's name
-        $token = $this->aSignedToken(['name' => null]);
-
-        // When the verifier checks it
-        $identity = $this->verifierFor(self::CLIENT_ID)->verify($token);
-
-        // Then the identity is read, its name empty
-        $this->assertSame('109876543210', $identity->subject);
-        $this->assertSame('', $identity->name);
-    }
-
     /** @param  Closure(): ResponseInterface  $googleAnswers */
     #[Test]
     #[DataProvider('provideKeyFetchFailures')]
@@ -147,14 +137,27 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
     }
 
     #[Test]
+    public function when_the_token_carries_no_name_then_the_identity_is_read_without_one(): void
+    {
+        // Given a token Google signed without the profile scope's name
+        $token = $this->aSignedToken(['name' => null]);
+
+        // When the verifier checks it
+        $identity = $this->verifierFor(self::CLIENT_ID)->verify($token);
+
+        // Then the identity is read, its name empty
+        $this->assertSame('109876543210', $identity->subject);
+        $this->assertSame('', $identity->name);
+    }
+
+    #[Test]
     public function when_keys_were_fetched_once_then_a_later_request_reuses_them(): void
     {
-        // Given the production verifier, configured for our client, Google's keys and a key cache
-        $cachePath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'google-certs-'.uniqid();
+        // Given the production verifier, configured for our client, Google's keys and a key cache, used once
         config([
             'services.google.client_id' => self::CLIENT_ID,
             'services.google.certs_location' => $this->certsLocation,
-            'services.google.certs_cache_path' => $cachePath,
+            'services.google.certs_cache_path' => $this->cachePath,
         ]);
         app(GoogleIdTokenVerifier::class)->verify($this->aSignedToken());
         unlink($this->certsLocation);
@@ -164,7 +167,6 @@ class GoogleAuthIdTokenVerifierTest extends TestCase
 
         // Then the keys come from the cache
         $this->assertSame('alice@contoso.lk', $identity->email);
-        File::deleteDirectory($cachePath);
     }
 
     #[Test]

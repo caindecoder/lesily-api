@@ -116,6 +116,21 @@ class LoginChallengeStoreTest extends TestCase
     }
 
     #[Test]
+    public function when_a_challenge_was_cached_without_a_pending_link_field_then_it_resolves_with_none(): void
+    {
+        // Given a challenge cached in the shape written before the pending link existed
+        $challengeId = (string) Str::uuid();
+        Cache::put("2fa-challenge:{$challengeId}", ['userId' => 'a-user', 'attemptsRemaining' => 5, 'expiresAt' => now()->addMinutes(5)->getTimestamp()]);
+
+        // When the challenge is resolved
+        $challenge = $this->store()->find($challengeId);
+
+        // Then it resolves with no pending link
+        $this->assertNotNull($challenge);
+        $this->assertNull($challenge->pendingGoogleSubjectId);
+    }
+
+    #[Test]
     public function when_a_challenge_carries_a_pending_google_link_then_it_survives_a_failed_attempt(): void
     {
         // Given a challenge opened with a pending Google link, then failed once

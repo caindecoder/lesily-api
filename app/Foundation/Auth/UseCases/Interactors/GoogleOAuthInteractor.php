@@ -15,6 +15,7 @@ use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\Auth\UseCases\Google\GoogleIdentity;
 use App\Foundation\Auth\UseCases\Results\SessionIssued;
 use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
+use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\Auth\UseCases\Results\ChallengeRequired;
 use App\Foundation\Auth\Exceptions\EmailNotVerifiedException;
 use App\Foundation\Auth\UseCases\Commands\GoogleOAuthCommand;
@@ -60,9 +61,13 @@ class GoogleOAuthInteractor
 
         $this->deviceLimitGuard->enforce($user);
 
-        return DB::transaction(fn (): SessionIssued => $this->finisher->finish(
-            new PendingSession($user, $command->deviceName, googleSubjectToLink: $googleSubjectToLink),
-        ));
+        return DB::transaction(function () use ($user, $command, $googleSubjectToLink): SessionIssued {
+            if ($googleSubjectToLink !== null) {
+                UserAggregate::retrieve($user->getKey())->linkGoogleOAuth($googleSubjectToLink)->persist();
+            }
+
+            return $this->finisher->finish(new PendingSession($user, $command->deviceName));
+        });
     }
 
     protected function verify(string $idToken): GoogleIdentity
