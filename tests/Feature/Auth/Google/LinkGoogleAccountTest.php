@@ -134,12 +134,7 @@ class LinkGoogleAccountTest extends AuthTestCase
     public function when_no_company_of_the_user_can_use_google_sign_in_then_the_upgrade_refusal_is_returned(string $memberships): void
     {
         // Given Alice with no live company whose plan grants Google sign-in, holding her own verified Google account
-        match ($memberships) {
-            'only a free company' => $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Free),
-            'an expired trial' => $this->memberOfExpiredTrialCompany($this->alice),
-            'removed from her starter company' => $this->aRemovedStarterMembership(),
-            default => null,
-        };
+        $this->withoutGoogleSignIn($this->alice, $memberships);
         $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
 
         // When Alice links that Google account
@@ -320,17 +315,6 @@ class LinkGoogleAccountTest extends AuthTestCase
         ];
     }
 
-    /** @return array<string, array{string}> */
-    public static function provideUsersWithoutGoogleSignIn(): array
-    {
-        return [
-            'only a free company' => ['only a free company'],
-            'an expired trial' => ['an expired trial'],
-            'removed from her starter company' => ['removed from her starter company'],
-            'no company' => ['no company'],
-        ];
-    }
-
     protected function assertLinkedTo(TestResponse $response, string $googleSubject): void
     {
         $response->assertNoContent();
@@ -346,12 +330,6 @@ class LinkGoogleAccountTest extends AuthTestCase
             ['userId' => $this->alice->getKey(), 'googleSubjectId' => $googleSubject],
             Arr::only($linked->event_properties, ['userId', 'googleSubjectId']),
         );
-    }
-
-    protected function aRemovedStarterMembership(): void
-    {
-        $this->seedRbacCatalog();
-        $this->aRemovedMembershipIn(Company::factory()->onPlan(BillingPlan::Starter)->create(), $this->alice);
     }
 
     protected function assertLinkRefusedWith(TestResponse $response, int $expectedStatus, ApiErrorCode $code): void

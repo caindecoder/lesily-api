@@ -129,6 +129,74 @@ class SignInWithGoogleTest extends AuthTestCase
     }
 
     #[Test]
+    #[DataProvider('provideUsersWithoutGoogleSignIn')]
+    public function when_no_company_can_use_google_sign_in_then_sign_in_is_refused_with_the_upgrade_plan(string $memberships): void
+    {
+        // Given Alice linked to Google with no live company whose plan grants Google sign-in
+        $this->withoutGoogleSignIn($this->alice, $memberships);
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
+
+        // When Alice signs in with Google
+        $response = $this->signInWithGoogle();
+
+        // Then the upgrade refusal names Starter, nothing is signed in, and the refusal is logged
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::FeatureNotAvailable);
+        $response->assertJsonPath('upgrade_to', 'Starter');
+        $this->assertNothingSignedIn($this->alice);
+        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::PlanNotEligible, $this->alice);
+    }
+
+    #[Test]
+    public function when_the_lesily_email_is_unverified_then_the_first_google_sign_in_is_refused_and_nothing_is_linked(): void
+    {
+        // Given Bob, not linked to Google, with an unverified Lesily email on a Starter company
+        $bob = User::factory()->withEmail('bob@contoso.lk')->unverified()->create();
+        $this->memberOfCompanyOnPlan($bob, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('bobs-google-subject', 'bob@contoso.lk', true, 'Bob'));
+
+        // When Bob signs in with a Google account for that email
+        $response = $this->signInWithGoogle();
+
+        // Then it is refused, nothing is linked, and the refusal is logged
+        $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::EmailNotVerified);
+        $this->assertNothingSignedIn($bob);
+        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::EmailNotVerified, $bob);
+    }
+
+    #[Test]
+    public function when_the_user_is_at_the_device_limit_then_no_session_is_issued(): void
+    {
+        // Given Alice linked to Google on a Pro company, already signed in on three devices
+        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Pro);
+        $this->aSessionFor($this->alice);
+        $this->aSessionFor($this->alice);
+        $this->aSessionFor($this->alice);
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
+
+        // When Alice signs in with Google on a fourth device
+        $response = $this->signInWithGoogle();
+
+        // Then the device cap refuses it and the refusal is logged
+        $this->assertDeviceLimitRejected($response, $this->alice, 3);
+        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $this->alice);
+    }
+
+    #[Test]
+    public function when_a_google_linked_user_with_an_unverified_email_signs_in_then_a_session_is_issued(): void
+    {
+        // Given Bob linked to Google with an unverified Lesily email, on a Starter company
+        $bob = User::factory()->withEmail('bob@contoso.lk')->unverified()->linkedToGoogle('bobs-google-subject')->create();
+        $this->memberOfCompanyOnPlan($bob, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('bobs-google-subject', 'bob@contoso.lk', true, 'Bob'));
+
+        // When Bob signs in with that Google account
+        $response = $this->signInWithGoogle();
+
+        // Then a session is issued: the email check guards a first link, not a linked account
+        $this->assertSignedInWithoutLink($response, $bob);
+    }
+
+    #[Test]
     public function when_a_google_linked_user_signs_in_then_a_session_is_issued(): void
     {
         // Given Alice linked to Google on a Starter company, holding a valid token for that account
@@ -143,6 +211,21 @@ class SignInWithGoogleTest extends AuthTestCase
         $this->assertSignedInWithoutLink($response, $this->alice);
         $this->assertLastLoggedAtStamped($this->alice);
         $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $this->alice);
+    }
+
+    #[Test]
+    public function when_one_company_among_free_ones_can_use_google_sign_in_then_sign_in_succeeds(): void
+    {
+        // Given Alice linked to Google, a member of a Free company and of a Starter company
+        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Free);
+        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
+
+        // When Alice signs in with Google
+        $response = $this->signInWithGoogle();
+
+        // Then a session is issued: one Starter company is enough
+        $this->assertSignedInWithoutLink($response, $this->alice);
     }
 
     /** @return array<string, array{string}> */

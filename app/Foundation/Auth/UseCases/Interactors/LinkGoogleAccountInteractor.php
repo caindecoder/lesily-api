@@ -5,7 +5,6 @@ namespace App\Foundation\Auth\UseCases\Interactors;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
-use App\Companies\Entities\Company;
 use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -33,7 +32,7 @@ class LinkGoogleAccountInteractor
             throw GoogleEmailMismatchException::notVerifiedByGoogle();
         }
 
-        if (! $this->hasCompanyWithGoogleSignIn($user)) {
+        if (! $user->hasCompanyThatCanUse(Feature::GoogleOAuth)) {
             throw FeatureUnavailableException::forFeature(Feature::GoogleOAuth);
         }
 
@@ -47,11 +46,5 @@ class LinkGoogleAccountInteractor
                 ? new GoogleAccountInUseException
                 : $violation;
         }
-    }
-
-    protected function hasCompanyWithGoogleSignIn(User $user): bool
-    {
-        return $user->companies()->with('addons')->get()
-            ->contains(fn (Company $company): bool => $company->canUseFeature(Feature::GoogleOAuth));
     }
 }

@@ -498,6 +498,33 @@ abstract class AuthTestCase extends TestCase
         ];
     }
 
+    /** @return array<string, array{string}> */
+    public static function provideUsersWithoutGoogleSignIn(): array
+    {
+        return [
+            'only a free company' => ['only a free company'],
+            'an expired trial' => ['an expired trial'],
+            'removed from her starter company' => ['removed from her starter company'],
+            'no company' => ['no company'],
+        ];
+    }
+
+    protected function withoutGoogleSignIn(User $user, string $memberships): void
+    {
+        match ($memberships) {
+            'only a free company' => $this->memberOfCompanyOnPlan($user, BillingPlan::Free),
+            'an expired trial' => $this->memberOfExpiredTrialCompany($user),
+            'removed from her starter company' => $this->aRemovedStarterMembershipFor($user),
+            default => null,
+        };
+    }
+
+    protected function aRemovedStarterMembershipFor(User $user): void
+    {
+        $this->seedRbacCatalog();
+        $this->aRemovedMembershipIn(Company::factory()->onPlan(BillingPlan::Starter)->create(), $user);
+    }
+
     /** @param  array<string, mixed>  $overrides */
     protected function signInWithGoogle(array $overrides = []): TestResponse
     {

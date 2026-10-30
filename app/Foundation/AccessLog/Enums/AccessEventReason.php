@@ -13,4 +13,5 @@ enum AccessEventReason: string
     case InvalidGoogleToken = 'invalid_google_token';
     case EmailNotVerified = 'email_not_verified';
     case GoogleAccountMismatch = 'google_account_mismatch';
+    case PlanNotEligible = 'plan_not_eligible';
 }

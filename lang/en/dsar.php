@@ -212,6 +212,7 @@ return [
             'invalid_google_token' => 'Google could not confirm the sign-in',
             'email_not_verified' => 'Email not verified',
             'google_account_mismatch' => 'The account is linked to a different Google account',
+            'plan_not_eligible' => 'No company on a plan with Google sign-in',
         ],
     ],
 ];
