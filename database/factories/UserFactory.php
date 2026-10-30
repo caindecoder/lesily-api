@@ -30,6 +30,7 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'google_id' => null,
+            'google_unlinked_at' => null,
             'remember_token' => Str::random(10),
             'locale' => 'en',
             'last_logged_at' => null,
@@ -75,6 +76,14 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes): array => [
             'google_id' => $googleId,
+        ]);
+    }
+
+    public function unlinkedFromGoogle(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'google_id' => null,
+            'google_unlinked_at' => now(),
         ]);
     }
 

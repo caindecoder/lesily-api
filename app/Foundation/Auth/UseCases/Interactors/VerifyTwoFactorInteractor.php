@@ -16,6 +16,7 @@ use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\Auth\UseCases\Results\SessionIssued;
 use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
+use App\Foundation\Auth\Exceptions\GoogleSignInUnlinkedException;
 use App\Foundation\Auth\UseCases\Commands\VerifyTwoFactorCommand;
 use App\Foundation\Auth\Exceptions\LoginChallengeNotFoundException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
@@ -49,6 +50,13 @@ class VerifyTwoFactorInteractor
         }
 
         $user = User::query()->findOrFail($challenge->userId);
+
+        // A pending link meets an unlink made during the challenge (G12): refused before a factor is spent.
+        if ($challenge->pendingGoogleSubjectId !== null && $user->google_unlinked_at !== null) {
+            $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::GoogleUnlinked, $user);
+
+            throw new GoogleSignInUnlinkedException;
+        }
 
         // Enforce the device cap before consuming the second factor (UC-1-002 alt-5a) — a
         // capped account is rejected without burning the TOTP challenge or a one-time

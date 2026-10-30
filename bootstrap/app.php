@@ -23,6 +23,7 @@ use App\Companies\Exceptions\UnsupportedCountryException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use App\Companies\Exceptions\SelfTransferBlockedException;
 use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
+use App\Foundation\Auth\Exceptions\GoogleNotLinkedException;
 use App\Foundation\Http\Exceptions\ConsentRequiredException;
 use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use App\Foundation\Auth\Exceptions\EmailNotVerifiedException;
@@ -42,6 +43,7 @@ use App\Foundation\Auth\Exceptions\GoogleEmailMismatchException;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
 use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
 use App\Billing\Invoices\Exceptions\ReceiptNotAvailableException;
+use App\Foundation\Auth\Exceptions\GoogleSignInUnlinkedException;
 use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -226,6 +228,18 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (GoogleAlreadyLinkedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::GoogleAlreadyLinked,
             $e->getMessage(),
+        ));
+
+        // A Google sign-in to an account that unlinked Google (UC-1-003 4d, G12) — only the profile re-links.
+        $exceptions->render(fn (GoogleSignInUnlinkedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::GoogleSignInUnlinked,
+            'Google sign-in is off for this account. Sign in with your password, then link Google from your profile.',
+        ));
+
+        // An unlink on an account with no Google link (UC-1-003 P2a). 422 — there is nothing to unlink.
+        $exceptions->render(fn (GoogleNotLinkedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::GoogleNotLinked,
+            'Google is not linked to this account.',
         ));
 
         // Google's signing keys could not be fetched — a retry hint, never a 401 that reads as a bad token.

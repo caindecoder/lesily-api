@@ -15,6 +15,7 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
+use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -230,6 +231,27 @@ class LinkGoogleAccountTest extends AuthTestCase
         $response->assertInternalServerError();
         $this->assertNull($this->alice->fresh()?->google_id);
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
+    }
+
+    #[Test]
+    public function when_google_is_relinked_after_an_unlink_then_the_unlink_marker_is_cleared(): void
+    {
+        // Given Alice on a Starter company, who linked and then unlinked Google, holding her verified Google account
+        $this->freezeTime();
+        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        UserAggregate::retrieve($this->alice->getKey())->linkGoogleOAuth(self::GOOGLE_SUBJECT)->persist();
+        UserAggregate::retrieve($this->alice->getKey())->unlinkGoogleOAuth()->persist();
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
+
+        // When Alice links Google again from her profile
+        $response = $this->linkGoogle($this->alice);
+
+        // Then she is linked again, the unlink marker is cleared, and the re-link is recorded
+        $response->assertNoContent();
+        $stored = User::query()->whereKey($this->alice->getKey())->firstOrFail();
+        $this->assertSame(self::GOOGLE_SUBJECT, $stored->google_id);
+        $this->assertNull($stored->google_unlinked_at, 'A re-link must turn Google sign-in back on (G12).');
+        $this->assertSame(2, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
     }
 
     #[Test]

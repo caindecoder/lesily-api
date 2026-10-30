@@ -179,6 +179,7 @@ return [
             'general_account_notice' => 'Account notice',
             'password_changed' => 'Password changed',
             'google_account_linked' => 'Google account linked',
+            'google_account_unlinked' => 'Google account unlinked',
             'team_welcome' => 'Welcome to the team',
             'ownership_received' => 'You became the owner',
             'dsar_export_ready' => 'Data export ready',
@@ -213,6 +214,7 @@ return [
             'email_not_verified' => 'Email not verified',
             'google_account_mismatch' => 'The account is linked to a different Google account',
             'plan_not_eligible' => 'No company on a plan with Google sign-in',
+            'google_unlinked' => 'Google sign-in was unlinked from the account',
         ],
     ],
 ];

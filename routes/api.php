@@ -201,6 +201,10 @@ Route::put('/v1/me/password', ChangePasswordController::class)
 Route::post('/v1/me/google', [GoogleAccountController::class, 'store'])
     ->middleware(['auth:sanctum', 'throttle:auth-tier', 'idempotency-key:required']);
 
+// Unlink Google with the password.
+Route::delete('/v1/me/google', [GoogleAccountController::class, 'destroy'])
+    ->middleware(['auth:sanctum', 'throttle:auth-tier', 'idempotency-key:required']);
+
 // Default company (UC-1-139) — the persisted switcher preference, a plain
 // users.default_company_id write (NOT event-sourced — slice-companies B2).
 // Bare auth:sanctum: a `me/` self-service preference with no credential check

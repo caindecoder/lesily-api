@@ -22,6 +22,7 @@ use App\Foundation\Auth\UseCases\Commands\GoogleOAuthCommand;
 use App\Foundation\Auth\UseCases\Google\GoogleIdTokenVerifier;
 use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
 use App\Foundation\Auth\Exceptions\GoogleAlreadyLinkedException;
+use App\Foundation\Auth\Exceptions\GoogleSignInUnlinkedException;
 use App\Foundation\Billing\Exceptions\FeatureUnavailableException;
 use App\Foundation\Auth\Exceptions\GoogleAccountNotRegisteredException;
 
@@ -98,6 +99,10 @@ class GoogleOAuthInteractor
 
         if ($user->google_id !== null) {
             $this->refuse(AccessEventReason::GoogleAccountMismatch, $user, GoogleAlreadyLinkedException::toAnotherGoogleAccount());
+        }
+
+        if ($user->google_unlinked_at !== null) {
+            $this->refuse(AccessEventReason::GoogleUnlinked, $user, new GoogleSignInUnlinkedException);
         }
 
         return $user;

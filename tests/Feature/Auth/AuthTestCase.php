@@ -484,6 +484,18 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
+     * The action succeeded (204), the user's other device no longer authenticates (probeWith forgets
+     * the guards, forcing a fresh DB re-check), and the current session survives. Shared by the
+     * change-password (UC-1-016), 2FA disable (UC-1-007) and Google unlink suites.
+     */
+    protected function assertOtherSessionsRevoked(TestResponse $response, string $currentToken, string $otherToken): void
+    {
+        $response->assertNoContent();
+        $this->assertUnauthenticated($this->probeWith($otherToken));
+        $this->probeWith($currentToken)->assertOk();
+    }
+
+    /**
      * Submit a password change to the self-service endpoint (which requires an idempotency key).
      * Shared by the change-password (UC-1-016) and password-changed-notification suites.
      *
@@ -502,6 +514,12 @@ abstract class AuthTestCase extends TestCase
         Sanctum::actingAs($actor);
 
         return $this->postJson('/api/v1/me/google', $payload, ['Idempotency-Key' => (string) Str::uuid()]);
+    }
+
+    /** @param  array<string, mixed>  $payload */
+    protected function unlinkGoogle(string $token, array $payload = ['password' => self::LOGIN_PASSWORD]): TestResponse
+    {
+        return $this->withToken($token)->deleteJson('/api/v1/me/google', $payload, ['Idempotency-Key' => (string) Str::uuid()]);
     }
 
     /** @return array<string, array{array<string, mixed>, string}> */

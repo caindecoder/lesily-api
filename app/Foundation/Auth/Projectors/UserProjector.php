@@ -11,6 +11,7 @@ use App\Foundation\Auth\Events\UserProfileUpdated;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
+use App\Foundation\Auth\Events\UserGoogleOAuthUnlinked;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 
@@ -93,6 +94,13 @@ class UserProjector extends Projector
     {
         UserReadModel::query()
             ->whereKey($event->userId)
-            ->update(['google_id' => $event->googleSubjectId]);
+            ->update(['google_id' => $event->googleSubjectId, 'google_unlinked_at' => null]);
+    }
+
+    public function onUserGoogleOAuthUnlinked(UserGoogleOAuthUnlinked $event): void
+    {
+        UserReadModel::query()
+            ->whereKey($event->userId)
+            ->update(['google_id' => null, 'google_unlinked_at' => $event->unlinkedAt]);
     }
 }

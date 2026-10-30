@@ -302,18 +302,6 @@ class ChangePasswordTest extends AuthTestCase
     }
 
     /**
-     * The change succeeded (204), revoked the user's OTHER sessions — the other device no longer
-     * authenticates (forgetGuards forces a fresh DB re-check) — and kept the current session alive.
-     * Goes RED if the revoke is removed (the other token would still authenticate).
-     */
-    protected function assertOtherSessionsRevoked(TestResponse $response, string $currentToken, string $otherToken): void
-    {
-        $response->assertNoContent();
-        $this->assertUnauthenticated($this->probeWith($otherToken));
-        $this->probeWith($currentToken)->assertOk();
-    }
-
-    /**
      * The change survived a delivery-time confirmation failure: the drained job surfaced the induced
      * failure (not some other error) and the NEW password authenticates — the reactor failed AFTER
      * the committed write, never in its place.
