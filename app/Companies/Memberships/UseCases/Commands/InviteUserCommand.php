@@ -5,6 +5,7 @@ namespace App\Companies\Memberships\UseCases\Commands;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\In;
+use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -25,6 +26,7 @@ class InviteUserCommand extends Data
 
     public string $email;
 
+    #[OpaqueString('a role code - the seeded catalog, open to custom roles later')]
     public string $roleCode;
 
     /**

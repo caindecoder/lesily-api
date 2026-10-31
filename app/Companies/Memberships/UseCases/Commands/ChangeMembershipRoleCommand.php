@@ -8,6 +8,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\In;
 use Spatie\LaravelData\Attributes\WithCast;
 use App\Foundation\UseCases\Casts\ModelCast;
+use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -27,6 +28,7 @@ class ChangeMembershipRoleCommand extends Data
      */
     private const array ASSIGNABLE_ROLE_CODES = ['admin', 'hr_officer', 'payroll_officer', 'employee', 'auditor'];
 
+    #[OpaqueString('a role code - the seeded catalog, open to custom roles later')]
     public string $roleCode;
 
     #[WithCast(ModelCast::class, User::class)]
