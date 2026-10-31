@@ -218,7 +218,7 @@ class IssueInvoiceTest extends BillingTestCase
         Invoice::retrieve($invoiceId)
             ->issue($this->issueInvoiceCommand($company, $subscription, [
                 'recipientBillingAddress' => $billingAddress,
-                'createdBy' => $owner->getKey(),
+                'createdBy' => $owner,
             ]))
             ->persist();
 

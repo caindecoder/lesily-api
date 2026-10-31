@@ -55,11 +55,11 @@ class Invoice extends AggregateRoot
             throw InvoiceLineItemsMismatchException::forInvoice($this->uuid(), $command->amountCents, $lineItemsTotalCents);
         }
 
-        return $this->forCompany($command->companyId)
+        return $this->forCompany($command->company->getKey())
             ->recordThat(new InvoiceCreated(
                 invoiceId: $this->uuid(),
-                subscriptionId: $command->subscriptionId,
-                companyId: $command->companyId,
+                subscriptionId: $command->subscription->getKey(),
+                companyId: $command->company->getKey(),
                 invoiceNumber: $command->invoiceNumber,
                 amountCents: $command->amountCents,
                 currency: $command->currency,
@@ -70,7 +70,7 @@ class Invoice extends AggregateRoot
                 recipientName: $command->recipientName,
                 recipientEmail: $command->recipientEmail,
                 recipientBillingAddress: $command->recipientBillingAddress,
-                createdBy: $command->createdBy,
+                createdBy: $command->createdBy?->getKey(),
             ));
     }
 
@@ -155,7 +155,7 @@ class Invoice extends AggregateRoot
         return $this->recordThat(new InvoiceVoided(
             invoiceId: $this->uuid(),
             voidedAt: CarbonImmutable::now(),
-            voidedBy: $command->voidedBy,
+            voidedBy: $command->voidedBy->getKey(),
             reason: $command->reason,
             source: $command->source,
         ));
@@ -177,7 +177,7 @@ class Invoice extends AggregateRoot
             disputeId: Str::uuid()->toString(),
             filedAt: CarbonImmutable::now(),
             reason: $command->reason,
-            filedBy: $command->filedBy,
+            filedBy: $command->filedBy->getKey(),
         ));
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Billing\Invoices\UseCases\Commands;
 
+use App\Models\User;
 use Spatie\LaravelData\Data;
 
 /**
@@ -14,9 +15,7 @@ use Spatie\LaravelData\Data;
  */
 class VoidInvoiceCommand extends Data
 {
-    public string $invoiceId;
-
-    public string $voidedBy;
+    public User $voidedBy;
 
     public string $reason;
 

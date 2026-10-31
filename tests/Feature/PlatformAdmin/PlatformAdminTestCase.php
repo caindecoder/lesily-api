@@ -134,8 +134,8 @@ abstract class PlatformAdminTestCase extends TestCase
     {
         return IssueInvoiceCommand::from([
             'invoiceNumber' => 'INV-2026-000001',
-            'subscriptionId' => $subscription->getKey(),
-            'companyId' => $company->getKey(),
+            'subscription' => $subscription,
+            'company' => $company,
             'amountCents' => 60000,
             'currency' => 'LKR',
             'lineItems' => [
@@ -201,7 +201,6 @@ abstract class PlatformAdminTestCase extends TestCase
     protected function recordPaymentSucceededCommand(InvoiceReadModel $invoice, array $overrides = []): RecordPaymentSucceededCommand
     {
         return RecordPaymentSucceededCommand::from([
-            'invoiceId' => $invoice->getKey(),
             'payHereEventId' => 'evt_'.$invoice->getKey(),
             'payHereTransactionId' => 'txn_'.$invoice->getKey(),
             'amountCents' => $invoice->amount_cents,
@@ -219,8 +218,7 @@ abstract class PlatformAdminTestCase extends TestCase
 
         Invoice::retrieve($invoice->getKey())
             ->void(VoidInvoiceCommand::from([
-                'invoiceId' => $invoice->getKey(),
-                'voidedBy' => User::factory()->create()->getKey(),
+                'voidedBy' => User::factory()->create(),
                 'reason' => 'Issued in error - admin correction.',
                 'source' => 'admin-correction',
             ]))
@@ -239,7 +237,6 @@ abstract class PlatformAdminTestCase extends TestCase
 
         Invoice::retrieve($invoice->getKey())
             ->recordPaymentFailed(RecordPaymentFailedCommand::from([
-                'invoiceId' => $invoice->getKey(),
                 'payHereEventId' => 'evt_fail_'.$invoice->getKey(),
                 'failureCode' => 'insufficient_funds',
                 'failureMessage' => 'Card has insufficient funds.',
@@ -260,9 +257,8 @@ abstract class PlatformAdminTestCase extends TestCase
 
         Invoice::retrieve($invoice->getKey())
             ->fileDispute(FileInvoiceDisputeCommand::from([
-                'invoiceId' => $invoice->getKey(),
                 'reason' => 'This charge does not match our agreed plan.',
-                'filedBy' => User::factory()->create()->getKey(),
+                'filedBy' => User::factory()->create(),
             ]))
             ->persist();
 

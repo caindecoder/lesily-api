@@ -2,6 +2,7 @@
 
 namespace App\Billing\Invoices\UseCases\Commands;
 
+use App\Models\User;
 use Spatie\LaravelData\Data;
 
 /**
@@ -15,9 +16,7 @@ use Spatie\LaravelData\Data;
  */
 class FileInvoiceDisputeCommand extends Data
 {
-    public string $invoiceId;
-
     public string $reason;
 
-    public string $filedBy;
+    public User $filedBy;
 }

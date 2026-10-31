@@ -81,7 +81,7 @@ class FileInvoiceDisputeTest extends BillingTestCase
         // When the dispute is filed
         Invoice::retrieve($invoice->getKey())
             ->fileDispute($this->fileInvoiceDisputeCommand($invoice, [
-                'filedBy' => $owner->getKey(),
+                'filedBy' => $owner,
                 'reason' => 'We were charged after cancelling the add-on.',
             ]))
             ->persist();

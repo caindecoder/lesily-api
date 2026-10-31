@@ -15,8 +15,6 @@ use Spatie\LaravelData\Data;
  */
 class RefundInvoiceCommand extends Data
 {
-    public string $invoiceId;
-
     public int $refundAmountCents;
 
     public ?string $payHereRefundTransactionId = null;

@@ -15,8 +15,6 @@ use Spatie\LaravelData\Data;
  */
 class RecordPaymentSucceededCommand extends Data
 {
-    public string $invoiceId;
-
     public string $payHereEventId;
 
     public string $payHereTransactionId;

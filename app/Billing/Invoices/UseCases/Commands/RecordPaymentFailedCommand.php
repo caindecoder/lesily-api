@@ -16,8 +16,6 @@ use Spatie\LaravelData\Data;
  */
 class RecordPaymentFailedCommand extends Data
 {
-    public string $invoiceId;
-
     public string $payHereEventId;
 
     public string $failureCode;

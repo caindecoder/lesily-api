@@ -30,22 +30,12 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     protected const int COMMANDS_AT_LEAST = 52;
 
     protected const array KNOWN_UNTYPED = [
-        'App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand::$invoiceId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand::$filedBy — a string reference',
         'App\Billing\Invoices\UseCases\Commands\InvoiceFilters::$status — a closed set kept as a string',
         'App\Billing\Invoices\UseCases\Commands\InvoiceFilters::$sort — a closed set kept as a string',
-        'App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand::$subscriptionId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand::$companyId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand::$createdBy — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand::$invoiceId — a string reference',
         'App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand::$payHereEventId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand::$invoiceId — a string reference',
         'App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand::$payHereEventId — a string reference',
         'App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand::$payHereTransactionId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand::$invoiceId — a string reference',
         'App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand::$payHereRefundTransactionId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand::$invoiceId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand::$voidedBy — a string reference',
         'App\Billing\Subscriptions\UseCases\Commands\ApplyTrialExpirationCommand::$companyId — a string reference',
         'App\Billing\Subscriptions\UseCases\Commands\ApplyTrialExpirationCommand::$subscriptionId — a string reference',
         'App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand::$companyId — a string reference',
