@@ -32,13 +32,9 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
 
     protected const array KNOWN_UNTYPED = [
         'App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand::$roleCode — a closed set kept as a string',
-        'App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand::$companyId — a string reference',
-        'App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand::$roleId — a string reference',
-        'App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand::$invitedByUserId — a string reference',
         'App\Companies\Memberships\UseCases\Commands\InviteUserCommand::$roleCode — a closed set kept as a string',
         'App\Companies\Memberships\UseCases\Commands\MembershipFilters::$status — a closed set kept as a string',
         'App\Companies\Memberships\UseCases\Commands\MembershipFilters::$sort — a closed set kept as a string',
-        'App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand::$resentBy — a string reference',
         'App\Companies\Memberships\UseCases\Commands\SetEmergencyContactCommand::$relationship — a closed set kept as a string',
         'App\Companies\UseCases\Commands\CreateCompanyCommand::$ownerUserId — a string reference',
         'App\Companies\UseCases\Commands\CreateCompanyCommand::$emergencyContactRelationship — a closed set kept as a string',

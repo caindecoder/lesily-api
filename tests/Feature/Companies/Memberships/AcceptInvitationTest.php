@@ -231,10 +231,10 @@ class AcceptInvitationTest extends MembershipsTestCase
         $plaintext = Str::random(40);
         UserMembership::retrieve((string) Str::uuid7())
             ->invite(CreateInvitationCommand::from([
-                'companyId' => $company->getKey(),
+                'company' => $company,
                 'email' => 'ruwan@member.lk',
-                'roleId' => $this->seededRole('employee')->getKey(),
-                'invitedByUserId' => $actor->getKey(),
+                'role' => $this->seededRole('employee'),
+                'invitedBy' => $actor,
                 'plaintextToken' => $plaintext,
             ]))
             ->persist();
@@ -616,10 +616,10 @@ class AcceptInvitationTest extends MembershipsTestCase
         $plaintext = Str::random(40);
         UserMembership::retrieve((string) Str::uuid7())
             ->invite(CreateInvitationCommand::from([
-                'companyId' => $company->getKey(),
+                'company' => $company,
                 'email' => 'ruwan@member.lk',
-                'roleId' => $this->seededRole('employee')->getKey(),
-                'invitedByUserId' => $actor->getKey(),
+                'role' => $this->seededRole('employee'),
+                'invitedBy' => $actor,
                 'plaintextToken' => $plaintext,
             ]))
             ->persist();

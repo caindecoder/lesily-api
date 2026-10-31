@@ -74,10 +74,10 @@ class InviteUserInteractor
 
         DB::transaction(fn () => UserMembership::retrieve($membershipId)
             ->invite(CreateInvitationCommand::from([
-                'companyId' => $company->getKey(),
+                'company' => $company,
                 'email' => $command->email,
-                'roleId' => Role::query()->where('code', $command->roleCode)->sole()->getKey(),
-                'invitedByUserId' => $actor->getKey(),
+                'role' => Role::query()->where('code', $command->roleCode)->sole(),
+                'invitedBy' => $actor,
                 'plaintextToken' => $plaintextToken,
             ]))
             ->persist());

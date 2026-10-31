@@ -1434,10 +1434,10 @@ abstract class DsarTestCase extends TestCase
 
         UserMembership::retrieve($invitationId)
             ->invite(CreateInvitationCommand::from([
-                'companyId' => $company->getKey(),
+                'company' => $company,
                 'email' => $email,
-                'roleId' => $this->seededRole('employee')->getKey(),
-                'invitedByUserId' => User::factory()->create()->getKey(),
+                'role' => $this->seededRole('employee'),
+                'invitedBy' => User::factory()->create(),
                 'plaintextToken' => Str::random(40),
             ]))
             ->persist();
@@ -1451,14 +1451,14 @@ abstract class DsarTestCase extends TestCase
      */
     protected function inviteAgain(string $invitationId, string $roleCode): void
     {
-        $invitation = Invitation::query()->findOrFail($invitationId);
+        $invitation = Invitation::query()->with('company')->findOrFail($invitationId);
 
         UserMembership::retrieve($invitationId)
             ->invite(CreateInvitationCommand::from([
-                'companyId' => $invitation->company_id,
+                'company' => $invitation->company,
                 'email' => $invitation->email,
-                'roleId' => $this->seededRole($roleCode)->getKey(),
-                'invitedByUserId' => User::factory()->create()->getKey(),
+                'role' => $this->seededRole($roleCode),
+                'invitedBy' => User::factory()->create(),
                 'plaintextToken' => Str::random(40),
             ]))
             ->persist();
@@ -1474,7 +1474,7 @@ abstract class DsarTestCase extends TestCase
         UserMembership::retrieve($invitationId)
             ->resendInvitation(ResendInvitationCommand::from([
                 'plaintextToken' => Str::random(40),
-                'resentBy' => User::factory()->create()->getKey(),
+                'resentBy' => User::factory()->create(),
             ]))
             ->persist();
     }

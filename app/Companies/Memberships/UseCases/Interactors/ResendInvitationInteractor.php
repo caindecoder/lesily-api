@@ -52,7 +52,7 @@ class ResendInvitationInteractor
         DB::transaction(fn () => UserMembership::retrieve($invitation->getKey())
             ->resendInvitation(ResendInvitationCommand::from([
                 'plaintextToken' => $plaintextToken,
-                'resentBy' => $actor->getKey(),
+                'resentBy' => $actor,
             ]))
             ->persist());
 
