@@ -6,6 +6,8 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Spatie\LaravelData\Data;
 use App\Companies\Entities\Company;
+use App\Billing\Invoices\Enums\Currency;
+use App\Billing\Invoices\Enums\InvoiceSource;
 use App\Billing\Subscriptions\Entities\Subscription;
 
 /**
@@ -29,14 +31,14 @@ class IssueInvoiceCommand extends Data
 
     public int $amountCents;
 
-    public string $currency;
+    public Currency $currency;
 
     /** @var array<int, array<string, mixed>> */
     public array $lineItems;
 
     public CarbonImmutable $dueDate;
 
-    public string $source;
+    public InvoiceSource $source;
 
     public string $recipientName;
 

@@ -31,7 +31,6 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     protected const int COMMANDS_AT_LEAST = 52;
 
     protected const array KNOWN_UNTYPED = [
-        'App\Billing\Invoices\UseCases\Commands\InvoiceFilters::$status — a closed set kept as a string',
         'App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand::$roleCode — a closed set kept as a string',
         'App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand::$changedBy — a string reference',
         'App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand::$companyId — a string reference',

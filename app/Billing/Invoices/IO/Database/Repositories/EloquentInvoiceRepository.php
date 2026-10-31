@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use App\Billing\Invoices\Entities\Invoice;
 use App\Billing\Invoices\Enums\InvoiceStatus;
+use App\Billing\Invoices\Enums\InvoiceStatusFilter;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use App\Billing\Invoices\UseCases\Commands\InvoiceFilters;
 use App\Billing\Invoices\UseCases\Repositories\InvoiceRepositoryInterface;
@@ -103,14 +104,14 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
      * @param  Builder<Invoice>  $query
      * @return Builder<Invoice>
      */
-    protected function applyStatusToken(Builder $query, string $status): Builder
+    protected function applyStatusToken(Builder $query, InvoiceStatusFilter $status): Builder
     {
         return match ($status) {
-            'overdue' => $query
+            InvoiceStatusFilter::Overdue => $query
                 ->where('status', InvoiceStatus::Pending)
                 ->whereDate('due_date', '<', CarbonImmutable::today()),
-            'disputed' => $query->where('has_dispute', true),
-            default => $query->where('status', $status),
+            InvoiceStatusFilter::Disputed => $query->where('has_dispute', true),
+            default => $query->where('status', $status->value),
         };
     }
 }

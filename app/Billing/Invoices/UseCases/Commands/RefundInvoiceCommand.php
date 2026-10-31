@@ -3,6 +3,7 @@
 namespace App\Billing\Invoices\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
+use App\Billing\Invoices\Enums\InvoiceSource;
 use App\Foundation\UseCases\Attributes\OpaqueString;
 
 /**
@@ -21,7 +22,7 @@ class RefundInvoiceCommand extends Data
     #[OpaqueString('the PayHere refund transaction id - not a row of ours')]
     public ?string $payHereRefundTransactionId = null;
 
-    public string $source;
+    public InvoiceSource $source;
 
     public string $reason;
 }

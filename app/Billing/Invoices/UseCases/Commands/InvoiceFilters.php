@@ -9,6 +9,7 @@ use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Spatie\LaravelData\Attributes\MapInputName;
+use App\Billing\Invoices\Enums\InvoiceStatusFilter;
 use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
@@ -29,15 +30,6 @@ class InvoiceFilters extends Data
     private const array QUERY_KEY_WHITELIST = ['status', 'within', 'min_amount', 'max_amount', 'sort', 'page', 'per_page'];
 
     /**
-     * The status tokens this endpoint accepts — SM-1-04's five stored states
-     * plus the two derived views (overdue = pending past due_date; disputed =
-     * has_dispute), re-pinned s129 R4.
-     *
-     * @var list<string>
-     */
-    private const array STATUS_TOKENS = ['pending', 'paid', 'failed', 'refunded', 'voided', 'overdue', 'disputed'];
-
-    /**
      * The sort tokens this endpoint accepts (api-1-invoices §2; `amount` maps to
      * the amount_cents column at the query layer). Default: -issued_at.
      *
@@ -45,7 +37,7 @@ class InvoiceFilters extends Data
      */
     private const array SORTABLE_FIELDS = ['-issued_at', 'issued_at', 'amount', '-amount'];
 
-    public ?string $status = null;
+    public ?InvoiceStatusFilter $status = null;
 
     public ?string $within = null;
 
@@ -85,7 +77,7 @@ class InvoiceFilters extends Data
         // only an implicit rule can refuse '' at this seam. Listed first so
         // its removal stays test-visible and the empty-value message leads.
         return [
-            'status' => ['filled', 'sometimes', 'string', Rule::in(self::STATUS_TOKENS)],
+            'status' => ['filled', 'sometimes', 'string', Rule::enum(InvoiceStatusFilter::class)],
             // bail: the closure must never run on a non-string (an array
             // within[] would fatal on the string cast before the 422).
             'within' => ['filled', 'sometimes', 'bail', 'string', self::isoDateRangeRule()],

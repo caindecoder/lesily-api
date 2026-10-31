@@ -62,11 +62,11 @@ class Invoice extends AggregateRoot
                 companyId: $command->company->getKey(),
                 invoiceNumber: $command->invoiceNumber,
                 amountCents: $command->amountCents,
-                currency: $command->currency,
+                currency: $command->currency->value,
                 lineItems: $command->lineItems,
                 dueDate: $command->dueDate,
                 issuedAt: CarbonImmutable::now(),
-                source: $command->source,
+                source: $command->source->value,
                 recipientName: $command->recipientName,
                 recipientEmail: $command->recipientEmail,
                 recipientBillingAddress: $command->recipientBillingAddress,
@@ -141,7 +141,7 @@ class Invoice extends AggregateRoot
             refundedAt: CarbonImmutable::now(),
             refundAmountCents: $command->refundAmountCents,
             payHereRefundTransactionId: $command->payHereRefundTransactionId,
-            source: $command->source,
+            source: $command->source->value,
             reason: $command->reason,
         ));
     }
@@ -157,7 +157,7 @@ class Invoice extends AggregateRoot
             voidedAt: CarbonImmutable::now(),
             voidedBy: $command->voidedBy->getKey(),
             reason: $command->reason,
-            source: $command->source,
+            source: $command->source->value,
         ));
     }
 
