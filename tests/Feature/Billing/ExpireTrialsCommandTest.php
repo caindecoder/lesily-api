@@ -94,12 +94,12 @@ class ExpireTrialsCommandTest extends BillingTestCase
         $subscriptionId = (string) Str::uuid();
         $this->givenTrialEndingAt($companyId, $subscriptionId, CarbonImmutable::now()->addDays(30));
         app(ApplyTrialExpirationInteractor::class)->execute(
-            ApplyTrialExpirationCommand::from(['companyId' => $companyId, 'subscriptionId' => $subscriptionId]),
+            $this->expiryCommandFor($companyId, $subscriptionId),
         );
 
         // When the trial-expiry interactor runs again for them
         app(ApplyTrialExpirationInteractor::class)->execute(
-            ApplyTrialExpirationCommand::from(['companyId' => $companyId, 'subscriptionId' => $subscriptionId]),
+            $this->expiryCommandFor($companyId, $subscriptionId),
         );
 
         // Then nothing changes — each expiry event was recorded exactly once
@@ -203,10 +203,18 @@ class ExpireTrialsCommandTest extends BillingTestCase
     {
         $this->createCompanyOnTrial($companyId);
         $command = StartTrialCommand::from([
-            'companyId' => $companyId,
+            'company' => CompanyReadModel::query()->findOrFail($companyId),
             'trialEndsAt' => $trialEndsAt,
         ]);
         Subscription::retrieve($subscriptionId)->startTrial($command)->persist();
+    }
+
+    protected function expiryCommandFor(string $companyId, string $subscriptionId): ApplyTrialExpirationCommand
+    {
+        return ApplyTrialExpirationCommand::from([
+            'company' => CompanyReadModel::query()->findOrFail($companyId),
+            'subscription' => SubscriptionReadModel::query()->findOrFail($subscriptionId),
+        ]);
     }
 
     protected function runExpireTrials(?string $asOf = null): PendingCommand

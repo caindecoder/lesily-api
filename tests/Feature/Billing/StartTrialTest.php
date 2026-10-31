@@ -4,6 +4,7 @@ namespace Tests\Feature\Billing;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
+use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
@@ -21,6 +22,8 @@ use App\Billing\Subscriptions\Exceptions\SubscriptionAlreadyStartedException;
  */
 class StartTrialTest extends BillingTestCase
 {
+    protected Company $company;
+
     protected string $companyId;
 
     protected string $subscriptionId;
@@ -30,7 +33,8 @@ class StartTrialTest extends BillingTestCase
         parent::setUp();
 
         $this->travelTo('2026-06-01 00:00:00');
-        $this->companyId = (string) Str::uuid();
+        $this->company = Company::factory()->create();
+        $this->companyId = $this->company->getKey();
         $this->subscriptionId = (string) Str::uuid();
     }
 
@@ -74,7 +78,7 @@ class StartTrialTest extends BillingTestCase
     protected function startTrial(): void
     {
         $command = StartTrialCommand::from([
-            'companyId' => $this->companyId,
+            'company' => $this->company,
             'trialEndsAt' => CarbonImmutable::now()->addDays(30),
         ]);
 

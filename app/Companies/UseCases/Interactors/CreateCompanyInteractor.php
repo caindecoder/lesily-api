@@ -77,7 +77,7 @@ class CreateCompanyInteractor
 
             Subscription::retrieve(Str::uuid7()->toString())
                 ->startTrial(StartTrialCommand::from([
-                    'companyId' => $companyId,
+                    'company' => Company::query()->findOrFail($companyId),
                     'trialEndsAt' => CarbonImmutable::now()->addDays(CompanyAggregate::TRIAL_DAYS),
                 ]))
                 ->persist();

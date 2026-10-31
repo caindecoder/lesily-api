@@ -117,7 +117,7 @@ abstract class PlatformAdminTestCase extends TestCase
 
         Subscription::retrieve($subscriptionId)
             ->startTrial(StartTrialCommand::from([
-                'companyId' => $company->getKey(),
+                'company' => $company,
                 'trialEndsAt' => $trialEndsAt,
             ]))
             ->persist();
