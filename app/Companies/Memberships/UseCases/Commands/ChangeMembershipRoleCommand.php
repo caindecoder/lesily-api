@@ -2,9 +2,12 @@
 
 namespace App\Companies\Memberships\UseCases\Commands;
 
+use App\Models\User;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\In;
+use Spatie\LaravelData\Attributes\WithCast;
+use App\Foundation\UseCases\Casts\ModelCast;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -26,7 +29,8 @@ class ChangeMembershipRoleCommand extends Data
 
     public string $roleCode;
 
-    public string $changedBy;
+    #[WithCast(ModelCast::class, User::class)]
+    public User $changedBy;
 
     /**
      * @return array<string, array<int, string|In>>

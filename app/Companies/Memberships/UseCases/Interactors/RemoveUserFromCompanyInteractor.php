@@ -48,7 +48,7 @@ class RemoveUserFromCompanyInteractor
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($membership->user_id === $command->removedBy) {
+            if ($membership->user_id === $command->removedBy->getKey()) {
                 throw new SelfRemovalBlockedException;
             }
 

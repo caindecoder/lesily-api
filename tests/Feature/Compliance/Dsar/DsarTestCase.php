@@ -1483,7 +1483,7 @@ abstract class DsarTestCase extends TestCase
     {
         UserMembership::retrieve($invitationId)
             ->revokeInvitation(RevokeInvitationCommand::from([
-                'revokedBy' => User::factory()->create()->getKey(),
+                'revokedBy' => User::factory()->create(),
                 'reason' => 'Sent to the wrong team',
             ]))
             ->persist();
@@ -1513,7 +1513,7 @@ abstract class DsarTestCase extends TestCase
             ->changeRole(
                 ChangeMembershipRoleCommand::from([
                     'roleCode' => $roleCode,
-                    'changedBy' => User::factory()->create()->getKey(),
+                    'changedBy' => User::factory()->create(),
                 ]),
                 $this->seededRole('employee')->getKey(),
                 $this->seededRole($roleCode)->getKey(),

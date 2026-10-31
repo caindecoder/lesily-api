@@ -63,7 +63,7 @@ class InvitationsController
         $actor = $request->user();
 
         $command = RevokeInvitationCommand::validateAndCreate([
-            'revokedBy' => $actor->getKey(),
+            'revokedBy' => $actor,
             'reason' => $request->input('reason'),
         ]);
 

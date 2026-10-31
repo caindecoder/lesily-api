@@ -48,7 +48,7 @@ class ChangeMembershipRoleInteractor
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($membership->user_id === $command->changedBy) {
+            if ($membership->user_id === $command->changedBy->getKey()) {
                 throw new SelfRoleChangeBlockedException;
             }
 

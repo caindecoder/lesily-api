@@ -2,7 +2,10 @@
 
 namespace App\Companies\Memberships\UseCases\Commands;
 
+use App\Models\User;
 use Spatie\LaravelData\Data;
+use Spatie\LaravelData\Attributes\WithCast;
+use App\Foundation\UseCases\Casts\ModelCast;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -14,7 +17,8 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  */
 class RevokeInvitationCommand extends Data
 {
-    public string $revokedBy;
+    #[WithCast(ModelCast::class, User::class)]
+    public User $revokedBy;
 
     public ?string $reason;
 

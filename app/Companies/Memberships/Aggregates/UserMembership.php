@@ -78,7 +78,7 @@ class UserMembership extends AggregateRoot
     {
         return $this->recordThat(new UserInvitationRevoked(
             membershipId: $this->uuid(),
-            revokedBy: $command->revokedBy,
+            revokedBy: $command->revokedBy->getKey(),
             revokedAt: CarbonImmutable::now(),
             reason: $command->reason,
         ));
@@ -97,7 +97,7 @@ class UserMembership extends AggregateRoot
             membershipId: $this->uuid(),
             fromRoleId: $fromRoleId,
             toRoleId: $toRoleId,
-            changedBy: $command->changedBy,
+            changedBy: $command->changedBy->getKey(),
             changedAt: CarbonImmutable::now(),
         ));
     }
@@ -146,7 +146,7 @@ class UserMembership extends AggregateRoot
     {
         return $this->recordThat(new UserRemovedFromCompany(
             membershipId: $this->uuid(),
-            removedBy: $command->removedBy,
+            removedBy: $command->removedBy->getKey(),
             removedAt: CarbonImmutable::now(),
         ));
     }
