@@ -58,7 +58,7 @@ class VoidInvoiceTest extends BillingTestCase
 
         // When the admin voids it as issued-in-error
         Invoice::retrieve($invoice->getKey())
-            ->void($this->voidInvoiceCommand($invoice, ['voidedBy' => $admin->getKey()]))
+            ->void($this->voidInvoiceCommand($invoice, ['voidedBy' => $admin]))
             ->persist();
 
         // Then the void event is stored and the row reflects the terminal void

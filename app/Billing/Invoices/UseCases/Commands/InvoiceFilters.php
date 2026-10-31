@@ -3,12 +3,17 @@
 namespace App\Billing\Invoices\UseCases\Commands;
 
 use Closure;
-use Carbon\CarbonImmutable;
+use DateTimeImmutable;
+use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
+use Spatie\LaravelData\Attributes\WithCast;
 use Illuminate\Validation\ValidationException;
 use Spatie\LaravelData\Attributes\MapInputName;
+use App\Billing\Invoices\Enums\InvoiceStatusFilter;
+use App\Foundation\UseCases\Casts\CarbonPeriodCast;
+use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -28,15 +33,6 @@ class InvoiceFilters extends Data
     private const array QUERY_KEY_WHITELIST = ['status', 'within', 'min_amount', 'max_amount', 'sort', 'page', 'per_page'];
 
     /**
-     * The status tokens this endpoint accepts — SM-1-04's five stored states
-     * plus the two derived views (overdue = pending past due_date; disputed =
-     * has_dispute), re-pinned s129 R4.
-     *
-     * @var list<string>
-     */
-    private const array STATUS_TOKENS = ['pending', 'paid', 'failed', 'refunded', 'voided', 'overdue', 'disputed'];
-
-    /**
      * The sort tokens this endpoint accepts (api-1-invoices §2; `amount` maps to
      * the amount_cents column at the query layer). Default: -issued_at.
      *
@@ -44,9 +40,10 @@ class InvoiceFilters extends Data
      */
     private const array SORTABLE_FIELDS = ['-issued_at', 'issued_at', 'amount', '-amount'];
 
-    public ?string $status = null;
+    public ?InvoiceStatusFilter $status = null;
 
-    public ?string $within = null;
+    #[WithCast(CarbonPeriodCast::class)]
+    public ?CarbonPeriod $within = null;
 
     #[MapInputName('min_amount')]
     public ?int $minAmount = null;
@@ -54,6 +51,7 @@ class InvoiceFilters extends Data
     #[MapInputName('max_amount')]
     public ?int $maxAmount = null;
 
+    #[OpaqueString('a per-endpoint sort token the repository maps to columns')]
     public ?string $sort = null;
 
     public ?int $page = null;
@@ -83,7 +81,7 @@ class InvoiceFilters extends Data
         // only an implicit rule can refuse '' at this seam. Listed first so
         // its removal stays test-visible and the empty-value message leads.
         return [
-            'status' => ['filled', 'sometimes', 'string', Rule::in(self::STATUS_TOKENS)],
+            'status' => ['filled', 'sometimes', 'string', Rule::enum(InvoiceStatusFilter::class)],
             // bail: the closure must never run on a non-string (an array
             // within[] would fatal on the string cast before the 422).
             'within' => ['filled', 'sometimes', 'bail', 'string', self::isoDateRangeRule()],
@@ -105,9 +103,20 @@ class InvoiceFilters extends Data
             /** @var string $value bail + string precede this rule */
             $dates = explode(',', $value);
 
-            if (count($dates) !== 2 || ! CarbonImmutable::hasFormat($dates[0], 'Y-m-d') || ! CarbonImmutable::hasFormat($dates[1], 'Y-m-d')) {
+            if (count($dates) !== 2 || ! self::isCalendarDate($dates[0]) || ! self::isCalendarDate($dates[1])) {
                 $fail("The {$attribute} filter must be two ISO-8601 (YYYY-MM-DD) dates separated by a comma.");
             }
         };
+    }
+
+    /**
+     * A Y-m-d date that exists on the calendar — 2026-02-31 has the shape but would
+     * roll over to March, so the date must read back unchanged.
+     */
+    protected static function isCalendarDate(string $date): bool
+    {
+        $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+
+        return $parsed !== false && $parsed->format('Y-m-d') === $date;
     }
 }

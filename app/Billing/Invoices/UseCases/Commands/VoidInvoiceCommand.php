@@ -2,7 +2,9 @@
 
 namespace App\Billing\Invoices\UseCases\Commands;
 
+use App\Models\User;
 use Spatie\LaravelData\Data;
+use App\Billing\Invoices\Enums\InvoiceSource;
 
 /**
  * Void an unpaid invoice (SM-1-04 T7 from Pending / T8 from Failed) — admin
@@ -14,11 +16,9 @@ use Spatie\LaravelData\Data;
  */
 class VoidInvoiceCommand extends Data
 {
-    public string $invoiceId;
-
-    public string $voidedBy;
+    public User $voidedBy;
 
     public string $reason;
 
-    public string $source;
+    public InvoiceSource $source;
 }

@@ -4,6 +4,7 @@ namespace App\Billing\Subscriptions\UseCases\Commands;
 
 use Carbon\CarbonImmutable;
 use Spatie\LaravelData\Data;
+use App\Companies\Entities\Company;
 
 /**
  * Start a company's 30-day trial subscription. trialEndsAt is supplied by the
@@ -18,7 +19,7 @@ use Spatie\LaravelData\Data;
  */
 class StartTrialCommand extends Data
 {
-    public string $companyId;
+    public Company $company;
 
     public CarbonImmutable $trialEndsAt;
 }

@@ -62,7 +62,6 @@ class RecordInvoicePaymentTest extends BillingTestCase
         try {
             Invoice::retrieve($orphanInvoiceId)
                 ->recordPaymentSucceeded(RecordPaymentSucceededCommand::from([
-                    'invoiceId' => $orphanInvoiceId,
                     'payHereEventId' => 'evt_orphan_stream_guard',
                     'payHereTransactionId' => 'txn_orphan',
                     'amountCents' => 60000,

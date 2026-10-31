@@ -14,9 +14,11 @@ use Illuminate\Validation\Rules\Enum;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\LaravelData\Support\DataConfig;
+use App\Foundation\UseCases\Casts\ModelCast;
 use Spatie\LaravelData\Support\DataProperty;
 use Spatie\LaravelData\Casts\BuiltinTypeCast;
 use Illuminate\Validation\ValidationRuleParser;
+use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationPath;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
@@ -29,27 +31,6 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     protected const int COMMANDS_AT_LEAST = 52;
 
     protected const array KNOWN_UNTYPED = [
-        'App\Billing\Invoices\UseCases\Commands\DownloadInvoiceReceiptCommand::$companyId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\DownloadInvoiceReceiptCommand::$invoiceId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand::$invoiceId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand::$filedBy — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\InvoiceFilters::$status — a closed set kept as a string',
-        'App\Billing\Invoices\UseCases\Commands\InvoiceFilters::$sort — a closed set kept as a string',
-        'App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand::$subscriptionId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand::$companyId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand::$createdBy — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand::$invoiceId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand::$payHereEventId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand::$invoiceId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand::$payHereEventId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand::$payHereTransactionId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand::$invoiceId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand::$payHereRefundTransactionId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand::$invoiceId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand::$voidedBy — a string reference',
-        'App\Billing\Subscriptions\UseCases\Commands\ApplyTrialExpirationCommand::$companyId — a string reference',
-        'App\Billing\Subscriptions\UseCases\Commands\ApplyTrialExpirationCommand::$subscriptionId — a string reference',
-        'App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand::$companyId — a string reference',
         'App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand::$roleCode — a closed set kept as a string',
         'App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand::$changedBy — a string reference',
         'App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand::$companyId — a string reference',
@@ -175,15 +156,19 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
      */
     protected function breachesOf(string $command, DataProperty $property, array $rules): array
     {
-        $type = (new ReflectionProperty($command, $property->name))->getType();
+        $reflection = new ReflectionProperty($command, $property->name);
+        $type = $reflection->getType();
         $typeName = $type instanceof ReflectionNamedType ? $type->getName() : '';
         $inputName = $property->inputMappedName ?? $property->name;
         $parsed = $this->parsedRules($rules[$inputName] ?? []);
+        $markerReason = $this->markerReasonOf($reflection);
+        $opaque = $markerReason !== null && $markerReason !== '';
 
         $checks = [
-            'a string reference' => $typeName === 'string'
+            'a string reference' => ! $opaque && $typeName === 'string'
                 && (preg_match('/(Id|By)$/', $property->name) === 1 || $this->holdsRule('Exists', $parsed)),
-            'a closed set kept as a string' => $typeName === 'string' && $this->holdsAClosedSet($parsed),
+            'a closed set kept as a string' => ! $opaque && $typeName === 'string' && $this->holdsAClosedSet($parsed),
+            'a marker without a reason' => $markerReason === '',
             'a flag that is not a cast bool' => $this->holdsAFlag($parsed)
                 && ! ($typeName === 'bool' && $type->allowsNull() && $property->cast instanceof BuiltinTypeCast),
             'a date that is not Carbon' => $this->holdsADate([...$parsed, ...$this->nestedRules($inputName, $rules)])
@@ -191,11 +176,29 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
             'a mapper outside the id shape' => $property->inputMappedName !== null
                 && ! str_ends_with($property->className, 'Filters')
                 && ! (is_subclass_of($typeName, Model::class) && $property->inputMappedName === $property->name.'Id'),
+            'a model without ModelCast' => $this->holdsAModelWithoutCast($command, $property, $typeName),
         ];
 
         $where = $property->className.'::$'.$property->name;
 
         return array_map(fn (string $check): string => "{$where} — {$check}", array_keys(array_filter($checks)));
+    }
+
+    protected function markerReasonOf(ReflectionProperty $reflection): ?string
+    {
+        $markers = $reflection->getAttributes(OpaqueString::class);
+
+        return $markers === [] ? null : trim($markers[0]->newInstance()->reason);
+    }
+
+    /**
+     * @param  class-string  $command
+     */
+    protected function holdsAModelWithoutCast(string $command, DataProperty $property, string $typeName): bool
+    {
+        return method_exists($command, 'rules')
+            && is_subclass_of($typeName, Model::class)
+            && ! $property->cast instanceof ModelCast;
     }
 
     /**

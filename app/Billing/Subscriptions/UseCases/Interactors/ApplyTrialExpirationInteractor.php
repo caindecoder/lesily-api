@@ -18,8 +18,8 @@ class ApplyTrialExpirationInteractor
     public function execute(ApplyTrialExpirationCommand $command): void
     {
         DB::transaction(function () use ($command): void {
-            Company::retrieve($command->companyId)->trialExpire()->persist();
-            Subscription::retrieve($command->subscriptionId)->endTrial('trial-expired')->persist();
+            Company::retrieve($command->company->getKey())->trialExpire()->persist();
+            Subscription::retrieve($command->subscription->getKey())->endTrial('trial-expired')->persist();
         });
     }
 }

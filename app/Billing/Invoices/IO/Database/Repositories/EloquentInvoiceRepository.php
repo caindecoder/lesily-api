@@ -2,10 +2,12 @@
 
 namespace App\Billing\Invoices\IO\Database\Repositories;
 
+use Carbon\CarbonPeriod;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use App\Billing\Invoices\Entities\Invoice;
 use App\Billing\Invoices\Enums\InvoiceStatus;
+use App\Billing\Invoices\Enums\InvoiceStatusFilter;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use App\Billing\Invoices\UseCases\Commands\InvoiceFilters;
 use App\Billing\Invoices\UseCases\Repositories\InvoiceRepositoryInterface;
@@ -59,18 +61,16 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
     /**
      * `within=from,to` filters on the issue date, both edges inclusive
      * (api-conventions §10.1 date-range convention; validated upstream by
-     * InvoiceFilters, so the two ISO dates are guaranteed here).
+     * InvoiceFilters and cast to a period, so both edges are dates here).
      *
      * @param  Builder<Invoice>  $query
      * @return Builder<Invoice>
      */
-    protected function applyIssuedWithin(Builder $query, string $within): Builder
+    protected function applyIssuedWithin(Builder $query, CarbonPeriod $within): Builder
     {
-        [$from, $to] = explode(',', $within);
-
         return $query
-            ->whereDate('issued_at', '>=', $from)
-            ->whereDate('issued_at', '<=', $to);
+            ->whereDate('issued_at', '>=', $within->getStartDate()->toDateString())
+            ->whereDate('issued_at', '<=', $within->getIncludedEndDate()->toDateString());
     }
 
     /**
@@ -103,14 +103,14 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
      * @param  Builder<Invoice>  $query
      * @return Builder<Invoice>
      */
-    protected function applyStatusToken(Builder $query, string $status): Builder
+    protected function applyStatusToken(Builder $query, InvoiceStatusFilter $status): Builder
     {
         return match ($status) {
-            'overdue' => $query
+            InvoiceStatusFilter::Overdue => $query
                 ->where('status', InvoiceStatus::Pending)
                 ->whereDate('due_date', '<', CarbonImmutable::today()),
-            'disputed' => $query->where('has_dispute', true),
-            default => $query->where('status', $status),
+            InvoiceStatusFilter::Disputed => $query->where('has_dispute', true),
+            default => $query->where('status', $status->value),
         };
     }
 }

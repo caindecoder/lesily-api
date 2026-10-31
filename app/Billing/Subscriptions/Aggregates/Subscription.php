@@ -20,9 +20,9 @@ class Subscription extends AggregateRoot
             throw SubscriptionAlreadyStartedException::withId($this->uuid());
         }
 
-        return $this->forCompany($command->companyId)
+        return $this->forCompany($command->company->getKey())
             ->recordThat(new SubscriptionTrialStarted(
-                companyId: $command->companyId,
+                companyId: $command->company->getKey(),
                 trialEndsAt: $command->trialEndsAt,
             ));
     }

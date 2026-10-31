@@ -3,6 +3,7 @@
 namespace App\Billing\Invoices\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
+use App\Foundation\UseCases\Attributes\OpaqueString;
 
 /**
  * Record a verified PayHere payment-success webhook against an invoice
@@ -15,10 +16,10 @@ use Spatie\LaravelData\Data;
  */
 class RecordPaymentSucceededCommand extends Data
 {
-    public string $invoiceId;
-
+    #[OpaqueString('the PayHere webhook event id - the idempotency key, not a row of ours')]
     public string $payHereEventId;
 
+    #[OpaqueString('the PayHere transaction id - not a row of ours')]
     public string $payHereTransactionId;
 
     public int $amountCents;

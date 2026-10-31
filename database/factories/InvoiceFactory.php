@@ -42,7 +42,7 @@ class InvoiceFactory extends Factory
 
                 Subscription::retrieve($subscriptionId)
                     ->startTrial(StartTrialCommand::from([
-                        'companyId' => $attributes['company_id'],
+                        'company' => Company::query()->findOrFail($attributes['company_id']),
                         'trialEndsAt' => CarbonImmutable::now()->addDays(30),
                     ]))
                     ->persist();

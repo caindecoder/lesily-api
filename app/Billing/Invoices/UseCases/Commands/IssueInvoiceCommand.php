@@ -2,8 +2,13 @@
 
 namespace App\Billing\Invoices\UseCases\Commands;
 
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Spatie\LaravelData\Data;
+use App\Companies\Entities\Company;
+use App\Billing\Invoices\Enums\Currency;
+use App\Billing\Invoices\Enums\InvoiceSource;
+use App\Billing\Subscriptions\Entities\Subscription;
 
 /**
  * Issue an invoice (SM-1-04 T1 genesis). Carries the full InvoiceCreated payload
@@ -20,20 +25,20 @@ class IssueInvoiceCommand extends Data
 {
     public string $invoiceNumber;
 
-    public string $subscriptionId;
+    public Subscription $subscription;
 
-    public string $companyId;
+    public Company $company;
 
     public int $amountCents;
 
-    public string $currency;
+    public Currency $currency;
 
     /** @var array<int, array<string, mixed>> */
     public array $lineItems;
 
     public CarbonImmutable $dueDate;
 
-    public string $source;
+    public InvoiceSource $source;
 
     public string $recipientName;
 
@@ -42,5 +47,5 @@ class IssueInvoiceCommand extends Data
     /** @var ?array<string, mixed> */
     public ?array $recipientBillingAddress = null;
 
-    public ?string $createdBy = null;
+    public ?User $createdBy = null;
 }

@@ -285,7 +285,7 @@ abstract class BillingTestCase extends TestCase
 
         Subscription::retrieve($subscriptionId)
             ->startTrial(StartTrialCommand::from([
-                'companyId' => $company->getKey(),
+                'company' => $company,
                 'trialEndsAt' => $trialEndsAt,
             ]))
             ->persist();
@@ -320,8 +320,8 @@ abstract class BillingTestCase extends TestCase
     {
         return IssueInvoiceCommand::from([
             'invoiceNumber' => 'INV-2026-000001',
-            'subscriptionId' => $subscription->getKey(),
-            'companyId' => $company->getKey(),
+            'subscription' => $subscription,
+            'company' => $company,
             'amountCents' => 60000,
             'currency' => 'LKR',
             'lineItems' => [
@@ -400,7 +400,6 @@ abstract class BillingTestCase extends TestCase
     protected function recordPaymentFailedCommand(InvoiceReadModel $invoice, array $overrides = []): RecordPaymentFailedCommand
     {
         return RecordPaymentFailedCommand::from([
-            'invoiceId' => $invoice->getKey(),
             'payHereEventId' => 'evt_fail_'.$invoice->getKey(),
             'failureCode' => 'insufficient_funds',
             'failureMessage' => 'Card has insufficient funds.',
@@ -430,7 +429,6 @@ abstract class BillingTestCase extends TestCase
     protected function refundInvoiceCommand(InvoiceReadModel $invoice, array $overrides = []): RefundInvoiceCommand
     {
         return RefundInvoiceCommand::from([
-            'invoiceId' => $invoice->getKey(),
             'refundAmountCents' => $invoice->amount_cents,
             'payHereRefundTransactionId' => 'refund_txn_'.$invoice->getKey(),
             'source' => 'admin-refund',
@@ -460,8 +458,7 @@ abstract class BillingTestCase extends TestCase
     protected function voidInvoiceCommand(InvoiceReadModel $invoice, array $overrides = []): VoidInvoiceCommand
     {
         return VoidInvoiceCommand::from([
-            'invoiceId' => $invoice->getKey(),
-            'voidedBy' => User::factory()->create()->getKey(),
+            'voidedBy' => User::factory()->create(),
             'reason' => 'Issued in error - admin correction.',
             'source' => 'admin-correction',
             ...$overrides,
@@ -489,9 +486,8 @@ abstract class BillingTestCase extends TestCase
     protected function fileInvoiceDisputeCommand(InvoiceReadModel $invoice, array $overrides = []): FileInvoiceDisputeCommand
     {
         return FileInvoiceDisputeCommand::from([
-            'invoiceId' => $invoice->getKey(),
             'reason' => 'This charge does not match our agreed plan.',
-            'filedBy' => User::factory()->create()->getKey(),
+            'filedBy' => User::factory()->create(),
             ...$overrides,
         ]);
     }
@@ -644,7 +640,6 @@ abstract class BillingTestCase extends TestCase
     protected function recordPaymentSucceededCommand(InvoiceReadModel $invoice, array $overrides = []): RecordPaymentSucceededCommand
     {
         return RecordPaymentSucceededCommand::from([
-            'invoiceId' => $invoice->getKey(),
             'payHereEventId' => 'evt_'.$invoice->getKey(),
             'payHereTransactionId' => 'txn_'.$invoice->getKey(),
             'amountCents' => $invoice->amount_cents,

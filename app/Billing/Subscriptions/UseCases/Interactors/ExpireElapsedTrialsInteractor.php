@@ -8,7 +8,7 @@ use App\Billing\Subscriptions\UseCases\Repositories\SubscriptionRepositoryInterf
 
 /**
  * Daily scan that ends every elapsed trial. The boundary (the `trials:expire` command) hands
- * it the cutoff; it reads the (companyId, subscriptionId) pairs from the repository and runs
+ * it the cutoff; it reads the (company, subscription) pairs from the repository and runs
  * the Pattern-A ApplyTrialExpirationInteractor once per pair. Delivery stays a thin appendix.
  */
 class ExpireElapsedTrialsInteractor

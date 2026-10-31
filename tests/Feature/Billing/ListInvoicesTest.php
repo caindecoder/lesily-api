@@ -426,8 +426,8 @@ class ListInvoicesTest extends BillingTestCase
     #[Test]
     public function when_status_and_period_filters_combined_then_matching_invoices_in_amount_order(): void
     {
-        // Given paid invoices issued exactly on both period edges, a paid one
-        // issued before the period, and a pending one inside it
+        // Given paid invoices issued exactly on both period edges, paid ones
+        // issued the day before and the day after the period, and a pending one inside it
         [$company, $owner] = $this->aCompanyWithMember('owner');
         $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
 
@@ -448,6 +448,12 @@ class ListInvoicesTest extends BillingTestCase
             'invoiceNumber' => 'INV-2026-000003',
             'amountCents' => 60000,
             'lineItems' => [self::planLineItem(60000)],
+        ]);
+        $this->travelTo(CarbonImmutable::parse('2026-07-01 10:00:00'));
+        $this->aPaidInvoiceFor($company, $subscription, [
+            'invoiceNumber' => 'INV-2026-000005',
+            'amountCents' => 65000,
+            'lineItems' => [self::planLineItem(65000)],
         ]);
         $this->travelTo(CarbonImmutable::parse('2026-02-01 10:00:00'));
         $this->anIssuedInvoiceFor($company, $subscription, ['invoiceNumber' => 'INV-2026-000004']);
@@ -686,6 +692,7 @@ class ListInvoicesTest extends BillingTestCase
             'within first date malformed' => [['within' => 'bad-date,2026-01-01'], 'within', $withinMessage],
             'within second date malformed' => [['within' => '2026-01-01,bad-date'], 'within', $withinMessage],
             'within missing second date' => [['within' => '2026-01-01'], 'within', $withinMessage],
+            'within impossible calendar date' => [['within' => '2026-02-01,2026-02-31'], 'within', $withinMessage],
             'non-integer min_amount' => [['min_amount' => 'abc'], 'min_amount', 'The min amount field must be an integer.'],
             'per_page over max' => [['per_page' => 101], 'per_page', 'The per page field must not be greater than 100.'],
             'per_page below minimum' => [['per_page' => 0], 'per_page', 'The per page field must be at least 1.'],
