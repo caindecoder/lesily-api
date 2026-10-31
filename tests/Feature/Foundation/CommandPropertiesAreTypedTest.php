@@ -11,6 +11,7 @@ use Carbon\CarbonImmutable;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rules\In;
 use Illuminate\Support\Facades\File;
+use Illuminate\Validation\Rules\Date;
 use Illuminate\Validation\Rules\Enum;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Database\Eloquent\Model;
@@ -116,7 +117,7 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
 
         $checks = [
             'a string reference' => $unmarkedString
-                && ($this->namesAReference($property) || $this->holdsA(Exists::class, $items)),
+                && ($this->namesAReference($property) || $this->holdsAnExistenceRule($items)),
             'a closed set kept as a string' => $unmarkedString && $this->holdsAClosedSet($items),
             'an opaque string with no reason' => $reason !== null && trim($reason) === '',
             'a flag that is not a cast bool' => $this->holdsAFlag($items) && ! $this->isACastBool($property),
@@ -135,7 +136,11 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
      */
     protected function ruleItems(mixed $entry): array
     {
-        return array_values(is_string($entry) ? explode('|', $entry) : (array) $entry);
+        return match (true) {
+            is_array($entry) => array_values($entry),
+            is_string($entry) => explode('|', $entry),
+            default => [$entry],
+        };
     }
 
     protected function inputNameOf(ReflectionProperty $property): string
@@ -175,12 +180,17 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     }
 
     /**
-     * @param  class-string  $rule
      * @param  list<mixed>  $items
      */
-    protected function holdsA(string $rule, array $items): bool
+    protected function holdsAnExistenceRule(array $items): bool
     {
-        return array_filter($items, fn (mixed $item): bool => $item instanceof $rule) !== [];
+        foreach ($items as $item) {
+            if ($item instanceof Exists || (is_string($item) && str_starts_with($item, 'exists:'))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -219,7 +229,7 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     protected function holdsADate(array $items): bool
     {
         foreach ($items as $item) {
-            if ($item === 'date' || (is_string($item) && str_starts_with($item, 'date_format:'))) {
+            if ($item === 'date' || $item instanceof Date || (is_string($item) && str_starts_with($item, 'date_format:'))) {
                 return true;
             }
         }
