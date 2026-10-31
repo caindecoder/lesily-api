@@ -26,7 +26,7 @@ class DownloadInvoiceReceiptInteractor
 
     public function execute(DownloadInvoiceReceiptCommand $command): InvoiceReceiptPdf
     {
-        $invoice = $this->invoices->findForCompany($command->companyId, $command->invoiceId);
+        $invoice = $this->invoices->findForCompany($command->company->getKey(), $command->invoice->getKey());
 
         // Unknown id and cross-tenant id surface identically (UC-1-121 4a
         // no-existence-leak) - findForCompany is tenant-scoped, so both are null.

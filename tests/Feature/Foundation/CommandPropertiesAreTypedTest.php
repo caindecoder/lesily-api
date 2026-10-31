@@ -14,6 +14,7 @@ use Illuminate\Validation\Rules\Enum;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\LaravelData\Support\DataConfig;
+use App\Foundation\UseCases\Casts\ModelCast;
 use Spatie\LaravelData\Support\DataProperty;
 use Spatie\LaravelData\Casts\BuiltinTypeCast;
 use Illuminate\Validation\ValidationRuleParser;
@@ -29,8 +30,6 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     protected const int COMMANDS_AT_LEAST = 52;
 
     protected const array KNOWN_UNTYPED = [
-        'App\Billing\Invoices\UseCases\Commands\DownloadInvoiceReceiptCommand::$companyId — a string reference',
-        'App\Billing\Invoices\UseCases\Commands\DownloadInvoiceReceiptCommand::$invoiceId — a string reference',
         'App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand::$invoiceId — a string reference',
         'App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand::$filedBy — a string reference',
         'App\Billing\Invoices\UseCases\Commands\InvoiceFilters::$status — a closed set kept as a string',
@@ -191,11 +190,22 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
             'a mapper outside the id shape' => $property->inputMappedName !== null
                 && ! str_ends_with($property->className, 'Filters')
                 && ! (is_subclass_of($typeName, Model::class) && $property->inputMappedName === $property->name.'Id'),
+            'a model without ModelCast' => $this->holdsAModelWithoutCast($command, $property, $typeName),
         ];
 
         $where = $property->className.'::$'.$property->name;
 
         return array_map(fn (string $check): string => "{$where} — {$check}", array_keys(array_filter($checks)));
+    }
+
+    /**
+     * @param  class-string  $command
+     */
+    protected function holdsAModelWithoutCast(string $command, DataProperty $property, string $typeName): bool
+    {
+        return method_exists($command, 'rules')
+            && is_subclass_of($typeName, Model::class)
+            && ! $property->cast instanceof ModelCast;
     }
 
     /**

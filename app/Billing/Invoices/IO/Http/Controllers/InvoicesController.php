@@ -33,8 +33,8 @@ class InvoicesController
     public function receipt(Request $request, string $invoiceId, DownloadInvoiceReceiptInteractor $interactor): Response
     {
         $receipt = $interactor->execute(DownloadInvoiceReceiptCommand::validateAndCreate([
-            'companyId' => $request->company()->getKey(),
-            'invoiceId' => $invoiceId,
+            'company' => $request->company(),
+            'invoice' => $invoiceId,
         ]));
 
         // Manual binary headers per the LD ICS-feed idiom — regenerated on
