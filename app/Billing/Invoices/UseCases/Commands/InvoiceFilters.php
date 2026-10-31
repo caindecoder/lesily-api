@@ -3,13 +3,16 @@
 namespace App\Billing\Invoices\UseCases\Commands;
 
 use Closure;
+use Carbon\CarbonPeriod;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
+use Spatie\LaravelData\Attributes\WithCast;
 use Illuminate\Validation\ValidationException;
 use Spatie\LaravelData\Attributes\MapInputName;
 use App\Billing\Invoices\Enums\InvoiceStatusFilter;
+use App\Foundation\UseCases\Casts\CarbonPeriodCast;
 use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
@@ -39,7 +42,8 @@ class InvoiceFilters extends Data
 
     public ?InvoiceStatusFilter $status = null;
 
-    public ?string $within = null;
+    #[WithCast(CarbonPeriodCast::class)]
+    public ?CarbonPeriod $within = null;
 
     #[MapInputName('min_amount')]
     public ?int $minAmount = null;

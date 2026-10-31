@@ -2,6 +2,7 @@
 
 namespace App\Billing\Invoices\IO\Database\Repositories;
 
+use Carbon\CarbonPeriod;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use App\Billing\Invoices\Entities\Invoice;
@@ -60,18 +61,16 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
     /**
      * `within=from,to` filters on the issue date, both edges inclusive
      * (api-conventions §10.1 date-range convention; validated upstream by
-     * InvoiceFilters, so the two ISO dates are guaranteed here).
+     * InvoiceFilters and cast to a period, so both edges are dates here).
      *
      * @param  Builder<Invoice>  $query
      * @return Builder<Invoice>
      */
-    protected function applyIssuedWithin(Builder $query, string $within): Builder
+    protected function applyIssuedWithin(Builder $query, CarbonPeriod $within): Builder
     {
-        [$from, $to] = explode(',', $within);
-
         return $query
-            ->whereDate('issued_at', '>=', $from)
-            ->whereDate('issued_at', '<=', $to);
+            ->whereDate('issued_at', '>=', $within->getStartDate()->toDateString())
+            ->whereDate('issued_at', '<=', $within->getIncludedEndDate()->toDateString());
     }
 
     /**
