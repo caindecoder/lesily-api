@@ -29,7 +29,8 @@ class DownloadInvoiceReceiptInteractor
         $invoice = $this->invoices->findForCompany($command->company->getKey(), $command->invoice->getKey());
 
         // Unknown id and cross-tenant id surface identically (UC-1-121 4a
-        // no-existence-leak) - findForCompany is tenant-scoped, so both are null.
+        // no-existence-leak) - an unknown id is refused by the command's cast,
+        // a foreign one is null here because findForCompany is tenant-scoped.
         if ($invoice === null) {
             throw new ModelNotFoundException;
         }

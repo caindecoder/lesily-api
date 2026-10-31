@@ -3,8 +3,8 @@
 namespace App\Billing\Invoices\Enums;
 
 /**
- * What caused an invoice to be issued, refunded or voided (SM-1-04). Cases land with
- * the producer that first records them.
+ * What caused an invoice to be issued, refunded or voided (SM-1-04) — the values the
+ * built issue, refund and void paths record today.
  */
 enum InvoiceSource: string
 {
