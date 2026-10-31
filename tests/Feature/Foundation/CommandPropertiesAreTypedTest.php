@@ -2,38 +2,106 @@
 
 namespace Tests\Feature\Foundation;
 
-use ReflectionClass;
+use Stringable;
 use ReflectionMethod;
 use ReflectionProperty;
 use Carbon\CarbonPeriod;
 use ReflectionNamedType;
 use Carbon\CarbonImmutable;
 use Spatie\LaravelData\Data;
-use Illuminate\Validation\Rules\In;
 use Illuminate\Support\Facades\File;
-use Illuminate\Validation\Rules\Date;
 use Illuminate\Validation\Rules\Enum;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Validation\Rules\Exists;
-use Spatie\LaravelData\Attributes\WithCast;
+use Spatie\LaravelData\Support\DataConfig;
+use Spatie\LaravelData\Support\DataProperty;
 use Spatie\LaravelData\Casts\BuiltinTypeCast;
-use Spatie\LaravelData\Attributes\MapInputName;
-use App\Foundation\UseCases\Attributes\OpaqueString;
+use Illuminate\Validation\ValidationRuleParser;
 use Spatie\LaravelData\Support\Validation\ValidationPath;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
  * Conv-plan §2.24 — a command's ids are models, its closed sets enums, its
- * dates Carbon and its true/false flags cast bools. The known count falls to
- * 0 as the modules are typed.
+ * dates Carbon and its true/false flags cast bools.
  */
 class CommandPropertiesAreTypedTest extends FoundationTestCase
 {
-    protected const int LEGACY_BOUND = 69;
+    protected const int COMMANDS_AT_LEAST = 52;
+
+    protected const array KNOWN_UNTYPED = [
+        'App\Billing\Invoices\UseCases\Commands\DownloadInvoiceReceiptCommand::$companyId — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\DownloadInvoiceReceiptCommand::$invoiceId — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand::$invoiceId — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand::$filedBy — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\InvoiceFilters::$status — a closed set kept as a string',
+        'App\Billing\Invoices\UseCases\Commands\InvoiceFilters::$sort — a closed set kept as a string',
+        'App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand::$subscriptionId — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand::$companyId — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand::$createdBy — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand::$invoiceId — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand::$payHereEventId — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand::$invoiceId — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand::$payHereEventId — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand::$payHereTransactionId — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand::$invoiceId — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand::$payHereRefundTransactionId — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand::$invoiceId — a string reference',
+        'App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand::$voidedBy — a string reference',
+        'App\Billing\Subscriptions\UseCases\Commands\ApplyTrialExpirationCommand::$companyId — a string reference',
+        'App\Billing\Subscriptions\UseCases\Commands\ApplyTrialExpirationCommand::$subscriptionId — a string reference',
+        'App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand::$companyId — a string reference',
+        'App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand::$roleCode — a closed set kept as a string',
+        'App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand::$changedBy — a string reference',
+        'App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand::$companyId — a string reference',
+        'App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand::$roleId — a string reference',
+        'App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand::$invitedByUserId — a string reference',
+        'App\Companies\Memberships\UseCases\Commands\InviteUserCommand::$roleCode — a closed set kept as a string',
+        'App\Companies\Memberships\UseCases\Commands\MembershipFilters::$status — a closed set kept as a string',
+        'App\Companies\Memberships\UseCases\Commands\MembershipFilters::$sort — a closed set kept as a string',
+        'App\Companies\Memberships\UseCases\Commands\RemoveUserFromCompanyCommand::$removedBy — a string reference',
+        'App\Companies\Memberships\UseCases\Commands\ResendInvitationCommand::$resentBy — a string reference',
+        'App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand::$revokedBy — a string reference',
+        'App\Companies\Memberships\UseCases\Commands\SetEmergencyContactCommand::$relationship — a closed set kept as a string',
+        'App\Companies\UseCases\Commands\CreateCompanyCommand::$ownerUserId — a string reference',
+        'App\Companies\UseCases\Commands\CreateCompanyCommand::$emergencyContactRelationship — a closed set kept as a string',
+        'App\Companies\UseCases\Commands\ExecuteOwnershipTransferCaseCommand::$caseId — a string reference',
+        'App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand::$companyId — a string reference',
+        'App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand::$newOwnerUserId — a string reference',
+        'App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters::$status — a closed set kept as a string',
+        'App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters::$companyId — a string reference',
+        'App\Companies\UseCases\Commands\RejectOwnershipTransferCaseCommand::$caseId — a string reference',
+        'App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand::$newOwnerUserId — a string reference',
+        'App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand::$transferredBy — a string reference',
+        'App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand::$caseId — a string reference',
+        'App\Companies\UseCases\Commands\VerifyOwnershipTransferCaseCommand::$caseId — a string reference',
+        'App\Companies\UseCases\Commands\VerifyOwnershipTransferCaseCommand::$newOwnerUserId — a string reference',
+        'App\Companies\UseCases\Commands\VerifyOwnershipTransferCaseCommand::$artefacts — a date that is not Carbon',
+        'App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand::$requestId — a string reference',
+        'App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand::$companyId — a string reference',
+        'App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand::$cancelledByUserId — a string reference',
+        'App\Compliance\Dsar\UseCases\Commands\DownloadDsarExportCommand::$requestId — a string reference',
+        'App\Compliance\Dsar\UseCases\Commands\DownloadDsarExportCommand::$companyId — a string reference',
+        'App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters::$status — a closed set kept as a string',
+        'App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters::$companyId — a string reference',
+        'App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters::$overdue — a flag that is not a cast bool',
+        'App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters::$slaBreached — a flag that is not a cast bool',
+        'App\Compliance\Dsar\UseCases\Commands\DsarRequestFilters::$status — a closed set kept as a string',
+        'App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand::$requestId — a string reference',
+        'App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand::$requestId — a string reference',
+        'App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand::$subjectUserId — a string reference',
+        'App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand::$companyId — a string reference',
+        'App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand::$requestedByUserId — a string reference',
+        'App\Consent\UseCases\Commands\RecordConsentCommand::$userId — a string reference',
+        'App\Consent\UseCases\Commands\RecordConsentCommand::$companyId — a string reference',
+        'App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand::$companyId — a string reference',
+        'App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand::$emergencyContactRelationship — a closed set kept as a string',
+        'App\Foundation\Auth\UseCases\Commands\SetDefaultCompanyCommand::$companyId — a string reference',
+        'App\Foundation\Auth\UseCases\Commands\UpdateUserProfileCommand::$locale — a closed set kept as a string',
+        'App\Foundation\Auth\UseCases\Commands\VerifyTwoFactorCommand::$challengeId — a string reference',
+    ];
 
     #[Test]
-    public function when_the_commands_are_walked_then_the_untyped_properties_equal_the_known_count(): void
+    public function when_the_commands_are_walked_then_only_the_known_properties_are_untyped(): void
     {
         // Given every Data class under app/**/UseCases/Commands
         $commands = $this->commandClasses();
@@ -41,8 +109,8 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         // When their public properties are walked
         $untyped = $this->untypedProperties($commands);
 
-        // Then the walk read the commands and found the known count
-        $this->assertWalkedAndCounted($commands, $untyped);
+        // Then the walk read the commands and found exactly the known untyped properties
+        $this->assertWalkedAndKnown($commands, $untyped);
     }
 
     /**
@@ -75,10 +143,8 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         foreach ($commands as $command) {
             $rules = $this->rulesOf($command);
 
-            foreach ((new ReflectionClass($command))->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
-                if ($property->getDeclaringClass()->getName() === $command) {
-                    array_push($untyped, ...$this->breachesOf($property, $rules));
-                }
+            foreach (app(DataConfig::class)->getDataClass($command)->properties as $property) {
+                array_push($untyped, ...$this->breachesOf($command, $property, $rules));
             }
         }
 
@@ -103,89 +169,87 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     }
 
     /**
+     * @param  class-string<Data>  $command
      * @param  array<string, mixed>  $rules
      * @return list<string>
      */
-    protected function breachesOf(ReflectionProperty $property, array $rules): array
+    protected function breachesOf(string $command, DataProperty $property, array $rules): array
     {
-        $type = $property->getType();
+        $type = (new ReflectionProperty($command, $property->name))->getType();
         $typeName = $type instanceof ReflectionNamedType ? $type->getName() : '';
-        $items = $this->ruleItems($rules[$this->inputNameOf($property)] ?? []);
-
-        $reason = $this->opaqueReasonOf($property);
-        $unmarkedString = $typeName === 'string' && ($reason === null || trim($reason) === '');
+        $inputName = $property->inputMappedName ?? $property->name;
+        $parsed = $this->parsedRules($rules[$inputName] ?? []);
 
         $checks = [
-            'a string reference' => $unmarkedString
-                && ($this->namesAReference($property) || $this->holdsAnExistenceRule($items)),
-            'a closed set kept as a string' => $unmarkedString && $this->holdsAClosedSet($items),
-            'an opaque string with no reason' => $reason !== null && trim($reason) === '',
-            'a flag that is not a cast bool' => $this->holdsAFlag($items) && ! $this->isACastBool($property),
-            'a date that is not Carbon' => $this->holdsADate([...$items, ...$this->nestedItems($property, $rules)])
+            'a string reference' => $typeName === 'string'
+                && (preg_match('/(Id|By)$/', $property->name) === 1 || $this->holdsRule('Exists', $parsed)),
+            'a closed set kept as a string' => $typeName === 'string' && $this->holdsAClosedSet($parsed),
+            'a flag that is not a cast bool' => $this->holdsAFlag($parsed)
+                && ! ($typeName === 'bool' && $type->allowsNull() && $property->cast instanceof BuiltinTypeCast),
+            'a date that is not Carbon' => $this->holdsADate([...$parsed, ...$this->nestedRules($inputName, $rules)])
                 && ! in_array($typeName, [CarbonImmutable::class, CarbonPeriod::class], true),
-            'a mapper outside the id shape' => $this->mapsOutsideTheIdShape($property, $typeName),
+            'a mapper outside the id shape' => $property->inputMappedName !== null
+                && ! str_ends_with($property->className, 'Filters')
+                && ! (is_subclass_of($typeName, Model::class) && $property->inputMappedName === $property->name.'Id'),
         ];
 
-        $where = $property->getDeclaringClass()->getName().'::$'.$property->getName();
+        $where = $property->className.'::$'.$property->name;
 
         return array_map(fn (string $check): string => "{$where} — {$check}", array_keys(array_filter($checks)));
     }
 
     /**
-     * @return list<mixed>
+     * @return list<array<mixed>>
      */
-    protected function ruleItems(mixed $entry): array
+    protected function parsedRules(mixed $entry): array
     {
-        return match (true) {
-            is_array($entry) => array_values($entry),
-            is_string($entry) => explode('|', $entry),
-            default => [$entry],
-        };
-    }
+        $parsed = [];
 
-    protected function inputNameOf(ReflectionProperty $property): string
-    {
-        $mapper = $property->getAttributes(MapInputName::class)[0] ?? null;
+        foreach (is_array($entry) ? $entry : [$entry] as $item) {
+            if ($item instanceof Enum) {
+                $parsed[] = ['Enum', []];
+            } elseif (is_string($item) || $item instanceof Stringable) {
+                foreach (explode('|', (string) $item) as $text) {
+                    $parsed[] = ValidationRuleParser::parse($text);
+                }
+            }
+        }
 
-        return $mapper?->getArguments()[0] ?? $property->getName();
+        return $parsed;
     }
 
     /**
      * @param  array<string, mixed>  $rules
-     * @return list<mixed>
+     * @return list<array<mixed>>
      */
-    protected function nestedItems(ReflectionProperty $property, array $rules): array
+    protected function nestedRules(string $inputName, array $rules): array
     {
         $nested = [];
 
         foreach ($rules as $key => $entry) {
-            if (str_starts_with($key, $this->inputNameOf($property).'.')) {
-                array_push($nested, ...$this->ruleItems($entry));
+            if (str_starts_with($key, $inputName.'.')) {
+                array_push($nested, ...$this->parsedRules($entry));
             }
         }
 
         return $nested;
     }
 
-    protected function opaqueReasonOf(ReflectionProperty $property): ?string
+    /**
+     * @param  list<array<mixed>>  $parsed
+     */
+    protected function holdsRule(string $name, array $parsed): bool
     {
-        $marker = $property->getAttributes(OpaqueString::class)[0] ?? null;
-
-        return $marker?->newInstance()->reason;
-    }
-
-    protected function namesAReference(ReflectionProperty $property): bool
-    {
-        return preg_match('/(Id|By)$/', $property->getName()) === 1;
+        return array_filter($parsed, fn (array $rule): bool => $rule[0] === $name) !== [];
     }
 
     /**
-     * @param  list<mixed>  $items
+     * @param  list<array<mixed>>  $parsed
      */
-    protected function holdsAnExistenceRule(array $items): bool
+    protected function holdsAClosedSet(array $parsed): bool
     {
-        foreach ($items as $item) {
-            if ($item instanceof Exists || (is_string($item) && str_starts_with($item, 'exists:'))) {
+        foreach ($parsed as [$name, $values]) {
+            if ($name === 'Enum' || ($name === 'In' && ! $this->isTrueFalse($values))) {
                 return true;
             }
         }
@@ -194,14 +258,12 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     }
 
     /**
-     * @param  list<mixed>  $items
+     * @param  list<array<mixed>>  $parsed
      */
-    protected function holdsAClosedSet(array $items): bool
+    protected function holdsAFlag(array $parsed): bool
     {
-        foreach ($items as $item) {
-            $values = $this->inValuesOf($item);
-
-            if ($item instanceof Enum || ($values !== null && $values !== ['false', 'true'])) {
+        foreach ($parsed as [$name, $values]) {
+            if ($name === 'Boolean' || ($name === 'In' && $this->isTrueFalse($values))) {
                 return true;
             }
         }
@@ -210,76 +272,32 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     }
 
     /**
-     * @param  list<mixed>  $items
+     * @param  list<array<mixed>>  $parsed
      */
-    protected function holdsAFlag(array $items): bool
+    protected function holdsADate(array $parsed): bool
     {
-        foreach ($items as $item) {
-            if ($item === 'boolean' || $this->inValuesOf($item) === ['false', 'true']) {
-                return true;
-            }
-        }
-
-        return false;
+        return $this->holdsRule('Date', $parsed) || $this->holdsRule('DateFormat', $parsed);
     }
 
-    /**
-     * @param  list<mixed>  $items
-     */
-    protected function holdsADate(array $items): bool
+    protected function isTrueFalse(mixed $values): bool
     {
-        foreach ($items as $item) {
-            if ($item === 'date' || $item instanceof Date || (is_string($item) && str_starts_with($item, 'date_format:'))) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * @return list<string>|null
-     */
-    protected function inValuesOf(mixed $item): ?array
-    {
-        $text = $item instanceof In ? (string) $item : $item;
-
-        if (! is_string($text) || ! str_starts_with($text, 'in:')) {
-            return null;
-        }
-
-        $values = array_map(fn (string $value): string => trim($value, '"'), explode(',', substr($text, 3)));
-        sort($values);
-
-        return $values;
-    }
-
-    protected function isACastBool(ReflectionProperty $property): bool
-    {
-        $type = $property->getType();
-        $cast = $property->getAttributes(WithCast::class)[0] ?? null;
-
-        return $type instanceof ReflectionNamedType && $type->getName() === 'bool' && $type->allowsNull()
-            && $cast?->getArguments() === [BuiltinTypeCast::class, 'bool'];
-    }
-
-    protected function mapsOutsideTheIdShape(ReflectionProperty $property, string $typeName): bool
-    {
-        if ($property->getAttributes(MapInputName::class) === []
-            || str_ends_with($property->getDeclaringClass()->getName(), 'Filters')) {
+        if (! is_array($values)) {
             return false;
         }
 
-        return ! (is_subclass_of($typeName, Model::class) && $this->inputNameOf($property) === $property->getName().'Id');
+        sort($values);
+
+        return $values === ['false', 'true'];
     }
 
     /**
      * @param  list<class-string<Data>>  $commands
      * @param  list<string>  $untyped
      */
-    protected function assertWalkedAndCounted(array $commands, array $untyped): void
+    protected function assertWalkedAndKnown(array $commands, array $untyped): void
     {
-        $this->assertNotEmpty($commands);
-        $this->assertCount(self::LEGACY_BOUND, $untyped, implode(PHP_EOL, $untyped));
+        $this->assertGreaterThanOrEqual(self::COMMANDS_AT_LEAST, count($commands));
+        $this->assertSame([], array_values(array_diff($untyped, self::KNOWN_UNTYPED)), 'Untyped and not in KNOWN_UNTYPED:');
+        $this->assertSame([], array_values(array_diff(self::KNOWN_UNTYPED, $untyped)), 'Typed now - delete from KNOWN_UNTYPED:');
     }
 }
