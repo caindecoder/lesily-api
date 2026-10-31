@@ -9,6 +9,7 @@ use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Spatie\LaravelData\Attributes\MapInputName;
+use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -54,6 +55,7 @@ class InvoiceFilters extends Data
     #[MapInputName('max_amount')]
     public ?int $maxAmount = null;
 
+    #[OpaqueString('a per-endpoint sort token the repository maps to columns')]
     public ?string $sort = null;
 
     public ?int $page = null;

@@ -3,6 +3,7 @@
 namespace App\Billing\Invoices\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
+use App\Foundation\UseCases\Attributes\OpaqueString;
 
 /**
  * Refund an invoice (SM-1-04 T5 credit-on-failed / T6 refund-on-paid).
@@ -17,6 +18,7 @@ class RefundInvoiceCommand extends Data
 {
     public int $refundAmountCents;
 
+    #[OpaqueString('the PayHere refund transaction id - not a row of ours')]
     public ?string $payHereRefundTransactionId = null;
 
     public string $source;
