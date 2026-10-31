@@ -3,8 +3,8 @@
 namespace App\Billing\Invoices\UseCases\Commands;
 
 use Closure;
+use DateTimeImmutable;
 use Carbon\CarbonPeriod;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
@@ -103,9 +103,20 @@ class InvoiceFilters extends Data
             /** @var string $value bail + string precede this rule */
             $dates = explode(',', $value);
 
-            if (count($dates) !== 2 || ! CarbonImmutable::hasFormat($dates[0], 'Y-m-d') || ! CarbonImmutable::hasFormat($dates[1], 'Y-m-d')) {
+            if (count($dates) !== 2 || ! self::isCalendarDate($dates[0]) || ! self::isCalendarDate($dates[1])) {
                 $fail("The {$attribute} filter must be two ISO-8601 (YYYY-MM-DD) dates separated by a comma.");
             }
         };
+    }
+
+    /**
+     * A Y-m-d date that exists on the calendar — 2026-02-31 has the shape but would
+     * roll over to March, so the date must read back unchanged.
+     */
+    protected static function isCalendarDate(string $date): bool
+    {
+        $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+
+        return $parsed !== false && $parsed->format('Y-m-d') === $date;
     }
 }
