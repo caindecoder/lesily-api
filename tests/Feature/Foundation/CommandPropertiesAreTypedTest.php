@@ -36,7 +36,6 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         'App\Consent\UseCases\Commands\RecordConsentCommand::$companyId — a string reference',
         'App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand::$companyId — a string reference',
         'App\Foundation\Auth\UseCases\Commands\SetDefaultCompanyCommand::$companyId — a string reference',
-        'App\Foundation\Auth\UseCases\Commands\UpdateUserProfileCommand::$locale — a closed set kept as a string',
         'App\Foundation\Auth\UseCases\Commands\VerifyTwoFactorCommand::$challengeId — a string reference',
     ];
 

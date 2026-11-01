@@ -219,7 +219,7 @@ class User extends AggregateRoot
         return $this->recordThat(new UserProfileUpdated(
             userId: $this->uuid(),
             name: $command->name,
-            locale: $command->locale,
+            locale: $command->locale->value,
             changedFields: $changedFields,
             updatedAt: CarbonImmutable::now(),
         ));

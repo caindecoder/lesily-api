@@ -40,7 +40,7 @@ class UpdateUserProfileInteractor
     {
         return array_keys(array_filter([
             'name' => $user->name !== $command->name,
-            'locale' => $user->locale !== $command->locale,
+            'locale' => $user->locale !== $command->locale->value,
         ]));
     }
 }
