@@ -3,7 +3,7 @@
     "private": true,
     "devDependencies": {
         "concurrently": "^10.0.6",
-        "lefthook": "^2.2.1"
+        "lefthook": "^2.2.2"
     },
     "dependencies": {
         "puppeteer": "^25.13.0"
