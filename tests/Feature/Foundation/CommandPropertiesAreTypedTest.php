@@ -33,8 +33,6 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     protected const array KNOWN_UNTYPED = [
         'App\Companies\UseCases\Commands\CreateCompanyCommand::$ownerUserId — a string reference',
         'App\Companies\UseCases\Commands\CreateCompanyCommand::$emergencyContactRelationship — a closed set kept as a string',
-        'App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand::$companyId — a string reference',
-        'App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand::$newOwnerUserId — a string reference',
         'App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters::$status — a closed set kept as a string',
         'App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters::$companyId — a string reference',
         'App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand::$newOwnerUserId — a string reference',

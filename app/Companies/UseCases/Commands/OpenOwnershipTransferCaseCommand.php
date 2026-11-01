@@ -2,8 +2,13 @@
 
 namespace App\Companies\UseCases\Commands;
 
+use App\Models\User;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
+use App\Companies\Entities\Company;
+use Spatie\LaravelData\Attributes\WithCast;
+use App\Foundation\UseCases\Casts\ModelCast;
+use Spatie\LaravelData\Attributes\MapInputName;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -17,11 +22,15 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  */
 class OpenOwnershipTransferCaseCommand extends Data
 {
-    public string $companyId;
+    #[MapInputName('companyId')]
+    #[WithCast(ModelCast::class, Company::class)]
+    public Company $company;
 
     public string $requestedContext;
 
-    public ?string $newOwnerUserId = null;
+    #[MapInputName('newOwnerUserId')]
+    #[WithCast(ModelCast::class, User::class)]
+    public ?User $newOwnerUser = null;
 
     /**
      * @return array<string, array<int, mixed>>
