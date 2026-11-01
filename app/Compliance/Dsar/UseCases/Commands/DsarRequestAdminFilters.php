@@ -5,9 +5,12 @@ namespace App\Compliance\Dsar\UseCases\Commands;
 use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
+use Spatie\LaravelData\Attributes\WithCast;
+use Spatie\LaravelData\Casts\BuiltinTypeCast;
 use Illuminate\Validation\ValidationException;
 use Spatie\LaravelData\Attributes\MapInputName;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
+use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 class DsarRequestAdminFilters extends Data
@@ -17,15 +20,18 @@ class DsarRequestAdminFilters extends Data
      */
     private const array QUERY_KEY_WHITELIST = ['status', 'company_id', 'overdue', 'sla_breached', 'page', 'per_page'];
 
-    public ?string $status = null;
+    public ?DsarRequestStatus $status = null;
 
     #[MapInputName('company_id')]
+    #[OpaqueString('a list filter; an unknown value yields an empty list')]
     public ?string $companyId = null;
 
-    public ?string $overdue = null;
+    #[WithCast(BuiltinTypeCast::class, 'bool')]
+    public ?bool $overdue = null;
 
     #[MapInputName('sla_breached')]
-    public ?string $slaBreached = null;
+    #[WithCast(BuiltinTypeCast::class, 'bool')]
+    public ?bool $slaBreached = null;
 
     public ?int $page = null;
 
@@ -43,16 +49,6 @@ class DsarRequestAdminFilters extends Data
         }
 
         return static::validateAndCreate($request->query());
-    }
-
-    public function overdueOnly(): bool
-    {
-        return $this->overdue === 'true';
-    }
-
-    public function breachedOnly(): bool
-    {
-        return $this->slaBreached === 'true';
     }
 
     /**

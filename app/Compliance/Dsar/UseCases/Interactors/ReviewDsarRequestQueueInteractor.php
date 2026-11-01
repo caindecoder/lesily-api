@@ -49,10 +49,10 @@ class ReviewDsarRequestQueueInteractor
     protected function selectedBy(DsarRequestAdminFilters $filters, CarbonImmutable $now): Builder
     {
         return DsarRequestRecord::query()
-            ->when($filters->status, fn (Builder $query, string $status) => $query->where('status', $status))
+            ->when($filters->status, fn (Builder $query, DsarRequestStatus $status) => $query->where('status', $status))
             ->when($filters->companyId, fn (Builder $query, string $companyId) => $query->where('company_id', $companyId))
-            ->when($filters->overdueOnly(), fn (Builder $query) => $query->whereOverdue($now))
-            ->when($filters->breachedOnly(), fn (Builder $query) => $query->whereSlaBreached());
+            ->when($filters->overdue, fn (Builder $query) => $query->whereOverdue($now))
+            ->when($filters->slaBreached, fn (Builder $query) => $query->whereSlaBreached());
     }
 
     /**
@@ -94,16 +94,25 @@ class ReviewDsarRequestQueueInteractor
         return [
             'filters' => array_filter(
                 [
-                    'status' => $filters->status,
+                    'status' => $filters->status?->value,
                     'company_id' => $filters->companyId,
-                    'overdue' => $filters->overdue,
-                    'sla_breached' => $filters->slaBreached,
+                    'overdue' => $this->asQueryValue($filters->overdue),
+                    'sla_breached' => $this->asQueryValue($filters->slaBreached),
                 ],
                 fn (?string $value): bool => $value !== null,
             ),
             'result_count' => count($page->items()),
             'page' => $page->currentPage(),
         ];
+    }
+
+    protected function asQueryValue(?bool $flag): ?string
+    {
+        return match ($flag) {
+            null => null,
+            true => 'true',
+            false => 'false',
+        };
     }
 
     /**

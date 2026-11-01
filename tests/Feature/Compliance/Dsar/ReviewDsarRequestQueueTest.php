@@ -213,10 +213,10 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         // When the filter is built
         $filters = DsarRequestAdminFilters::validateAndCreate([]);
 
-        // Then nothing is filtered, both flags are off, and pagination falls to its defaults
+        // Then nothing is filtered, neither flag is set, and pagination falls to its defaults
         $this->assertSame(
-            [null, null, false, false, null, null],
-            [$filters->status, $filters->companyId, $filters->overdueOnly(), $filters->breachedOnly(), $filters->page, $filters->perPage],
+            [null, null, null, null, null, null],
+            [$filters->status, $filters->companyId, $filters->overdue, $filters->slaBreached, $filters->page, $filters->perPage],
         );
     }
 
