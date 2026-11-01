@@ -8,6 +8,7 @@ use ReflectionProperty;
 use Carbon\CarbonPeriod;
 use ReflectionNamedType;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use Spatie\LaravelData\Data;
 use Illuminate\Support\Facades\File;
 use Illuminate\Validation\Rules\Enum;
@@ -31,7 +32,6 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     protected const int COMMANDS_AT_LEAST = 52;
 
     protected const array KNOWN_UNTYPED = [
-        'App\Companies\UseCases\Commands\VerifyOwnershipTransferCaseCommand::$artefacts — a date that is not Carbon',
         'App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand::$requestId — a string reference',
         'App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand::$companyId — a string reference',
         'App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand::$cancelledByUserId — a string reference',
@@ -146,8 +146,8 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
             'a marker without a reason' => $markerReason === '',
             'a flag that is not a cast bool' => $this->holdsAFlag($parsed)
                 && ! ($typeName === 'bool' && $type->allowsNull() && $property->cast instanceof BuiltinTypeCast),
-            'a date that is not Carbon' => $this->holdsADate([...$parsed, ...$this->nestedRules($inputName, $rules)])
-                && ! in_array($typeName, [CarbonImmutable::class, CarbonPeriod::class], true),
+            'a date that is not Carbon' => ($this->holdsADate($parsed) && ! $this->isCarbon($typeName))
+                || $this->holdsANestedDateNotCarbon($property, $rules),
             'a mapper outside the id shape' => $property->inputMappedName !== null
                 && ! str_ends_with($property->className, 'Filters')
                 && ! (is_subclass_of($typeName, Model::class) && $property->inputMappedName === $property->name.'Id'),
@@ -197,20 +197,44 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     }
 
     /**
+     * A nested `prop.*.key` date counts against the item class's `key` property
+     * when the property carries #[DataCollectionOf], otherwise against the parent.
+     *
      * @param  array<string, mixed>  $rules
-     * @return list<array<mixed>>
      */
-    protected function nestedRules(string $inputName, array $rules): array
+    protected function holdsANestedDateNotCarbon(DataProperty $property, array $rules): bool
     {
-        $nested = [];
+        $inputName = $property->inputMappedName ?? $property->name;
 
         foreach ($rules as $key => $entry) {
-            if (str_starts_with($key, $inputName.'.')) {
-                array_push($nested, ...$this->parsedRules($entry));
+            if (str_starts_with($key, $inputName.'.')
+                && $this->holdsADate($this->parsedRules($entry))
+                && ! $this->isCarbon($this->itemTypeOf($property, $key))) {
+                return true;
             }
         }
 
-        return $nested;
+        return false;
+    }
+
+    protected function itemTypeOf(DataProperty $property, string $key): string
+    {
+        /** @var class-string<Data>|null $itemClass */
+        $itemClass = $property->type->dataClass;
+        $field = Str::afterLast($key, '.');
+
+        if ($itemClass === null || ! property_exists($itemClass, $field)) {
+            return '';
+        }
+
+        $type = (new ReflectionProperty($itemClass, $field))->getType();
+
+        return $type instanceof ReflectionNamedType ? $type->getName() : '';
+    }
+
+    protected function isCarbon(string $typeName): bool
+    {
+        return in_array($typeName, [CarbonImmutable::class, CarbonPeriod::class], true);
     }
 
     /**
