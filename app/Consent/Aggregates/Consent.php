@@ -15,12 +15,12 @@ class Consent extends AggregateRoot
 {
     public function record(RecordConsentCommand $command): static
     {
-        $this->forCompany($command->companyId);
+        $this->forCompany($command->company->getKey());
 
         foreach ($command->policyVersions as $policyType => $version) {
             $this->recordThat(new ConsentRecorded(
-                userId: $command->userId,
-                companyId: $command->companyId,
+                userId: $command->user->getKey(),
+                companyId: $command->company->getKey(),
                 policyType: $policyType,
                 version: $version,
                 ip: $command->ip,

@@ -210,7 +210,7 @@ Route::delete('/v1/me/google', [GoogleAccountController::class, 'destroy'])
 // Bare auth:sanctum: a `me/` self-service preference with no credential check
 // (no throttle — not a brute-force surface) and no idempotency-key mount (both
 // verbs are naturally idempotent; the 204 carries no body). The set is guarded
-// to live memberships in the interactor, collapsed to 422 (no id-existence leak).
+// to live memberships by the command's rule, collapsed to 422 (no id-existence leak).
 Route::put('/v1/me/default-company', [DefaultCompanyController::class, 'update'])
     ->middleware('auth:sanctum');
 Route::delete('/v1/me/default-company', [DefaultCompanyController::class, 'destroy'])

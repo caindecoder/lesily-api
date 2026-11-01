@@ -38,14 +38,14 @@ class UpdateProfileTest extends AuthTestCase
         $response = $this->updateProfile($user, ['name' => self::CURRENT_NAME, 'locale' => 'fr']);
 
         // Then the update is rejected as a validation error and the record is unchanged
-        $this->assertUpdateRejectedAndProfileUnchanged($response, 'locale', $this->unchangedProfileOf($user));
+        $this->assertUpdateRejectedAndProfileUnchanged($response, ['locale' => 'The selected locale is invalid.'], $this->unchangedProfileOf($user));
     }
 
     #[Test]
     #[DataProvider('provideInvalidUpdateProfilePayloads')]
     public function when_the_payload_is_invalid_then_the_update_is_rejected_and_the_record_is_unchanged(
         array $payload,
-        string|array $invalidFields,
+        array $expectedErrors,
     ): void {
         // Given an authenticated user with an established profile
         $user = $this->anEstablishedUser();
@@ -54,7 +54,7 @@ class UpdateProfileTest extends AuthTestCase
         $response = $this->updateProfile($user, $payload);
 
         // Then the update is rejected naming the offending field(s) and the record is unchanged
-        $this->assertUpdateRejectedAndProfileUnchanged($response, $invalidFields, $this->unchangedProfileOf($user));
+        $this->assertUpdateRejectedAndProfileUnchanged($response, $expectedErrors, $this->unchangedProfileOf($user));
     }
 
     #[Test]
@@ -87,22 +87,22 @@ class UpdateProfileTest extends AuthTestCase
     }
 
     /**
-     * @return array<string, array{array<string, mixed>, string|array<int, string>}>
+     * @return array<string, array{array<string, mixed>, array<string, string>}>
      */
     public static function provideInvalidUpdateProfilePayloads(): array
     {
         return [
-            'missing name' => [['locale' => self::CURRENT_LOCALE], 'name'],
-            'null name' => [['name' => null, 'locale' => self::CURRENT_LOCALE], 'name'],
-            'non-string name' => [['name' => 12345, 'locale' => self::CURRENT_LOCALE], 'name'],
-            'one-character name' => [['name' => 'A', 'locale' => self::CURRENT_LOCALE], 'name'],
-            'name over the length cap' => [['name' => str_repeat('a', 256), 'locale' => self::CURRENT_LOCALE], 'name'],
-            'missing locale (the full-PUT pin)' => [['name' => self::CURRENT_NAME], 'locale'],
-            'null locale' => [['name' => self::CURRENT_NAME, 'locale' => null], 'locale'],
-            'empty locale' => [['name' => self::CURRENT_NAME, 'locale' => ''], 'locale'],
-            'non-string locale' => [['name' => self::CURRENT_NAME, 'locale' => 123], 'locale'],
-            'whitespace-only name' => [['name' => '   ', 'locale' => self::CURRENT_LOCALE], 'name'],
-            'empty payload' => [[], ['name', 'locale']],
+            'missing name' => [['locale' => self::CURRENT_LOCALE], ['name' => 'The name field is required.']],
+            'null name' => [['name' => null, 'locale' => self::CURRENT_LOCALE], ['name' => 'The name field is required.']],
+            'non-string name' => [['name' => 12345, 'locale' => self::CURRENT_LOCALE], ['name' => 'The name field must be a string.']],
+            'one-character name' => [['name' => 'A', 'locale' => self::CURRENT_LOCALE], ['name' => 'The name field must be at least 2 characters.']],
+            'name over the length cap' => [['name' => str_repeat('a', 256), 'locale' => self::CURRENT_LOCALE], ['name' => 'The name field must not be greater than 255 characters.']],
+            'missing locale (the full-PUT pin)' => [['name' => self::CURRENT_NAME], ['locale' => 'The locale field is required.']],
+            'null locale' => [['name' => self::CURRENT_NAME, 'locale' => null], ['locale' => 'The locale field is required.']],
+            'empty locale' => [['name' => self::CURRENT_NAME, 'locale' => ''], ['locale' => 'The locale field is required.']],
+            'non-string locale' => [['name' => self::CURRENT_NAME, 'locale' => 123], ['locale' => 'The locale field must be a string.']],
+            'whitespace-only name' => [['name' => '   ', 'locale' => self::CURRENT_LOCALE], ['name' => 'The name field is required.']],
+            'empty payload' => [[], ['name' => 'The name field is required.', 'locale' => 'The locale field is required.']],
         ];
     }
 
@@ -343,17 +343,17 @@ class UpdateProfileTest extends AuthTestCase
      * profile-change record was produced (the full Minimal Guarantee — goes RED if
      * any write or event leaks past a rejected update).
      *
-     * @param  string|array<int, string>  $invalidFields
+     * @param  array<string, string>  $expectedErrors
      * @param  array<string, mixed>  $before
      */
     protected function assertUpdateRejectedAndProfileUnchanged(
         TestResponse $response,
-        string|array $invalidFields,
+        array $expectedErrors,
         array $before,
     ): void {
         $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
-        $response->assertJsonValidationErrors($invalidFields);
+        $response->assertJsonValidationErrors($expectedErrors);
         $this->assertDatabaseHas('users', $before);
         $this->assertNoProfileEventRecorded();
     }

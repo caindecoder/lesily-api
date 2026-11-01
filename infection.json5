@@ -201,7 +201,7 @@
                 "App\\Foundation\\Auth\\UseCases\\Commands\\LogoutAllCommand::rules::23",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\RegenerateRecoveryCodesCommand::rules::23",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ResetPasswordCommand::rules::21",
-                "App\\Foundation\\Auth\\UseCases\\Commands\\VerifyTwoFactorCommand::rules::28",
+                "App\\Foundation\\Auth\\UseCases\\Commands\\VerifyTwoFactorCommand::rules::30",
                 // The one-key [required, string] on a typed string property: return [] is
                 // re-inferred to the same rules by Spatie. REMOVE WHEN
                 // idToken gains a rule beyond required+type.

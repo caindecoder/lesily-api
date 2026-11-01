@@ -3,6 +3,7 @@
 namespace App\Foundation\Auth\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
+use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -14,6 +15,7 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  */
 class VerifyTwoFactorCommand extends Data
 {
+    #[OpaqueString('the login challenge cache key - not a row of ours; an unknown one is the expired-session 404')]
     public string $challengeId;
 
     public string $code;

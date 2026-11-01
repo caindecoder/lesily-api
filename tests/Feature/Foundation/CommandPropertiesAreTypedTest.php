@@ -31,18 +31,8 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
 {
     protected const int COMMANDS_AT_LEAST = 52;
 
-    protected const array KNOWN_UNTYPED = [
-        'App\Consent\UseCases\Commands\RecordConsentCommand::$userId — a string reference',
-        'App\Consent\UseCases\Commands\RecordConsentCommand::$companyId — a string reference',
-        'App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand::$companyId — a string reference',
-        'App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand::$emergencyContactRelationship — a closed set kept as a string',
-        'App\Foundation\Auth\UseCases\Commands\SetDefaultCompanyCommand::$companyId — a string reference',
-        'App\Foundation\Auth\UseCases\Commands\UpdateUserProfileCommand::$locale — a closed set kept as a string',
-        'App\Foundation\Auth\UseCases\Commands\VerifyTwoFactorCommand::$challengeId — a string reference',
-    ];
-
     #[Test]
-    public function when_the_commands_are_walked_then_only_the_known_properties_are_untyped(): void
+    public function when_the_commands_are_walked_then_no_property_is_untyped(): void
     {
         // Given every Data class under app/**/UseCases/Commands
         $commands = $this->commandClasses();
@@ -50,8 +40,21 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         // When their public properties are walked
         $untyped = $this->untypedProperties($commands);
 
-        // Then the walk read the commands and found exactly the known untyped properties
-        $this->assertWalkedAndKnown($commands, $untyped);
+        // Then the walk read the commands and found no untyped property
+        $this->assertWalkedAndTyped($commands, $untyped);
+    }
+
+    #[Test]
+    public function when_the_marked_strings_are_walked_without_their_markers_then_the_string_checks_fire(): void
+    {
+        // Given every Data class under app/**/UseCases/Commands
+        $commands = $this->commandClasses();
+
+        // When their #[OpaqueString] properties are walked as if unmarked
+        $fired = $this->stringChecksFiredUnderMarkers($commands);
+
+        // Then both string checks fire on real marked properties
+        $this->assertSame(['a closed set kept as a string', 'a string reference'], $fired);
     }
 
     /**
@@ -125,9 +128,7 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         $opaque = $markerReason !== null && $markerReason !== '';
 
         $checks = [
-            'a string reference' => ! $opaque && $typeName === 'string'
-                && (preg_match('/(Id|By)$/', $property->name) === 1 || $this->holdsRule('Exists', $parsed)),
-            'a closed set kept as a string' => ! $opaque && $typeName === 'string' && $this->holdsAClosedSet($parsed),
+            ...array_fill_keys($opaque ? [] : $this->stringChecksOf($property, $typeName, $parsed), true),
             'a marker without a reason' => $markerReason === '',
             'a flag that is not a cast bool' => $this->holdsAFlag($parsed)
                 && ! ($typeName === 'bool' && $type->allowsNull() && $property->cast instanceof BuiltinTypeCast),
@@ -142,6 +143,47 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         $where = $property->className.'::$'.$property->name;
 
         return array_map(fn (string $check): string => "{$where} — {$check}", array_keys(array_filter($checks)));
+    }
+
+    /**
+     * @param  list<array<mixed>>  $parsed
+     * @return list<string>
+     */
+    protected function stringChecksOf(DataProperty $property, string $typeName, array $parsed): array
+    {
+        return array_keys(array_filter([
+            'a string reference' => $typeName === 'string'
+                && (preg_match('/(Id|By)$/', $property->name) === 1 || $this->holdsRule('Exists', $parsed)),
+            'a closed set kept as a string' => $typeName === 'string' && $this->holdsAClosedSet($parsed),
+        ]));
+    }
+
+    /**
+     * @param  list<class-string<Data>>  $commands
+     * @return list<string>
+     */
+    protected function stringChecksFiredUnderMarkers(array $commands): array
+    {
+        $fired = [];
+
+        foreach ($commands as $command) {
+            $rules = $this->rulesOf($command);
+
+            foreach (app(DataConfig::class)->getDataClass($command)->properties as $property) {
+                $reflection = new ReflectionProperty($command, $property->name);
+                $type = $reflection->getType();
+
+                if ($this->markerReasonOf($reflection) !== null && $type instanceof ReflectionNamedType) {
+                    $parsed = $this->parsedRules($rules[$property->inputMappedName ?? $property->name] ?? []);
+                    array_push($fired, ...$this->stringChecksOf($property, $type->getName(), $parsed));
+                }
+            }
+        }
+
+        $fired = array_values(array_unique($fired));
+        sort($fired);
+
+        return $fired;
     }
 
     protected function markerReasonOf(ReflectionProperty $reflection): ?string
@@ -281,10 +323,9 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
      * @param  list<class-string<Data>>  $commands
      * @param  list<string>  $untyped
      */
-    protected function assertWalkedAndKnown(array $commands, array $untyped): void
+    protected function assertWalkedAndTyped(array $commands, array $untyped): void
     {
         $this->assertGreaterThanOrEqual(self::COMMANDS_AT_LEAST, count($commands));
-        $this->assertSame([], array_values(array_diff($untyped, self::KNOWN_UNTYPED)), 'Untyped and not in KNOWN_UNTYPED:');
-        $this->assertSame([], array_values(array_diff(self::KNOWN_UNTYPED, $untyped)), 'Typed now - delete from KNOWN_UNTYPED:');
+        $this->assertSame([], $untyped, 'Untyped - type it, or mark a deliberate string #[OpaqueString(<why>)]:');
     }
 }

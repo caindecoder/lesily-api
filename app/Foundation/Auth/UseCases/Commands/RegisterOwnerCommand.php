@@ -7,6 +7,7 @@ use Illuminate\Validation\Rules\Enum;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 use App\Companies\UseCases\Commands\CompanyRegistrationRules;
+use App\Companies\Memberships\Enums\EmergencyContactRelationship;
 
 /**
  * The fused owner-signup payload (UC-1-001 + UC-1-031 + UC-1-029 + UC-1-069).
@@ -39,7 +40,7 @@ class RegisterOwnerCommand extends Data
 
     public string $emergencyContactPhone;
 
-    public string $emergencyContactRelationship;
+    public EmergencyContactRelationship $emergencyContactRelationship;
 
     /**
      * @return array<string, array<int, string|Enum|ValidationRule>>

@@ -71,7 +71,7 @@ class User extends AggregateRoot
             throw UserAlreadyRegisteredException::withId($this->uuid());
         }
 
-        return $this->forCompany($command->companyId)
+        return $this->forCompany($command->company->getKey())
             ->recordThat(new UserCreatedFromInvitation(
                 userId: $this->uuid(),
                 email: $command->email,
@@ -219,7 +219,7 @@ class User extends AggregateRoot
         return $this->recordThat(new UserProfileUpdated(
             userId: $this->uuid(),
             name: $command->name,
-            locale: $command->locale,
+            locale: $command->locale->value,
             changedFields: $changedFields,
             updatedAt: CarbonImmutable::now(),
         ));

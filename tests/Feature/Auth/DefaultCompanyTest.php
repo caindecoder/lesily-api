@@ -55,7 +55,7 @@ class DefaultCompanyTest extends AuthTestCase
     #[Test, DataProvider('malformedCompanyIdProvider')]
     public function when_company_id_is_missing_or_malformed_then_set_refused(array $payload, string $expectedMessage): void
     {
-        // Given a member with a live membership (the guard must never be reached)
+        // Given a member with a live membership (the membership rule must never be reached)
         $user = $this->aRegisteredUser();
         $this->aMembershipFor($user, Company::factory()->named('Home')->create());
 
@@ -86,6 +86,10 @@ class DefaultCompanyTest extends AuthTestCase
         $this->aMembershipFor($user, Company::factory()->named('Home')->create());
         $targetId = match ($case) {
             'not a member' => Company::factory()->named('Other')->create()->getKey(),
+            'another user\'s company' => tap(
+                Company::factory()->named('Other')->create(),
+                fn (Company $other) => $this->aMembershipFor(User::factory()->create(), $other),
+            )->getKey(),
             'unknown company id' => Str::uuid7()->toString(),
             'removed membership' => tap(
                 Company::factory()->named('Other')->create(),
@@ -108,6 +112,7 @@ class DefaultCompanyTest extends AuthTestCase
     {
         return [
             'not a member' => ['not a member'],
+            'another user\'s company' => ['another user\'s company'],
             'unknown company id' => ['unknown company id'],
             'removed membership' => ['removed membership'],
         ];
@@ -286,6 +291,7 @@ class DefaultCompanyTest extends AuthTestCase
     protected function assertSetRefusedAsInvalid(TestResponse $response, User $user, string $expectedMessage): void
     {
         $this->assertValidationRejected($response, 'companyId', $expectedMessage);
+        $response->assertJsonCount(1, 'errors.companyId');
         $this->assertNull($user->refresh()->default_company_id);
     }
 
@@ -298,6 +304,7 @@ class DefaultCompanyTest extends AuthTestCase
     protected function assertSetRefusedLeavingDefault(TestResponse $response, User $user, ?string $expectedDefault): void
     {
         $this->assertValidationRejected($response, 'companyId', 'The selected company is invalid.');
+        $response->assertJsonCount(1, 'errors.companyId');
         $this->assertSame($expectedDefault, $user->refresh()->default_company_id);
     }
 }

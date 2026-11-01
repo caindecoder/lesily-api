@@ -56,6 +56,7 @@ class CreateCompanyInteractor
     {
         DB::transaction(function () use ($command, $clientIp, $companyId): void {
             CompanyAggregate::retrieve($companyId)->create($command)->persist();
+            $company = Company::query()->findOrFail($companyId);
 
             User::retrieve($command->owner->getKey())
                 ->setEmergencyContact($companyId, SetEmergencyContactCommand::from([
@@ -68,8 +69,8 @@ class CreateCompanyInteractor
 
             Consent::retrieve(Str::uuid7()->toString())
                 ->record(RecordConsentCommand::from([
-                    'userId' => $command->owner->getKey(),
-                    'companyId' => $companyId,
+                    'user' => $command->owner,
+                    'company' => $company,
                     'policyVersions' => config('lesily.policies'),
                     'ip' => $clientIp,
                 ]))
@@ -77,7 +78,7 @@ class CreateCompanyInteractor
 
             Subscription::retrieve(Str::uuid7()->toString())
                 ->startTrial(StartTrialCommand::from([
-                    'company' => Company::query()->findOrFail($companyId),
+                    'company' => $company,
                     'trialEndsAt' => CarbonImmutable::now()->addDays(CompanyAggregate::TRIAL_DAYS),
                 ]))
                 ->persist();

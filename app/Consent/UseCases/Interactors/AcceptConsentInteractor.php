@@ -23,8 +23,8 @@ class AcceptConsentInteractor
         DB::transaction(function () use ($company, $user, $clientIp): void {
             Consent::retrieve(Str::uuid7()->toString())
                 ->record(RecordConsentCommand::from([
-                    'userId' => $user->getKey(),
-                    'companyId' => $company->getKey(),
+                    'user' => $user,
+                    'company' => $company,
                     'policyVersions' => config('lesily.policies'),
                     'ip' => $clientIp,
                 ]))

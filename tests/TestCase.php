@@ -54,8 +54,8 @@ abstract class TestCase extends BaseTestCase
     {
         Consent::retrieve(Str::uuid7()->toString())
             ->record(RecordConsentCommand::from([
-                'userId' => $user->getKey(),
-                'companyId' => $company->getKey(),
+                'user' => $user,
+                'company' => $company,
                 'policyVersions' => config('lesily.policies'),
                 'ip' => '198.51.100.4',
             ]))
