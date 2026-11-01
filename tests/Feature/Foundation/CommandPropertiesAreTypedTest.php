@@ -31,11 +31,8 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
 {
     protected const int COMMANDS_AT_LEAST = 52;
 
-    protected const array KNOWN_UNTYPED = [
-    ];
-
     #[Test]
-    public function when_the_commands_are_walked_then_only_the_known_properties_are_untyped(): void
+    public function when_the_commands_are_walked_then_no_property_is_untyped(): void
     {
         // Given every Data class under app/**/UseCases/Commands
         $commands = $this->commandClasses();
@@ -43,8 +40,8 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         // When their public properties are walked
         $untyped = $this->untypedProperties($commands);
 
-        // Then the walk read the commands and found exactly the known untyped properties
-        $this->assertWalkedAndKnown($commands, $untyped);
+        // Then the walk read the commands and found no untyped property
+        $this->assertWalkedAndTyped($commands, $untyped);
     }
 
     /**
@@ -274,10 +271,9 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
      * @param  list<class-string<Data>>  $commands
      * @param  list<string>  $untyped
      */
-    protected function assertWalkedAndKnown(array $commands, array $untyped): void
+    protected function assertWalkedAndTyped(array $commands, array $untyped): void
     {
         $this->assertGreaterThanOrEqual(self::COMMANDS_AT_LEAST, count($commands));
-        $this->assertSame([], array_values(array_diff($untyped, self::KNOWN_UNTYPED)), 'Untyped and not in KNOWN_UNTYPED:');
-        $this->assertSame([], array_values(array_diff(self::KNOWN_UNTYPED, $untyped)), 'Typed now - delete from KNOWN_UNTYPED:');
+        $this->assertSame([], $untyped, 'Untyped - type it, or mark a deliberate string #[OpaqueString(<why>)]:');
     }
 }
