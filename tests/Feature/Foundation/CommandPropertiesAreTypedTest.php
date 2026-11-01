@@ -198,7 +198,7 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
 
     /**
      * A nested `prop.*.key` date counts against the item class's `key` property
-     * when the property carries #[DataCollectionOf], otherwise against the parent.
+     * when the property carries #[DataCollectionOf]; without one it is always listed.
      *
      * @param  array<string, mixed>  $rules
      */

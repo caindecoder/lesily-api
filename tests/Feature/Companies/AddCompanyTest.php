@@ -235,7 +235,7 @@ class AddCompanyTest extends CompaniesTestCase
         $someoneElse = User::factory()->create();
 
         // When they add a company
-        $response = $this->addCompany(['ownerUserId' => $someoneElse->getKey()]);
+        $response = $this->addCompany(['owner' => $someoneElse->getKey(), 'ownerUserId' => $someoneElse->getKey()]);
 
         // Then the signed-in person owns it, and nothing is opened for the other user
         $companyId = $response->json('data.id');
