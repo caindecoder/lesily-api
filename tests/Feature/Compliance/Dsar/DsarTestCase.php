@@ -176,8 +176,8 @@ abstract class DsarTestCase extends TestCase
         DsarRequest::retrieve($requestId)
             ->submit(SubmitDsarRequestCommand::from([
                 'subjectUserId' => $subject->getKey(),
-                'companyId' => $company->getKey(),
-                'requestedByUserId' => $requester->getKey(),
+                'company' => $company,
+                'requestedBy' => $requester,
             ]), $this->roleCodeOf($requester, $company->getKey()))
             ->persist();
 
@@ -333,16 +333,16 @@ abstract class DsarTestCase extends TestCase
 
         match ($closedBy) {
             'withdrawn' => $aggregate->cancel(CancelDsarRequestCommand::from([
-                'requestId' => $request->getKey(),
-                'companyId' => $company->getKey(),
-                'cancelledByUserId' => $subject->getKey(),
+                'dsarRequest' => $request,
+                'company' => $company,
+                'cancelledBy' => $subject,
             ])),
             'fulfilled' => $aggregate->fulfil(FulfilDsarRequestCommand::from([
-                'requestId' => $request->getKey(),
+                'dsarRequest' => $request,
                 'filePath' => $this->exportPathOf($request),
             ])),
             'rejected' => $aggregate->reject(RejectDsarRequestCommand::from([
-                'requestId' => $request->getKey(),
+                'dsarRequest' => $request,
                 'reason' => 'The export could not be built. Please submit a new request.',
             ])),
             default => throw new InvalidArgumentException("Unknown closure: {$closedBy}"),
@@ -1074,9 +1074,9 @@ abstract class DsarTestCase extends TestCase
             {
                 DsarRequest::retrieve($this->request->getKey())
                     ->cancel(CancelDsarRequestCommand::from([
-                        'requestId' => $this->request->getKey(),
-                        'companyId' => $companyId,
-                        'cancelledByUserId' => $this->request->requested_by,
+                        'dsarRequest' => $this->request,
+                        'company' => Company::query()->findOrFail($companyId),
+                        'cancelledBy' => User::query()->findOrFail($this->request->requested_by),
                     ]))
                     ->persist();
 
@@ -1212,7 +1212,7 @@ abstract class DsarTestCase extends TestCase
             {
                 DsarRequest::retrieve($this->request->getKey())
                     ->fulfil(FulfilDsarRequestCommand::from([
-                        'requestId' => $this->request->getKey(),
+                        'dsarRequest' => $this->request,
                         'filePath' => 'dsar/'.$this->request->company_id.'/'.$this->request->getKey().'.zip',
                     ]))
                     ->persist();

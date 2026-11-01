@@ -40,11 +40,13 @@ class BuildDsarExportJob implements ShouldQueue
             return;
         }
 
-        Storage::disk('dsar')->put($this->filePath(), $export->build(DsarRequestRecord::query()->with('subject')->findOrFail($this->requestId)));
+        $dsarRequest = DsarRequestRecord::query()->with('subject')->findOrFail($this->requestId);
+
+        Storage::disk('dsar')->put($this->filePath(), $export->build($dsarRequest));
 
         try {
             $fulfil->execute(FulfilDsarRequestCommand::from([
-                'requestId' => $this->requestId,
+                'dsarRequest' => $dsarRequest,
                 'filePath' => $this->filePath(),
             ]));
         } catch (DsarRequestNotInProgressException) {
@@ -60,7 +62,7 @@ class BuildDsarExportJob implements ShouldQueue
     {
         try {
             resolve(RejectDsarRequestInteractor::class)->execute(RejectDsarRequestCommand::from([
-                'requestId' => $this->requestId,
+                'dsarRequest' => DsarRequestRecord::query()->findOrFail($this->requestId),
                 'reason' => self::REJECTION_REASON,
             ]));
         } catch (DsarRequestNotInProgressException) {

@@ -5,7 +5,6 @@ namespace App\Compliance\Dsar\UseCases\Interactors;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
-use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\AuditTrail\Enums\AuditAction;
@@ -30,13 +29,13 @@ class SubmitDsarRequestInteractor
 
     public function execute(SubmitDsarRequestCommand $command, User $actor, RequestOrigin $context): DsarRequestRecord
     {
-        $company = Company::query()->findOrFail($command->companyId);
+        $company = $command->company;
 
         if ($command->isForSomeoneElse() && ! $this->permissions->canUserDo($actor, $company, self::REQUEST_FOR_OTHERS)) {
             throw new RoleInsufficientException(self::REQUEST_FOR_OTHERS);
         }
 
-        $this->liveMembership($command->companyId, $command->resolvedSubjectUserId());
+        $this->liveMembership($company->getKey(), $command->resolvedSubjectUserId());
 
         try {
             return DB::transaction(fn () => $this->record($command, $actor, $context));
@@ -49,7 +48,7 @@ class SubmitDsarRequestInteractor
     {
         $requestId = Str::uuid7()->toString();
         $requestedByRole = Role::query()
-            ->whereKey($this->liveMembership($command->companyId, $actor->getKey())->role_id)
+            ->whereKey($this->liveMembership($command->company->getKey(), $actor->getKey())->role_id)
             ->value('code');
 
         DsarRequest::retrieve($requestId)

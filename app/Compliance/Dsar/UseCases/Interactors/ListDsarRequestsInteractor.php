@@ -5,6 +5,7 @@ namespace App\Compliance\Dsar\UseCases\Interactors;
 use App\Models\User;
 use App\Companies\Entities\Company;
 use Illuminate\Pagination\LengthAwarePaginator;
+use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Compliance\Dsar\UseCases\Commands\DsarRequestFilters;
 use App\Compliance\Dsar\UseCases\Queries\DsarRequestVisibility;
@@ -20,7 +21,7 @@ class ListDsarRequestsInteractor
     {
         return $this->visibility->visibleTo($actor, $company)
             ->with(['subject', 'requestedBy'])
-            ->when($filters->status, fn ($query, string $status) => $query->where('status', $status))
+            ->when($filters->status, fn ($query, DsarRequestStatus $status) => $query->where('status', $status))
             ->orderByDesc('requested_at')
             ->orderByDesc('id')
             // page defaults here, never through Laravel's resolver, which would

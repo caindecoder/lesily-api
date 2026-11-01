@@ -32,21 +32,6 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     protected const int COMMANDS_AT_LEAST = 52;
 
     protected const array KNOWN_UNTYPED = [
-        'App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand::$requestId — a string reference',
-        'App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand::$companyId — a string reference',
-        'App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand::$cancelledByUserId — a string reference',
-        'App\Compliance\Dsar\UseCases\Commands\DownloadDsarExportCommand::$requestId — a string reference',
-        'App\Compliance\Dsar\UseCases\Commands\DownloadDsarExportCommand::$companyId — a string reference',
-        'App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters::$status — a closed set kept as a string',
-        'App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters::$companyId — a string reference',
-        'App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters::$overdue — a flag that is not a cast bool',
-        'App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters::$slaBreached — a flag that is not a cast bool',
-        'App\Compliance\Dsar\UseCases\Commands\DsarRequestFilters::$status — a closed set kept as a string',
-        'App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand::$requestId — a string reference',
-        'App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand::$requestId — a string reference',
-        'App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand::$subjectUserId — a string reference',
-        'App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand::$companyId — a string reference',
-        'App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand::$requestedByUserId — a string reference',
         'App\Consent\UseCases\Commands\RecordConsentCommand::$userId — a string reference',
         'App\Consent\UseCases\Commands\RecordConsentCommand::$companyId — a string reference',
         'App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand::$companyId — a string reference',

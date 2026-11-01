@@ -17,9 +17,9 @@ class FulfilDsarRequestInteractor
     public function execute(FulfilDsarRequestCommand $command): void
     {
         DB::transaction(function () use ($command): void {
-            DsarRequest::retrieve($command->requestId)->fulfil($command)->persist();
+            DsarRequest::retrieve($command->dsarRequest->getKey())->fulfil($command)->persist();
 
-            $this->audit->record(DsarRequestRecord::query()->findOrFail($command->requestId), DsarRequestFulfilled::class, AuditAction::DsarFulfilled);
+            $this->audit->record(DsarRequestRecord::query()->whereKey($command->dsarRequest->getKey())->firstOrFail(), DsarRequestFulfilled::class, AuditAction::DsarFulfilled);
         });
     }
 }

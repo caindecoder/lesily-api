@@ -3,7 +3,6 @@
 namespace App\Compliance\Dsar\UseCases\Interactors;
 
 use App\Models\User;
-use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Storage;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -23,9 +22,7 @@ class DownloadDsarExportInteractor
 
     public function execute(DownloadDsarExportCommand $command, User $actor, RequestOrigin $context): DsarExportFile
     {
-        $company = Company::query()->findOrFail($command->companyId);
-
-        $request = DsarRequestRecord::query()->whereCompany($company)->whereSubject($actor)->whereKey($command->requestId)->first()
+        $request = DsarRequestRecord::query()->whereCompany($command->company)->whereSubject($actor)->whereKey($command->dsarRequest->getKey())->first()
             ?? throw new ModelNotFoundException;
 
         $fulfilledAt = $request->fulfilledAt();

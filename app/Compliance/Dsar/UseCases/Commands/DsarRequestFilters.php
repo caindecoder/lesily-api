@@ -17,7 +17,7 @@ class DsarRequestFilters extends Data
      */
     private const array QUERY_KEY_WHITELIST = ['status', 'page', 'per_page'];
 
-    public ?string $status = null;
+    public ?DsarRequestStatus $status = null;
 
     public ?int $page = null;
 

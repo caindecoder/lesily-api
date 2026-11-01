@@ -3,12 +3,18 @@
 namespace App\Compliance\Dsar\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
+use App\Companies\Entities\Company;
+use Spatie\LaravelData\Attributes\WithCast;
+use App\Foundation\UseCases\Casts\ModelCast;
+use App\Compliance\Dsar\Entities\DsarRequestRecord;
 
 class DownloadDsarExportCommand extends Data
 {
-    public string $requestId;
+    #[WithCast(ModelCast::class, DsarRequestRecord::class)]
+    public DsarRequestRecord $dsarRequest;
 
-    public string $companyId;
+    #[WithCast(ModelCast::class, Company::class)]
+    public Company $company;
 
     /**
      * Both keys are server-sourced (the route id, the company context) and
