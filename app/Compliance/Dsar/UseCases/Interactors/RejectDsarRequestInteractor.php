@@ -17,9 +17,9 @@ class RejectDsarRequestInteractor
     public function execute(RejectDsarRequestCommand $command): void
     {
         DB::transaction(function () use ($command): void {
-            DsarRequest::retrieve($command->requestId)->reject($command)->persist();
+            DsarRequest::retrieve($command->dsarRequest->getKey())->reject($command)->persist();
 
-            $this->audit->record(DsarRequestRecord::query()->findOrFail($command->requestId), DsarRequestRejected::class, AuditAction::DsarRejected);
+            $this->audit->record(DsarRequestRecord::query()->whereKey($command->dsarRequest->getKey())->firstOrFail(), DsarRequestRejected::class, AuditAction::DsarRejected);
         });
     }
 }

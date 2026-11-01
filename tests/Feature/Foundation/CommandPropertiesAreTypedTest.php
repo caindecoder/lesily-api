@@ -37,8 +37,6 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         'App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters::$overdue — a flag that is not a cast bool',
         'App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters::$slaBreached — a flag that is not a cast bool',
         'App\Compliance\Dsar\UseCases\Commands\DsarRequestFilters::$status — a closed set kept as a string',
-        'App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand::$requestId — a string reference',
-        'App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand::$requestId — a string reference',
         'App\Consent\UseCases\Commands\RecordConsentCommand::$userId — a string reference',
         'App\Consent\UseCases\Commands\RecordConsentCommand::$companyId — a string reference',
         'App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand::$companyId — a string reference',

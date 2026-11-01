@@ -338,11 +338,11 @@ abstract class DsarTestCase extends TestCase
                 'cancelledBy' => $subject,
             ])),
             'fulfilled' => $aggregate->fulfil(FulfilDsarRequestCommand::from([
-                'requestId' => $request->getKey(),
+                'dsarRequest' => $request,
                 'filePath' => $this->exportPathOf($request),
             ])),
             'rejected' => $aggregate->reject(RejectDsarRequestCommand::from([
-                'requestId' => $request->getKey(),
+                'dsarRequest' => $request,
                 'reason' => 'The export could not be built. Please submit a new request.',
             ])),
             default => throw new InvalidArgumentException("Unknown closure: {$closedBy}"),
@@ -1212,7 +1212,7 @@ abstract class DsarTestCase extends TestCase
             {
                 DsarRequest::retrieve($this->request->getKey())
                     ->fulfil(FulfilDsarRequestCommand::from([
-                        'requestId' => $this->request->getKey(),
+                        'dsarRequest' => $this->request,
                         'filePath' => 'dsar/'.$this->request->company_id.'/'.$this->request->getKey().'.zip',
                     ]))
                     ->persist();
