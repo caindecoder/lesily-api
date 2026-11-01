@@ -93,7 +93,7 @@ class RegisterOwnerInteractor
             'brNumber' => $command->brNumber,
             'epfNumber' => $command->epfNumber,
             'country' => $command->country,
-            'ownerUserId' => $ownerUserId,
+            'owner' => UserReadModel::query()->findOrFail($ownerUserId),
             'emergencyContactName' => $command->emergencyContactName,
             'emergencyContactEmail' => $command->emergencyContactEmail,
             'emergencyContactPhone' => $command->emergencyContactPhone,

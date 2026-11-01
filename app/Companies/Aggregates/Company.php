@@ -40,7 +40,7 @@ class Company extends AggregateRoot
                 brNumber: $command->brNumber,
                 epfNumber: $command->epfNumber,
                 country: $command->country,
-                ownerUserId: $command->ownerUserId,
+                ownerUserId: $command->owner->getKey(),
                 trialEndsAt: CarbonImmutable::now()->addDays(self::TRIAL_DAYS),
             ))
             ->recordThat(new CompanySettingsCreated(

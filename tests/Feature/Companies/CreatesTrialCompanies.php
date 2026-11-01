@@ -20,7 +20,7 @@ trait CreatesTrialCompanies
             ->persist();
     }
 
-    protected function buildCreateCompanyCommand(string $companyId, string $name = 'Contoso', ?string $ownerUserId = null): CreateCompanyCommand
+    protected function buildCreateCompanyCommand(string $companyId, string $name = 'Contoso', ?User $owner = null): CreateCompanyCommand
     {
         // The genesis projection enrolls the owner against the seeded 'owner'
         // role (CompanyProjector) — the catalog is part of the genesis fixture.
@@ -31,7 +31,7 @@ trait CreatesTrialCompanies
             'brNumber' => "BR-{$companyId}",
             'epfNumber' => "EPF-{$companyId}",
             'country' => 'LK',
-            'ownerUserId' => $ownerUserId ?? User::factory()->create()->getKey(),
+            'owner' => $owner ?? User::factory()->create(),
             'emergencyContactName' => 'Kamala Perera',
             'emergencyContactEmail' => 'kamala@contoso.lk',
             'emergencyContactPhone' => '+94771234567',

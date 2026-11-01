@@ -57,7 +57,7 @@ class CreateCompanyInteractor
         DB::transaction(function () use ($command, $clientIp, $companyId): void {
             CompanyAggregate::retrieve($companyId)->create($command)->persist();
 
-            User::retrieve($command->ownerUserId)
+            User::retrieve($command->owner->getKey())
                 ->setEmergencyContact($companyId, SetEmergencyContactCommand::from([
                     'name' => $command->emergencyContactName,
                     'email' => $command->emergencyContactEmail,
@@ -68,7 +68,7 @@ class CreateCompanyInteractor
 
             Consent::retrieve(Str::uuid7()->toString())
                 ->record(RecordConsentCommand::from([
-                    'userId' => $command->ownerUserId,
+                    'userId' => $command->owner->getKey(),
                     'companyId' => $companyId,
                     'policyVersions' => config('lesily.policies'),
                     'ip' => $clientIp,

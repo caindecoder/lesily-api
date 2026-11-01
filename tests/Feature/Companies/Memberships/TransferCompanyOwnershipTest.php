@@ -333,7 +333,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $companyId = (string) Str::uuid7();
 
         CompanyAggregate::retrieve($companyId)
-            ->create($this->buildCreateCompanyCommand($companyId, $name, $owner->getKey()))
+            ->create($this->buildCreateCompanyCommand($companyId, $name, $owner))
             ->persist();
         $company = Company::query()->findOrFail($companyId);
         $this->aConsentRecordedBy($owner, $company);
