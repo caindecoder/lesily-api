@@ -557,7 +557,10 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
             'user_agent' => 'Symfony',
             'request_id' => $correlationId,
         ]);
-        $this->assertEquals($metadata, $entry->metadata);
+        /** @var array{filters: array<string, mixed>} $stored */
+        $stored = $entry->metadata;
+        $this->assertEquals($metadata, $stored);
+        $this->assertContainsOnlyString($stored['filters']);
     }
 
     /**
