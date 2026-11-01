@@ -1331,8 +1331,8 @@ abstract class DsarTestCase extends TestCase
     {
         Consent::retrieve(Str::uuid7()->toString())
             ->record(RecordConsentCommand::from([
-                'userId' => $user->getKey(),
-                'companyId' => $company->getKey(),
+                'user' => $user,
+                'company' => $company,
                 'policyVersions' => ['tos' => '2026-03', 'privacy' => '2026-04'],
                 'ip' => '203.0.113.7',
             ]))

@@ -32,8 +32,6 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     protected const int COMMANDS_AT_LEAST = 52;
 
     protected const array KNOWN_UNTYPED = [
-        'App\Consent\UseCases\Commands\RecordConsentCommand::$userId — a string reference',
-        'App\Consent\UseCases\Commands\RecordConsentCommand::$companyId — a string reference',
         'App\Foundation\Auth\UseCases\Commands\CreateUserFromInvitationCommand::$companyId — a string reference',
         'App\Foundation\Auth\UseCases\Commands\SetDefaultCompanyCommand::$companyId — a string reference',
     ];
