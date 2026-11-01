@@ -22,6 +22,7 @@ class VerifyOwnershipTransferCaseCommand extends Data
     #[OpaqueString('the case is read once, locked, inside the transaction')]
     public string $caseId;
 
+    #[OpaqueString('checked as a live member under the lock - TARGET_NOT_MEMBER')]
     public string $newOwnerUserId;
 
     public string $notes;

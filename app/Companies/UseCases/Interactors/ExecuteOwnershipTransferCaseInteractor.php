@@ -5,6 +5,7 @@ namespace App\Companies\UseCases\Interactors;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
+use App\Companies\Enums\TransferSource;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\DeadlockException;
 use App\Foundation\Database\LockContention;
@@ -61,9 +62,9 @@ class ExecuteOwnershipTransferCaseInteractor
 
             $this->transferInteractor->execute($company, TransferCompanyOwnershipCommand::from([
                 'newOwnerUserId' => $case->new_owner_user_id,
-                'transferredBy' => $admin->getKey(),
-                'source' => TransferCompanyOwnershipCommand::SOURCE_ADMIN,
-                'caseId' => $case->getKey(),
+                'transferredBy' => $admin,
+                'source' => TransferSource::Admin,
+                'case' => $case,
             ]), $case->expected_owner_user_id);
 
             $case->update([

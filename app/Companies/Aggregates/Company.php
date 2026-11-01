@@ -110,9 +110,9 @@ class Company extends AggregateRoot
         return $this->recordThat(new CompanyOwnershipTransferred(
             previousOwnerUserId: $previousOwnerUserId,
             newOwnerUserId: $command->newOwnerUserId,
-            transferredBy: $command->transferredBy,
-            source: $command->source,
-            caseId: $command->caseId,
+            transferredBy: $command->transferredBy->getKey(),
+            source: $command->source->value,
+            caseId: $command->case?->getKey(),
         ));
     }
 
