@@ -2,15 +2,23 @@
 
 namespace App\Compliance\Dsar\UseCases\Commands;
 
+use App\Models\User;
 use Spatie\LaravelData\Data;
+use App\Companies\Entities\Company;
+use Spatie\LaravelData\Attributes\WithCast;
+use App\Foundation\UseCases\Casts\ModelCast;
+use App\Compliance\Dsar\Entities\DsarRequestRecord;
 
 class CancelDsarRequestCommand extends Data
 {
-    public string $requestId;
+    #[WithCast(ModelCast::class, DsarRequestRecord::class)]
+    public DsarRequestRecord $dsarRequest;
 
-    public string $companyId;
+    #[WithCast(ModelCast::class, Company::class)]
+    public Company $company;
 
-    public string $cancelledByUserId;
+    #[WithCast(ModelCast::class, User::class)]
+    public User $cancelledBy;
 
     /**
      * Every key is server-sourced (the route id, the company context, the

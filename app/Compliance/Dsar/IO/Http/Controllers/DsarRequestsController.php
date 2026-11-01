@@ -60,9 +60,9 @@ class DsarRequestsController extends Controller
         $actor = $request->user();
 
         $command = CancelDsarRequestCommand::validateAndCreate([
-            'requestId' => $requestId,
-            'companyId' => $request->company()->getKey(),
-            'cancelledByUserId' => $actor->getKey(),
+            'dsarRequest' => $requestId,
+            'company' => $request->company(),
+            'cancelledBy' => $actor,
         ]);
 
         return new DsarRequestResource($interactor->execute($command, $actor, RequestOrigin::fromRequest($request)));

@@ -59,7 +59,10 @@ class DsarRequest extends AggregateRoot
 
     public function cancel(CancelDsarRequestCommand $command): static
     {
-        if ($command->cancelledByUserId !== $this->requestedByUserId) {
+        /** @var string $cancelledById users are UUID-keyed (HasUuids) */
+        $cancelledById = $command->cancelledBy->getKey();
+
+        if ($cancelledById !== $this->requestedByUserId) {
             throw new DsarRequesterMismatchException;
         }
 
@@ -69,7 +72,7 @@ class DsarRequest extends AggregateRoot
 
         return $this->recordThat(new DsarRequestCancelled(
             cancelledAt: CarbonImmutable::now(),
-            cancelledByUserId: $command->cancelledByUserId,
+            cancelledByUserId: $cancelledById,
         ));
     }
 

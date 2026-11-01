@@ -4,7 +4,6 @@ namespace App\Compliance\Dsar\UseCases\Interactors;
 
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use App\Companies\Entities\Company;
 use App\Compliance\Dsar\Aggregates\DsarRequest;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -27,15 +26,13 @@ class CancelDsarRequestInteractor
 
     public function execute(CancelDsarRequestCommand $command, User $actor, RequestOrigin $context): DsarRequestRecord
     {
-        $company = Company::query()->findOrFail($command->companyId);
-
-        $request = $this->visibility->visibleTo($actor, $company)->whereKey($command->requestId)->first()
+        $request = $this->visibility->visibleTo($actor, $command->company)->whereKey($command->dsarRequest->getKey())->first()
             ?? throw new ModelNotFoundException;
 
         return DB::transaction(function () use ($request, $command, $actor, $context): DsarRequestRecord {
             DsarRequest::retrieve($request->getKey())->cancel($command)->persist();
 
-            $withdrawn = DsarRequestRecord::query()->findOrFail($command->requestId);
+            $withdrawn = DsarRequestRecord::query()->whereKey($request->getKey())->firstOrFail();
             $this->recordWithdrawn($withdrawn, $actor, $context);
 
             return $withdrawn;

@@ -32,9 +32,6 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     protected const int COMMANDS_AT_LEAST = 52;
 
     protected const array KNOWN_UNTYPED = [
-        'App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand::$requestId — a string reference',
-        'App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand::$companyId — a string reference',
-        'App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand::$cancelledByUserId — a string reference',
         'App\Compliance\Dsar\UseCases\Commands\DownloadDsarExportCommand::$requestId — a string reference',
         'App\Compliance\Dsar\UseCases\Commands\DownloadDsarExportCommand::$companyId — a string reference',
         'App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters::$status — a closed set kept as a string',

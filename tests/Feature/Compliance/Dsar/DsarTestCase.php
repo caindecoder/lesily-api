@@ -333,9 +333,9 @@ abstract class DsarTestCase extends TestCase
 
         match ($closedBy) {
             'withdrawn' => $aggregate->cancel(CancelDsarRequestCommand::from([
-                'requestId' => $request->getKey(),
-                'companyId' => $company->getKey(),
-                'cancelledByUserId' => $subject->getKey(),
+                'dsarRequest' => $request,
+                'company' => $company,
+                'cancelledBy' => $subject,
             ])),
             'fulfilled' => $aggregate->fulfil(FulfilDsarRequestCommand::from([
                 'requestId' => $request->getKey(),
@@ -1074,9 +1074,9 @@ abstract class DsarTestCase extends TestCase
             {
                 DsarRequest::retrieve($this->request->getKey())
                     ->cancel(CancelDsarRequestCommand::from([
-                        'requestId' => $this->request->getKey(),
-                        'companyId' => $companyId,
-                        'cancelledByUserId' => $this->request->requested_by,
+                        'dsarRequest' => $this->request,
+                        'company' => Company::query()->findOrFail($companyId),
+                        'cancelledBy' => User::query()->findOrFail($this->request->requested_by),
                     ]))
                     ->persist();
 
