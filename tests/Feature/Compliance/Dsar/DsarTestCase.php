@@ -176,8 +176,8 @@ abstract class DsarTestCase extends TestCase
         DsarRequest::retrieve($requestId)
             ->submit(SubmitDsarRequestCommand::from([
                 'subjectUserId' => $subject->getKey(),
-                'companyId' => $company->getKey(),
-                'requestedByUserId' => $requester->getKey(),
+                'company' => $company,
+                'requestedBy' => $requester,
             ]), $this->roleCodeOf($requester, $company->getKey()))
             ->persist();
 

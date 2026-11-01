@@ -44,12 +44,12 @@ class DsarRequest extends AggregateRoot
     {
         $requestedAt = CarbonImmutable::now();
 
-        return $this->forCompany($command->companyId)
+        return $this->forCompany($command->company->getKey())
             ->recordThat(new DsarRequestSubmitted(
                 requestId: $this->uuid(),
-                companyId: $command->companyId,
+                companyId: $command->company->getKey(),
                 subjectUserId: $command->resolvedSubjectUserId(),
-                requestedByUserId: $command->requestedByUserId,
+                requestedByUserId: $command->requestedBy->getKey(),
                 requestedByRole: $requestedByRole,
                 requestType: self::REQUEST_TYPE_ACCESS,
                 requestedAt: $requestedAt,
