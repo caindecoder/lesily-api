@@ -3,6 +3,7 @@
 namespace App\Companies\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
+use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -14,6 +15,7 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  */
 class ExecuteOwnershipTransferCaseCommand extends Data
 {
+    #[OpaqueString('the case is read once, locked, inside the transaction')]
     public string $caseId;
 
     /**
