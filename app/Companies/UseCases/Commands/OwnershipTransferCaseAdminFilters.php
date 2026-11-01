@@ -8,6 +8,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Spatie\LaravelData\Attributes\MapInputName;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
+use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -27,9 +28,10 @@ class OwnershipTransferCaseAdminFilters extends Data
      */
     private const array QUERY_KEY_WHITELIST = ['status', 'company_id', 'page', 'per_page'];
 
-    public ?string $status = null;
+    public ?OwnershipTransferCaseStatus $status = null;
 
     #[MapInputName('company_id')]
+    #[OpaqueString('a list filter; an unknown value yields an empty list')]
     public ?string $companyId = null;
 
     public ?int $page = null;

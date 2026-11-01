@@ -31,7 +31,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
     {
         return DB::transaction(function () use ($filters, $admin, $context): LengthAwarePaginator {
             $page = OwnershipTransferCase::query()
-                ->when($filters->status, fn ($query, string $status) => $query->withStatus(OwnershipTransferCaseStatus::from($status)))
+                ->when($filters->status, fn ($query, OwnershipTransferCaseStatus $status) => $query->withStatus($status))
                 ->when($filters->companyId, fn ($query, string $companyId) => $query->forCompanyId($companyId))
                 ->newestFirst()
                 // page defaults HERE, never by falling through to Laravel's resolver:
@@ -53,7 +53,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
     {
         return [
             'filters' => array_filter(
-                ['status' => $filters->status, 'company_id' => $filters->companyId],
+                ['status' => $filters->status?->value, 'company_id' => $filters->companyId],
                 fn (?string $value): bool => $value !== null,
             ),
             'result_count' => count($page->items()),
