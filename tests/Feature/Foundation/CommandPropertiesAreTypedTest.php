@@ -44,6 +44,19 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         $this->assertWalkedAndTyped($commands, $untyped);
     }
 
+    #[Test]
+    public function when_the_marked_strings_are_walked_without_their_markers_then_the_string_checks_fire(): void
+    {
+        // Given every Data class under app/**/UseCases/Commands
+        $commands = $this->commandClasses();
+
+        // When their #[OpaqueString] properties are walked as if unmarked
+        $fired = $this->stringChecksFiredUnderMarkers($commands);
+
+        // Then both string checks fire on real marked properties
+        $this->assertSame(['a closed set kept as a string', 'a string reference'], $fired);
+    }
+
     /**
      * @return list<class-string<Data>>
      */
@@ -115,9 +128,7 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         $opaque = $markerReason !== null && $markerReason !== '';
 
         $checks = [
-            'a string reference' => ! $opaque && $typeName === 'string'
-                && (preg_match('/(Id|By)$/', $property->name) === 1 || $this->holdsRule('Exists', $parsed)),
-            'a closed set kept as a string' => ! $opaque && $typeName === 'string' && $this->holdsAClosedSet($parsed),
+            ...array_fill_keys($opaque ? [] : $this->stringChecksOf($property, $typeName, $parsed), true),
             'a marker without a reason' => $markerReason === '',
             'a flag that is not a cast bool' => $this->holdsAFlag($parsed)
                 && ! ($typeName === 'bool' && $type->allowsNull() && $property->cast instanceof BuiltinTypeCast),
@@ -132,6 +143,47 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         $where = $property->className.'::$'.$property->name;
 
         return array_map(fn (string $check): string => "{$where} — {$check}", array_keys(array_filter($checks)));
+    }
+
+    /**
+     * @param  list<array<mixed>>  $parsed
+     * @return list<string>
+     */
+    protected function stringChecksOf(DataProperty $property, string $typeName, array $parsed): array
+    {
+        return array_keys(array_filter([
+            'a string reference' => $typeName === 'string'
+                && (preg_match('/(Id|By)$/', $property->name) === 1 || $this->holdsRule('Exists', $parsed)),
+            'a closed set kept as a string' => $typeName === 'string' && $this->holdsAClosedSet($parsed),
+        ]));
+    }
+
+    /**
+     * @param  list<class-string<Data>>  $commands
+     * @return list<string>
+     */
+    protected function stringChecksFiredUnderMarkers(array $commands): array
+    {
+        $fired = [];
+
+        foreach ($commands as $command) {
+            $rules = $this->rulesOf($command);
+
+            foreach (app(DataConfig::class)->getDataClass($command)->properties as $property) {
+                $reflection = new ReflectionProperty($command, $property->name);
+                $type = $reflection->getType();
+
+                if ($this->markerReasonOf($reflection) !== null && $type instanceof ReflectionNamedType) {
+                    $parsed = $this->parsedRules($rules[$property->inputMappedName ?? $property->name] ?? []);
+                    array_push($fired, ...$this->stringChecksOf($property, $type->getName(), $parsed));
+                }
+            }
+        }
+
+        $fired = array_values(array_unique($fired));
+        sort($fired);
+
+        return $fired;
     }
 
     protected function markerReasonOf(ReflectionProperty $reflection): ?string

@@ -55,7 +55,7 @@ class DefaultCompanyTest extends AuthTestCase
     #[Test, DataProvider('malformedCompanyIdProvider')]
     public function when_company_id_is_missing_or_malformed_then_set_refused(array $payload, string $expectedMessage): void
     {
-        // Given a member with a live membership (the guard must never be reached)
+        // Given a member with a live membership (the membership rule must never be reached)
         $user = $this->aRegisteredUser();
         $this->aMembershipFor($user, Company::factory()->named('Home')->create());
 

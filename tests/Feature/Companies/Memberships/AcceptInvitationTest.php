@@ -654,7 +654,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // membership activates on the invitation's UUID, a working session is
         // issued (auto-login), and the welcome goes out
         $response->assertCreated();
-        $this->assertNewUserProvisioned('kasun@newjoiner.lk', 'Nimal Perera');
+        $this->assertNewUserProvisioned($company, 'kasun@newjoiner.lk', 'Nimal Perera');
         $this->assertMembershipActivated($company, 'kasun@newjoiner.lk');
         $this->assertAutoLoggedIn($response, $company);
         $this->assertTeamWelcomeQueued('kasun@newjoiner.lk', $company);

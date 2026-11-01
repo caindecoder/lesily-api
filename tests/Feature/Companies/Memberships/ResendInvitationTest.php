@@ -262,7 +262,7 @@ class ResendInvitationTest extends MembershipsTestCase
         // Then
         $response->assertCreated();
         $this->assertMembershipActivated($company, 'invitee@contoso.lk');
-        $this->assertNewUserProvisioned('invitee@contoso.lk', 'Nimal Perera');
+        $this->assertNewUserProvisioned($company, 'invitee@contoso.lk', 'Nimal Perera');
     }
 
     /**

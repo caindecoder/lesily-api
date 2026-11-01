@@ -996,7 +996,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      * UserCreatedFromInvitation stored event whose payload matches the row
      * verbatim (amendment R).
      */
-    protected function assertNewUserProvisioned(string $email, string $name): void
+    protected function assertNewUserProvisioned(Company $company, string $email, string $name): void
     {
         $user = User::query()->where('email', $email)->sole();
 
@@ -1004,6 +1004,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $this->assertNotSame('', $user->password, 'The provisioned account must carry a set password.');
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', UserCreatedFromInvitation::class)
+            ->whereForCompany($company->getKey())
             ->where('event_properties->userId', $user->getKey())
             ->where('event_properties->email', $email)
             ->where('event_properties->name', $name)

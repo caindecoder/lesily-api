@@ -13,8 +13,9 @@ use App\Foundation\Auth\UseCases\Interactors\ClearDefaultCompanyInteractor;
 /**
  * Thin delivery appendix (E07) for PUT/DELETE /api/v1/me/default-company — the
  * persisted default-company preference (UC-1-139, slice-companies B2/B3). The
- * live-membership guard and the plain users.default_company_id write live in
- * the interactors; the controller only shapes the 204s.
+ * live-membership guard is the command's rule and the plain
+ * users.default_company_id write lives in the interactors; the controller only
+ * shapes the 204s.
  */
 class DefaultCompanyController extends Controller
 {
