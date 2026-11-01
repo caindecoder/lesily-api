@@ -4,7 +4,6 @@ namespace App\Companies\UseCases\Interactors;
 
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use App\Companies\Entities\Company;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -27,12 +26,10 @@ class OpenOwnershipTransferCaseInteractor
     {
         return DB::transaction(function () use ($command, $admin, $context): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()->create([
-                'company_id' => $command->companyId,
-                'expected_owner_user_id' => Company::query()
-                    ->whereKey($command->companyId)
-                    ->value('owner_id'),
+                'company_id' => $command->company->getKey(),
+                'expected_owner_user_id' => $command->company->owner_id,
                 'status' => OwnershipTransferCaseStatus::Open,
-                'new_owner_user_id' => $command->newOwnerUserId,
+                'new_owner_user_id' => $command->newOwnerUser?->getKey(),
                 'requested_context' => $command->requestedContext,
             ]);
 

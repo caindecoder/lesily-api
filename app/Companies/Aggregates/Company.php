@@ -40,7 +40,7 @@ class Company extends AggregateRoot
                 brNumber: $command->brNumber,
                 epfNumber: $command->epfNumber,
                 country: $command->country,
-                ownerUserId: $command->ownerUserId,
+                ownerUserId: $command->owner->getKey(),
                 trialEndsAt: CarbonImmutable::now()->addDays(self::TRIAL_DAYS),
             ))
             ->recordThat(new CompanySettingsCreated(
@@ -110,9 +110,9 @@ class Company extends AggregateRoot
         return $this->recordThat(new CompanyOwnershipTransferred(
             previousOwnerUserId: $previousOwnerUserId,
             newOwnerUserId: $command->newOwnerUserId,
-            transferredBy: $command->transferredBy,
-            source: $command->source,
-            caseId: $command->caseId,
+            transferredBy: $command->transferredBy->getKey(),
+            source: $command->source->value,
+            caseId: $command->case?->getKey(),
         ));
     }
 

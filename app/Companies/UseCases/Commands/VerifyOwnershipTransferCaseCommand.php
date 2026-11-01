@@ -5,6 +5,8 @@ namespace App\Companies\UseCases\Commands;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use App\Companies\Enums\VerificationArtefactType;
+use Spatie\LaravelData\Attributes\DataCollectionOf;
+use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -18,15 +20,18 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  */
 class VerifyOwnershipTransferCaseCommand extends Data
 {
+    #[OpaqueString('the case is read once, locked, inside the transaction')]
     public string $caseId;
 
+    #[OpaqueString('checked as a live member under the lock - TARGET_NOT_MEMBER')]
     public string $newOwnerUserId;
 
     public string $notes;
 
     /**
-     * @var array<int, array<string, mixed>>
+     * @var array<int, VerificationArtefact>
      */
+    #[DataCollectionOf(VerificationArtefact::class)]
     public array $artefacts;
 
     /**
@@ -42,24 +47,17 @@ class VerifyOwnershipTransferCaseCommand extends Data
             'artefacts.*' => ['array'],
             'artefacts.*.type' => ['required', Rule::enum(VerificationArtefactType::class)],
             'artefacts.*.reference' => ['required', 'string', 'max:255'],
-            'artefacts.*.capturedAt' => ['required', 'date_format:Y-m-d\TH:i:sp', 'before_or_equal:now'],
+            'artefacts.*.capturedAt' => ['required', 'date_format:'.VerificationArtefact::CAPTURED_AT_FORMAT, 'before_or_equal:now'],
         ];
     }
 
     /**
-     * The artefact entries projected to EXACTLY the spec §2 metadata shape
-     * {type, reference, capturedAt} — unknown keys are structurally dropped,
-     * so nothing beyond the closed metadata set can reach the event payload
-     * or the case row.
+     * The artefact entries in the spec §2 metadata shape {type, reference, capturedAt}.
      *
      * @return array<int, array{type: string, reference: string, capturedAt: string}>
      */
     public function artefactMetadata(): array
     {
-        return array_map(fn (array $artefact): array => [
-            'type' => $artefact['type'],
-            'reference' => $artefact['reference'],
-            'capturedAt' => $artefact['capturedAt'],
-        ], $this->artefacts);
+        return array_map(fn (VerificationArtefact $artefact): array => $artefact->metadata(), $this->artefacts);
     }
 }

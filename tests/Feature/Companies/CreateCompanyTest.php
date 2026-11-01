@@ -68,9 +68,9 @@ class CreateCompanyTest extends CompaniesTestCase
 
     protected function buildCreateCompanyCommandForCountry(string $companyId, string $country): CreateCompanyCommand
     {
-        return CreateCompanyCommand::from(
-            ['country' => $country] + $this->buildCreateCompanyCommand($companyId)->toArray()
-        );
+        $command = $this->buildCreateCompanyCommand($companyId);
+
+        return CreateCompanyCommand::from(['country' => $country, 'owner' => $command->owner] + $command->toArray());
     }
 
     // Happy — genesis: creating a company opens a 30-day trial scoped to its own
@@ -109,7 +109,7 @@ class CreateCompanyTest extends CompaniesTestCase
 
         $this->assertCompanyOnTrial($row, 'Contoso', '2026-07-01 00:00:00');
         $this->assertRegistrationProjected($row, $command);
-        $this->assertOwnerMembershipPivotIsUuid($companyId, $command->ownerUserId);
+        $this->assertOwnerMembershipPivotIsUuid($companyId, $command->owner->getKey());
     }
 
     protected function assertCompanyCreatedEventOpensTrial(EloquentStoredEvent $event, string $expectedTrialEndsAt): void
@@ -124,7 +124,7 @@ class CreateCompanyTest extends CompaniesTestCase
         $this->assertSame($command->brNumber, $event->event_properties['brNumber']);
         $this->assertSame($command->epfNumber, $event->event_properties['epfNumber']);
         $this->assertSame($command->country, $event->event_properties['country']);
-        $this->assertSame($command->ownerUserId, $event->event_properties['ownerUserId']);
+        $this->assertSame($command->owner->getKey(), $event->event_properties['ownerUserId']);
     }
 
     protected function assertSettingsSeededFromCountryDefaults(EloquentStoredEvent $event): void
@@ -152,7 +152,7 @@ class CreateCompanyTest extends CompaniesTestCase
         $this->assertSame($command->brNumber, $row->br_number);
         $this->assertSame($command->epfNumber, $row->epf_number);
         $this->assertSame($command->country, $row->country);
-        $this->assertSame($command->ownerUserId, $row->owner_id);
+        $this->assertSame($command->owner->getKey(), $row->owner_id);
     }
 
     protected function assertOwnerMembershipPivotIsUuid(string $companyId, string $ownerUserId): void

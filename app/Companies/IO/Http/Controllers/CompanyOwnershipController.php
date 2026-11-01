@@ -4,6 +4,7 @@ namespace App\Companies\IO\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+use App\Companies\Enums\TransferSource;
 use App\Companies\IO\Http\Resources\CompanyOwnerResource;
 use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 use App\Companies\UseCases\Interactors\TransferCompanyOwnershipInteractor;
@@ -23,8 +24,8 @@ class CompanyOwnershipController
 
         $command = TransferCompanyOwnershipCommand::validateAndCreate([
             'newOwnerUserId' => $request->input('newOwnerUserId'),
-            'transferredBy' => $actor->getKey(),
-            'source' => TransferCompanyOwnershipCommand::SOURCE_SELF_SERVICE,
+            'transferredBy' => $actor,
+            'source' => TransferSource::SelfService,
         ]);
 
         return new CompanyOwnerResource($interactor->execute($request->company(), $command, $actor->getKey()));

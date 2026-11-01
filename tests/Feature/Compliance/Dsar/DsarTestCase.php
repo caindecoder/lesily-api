@@ -22,6 +22,7 @@ use Illuminate\Testing\TestResponse;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Queue;
 use App\Companies\Entities\CompanyUser;
+use App\Companies\Enums\TransferSource;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Exceptions;
@@ -1498,8 +1499,8 @@ abstract class DsarTestCase extends TestCase
         CompanyAggregate::retrieve($company->getKey())
             ->transferOwnership(TransferCompanyOwnershipCommand::from([
                 'newOwnerUserId' => $to->getKey(),
-                'transferredBy' => $from->getKey(),
-                'source' => TransferCompanyOwnershipCommand::SOURCE_SELF_SERVICE,
+                'transferredBy' => $from,
+                'source' => TransferSource::SelfService,
             ]), $from->getKey())
             ->persist();
     }
@@ -1530,8 +1531,8 @@ abstract class DsarTestCase extends TestCase
         CompanyAggregate::retrieve($company->getKey())
             ->transferOwnership(TransferCompanyOwnershipCommand::from([
                 'newOwnerUserId' => $to->getKey(),
-                'transferredBy' => User::factory()->create()->getKey(),
-                'source' => TransferCompanyOwnershipCommand::SOURCE_ADMIN,
+                'transferredBy' => User::factory()->create(),
+                'source' => TransferSource::Admin,
             ]), $from->getKey())
             ->persist();
     }

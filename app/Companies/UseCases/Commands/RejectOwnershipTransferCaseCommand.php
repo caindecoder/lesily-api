@@ -5,6 +5,7 @@ namespace App\Companies\UseCases\Commands;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use App\Companies\Enums\RejectionReasonCode;
+use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -15,6 +16,7 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  */
 class RejectOwnershipTransferCaseCommand extends Data
 {
+    #[OpaqueString('the case is read once, locked, inside the transaction')]
     public string $caseId;
 
     public string $reason;

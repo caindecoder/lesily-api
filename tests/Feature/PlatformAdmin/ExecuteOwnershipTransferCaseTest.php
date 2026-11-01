@@ -13,6 +13,7 @@ use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
+use App\Companies\Enums\TransferSource;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Entities\OwnershipTransferCase;
@@ -322,8 +323,8 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             $company,
             TransferCompanyOwnershipCommand::validateAndCreate([
                 'newOwnerUserId' => $bob->getKey(),
-                'transferredBy' => $olive->getKey(),
-                'source' => TransferCompanyOwnershipCommand::SOURCE_SELF_SERVICE,
+                'transferredBy' => $olive,
+                'source' => TransferSource::SelfService,
             ]),
             $olive->getKey(),
         );

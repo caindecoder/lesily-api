@@ -28,7 +28,7 @@ class CompaniesController
         $actor = $request->user();
 
         $company = $interactor->execute(
-            CreateCompanyCommand::validateAndCreate([...$request->all(), 'ownerUserId' => $actor->getKey()]),
+            CreateCompanyCommand::validateAndCreate([...$request->all(), 'owner' => $actor]),
             $request->ip(),
         );
 
