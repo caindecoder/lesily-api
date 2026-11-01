@@ -7,6 +7,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Query\Builder;
 use App\Companies\Entities\CompanyUser;
+use App\Companies\Memberships\Enums\MembershipStatus;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterface;
@@ -37,9 +38,9 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
     public function listForCompany(string $companyId, MembershipFilters $filters): LengthAwarePaginator
     {
         $rows = match ($filters->status) {
-            'active' => $this->activeMembers($companyId, $filters),
-            'invited' => $this->pendingInvitations($companyId, $filters),
-            default => $this->activeMembers($companyId, $filters)
+            MembershipStatus::Active => $this->activeMembers($companyId, $filters),
+            MembershipStatus::Invited => $this->pendingInvitations($companyId, $filters),
+            null => $this->activeMembers($companyId, $filters)
                 ->unionAll($this->pendingInvitations($companyId, $filters)),
         };
 

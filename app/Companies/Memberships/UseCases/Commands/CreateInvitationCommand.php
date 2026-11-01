@@ -2,7 +2,10 @@
 
 namespace App\Companies\Memberships\UseCases\Commands;
 
+use App\Models\User;
 use Spatie\LaravelData\Data;
+use App\Companies\Entities\Company;
+use App\Foundation\RolesPermissions\Entities\Role;
 
 /**
  * Genesis payload for the UserMembership aggregate — an internal command built
@@ -13,13 +16,13 @@ use Spatie\LaravelData\Data;
  */
 class CreateInvitationCommand extends Data
 {
-    public string $companyId;
+    public Company $company;
 
     public string $email;
 
-    public string $roleId;
+    public Role $role;
 
-    public string $invitedByUserId;
+    public User $invitedBy;
 
     public string $plaintextToken;
 }

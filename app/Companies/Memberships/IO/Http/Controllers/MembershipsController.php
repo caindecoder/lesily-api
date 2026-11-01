@@ -67,7 +67,7 @@ class MembershipsController
 
         $command = ChangeMembershipRoleCommand::validateAndCreate([
             'roleCode' => $request->input('roleCode'),
-            'changedBy' => $actor->getKey(),
+            'changedBy' => $actor,
         ]);
 
         $interactor->execute($company, $command, $membershipId);
@@ -88,7 +88,7 @@ class MembershipsController
         $actor = $request->user();
 
         $command = RemoveUserFromCompanyCommand::validateAndCreate([
-            'removedBy' => $actor->getKey(),
+            'removedBy' => $actor,
         ]);
 
         $interactor->execute($request->company(), $command, $membershipId);

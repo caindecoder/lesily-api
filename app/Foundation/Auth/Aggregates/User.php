@@ -88,7 +88,7 @@ class User extends AggregateRoot
             name: $command->name,
             email: $command->email,
             phone: $command->phone,
-            relationship: $command->relationship,
+            relationship: $command->relationship->value,
         ));
     }
 

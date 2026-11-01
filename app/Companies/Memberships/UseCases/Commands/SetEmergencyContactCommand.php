@@ -9,6 +9,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerRules;
 use App\Companies\Memberships\UseCases\Casts\SriLankanE164Cast;
+use App\Companies\Memberships\Enums\EmergencyContactRelationship;
 
 /**
  * An owner's emergency contact for one company (UC-1-029) — validated at the
@@ -26,7 +27,7 @@ class SetEmergencyContactCommand extends Data
     #[WithCast(SriLankanE164Cast::class)]
     public string $phone;
 
-    public string $relationship;
+    public EmergencyContactRelationship $relationship;
 
     /**
      * @return array<string, array<int, string|Enum|ValidationRule>>

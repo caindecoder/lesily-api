@@ -2,6 +2,7 @@
 
 namespace App\Companies\Memberships\UseCases\Commands;
 
+use App\Models\User;
 use Spatie\LaravelData\Data;
 
 /**
@@ -15,5 +16,5 @@ class ResendInvitationCommand extends Data
 {
     public string $plaintextToken;
 
-    public string $resentBy;
+    public User $resentBy;
 }

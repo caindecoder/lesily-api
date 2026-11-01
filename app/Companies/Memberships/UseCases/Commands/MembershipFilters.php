@@ -7,6 +7,8 @@ use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Spatie\LaravelData\Attributes\MapInputName;
+use App\Foundation\UseCases\Attributes\OpaqueString;
+use App\Companies\Memberships\Enums\MembershipStatus;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
@@ -31,12 +33,14 @@ class MembershipFilters extends Data
      */
     private const array SORTABLE_FIELDS = ['name', '-created_at'];
 
+    #[OpaqueString('a role code - the seeded catalog, open to custom roles later')]
     public ?string $role = null;
 
-    public ?string $status = null;
+    public ?MembershipStatus $status = null;
 
     public ?string $search = null;
 
+    #[OpaqueString('a per-endpoint sort token the repository maps to columns')]
     public ?string $sort = null;
 
     public ?int $page = null;
@@ -67,7 +71,7 @@ class MembershipFilters extends Data
         // its removal stays test-visible and the empty-value message leads.
         return [
             'role' => ['filled', 'sometimes', 'string'],
-            'status' => ['filled', 'sometimes', 'string', Rule::in(['active', 'invited'])],
+            'status' => ['filled', 'sometimes', 'string', Rule::enum(MembershipStatus::class)],
             'search' => ['filled', 'sometimes', 'string'],
             'sort' => ['filled', 'sometimes', 'string', Rule::in(self::SORTABLE_FIELDS)],
             'page' => ['filled', 'sometimes', 'integer', 'min:1'],

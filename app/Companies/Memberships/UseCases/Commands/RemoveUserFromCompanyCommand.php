@@ -2,7 +2,10 @@
 
 namespace App\Companies\Memberships\UseCases\Commands;
 
+use App\Models\User;
 use Spatie\LaravelData\Data;
+use Spatie\LaravelData\Attributes\WithCast;
+use App\Foundation\UseCases\Casts\ModelCast;
 
 /**
  * Remove-member payload for the UserMembership aggregate (UC-1-024). Built at
@@ -12,7 +15,8 @@ use Spatie\LaravelData\Data;
  */
 class RemoveUserFromCompanyCommand extends Data
 {
-    public string $removedBy;
+    #[WithCast(ModelCast::class, User::class)]
+    public User $removedBy;
 
     /**
      * removedBy is server-sourced from the authenticated actor and carries no

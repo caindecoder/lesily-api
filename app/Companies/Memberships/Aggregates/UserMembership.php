@@ -39,13 +39,13 @@ class UserMembership extends AggregateRoot
      */
     public function invite(CreateInvitationCommand $command): static
     {
-        return $this->forCompany($command->companyId)
+        return $this->forCompany($command->company->getKey())
             ->recordThat(new UserInvited(
                 invitationId: $this->uuid(),
-                companyId: $command->companyId,
+                companyId: $command->company->getKey(),
                 email: $command->email,
-                roleId: $command->roleId,
-                invitedBy: $command->invitedByUserId,
+                roleId: $command->role->getKey(),
+                invitedBy: $command->invitedBy->getKey(),
                 expiresAt: CarbonImmutable::now()->addDays(self::INVITATION_TTL_DAYS),
                 tokenHash: hash('sha256', $command->plaintextToken),
             ));
@@ -64,7 +64,7 @@ class UserMembership extends AggregateRoot
             membershipId: $this->uuid(),
             tokenHash: hash('sha256', $command->plaintextToken),
             expiresAt: CarbonImmutable::now()->addDays(self::INVITATION_TTL_DAYS),
-            resentBy: $command->resentBy,
+            resentBy: $command->resentBy->getKey(),
         ));
     }
 
@@ -78,7 +78,7 @@ class UserMembership extends AggregateRoot
     {
         return $this->recordThat(new UserInvitationRevoked(
             membershipId: $this->uuid(),
-            revokedBy: $command->revokedBy,
+            revokedBy: $command->revokedBy->getKey(),
             revokedAt: CarbonImmutable::now(),
             reason: $command->reason,
         ));
@@ -97,7 +97,7 @@ class UserMembership extends AggregateRoot
             membershipId: $this->uuid(),
             fromRoleId: $fromRoleId,
             toRoleId: $toRoleId,
-            changedBy: $command->changedBy,
+            changedBy: $command->changedBy->getKey(),
             changedAt: CarbonImmutable::now(),
         ));
     }
@@ -146,7 +146,7 @@ class UserMembership extends AggregateRoot
     {
         return $this->recordThat(new UserRemovedFromCompany(
             membershipId: $this->uuid(),
-            removedBy: $command->removedBy,
+            removedBy: $command->removedBy->getKey(),
             removedAt: CarbonImmutable::now(),
         ));
     }
