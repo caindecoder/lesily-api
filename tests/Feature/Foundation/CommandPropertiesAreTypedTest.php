@@ -32,8 +32,6 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     protected const int COMMANDS_AT_LEAST = 52;
 
     protected const array KNOWN_UNTYPED = [
-        'App\Compliance\Dsar\UseCases\Commands\DownloadDsarExportCommand::$requestId — a string reference',
-        'App\Compliance\Dsar\UseCases\Commands\DownloadDsarExportCommand::$companyId — a string reference',
         'App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters::$status — a closed set kept as a string',
         'App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters::$companyId — a string reference',
         'App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters::$overdue — a flag that is not a cast bool',

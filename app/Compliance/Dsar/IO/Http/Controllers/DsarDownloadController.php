@@ -19,8 +19,8 @@ class DsarDownloadController extends Controller
         $actor = $request->user();
 
         $command = DownloadDsarExportCommand::validateAndCreate([
-            'requestId' => $requestId,
-            'companyId' => $request->company()->getKey(),
+            'dsarRequest' => $requestId,
+            'company' => $request->company(),
         ]);
 
         $export = $interactor->execute($command, $actor, RequestOrigin::fromRequest($request));
