@@ -5,6 +5,7 @@ namespace App\Companies\Memberships\UseCases\Interactors;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
+use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Hash;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Database\QueryException;
@@ -110,7 +111,7 @@ class AcceptInvitationInteractor
 
             UserAggregate::retrieve($userId)
                 ->createFromInvitation(CreateUserFromInvitationCommand::from([
-                    'companyId' => $live->company_id,
+                    'company' => Company::query()->findOrFail($live->company_id),
                     'email' => $live->email,
                     'passwordHash' => $passwordHash,
                     'name' => $name,

@@ -71,7 +71,7 @@ class User extends AggregateRoot
             throw UserAlreadyRegisteredException::withId($this->uuid());
         }
 
-        return $this->forCompany($command->companyId)
+        return $this->forCompany($command->company->getKey())
             ->recordThat(new UserCreatedFromInvitation(
                 userId: $this->uuid(),
                 email: $command->email,

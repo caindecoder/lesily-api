@@ -747,7 +747,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // so the re-fire guard is proven at the aggregate seam, mirroring the
         // Company::create re-create guard precedent)
         $genesis = CreateUserFromInvitationCommand::from([
-            'companyId' => (string) Str::uuid7(),
+            'company' => Company::factory()->create(),
             'email' => 'kasun@newjoiner.lk',
             'passwordHash' => 'a-bcrypt-hash-stand-in',
             'name' => 'Nimal Perera',

@@ -3,6 +3,7 @@
 namespace App\Foundation\Auth\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
+use App\Companies\Entities\Company;
 
 /**
  * Genesis payload for the invite-accept path on the User aggregate (internal
@@ -14,7 +15,7 @@ use Spatie\LaravelData\Data;
  */
 class CreateUserFromInvitationCommand extends Data
 {
-    public string $companyId;
+    public Company $company;
 
     public string $email;
 
