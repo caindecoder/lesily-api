@@ -6,7 +6,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use App\Companies\Enums\CompanyStatus;
 use App\Companies\Events\CompanyCreated;
-use App\Companies\Support\CountryDefaults;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\Events\CompanyTrialExpired;
 use App\Companies\Events\CompanyDetailsUpdated;
@@ -31,8 +30,6 @@ class Company extends AggregateRoot
         if ($this->status !== null) {
             throw CompanyAlreadyExistsException::withId($this->uuid());
         }
-
-        CountryDefaults::for($command->country);
 
         return $this->forCompany($this->uuid())
             ->recordThat(new CompanyCreated(

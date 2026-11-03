@@ -9,9 +9,11 @@ use App\Companies\Entities\Company;
 use App\Consent\Aggregates\Consent;
 use App\Foundation\Auth\Aggregates\User;
 use Illuminate\Validation\ValidationException;
+use App\Foundation\CountryConfig\Entities\Country;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Companies\Aggregates\Company as CompanyAggregate;
+use App\Companies\Exceptions\UnsupportedCountryException;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
@@ -55,6 +57,10 @@ class CreateCompanyInteractor
     protected function open(CreateCompanyCommand $command, string $clientIp, string $companyId): void
     {
         DB::transaction(function () use ($command, $clientIp, $companyId): void {
+            if (! Country::query()->where('code', $command->country)->exists()) {
+                throw UnsupportedCountryException::notSupported();
+            }
+
             CompanyAggregate::retrieve($companyId)->create($command)->persist();
             $company = Company::query()->findOrFail($companyId);
 

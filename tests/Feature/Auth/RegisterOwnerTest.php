@@ -13,6 +13,7 @@ use App\Consent\Entities\ConsentRecord;
 use App\Consent\Events\ConsentRecorded;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\CountryConfig\Entities\Country;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
@@ -251,7 +252,7 @@ class RegisterOwnerTest extends AuthTestCase
     #[Test]
     public function when_an_unsupported_country_is_submitted_then_nothing_is_persisted(): void
     {
-        // Given a signup for a country with no seeded defaults
+        // Given a signup for a country with no stored row
         $payload = [...$this->validRegistrationPayload(), 'country' => 'ZZ'];
 
         // When the guest submits it
@@ -262,6 +263,21 @@ class RegisterOwnerTest extends AuthTestCase
         $response->assertJsonPath('error_code', 'UNSUPPORTED_COUNTRY');
         $response->assertJsonPath('message', 'Selected country is not supported.');
         $this->assertNothingPersisted();
+    }
+
+    #[Test]
+    public function when_a_country_with_a_stored_row_is_submitted_then_the_company_is_registered(): void
+    {
+        // Given a stored country other than Sri Lanka and a signup for it
+        $country = Country::factory()->create();
+        $payload = [...$this->validRegistrationPayload(), 'country' => $country->code];
+
+        // When the guest submits it
+        $response = $this->postJson('/api/v1/auth/register', $payload);
+
+        // Then the owner is registered with a company in that country
+        $this->assertRegistrationSucceeded($response);
+        $this->assertSame($country->code, Company::query()->sole()->country);
     }
 
     // Edge (rate limit) — the public register endpoint runs under the auth-tier
