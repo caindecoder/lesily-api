@@ -81,8 +81,16 @@ class Company extends AggregateRoot
         return $this;
     }
 
-    public function resetSetting(ResettableSetting $setting, string $resetBy): static
+    /**
+     * Put one setting back on its country's default (UC-1-058); a setting that
+     * already follows records nothing.
+     */
+    public function resetSetting(ResettableSetting $setting, SettingsBaseline $baseline, string $resetBy): static
     {
+        if (! $baseline->hasOwnValue($setting)) {
+            return $this;
+        }
+
         $this->forCompany($this->uuid());
 
         return $this->recordThat(new CompanySettingReset(

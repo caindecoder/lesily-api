@@ -88,6 +88,38 @@ class ResetCompanySettingTest extends CompaniesTestCase
     }
 
     #[Test]
+    public function when_setting_already_follows_the_country_then_nothing_is_recorded(): void
+    {
+        // Given the owner of a company that follows its country on every setting
+        $company = Company::factory()->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they reset its working days
+        $response = $this->resetCompanySetting($owner, $company->getKey(), 'working_days_per_week');
+
+        // Then the reset answers and nothing is recorded
+        $response->assertNoContent();
+        $this->assertNothingRecorded($company);
+        $this->assertSettingFollowsTheCountry($company, 'working_days_per_week');
+    }
+
+    #[Test]
+    public function when_a_company_resets_a_setting_then_another_company_keeps_its_own_value(): void
+    {
+        // Given two companies with their own settings and the owner of company A
+        $companyA = Company::factory()->withOwnSettings()->create();
+        $companyB = Company::factory()->withOwnSettings()->create();
+        $ownerOfA = $this->aCompanyMember($companyA, 'owner');
+
+        // When they reset company A's timezone
+        $response = $this->resetCompanySetting($ownerOfA, $companyA->getKey(), 'timezone');
+
+        // Then company B keeps its own value and records nothing
+        $response->assertNoContent();
+        $this->assertOwnValueKept($companyB);
+    }
+
+    #[Test]
     #[DataProvider('provideResettableSettings')]
     public function when_a_setting_with_an_own_value_is_reset_then_it_follows_the_country(string $setting, string $role): void
     {
