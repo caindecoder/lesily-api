@@ -4,6 +4,7 @@ namespace App\Companies\UseCases\Commands;
 
 use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
+use App\Companies\Enums\ResettableSetting;
 use Illuminate\Validation\ValidationException;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
@@ -49,12 +50,40 @@ class UpdateCompanyCommand extends Data
         return static::validateAndCreate($request->all());
     }
 
-    public function hasSettingsChanges(): bool
+    /**
+     * The settings this update carries, keyed by their column.
+     *
+     * @return array<string, int|float|string>
+     */
+    public function settingsSent(): array
     {
-        return $this->timezone !== null
-            || $this->fiscalYearStartMonth !== null
-            || $this->workingDaysPerWeek !== null
-            || $this->defaultWorkHoursPerDay !== null;
+        return array_filter([
+            ResettableSetting::Timezone->value => $this->timezone,
+            ResettableSetting::FiscalYearStartMonth->value => $this->fiscalYearStartMonth,
+            ResettableSetting::WorkingDaysPerWeek->value => $this->workingDaysPerWeek,
+            ResettableSetting::DefaultWorkHoursPerDay->value => $this->defaultWorkHoursPerDay,
+        ], static fn (int|float|string|null $value): bool => $value !== null);
+    }
+
+    /**
+     * This update with $settings left out.
+     *
+     * @param  list<ResettableSetting>  $settings
+     */
+    public function withoutSettings(array $settings): static
+    {
+        $update = clone $this;
+
+        foreach ($settings as $setting) {
+            match ($setting) {
+                ResettableSetting::Timezone => $update->timezone = null,
+                ResettableSetting::FiscalYearStartMonth => $update->fiscalYearStartMonth = null,
+                ResettableSetting::WorkingDaysPerWeek => $update->workingDaysPerWeek = null,
+                ResettableSetting::DefaultWorkHoursPerDay => $update->defaultWorkHoursPerDay = null,
+            };
+        }
+
+        return $update;
     }
 
     /**

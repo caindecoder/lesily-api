@@ -272,6 +272,22 @@ class UpdateCompanyTest extends CompaniesTestCase
         $this->assertUpdateEventsRecorded($company);
     }
 
+    #[Test]
+    public function when_submitted_setting_equals_the_country_default_over_an_own_value_then_it_follows_the_country(): void
+    {
+        // Given the owner of a company with its own timezone
+        $company = Company::factory()->withOwnSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they submit Sri Lanka's own timezone
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['timezone' => 'Asia/Colombo']);
+
+        // Then the timezone follows the country again and the reset is recorded
+        $response->assertOk();
+        $this->assertSettingFollowsTheCountry($company, 'timezone');
+        $this->assertResetRecorded($company, 'timezone', $owner->getKey());
+    }
+
     // Edge — an empty payload is a no-op: nothing is submitted, so no event fires
     // and the company is untouched (Chamil's s122 ruling — 200, not a 422).
     #[Test]

@@ -49,13 +49,13 @@ class Company extends AggregateRoot
     }
 
     /**
-     * Update the editable details (UC-1-033). Guardless (mirrors changePassword /
-     * changeRole — name/settings are projected columns, not aggregate state), and
-     * conditional: the details event fires only when a name is supplied, the
-     * settings event only when a settings field is. forCompany re-tags the tenant
-     * so the events carry company_id metadata even for a read-model-seeded company.
+     * Update the editable details (UC-1-033). The details event fires only when
+     * a name is supplied. A setting sent with its country's default over an own
+     * value follows the country again (UC-1-058); the other sent settings become
+     * own values. forCompany re-tags the tenant so the events carry company_id
+     * metadata even for a read-model-seeded company.
      */
-    public function updateDetails(UpdateCompanyCommand $command, string $updatedBy): static
+    public function updateDetails(UpdateCompanyCommand $command, SettingsBaseline $baseline, string $updatedBy): static
     {
         $this->forCompany($this->uuid());
 
@@ -67,12 +67,20 @@ class Company extends AggregateRoot
             ));
         }
 
-        if ($command->hasSettingsChanges()) {
+        $followingAgain = $baseline->settingsFollowingAgain($command->settingsSent());
+
+        foreach ($followingAgain as $setting) {
+            $this->recordReset($setting, $updatedBy);
+        }
+
+        $ownValues = $command->withoutSettings($followingAgain);
+
+        if ($ownValues->settingsSent() !== []) {
             $this->recordThat(new CompanySettingsUpdated(
-                timezone: $command->timezone,
-                fiscalYearStartMonth: $command->fiscalYearStartMonth,
-                workingDaysPerWeek: $command->workingDaysPerWeek,
-                defaultWorkHoursPerDay: $command->defaultWorkHoursPerDay,
+                timezone: $ownValues->timezone,
+                fiscalYearStartMonth: $ownValues->fiscalYearStartMonth,
+                workingDaysPerWeek: $ownValues->workingDaysPerWeek,
+                defaultWorkHoursPerDay: $ownValues->defaultWorkHoursPerDay,
                 updatedBy: $updatedBy,
                 updatedAt: CarbonImmutable::now(),
             ));
@@ -93,6 +101,11 @@ class Company extends AggregateRoot
 
         $this->forCompany($this->uuid());
 
+        return $this->recordReset($setting, $resetBy);
+    }
+
+    protected function recordReset(ResettableSetting $setting, string $resetBy): static
+    {
         return $this->recordThat(new CompanySettingReset(
             setting: $setting->value,
             resetBy: $resetBy,
