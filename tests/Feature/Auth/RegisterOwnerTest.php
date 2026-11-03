@@ -266,6 +266,21 @@ class RegisterOwnerTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_a_stored_country_code_is_submitted_in_lower_case_then_nothing_is_persisted(): void
+    {
+        // Given a signup for Sri Lanka's code written in lower case
+        $payload = [...$this->validRegistrationPayload(), 'country' => 'lk'];
+
+        // When the guest submits it
+        $response = $this->postJson('/api/v1/auth/register', $payload);
+
+        // Then the request is rejected as an unsupported country and nothing is kept
+        $response->assertUnprocessable();
+        $response->assertJsonPath('error_code', 'UNSUPPORTED_COUNTRY');
+        $this->assertNothingPersisted();
+    }
+
+    #[Test]
     public function when_a_country_with_a_stored_row_is_submitted_then_the_company_is_registered(): void
     {
         // Given a stored country other than Sri Lanka and a signup for it

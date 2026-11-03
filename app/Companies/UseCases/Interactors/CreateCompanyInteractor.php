@@ -57,9 +57,7 @@ class CreateCompanyInteractor
     protected function open(CreateCompanyCommand $command, string $clientIp, string $companyId): void
     {
         DB::transaction(function () use ($command, $clientIp, $companyId): void {
-            if (! Country::query()->where('code', $command->country)->exists()) {
-                throw UnsupportedCountryException::notSupported();
-            }
+            $this->assertSupportedCountry($command->country);
 
             CompanyAggregate::retrieve($companyId)->create($command)->persist();
             $company = Company::query()->findOrFail($companyId);
@@ -89,5 +87,16 @@ class CreateCompanyInteractor
                 ]))
                 ->persist();
         });
+    }
+
+    /**
+     * The code must match a stored country exactly — the column's collation
+     * ignores case, so `lk` would otherwise find Sri Lanka.
+     */
+    protected function assertSupportedCountry(string $code): void
+    {
+        if (Country::query()->where('code', $code)->value('code') !== $code) {
+            throw UnsupportedCountryException::notSupported();
+        }
     }
 }
