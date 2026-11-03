@@ -100,7 +100,7 @@ class UpdateCompanyCommand extends Data
             'timezone' => ['sometimes', 'required', 'timezone'],
             'fiscalYearStartMonth' => ['sometimes', 'required', 'integer', 'between:1,12'],
             'workingDaysPerWeek' => ['sometimes', 'required', 'integer', 'between:1,7'],
-            'defaultWorkHoursPerDay' => ['sometimes', 'required', 'numeric', 'between:0,24'],
+            'defaultWorkHoursPerDay' => ['sometimes', 'required', 'numeric', 'between:0,24', 'decimal:0,2'],
         ];
     }
 }

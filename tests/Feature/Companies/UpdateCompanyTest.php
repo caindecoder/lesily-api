@@ -109,6 +109,7 @@ class UpdateCompanyTest extends CompaniesTestCase
             'working days above seven' => [['workingDaysPerWeek' => 8], 'workingDaysPerWeek', 'The working days per week field must be between 1 and 7.'],
             'work hours below zero' => [['defaultWorkHoursPerDay' => -1], 'defaultWorkHoursPerDay', 'The default work hours per day field must be between 0 and 24.'],
             'work hours above twenty four' => [['defaultWorkHoursPerDay' => 25], 'defaultWorkHoursPerDay', 'The default work hours per day field must be between 0 and 24.'],
+            'work hours finer than two decimals' => [['defaultWorkHoursPerDay' => 8.001], 'defaultWorkHoursPerDay', 'The default work hours per day field must have 0-2 decimal places.'],
         ];
     }
 
