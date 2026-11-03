@@ -9,6 +9,7 @@ use App\Foundation\Auth\IO\Http\Controllers\LogoutController;
 use App\Foundation\Auth\IO\Http\Controllers\ProfileController;
 use App\Foundation\Auth\IO\Http\Controllers\RegisterController;
 use App\Billing\Invoices\IO\Http\Controllers\InvoicesController;
+use App\Companies\IO\Http\Controllers\CompanySettingsController;
 use App\Foundation\Auth\IO\Http\Controllers\LogoutAllController;
 use App\Companies\IO\Http\Controllers\CompanyOwnershipController;
 use App\Billing\Subscriptions\IO\Http\Controllers\PlansController;
@@ -238,6 +239,13 @@ Route::get('/v1/companies/{companyId}', [CompaniesController::class, 'show'])
 // membership writes omit it (s122 ruling). No throttle (tiered limits — OQ-1-098).
 Route::put('/v1/companies/{companyId}', [CompaniesController::class, 'update'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:companies.update']);
+
+// View the company's settings (UC-1-056 / 057) — per setting the country default,
+// the company's own value, the value that applies and whether it follows the
+// country. Same param-first resolver and gates as the company view. Repository-
+// direct read, no event. No throttle (tiered limits — OQ-1-098).
+Route::get('/v1/companies/{companyId}/settings', [CompanySettingsController::class, 'show'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:companies.view']);
 
 // Transfer company ownership (UC-1-028) — the Owner hands the seat to an existing
 // member through the event-sourced Company aggregate (CompanyOwnershipTransferred);

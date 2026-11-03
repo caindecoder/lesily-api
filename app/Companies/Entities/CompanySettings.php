@@ -21,6 +21,20 @@ class CompanySettings extends Model
 
     use HasUuids;
 
+    /**
+     * The six settings a company follows from its country or sets itself.
+     *
+     * @var list<string>
+     */
+    public const array SETTINGS = [
+        'timezone',
+        'currency',
+        'locale_default',
+        'fiscal_year_start_month',
+        'working_days_per_week',
+        'default_work_hours_per_day',
+    ];
+
     protected $table = 'company_settings';
 
     protected $fillable = [
@@ -55,7 +69,23 @@ class CompanySettings extends Model
      */
     public function valueThatApplies(string $setting): mixed
     {
-        return $this->getAttribute($setting) ?? $this->country?->getAttribute($setting);
+        return $this->getAttribute($setting) ?? $this->countryDefault($setting);
+    }
+
+    /**
+     * The company's country's value for $setting.
+     */
+    public function countryDefault(string $setting): mixed
+    {
+        return $this->country?->getAttribute($setting);
+    }
+
+    /**
+     * Whether the company follows its country on $setting — it has no own value.
+     */
+    public function followsTheCountry(string $setting): bool
+    {
+        return $this->getAttribute($setting) === null;
     }
 
     protected static function newFactory(): CompanySettingsFactory

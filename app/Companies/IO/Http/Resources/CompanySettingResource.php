@@ -15,21 +15,12 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class CompanySettingResource extends JsonResource
 {
-    protected const array SETTINGS = [
-        'timezone',
-        'currency',
-        'locale_default',
-        'fiscal_year_start_month',
-        'working_days_per_week',
-        'default_work_hours_per_day',
-    ];
-
     /**
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
     {
-        return collect(self::SETTINGS)
+        return collect(CompanySettings::SETTINGS)
             ->mapWithKeys(fn (string $setting): array => [$setting => $this->resource->valueThatApplies($setting)])
             ->all();
     }
