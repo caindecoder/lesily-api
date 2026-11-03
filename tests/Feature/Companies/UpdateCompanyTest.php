@@ -295,8 +295,8 @@ class UpdateCompanyTest extends CompaniesTestCase
     #[Test]
     public function when_one_setting_is_updated_then_the_others_are_preserved(): void
     {
-        // Given the owner of a company on the LK defaults
-        $company = Company::factory()->withSettings()->create();
+        // Given the owner of a company with its own settings
+        $company = Company::factory()->withOwnSettings()->create();
         $owner = $this->aCompanyMember($company, 'owner');
 
         // When they change only the fiscal year start month (to the upper bound)
@@ -307,9 +307,9 @@ class UpdateCompanyTest extends CompaniesTestCase
         $this->assertDatabaseHas('company_settings', [
             'company_id' => $company->getKey(),
             'fiscal_year_start_month' => 12,
-            'timezone' => 'Asia/Colombo',
-            'working_days_per_week' => 5,
-            'default_work_hours_per_day' => 8.0,
+            'timezone' => 'Asia/Singapore',
+            'working_days_per_week' => 6,
+            'default_work_hours_per_day' => 7.5,
         ]);
     }
 
@@ -319,16 +319,16 @@ class UpdateCompanyTest extends CompaniesTestCase
     #[Test]
     public function when_work_hours_are_set_to_zero_then_the_update_is_recorded(): void
     {
-        // Given the owner of a company on the LK defaults (8 work hours)
+        // Given the owner of a company following Sri Lanka (8 work hours)
         $company = Company::factory()->withSettings()->create();
         $owner = $this->aCompanyMember($company, 'owner');
 
         // When they set the default work hours to zero
         $response = $this->updateCompanyDetails($owner, $company->getKey(), ['defaultWorkHoursPerDay' => 0]);
 
-        // Then the settings event fires (timezone preserved) and the read model reads zero
+        // Then the settings event fires (the timezone still follows) and the read model reads zero
         $response->assertOk();
-        $this->assertOnlySettingsEventRecorded($company, 'Asia/Colombo');
+        $this->assertOnlySettingsEventRecorded($company, null);
         $this->assertDatabaseHas('company_settings', [
             'company_id' => $company->getKey(),
             'default_work_hours_per_day' => 0,

@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use App\Consent\Aggregates\Consent;
 use Illuminate\Testing\TestResponse;
+use Database\Seeders\CountriesSeeder;
 use Database\Seeders\RolesPermissionsSeeder;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,6 +17,17 @@ use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 abstract class TestCase extends BaseTestCase
 {
     use RefreshDatabase;
+
+    /**
+     * Every test runs with the supported countries a company is created in and
+     * follows (slice-country-settings CS5); a test needing none removes them.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        CountriesSeeder::fromDefaultPath()->run();
+    }
 
     /**
      * Infection mutant processes carry INFECTION=1 (never Infection's initial run)

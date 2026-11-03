@@ -12,6 +12,7 @@ use App\Companies\Entities\CompanySettings;
 use Tests\Concerns\InducesProjectorFailures;
 use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsUpdated;
+use App\Foundation\CountryConfig\Entities\Country;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -107,7 +108,7 @@ abstract class CompaniesTestCase extends TestCase
 
     /**
      * A rejected update left the company untouched — the name still reads
-     * $expectedName, the settings still hold the country defaults, and no update
+     * $expectedName, the settings still follow the country, and no update
      * event escaped the guard (factory companies carry no genesis events, so the
      * only events that could exist are the update's). The LD / amendment-R
      * state-unchanged discipline for sad paths.
@@ -118,7 +119,7 @@ abstract class CompaniesTestCase extends TestCase
         $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
 
         $this->assertSame($expectedName, $company->name);
-        $this->assertSame('Asia/Colombo', $settings->timezone);
+        $this->assertNull($settings->timezone);
         $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
     }
 
@@ -169,6 +170,7 @@ abstract class CompaniesTestCase extends TestCase
     {
         $company->refresh();
         $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
+        $country = Country::query()->where('code', $company->country)->sole();
 
         return [
             'id' => $company->getKey(),
@@ -180,12 +182,12 @@ abstract class CompaniesTestCase extends TestCase
             'status' => $company->status->value,
             'trial_ends_at' => $company->trial_ends_at?->toISOString(),
             'settings' => [
-                'timezone' => $settings->timezone,
-                'currency' => $settings->currency,
-                'locale_default' => $settings->locale_default,
-                'fiscal_year_start_month' => $settings->fiscal_year_start_month,
-                'working_days_per_week' => $settings->working_days_per_week,
-                'default_work_hours_per_day' => $settings->default_work_hours_per_day,
+                'timezone' => $settings->timezone ?? $country->timezone,
+                'currency' => $settings->currency ?? $country->currency,
+                'locale_default' => $settings->locale_default ?? $country->locale_default,
+                'fiscal_year_start_month' => $settings->fiscal_year_start_month ?? $country->fiscal_year_start_month,
+                'working_days_per_week' => $settings->working_days_per_week ?? $country->working_days_per_week,
+                'default_work_hours_per_day' => $settings->default_work_hours_per_day ?? $country->default_work_hours_per_day,
             ],
         ];
     }
@@ -208,11 +210,11 @@ abstract class CompaniesTestCase extends TestCase
 
     /**
      * A settings-only update recorded exactly one CompanySettingsUpdated event
-     * (the details event stays silent — conditional emission) and the timezone
-     * landed on the settings read model. The single total event proves nothing
-     * else was recorded.
+     * (the details event stays silent — conditional emission) and the settings
+     * read model holds $expectedTimezone (null: it still follows the country).
+     * The single total event proves nothing else was recorded.
      */
-    protected function assertOnlySettingsEventRecorded(Company $company, string $expectedTimezone): void
+    protected function assertOnlySettingsEventRecorded(Company $company, ?string $expectedTimezone): void
     {
         $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
 

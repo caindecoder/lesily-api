@@ -7,6 +7,7 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\CountryConfig\Entities\Country;
 
 /**
  * UC-1-032 View Company Details + the R8 CompanyContextResolver route-param
@@ -176,6 +177,39 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
         ];
     }
 
+    #[Test]
+    public function when_the_country_value_changes_then_a_following_company_shows_the_new_value(): void
+    {
+        // Given the owner of a company that follows Sri Lanka, whose working week becomes six days
+        $company = Company::factory()->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        Country::query()->where('code', 'LK')->update(['working_days_per_week' => 6]);
+
+        // When they view the company details
+        $response = $this->viewCompanyDetails($owner, $company->getKey());
+
+        // Then the company shows Sri Lanka's new working week
+        $response->assertOk();
+        $response->assertJsonPath('data.settings.working_days_per_week', 6);
+    }
+
+    #[Test]
+    public function when_the_company_has_its_own_value_then_the_details_show_it_rather_than_the_country_value(): void
+    {
+        // Given the owner of a company with its own six-day week, while Sri Lanka's becomes four days
+        $company = Company::factory()->withOwnSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        Country::query()->where('code', 'LK')->update(['working_days_per_week' => 4]);
+
+        // When they view the company details
+        $response = $this->viewCompanyDetails($owner, $company->getKey());
+
+        // Then the company's own values are shown
+        $response->assertOk();
+        $response->assertJsonPath('data.settings.working_days_per_week', 6);
+        $response->assertJsonPath('data.settings.timezone', 'Asia/Singapore');
+    }
+
     // Happy — the exact CompanyResource contract: identity, plan/status/trial
     // and all six settings, nothing more. assertExactJson is the B7 teeth —
     // employee_count, legal_hold and owner_id are locked OUT of the wire shape
@@ -232,7 +266,7 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
             'timezone' => 'Asia/Colombo',
             'currency' => 'LKR',
             'locale_default' => 'en',
-            'fiscal_year_start_month' => 1,
+            'fiscal_year_start_month' => 4,
             'working_days_per_week' => 5,
             'default_work_hours_per_day' => 8,
         ]);
