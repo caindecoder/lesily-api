@@ -4,6 +4,7 @@ namespace App\Companies\IO\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use App\Companies\Enums\ResettableSetting;
 use App\Companies\IO\Http\Resources\CompanySettingsResource;
 
 /**
@@ -17,7 +18,7 @@ class CompanySettingsController
         return new CompanySettingsResource($request->company());
     }
 
-    public function destroy(): Response
+    public function destroy(ResettableSetting $setting): Response
     {
         return response()->noContent();
     }

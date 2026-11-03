@@ -9,6 +9,7 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Consent\Events\ConsentRecorded;
 use App\Companies\Entities\CompanySettings;
+use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -57,6 +58,35 @@ class ResetCompanySettingTest extends CompaniesTestCase
         $this->assertOwnValueKept($companyB);
     }
 
+    #[Test]
+    #[DataProvider('provideSettingsThatCannotBeReset')]
+    public function when_setting_cannot_be_reset_then_not_found_and_nothing_recorded(string $setting): void
+    {
+        // Given the owner of a company with its own settings
+        $company = Company::factory()->withOwnSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they reset a setting that cannot be reset
+        $response = $this->resetCompanySetting($owner, $company->getKey(), $setting);
+
+        // Then it is not found and nothing is recorded
+        $this->assertResourceNotFound($response);
+        $this->assertNothingRecorded($company);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideSettingsThatCannotBeReset(): array
+    {
+        return [
+            'unknown setting' => ['overtime_rate'],
+            'currency' => ['currency'],
+            'default language' => ['locale_default'],
+            'camelCase spelling' => ['workingDaysPerWeek'],
+        ];
+    }
+
     protected function resetCompanySetting(User $user, string $companyId, string $setting): TestResponse
     {
         Sanctum::actingAs($user);
@@ -72,6 +102,11 @@ class ResetCompanySettingTest extends CompaniesTestCase
         $this->assertSame(7, $settings->fiscal_year_start_month);
         $this->assertSame(6, $settings->working_days_per_week);
         $this->assertSame(7.5, $settings->default_work_hours_per_day);
+        $this->assertNothingRecorded($company);
+    }
+
+    protected function assertNothingRecorded(Company $company): void
+    {
         $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
     }
 }
