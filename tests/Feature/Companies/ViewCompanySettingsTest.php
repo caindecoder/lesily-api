@@ -133,6 +133,25 @@ class ViewCompanySettingsTest extends CompaniesTestCase
         $response->assertJsonPath('data.country.code', 'LK');
     }
 
+    #[Test]
+    public function when_the_company_has_its_own_value_then_it_applies_over_the_country_default(): void
+    {
+        // Given the owner of a Sri Lankan company that set its own six-day week
+        $company = Company::factory()->withOwnSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they view the company's settings
+        $response = $this->viewCompanySettings($owner, $company->getKey());
+
+        // Then the own value applies over Sri Lanka's five days
+        $this->assertSettingShows($response, 'working_days_per_week', [
+            'country_default' => 5,
+            'own_value' => 6,
+            'applies' => 6,
+            'is_following_country' => false,
+        ]);
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -157,6 +176,15 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     protected function viewCompanySettingsAsGuest(string $companyId): TestResponse
     {
         return $this->getJson('/api/v1/companies/'.$companyId.'/settings');
+    }
+
+    /**
+     * @param  array<string, mixed>  $expected
+     */
+    protected function assertSettingShows(TestResponse $response, string $setting, array $expected): void
+    {
+        $response->assertOk();
+        $this->assertSame($expected, $response->json('data.settings.'.$setting));
     }
 
     /**

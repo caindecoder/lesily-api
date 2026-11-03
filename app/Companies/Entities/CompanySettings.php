@@ -69,7 +69,23 @@ class CompanySettings extends Model
      */
     public function valueThatApplies(string $setting): mixed
     {
-        return $this->getAttribute($setting) ?? $this->country?->getAttribute($setting);
+        return $this->getAttribute($setting) ?? $this->countryDefault($setting);
+    }
+
+    /**
+     * The company's country's value for $setting.
+     */
+    public function countryDefault(string $setting): mixed
+    {
+        return $this->country?->getAttribute($setting);
+    }
+
+    /**
+     * Whether the company follows its country on $setting — it has no own value.
+     */
+    public function followsTheCountry(string $setting): bool
+    {
+        return $this->getAttribute($setting) === null;
     }
 
     protected static function newFactory(): CompanySettingsFactory

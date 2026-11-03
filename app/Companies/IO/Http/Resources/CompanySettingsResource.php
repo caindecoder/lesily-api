@@ -30,10 +30,10 @@ class CompanySettingsResource extends JsonResource
             ],
             'settings' => collect(CompanySettings::SETTINGS)
                 ->mapWithKeys(fn (string $setting): array => [$setting => [
-                    'country_default' => $settings->valueThatApplies($setting),
-                    'own_value' => null,
+                    'country_default' => $settings->countryDefault($setting),
+                    'own_value' => $settings->getAttribute($setting),
                     'applies' => $settings->valueThatApplies($setting),
-                    'is_following_country' => true,
+                    'is_following_country' => $settings->followsTheCountry($setting),
                 ]])
                 ->all(),
         ];
