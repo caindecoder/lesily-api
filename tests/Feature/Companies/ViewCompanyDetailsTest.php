@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies;
 
 use App\Companies\Entities\Company;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -214,5 +215,35 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
         // Then the details render with no plan and no trial expiry
         $response->assertExactJson(['data' => $this->expectedCompanyDetails($company)]);
         $response->assertJsonPath('data.plan', null);
+    }
+
+    #[Test]
+    public function when_the_company_follows_its_country_then_the_details_show_the_country_values(): void
+    {
+        // Given the owner of a Sri Lankan company that follows its country
+        $company = Company::factory()->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they view the company details
+        $response = $this->viewCompanyDetails($owner, $company->getKey());
+
+        // Then the settings are Sri Lanka's
+        $this->assertDetailsShowSettings($response, [
+            'timezone' => 'Asia/Colombo',
+            'currency' => 'LKR',
+            'locale_default' => 'en',
+            'fiscal_year_start_month' => 1,
+            'working_days_per_week' => 5,
+            'default_work_hours_per_day' => 8,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $settings
+     */
+    protected function assertDetailsShowSettings(TestResponse $response, array $settings): void
+    {
+        $response->assertOk();
+        $this->assertSame($settings, $response->json('data.settings'));
     }
 }
