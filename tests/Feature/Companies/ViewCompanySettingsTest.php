@@ -114,14 +114,31 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     }
 
     #[Test]
-    public function when_a_new_company_views_its_settings_then_every_setting_follows_the_country(): void
+    public function when_the_company_is_in_another_country_then_the_settings_show_that_countrys_defaults(): void
     {
-        // Given the owner of a new Sri Lankan company that chose no own values
-        $company = Company::factory()->withSettings()->create();
+        // Given the owner of a following company in a stored country other than Sri Lanka
+        $country = Country::factory()->create();
+        $company = Company::factory()->inCountry($country)->withSettings()->create();
         $owner = $this->aCompanyMember($company, 'owner');
 
         // When they view the company's settings
         $response = $this->viewCompanySettings($owner, $company->getKey());
+
+        // Then the country and its defaults are that country's
+        $response->assertOk();
+        $response->assertJsonPath('data.country', ['code' => $country->code, 'name' => $country->name]);
+        $response->assertJsonPath('data.settings.timezone', $this->aFollowedSetting($country->timezone));
+    }
+
+    #[Test]
+    public function when_a_new_company_views_its_settings_then_every_setting_follows_the_country(): void
+    {
+        // Given an employee of a new Sri Lankan company that chose no own values
+        $company = Company::factory()->withSettings()->create();
+        $employee = $this->aCompanyMember($company, 'employee');
+
+        // When they view the company's settings
+        $response = $this->viewCompanySettings($employee, $company->getKey());
 
         // Then every setting follows Sri Lanka's default
         $response->assertExactJson(['data' => [
@@ -151,6 +168,20 @@ class ViewCompanySettingsTest extends CompaniesTestCase
         // Then the settings are returned
         $response->assertOk();
         $response->assertJsonPath('data.country.code', 'LK');
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideViewingRoles(): array
+    {
+        return [
+            'admin' => ['admin'],
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'auditor' => ['auditor'],
+            'employee' => ['employee'],
+        ];
     }
 
     #[Test]
@@ -205,20 +236,6 @@ class ViewCompanySettingsTest extends CompaniesTestCase
             'applies' => 6,
             'is_following_country' => false,
         ]);
-    }
-
-    /**
-     * @return array<string, array{string}>
-     */
-    public static function provideViewingRoles(): array
-    {
-        return [
-            'admin' => ['admin'],
-            'hr officer' => ['hr_officer'],
-            'payroll officer' => ['payroll_officer'],
-            'auditor' => ['auditor'],
-            'employee' => ['employee'],
-        ];
     }
 
     protected function viewCompanySettings(User $user, string $companyId): TestResponse
