@@ -10,6 +10,7 @@ use Illuminate\Testing\TestResponse;
 use App\Consent\Events\ConsentRecorded;
 use App\Companies\Entities\CompanySettings;
 use Tests\Concerns\InducesProjectorFailures;
+use App\Companies\Events\CompanySettingReset;
 use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\CountryConfig\Entities\Country;
@@ -271,5 +272,28 @@ abstract class CompaniesTestCase extends TestCase
             ->whereNotNull('event_properties->updatedAt')
             ->where('company_id', $company->getKey())
             ->count());
+    }
+
+    protected function assertSettingFollowsTheCountry(Company $company, string $setting): void
+    {
+        $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
+
+        $this->assertNull($settings->getAttribute($setting));
+        $this->assertTrue($settings->followsTheCountry($setting));
+        $this->assertSame(Country::query()->where('code', 'LK')->sole()->getAttribute($setting), $settings->valueThatApplies($setting));
+    }
+
+    protected function assertResetRecorded(Company $company, string $setting, string $resetBy): void
+    {
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanySettingReset::class)
+            ->where('event_properties->setting', $setting)
+            ->where('event_properties->resetBy', $resetBy)
+            ->whereNotNull('event_properties->resetAt')
+            ->where('company_id', $company->getKey())
+            ->count());
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('event_class', CompanySettingsUpdated::class)
+            ->whereForCompany($company->getKey())->count());
     }
 }

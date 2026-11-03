@@ -6,7 +6,9 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use App\Companies\Enums\CompanyStatus;
 use App\Companies\Events\CompanyCreated;
+use App\Companies\Enums\ResettableSetting;
 use App\Foundation\EventStore\AggregateRoot;
+use App\Companies\Events\CompanySettingReset;
 use App\Companies\Events\CompanyTrialExpired;
 use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsCreated;
@@ -77,6 +79,17 @@ class Company extends AggregateRoot
         }
 
         return $this;
+    }
+
+    public function resetSetting(ResettableSetting $setting, string $resetBy): static
+    {
+        $this->forCompany($this->uuid());
+
+        return $this->recordThat(new CompanySettingReset(
+            setting: $setting->value,
+            resetBy: $resetBy,
+            resetAt: CarbonImmutable::now(),
+        ));
     }
 
     public function trialExpire(): static

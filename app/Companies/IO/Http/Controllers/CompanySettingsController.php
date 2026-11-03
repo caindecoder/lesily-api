@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use App\Companies\Enums\ResettableSetting;
 use App\Companies\IO\Http\Resources\CompanySettingsResource;
+use App\Companies\UseCases\Commands\ResetCompanySettingCommand;
+use App\Companies\UseCases\Interactors\ResetCompanySettingInteractor;
 
 /**
  * The company's settings view (UC-1-056 / 057) — the company AuthorizeCompany
@@ -18,8 +20,14 @@ class CompanySettingsController
         return new CompanySettingsResource($request->company());
     }
 
-    public function destroy(ResettableSetting $setting): Response
+    public function destroy(Request $request, string $companyId, ResettableSetting $setting, ResetCompanySettingInteractor $interactor): Response
     {
+        $interactor->execute(ResetCompanySettingCommand::validateAndCreate([
+            'company' => $companyId,
+            'setting' => $setting,
+            'resetBy' => $request->user(),
+        ]));
+
         return response()->noContent();
     }
 }

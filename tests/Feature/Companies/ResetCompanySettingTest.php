@@ -87,6 +87,36 @@ class ResetCompanySettingTest extends CompaniesTestCase
         ];
     }
 
+    #[Test]
+    #[DataProvider('provideResettableSettings')]
+    public function when_a_setting_with_an_own_value_is_reset_then_it_follows_the_country(string $setting, string $role): void
+    {
+        // Given a member allowed to update a company with its own settings
+        $company = Company::factory()->withOwnSettings()->create();
+        $member = $this->aCompanyMember($company, $role);
+
+        // When they reset one of its settings
+        $response = $this->resetCompanySetting($member, $company->getKey(), $setting);
+
+        // Then the setting follows the country and the reset is recorded
+        $response->assertNoContent();
+        $this->assertSettingFollowsTheCountry($company, $setting);
+        $this->assertResetRecorded($company, $setting, $member->getKey());
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function provideResettableSettings(): array
+    {
+        return [
+            'owner resets the timezone' => ['timezone', 'owner'],
+            'admin resets the fiscal year start' => ['fiscal_year_start_month', 'admin'],
+            'owner resets the working days' => ['working_days_per_week', 'owner'],
+            'admin resets the work hours' => ['default_work_hours_per_day', 'admin'],
+        ];
+    }
+
     protected function resetCompanySetting(User $user, string $companyId, string $setting): TestResponse
     {
         Sanctum::actingAs($user);
