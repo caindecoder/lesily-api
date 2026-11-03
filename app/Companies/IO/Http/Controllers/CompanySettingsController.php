@@ -3,6 +3,7 @@
 namespace App\Companies\IO\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use App\Companies\IO\Http\Resources\CompanySettingsResource;
 
 /**
@@ -14,5 +15,10 @@ class CompanySettingsController
     public function show(Request $request): CompanySettingsResource
     {
         return new CompanySettingsResource($request->company());
+    }
+
+    public function destroy(): Response
+    {
+        return response()->noContent();
     }
 }

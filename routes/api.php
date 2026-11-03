@@ -247,6 +247,11 @@ Route::put('/v1/companies/{companyId}', [CompaniesController::class, 'update'])
 Route::get('/v1/companies/{companyId}/settings', [CompanySettingsController::class, 'show'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:companies.view']);
 
+// Reset a company setting to its country's default (UC-1-058) — the setting
+// follows the country again.
+Route::delete('/v1/companies/{companyId}/settings/{setting}', [CompanySettingsController::class, 'destroy'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:companies.update']);
+
 // Transfer company ownership (UC-1-028) — the Owner hands the seat to an existing
 // member through the event-sourced Company aggregate (CompanyOwnershipTransferred);
 // the locked interactor re-validates live state in-transaction (slice-11R spec §4).
