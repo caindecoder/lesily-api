@@ -21,6 +21,20 @@ class CompanySettings extends Model
 
     use HasUuids;
 
+    /**
+     * The six settings a company follows from its country or sets itself.
+     *
+     * @var list<string>
+     */
+    public const array SETTINGS = [
+        'timezone',
+        'currency',
+        'locale_default',
+        'fiscal_year_start_month',
+        'working_days_per_week',
+        'default_work_hours_per_day',
+    ];
+
     protected $table = 'company_settings';
 
     protected $fillable = [

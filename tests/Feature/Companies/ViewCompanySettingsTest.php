@@ -93,6 +93,60 @@ class ViewCompanySettingsTest extends CompaniesTestCase
         $this->assertRoleInsufficient($response, 'companies.view');
     }
 
+    #[Test]
+    public function when_a_new_company_views_its_settings_then_every_setting_follows_the_country(): void
+    {
+        // Given the owner of a new Sri Lankan company that chose no own values
+        $company = Company::factory()->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they view the company's settings
+        $response = $this->viewCompanySettings($owner, $company->getKey());
+
+        // Then every setting follows Sri Lanka's default
+        $response->assertExactJson(['data' => [
+            'country' => ['code' => 'LK', 'name' => 'Sri Lanka'],
+            'settings' => [
+                'timezone' => $this->aFollowedSetting('Asia/Colombo'),
+                'currency' => $this->aFollowedSetting('LKR'),
+                'locale_default' => $this->aFollowedSetting('en'),
+                'fiscal_year_start_month' => $this->aFollowedSetting(4),
+                'working_days_per_week' => $this->aFollowedSetting(5),
+                'default_work_hours_per_day' => $this->aFollowedSetting(8),
+            ],
+        ]]);
+    }
+
+    #[Test]
+    #[DataProvider('provideViewingRoles')]
+    public function when_role_holds_companies_view_then_the_settings_are_returned(string $roleCode): void
+    {
+        // Given a member under a companies.view-holding role
+        $company = Company::factory()->withSettings()->create();
+        $member = $this->aCompanyMember($company, $roleCode);
+
+        // When they view the company's settings
+        $response = $this->viewCompanySettings($member, $company->getKey());
+
+        // Then the settings are returned
+        $response->assertOk();
+        $response->assertJsonPath('data.country.code', 'LK');
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideViewingRoles(): array
+    {
+        return [
+            'admin' => ['admin'],
+            'hr officer' => ['hr_officer'],
+            'payroll officer' => ['payroll_officer'],
+            'auditor' => ['auditor'],
+            'employee' => ['employee'],
+        ];
+    }
+
     protected function viewCompanySettings(User $user, string $companyId): TestResponse
     {
         Sanctum::actingAs($user);
@@ -103,5 +157,18 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     protected function viewCompanySettingsAsGuest(string $companyId): TestResponse
     {
         return $this->getJson('/api/v1/companies/'.$companyId.'/settings');
+    }
+
+    /**
+     * @return array{country_default: mixed, own_value: null, applies: mixed, is_following_country: true}
+     */
+    protected function aFollowedSetting(mixed $countryDefault): array
+    {
+        return [
+            'country_default' => $countryDefault,
+            'own_value' => null,
+            'applies' => $countryDefault,
+            'is_following_country' => true,
+        ];
     }
 }
