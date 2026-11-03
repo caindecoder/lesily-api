@@ -155,7 +155,7 @@ class AddCompanyTest extends CompaniesTestCase
     #[Test]
     public function when_the_country_is_not_supported_then_it_is_rejected_and_nothing_is_created(): void
     {
-        // Given a signed-in owner choosing a country with no seeded defaults
+        // Given a signed-in owner choosing a country with no stored row
 
         // When they add a company
         $response = $this->addCompany(['country' => 'ZZ']);

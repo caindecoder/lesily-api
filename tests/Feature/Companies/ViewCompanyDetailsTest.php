@@ -144,6 +144,84 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
         $response->assertJsonPath('data.id', $company->getKey());
     }
 
+    // Edge — a following company reads its country's row live: a changed
+    // country value reaches it at once.
+    #[Test]
+    public function when_the_country_value_changes_then_a_following_company_shows_the_new_value(): void
+    {
+        // Given the owner of a company that follows Sri Lanka, whose working week becomes six days
+        $company = Company::factory()->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        Country::query()->where('code', 'LK')->update(['working_days_per_week' => 6]);
+
+        // When they view the company details
+        $response = $this->viewCompanyDetails($owner, $company->getKey());
+
+        // Then the company shows Sri Lanka's new working week
+        $response->assertOk();
+        $response->assertJsonPath('data.settings.working_days_per_week', 6);
+    }
+
+    // Edge — a following company reads its own country, not the first one stored.
+    #[Test]
+    public function when_the_company_is_in_another_country_then_the_details_show_that_countrys_values(): void
+    {
+        // Given the owner of a company that follows a stored country other than Sri Lanka
+        $country = Country::factory()->create();
+        $company = Company::factory()->inCountry($country)->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they view the company details
+        $response = $this->viewCompanyDetails($owner, $company->getKey());
+
+        // Then the settings are that country's
+        $response->assertOk();
+        $response->assertJsonPath('data.settings.timezone', $country->timezone);
+        $response->assertJsonPath('data.settings.currency', $country->currency);
+    }
+
+    // Edge — the company's own value wins over its country's.
+    #[Test]
+    public function when_the_company_has_its_own_value_then_the_details_show_it_rather_than_the_country_value(): void
+    {
+        // Given the owner of a company with its own six-day week, while Sri Lanka's becomes four days
+        $company = Company::factory()->withOwnSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        Country::query()->where('code', 'LK')->update(['working_days_per_week' => 4]);
+
+        // When they view the company details
+        $response = $this->viewCompanyDetails($owner, $company->getKey());
+
+        // Then the company's own values are shown
+        $response->assertOk();
+        $response->assertJsonPath('data.settings.working_days_per_week', 6);
+        $response->assertJsonPath('data.settings.timezone', 'Asia/Singapore');
+    }
+
+    // Edge — a company whose country row is gone still renders: the settings it
+    // follows have no value to show.
+    #[Test]
+    public function when_the_companys_country_has_no_row_then_the_following_settings_are_empty(): void
+    {
+        // Given the owner of a following company whose country row is removed
+        $company = Company::factory()->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        Country::query()->delete();
+
+        // When they view the company details
+        $response = $this->viewCompanyDetails($owner, $company->getKey());
+
+        // Then every setting is empty
+        $this->assertDetailsShowSettings($response, [
+            'timezone' => null,
+            'currency' => null,
+            'locale_default' => null,
+            'fiscal_year_start_month' => null,
+            'working_days_per_week' => null,
+            'default_work_hours_per_day' => null,
+        ]);
+    }
+
     // Happy — every seeded role except manager holds companies.view (s117
     // matrix/seed-authoritative): the DP locks the grant set in step with the
     // seed (owner is exercised by the exact-contract test).
@@ -175,39 +253,6 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
             'auditor' => ['auditor'],
             'employee' => ['employee'],
         ];
-    }
-
-    #[Test]
-    public function when_the_country_value_changes_then_a_following_company_shows_the_new_value(): void
-    {
-        // Given the owner of a company that follows Sri Lanka, whose working week becomes six days
-        $company = Company::factory()->withSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
-        Country::query()->where('code', 'LK')->update(['working_days_per_week' => 6]);
-
-        // When they view the company details
-        $response = $this->viewCompanyDetails($owner, $company->getKey());
-
-        // Then the company shows Sri Lanka's new working week
-        $response->assertOk();
-        $response->assertJsonPath('data.settings.working_days_per_week', 6);
-    }
-
-    #[Test]
-    public function when_the_company_has_its_own_value_then_the_details_show_it_rather_than_the_country_value(): void
-    {
-        // Given the owner of a company with its own six-day week, while Sri Lanka's becomes four days
-        $company = Company::factory()->withOwnSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
-        Country::query()->where('code', 'LK')->update(['working_days_per_week' => 4]);
-
-        // When they view the company details
-        $response = $this->viewCompanyDetails($owner, $company->getKey());
-
-        // Then the company's own values are shown
-        $response->assertOk();
-        $response->assertJsonPath('data.settings.working_days_per_week', 6);
-        $response->assertJsonPath('data.settings.timezone', 'Asia/Singapore');
     }
 
     // Happy — the exact CompanyResource contract: identity, plan/status/trial

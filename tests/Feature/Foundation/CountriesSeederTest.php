@@ -23,7 +23,7 @@ class CountriesSeederTest extends FoundationTestCase
         // When the seeder runs
         // Then it throws naming the missing file
         $this->expectException(CountrySourceException::class);
-        $this->expectExceptionMessage('/nonexistent/countries.yaml');
+        $this->expectExceptionMessage('missing or unreadable: /nonexistent/countries.yaml');
 
         $seeder->run();
     }
@@ -79,7 +79,8 @@ class CountriesSeederTest extends FoundationTestCase
     #[Test]
     public function when_the_seeder_runs_twice_then_the_countries_are_unchanged(): void
     {
-        // Given Sri Lanka seeded from the bundled file
+        // Given Sri Lanka seeded from the bundled file, at a fixed moment
+        $this->freezeTime();
         $this->givenSriLankaSeeded();
         $before = $this->storedCountries();
 

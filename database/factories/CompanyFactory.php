@@ -9,6 +9,7 @@ use App\Companies\Enums\CompanyStatus;
 use App\Foundation\Billing\Enums\Addon;
 use App\Companies\Entities\CompanySettings;
 use App\Foundation\Billing\Enums\BillingPlan;
+use App\Foundation\CountryConfig\Entities\Country;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -123,6 +124,13 @@ class CompanyFactory extends Factory
         return $this->afterCreating(function (Company $company): void {
             CompanySettings::factory()->ownValues()->create(['company_id' => $company->getKey()]);
         });
+    }
+
+    public function inCountry(Country $country): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'country' => $country->code,
+        ]);
     }
 
     public function ownedBy(User $owner): static
