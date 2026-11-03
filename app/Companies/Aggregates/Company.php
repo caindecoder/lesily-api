@@ -6,7 +6,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use App\Companies\Enums\CompanyStatus;
 use App\Companies\Events\CompanyCreated;
-use App\Companies\Support\CountryDefaults;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Companies\Events\CompanyTrialExpired;
 use App\Companies\Events\CompanyDetailsUpdated;
@@ -32,8 +31,6 @@ class Company extends AggregateRoot
             throw CompanyAlreadyExistsException::withId($this->uuid());
         }
 
-        $defaults = CountryDefaults::for($command->country);
-
         return $this->forCompany($this->uuid())
             ->recordThat(new CompanyCreated(
                 name: $command->name,
@@ -46,12 +43,6 @@ class Company extends AggregateRoot
             ->recordThat(new CompanySettingsCreated(
                 companyId: $this->uuid(),
                 settingsId: Str::uuid7()->toString(),
-                timezone: $defaults['timezone'],
-                currency: $defaults['currency'],
-                localeDefault: $defaults['localeDefault'],
-                fiscalYearStartMonth: $defaults['fiscalYearStartMonth'],
-                workingDaysPerWeek: $defaults['workingDaysPerWeek'],
-                defaultWorkHoursPerDay: $defaults['defaultWorkHoursPerDay'],
             ));
     }
 

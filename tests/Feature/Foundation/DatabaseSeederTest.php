@@ -4,6 +4,7 @@ namespace Tests\Feature\Foundation;
 
 use Database\Seeders\DatabaseSeeder;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\CountryConfig\Entities\Country;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\RolesPermissions\Entities\Permission;
 use App\Foundation\RolesPermissions\Entities\RolePermission;
@@ -26,6 +27,19 @@ class DatabaseSeederTest extends FoundationTestCase
 
         // Then the roles, permissions, and their mappings are all present
         $this->assertRbacCatalogSeeded();
+    }
+
+    #[Test]
+    public function when_the_database_is_seeded_then_the_countries_are_available(): void
+    {
+        // Given no stored country
+        Country::query()->delete();
+
+        // When the application database is seeded
+        $this->seed(DatabaseSeeder::class);
+
+        // Then Sri Lanka is available for signup
+        $this->assertTrue(Country::query()->where('code', 'LK')->exists(), 'The Sri Lanka country row must be seeded.');
     }
 
     protected function assertRbacCatalogSeeded(): void

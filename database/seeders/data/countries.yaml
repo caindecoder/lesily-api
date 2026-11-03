@@ -1,0 +1,12 @@
+# Lesily supported countries and the six company-setting defaults their companies follow.
+# Re-seeding updates a country by code and never deletes one (slice-country-settings CS6).
+# Source: Documentation/06-design/chunk-1/_process/slice-country-settings.md (CS1, CS11).
+
+- code: LK
+  name: Sri Lanka
+  timezone: Asia/Colombo
+  currency: LKR
+  locale_default: en
+  fiscal_year_start_month: 4
+  working_days_per_week: 5
+  default_work_hours_per_day: 8.00

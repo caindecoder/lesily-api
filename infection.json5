@@ -142,13 +142,14 @@
                 "App\\Foundation\\Auth\\Reactors\\EmailVerificationReactor::onUserSignedUpAsOwner",
                 "App\\Consent\\Projectors\\ConsentRecordProjector::onConsentRecorded",
                 // OQ-1-172 PR-0 L-RELATIONS: lazy relations resolved from Model scope
-                // (Model::getRelationValue calls $this->company() / $this->settings() from
-                // inside the class, so protected still resolves); no with()/load() names
-                // either relation anywhere in app/ today. REMOVE WHEN an eager-load lands:
+                // (Model::getRelationValue calls $this->company() / $this->settings() /
+                // $this->country() from inside the class, so protected still resolves); no
+                // with()/load() names any of them in app/ today. REMOVE WHEN an eager-load lands:
                 // Builder::with() calls the method from outside the class and the mutant
                 // becomes a real, killable regression.
                 "App\\Billing\\Invoices\\Entities\\Invoice::company",
                 "App\\Companies\\Entities\\Company::settings",
+                "App\\Companies\\Entities\\CompanySettings::country",
                 // OQ-1-172 PR-0 L-SCOPE: each is invoked from a scope that reaches
                 // protected - envelope() by the parent Mailable, forCompany() by the
                 // AggregateRoot subclasses, scopeWhereForCompany() via Model::callNamedScope.

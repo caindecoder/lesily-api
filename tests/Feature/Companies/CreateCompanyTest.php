@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Companies;
 
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Aggregates\Company;
@@ -11,7 +12,6 @@ use App\Companies\Events\CompanyCreated;
 use App\Companies\Entities\CompanySettings;
 use App\Companies\Events\CompanySettingsCreated;
 use App\Companies\Entities\Company as CompanyReadModel;
-use App\Companies\Exceptions\UnsupportedCountryException;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use App\Companies\Exceptions\CompanyAlreadyExistsException;
 use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
@@ -46,36 +46,9 @@ class CreateCompanyTest extends CompaniesTestCase
         }
     }
 
-    // Sad — only launch-market countries have defaults to seed: an unsupported
-    // country is rejected at the aggregate seam (the HTTP 422 country rule is the
-    // slice-05 guard above it), and the rejection must persist nothing.
-    #[Test]
-    public function when_a_company_is_created_for_an_unsupported_country_then_it_is_rejected(): void
-    {
-        // Given an owner-signup command for a country without seeded defaults
-        $companyId = (string) Str::uuid();
-        $command = $this->buildCreateCompanyCommandForCountry($companyId, 'US');
-
-        // When the company is created
-        try {
-            Company::retrieve($companyId)->create($command);
-            $this->fail('Creating a company for an unsupported country must be rejected.');
-        } catch (UnsupportedCountryException) {
-            // Then it is rejected and nothing is persisted for the company
-            $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($companyId)->count());
-        }
-    }
-
-    protected function buildCreateCompanyCommandForCountry(string $companyId, string $country): CreateCompanyCommand
-    {
-        $command = $this->buildCreateCompanyCommand($companyId);
-
-        return CreateCompanyCommand::from(['country' => $country, 'owner' => $command->owner] + $command->toArray());
-    }
-
     // Happy — genesis: creating a company opens a 30-day trial scoped to its own
     // tenant, carrying the full registration payload (UC-1-031, slice C3/C4),
-    // seeding the settings from the country defaults (CD-1-02), projecting the
+    // its settings following the country (CD-1-02), projecting the
     // trial row with the owner linked (OQ-1-105), and minting the owner's
     // membership pivot UUID (ERD-1-01, R-042) — one behavioral walk, write side
     // and read side together (conv-plan sec 2.14 Rule A).
@@ -101,7 +74,7 @@ class CreateCompanyTest extends CompaniesTestCase
 
         $this->assertCompanyCreatedEventOpensTrial($created, '2026-07-01T00:00:00+00:00');
         $this->assertEventPayloadMatchesCommand($created, $command);
-        $this->assertSettingsSeededFromCountryDefaults($settings);
+        $this->assertSettingsFollowTheCountry($settings);
 
         // ...and the read side projects the same genesis: the trial row with the
         // owner linked, plus the owner's membership pivot keyed by a UUID
@@ -127,12 +100,15 @@ class CreateCompanyTest extends CompaniesTestCase
         $this->assertSame($command->owner->getKey(), $event->event_properties['ownerUserId']);
     }
 
-    protected function assertSettingsSeededFromCountryDefaults(EloquentStoredEvent $event): void
+    protected function assertSettingsFollowTheCountry(EloquentStoredEvent $event): void
     {
         $this->assertSame(CompanySettingsCreated::class, $event->event_class);
-        $this->assertSame('LKR', $event->event_properties['currency']);
-        $this->assertSame('Asia/Colombo', $event->event_properties['timezone']);
-        $this->assertSame('en', $event->event_properties['localeDefault']);
+        $settings = Arr::only($event->event_properties, ['currency', 'defaultWorkHoursPerDay', 'fiscalYearStartMonth', 'localeDefault', 'timezone', 'workingDaysPerWeek']);
+        ksort($settings);
+        $this->assertSame(
+            ['currency' => null, 'defaultWorkHoursPerDay' => null, 'fiscalYearStartMonth' => null, 'localeDefault' => null, 'timezone' => null, 'workingDaysPerWeek' => null],
+            $settings,
+        );
         $this->assertSame(
             $event->event_properties['settingsId'],
             CompanySettings::query()->where('company_id', $event->event_properties['companyId'])->sole()->getKey(),

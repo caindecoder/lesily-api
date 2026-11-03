@@ -9,6 +9,7 @@ use App\Companies\Enums\CompanyStatus;
 use App\Foundation\Billing\Enums\Addon;
 use App\Companies\Entities\CompanySettings;
 use App\Foundation\Billing\Enums\BillingPlan;
+use App\Foundation\CountryConfig\Entities\Country;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -104,7 +105,7 @@ class CompanyFactory extends Factory
 
     /**
      * A company with its settings row — production's genesis invariant (every
-     * company gets one, seeded from CountryDefaults by CompanySettingsProjector).
+     * company gets one, following its country, from CompanySettingsProjector).
      * Required by any fixture whose response renders the settings sub-object
      * (UC-1-032 CompanyResource).
      */
@@ -113,6 +114,23 @@ class CompanyFactory extends Factory
         return $this->afterCreating(function (Company $company): void {
             CompanySettings::factory()->create(['company_id' => $company->getKey()]);
         });
+    }
+
+    /**
+     * A company whose editable settings are its own values, not its country's.
+     */
+    public function withOwnSettings(): static
+    {
+        return $this->afterCreating(function (Company $company): void {
+            CompanySettings::factory()->ownValues()->create(['company_id' => $company->getKey()]);
+        });
+    }
+
+    public function inCountry(Country $country): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'country' => $country->code,
+        ]);
     }
 
     public function ownedBy(User $owner): static

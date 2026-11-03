@@ -13,6 +13,7 @@ use App\Consent\Entities\ConsentRecord;
 use App\Consent\Events\ConsentRecorded;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\CountryConfig\Entities\Country;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
@@ -251,7 +252,7 @@ class RegisterOwnerTest extends AuthTestCase
     #[Test]
     public function when_an_unsupported_country_is_submitted_then_nothing_is_persisted(): void
     {
-        // Given a signup for a country with no seeded defaults
+        // Given a signup for a country with no stored row
         $payload = [...$this->validRegistrationPayload(), 'country' => 'ZZ'];
 
         // When the guest submits it
@@ -262,6 +263,36 @@ class RegisterOwnerTest extends AuthTestCase
         $response->assertJsonPath('error_code', 'UNSUPPORTED_COUNTRY');
         $response->assertJsonPath('message', 'Selected country is not supported.');
         $this->assertNothingPersisted();
+    }
+
+    #[Test]
+    public function when_a_stored_country_code_is_submitted_in_lower_case_then_nothing_is_persisted(): void
+    {
+        // Given a signup for Sri Lanka's code written in lower case
+        $payload = [...$this->validRegistrationPayload(), 'country' => 'lk'];
+
+        // When the guest submits it
+        $response = $this->postJson('/api/v1/auth/register', $payload);
+
+        // Then the request is rejected as an unsupported country and nothing is kept
+        $response->assertUnprocessable();
+        $response->assertJsonPath('error_code', 'UNSUPPORTED_COUNTRY');
+        $this->assertNothingPersisted();
+    }
+
+    #[Test]
+    public function when_a_country_with_a_stored_row_is_submitted_then_the_company_is_registered(): void
+    {
+        // Given a stored country other than Sri Lanka and a signup for it
+        $country = Country::factory()->create();
+        $payload = [...$this->validRegistrationPayload(), 'country' => $country->code];
+
+        // When the guest submits it
+        $response = $this->postJson('/api/v1/auth/register', $payload);
+
+        // Then the owner is registered with a company in that country
+        $this->assertRegistrationSucceeded($response);
+        $this->assertSame($country->code, Company::query()->sole()->country);
     }
 
     // Edge (rate limit) — the public register endpoint runs under the auth-tier
@@ -425,7 +456,7 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertOwnerEnrolledWithEmergencyContact('nimal@contoso.lk');
         $this->assertConsentRecorded('nimal@contoso.lk');
         $this->assertConsentStored('nimal@contoso.lk');
-        $this->assertCompanySettingsSeeded('nimal@contoso.lk');
+        $this->assertCompanyFollowsItsCountry('nimal@contoso.lk');
     }
 
     // Happy — the issued token is a real credential: it authenticates the new owner
@@ -528,19 +559,19 @@ class RegisterOwnerTest extends AuthTestCase
         }
     }
 
-    protected function assertCompanySettingsSeeded(string $ownerEmail): void
+    protected function assertCompanyFollowsItsCountry(string $ownerEmail): void
     {
         $owner = User::query()->where('email', $ownerEmail)->sole();
         $company = Company::query()->where('owner_id', $owner->getKey())->sole();
 
         $this->assertDatabaseHas('company_settings', [
             'company_id' => $company->getKey(),
-            'currency' => 'LKR',
-            'timezone' => 'Asia/Colombo',
-            'locale_default' => 'en',
-            'fiscal_year_start_month' => 1,
-            'working_days_per_week' => 5,
-            'default_work_hours_per_day' => 8.0,
+            'currency' => null,
+            'timezone' => null,
+            'locale_default' => null,
+            'fiscal_year_start_month' => null,
+            'working_days_per_week' => null,
+            'default_work_hours_per_day' => null,
         ]);
     }
 
