@@ -8,6 +8,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\CountryConfig\Entities\Country;
 
 /**
  * UC-1-056 (narrowed) + UC-1-057 — GET /api/v1/companies/{companyId}/settings:
@@ -146,6 +147,30 @@ class ViewCompanySettingsTest extends CompaniesTestCase
         // Then the own value applies over Sri Lanka's five days
         $this->assertSettingShows($response, 'working_days_per_week', [
             'country_default' => 5,
+            'own_value' => 6,
+            'applies' => 6,
+            'is_following_country' => false,
+        ]);
+    }
+
+    #[Test]
+    public function when_the_country_default_changes_then_only_the_following_company_picks_it_up(): void
+    {
+        // Given company A follows Sri Lanka, company B set its own six-day week, and Sri Lanka's week becomes six days
+        $following = Company::factory()->withSettings()->create();
+        $own = Company::factory()->withOwnSettings()->create();
+        $followingOwner = $this->aCompanyMember($following, 'owner');
+        $ownOwner = $this->aCompanyMember($own, 'owner');
+        Country::query()->where('code', 'LK')->update(['working_days_per_week' => 6]);
+
+        // When each owner views their company's settings
+        $followingResponse = $this->viewCompanySettings($followingOwner, $following->getKey());
+        $ownResponse = $this->viewCompanySettings($ownOwner, $own->getKey());
+
+        // Then A follows the new default, and B keeps its own value
+        $this->assertSettingShows($followingResponse, 'working_days_per_week', $this->aFollowedSetting(6));
+        $this->assertSettingShows($ownResponse, 'working_days_per_week', [
+            'country_default' => 6,
             'own_value' => 6,
             'applies' => 6,
             'is_following_country' => false,
