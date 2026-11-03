@@ -251,25 +251,23 @@ class UpdateCompanyTest extends CompaniesTestCase
         $this->assertOnlySettingsEventRecorded($company, 'Asia/Singapore');
     }
 
-    // Edge — the aggregate is guardless: re-submitting the current values still
-    // records both events (no diff-check — the audit trail reflects the action,
-    // changeRole same-role precedent).
     #[Test]
-    public function when_submitted_values_match_current_then_update_is_still_recorded(): void
+    public function when_submitted_setting_equals_the_country_default_while_following_then_nothing_is_recorded_for_it(): void
     {
-        // Given the owner of a company with the default LK settings
+        // Given the owner of a company that follows Sri Lanka's timezone
         $company = Company::factory()->withSettings()->named('Same Co')->create();
         $owner = $this->aCompanyMember($company, 'owner');
 
-        // When they re-submit the current name and timezone unchanged
+        // When they submit the current name and Sri Lanka's own timezone
         $response = $this->updateCompanyDetails($owner, $company->getKey(), [
             'name' => 'Same Co',
             'timezone' => 'Asia/Colombo',
         ]);
 
-        // Then both events are still recorded
+        // Then only the name is recorded and the timezone still follows the country
         $response->assertOk();
-        $this->assertUpdateEventsRecorded($company);
+        $this->assertOnlyDetailsEventRecorded($company, 'Same Co');
+        $this->assertSettingFollowsTheCountry($company, 'timezone');
     }
 
     #[Test]
@@ -400,7 +398,7 @@ class UpdateCompanyTest extends CompaniesTestCase
         $response = $this->updateCompanyDetails($owner, $company->getKey(), [
             'name' => 'Contoso (Pvt) Ltd',
             'timezone' => 'Asia/Singapore',
-            'fiscalYearStartMonth' => 4,
+            'fiscalYearStartMonth' => 9,
             'workingDaysPerWeek' => 6,
             'defaultWorkHoursPerDay' => 7.5,
         ]);
@@ -415,7 +413,7 @@ class UpdateCompanyTest extends CompaniesTestCase
         $this->assertDatabaseHas('company_settings', [
             'company_id' => $company->getKey(),
             'timezone' => 'Asia/Singapore',
-            'fiscal_year_start_month' => 4,
+            'fiscal_year_start_month' => 9,
             'working_days_per_week' => 6,
             'default_work_hours_per_day' => 7.5,
         ]);

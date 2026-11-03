@@ -67,13 +67,11 @@ class Company extends AggregateRoot
             ));
         }
 
-        $followingAgain = $baseline->settingsFollowingAgain($command->settingsSent());
-
-        foreach ($followingAgain as $setting) {
+        foreach ($baseline->settingsFollowingAgain($command->settingsSent()) as $setting) {
             $this->recordReset($setting, $updatedBy);
         }
 
-        $ownValues = $command->withoutSettings($followingAgain);
+        $ownValues = $command->withoutSettings($baseline->settingsAtTheCountryDefault($command->settingsSent()));
 
         if ($ownValues->settingsSent() !== []) {
             $this->recordThat(new CompanySettingsUpdated(

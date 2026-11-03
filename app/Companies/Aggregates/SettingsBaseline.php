@@ -43,16 +43,28 @@ class SettingsBaseline
      */
     public function settingsFollowingAgain(array $sent): array
     {
-        $following = [];
+        return array_values(array_filter(
+            $this->settingsAtTheCountryDefault($sent),
+            fn (ResettableSetting $setting): bool => $this->hasOwnValue($setting),
+        ));
+    }
+
+    /**
+     * The sent settings that carry their country's default — none of them is an own value.
+     *
+     * @param  array<string, int|float|string>  $sent  keyed by ResettableSetting value
+     * @return list<ResettableSetting>
+     */
+    public function settingsAtTheCountryDefault(array $sent): array
+    {
+        $atTheDefault = [];
 
         foreach ($sent as $column => $value) {
-            $setting = ResettableSetting::from($column);
-
-            if ($this->hasOwnValue($setting) && $value === $this->countryDefaults[$column]) {
-                $following[] = $setting;
+            if ($value === $this->countryDefaults[$column]) {
+                $atTheDefault[] = ResettableSetting::from($column);
             }
         }
 
-        return $following;
+        return $atTheDefault;
     }
 }
