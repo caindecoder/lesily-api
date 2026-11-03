@@ -173,22 +173,33 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     }
 
     #[Test]
-    public function when_the_country_default_changes_then_only_the_following_company_picks_it_up(): void
+    public function when_the_country_default_changes_then_a_following_company_picks_it_up(): void
     {
-        // Given company A follows Sri Lanka, company B set its own six-day week, and Sri Lanka's week becomes six days
-        $following = Company::factory()->withSettings()->create();
-        $own = Company::factory()->withOwnSettings()->create();
-        $followingOwner = $this->aCompanyMember($following, 'owner');
-        $ownOwner = $this->aCompanyMember($own, 'owner');
+        // Given the owner of a company that follows Sri Lanka, whose working week becomes six days
+        $company = Company::factory()->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
         Country::query()->where('code', 'LK')->update(['working_days_per_week' => 6]);
 
-        // When each owner views their company's settings
-        $followingResponse = $this->viewCompanySettings($followingOwner, $following->getKey());
-        $ownResponse = $this->viewCompanySettings($ownOwner, $own->getKey());
+        // When they view the company's settings
+        $response = $this->viewCompanySettings($owner, $company->getKey());
 
-        // Then A follows the new default, and B keeps its own value
-        $this->assertSettingShows($followingResponse, 'working_days_per_week', $this->aFollowedSetting(6));
-        $this->assertSettingShows($ownResponse, 'working_days_per_week', [
+        // Then the company follows Sri Lanka's new six-day week
+        $this->assertSettingShows($response, 'working_days_per_week', $this->aFollowedSetting(6));
+    }
+
+    #[Test]
+    public function when_the_country_default_changes_to_the_own_value_then_the_company_keeps_its_own_value(): void
+    {
+        // Given the owner of a company with its own six-day week, and Sri Lanka's week becomes six days too
+        $company = Company::factory()->withOwnSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        Country::query()->where('code', 'LK')->update(['working_days_per_week' => 6]);
+
+        // When they view the company's settings
+        $response = $this->viewCompanySettings($owner, $company->getKey());
+
+        // Then the six days are still the company's own, not followed
+        $this->assertSettingShows($response, 'working_days_per_week', [
             'country_default' => 6,
             'own_value' => 6,
             'applies' => 6,
