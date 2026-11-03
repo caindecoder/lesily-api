@@ -71,14 +71,15 @@ class Company extends AggregateRoot
             $this->recordReset($setting, $updatedBy);
         }
 
-        $ownValues = $command->withoutSettings($baseline->settingsAtTheCountryDefault($command->settingsSent()));
+        /** @var array{timezone?: string, fiscal_year_start_month?: int, working_days_per_week?: int, default_work_hours_per_day?: float} $ownValues */
+        $ownValues = $baseline->ownValueChanges($command->settingsSent());
 
-        if ($ownValues->settingsSent() !== []) {
+        if ($ownValues !== []) {
             $this->recordThat(new CompanySettingsUpdated(
-                timezone: $ownValues->timezone,
-                fiscalYearStartMonth: $ownValues->fiscalYearStartMonth,
-                workingDaysPerWeek: $ownValues->workingDaysPerWeek,
-                defaultWorkHoursPerDay: $ownValues->defaultWorkHoursPerDay,
+                timezone: $ownValues['timezone'] ?? null,
+                fiscalYearStartMonth: $ownValues['fiscal_year_start_month'] ?? null,
+                workingDaysPerWeek: $ownValues['working_days_per_week'] ?? null,
+                defaultWorkHoursPerDay: $ownValues['default_work_hours_per_day'] ?? null,
                 updatedBy: $updatedBy,
                 updatedAt: CarbonImmutable::now(),
             ));

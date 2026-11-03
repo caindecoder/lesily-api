@@ -66,27 +66,6 @@ class UpdateCompanyCommand extends Data
     }
 
     /**
-     * This update with $settings left out.
-     *
-     * @param  list<ResettableSetting>  $settings
-     */
-    public function withoutSettings(array $settings): static
-    {
-        $update = clone $this;
-
-        foreach ($settings as $setting) {
-            match ($setting) {
-                ResettableSetting::Timezone => $update->timezone = null,
-                ResettableSetting::FiscalYearStartMonth => $update->fiscalYearStartMonth = null,
-                ResettableSetting::WorkingDaysPerWeek => $update->workingDaysPerWeek = null,
-                ResettableSetting::DefaultWorkHoursPerDay => $update->defaultWorkHoursPerDay = null,
-            };
-        }
-
-        return $update;
-    }
-
-    /**
      * @return array<string, array<int, string>>
      */
     public static function rules(ValidationContext $context): array

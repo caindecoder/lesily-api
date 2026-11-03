@@ -45,8 +45,10 @@ class SettingsBaseline
     {
         $following = [];
 
-        foreach ($this->settingsAtTheCountryDefault($sent) as $setting) {
-            if ($this->hasOwnValue($setting)) {
+        foreach ($sent as $column => $value) {
+            $setting = ResettableSetting::from($column);
+
+            if ($this->isCountryDefault($column, $value) && $this->hasOwnValue($setting)) {
                 $following[] = $setting;
             }
         }
@@ -55,21 +57,27 @@ class SettingsBaseline
     }
 
     /**
-     * The sent settings that carry their country's default — none of them is an own value.
+     * The sent settings that become the company's own values — every one not
+     * equal to its country's default.
      *
      * @param  array<string, int|float|string>  $sent  keyed by ResettableSetting value
-     * @return list<ResettableSetting>
+     * @return array<string, int|float|string>
      */
-    public function settingsAtTheCountryDefault(array $sent): array
+    public function ownValueChanges(array $sent): array
     {
-        $atTheDefault = [];
+        $changes = [];
 
         foreach ($sent as $column => $value) {
-            if ($value === $this->countryDefaults[$column]) {
-                $atTheDefault[] = ResettableSetting::from($column);
+            if (! $this->isCountryDefault($column, $value)) {
+                $changes[$column] = $value;
             }
         }
 
-        return $atTheDefault;
+        return $changes;
+    }
+
+    protected function isCountryDefault(string $column, int|float|string $value): bool
+    {
+        return $value === $this->countryDefaults[$column];
     }
 }

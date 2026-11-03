@@ -274,7 +274,7 @@ abstract class CompaniesTestCase extends TestCase
             ->where('event_properties->setting', $setting)
             ->where('event_properties->resetBy', $resetBy)
             ->whereNotNull('event_properties->resetAt')
-            ->where('company_id', $company->getKey())
+            ->whereForCompany($company->getKey())
             ->count());
         $this->assertSame(0, LesilyStoredEvent::query()
             ->where('event_class', CompanySettingsUpdated::class)

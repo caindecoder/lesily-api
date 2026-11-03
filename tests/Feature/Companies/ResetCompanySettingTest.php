@@ -18,6 +18,16 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class ResetCompanySettingTest extends CompaniesTestCase
 {
+    /**
+     * The own values CompanySettingsFactory::ownValues() gives a company.
+     */
+    protected const array OWN_VALUES = [
+        'timezone' => 'Asia/Singapore',
+        'fiscal_year_start_month' => 7,
+        'working_days_per_week' => 6,
+        'default_work_hours_per_day' => 7.5,
+    ];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -130,10 +140,11 @@ class ResetCompanySettingTest extends CompaniesTestCase
         // When they reset one of its settings
         $response = $this->resetCompanySetting($member, $company->getKey(), $setting);
 
-        // Then the setting follows the country and the reset is recorded
+        // Then the setting follows the country, the reset is recorded and the other own values stay
         $response->assertNoContent();
         $this->assertSettingFollowsTheCountry($company, $setting);
         $this->assertResetRecorded($company, $setting, $member->getKey());
+        $this->assertOtherOwnValuesKept($company, $setting);
     }
 
     /**
@@ -165,6 +176,17 @@ class ResetCompanySettingTest extends CompaniesTestCase
         $this->assertSame(6, $settings->working_days_per_week);
         $this->assertSame(7.5, $settings->default_work_hours_per_day);
         $this->assertNothingRecorded($company);
+    }
+
+    protected function assertOtherOwnValuesKept(Company $company, string $resetSetting): void
+    {
+        $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
+        $otherOwnValues = array_diff_key(self::OWN_VALUES, [$resetSetting => true]);
+
+        $this->assertCount(3, $otherOwnValues);
+        foreach ($otherOwnValues as $setting => $ownValue) {
+            $this->assertSame($ownValue, $settings->getAttribute($setting));
+        }
     }
 
     protected function assertNothingRecorded(Company $company): void
