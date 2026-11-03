@@ -21,12 +21,13 @@ class CompanySettingsResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        /** @var CompanySettings $settings — every company is created with its settings row */
         $settings = $this->resource->settings;
 
         return [
             'country' => [
                 'code' => $this->resource->country,
-                'name' => $settings->country->name,
+                'name' => $settings->country?->name,
             ],
             'settings' => collect(CompanySettings::SETTINGS)
                 ->mapWithKeys(fn (string $setting): array => [$setting => [

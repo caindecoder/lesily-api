@@ -7,6 +7,7 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanySettings;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\CountryConfig\Entities\Country;
 
@@ -92,6 +93,24 @@ class ViewCompanySettingsTest extends CompaniesTestCase
 
         // Then their role is insufficient for companies.view
         $this->assertRoleInsufficient($response, 'companies.view');
+    }
+
+    #[Test]
+    public function when_the_companys_country_has_no_row_then_the_country_defaults_are_empty(): void
+    {
+        // Given the owner of a following company whose country row is removed
+        $company = Company::factory()->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        Country::query()->delete();
+
+        // When they view the company's settings
+        $response = $this->viewCompanySettings($owner, $company->getKey());
+
+        // Then the country has no name and every setting has no default to follow
+        $response->assertExactJson(['data' => [
+            'country' => ['code' => 'LK', 'name' => null],
+            'settings' => array_fill_keys(CompanySettings::SETTINGS, $this->aFollowedSetting(null)),
+        ]]);
     }
 
     #[Test]
