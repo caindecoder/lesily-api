@@ -425,7 +425,7 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertOwnerEnrolledWithEmergencyContact('nimal@contoso.lk');
         $this->assertConsentRecorded('nimal@contoso.lk');
         $this->assertConsentStored('nimal@contoso.lk');
-        $this->assertCompanySettingsSeeded('nimal@contoso.lk');
+        $this->assertCompanyFollowsItsCountry('nimal@contoso.lk');
     }
 
     // Happy — the issued token is a real credential: it authenticates the new owner
@@ -528,19 +528,19 @@ class RegisterOwnerTest extends AuthTestCase
         }
     }
 
-    protected function assertCompanySettingsSeeded(string $ownerEmail): void
+    protected function assertCompanyFollowsItsCountry(string $ownerEmail): void
     {
         $owner = User::query()->where('email', $ownerEmail)->sole();
         $company = Company::query()->where('owner_id', $owner->getKey())->sole();
 
         $this->assertDatabaseHas('company_settings', [
             'company_id' => $company->getKey(),
-            'currency' => 'LKR',
-            'timezone' => 'Asia/Colombo',
-            'locale_default' => 'en',
-            'fiscal_year_start_month' => 1,
-            'working_days_per_week' => 5,
-            'default_work_hours_per_day' => 8.0,
+            'currency' => null,
+            'timezone' => null,
+            'locale_default' => null,
+            'fiscal_year_start_month' => null,
+            'working_days_per_week' => null,
+            'default_work_hours_per_day' => null,
         ]);
     }
 

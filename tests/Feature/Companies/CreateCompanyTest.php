@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Companies;
 
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Aggregates\Company;
@@ -101,7 +102,7 @@ class CreateCompanyTest extends CompaniesTestCase
 
         $this->assertCompanyCreatedEventOpensTrial($created, '2026-07-01T00:00:00+00:00');
         $this->assertEventPayloadMatchesCommand($created, $command);
-        $this->assertSettingsSeededFromCountryDefaults($settings);
+        $this->assertSettingsFollowTheCountry($settings);
 
         // ...and the read side projects the same genesis: the trial row with the
         // owner linked, plus the owner's membership pivot keyed by a UUID
@@ -127,12 +128,15 @@ class CreateCompanyTest extends CompaniesTestCase
         $this->assertSame($command->owner->getKey(), $event->event_properties['ownerUserId']);
     }
 
-    protected function assertSettingsSeededFromCountryDefaults(EloquentStoredEvent $event): void
+    protected function assertSettingsFollowTheCountry(EloquentStoredEvent $event): void
     {
         $this->assertSame(CompanySettingsCreated::class, $event->event_class);
-        $this->assertSame('LKR', $event->event_properties['currency']);
-        $this->assertSame('Asia/Colombo', $event->event_properties['timezone']);
-        $this->assertSame('en', $event->event_properties['localeDefault']);
+        $settings = Arr::only($event->event_properties, ['currency', 'defaultWorkHoursPerDay', 'fiscalYearStartMonth', 'localeDefault', 'timezone', 'workingDaysPerWeek']);
+        ksort($settings);
+        $this->assertSame(
+            ['currency' => null, 'defaultWorkHoursPerDay' => null, 'fiscalYearStartMonth' => null, 'localeDefault' => null, 'timezone' => null, 'workingDaysPerWeek' => null],
+            $settings,
+        );
         $this->assertSame(
             $event->event_properties['settingsId'],
             CompanySettings::query()->where('company_id', $event->event_properties['companyId'])->sole()->getKey(),

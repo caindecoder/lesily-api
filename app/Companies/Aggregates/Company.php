@@ -32,7 +32,7 @@ class Company extends AggregateRoot
             throw CompanyAlreadyExistsException::withId($this->uuid());
         }
 
-        $defaults = CountryDefaults::for($command->country);
+        CountryDefaults::for($command->country);
 
         return $this->forCompany($this->uuid())
             ->recordThat(new CompanyCreated(
@@ -46,12 +46,6 @@ class Company extends AggregateRoot
             ->recordThat(new CompanySettingsCreated(
                 companyId: $this->uuid(),
                 settingsId: Str::uuid7()->toString(),
-                timezone: $defaults['timezone'],
-                currency: $defaults['currency'],
-                localeDefault: $defaults['localeDefault'],
-                fiscalYearStartMonth: $defaults['fiscalYearStartMonth'],
-                workingDaysPerWeek: $defaults['workingDaysPerWeek'],
-                defaultWorkHoursPerDay: $defaults['defaultWorkHoursPerDay'],
             ));
     }
 
