@@ -43,10 +43,15 @@ class SettingsBaseline
      */
     public function settingsFollowingAgain(array $sent): array
     {
-        return array_values(array_filter(
-            $this->settingsAtTheCountryDefault($sent),
-            fn (ResettableSetting $setting): bool => $this->hasOwnValue($setting),
-        ));
+        $following = [];
+
+        foreach ($this->settingsAtTheCountryDefault($sent) as $setting) {
+            if ($this->hasOwnValue($setting)) {
+                $following[] = $setting;
+            }
+        }
+
+        return $following;
     }
 
     /**

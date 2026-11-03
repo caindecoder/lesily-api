@@ -271,19 +271,33 @@ class UpdateCompanyTest extends CompaniesTestCase
     }
 
     #[Test]
-    public function when_submitted_setting_equals_the_country_default_over_an_own_value_then_it_follows_the_country(): void
+    #[DataProvider('provideSriLankaDefaults')]
+    public function when_submitted_setting_equals_the_country_default_over_an_own_value_then_it_follows_the_country(string $field, string $setting, int|string $sriLankaDefault): void
     {
-        // Given the owner of a company with its own timezone
+        // Given the owner of a company with its own settings
         $company = Company::factory()->withOwnSettings()->create();
         $owner = $this->aCompanyMember($company, 'owner');
 
-        // When they submit Sri Lanka's own timezone
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['timezone' => 'Asia/Colombo']);
+        // When they submit Sri Lanka's own value for one of them
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), [$field => $sriLankaDefault]);
 
-        // Then the timezone follows the country again and the reset is recorded
+        // Then that setting follows the country again and the reset is recorded
         $response->assertOk();
-        $this->assertSettingFollowsTheCountry($company, 'timezone');
-        $this->assertResetRecorded($company, 'timezone', $owner->getKey());
+        $this->assertSettingFollowsTheCountry($company, $setting);
+        $this->assertResetRecorded($company, $setting, $owner->getKey());
+    }
+
+    /**
+     * @return array<string, array{string, string, int|string}>
+     */
+    public static function provideSriLankaDefaults(): array
+    {
+        return [
+            'timezone' => ['timezone', 'timezone', 'Asia/Colombo'],
+            'fiscal year start' => ['fiscalYearStartMonth', 'fiscal_year_start_month', 4],
+            'working days' => ['workingDaysPerWeek', 'working_days_per_week', 5],
+            'work hours sent as a whole number' => ['defaultWorkHoursPerDay', 'default_work_hours_per_day', 8],
+        ];
     }
 
     // Edge — an empty payload is a no-op: nothing is submitted, so no event fires

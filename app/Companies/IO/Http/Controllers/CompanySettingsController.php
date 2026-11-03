@@ -15,14 +15,16 @@ use App\Companies\UseCases\Interactors\ResetCompanySettingInteractor;
  */
 class CompanySettingsController
 {
+    public function __construct(private readonly ResetCompanySettingInteractor $resetSetting) {}
+
     public function show(Request $request): CompanySettingsResource
     {
         return new CompanySettingsResource($request->company());
     }
 
-    public function destroy(Request $request, string $companyId, ResettableSetting $setting, ResetCompanySettingInteractor $interactor): Response
+    public function destroy(Request $request, string $companyId, ResettableSetting $setting): Response
     {
-        $interactor->execute(ResetCompanySettingCommand::validateAndCreate([
+        $this->resetSetting->execute(ResetCompanySettingCommand::validateAndCreate([
             'company' => $companyId,
             'setting' => $setting,
             'resetBy' => $request->user(),
