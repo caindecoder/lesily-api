@@ -10,6 +10,7 @@ use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Notification;
 use App\Compliance\Breach\Events\BreachRecorded;
 use Tests\Feature\PlatformAdmin\PlatformAdminTestCase;
+use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -94,7 +95,8 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
                 ->where('breach_incident_id', $breachId)
                 ->where('company_id', $companyId)
                 ->sole();
-            $this->assertSame([$dataTypes, $estimatedCount], [$row->data_types, $row->estimated_count]);
+            $this->assertSame([$dataTypes, $estimatedCount, $this->admin->getKey()], [$row->data_types, $row->estimated_count, $row->added_by]);
+            $this->assertTrue($row->added_at->equalTo(BreachIncidentRecord::query()->findOrFail($breachId)->recorded_at));
         }
     }
 }

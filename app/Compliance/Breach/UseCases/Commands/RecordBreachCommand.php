@@ -22,7 +22,7 @@ class RecordBreachCommand extends Data
 
     public string $measures;
 
-    #[WithCast(DateTimeInterfaceCast::class, format: self::DATE_DISCOVERED_FORMAT)]
+    #[WithCast(DateTimeInterfaceCast::class, format: self::DATE_DISCOVERED_FORMAT, setTimeZone: 'UTC')]
     public CarbonImmutable $dateDiscovered;
 
     public BreachSeverity $severity;
@@ -44,12 +44,12 @@ class RecordBreachCommand extends Data
             'measures' => ['required', 'string', 'max:1000'],
             'dateDiscovered' => ['required', 'date_format:'.self::DATE_DISCOVERED_FORMAT, 'before_or_equal:now'],
             'severity' => ['required', Rule::enum(BreachSeverity::class)],
-            'companies' => ['required', 'array', 'list', 'min:1'],
+            'companies' => ['required', 'array', 'list'],
             'companies.*' => ['array'],
-            'companies.*.companyId' => ['required', 'uuid', 'distinct', Rule::exists('companies', 'id')],
-            'companies.*.dataTypes' => ['required', 'array', 'list', 'min:1'],
+            'companies.*.companyId' => ['required', 'uuid', 'distinct:ignore_case', Rule::exists('companies', 'id')],
+            'companies.*.dataTypes' => ['required', 'array', 'list'],
             'companies.*.dataTypes.*' => [Rule::enum(BreachDataType::class)],
-            'companies.*.estimatedCount' => ['nullable', 'integer', 'min:0'],
+            'companies.*.estimatedCount' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
         ];
     }
 
@@ -60,7 +60,6 @@ class RecordBreachCommand extends Data
     {
         return [
             'companies.required' => 'At least one affected company must be selected.',
-            'companies.min' => 'At least one affected company must be selected.',
         ];
     }
 }

@@ -20,6 +20,8 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
 {
     protected const string COMPANY_A = 'company A';
 
+    protected const string COMPANY_A_UPPERCASE = 'company A in upper case';
+
     #[Test]
     public function when_an_unauthenticated_caller_records_a_breach_then_it_is_refused_as_unauthenticated(): void
     {
@@ -103,6 +105,34 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_the_discovery_moment_carries_an_offset_then_it_is_kept_in_utc(): void
+    {
+        // Given a breach discovered at 19:30 in Colombo (+05:30), which is 14:00 UTC
+        $payload = $this->validPayload(['dateDiscovered' => '2026-05-04T19:30:00+05:30']);
+
+        // When the admin records it
+        $response = $this->recordBreach($this->admin, $payload);
+
+        // Then the discovery moment and the deadline are kept in UTC
+        $breach = BreachIncidentRecord::query()->findOrFail($this->assertIncidentCreated($response));
+        $this->assertSame(['2026-05-04 14:00:00', '2026-05-07 14:00:00'], [$breach->getRawOriginal('date_discovered'), $breach->getRawOriginal('deadline')]);
+        $this->assertSame(['2026-05-04T14:00:00.000000Z', '2026-05-07T14:00:00.000000Z'], [$response->json('data.date_discovered'), $response->json('data.deadline')]);
+    }
+
+    #[Test]
+    public function when_a_low_severity_breach_is_recorded_then_it_is_recorded_like_any_other(): void
+    {
+        // Given a breach the admin judges low severity
+        $payload = $this->validPayload(['severity' => 'low']);
+
+        // When the admin records it
+        $response = $this->recordBreach($this->admin, $payload);
+
+        // Then it is recorded at stage recorded with its severity
+        $this->assertDatabaseHas('breach_incidents', ['id' => $this->assertIncidentCreated($response), 'stage' => 'recorded', 'severity' => 'low']);
+    }
+
+    #[Test]
     public function when_a_company_count_is_not_yet_known_then_it_is_recorded_empty(): void
     {
         // Given company A's number of affected people is not yet known
@@ -181,8 +211,10 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
             'no company list' => [['companies' => null], 'companies', 'At least one affected company must be selected.'],
             'a company entry that is not a company' => [['companies.0' => 'company A'], 'companies.0', 'The companies.0 field must be an array.'],
             'a company without its id' => [['companies.0.companyId' => null], 'companies.0.companyId', 'The companies.0.companyId field is required.'],
+            'a company id that is not a uuid' => [['companies.0.companyId' => 'company-a'], 'companies.0.companyId', 'The companies.0.companyId field must be a valid UUID.'],
             'a company that does not exist' => [['companies.0.companyId' => '01980000-0000-7000-8000-000000000000'], 'companies.0.companyId', 'The selected companies.0.companyId is invalid.'],
             'the same company twice' => [['companies.1.companyId' => self::COMPANY_A, 'companies.1.dataTypes' => ['payroll']], 'companies.0.companyId', 'The companies.0.companyId field has a duplicate value.'],
+            'the same company twice in another case' => [['companies.1.companyId' => self::COMPANY_A_UPPERCASE, 'companies.1.dataTypes' => ['payroll']], 'companies.0.companyId', 'The companies.0.companyId field has a duplicate value.'],
             'no description' => [['description' => null], 'description', 'The description field is required.'],
             'no likely consequences' => [['likelyConsequences' => null], 'likelyConsequences', 'The likely consequences field is required.'],
             'no measures' => [['measures' => null], 'measures', 'The measures field is required.'],
@@ -197,6 +229,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
             'a company with no data type' => [['companies.0.dataTypes' => []], 'companies.0.dataTypes', 'The companies.0.dataTypes field is required.'],
             'a data type outside the seven' => [['companies.0.dataTypes' => ['passwords']], 'companies.0.dataTypes.0', 'The selected companies.0.dataTypes.0 is invalid.'],
             'a negative count' => [['companies.0.estimatedCount' => -1], 'companies.0.estimatedCount', 'The companies.0.estimatedCount field must be at least 0.'],
+            'a count beyond the largest the record holds' => [['companies.0.estimatedCount' => 4294967296], 'companies.0.estimatedCount', 'The companies.0.estimatedCount field must not be greater than 4294967295.'],
             'a count that is not a number' => [['companies.0.estimatedCount' => 'many'], 'companies.0.estimatedCount', 'The companies.0.estimatedCount field must be an integer.'],
         ];
     }
@@ -206,7 +239,11 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         $payload = $this->validPayload();
 
         foreach ($changes as $path => $value) {
-            Arr::set($payload, $path, $value === self::COMPANY_A ? $this->companyA->getKey() : $value);
+            Arr::set($payload, $path, match ($value) {
+                self::COMPANY_A => $this->companyA->getKey(),
+                self::COMPANY_A_UPPERCASE => strtoupper($this->companyA->getKey()),
+                default => $value,
+            });
         }
 
         return $payload;
@@ -282,6 +319,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
             'action' => 'breach_recorded',
             'description' => 'Platform admin recorded a data breach.',
             'metadata' => null,
+            'recorded_at' => '2026-05-10 09:00:00',
             'actor_user_id' => $this->admin->getKey(),
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => $this->admin->name,
