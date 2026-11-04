@@ -457,6 +457,7 @@ Route::get('/v1/admin/dsar-requests', [PlatformAdminDsarRequestsController::clas
 Route::get('/v1/admin/dsar-requests/{requestId}', [PlatformAdminDsarRequestsController::class, 'show'])
     ->middleware(['auth:sanctum', 'platform.admin']);
 
-// A platform admin records a data breach (UC-1-072) - auth:sanctum + platform.admin only, no auth.company.
+// A platform admin records a data breach (UC-1-072) - auth:sanctum + platform.admin only, no auth.company;
+// idempotency-key:required - a replay must never open a second incident with its own 72-hour clock.
 Route::post('/v1/admin/breach-incidents', [PlatformAdminBreachIncidentsController::class, 'store'])
-    ->middleware(['auth:sanctum', 'platform.admin']);
+    ->middleware(['auth:sanctum', 'platform.admin', 'idempotency-key:required']);

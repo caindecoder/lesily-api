@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Compliance\Breach;
 
+use Illuminate\Http\Response;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Http\Responses\ApiErrorCode;
 
 class RecordBreachIncidentTest extends BreachIncidentsTestCase
 {
@@ -30,6 +32,20 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
 
         // Then the admin surface answers as if it did not exist and nothing is recorded
         $this->assertResourceNotFoundNoLeak($response);
+        $this->assertNothingRecorded();
+    }
+
+    #[Test]
+    public function when_the_idempotency_key_is_missing_then_no_breach_is_recorded(): void
+    {
+        // Given the admin sends no Idempotency-Key
+        $this->idempotencyKey = null;
+
+        // When the admin records a breach
+        $response = $this->recordBreach($this->admin, $this->validPayload());
+
+        // Then the request is refused for the missing key and nothing is recorded
+        $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::IdempotencyKeyRequired);
         $this->assertNothingRecorded();
     }
 }
