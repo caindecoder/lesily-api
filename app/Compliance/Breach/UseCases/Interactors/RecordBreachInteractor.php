@@ -38,7 +38,6 @@ class RecordBreachInteractor
     protected function recordAudit(BreachIncidentRecord $breach, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
-            'company_id' => null,
             'stored_event_id' => $this->recordedEventIdFor($breach),
             'event_class' => 'BreachRecorded',
             'subject_type' => AuditSubjectType::BreachIncident,

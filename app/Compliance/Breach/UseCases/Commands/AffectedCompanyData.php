@@ -10,7 +10,7 @@ use App\Compliance\Breach\Enums\BreachDataType;
 use Spatie\LaravelData\Attributes\MapInputName;
 
 /**
- * One affected company with its own figures (OQ-1-009). Its rules live on
+ * One affected company with its own figures. Its rules live on
  * RecordBreachCommand::rules() under companies.*.
  */
 class AffectedCompanyData extends Data

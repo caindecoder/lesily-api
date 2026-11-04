@@ -106,7 +106,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
     public function when_a_company_count_is_not_yet_known_then_it_is_recorded_empty(): void
     {
         // Given company A's number of affected people is not yet known
-        $payload = $this->validPayload(['companies' => [['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii']]]]);
+        $payload = $this->validPayload(['companies' => [['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => null]]]);
 
         // When the admin records the breach
         $response = $this->recordBreach($this->admin, $payload);
@@ -178,6 +178,9 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
     {
         return [
             'no affected company' => [['companies' => []], 'companies', 'At least one affected company must be selected.'],
+            'no company list' => [['companies' => null], 'companies', 'At least one affected company must be selected.'],
+            'a company entry that is not a company' => [['companies.0' => 'company A'], 'companies.0', 'The companies.0 field must be an array.'],
+            'a company without its id' => [['companies.0.companyId' => null], 'companies.0.companyId', 'The companies.0.companyId field is required.'],
             'a company that does not exist' => [['companies.0.companyId' => '01980000-0000-7000-8000-000000000000'], 'companies.0.companyId', 'The selected companies.0.companyId is invalid.'],
             'the same company twice' => [['companies.1.companyId' => self::COMPANY_A, 'companies.1.dataTypes' => ['payroll']], 'companies.0.companyId', 'The companies.0.companyId field has a duplicate value.'],
             'no description' => [['description' => null], 'description', 'The description field is required.'],
@@ -187,7 +190,9 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
             'likely consequences over 1,000 characters' => [['likelyConsequences' => str_repeat('a', 1001)], 'likelyConsequences', 'The likely consequences field must not be greater than 1000 characters.'],
             'measures over 1,000 characters' => [['measures' => str_repeat('a', 1001)], 'measures', 'The measures field must not be greater than 1000 characters.'],
             'discovered one second from now' => [['dateDiscovered' => '2026-05-10T09:00:01Z'], 'dateDiscovered', 'The date discovered field must be a date before or equal to now.'],
+            'no discovery moment' => [['dateDiscovered' => null], 'dateDiscovered', 'The date discovered field is required.'],
             'a discovery moment without a time' => [['dateDiscovered' => '2026-05-04'], 'dateDiscovered', 'The date discovered field must match the format Y-m-d\TH:i:sp.'],
+            'no severity' => [['severity' => null], 'severity', 'The severity field is required.'],
             'a severity outside the four' => [['severity' => 'extreme'], 'severity', 'The selected severity is invalid.'],
             'a company with no data type' => [['companies.0.dataTypes' => []], 'companies.0.dataTypes', 'The companies.0.dataTypes field is required.'],
             'a data type outside the seven' => [['companies.0.dataTypes' => ['passwords']], 'companies.0.dataTypes.0', 'The selected companies.0.dataTypes.0 is invalid.'],
@@ -273,7 +278,10 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
             'event_class' => 'BreachRecorded',
             'subject_type' => 'breach_incident',
             'subject_id' => $breachId,
+            'subject_label' => null,
             'action' => 'breach_recorded',
+            'description' => 'Platform admin recorded a data breach.',
+            'metadata' => null,
             'actor_user_id' => $this->admin->getKey(),
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => $this->admin->name,
