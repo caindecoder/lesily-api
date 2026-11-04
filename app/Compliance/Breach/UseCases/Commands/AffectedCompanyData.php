@@ -20,9 +20,21 @@ class AffectedCompanyData extends Data
     public Company $company;
 
     /**
-     * @var array<int, BreachDataType>
+     * @var list<BreachDataType>
      */
     public array $dataTypes;
 
     public ?int $estimatedCount = null;
+
+    /**
+     * @return array{companyId: string, dataTypes: list<string>, estimatedCount: ?int}
+     */
+    public function facts(): array
+    {
+        return [
+            'companyId' => $this->company->getKey(),
+            'dataTypes' => array_map(fn (BreachDataType $type): string => $type->value, $this->dataTypes),
+            'estimatedCount' => $this->estimatedCount,
+        ];
+    }
 }

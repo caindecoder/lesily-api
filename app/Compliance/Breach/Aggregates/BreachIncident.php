@@ -6,7 +6,6 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use App\Compliance\Breach\Enums\BreachStage;
 use App\Foundation\EventStore\AggregateRoot;
-use App\Compliance\Breach\Enums\BreachDataType;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\UseCases\Commands\AffectedCompanyData;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
@@ -34,11 +33,7 @@ class BreachIncident extends AggregateRoot
             dateDiscovered: $command->dateDiscovered,
             severity: $command->severity->value,
             deadline: $command->dateDiscovered->addHours(self::DEADLINE_HOURS),
-            companies: array_map(fn (AffectedCompanyData $company): array => [
-                'companyId' => $company->company->getKey(),
-                'dataTypes' => array_map(fn (BreachDataType $type): string => $type->value, $company->dataTypes),
-                'estimatedCount' => $company->estimatedCount,
-            ], $command->companies),
+            companies: array_map(fn (AffectedCompanyData $company): array => $company->facts(), $command->companies),
         ));
     }
 

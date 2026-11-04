@@ -28,7 +28,7 @@ class RecordBreachCommand extends Data
     public BreachSeverity $severity;
 
     /**
-     * @var array<int, AffectedCompanyData>
+     * @var list<AffectedCompanyData>
      */
     #[DataCollectionOf(AffectedCompanyData::class)]
     public array $companies;
