@@ -13,6 +13,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RecordBreachIncidentTest extends BreachIncidentsTestCase
@@ -89,6 +90,70 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_the_breach_was_discovered_this_moment_then_it_is_recorded(): void
+    {
+        // Given the clock reads 2026-05-10 09:00 UTC, the moment the breach was discovered
+        $this->travelTo(CarbonImmutable::parse('2026-05-10T09:00:00Z'));
+
+        // When the admin records it
+        $response = $this->recordBreach($this->admin, $this->validPayload(['dateDiscovered' => '2026-05-10T09:00:00Z']));
+
+        // Then it is recorded
+        $this->assertIncidentProjected($this->assertIncidentCreated($response), [$this->companyA->getKey() => [['pii'], 40]]);
+    }
+
+    #[Test]
+    public function when_a_company_count_is_not_yet_known_then_it_is_recorded_empty(): void
+    {
+        // Given company A's number of affected people is not yet known
+        $payload = $this->validPayload(['companies' => [['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii']]]]);
+
+        // When the admin records the breach
+        $response = $this->recordBreach($this->admin, $payload);
+
+        // Then company A's count is left empty
+        $this->assertIncidentProjected($this->assertIncidentCreated($response), [$this->companyA->getKey() => [['pii'], null]]);
+    }
+
+    #[Test]
+    public function when_a_breach_is_recorded_then_the_deadline_is_72_hours_after_the_discovery_moment(): void
+    {
+        // Given a breach discovered on 2026-05-04 at 14:00 UTC
+        $payload = $this->validPayload(['dateDiscovered' => '2026-05-04T14:00:00Z']);
+
+        // When the admin records it
+        $response = $this->recordBreach($this->admin, $payload);
+
+        // Then its deadline is 2026-05-07 at 14:00 UTC
+        $breachId = $this->assertIncidentCreated($response);
+        $this->assertSame('2026-05-07T14:00:00.000000Z', $response->json('data.deadline'));
+        $this->assertTrue(BreachIncidentRecord::query()->findOrFail($breachId)->deadline->equalTo(CarbonImmutable::parse('2026-05-07T14:00:00Z')));
+    }
+
+    #[Test]
+    public function when_two_companies_are_affected_then_each_keeps_its_own_data_types_and_count(): void
+    {
+        // Given company A lost contact details of 40 people and company B payroll and bank details of 7
+        $payload = $this->validPayload(['companies' => [
+            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
+            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll', 'banking'], 'estimatedCount' => 7],
+        ]]);
+
+        // When the admin records the breach
+        $response = $this->recordBreach($this->admin, $payload);
+
+        // Then each company keeps its own figures and no incident-wide total exists
+        $this->assertIncidentProjected($this->assertIncidentCreated($response), [
+            $this->companyA->getKey() => [['pii'], 40],
+            $this->companyB->getKey() => [['payroll', 'banking'], 7],
+        ]);
+        $this->assertSame([[['pii'], 40], [['payroll', 'banking'], 7]], array_map(
+            fn (array $company): array => [$company['data_types'], $company['estimated_count']],
+            $response->json('data.companies'),
+        ));
+    }
+
+    #[Test]
     public function when_a_platform_admin_records_a_breach_then_it_is_stored_projected_audited_and_nothing_is_sent(): void
     {
         // Given the clock reads 2026-05-10 09:00 UTC and a breach at company A discovered on 2026-05-04 14:00 UTC
@@ -142,6 +207,15 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         return $payload;
     }
 
+    protected function assertIncidentCreated(TestResponse $response): string
+    {
+        $response->assertCreated();
+        $breachId = $response->json('data.id');
+        $this->assertIsString($breachId);
+
+        return $breachId;
+    }
+
     protected function assertRecordFailedSafely(TestResponse $response): void
     {
         $response->assertInternalServerError();
@@ -150,9 +224,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
 
     protected function assertIncidentResponded(TestResponse $response): string
     {
-        $response->assertCreated();
-        $breachId = $response->json('data.id');
-        $this->assertIsString($breachId);
+        $breachId = $this->assertIncidentCreated($response);
 
         $response->assertExactJson(['data' => [
             'id' => $breachId,
