@@ -10,6 +10,7 @@ use App\Compliance\Breach\Enums\BreachDataType;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\UseCases\Commands\AffectedCompanyData;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
+use App\Compliance\Breach\Exceptions\BreachIncidentAlreadyRecordedException;
 
 class BreachIncident extends AggregateRoot
 {
@@ -19,6 +20,10 @@ class BreachIncident extends AggregateRoot
 
     public function record(RecordBreachCommand $command, User $admin): static
     {
+        if ($this->stage !== null) {
+            throw BreachIncidentAlreadyRecordedException::withId($this->uuid());
+        }
+
         return $this->recordThat(new BreachRecorded(
             breachId: $this->uuid(),
             recordedAt: CarbonImmutable::now(),
