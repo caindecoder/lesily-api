@@ -8,7 +8,10 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Notification;
+use App\Compliance\Breach\Events\BreachRecorded;
 use Tests\Feature\PlatformAdmin\PlatformAdminTestCase;
+use App\Compliance\Breach\Entities\BreachIncidentCompany;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
 {
@@ -71,6 +74,27 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
 
     protected function assertNothingRecorded(): void
     {
+        $this->assertDatabaseCount('breach_incidents', 0);
+        $this->assertDatabaseCount('breach_incident_companies', 0);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', BreachRecorded::class)->count());
         $this->assertNoAuditRecorded();
+    }
+
+    /**
+     * @param  array<string, array{list<string>, ?int}>  $companies  each company id with its data types and count
+     */
+    protected function assertIncidentProjected(string $breachId, array $companies): void
+    {
+        $this->assertDatabaseHas('breach_incidents', ['id' => $breachId, 'stage' => 'recorded']);
+        $this->assertDatabaseCount('breach_incident_companies', count($companies));
+        $this->assertNotEmpty($companies);
+
+        foreach ($companies as $companyId => [$dataTypes, $estimatedCount]) {
+            $row = BreachIncidentCompany::query()
+                ->where('breach_incident_id', $breachId)
+                ->where('company_id', $companyId)
+                ->sole();
+            $this->assertSame([$dataTypes, $estimatedCount], [$row->data_types, $row->estimated_count]);
+        }
     }
 }

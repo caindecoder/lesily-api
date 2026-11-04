@@ -5,9 +5,14 @@ namespace Tests\Feature\Compliance\Breach;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Illuminate\Http\Response;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Compliance\Breach\Events\BreachRecorded;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RecordBreachIncidentTest extends BreachIncidentsTestCase
 {
@@ -68,6 +73,24 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertNothingRecorded();
     }
 
+    #[Test]
+    public function when_a_platform_admin_records_a_breach_then_it_is_stored_projected_audited_and_nothing_is_sent(): void
+    {
+        // Given the clock reads 2026-05-10 09:00 UTC and a breach at company A discovered on 2026-05-04 14:00 UTC
+        $this->travelTo(CarbonImmutable::parse('2026-05-10T09:00:00Z'));
+
+        // When the platform admin records the breach
+        $response = $this->recordBreach($this->admin, $this->validPayload());
+
+        // Then the incident is answered, stored as its genesis event, projected,
+        // audited once with no company, and no one is told anything yet
+        $breachId = $this->assertIncidentResponded($response);
+        $storedEventId = $this->assertBreachRecordedStored($breachId);
+        $this->assertIncidentProjected($breachId, [$this->companyA->getKey() => [['pii'], 40]]);
+        $this->assertRecordAudited($response, $breachId, $storedEventId);
+        Notification::assertNothingSent();
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string, string}>
      */
@@ -102,5 +125,72 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         }
 
         return $payload;
+    }
+
+    protected function assertIncidentResponded(TestResponse $response): string
+    {
+        $response->assertCreated();
+        $breachId = $response->json('data.id');
+        $this->assertIsString($breachId);
+
+        $response->assertExactJson(['data' => [
+            'id' => $breachId,
+            'stage' => 'recorded',
+            'severity' => 'high',
+            'description' => $this->validPayload()['description'],
+            'likely_consequences' => $this->validPayload()['likelyConsequences'],
+            'measures' => $this->validPayload()['measures'],
+            'date_discovered' => '2026-05-04T14:00:00.000000Z',
+            'deadline' => '2026-05-07T14:00:00.000000Z',
+            'recorded_at' => '2026-05-10T09:00:00.000000Z',
+            'recorded_by' => $this->admin->getKey(),
+            'companies' => [[
+                'company_id' => $this->companyA->getKey(),
+                'name' => $this->companyA->name,
+                'data_types' => ['pii'],
+                'estimated_count' => 40,
+            ]],
+        ]]);
+
+        return $breachId;
+    }
+
+    protected function assertBreachRecordedStored(string $breachId): int
+    {
+        $event = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $breachId)
+            ->where('event_class', BreachRecorded::class)
+            ->sole();
+
+        $properties = $event->event_properties;
+        $this->assertNull($event->meta_data['company_id'] ?? null);
+        $this->assertSame([$breachId, $this->admin->getKey(), 'high'], [$properties['breachId'], $properties['recordedByUserId'], $properties['severity']]);
+        $this->assertTrue(CarbonImmutable::parse($properties['deadline'])->equalTo(CarbonImmutable::parse('2026-05-07T14:00:00Z')));
+        $this->assertSame([['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40]], $properties['companies']);
+
+        return (int) $event->getKey();
+    }
+
+    protected function assertRecordAudited(TestResponse $response, string $breachId, int $storedEventId): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => null,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'BreachRecorded',
+            'subject_type' => 'breach_incident',
+            'subject_id' => $breachId,
+            'action' => 'breach_recorded',
+            'actor_user_id' => $this->admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $this->admin->name,
+            'ip_address' => '127.0.0.1',
+        ]);
+
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+        $entry = AuditEntry::query()->sole();
+        $this->assertSame($correlationId, $entry->request_id);
+        $this->assertSame('Symfony', $entry->user_agent);
     }
 }

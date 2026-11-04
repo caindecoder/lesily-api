@@ -20,4 +20,5 @@ enum AuditAction: string
     case CaseViewed = 'case_viewed';
     case CaseQueueViewed = 'case_queue_viewed';
     case AdminReviewed = 'admin_reviewed';
+    case BreachRecorded = 'breach_recorded';
 }
