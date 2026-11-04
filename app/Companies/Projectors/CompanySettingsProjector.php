@@ -3,6 +3,7 @@
 namespace App\Companies\Projectors;
 
 use App\Companies\Entities\CompanySettings;
+use App\Companies\Events\CompanySettingReset;
 use App\Companies\Events\CompanySettingsCreated;
 use App\Companies\Events\CompanySettingsUpdated;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
@@ -40,5 +41,11 @@ class CompanySettingsProjector extends Projector
 
         CompanySettings::query()->where('company_id', $event->aggregateRootUuid())
             ->update($changes);
+    }
+
+    public function onCompanySettingReset(CompanySettingReset $event): void
+    {
+        CompanySettings::query()->where('company_id', $event->aggregateRootUuid())
+            ->update([$event->setting => null]);
     }
 }

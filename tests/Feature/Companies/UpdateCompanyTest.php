@@ -5,10 +5,13 @@ namespace Tests\Feature\Companies;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanySettings;
+use App\Companies\Events\CompanySettingReset;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Events\CompanySettingsUpdated;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
  * UC-1-033 Update Company Details (slice-companies Task 6). PUT /api/v1/companies/{companyId}
@@ -109,6 +112,7 @@ class UpdateCompanyTest extends CompaniesTestCase
             'working days above seven' => [['workingDaysPerWeek' => 8], 'workingDaysPerWeek', 'The working days per week field must be between 1 and 7.'],
             'work hours below zero' => [['defaultWorkHoursPerDay' => -1], 'defaultWorkHoursPerDay', 'The default work hours per day field must be between 0 and 24.'],
             'work hours above twenty four' => [['defaultWorkHoursPerDay' => 25], 'defaultWorkHoursPerDay', 'The default work hours per day field must be between 0 and 24.'],
+            'work hours finer than two decimals' => [['defaultWorkHoursPerDay' => 8.001], 'defaultWorkHoursPerDay', 'The default work hours per day field must have 0-2 decimal places.'],
         ];
     }
 
@@ -251,25 +255,87 @@ class UpdateCompanyTest extends CompaniesTestCase
         $this->assertOnlySettingsEventRecorded($company, 'Asia/Singapore');
     }
 
-    // Edge — the aggregate is guardless: re-submitting the current values still
-    // records both events (no diff-check — the audit trail reflects the action,
-    // changeRole same-role precedent).
     #[Test]
-    public function when_submitted_values_match_current_then_update_is_still_recorded(): void
+    public function when_submitted_setting_equals_the_country_default_while_following_then_nothing_is_recorded_for_it(): void
     {
-        // Given the owner of a company with the default LK settings
+        // Given the owner of a company that follows Sri Lanka's timezone
         $company = Company::factory()->withSettings()->named('Same Co')->create();
         $owner = $this->aCompanyMember($company, 'owner');
 
-        // When they re-submit the current name and timezone unchanged
+        // When they submit the current name and Sri Lanka's own timezone
         $response = $this->updateCompanyDetails($owner, $company->getKey(), [
             'name' => 'Same Co',
             'timezone' => 'Asia/Colombo',
         ]);
 
-        // Then both events are still recorded
+        // Then only the name is recorded and the timezone still follows the country
         $response->assertOk();
-        $this->assertUpdateEventsRecorded($company);
+        $this->assertOnlyDetailsEventRecorded($company, 'Same Co');
+        $this->assertSettingFollowsTheCountry($company, 'timezone');
+    }
+
+    #[Test]
+    #[DataProvider('provideSriLankaDefaults')]
+    public function when_submitted_setting_equals_the_country_default_over_an_own_value_then_it_follows_the_country(string $field, string $setting, int|string $sriLankaDefault): void
+    {
+        // Given the owner of a company with its own settings
+        $company = Company::factory()->withOwnSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they submit Sri Lanka's own value for one of them
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), [$field => $sriLankaDefault]);
+
+        // Then that setting follows the country again and the reset is recorded
+        $response->assertOk();
+        $this->assertSettingFollowsTheCountry($company, $setting);
+        $this->assertResetRecorded($company, $setting, $owner->getKey());
+    }
+
+    #[Test]
+    public function when_two_settings_are_submitted_at_the_country_default_over_own_values_then_both_follow_the_country(): void
+    {
+        // Given the owner of a company with its own settings
+        $company = Company::factory()->withOwnSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they submit Sri Lanka's timezone and working days together
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['timezone' => 'Asia/Colombo', 'workingDaysPerWeek' => 5]);
+
+        // Then both follow the country again, each with its own reset
+        $response->assertOk();
+        $this->assertResetRecorded($company, 'timezone', $owner->getKey());
+        $this->assertResetRecorded($company, 'working_days_per_week', $owner->getKey());
+        $this->assertSettingFollowsTheCountry($company, 'timezone');
+        $this->assertSettingFollowsTheCountry($company, 'working_days_per_week');
+    }
+
+    #[Test]
+    public function when_one_setting_is_submitted_at_the_country_default_and_another_changes_then_each_is_recorded_as_such(): void
+    {
+        // Given the owner of a company with its own settings
+        $company = Company::factory()->withOwnSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+
+        // When they submit Sri Lanka's timezone and new working days together
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['timezone' => 'Asia/Colombo', 'workingDaysPerWeek' => 4]);
+
+        // Then the timezone follows the country and the working days become the company's own
+        $response->assertOk();
+        $this->assertSettingFollowsTheCountry($company, 'timezone');
+        $this->assertOnlyWorkingDaysUpdatedTo($company, 4);
+    }
+
+    /**
+     * @return array<string, array{string, string, int|string}>
+     */
+    public static function provideSriLankaDefaults(): array
+    {
+        return [
+            'timezone' => ['timezone', 'timezone', 'Asia/Colombo'],
+            'fiscal year start' => ['fiscalYearStartMonth', 'fiscal_year_start_month', 4],
+            'working days' => ['workingDaysPerWeek', 'working_days_per_week', 5],
+            'work hours sent as a whole number' => ['defaultWorkHoursPerDay', 'default_work_hours_per_day', 8],
+        ];
     }
 
     // Edge — an empty payload is a no-op: nothing is submitted, so no event fires
@@ -384,7 +450,7 @@ class UpdateCompanyTest extends CompaniesTestCase
         $response = $this->updateCompanyDetails($owner, $company->getKey(), [
             'name' => 'Contoso (Pvt) Ltd',
             'timezone' => 'Asia/Singapore',
-            'fiscalYearStartMonth' => 4,
+            'fiscalYearStartMonth' => 9,
             'workingDaysPerWeek' => 6,
             'defaultWorkHoursPerDay' => 7.5,
         ]);
@@ -399,10 +465,24 @@ class UpdateCompanyTest extends CompaniesTestCase
         $this->assertDatabaseHas('company_settings', [
             'company_id' => $company->getKey(),
             'timezone' => 'Asia/Singapore',
-            'fiscal_year_start_month' => 4,
+            'fiscal_year_start_month' => 9,
             'working_days_per_week' => 6,
             'default_work_hours_per_day' => 7.5,
         ]);
         $this->assertCompanyUpdateWasEventSourced($company, $owner->getKey());
+    }
+
+    protected function assertOnlyWorkingDaysUpdatedTo(Company $company, int $workingDays): void
+    {
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanySettingReset::class)
+            ->where('event_properties->setting', 'timezone')
+            ->whereForCompany($company->getKey())->count());
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanySettingsUpdated::class)
+            ->whereNull('event_properties->timezone')
+            ->where('event_properties->workingDaysPerWeek', $workingDays)
+            ->whereForCompany($company->getKey())->count());
+        $this->assertSame($workingDays, CompanySettings::query()->where('company_id', $company->getKey())->sole()->working_days_per_week);
     }
 }

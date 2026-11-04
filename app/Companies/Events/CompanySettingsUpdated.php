@@ -7,8 +7,10 @@ use Spatie\EventSourcing\StoredEvents\ShouldBeStored;
 
 /**
  * The company's editable settings changed (UC-1-033; a non-lifecycle attribute
- * mutation, no SM transition). Only the submitted fields are non-null and the
- * projector writes exactly those (partial update). companyId rides the stream
+ * mutation, no SM transition). Only the fields that become own values are
+ * non-null and the projector writes exactly those (partial update). A field
+ * sent with its country's value is recorded as CompanySettingReset or not at
+ * all (UC-1-058). companyId rides the stream
  * metadata (the projector reads aggregateRootUuid); updatedBy is the acting
  * owner/admin and updatedAt anchors the audit trail.
  */

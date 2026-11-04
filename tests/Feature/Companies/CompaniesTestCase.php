@@ -10,6 +10,7 @@ use Illuminate\Testing\TestResponse;
 use App\Consent\Events\ConsentRecorded;
 use App\Companies\Entities\CompanySettings;
 use Tests\Concerns\InducesProjectorFailures;
+use App\Companies\Events\CompanySettingReset;
 use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\CountryConfig\Entities\Country;
@@ -226,22 +227,6 @@ abstract class CompaniesTestCase extends TestCase
     }
 
     /**
-     * A no-op update (the current values re-submitted) still recorded both events:
-     * the aggregate is guardless — it does not diff before recording (changeRole
-     * same-role precedent). One details event, one settings event, two in total.
-     */
-    protected function assertUpdateEventsRecorded(Company $company): void
-    {
-        $this->assertSame(1, LesilyStoredEvent::query()
-            ->where('event_class', CompanyDetailsUpdated::class)
-            ->whereForCompany($company->getKey())->count());
-        $this->assertSame(1, LesilyStoredEvent::query()
-            ->where('event_class', CompanySettingsUpdated::class)
-            ->whereForCompany($company->getKey())->count());
-        $this->assertSame(2, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
-    }
-
-    /**
      * Both edits landed the event-sourced way: a CompanyDetailsUpdated and a
      * CompanySettingsUpdated stored event, each scoped to the company and stamped
      * with the acting user + an updatedAt, carry the new read-model values
@@ -271,5 +256,28 @@ abstract class CompaniesTestCase extends TestCase
             ->whereNotNull('event_properties->updatedAt')
             ->where('company_id', $company->getKey())
             ->count());
+    }
+
+    protected function assertSettingFollowsTheCountry(Company $company, string $setting): void
+    {
+        $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
+
+        $this->assertNull($settings->getAttribute($setting));
+        $this->assertTrue($settings->followsTheCountry($setting));
+        $this->assertSame(Country::query()->where('code', 'LK')->sole()->getAttribute($setting), $settings->valueThatApplies($setting));
+    }
+
+    protected function assertResetRecorded(Company $company, string $setting, string $resetBy): void
+    {
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', CompanySettingReset::class)
+            ->where('event_properties->setting', $setting)
+            ->where('event_properties->resetBy', $resetBy)
+            ->whereNotNull('event_properties->resetAt')
+            ->whereForCompany($company->getKey())
+            ->count());
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('event_class', CompanySettingsUpdated::class)
+            ->whereForCompany($company->getKey())->count());
     }
 }

@@ -4,6 +4,7 @@ namespace App\Companies\UseCases\Commands;
 
 use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
+use App\Companies\Enums\ResettableSetting;
 use Illuminate\Validation\ValidationException;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
@@ -49,12 +50,19 @@ class UpdateCompanyCommand extends Data
         return static::validateAndCreate($request->all());
     }
 
-    public function hasSettingsChanges(): bool
+    /**
+     * The settings this update carries, keyed by their column.
+     *
+     * @return array<string, int|float|string>
+     */
+    public function settingsSent(): array
     {
-        return $this->timezone !== null
-            || $this->fiscalYearStartMonth !== null
-            || $this->workingDaysPerWeek !== null
-            || $this->defaultWorkHoursPerDay !== null;
+        return array_filter([
+            ResettableSetting::Timezone->value => $this->timezone,
+            ResettableSetting::FiscalYearStartMonth->value => $this->fiscalYearStartMonth,
+            ResettableSetting::WorkingDaysPerWeek->value => $this->workingDaysPerWeek,
+            ResettableSetting::DefaultWorkHoursPerDay->value => $this->defaultWorkHoursPerDay,
+        ], static fn (int|float|string|null $value): bool => $value !== null);
     }
 
     /**
@@ -63,15 +71,15 @@ class UpdateCompanyCommand extends Data
     public static function rules(ValidationContext $context): array
     {
         // sometimes: a partial update validates only the keys it carries. required:
-        // a present key may not be null/empty (an empty setting means "follow the
-        // country", which an update does not set, and a name cannot be blanked). The domain bounds mirror the fiscal-month
+        // a present key may not be null/empty (a setting follows the country again
+        // when its country's value is sent, and a name cannot be blanked). The domain bounds mirror the fiscal-month
         // (1-12), week (1-7) and day-hours (0-24) ranges the settings columns model.
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'timezone' => ['sometimes', 'required', 'timezone'],
             'fiscalYearStartMonth' => ['sometimes', 'required', 'integer', 'between:1,12'],
             'workingDaysPerWeek' => ['sometimes', 'required', 'integer', 'between:1,7'],
-            'defaultWorkHoursPerDay' => ['sometimes', 'required', 'numeric', 'between:0,24'],
+            'defaultWorkHoursPerDay' => ['sometimes', 'required', 'numeric', 'between:0,24', 'decimal:0,2'],
         ];
     }
 }

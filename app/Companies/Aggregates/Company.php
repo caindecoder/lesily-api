@@ -6,7 +6,9 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use App\Companies\Enums\CompanyStatus;
 use App\Companies\Events\CompanyCreated;
+use App\Companies\Enums\ResettableSetting;
 use App\Foundation\EventStore\AggregateRoot;
+use App\Companies\Events\CompanySettingReset;
 use App\Companies\Events\CompanyTrialExpired;
 use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsCreated;
@@ -47,13 +49,13 @@ class Company extends AggregateRoot
     }
 
     /**
-     * Update the editable details (UC-1-033). Guardless (mirrors changePassword /
-     * changeRole — name/settings are projected columns, not aggregate state), and
-     * conditional: the details event fires only when a name is supplied, the
-     * settings event only when a settings field is. forCompany re-tags the tenant
-     * so the events carry company_id metadata even for a read-model-seeded company.
+     * Update the editable details (UC-1-033). The details event fires only when
+     * a name is supplied. A setting sent with its country's default over an own
+     * value follows the country again (UC-1-058); the other sent settings become
+     * own values. forCompany re-tags the tenant so the events carry company_id
+     * metadata even for a read-model-seeded company.
      */
-    public function updateDetails(UpdateCompanyCommand $command, string $updatedBy): static
+    public function updateDetails(UpdateCompanyCommand $command, SettingsBaseline $baseline, string $updatedBy): static
     {
         $this->forCompany($this->uuid());
 
@@ -65,18 +67,49 @@ class Company extends AggregateRoot
             ));
         }
 
-        if ($command->hasSettingsChanges()) {
+        foreach ($baseline->settingsFollowingAgain($command->settingsSent()) as $setting) {
+            $this->recordReset($setting, $updatedBy);
+        }
+
+        /** @var array{timezone?: string, fiscal_year_start_month?: int, working_days_per_week?: int, default_work_hours_per_day?: float} $ownValues */
+        $ownValues = $baseline->ownValueChanges($command->settingsSent());
+
+        if ($ownValues !== []) {
             $this->recordThat(new CompanySettingsUpdated(
-                timezone: $command->timezone,
-                fiscalYearStartMonth: $command->fiscalYearStartMonth,
-                workingDaysPerWeek: $command->workingDaysPerWeek,
-                defaultWorkHoursPerDay: $command->defaultWorkHoursPerDay,
+                timezone: $ownValues['timezone'] ?? null,
+                fiscalYearStartMonth: $ownValues['fiscal_year_start_month'] ?? null,
+                workingDaysPerWeek: $ownValues['working_days_per_week'] ?? null,
+                defaultWorkHoursPerDay: $ownValues['default_work_hours_per_day'] ?? null,
                 updatedBy: $updatedBy,
                 updatedAt: CarbonImmutable::now(),
             ));
         }
 
         return $this;
+    }
+
+    /**
+     * Put one setting back on its country's default (UC-1-058); a setting that
+     * already follows records nothing.
+     */
+    public function resetSetting(ResettableSetting $setting, SettingsBaseline $baseline, string $resetBy): static
+    {
+        if (! $baseline->hasOwnValue($setting)) {
+            return $this;
+        }
+
+        $this->forCompany($this->uuid());
+
+        return $this->recordReset($setting, $resetBy);
+    }
+
+    protected function recordReset(ResettableSetting $setting, string $resetBy): static
+    {
+        return $this->recordThat(new CompanySettingReset(
+            setting: $setting->value,
+            resetBy: $resetBy,
+            resetAt: CarbonImmutable::now(),
+        ));
     }
 
     public function trialExpire(): static
