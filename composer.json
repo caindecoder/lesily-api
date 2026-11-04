@@ -1,10 +1,10 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/laravel",
+    "name": "caindecoder/lesily-api",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
+    "description": "Lesily HR and payroll SaaS - the API.",
     "keywords": ["laravel", "framework"],
-    "license": "MIT",
+    "license": "proprietary",
     "require": {
         "php": "^8.4",
         "darkaonline/l5-swagger": "^11.0",
