@@ -42,6 +42,7 @@ use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
 use App\Foundation\Auth\IO\Http\Controllers\ResendVerificationEmailController;
 use App\Compliance\Dsar\IO\Http\Controllers\PlatformAdminDsarRequestsController;
 use App\Companies\IO\Http\Controllers\PlatformAdminOwnershipTransferCasesController;
+use App\Compliance\Breach\IO\Http\Controllers\PlatformAdminBreachIncidentsController;
 
 // Health is operational tooling and opts out of the platform cross-cutting
 // middleware (no Correlation-Id) — UC-1-118 / cd-foundation-http §4.2.
@@ -455,3 +456,7 @@ Route::get('/v1/admin/dsar-requests', [PlatformAdminDsarRequestsController::clas
 // only, no auth.company; one audit row per read, written with the read (an audit failure vetoes it).
 Route::get('/v1/admin/dsar-requests/{requestId}', [PlatformAdminDsarRequestsController::class, 'show'])
     ->middleware(['auth:sanctum', 'platform.admin']);
+
+// A platform admin records a data breach (UC-1-072) - auth:sanctum + platform.admin only, no auth.company.
+Route::post('/v1/admin/breach-incidents', [PlatformAdminBreachIncidentsController::class, 'store'])
+    ->middleware(['auth:sanctum']);
