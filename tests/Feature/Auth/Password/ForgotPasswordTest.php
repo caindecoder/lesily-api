@@ -218,6 +218,7 @@ class ForgotPasswordTest extends AuthTestCase
                 return $notification->token !== ''
                     && $notification->via($user) === ['mail']
                     && $mail->subject === 'Reset your password'
+                    && is_string($mail->actionUrl)
                     && str_contains(
                         $mail->actionUrl,
                         '/reset-password?token='.$notification->token.'&email='.urlencode($user->getEmailForPasswordReset()),
