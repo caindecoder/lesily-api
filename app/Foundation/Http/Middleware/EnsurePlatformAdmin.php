@@ -18,8 +18,9 @@ use App\Foundation\RolesPermissions\Services\PlatformAdminAllowlist;
  * INTERIM binding (slice-plans-billing B2): an env allowlist of user ids, to
  * be replaced by the platform-admin slice's real admin auth. Extending it to a
  * further admin surface needs that surface's slice design — the invoice review
- * (UC-1-122) and the ownership-transfer case family (slice-11R spec §4 seam
- * reuse) are the two designed consumers.
+ * (UC-1-122), the ownership-transfer cases (slice-11R spec §4), the DSAR admin
+ * reads (UC-1-123/124) and the breach incidents (slice-breach-incidents) are
+ * the designed consumers.
  */
 class EnsurePlatformAdmin
 {
