@@ -30,5 +30,9 @@ See `../Documentation/05-operations/git-conventions.md` for commit message forma
 
 Scaffolded with Laravel 13 + PHPUnit 12 + Larastan Level 8 + Pint + Lefthook + Infection (MSI ≥80%) + Telescope + Sentry + Boost on 2026-05-13 (chunk-1 TDD-RED beginning). See `../Documentation/06-design/chunk-1/foundation-brief.md` + the N+2 coding plan.
 
+## Licence
+
+Proprietary — all rights reserved; no licence is granted. See [`LICENSE`](LICENSE). Third-party material (dependencies, the Inter font with its `resources/fonts/inter/OFL.txt`) keeps its own licence.
+
 ---
 *© 2026 Chamil Abeysinghe | FusionRealm | @caindecoder*
