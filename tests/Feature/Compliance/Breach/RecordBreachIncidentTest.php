@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Compliance\Breach;
 
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Illuminate\Http\Response;
@@ -74,6 +75,20 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_the_audit_entry_cannot_be_written_then_no_breach_is_recorded(): void
+    {
+        // Given the audit write will fail
+        AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the admin records a breach
+        $response = $this->recordBreach($this->admin, $this->validPayload());
+
+        // Then the request fails safely and the event, the rows and the audit row are all absent
+        $this->assertRecordFailedSafely($response);
+        $this->assertNothingRecorded();
+    }
+
+    #[Test]
     public function when_a_platform_admin_records_a_breach_then_it_is_stored_projected_audited_and_nothing_is_sent(): void
     {
         // Given the clock reads 2026-05-10 09:00 UTC and a breach at company A discovered on 2026-05-04 14:00 UTC
@@ -125,6 +140,12 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         }
 
         return $payload;
+    }
+
+    protected function assertRecordFailedSafely(TestResponse $response): void
+    {
+        $response->assertInternalServerError();
+        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
     }
 
     protected function assertIncidentResponded(TestResponse $response): string
