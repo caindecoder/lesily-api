@@ -459,4 +459,4 @@ Route::get('/v1/admin/dsar-requests/{requestId}', [PlatformAdminDsarRequestsCont
 
 // A platform admin records a data breach (UC-1-072) - auth:sanctum + platform.admin only, no auth.company.
 Route::post('/v1/admin/breach-incidents', [PlatformAdminBreachIncidentsController::class, 'store'])
-    ->middleware(['auth:sanctum']);
+    ->middleware(['auth:sanctum', 'platform.admin']);

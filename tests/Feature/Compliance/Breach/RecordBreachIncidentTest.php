@@ -18,4 +18,18 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertUnauthenticated($response);
         $this->assertNothingRecorded();
     }
+
+    #[Test]
+    public function when_a_company_owner_records_a_breach_then_the_admin_surface_is_not_acknowledged(): void
+    {
+        // Given the owner of an affected company, who is not a platform admin
+        $owner = $this->aCompanyMember($this->companyA, 'owner');
+
+        // When the owner records a breach
+        $response = $this->recordBreach($owner, $this->validPayload());
+
+        // Then the admin surface answers as if it did not exist and nothing is recorded
+        $this->assertResourceNotFoundNoLeak($response);
+        $this->assertNothingRecorded();
+    }
 }
