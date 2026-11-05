@@ -462,6 +462,11 @@ Route::get('/v1/admin/dsar-requests/{requestId}', [PlatformAdminDsarRequestsCont
 Route::post('/v1/admin/breach-incidents', [PlatformAdminBreachIncidentsController::class, 'store'])
     ->middleware(['auth:sanctum', 'platform.admin', 'idempotency-key:required']);
 
+// A platform admin reviews the breach queue (UC-1-129) - auth:sanctum + platform.admin only, no auth.company;
+// one audit row per read, written with the read.
+Route::get('/v1/admin/breach-incidents', [PlatformAdminBreachIncidentsController::class, 'index'])
+    ->middleware(['auth:sanctum', 'platform.admin']);
+
 // A platform admin views one breach incident (UC-1-129) - auth:sanctum + platform.admin only, no auth.company;
 // one audit row per read, written with the read (an audit failure vetoes it).
 Route::get('/v1/admin/breach-incidents/{breachId}', [PlatformAdminBreachIncidentsController::class, 'show'])
