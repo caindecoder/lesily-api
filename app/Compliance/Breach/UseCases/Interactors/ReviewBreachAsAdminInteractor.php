@@ -31,7 +31,6 @@ class ReviewBreachAsAdminInteractor
     protected function recordAdminRead(BreachIncidentRecord $breach, User $admin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
-            'stored_event_id' => null,
             'event_class' => 'BreachIncidentViewedByAdmin',
             'subject_type' => AuditSubjectType::BreachIncident,
             'subject_id' => $breach->getKey(),
