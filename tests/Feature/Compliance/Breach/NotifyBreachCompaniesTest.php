@@ -16,10 +16,12 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Breach\Enums\BreachDataType;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Breach\Events\BreachRecorded;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
+use App\Compliance\Breach\Events\BreachCompaniesNotified;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -31,6 +33,16 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     protected const string NOTIFIED_AT = '2026-05-05 14:00:00';
 
     protected const string NOTIFIED_AT_JSON = '2026-05-05T14:00:00.000000Z';
+
+    protected Company $acme;
+
+    protected Company $globex;
+
+    /** @var list<User> */
+    protected array $acmeMembers;
+
+    /** @var list<User> */
+    protected array $globexMembers;
 
     protected function setUp(): void
     {
@@ -200,22 +212,33 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     {
         // Given a recorded incident naming Acme Holdings (personal and bank details, 120 people)
         // and Globex Traders (payroll records, 30 people), each with an owner and an admin
-        $acme = Company::factory()->named('Acme Holdings')->createOne();
-        $globex = Company::factory()->named('Globex Traders')->createOne();
-        $breachId = $this->aRecordedIncident(['companies' => [
-            ['companyId' => $acme->getKey(), 'dataTypes' => ['pii', 'banking'], 'estimatedCount' => 120],
-            ['companyId' => $globex->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 30],
-        ]]);
-        $acmeMembers = [$this->aCompanyMember($acme, 'owner'), $this->aCompanyMember($acme, 'admin')];
-        $globexMembers = [$this->aCompanyMember($globex, 'owner'), $this->aCompanyMember($globex, 'admin')];
+        $breachId = $this->anIncidentNamingAcmeAndGlobex();
 
         // When the admin presses notify and the notices leave the queue
         $this->notifyCompanies($this->admin, $breachId);
         $this->runTheNotices();
 
         // Then each company's owner and admin hear that company's own part and nothing of the other's
-        $this->assertToldOnceEach($acmeMembers, $acme, $this->partFor('Personal details, Bank details', '120'));
-        $this->assertToldOnceEach($globexMembers, $globex, $this->partFor('Payroll records', '30'));
+        $this->assertAcmeAndGlobexToldTheirOwnParts();
+    }
+
+    protected function anIncidentNamingAcmeAndGlobex(): string
+    {
+        $this->acme = Company::factory()->named('Acme Holdings')->createOne();
+        $this->globex = Company::factory()->named('Globex Traders')->createOne();
+        $this->acmeMembers = [$this->aCompanyMember($this->acme, 'owner'), $this->aCompanyMember($this->acme, 'admin')];
+        $this->globexMembers = [$this->aCompanyMember($this->globex, 'owner'), $this->aCompanyMember($this->globex, 'admin')];
+
+        return $this->aRecordedIncident(['companies' => [
+            ['companyId' => $this->acme->getKey(), 'dataTypes' => ['pii', 'banking'], 'estimatedCount' => 120],
+            ['companyId' => $this->globex->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 30],
+        ]]);
+    }
+
+    protected function assertAcmeAndGlobexToldTheirOwnParts(): void
+    {
+        $this->assertToldOnceEach($this->acmeMembers, $this->acme, $this->partFor('Personal details, Bank details', '120'));
+        $this->assertToldOnceEach($this->globexMembers, $this->globex, $this->partFor('Payroll records', '30'));
         Notification::assertCount(4);
     }
 
@@ -255,6 +278,81 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         return collect(BreachDataType::cases())
             ->mapWithKeys(fn (BreachDataType $type): array => [$type->value => [$type->value, $words[$type->value] ?? 'no words for '.$type->value]])
             ->all();
+    }
+
+    #[Test]
+    public function when_an_admin_notifies_the_companies_then_they_are_recorded_projected_audited_and_told(): void
+    {
+        // Given a recorded incident naming Acme Holdings and Globex Traders, each with an owner and an admin
+        $breachId = $this->anIncidentNamingAcmeAndGlobex();
+        $this->travelTo(self::NOTIFIED_AT);
+
+        // When the admin presses notify and the notices leave the queue
+        $response = $this->notifyCompanies($this->admin, $breachId);
+        $this->runTheNotices();
+
+        // Then each company's notice is recorded and projected, the action is audited,
+        // and each company's owner and admin hear that company's own part
+        $this->assertNotified($response, $breachId);
+        $storedEventId = $this->assertNotificationsStored($breachId);
+        $this->assertNotifyAudited($response, $breachId, $storedEventId);
+        $this->assertAcmeAndGlobexToldTheirOwnParts();
+    }
+
+    protected function assertNotificationsStored(string $breachId): int
+    {
+        $events = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->orderBy('id')->get();
+        $this->assertSame(
+            [BreachRecorded::class, BreachCompanyNotified::class, BreachCompanyNotified::class, BreachCompaniesNotified::class],
+            $events->pluck('event_class')->all(),
+        );
+
+        $parts = $events->where('event_class', BreachCompanyNotified::class)
+            ->mapWithKeys(fn (LesilyStoredEvent $event): array => [$event->event_properties['companyId'] => [
+                $event->event_properties['notifiedByUserId'],
+                CarbonImmutable::parse($event->event_properties['notifiedAt'])->toIso8601String(),
+                $event->event_properties['part'],
+            ]])->all();
+        $notifiedAt = CarbonImmutable::parse(self::NOTIFIED_AT)->toIso8601String();
+        $this->assertEquals([
+            $this->acme->getKey() => [$this->admin->getKey(), $notifiedAt, $this->partFor('Personal details, Bank details', '120')],
+            $this->globex->getKey() => [$this->admin->getKey(), $notifiedAt, $this->partFor('Payroll records', '30')],
+        ], $parts);
+
+        $closing = $events->last();
+        $this->assertSame([$this->admin->getKey(), $notifiedAt], [
+            $closing->event_properties['notifiedByUserId'],
+            CarbonImmutable::parse($closing->event_properties['notifiedAt'])->toIso8601String(),
+        ]);
+
+        return (int) $closing->getKey();
+    }
+
+    protected function assertNotifyAudited(TestResponse $response, string $breachId, int $storedEventId): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => null,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'BreachCompaniesNotified',
+            'subject_type' => 'breach_incident',
+            'subject_id' => $breachId,
+            'subject_label' => null,
+            'action' => 'breach_companies_notified',
+            'description' => 'Platform admin notified the companies affected by a data breach.',
+            'metadata' => null,
+            'recorded_at' => self::NOTIFIED_AT,
+            'actor_user_id' => $this->admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $this->admin->name,
+            'ip_address' => '127.0.0.1',
+            'severity' => 'critical',
+        ]);
+
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+        $entry = AuditEntry::query()->sole();
+        $this->assertSame([$correlationId, 'Symfony'], [$entry->request_id, $entry->user_agent]);
     }
 
     /**
