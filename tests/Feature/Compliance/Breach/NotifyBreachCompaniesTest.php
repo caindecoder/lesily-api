@@ -11,6 +11,7 @@ use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
+use Illuminate\Support\Facades\Exceptions;
 use App\Compliance\Breach\Enums\BreachStage;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -287,6 +288,26 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
             ->where('event_class', BreachCompaniesNotified::class)
             ->sole()
             ->getKey();
+    }
+
+    #[Test]
+    public function when_a_company_has_nobody_to_tell_then_the_gap_is_reported_and_the_others_are_told(): void
+    {
+        // Given a recorded incident naming company A (an owner and an admin) and company B (no members)
+        $breachId = $this->aRecordedIncident(['companies' => [
+            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
+            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
+        ]]);
+        $toldMembers = [$this->aCompanyMember($this->companyA, 'owner'), $this->aCompanyMember($this->companyA, 'admin')];
+        Exceptions::fake();
+
+        // When the admin presses notify and the notices leave the queue
+        $this->notifyCompanies($this->admin, $breachId);
+        $this->runTheNotices();
+
+        // Then B's missing recipients are reported and A's owner and admin are still told
+        Exceptions::assertReported(fn (RuntimeException $gap): bool => $gap->getMessage() === "No owner or admin of company {$this->companyB->getKey()} to tell about breach incident {$breachId}.");
+        $this->assertToldExactly($toldMembers, $this->companyA);
     }
 
     #[Test]
