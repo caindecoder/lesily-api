@@ -2,11 +2,14 @@
 
 namespace Tests\Feature\Compliance\Breach;
 
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Response;
+use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
+use App\Companies\Entities\CompanyUser;
 use App\Compliance\Breach\Enums\BreachStage;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -14,6 +17,7 @@ use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
+use App\Foundation\Notifications\Enums\NotificationType;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Foundation\Notifications\Notifications\SystemNotification;
@@ -151,6 +155,51 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         // Then the incident is at companies notified and A's owner and both admins are told
         $this->assertNotified($response, $breachId);
         Notification::assertCount(3);
+    }
+
+    #[Test]
+    public function when_a_company_has_other_members_then_only_the_owner_and_admins_are_told(): void
+    {
+        // Given a recorded incident naming company A, which has an owner, two admins,
+        // an HR officer, a payroll officer, two employees and an admin who was removed
+        $breachId = $this->aRecordedIncident();
+        $toldMembers = $this->anOwnerAndAdmins($this->companyA);
+        foreach (['hr_officer', 'payroll_officer', 'employee', 'employee'] as $role) {
+            $this->aCompanyMember($this->companyA, $role);
+        }
+        $this->aRemovedMember($this->companyA, 'admin');
+
+        // When the admin presses notify and the notices leave the queue
+        $this->notifyCompanies($this->admin, $breachId);
+        $this->runTheNotices();
+
+        // Then only the owner and the two current admins are told, once each
+        $this->assertToldExactly($toldMembers, $this->companyA);
+    }
+
+    protected function aRemovedMember(Company $company, string $roleCode): void
+    {
+        $member = $this->aCompanyMember($company, $roleCode);
+
+        CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $member->getKey())
+            ->update(['deleted_at' => now()]);
+    }
+
+    /**
+     * @param  list<User>  $recipients
+     */
+    protected function assertToldExactly(array $recipients, Company $company): void
+    {
+        $this->assertNotEmpty($recipients);
+        foreach ($recipients as $recipient) {
+            Notification::assertSentToTimes($recipient, SystemNotification::class, 1);
+            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->type === NotificationType::BreachCompanyNotice
+                && $notice->companyName === $company->name
+                && $notice->companyId === $company->getKey());
+        }
+        Notification::assertCount(count($recipients));
     }
 
     protected function runTheNotices(): void

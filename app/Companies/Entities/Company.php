@@ -141,6 +141,7 @@ class Company extends Model
     {
         return $this->users()
             ->wherePivotIn('role_id', Role::query()->whereIn('code', ['owner', 'admin'])->pluck('id'))
+            ->wherePivotNull('deleted_at')
             ->get();
     }
 
