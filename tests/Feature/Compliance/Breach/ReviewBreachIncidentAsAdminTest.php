@@ -128,6 +128,53 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         $this->assertDetailReadAudited($response, $incident);
     }
 
+    #[Test]
+    public function when_a_resolved_incident_is_opened_then_its_resolution_missed_deadline_and_filing_are_shown(): void
+    {
+        // Given an incident that missed its deadline, was filed with the regulator for company A, then was resolved
+        $incident = $this->anIncident()->deadlineMissed()->resolved()->createOne();
+        $owner = $this->aCompanyMember($this->companyA, 'owner');
+        BreachIncidentCompany::factory()->forIncident($incident, $this->companyA)->filed($owner->getKey(), $this->admin->getKey())->createOne();
+
+        // When the admin opens the incident
+        $response = $this->showIncident($this->admin, $incident->getKey());
+
+        // Then the missed deadline, the resolution and the filing are each shown in their own field
+        $response->assertOk();
+        $this->assertSame(
+            [
+                '2026-05-08T00:00:00.000000Z', '2026-05-09T14:00:00.000000Z', $this->admin->getKey(),
+                $incident->root_cause, $incident->remediation_steps, $incident->resolution_summary,
+                '2026-05-07T14:00:00.000000Z',
+            ],
+            [
+                $response->json('data.deadline_missed_at'), $response->json('data.resolved_at'), $response->json('data.resolved_by'),
+                $response->json('data.root_cause'), $response->json('data.remediation_steps'), $response->json('data.resolution_summary'),
+                $response->json('data.companies.0.filed_at'),
+            ],
+        );
+    }
+
+    #[Test]
+    public function when_a_false_alarm_is_opened_then_its_reason_and_findings_are_shown(): void
+    {
+        // Given an incident closed as a false alarm
+        $incident = $this->anIncident()->falseAlarm()->withCompany($this->companyA, ['pii'], 40)->createOne();
+
+        // When the admin opens the incident
+        $response = $this->showIncident($this->admin, $incident->getKey());
+
+        // Then when, by whom, why and what was found are each shown in their own field
+        $response->assertOk();
+        $this->assertSame(
+            ['2026-05-05T14:00:00.000000Z', $this->admin->getKey(), $incident->false_alarm_reason, $incident->false_alarm_findings],
+            [
+                $response->json('data.false_alarm_at'), $response->json('data.false_alarm_by'),
+                $response->json('data.false_alarm_reason'), $response->json('data.false_alarm_findings'),
+            ],
+        );
+    }
+
     /**
      * @return array<string, array{?int, ?int, ?int}>
      */

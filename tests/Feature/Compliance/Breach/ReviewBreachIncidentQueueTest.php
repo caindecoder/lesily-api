@@ -169,6 +169,30 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_incidents_are_past_their_first_stage_then_each_row_shows_its_stage_stamps(): void
+    {
+        // Given an incident that missed its deadline and was resolved, and one closed as a false alarm a week later
+        $resolved = $this->anIncident()->deadlineMissed()->resolved()->createOne();
+        $falseAlarm = $this->anIncident()->dueAt('2026-05-14 14:00:00')->falseAlarm()->createOne();
+
+        // When the admin opens the queue
+        $response = $this->listQueue($this->admin);
+
+        // Then each row carries its own stage stamps, each in its own field
+        $this->assertListed($response, [$resolved, $falseAlarm]);
+        $this->assertSame(
+            [
+                ['2026-05-08T00:00:00.000000Z', '2026-05-05T14:00:00.000000Z', '2026-05-09T14:00:00.000000Z', null],
+                [null, null, null, '2026-05-12T14:00:00.000000Z'],
+            ],
+            array_map(
+                fn (array $row): array => [$row['deadline_missed_at'], $row['companies_notified_at'], $row['resolved_at'], $row['false_alarm_at']],
+                $response->json('data'),
+            ),
+        );
+    }
+
+    #[Test]
     #[DataProvider('provideStages')]
     public function when_the_stage_filter_is_set_then_only_incidents_at_that_stage_are_listed(string $stage): void
     {

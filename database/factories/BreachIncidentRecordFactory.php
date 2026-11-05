@@ -78,6 +78,13 @@ class BreachIncidentRecordFactory extends Factory
         ]);
     }
 
+    public function deadlineMissed(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'deadline_missed_at' => CarbonImmutable::parse($attributes['deadline'])->addDay()->startOfDay(),
+        ]);
+    }
+
     public function resolved(): static
     {
         return $this->companiesNotified()->state(fn (array $attributes): array => [

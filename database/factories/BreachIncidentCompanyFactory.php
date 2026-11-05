@@ -62,6 +62,15 @@ class BreachIncidentCompanyFactory extends Factory
         ]);
     }
 
+    public function filed(string $ownerId, string $adminId): static
+    {
+        return $this->filingRequested($ownerId)->state(fn (array $attributes): array => [
+            'filed_at' => CarbonImmutable::parse($attributes['added_at'])->addDays(3),
+            'filed_by' => $adminId,
+            'filed_body_hash' => hash('sha256', 'the regulator notice'),
+        ]);
+    }
+
     public function filingRequested(string $ownerId): static
     {
         return $this->notified()->state(fn (array $attributes): array => [
