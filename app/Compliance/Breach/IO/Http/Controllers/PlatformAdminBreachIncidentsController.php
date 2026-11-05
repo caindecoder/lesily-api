@@ -51,4 +51,9 @@ class PlatformAdminBreachIncidentsController extends Controller
 
         return new BreachIncidentAdminDetailResource($interactor->execute($breachId, $admin, RequestOrigin::fromRequest($request)));
     }
+
+    public function notifyCompanies(): never
+    {
+        abort(Response::HTTP_NOT_IMPLEMENTED);
+    }
 }

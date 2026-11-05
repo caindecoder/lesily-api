@@ -10,9 +10,11 @@ use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Notification;
 use App\Compliance\Breach\Events\BreachRecorded;
 use Database\Factories\BreachIncidentRecordFactory;
+use App\Compliance\Breach\Aggregates\BreachIncident;
 use Tests\Feature\PlatformAdmin\PlatformAdminTestCase;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
+use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
@@ -51,6 +53,26 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
     protected function anIncident(): BreachIncidentRecordFactory
     {
         return BreachIncidentRecord::factory()->recordedBy($this->admin);
+    }
+
+    protected function aRecordedIncident(array $overrides = []): string
+    {
+        $breachId = Str::uuid7()->toString();
+
+        BreachIncident::retrieve($breachId)
+            ->record(RecordBreachCommand::from($this->validPayload($overrides)), $this->admin)
+            ->persist();
+
+        return $breachId;
+    }
+
+    protected function notifyCompanies(?User $caller, string $breachId): TestResponse
+    {
+        if ($caller !== null) {
+            Sanctum::actingAs($caller);
+        }
+
+        return $this->postJson("/api/v1/admin/breach-incidents/{$breachId}/notifications/companies");
     }
 
     protected function recordBreach(?User $caller, array $body): TestResponse

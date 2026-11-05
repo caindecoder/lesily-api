@@ -471,3 +471,8 @@ Route::get('/v1/admin/breach-incidents', [PlatformAdminBreachIncidentsController
 // one audit row per read, written with the read (an audit failure vetoes it).
 Route::get('/v1/admin/breach-incidents/{breachId}', [PlatformAdminBreachIncidentsController::class, 'show'])
     ->middleware(['auth:sanctum', 'platform.admin']);
+
+// A platform admin notifies every affected company (UC-1-132) - auth:sanctum + platform.admin only, no
+// auth.company; no idempotency mount - the recorded-only stage guard is the dedup (a re-press answers 409).
+Route::post('/v1/admin/breach-incidents/{breachId}/notifications/companies', [PlatformAdminBreachIncidentsController::class, 'notifyCompanies'])
+    ->middleware(['auth:sanctum', 'platform.admin']);
