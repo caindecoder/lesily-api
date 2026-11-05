@@ -6,9 +6,14 @@ use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Concerns\AssertsFilterEmptyValueRejection;
+use App\Compliance\Breach\UseCases\Commands\BreachIncidentAdminFilters;
 
 class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
 {
+    use AssertsFilterEmptyValueRejection;
+
     #[Test]
     public function when_an_unauthenticated_caller_opens_the_queue_then_they_are_refused(): void
     {
@@ -37,6 +42,67 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
         $this->assertResourceNotFoundNoLeak($response);
         $response->assertJsonMissingPath('data');
         $this->assertNoQueueReadRecorded();
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
+     */
+    #[Test]
+    #[DataProvider('provideInvalidQueueQueries')]
+    public function when_the_filter_is_invalid_then_it_is_refused(array $query, string $field, string $message): void
+    {
+        // Given a recorded incident
+        $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
+
+        // When the admin opens the queue with this filter
+        $response = $this->listQueue($this->admin, $query);
+
+        // Then the filter is refused on its field and no read is recorded
+        $this->assertValidationRejected($response, $field, $message);
+        $this->assertNoQueueReadRecorded();
+    }
+
+    #[Test]
+    #[DataProvider('provideEmptyFilterValues')]
+    public function when_a_breach_filter_is_built_with_an_empty_value_then_it_is_rejected(string $field, string $value): void
+    {
+        // Given an empty value for a whitelisted filter key — reachable only at the DTO seam
+        // (TrimStrings + ConvertEmptyStringsToNull neutralise it over HTTP)
+
+        // When the filter is built directly, then construction is rejected on that field
+        $this->assertEmptyFilterValueRejected(BreachIncidentAdminFilters::class, $field, $value);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string, string}>
+     */
+    public static function provideInvalidQueueQueries(): array
+    {
+        return [
+            'unknown key' => [['sort' => 'deadline'], 'sort', 'This filter is not supported.'],
+            'unknown stage' => [['stage' => 'pending'], 'stage', 'The selected stage is invalid.'],
+            'array-valued stage' => [['stage' => ['recorded']], 'stage', 'The stage field must be a string.'],
+            'per_page below floor' => [['per_page' => 0], 'per_page', 'The per page field must be at least 1.'],
+            'per_page above cap' => [['per_page' => 101], 'per_page', 'The per page field must not be greater than 100.'],
+            'per_page not a number' => [['per_page' => 'abc'], 'per_page', 'The per page field must be an integer.'],
+            'page below floor' => [['page' => 0], 'page', 'The page field must be at least 1.'],
+            'page not a number' => [['page' => 'abc'], 'page', 'The page field must be an integer.'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function provideEmptyFilterValues(): array
+    {
+        return [
+            'empty stage' => ['stage', ''],
+            'empty page' => ['page', ''],
+            'empty per_page' => ['per_page', ''],
+            'whitespace stage' => ['stage', ' '],
+            'whitespace page' => ['page', ' '],
+            'whitespace per_page' => ['per_page', ' '],
+        ];
     }
 
     /**

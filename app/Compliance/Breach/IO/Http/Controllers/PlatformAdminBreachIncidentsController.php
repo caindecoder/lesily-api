@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
 use App\Compliance\Breach\UseCases\Interactors\RecordBreachInteractor;
+use App\Compliance\Breach\UseCases\Commands\BreachIncidentAdminFilters;
 use App\Compliance\Breach\IO\Http\Resources\BreachIncidentAdminCollection;
 use App\Compliance\Breach\UseCases\Interactors\ReviewBreachQueueInteractor;
 use App\Compliance\Breach\UseCases\Interactors\ReviewBreachAsAdminInteractor;
@@ -38,8 +39,9 @@ class PlatformAdminBreachIncidentsController extends Controller
         /** @var User $admin */
         $admin = $request->user();
 
-        return (new BreachIncidentAdminCollection($interactor->execute($admin, RequestOrigin::fromRequest($request))))
-            ->response($request);
+        $page = $interactor->execute(BreachIncidentAdminFilters::fromQuery($request), $admin, RequestOrigin::fromRequest($request));
+
+        return (new BreachIncidentAdminCollection($page))->response($request);
     }
 
     public function show(Request $request, string $breachId, ReviewBreachAsAdminInteractor $interactor): BreachIncidentAdminDetailResource
