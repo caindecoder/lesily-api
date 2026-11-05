@@ -82,6 +82,17 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    #[DataProvider('provideEmptyFilterValues')]
+    public function when_a_breach_filter_is_built_with_an_empty_value_then_it_is_rejected(string $field, string $value): void
+    {
+        // Given an empty value for a whitelisted filter key — reachable only at the DTO seam
+        // (TrimStrings + ConvertEmptyStringsToNull neutralise it over HTTP)
+
+        // When the filter is built directly, then construction is rejected on that field
+        $this->assertEmptyFilterValueRejected(BreachIncidentAdminFilters::class, $field, $value);
+    }
+
+    #[Test]
     public function when_no_incident_is_recorded_then_an_empty_page_is_shown_and_the_read_is_audited(): void
     {
         // Given no incident anywhere
@@ -92,17 +103,6 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
         $this->assertListed($response, []);
         $response->assertJsonPath('meta.pagination', ['page' => 1, 'per_page' => 15, 'total' => 0, 'last_page' => 1]);
         $this->assertQueueReadAudited($response, ['filters' => [], 'result_count' => 0, 'page' => 1]);
-    }
-
-    #[Test]
-    #[DataProvider('provideEmptyFilterValues')]
-    public function when_a_breach_filter_is_built_with_an_empty_value_then_it_is_rejected(string $field, string $value): void
-    {
-        // Given an empty value for a whitelisted filter key — reachable only at the DTO seam
-        // (TrimStrings + ConvertEmptyStringsToNull neutralise it over HTTP)
-
-        // When the filter is built directly, then construction is rejected on that field
-        $this->assertEmptyFilterValueRejected(BreachIncidentAdminFilters::class, $field, $value);
     }
 
     #[Test]
@@ -149,6 +149,23 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
         $response->assertOk();
         $this->assertCount(15, $response->json('data'));
         $response->assertJsonPath('meta.pagination.page', 1);
+    }
+
+    #[Test]
+    public function when_no_company_count_is_known_then_the_row_total_is_empty(): void
+    {
+        // Given an incident whose two companies have not yet counted the people affected
+        $this->anIncident()
+            ->withCompany($this->companyA, ['pii'], null)
+            ->withCompany($this->companyB, ['payroll'], null)
+            ->createOne();
+
+        // When the admin opens the queue
+        $response = $this->listQueue($this->admin);
+
+        // Then the row counts both companies but shows no total — an unknown count is not zero
+        $response->assertOk();
+        $this->assertSame([2, null], [$response->json('data.0.companies_count'), $response->json('data.0.total_estimated_count')]);
     }
 
     #[Test]
