@@ -133,7 +133,7 @@ class Company extends Model
 
     /**
      * The members told when the company must act as data controller — its
-     * owner and its admins (breach notices, BI3).
+     * owner and its current admins.
      *
      * @return Collection<int, User>
      */

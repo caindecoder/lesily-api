@@ -12,7 +12,7 @@ class BreachCompanyPartRenderer
     /**
      * One company's own part of an incident. It reads one company row and never
      * the incident's company list, so no other company, company count or
-     * incident-wide total can reach it (OQ-1-009).
+     * incident-wide total can reach it.
      *
      * @return array<string, string>
      */
