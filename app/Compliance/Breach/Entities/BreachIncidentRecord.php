@@ -82,7 +82,7 @@ class BreachIncidentRecord extends Model
     /**
      * @param  Builder<self>  $query
      */
-    public function scopeWhereStage(Builder $query, ?BreachStage $stage): void
+    protected function scopeWhereStage(Builder $query, ?BreachStage $stage): void
     {
         $query->when($stage !== null, fn (Builder $query) => $query->where('stage', $stage));
     }
@@ -90,7 +90,7 @@ class BreachIncidentRecord extends Model
     /**
      * @param  Builder<self>  $query
      */
-    public function scopeOrderByDeadline(Builder $query): void
+    protected function scopeOrderByDeadline(Builder $query): void
     {
         $query->orderBy('deadline')->orderBy('id');
     }
