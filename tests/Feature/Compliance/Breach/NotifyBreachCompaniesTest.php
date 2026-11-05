@@ -91,9 +91,9 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         // When the admin presses notify for it
         $response = $this->notifyCompanies($this->admin, $breachId);
 
-        // Then it is not found and nothing is sent
+        // Then it is not found and no notice is queued
         $this->assertResourceNotFoundNoLeak($response);
-        Notification::assertNothingSent();
+        $this->assertNoHandlersQueuedFor(BreachCompanyNotified::class);
     }
 
     /**
@@ -154,13 +154,13 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         // When the admin presses notify
         $response = $this->notifyCompanies($this->admin, $breachId);
 
-        // Then the request fails closed: nothing recorded, the incident still Recorded, nobody told
+        // Then the request fails closed: nothing recorded and the incident still Recorded
         $this->assertFailedClosed($response);
-        $this->assertNothingNotified($breachId);
+        $this->assertStillRecorded($breachId);
     }
 
     #[Test]
-    public function when_the_companies_are_notified_then_no_notice_leaves_before_the_commit(): void
+    public function when_the_companies_are_notified_then_no_notice_is_sent_until_the_queued_reactor_runs(): void
     {
         // Given a recorded incident naming company A, which has an owner and two admins
         $breachId = $this->aRecordedIncident();
@@ -169,7 +169,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         // When the admin presses notify
         $response = $this->notifyCompanies($this->admin, $breachId);
 
-        // Then no notice has gone out yet: each company's notice waits on the queue for the commit
+        // Then no notice has gone out yet: each company's notice waits on the queue
         $response->assertOk();
         $this->assertReactorDeferred(BreachCompanyNotified::class, SystemNotification::class);
     }
@@ -280,6 +280,20 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
             AuditEntry::query()->where('subject_id', $second)->sole()->stored_event_id,
         );
         $this->assertNotSame($this->notifiedEventIdOf($first), $this->notifiedEventIdOf($second));
+    }
+
+    #[Test]
+    public function when_a_company_is_named_on_two_incidents_then_notifying_one_leaves_the_other_untouched(): void
+    {
+        // Given two recorded incidents, both naming company A
+        $notified = $this->aRecordedIncident();
+        $untouched = $this->aRecordedIncident();
+
+        // When the admin notifies the first
+        $this->notifyCompanies($this->admin, $notified);
+
+        // Then the second incident is still Recorded and company A's row on it carries no notice stamp
+        $this->assertStillRecorded($untouched);
     }
 
     protected function notifiedEventIdOf(string $breachId): int
@@ -529,12 +543,18 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->assertSame($before, $this->snapshotOf($incident));
         $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $incident->getKey())->count());
         $this->assertDatabaseCount('audit_trail', 0);
-        Notification::assertNothingSent();
+        $this->assertNoHandlersQueuedFor(BreachCompanyNotified::class);
     }
 
     protected function assertNothingNotified(string $breachId): void
     {
-        $incident = BreachIncidentRecord::query()->findOrFail($breachId);
+        $this->assertStillRecorded($breachId);
+        $this->assertNoHandlersQueuedFor(BreachCompanyNotified::class);
+    }
+
+    protected function assertStillRecorded(string $breachId): void
+    {
+        $incident = BreachIncidentRecord::query()->whereKey($breachId)->firstOrFail();
 
         $this->assertSame(0, LesilyStoredEvent::query()
             ->where('aggregate_uuid', $breachId)
@@ -542,6 +562,5 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
             ->count());
         $this->assertNull($incident->companies_notified_at);
         $this->assertSame(0, BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->whereNotNull('notified_at')->count());
-        Notification::assertNothingSent();
     }
 }

@@ -115,6 +115,25 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
         $mail->assertSeeInHtml('The personal data request 0199e3a4-7b2c-7d10-9f3e-5a6b7c8d9e0f in Contoso was due on 31 Oct 2026, 09:00 UTC and is not yet complete. Please follow it up with the company.');
     }
 
+    #[Test]
+    public function when_a_breach_notice_carries_a_company_part_then_its_mail_reads_every_fact(): void
+    {
+        // Given a breach notice for Contoso carrying its own part of the incident
+        $mail = new SystemNotificationMail(NotificationType::BreachCompanyNotice, 'Contoso', [
+            'discovered' => '4 May 2026, 14:00 UTC',
+            'deadline' => '7 May 2026, 14:00 UTC',
+            'description' => 'A payroll export was emailed to the wrong recipient.',
+            'consequences' => 'Salary and bank details may be read by one outside person.',
+            'measures' => 'The recipient was asked to delete the file.',
+            'data_types' => 'Payroll records, Bank details',
+            'count' => '30',
+        ]);
+
+        // When / Then — its subject names the company and its body reads every fact of the part
+        $mail->assertHasSubject('A personal data breach affects Contoso');
+        $mail->assertSeeInHtml('Lesily found a breach of personal data that Contoso keeps in Lesily. It was discovered on 4 May 2026, 14:00 UTC. As the data controller, Contoso should notify the Data Protection Authority by 7 May 2026, 14:00 UTC. What happened: A payroll export was emailed to the wrong recipient. Likely consequences: Salary and bank details may be read by one outside person. Measures taken or planned: The recipient was asked to delete the file. Personal data affected: Payroll records, Bank details. People affected: 30.');
+    }
+
     /**
      * @return array<string, array{NotificationType, string, string}>
      */
