@@ -158,6 +158,23 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_a_company_count_is_not_known_then_its_notice_says_so(): void
+    {
+        // Given a recorded incident naming company A with no estimated count, and A's owner
+        $breachId = $this->aRecordedIncident(['companies' => [
+            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => null],
+        ]]);
+        $owner = $this->aCompanyMember($this->companyA, 'owner');
+
+        // When the admin presses notify and the notice leaves the queue
+        $this->notifyCompanies($this->admin, $breachId);
+        $this->runTheNotices();
+
+        // Then A's notice says the number of people affected is not yet known
+        $this->assertToldOnceEach([$owner], $this->companyA, $this->partFor('Personal details', 'Not yet known'));
+    }
+
+    #[Test]
     public function when_a_company_has_other_members_then_only_the_owner_and_admins_are_told(): void
     {
         // Given a recorded incident naming company A, which has an owner, two admins,

@@ -25,7 +25,9 @@ class BreachCompanyPartRenderer
             'consequences' => $incident->likely_consequences,
             'measures' => $incident->measures,
             'data_types' => implode(', ', array_map(fn (string $type): string => __("notifications.breach_data_types.{$type}"), $company->data_types)),
-            'count' => (string) $company->estimated_count,
+            'count' => $company->estimated_count === null
+                ? __('notifications.breach_company_notice.count_not_known')
+                : (string) $company->estimated_count,
         ];
     }
 }
