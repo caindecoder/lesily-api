@@ -4,6 +4,7 @@ namespace App\Compliance\Breach\Entities;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use App\Compliance\Breach\Enums\BreachStage;
 use Illuminate\Database\Eloquent\Collection;
 use App\Compliance\Breach\Enums\BreachSeverity;
@@ -74,6 +75,14 @@ class BreachIncidentRecord extends Model
     public function companies(): HasMany
     {
         return $this->hasMany(BreachIncidentCompany::class, 'breach_incident_id');
+    }
+
+    /**
+     * @param  Builder<self>  $query
+     */
+    public function scopeOrderByDeadline(Builder $query): void
+    {
+        $query->orderBy('deadline')->orderBy('id');
     }
 
     public function totalEstimatedCount(): ?int

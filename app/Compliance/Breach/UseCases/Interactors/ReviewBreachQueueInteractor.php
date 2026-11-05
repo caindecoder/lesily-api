@@ -23,6 +23,7 @@ class ReviewBreachQueueInteractor
     {
         return DB::transaction(function () use ($filters, $admin, $context): LengthAwarePaginator {
             $page = BreachIncidentRecord::query()
+                ->orderByDeadline()
                 // page defaults here, never through Laravel's resolver, which would
                 // honour a body-supplied page past the validated query filters.
                 ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);

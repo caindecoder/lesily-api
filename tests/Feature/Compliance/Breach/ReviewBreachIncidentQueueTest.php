@@ -105,6 +105,67 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
         $this->assertEmptyFilterValueRejected(BreachIncidentAdminFilters::class, $field, $value);
     }
 
+    #[Test]
+    public function when_deadlines_tie_then_the_order_falls_back_to_the_id(): void
+    {
+        // Given three incidents due at the same instant, created highest id first
+        $tied = array_map(
+            fn (string $id): BreachIncidentRecord => $this->anIncident()->identifiedAs($id)->dueAt('2026-05-12 09:00:00')->createOne(),
+            ['0199a3f0-0000-7000-8000-000000000003', '0199a3f0-0000-7000-8000-000000000002', '0199a3f0-0000-7000-8000-000000000001'],
+        );
+
+        // When the admin opens the queue
+        $response = $this->listQueue($this->admin);
+
+        // Then the tie falls back to the lowest id first — pages can never duplicate or skip a tied incident
+        $this->assertListed($response, array_reverse($tied));
+    }
+
+    #[Test]
+    public function when_the_queue_spans_pages_then_each_page_is_read_and_audited_on_its_own(): void
+    {
+        // Given sixteen incidents due on consecutive days
+        $incidents = $this->sixteenIncidents();
+
+        // When the admin asks for the second page of ten
+        $response = $this->listQueue($this->admin, ['page' => 2, 'per_page' => 10]);
+
+        // Then the last six are listed, and this page's read is recorded on its own
+        $this->assertListed($response, array_slice($incidents, 10));
+        $response->assertJsonPath('meta.pagination', ['page' => 2, 'per_page' => 10, 'total' => 16, 'last_page' => 2]);
+        $this->assertQueueReadAudited($response, ['filters' => [], 'result_count' => 6, 'page' => 2]);
+    }
+
+    #[Test]
+    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
+    {
+        // Given sixteen incidents — two pages at the default size
+        $this->sixteenIncidents();
+
+        // When the admin sends page 2 in the request body instead of the query string
+        $response = $this->listQueueWithBody(['page' => 2]);
+
+        // Then the body is ignored and the first page comes back
+        $response->assertOk();
+        $this->assertCount(15, $response->json('data'));
+        $response->assertJsonPath('meta.pagination.page', 1);
+    }
+
+    #[Test]
+    public function when_the_queue_is_opened_then_incidents_are_listed_soonest_deadline_first(): void
+    {
+        // Given three incidents recorded out of deadline order
+        $dueLast = $this->anIncident()->dueAt('2026-05-12 09:00:00')->createOne();
+        $dueFirst = $this->anIncident()->dueAt('2026-05-10 09:00:00')->createOne();
+        $dueSecond = $this->anIncident()->dueAt('2026-05-11 09:00:00')->createOne();
+
+        // When the admin opens the queue
+        $response = $this->listQueue($this->admin);
+
+        // Then the soonest deadline comes first
+        $this->assertListed($response, [$dueFirst, $dueSecond, $dueLast]);
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string, string}>
      */
@@ -191,6 +252,29 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
         $stored = $entry->metadata;
         $this->assertEquals($metadata, $stored);
         $this->assertContainsOnlyString($stored['filters']);
+    }
+
+    /**
+     * @param  array<string, mixed>  $body
+     */
+    protected function listQueueWithBody(array $body): TestResponse
+    {
+        Sanctum::actingAs($this->admin);
+
+        return $this->json('GET', '/api/v1/admin/breach-incidents', $body);
+    }
+
+    /**
+     * Sixteen incidents due on consecutive days from 2 May, created in that order — one more than a default page.
+     *
+     * @return list<BreachIncidentRecord>
+     */
+    protected function sixteenIncidents(): array
+    {
+        return array_map(
+            fn (int $day): BreachIncidentRecord => $this->anIncident()->dueAt(sprintf('2026-05-%02d 09:00:00', $day + 1))->createOne(),
+            range(1, 16),
+        );
     }
 
     protected function assertNoQueueReadRecorded(): void
