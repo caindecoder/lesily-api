@@ -16,7 +16,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     public function when_an_unauthenticated_caller_opens_an_incident_then_they_are_refused(): void
     {
         // Given a recorded incident
-        $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->create();
+        $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
 
         // When a caller with no token opens it
         $response = $this->showIncident(null, $incident->getKey());
@@ -30,7 +30,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     public function when_a_company_owner_opens_an_incident_then_it_is_not_found_and_nothing_is_audited(): void
     {
         // Given an incident naming company A, and company A's owner, who is not a platform admin
-        $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->create();
+        $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
         $owner = $this->aCompanyMember($this->companyA, 'owner');
 
         // When the owner opens the incident
@@ -60,7 +60,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     {
         // Given an incident, and an audit write that fails after its row is inserted —
         // only the read's transaction can take the row back out
-        $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->create();
+        $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the admin opens the incident
@@ -69,6 +69,36 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         // Then the read fails closed — no incident data, and the evidence row was rolled back with it
         $this->assertFailedClosed($response);
         $this->assertNoDetailReadRecorded();
+    }
+
+    #[Test]
+    #[DataProvider('provideCompanyCounts')]
+    public function when_some_companies_have_no_estimated_count_then_the_sum_counts_only_the_known_ones(?int $countA, ?int $countB, ?int $expectedTotal): void
+    {
+        // Given an incident whose two companies carry these counts — a null count is not yet known
+        $incident = $this->anIncident()
+            ->withCompany($this->companyA, ['pii'], $countA)
+            ->withCompany($this->companyB, ['payroll'], $countB)
+            ->createOne();
+
+        // When the admin opens the incident
+        $response = $this->showIncident($this->admin, $incident->getKey());
+
+        // Then the total adds the known counts only, and is empty when none is known
+        $response->assertOk();
+        $this->assertSame($expectedTotal, $response->json('data.total_estimated_count'));
+    }
+
+    /**
+     * @return array<string, array{?int, ?int, ?int}>
+     */
+    public static function provideCompanyCounts(): array
+    {
+        return [
+            'one count unknown' => [40, null, 40],
+            'every count unknown' => [null, null, null],
+            'a known zero' => [0, null, 0],
+        ];
     }
 
     /**

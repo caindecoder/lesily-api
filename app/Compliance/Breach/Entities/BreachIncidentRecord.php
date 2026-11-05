@@ -61,6 +61,15 @@ class BreachIncidentRecord extends Model
         return $this->hasMany(BreachIncidentCompany::class, 'breach_incident_id');
     }
 
+    public function totalEstimatedCount(): ?int
+    {
+        $known = $this->companies->pluck('estimated_count')->filter(fn (?int $count): bool => $count !== null);
+        /** @var int $total */
+        $total = $known->sum();
+
+        return $known->isEmpty() ? null : $total;
+    }
+
     protected static function newFactory(): BreachIncidentRecordFactory
     {
         return BreachIncidentRecordFactory::new();

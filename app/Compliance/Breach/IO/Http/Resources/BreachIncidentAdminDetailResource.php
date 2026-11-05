@@ -34,6 +34,7 @@ class BreachIncidentAdminDetailResource extends JsonResource
                 'data_types' => $company->data_types,
                 'estimated_count' => $company->estimated_count,
             ])->all(),
+            'total_estimated_count' => $this->resource->totalEstimatedCount(),
         ];
     }
 }

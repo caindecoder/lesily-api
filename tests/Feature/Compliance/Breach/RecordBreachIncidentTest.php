@@ -285,6 +285,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
                 'data_types' => ['pii'],
                 'estimated_count' => 40,
             ]],
+            'total_estimated_count' => 40,
         ]]);
 
         return $breachId;
