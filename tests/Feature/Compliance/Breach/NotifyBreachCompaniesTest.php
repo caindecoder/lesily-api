@@ -2,10 +2,13 @@
 
 namespace Tests\Feature\Compliance\Breach;
 
+use Illuminate\Http\Response;
+use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
@@ -74,6 +77,68 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
             'a random uuid' => ['019a5b2e-7c1d-7f00-8a00-000000000000'],
             'not a uuid' => ['not-a-breach'],
         ];
+    }
+
+    #[Test]
+    #[DataProvider('provideLaterStages')]
+    public function when_the_incident_is_past_recorded_then_the_notify_is_refused_with_its_stage_named(string $stage): void
+    {
+        // Given an incident that has moved past Recorded
+        $incident = match ($stage) {
+            'companies_notified' => $this->anIncident()->companiesNotified(),
+            'resolved' => $this->anIncident()->resolved(),
+            'false_alarm' => $this->anIncident()->falseAlarm(),
+            default => $this->fail('Unknown stage: '.$stage),
+        };
+        $incident = $incident->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $before = $this->snapshotOf($incident);
+
+        // When the admin presses notify
+        $response = $this->notifyCompanies($this->admin, $incident->getKey());
+
+        // Then it is refused with its stage named, and the incident is left as it was
+        $this->assertRefusedAt($response, $stage);
+        $this->assertIncidentUnchanged($incident, $before);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideLaterStages(): array
+    {
+        return [
+            'companies notified (a re-press)' => ['companies_notified'],
+            'resolved' => ['resolved'],
+            'false alarm' => ['false_alarm'],
+        ];
+    }
+
+    protected function assertRefusedAt(TestResponse $response, string $stage): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::StateGuardViolation);
+        $response->assertJsonPath('message', "Only a recorded breach incident can have its companies notified; this incident is {$stage}.");
+    }
+
+    /**
+     * @return array{0: array<string, mixed>, 1: list<array<string, mixed>>}
+     */
+    protected function snapshotOf(BreachIncidentRecord $incident): array
+    {
+        return [
+            BreachIncidentRecord::query()->findOrFail($incident->getKey())->getAttributes(),
+            BreachIncidentCompany::query()->where('breach_incident_id', $incident->getKey())->get()->map->getAttributes()->all(),
+        ];
+    }
+
+    /**
+     * @param  array{0: array<string, mixed>, 1: list<array<string, mixed>>}  $before
+     */
+    protected function assertIncidentUnchanged(BreachIncidentRecord $incident, array $before): void
+    {
+        $this->assertSame($before, $this->snapshotOf($incident));
+        $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $incident->getKey())->count());
+        $this->assertDatabaseCount('audit_trail', 0);
+        Notification::assertNothingSent();
     }
 
     protected function assertNothingNotified(string $breachId): void
