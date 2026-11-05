@@ -5,6 +5,7 @@ namespace Tests\Feature\Compliance\Breach;
 use App\Models\User;
 use RuntimeException;
 use Laravel\Sanctum\Sanctum;
+use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -92,6 +93,25 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_an_incident_names_several_companies_then_they_are_listed_by_name(): void
+    {
+        // Given an incident naming Zeta Traders and then Acme Holdings — added in that order, Zeta first by id
+        $zeta = Company::factory()->named('Zeta Traders')->createOne();
+        $acme = Company::factory()->named('Acme Holdings')->createOne();
+        $incident = $this->anIncident()
+            ->withCompany($zeta, ['pii'], 4)
+            ->withCompany($acme, ['payroll'], 9)
+            ->createOne();
+
+        // When the admin opens the incident
+        $response = $this->showIncident($this->admin, $incident->getKey());
+
+        // Then the companies are listed by name, whatever order they were added in
+        $response->assertOk();
+        $this->assertSame(['Acme Holdings', 'Zeta Traders'], array_column($response->json('data.companies'), 'name'));
+    }
+
+    #[Test]
     public function when_an_admin_opens_an_incident_then_every_company_and_the_sum_are_shown_and_the_read_is_audited(): void
     {
         // Given an incident whose companies were notified — company A's owner has asked Lesily to file
@@ -143,7 +163,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     protected function assertIncidentShown(TestResponse $response, BreachIncidentRecord $incident): void
     {
         $response->assertOk();
-        $companies = BreachIncidentCompany::query()->with('company')->where('breach_incident_id', $incident->getKey())->orderBy('company_id')->get();
+        $companies = BreachIncidentCompany::query()->with('company')->where('breach_incident_id', $incident->getKey())->get()->sortBy(fn (BreachIncidentCompany $company): string => $company->company->name)->values();
         $this->assertCount(2, $companies);
 
         $response->assertExactJson(['data' => [

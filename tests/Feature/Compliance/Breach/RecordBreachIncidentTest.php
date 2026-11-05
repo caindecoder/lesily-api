@@ -177,10 +177,14 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
             $this->companyA->getKey() => [['pii'], 40],
             $this->companyB->getKey() => [['payroll', 'banking'], 7],
         ]);
-        $this->assertSame([[['pii'], 40], [['payroll', 'banking'], 7]], array_map(
-            fn (array $company): array => [$company['data_types'], $company['estimated_count']],
-            $response->json('data.companies'),
-        ));
+        $shown = array_column($response->json('data.companies'), null, 'company_id');
+        $this->assertSame(
+            [[['pii'], 40], [['payroll', 'banking'], 7]],
+            [
+                [$shown[$this->companyA->getKey()]['data_types'], $shown[$this->companyA->getKey()]['estimated_count']],
+                [$shown[$this->companyB->getKey()]['data_types'], $shown[$this->companyB->getKey()]['estimated_count']],
+            ],
+        );
     }
 
     #[Test]

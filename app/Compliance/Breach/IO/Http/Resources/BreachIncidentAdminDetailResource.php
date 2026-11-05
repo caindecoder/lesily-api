@@ -39,7 +39,7 @@ class BreachIncidentAdminDetailResource extends JsonResource
             'false_alarm_by' => $this->resource->false_alarm_by,
             'false_alarm_reason' => $this->resource->false_alarm_reason,
             'false_alarm_findings' => $this->resource->false_alarm_findings,
-            'companies' => $this->resource->companies->map(fn (BreachIncidentCompany $company): array => [
+            'companies' => $this->resource->companies->sortBy(fn (BreachIncidentCompany $company): string => $company->company->name)->values()->map(fn (BreachIncidentCompany $company): array => [
                 'company_id' => $company->company_id,
                 'name' => $company->company->name,
                 'data_types' => $company->data_types,
