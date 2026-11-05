@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Compliance\Breach;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Response;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
+use App\Compliance\Breach\Enums\BreachStage;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -20,6 +22,10 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
 {
     use InteractsWithQueuedReactors;
+
+    protected const string NOTIFIED_AT = '2026-05-05 14:00:00';
+
+    protected const string NOTIFIED_AT_JSON = '2026-05-05T14:00:00.000000Z';
 
     protected function setUp(): void
     {
@@ -128,6 +134,45 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         // Then no notice has gone out yet: each company's notice waits on the queue for the commit
         $response->assertOk();
         $this->assertReactorDeferred(BreachCompanyNotified::class, SystemNotification::class);
+    }
+
+    #[Test]
+    public function when_a_low_severity_incident_is_notified_then_its_companies_are_told_too(): void
+    {
+        // Given a recorded low-severity incident naming company A, which has an owner and two admins
+        $breachId = $this->aRecordedIncident(['severity' => 'low']);
+        $this->anOwnerAndAdmins($this->companyA);
+        $this->travelTo(self::NOTIFIED_AT);
+
+        // When the admin presses notify and the notices leave the queue
+        $response = $this->notifyCompanies($this->admin, $breachId);
+        $this->runTheNotices();
+
+        // Then the incident is at companies notified and A's owner and both admins are told
+        $this->assertNotified($response, $breachId);
+        Notification::assertCount(3);
+    }
+
+    protected function runTheNotices(): void
+    {
+        $this->runQueuedHandlersFor(BreachCompanyNotified::class);
+    }
+
+    protected function assertNotified(TestResponse $response, string $breachId): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data.stage', 'companies_notified');
+        $this->assertSame([self::NOTIFIED_AT_JSON], array_values(array_unique([
+            $response->json('data.companies_notified_at'),
+            ...array_column($response->json('data.companies'), 'notified_at'),
+        ])));
+
+        $incident = BreachIncidentRecord::query()->with('companies')->findOrFail($breachId);
+        $this->assertSame(BreachStage::CompaniesNotified, $incident->stage);
+        $this->assertNotEmpty($incident->companies);
+        foreach ([$incident->companies_notified_at, ...$incident->companies->pluck('notified_at')] as $stamp) {
+            $this->assertTrue(CarbonImmutable::parse(self::NOTIFIED_AT)->equalTo($stamp));
+        }
     }
 
     protected function assertRefusedAt(TestResponse $response, string $stage): void

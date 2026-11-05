@@ -48,4 +48,8 @@ return [
         'subject' => 'A personal data request in :company missed its 30-day deadline',
         'body' => 'The personal data request :request in :company was due on :deadline and is not yet complete. Please follow it up with the company.',
     ],
+    'breach_company_notice' => [
+        'subject' => 'A personal data breach affects :company',
+        'body' => 'Lesily found a breach of personal data that :company keeps in Lesily. It was discovered on :discovered. As the data controller, :company should notify the Data Protection Authority by :deadline. What happened: :description Likely consequences: :consequences Measures taken or planned: :measures Personal data affected: :data_types. People affected: :count.',
+    ],
 ];

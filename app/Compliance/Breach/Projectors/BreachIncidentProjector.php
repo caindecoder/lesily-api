@@ -4,8 +4,10 @@ namespace App\Compliance\Breach\Projectors;
 
 use App\Compliance\Breach\Enums\BreachStage;
 use App\Compliance\Breach\Events\BreachRecorded;
+use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
+use App\Compliance\Breach\Events\BreachCompaniesNotified;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 
 class BreachIncidentProjector extends Projector
@@ -28,6 +30,22 @@ class BreachIncidentProjector extends Projector
         foreach ($event->companies as $company) {
             $this->insertCompany($event, $company);
         }
+    }
+
+    public function onBreachCompanyNotified(BreachCompanyNotified $event): void
+    {
+        BreachIncidentCompany::query()
+            ->where('breach_incident_id', $event->breachId)
+            ->where('company_id', $event->companyId)
+            ->update(['notified_at' => $event->notifiedAt]);
+    }
+
+    public function onBreachCompaniesNotified(BreachCompaniesNotified $event): void
+    {
+        BreachIncidentRecord::query()->whereKey($event->breachId)->update([
+            'stage' => BreachStage::CompaniesNotified,
+            'companies_notified_at' => $event->notifiedAt,
+        ]);
     }
 
     /**
