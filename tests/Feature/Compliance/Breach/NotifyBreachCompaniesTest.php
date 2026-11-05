@@ -3,6 +3,7 @@
 namespace Tests\Feature\Compliance\Breach;
 
 use App\Models\User;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
@@ -139,6 +140,24 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_the_audit_row_cannot_be_written_then_nobody_is_notified(): void
+    {
+        // Given a recorded incident naming companies A and B, and an audit trail that refuses every write
+        $breachId = $this->aRecordedIncident(['companies' => [
+            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
+            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
+        ]]);
+        AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the admin presses notify
+        $response = $this->notifyCompanies($this->admin, $breachId);
+
+        // Then the request fails closed: nothing recorded, the incident still Recorded, nobody told
+        $this->assertFailedClosed($response);
+        $this->assertNothingNotified($breachId);
+    }
+
+    #[Test]
     public function when_the_companies_are_notified_then_no_notice_leaves_before_the_commit(): void
     {
         // Given a recorded incident naming company A, which has an owner and two admins
@@ -240,6 +259,34 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->assertToldOnceEach($this->acmeMembers, $this->acme, $this->partFor('Personal details, Bank details', '120'));
         $this->assertToldOnceEach($this->globexMembers, $this->globex, $this->partFor('Payroll records', '30'));
         Notification::assertCount(4);
+    }
+
+    #[Test]
+    public function when_two_incidents_are_notified_then_each_audit_row_cites_its_own_event(): void
+    {
+        // Given two recorded incidents, the first already notified
+        $first = $this->aRecordedIncident();
+        $second = $this->aRecordedIncident();
+        $this->notifyCompanies($this->admin, $first);
+
+        // When the admin notifies the second
+        $this->notifyCompanies($this->admin, $second);
+
+        // Then the second's audit row cites the second's own notified event
+        $this->assertSame(
+            $this->notifiedEventIdOf($second),
+            AuditEntry::query()->where('subject_id', $second)->sole()->stored_event_id,
+        );
+        $this->assertNotSame($this->notifiedEventIdOf($first), $this->notifiedEventIdOf($second));
+    }
+
+    protected function notifiedEventIdOf(string $breachId): int
+    {
+        return (int) LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $breachId)
+            ->where('event_class', BreachCompaniesNotified::class)
+            ->sole()
+            ->getKey();
     }
 
     #[Test]
