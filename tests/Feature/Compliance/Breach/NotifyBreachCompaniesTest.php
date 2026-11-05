@@ -25,6 +25,7 @@ use App\Foundation\Notifications\Enums\NotificationType;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use App\Compliance\Breach\Events\BreachCompaniesNotified;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
+use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -344,7 +345,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         ];
 
         return collect(BreachDataType::cases())
-            ->mapWithKeys(fn (BreachDataType $type): array => [$type->value => [$type->value, $words[$type->value] ?? 'no words for '.$type->value]])
+            ->mapWithKeys(fn (BreachDataType $type): array => [$type->value => [$type->value, $words[$type->value]]])
             ->all();
     }
 
@@ -376,7 +377,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         );
 
         $parts = $events->where('event_class', BreachCompanyNotified::class)
-            ->mapWithKeys(fn (LesilyStoredEvent $event): array => [$event->event_properties['companyId'] => [
+            ->mapWithKeys(fn (EloquentStoredEvent $event): array => [$event->event_properties['companyId'] => [
                 $event->event_properties['notifiedByUserId'],
                 CarbonImmutable::parse($event->event_properties['notifiedAt'])->toIso8601String(),
                 $event->event_properties['part'],
@@ -388,6 +389,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         ], $parts);
 
         $closing = $events->last();
+        $this->assertInstanceOf(LesilyStoredEvent::class, $closing);
         $this->assertSame([$this->admin->getKey(), $notifiedAt], [
             $closing->event_properties['notifiedByUserId'],
             CarbonImmutable::parse($closing->event_properties['notifiedAt'])->toIso8601String(),
@@ -509,18 +511,18 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     }
 
     /**
-     * @return array{0: array<string, mixed>, 1: list<array<string, mixed>>}
+     * @return array{0: array<string, mixed>, 1: array<int, array<string, mixed>>}
      */
     protected function snapshotOf(BreachIncidentRecord $incident): array
     {
         return [
-            BreachIncidentRecord::query()->findOrFail($incident->getKey())->getAttributes(),
+            BreachIncidentRecord::query()->whereKey($incident->getKey())->firstOrFail()->getAttributes(),
             BreachIncidentCompany::query()->where('breach_incident_id', $incident->getKey())->get()->map->getAttributes()->all(),
         ];
     }
 
     /**
-     * @param  array{0: array<string, mixed>, 1: list<array<string, mixed>>}  $before
+     * @param  array{0: array<string, mixed>, 1: array<int, array<string, mixed>>}  $before
      */
     protected function assertIncidentUnchanged(BreachIncidentRecord $incident, array $before): void
     {
