@@ -3,10 +3,12 @@
 namespace Tests\Feature\Compliance\Breach;
 
 use App\Models\User;
+use RuntimeException;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 
 class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
 {
@@ -50,6 +52,22 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
 
         // Then it is not found and no read is recorded
         $this->assertResourceNotFoundNoLeak($response);
+        $this->assertNoDetailReadRecorded();
+    }
+
+    #[Test]
+    public function when_the_audit_row_cannot_be_written_then_the_incident_is_not_shown(): void
+    {
+        // Given an incident, and an audit write that fails after its row is inserted —
+        // only the read's transaction can take the row back out
+        $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->create();
+        AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the admin opens the incident
+        $response = $this->showIncident($this->admin, $incident->getKey());
+
+        // Then the read fails closed — no incident data, and the evidence row was rolled back with it
+        $this->assertFailedClosed($response);
         $this->assertNoDetailReadRecorded();
     }
 
