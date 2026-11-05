@@ -52,4 +52,9 @@ return [
         'subject' => 'A personal data breach affects :company',
         'body' => 'Lesily found a breach of personal data that :company keeps in Lesily. It was discovered on :discovered. As the data controller, :company should notify the Data Protection Authority by :deadline. What happened: :description Likely consequences: :consequences Measures taken or planned: :measures Personal data affected: :data_types. People affected: :count.',
     ],
+    'breach_data_types' => [
+        'pii' => 'Personal details',
+        'payroll' => 'Payroll records',
+        'banking' => 'Bank details',
+    ],
 ];

@@ -177,6 +177,62 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->assertToldExactly($toldMembers, $this->companyA);
     }
 
+    #[Test]
+    public function when_two_companies_are_notified_then_each_hears_only_its_own_part(): void
+    {
+        // Given a recorded incident naming Acme Holdings (personal and bank details, 120 people)
+        // and Globex Traders (payroll records, 30 people), each with an owner and an admin
+        $acme = Company::factory()->named('Acme Holdings')->createOne();
+        $globex = Company::factory()->named('Globex Traders')->createOne();
+        $breachId = $this->aRecordedIncident(['companies' => [
+            ['companyId' => $acme->getKey(), 'dataTypes' => ['pii', 'banking'], 'estimatedCount' => 120],
+            ['companyId' => $globex->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 30],
+        ]]);
+        $acmeMembers = [$this->aCompanyMember($acme, 'owner'), $this->aCompanyMember($acme, 'admin')];
+        $globexMembers = [$this->aCompanyMember($globex, 'owner'), $this->aCompanyMember($globex, 'admin')];
+
+        // When the admin presses notify and the notices leave the queue
+        $this->notifyCompanies($this->admin, $breachId);
+        $this->runTheNotices();
+
+        // Then each company's owner and admin hear that company's own part and nothing of the other's
+        $this->assertToldOnceEach($acmeMembers, $acme, $this->partFor('Personal details, Bank details', '120'));
+        $this->assertToldOnceEach($globexMembers, $globex, $this->partFor('Payroll records', '30'));
+        Notification::assertCount(4);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function partFor(string $dataTypes, string $count): array
+    {
+        return [
+            'discovered' => '4 May 2026, 14:00 UTC',
+            'deadline' => '7 May 2026, 14:00 UTC',
+            'description' => 'A payroll export was emailed to the wrong recipient.',
+            'consequences' => 'Salary and bank details may be read by one outside person.',
+            'measures' => 'The recipient was asked to delete the file; exports now need a second check.',
+            'data_types' => $dataTypes,
+            'count' => $count,
+        ];
+    }
+
+    /**
+     * @param  list<User>  $recipients
+     * @param  array<string, string>  $part
+     */
+    protected function assertToldOnceEach(array $recipients, Company $company, array $part): void
+    {
+        $this->assertNotEmpty($recipients);
+        foreach ($recipients as $recipient) {
+            Notification::assertSentToTimes($recipient, SystemNotification::class, 1);
+            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->type === NotificationType::BreachCompanyNotice
+                && $notice->companyName === $company->name
+                && $notice->companyId === $company->getKey()
+                && $notice->details === $part);
+        }
+    }
+
     protected function aRemovedMember(Company $company, string $roleCode): void
     {
         $member = $this->aCompanyMember($company, $roleCode);
