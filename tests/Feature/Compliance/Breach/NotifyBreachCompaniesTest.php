@@ -13,6 +13,7 @@ use App\Companies\Entities\CompanyUser;
 use App\Compliance\Breach\Enums\BreachStage;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Compliance\Breach\Enums\BreachDataType;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
@@ -216,6 +217,44 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->assertToldOnceEach($acmeMembers, $acme, $this->partFor('Personal details, Bank details', '120'));
         $this->assertToldOnceEach($globexMembers, $globex, $this->partFor('Payroll records', '30'));
         Notification::assertCount(4);
+    }
+
+    #[Test]
+    #[DataProvider('provideDataTypes')]
+    public function when_any_data_type_is_named_then_its_notice_has_words_for_it(string $dataType, string $words): void
+    {
+        // Given a recorded incident naming company A with one data type, and A's owner
+        $breachId = $this->aRecordedIncident(['companies' => [
+            ['companyId' => $this->companyA->getKey(), 'dataTypes' => [$dataType], 'estimatedCount' => 40],
+        ]]);
+        $owner = $this->aCompanyMember($this->companyA, 'owner');
+
+        // When the admin presses notify and the notice leaves the queue
+        $this->notifyCompanies($this->admin, $breachId);
+        $this->runTheNotices();
+
+        // Then the notice names that data type in words
+        $this->assertToldOnceEach([$owner], $this->companyA, $this->partFor($words, '40'));
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function provideDataTypes(): array
+    {
+        $words = [
+            'pii' => 'Personal details',
+            'payroll' => 'Payroll records',
+            'banking' => 'Bank details',
+            'nic' => 'National identity card numbers',
+            'epf_etf' => 'EPF and ETF records',
+            'medical' => 'Medical records',
+            'other' => 'Other personal data',
+        ];
+
+        return collect(BreachDataType::cases())
+            ->mapWithKeys(fn (BreachDataType $type): array => [$type->value => [$type->value, $words[$type->value] ?? 'no words for '.$type->value]])
+            ->all();
     }
 
     /**

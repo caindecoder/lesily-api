@@ -57,5 +57,9 @@ return [
         'pii' => 'Personal details',
         'payroll' => 'Payroll records',
         'banking' => 'Bank details',
+        'nic' => 'National identity card numbers',
+        'epf_etf' => 'EPF and ETF records',
+        'medical' => 'Medical records',
+        'other' => 'Other personal data',
     ],
 ];
