@@ -20,7 +20,8 @@ enum NotificationType: string
     /**
      * Critical notifications (account-security alerts, password-change
      * confirmations, ownership-received notices, the outcome of a data
-     * export, a missed data-request deadline) are mandatory: users cannot opt
+     * export, a missed data-request deadline, a breach notice to a company)
+     * are mandatory: users cannot opt
      * their email out of them. Security notices per foundation-brief /
      * questionnaire S16 L474; ownership-received is a control-surface change —
      * who owns the company — ruled critical at the UC-1-028 build (s170); a
@@ -41,7 +42,7 @@ enum NotificationType: string
             self::DsarDeadlineMissed => true,
             self::GeneralAccountNotice => false,
             self::TeamWelcome => false,
-            self::BreachCompanyNotice => false,
+            self::BreachCompanyNotice => true,
         };
     }
 }
