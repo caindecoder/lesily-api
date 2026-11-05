@@ -23,6 +23,9 @@ class ReviewBreachQueueInteractor
     {
         return DB::transaction(function () use ($filters, $admin, $context): LengthAwarePaginator {
             $page = BreachIncidentRecord::query()
+                ->whereStage($filters->stage)
+                ->withCount('companies')
+                ->withSum('companies', 'estimated_count')
                 ->orderByDeadline()
                 // page defaults here, never through Laravel's resolver, which would
                 // honour a body-supplied page past the validated query filters.

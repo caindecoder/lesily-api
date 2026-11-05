@@ -36,6 +36,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property ?string $false_alarm_reason
  * @property ?string $false_alarm_findings
  * @property-read Collection<int, BreachIncidentCompany> $companies
+ * @property-read int $companies_count the queue's withCount
+ * @property-read string|int|null $companies_sum_estimated_count the queue's withSum — the driver returns a decimal string; null when no count is known
  */
 class BreachIncidentRecord extends Model
 {
@@ -75,6 +77,14 @@ class BreachIncidentRecord extends Model
     public function companies(): HasMany
     {
         return $this->hasMany(BreachIncidentCompany::class, 'breach_incident_id');
+    }
+
+    /**
+     * @param  Builder<self>  $query
+     */
+    public function scopeWhereStage(Builder $query, ?BreachStage $stage): void
+    {
+        $query->when($stage !== null, fn (Builder $query) => $query->where('stage', $stage));
     }
 
     /**

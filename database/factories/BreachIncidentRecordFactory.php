@@ -78,6 +78,29 @@ class BreachIncidentRecordFactory extends Factory
         ]);
     }
 
+    public function resolved(): static
+    {
+        return $this->companiesNotified()->state(fn (array $attributes): array => [
+            'stage' => BreachStage::Resolved,
+            'resolved_at' => CarbonImmutable::parse($attributes['date_discovered'])->addDays(5),
+            'resolved_by' => $attributes['recorded_by'],
+            'root_cause' => 'An export had no recipient check.',
+            'remediation_steps' => 'Exports now need a second person to confirm the recipient.',
+            'resolution_summary' => 'The file was deleted; no further reading was found.',
+        ]);
+    }
+
+    public function falseAlarm(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'stage' => BreachStage::FalseAlarm,
+            'false_alarm_at' => CarbonImmutable::parse($attributes['date_discovered'])->addDay(),
+            'false_alarm_by' => $attributes['recorded_by'],
+            'false_alarm_reason' => 'The recipient was the company\'s own payroll address.',
+            'false_alarm_findings' => 'No data left the company.',
+        ]);
+    }
+
     /**
      * @param  list<string>  $dataTypes
      */

@@ -152,6 +152,26 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    #[DataProvider('provideStages')]
+    public function when_the_stage_filter_is_set_then_only_incidents_at_that_stage_are_listed(string $stage): void
+    {
+        // Given one incident at each of the four stages
+        $atStage = [
+            'recorded' => $this->anIncident()->createOne(),
+            'companies_notified' => $this->anIncident()->companiesNotified()->createOne(),
+            'resolved' => $this->anIncident()->resolved()->createOne(),
+            'false_alarm' => $this->anIncident()->falseAlarm()->createOne(),
+        ];
+
+        // When the admin filters the queue by this stage
+        $response = $this->listQueue($this->admin, ['stage' => $stage]);
+
+        // Then only that stage's incident is listed, and the filter is recorded with the read
+        $this->assertListed($response, [$atStage[$stage]]);
+        $this->assertQueueReadAudited($response, ['filters' => ['stage' => $stage], 'result_count' => 1, 'page' => 1]);
+    }
+
+    #[Test]
     public function when_the_queue_is_opened_then_incidents_are_listed_soonest_deadline_first(): void
     {
         // Given three incidents recorded out of deadline order
@@ -164,6 +184,40 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
 
         // Then the soonest deadline comes first
         $this->assertListed($response, [$dueFirst, $dueSecond, $dueLast]);
+    }
+
+    #[Test]
+    public function when_the_queue_is_opened_then_each_row_shows_its_facts_and_the_read_is_audited(): void
+    {
+        // Given an incident whose two companies were notified — company A counted 40 people, company B 7
+        $incident = $this->anIncident()
+            ->companiesNotified()
+            ->withCompany($this->companyA, ['pii'], 40)
+            ->withCompany($this->companyB, ['payroll', 'banking'], 7)
+            ->createOne();
+
+        // When the admin opens the queue
+        $response = $this->listQueue($this->admin);
+
+        // Then the row shows the incident's facts, its company count and their total, and the read left its evidence
+        $response->assertExactJson([
+            'data' => [[
+                'id' => $incident->getKey(),
+                'stage' => 'companies_notified',
+                'severity' => 'high',
+                'description' => $incident->description,
+                'date_discovered' => '2026-05-04T14:00:00.000000Z',
+                'deadline' => '2026-05-07T14:00:00.000000Z',
+                'deadline_missed_at' => null,
+                'companies_notified_at' => '2026-05-05T14:00:00.000000Z',
+                'resolved_at' => null,
+                'false_alarm_at' => null,
+                'companies_count' => 2,
+                'total_estimated_count' => 47,
+            ]],
+            'meta' => ['pagination' => ['page' => 1, 'per_page' => 15, 'total' => 1, 'last_page' => 1]],
+        ]);
+        $this->assertQueueReadAudited($response, ['filters' => [], 'result_count' => 1, 'page' => 1]);
     }
 
     /**
@@ -180,6 +234,19 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
             'per_page not a number' => [['per_page' => 'abc'], 'per_page', 'The per page field must be an integer.'],
             'page below floor' => [['page' => 0], 'page', 'The page field must be at least 1.'],
             'page not a number' => [['page' => 'abc'], 'page', 'The page field must be an integer.'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideStages(): array
+    {
+        return [
+            'recorded' => ['recorded'],
+            'companies notified' => ['companies_notified'],
+            'resolved' => ['resolved'],
+            'false alarm' => ['false_alarm'],
         ];
     }
 
