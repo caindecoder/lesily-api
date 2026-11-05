@@ -172,15 +172,19 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // When the admin records the breach
         $response = $this->recordBreach($this->admin, $payload);
 
-        // Then each company keeps its own figures and no incident-wide total exists
+        // Then each company keeps its own figures, stored per company and never as one incident-wide figure
         $this->assertIncidentProjected($this->assertIncidentCreated($response), [
             $this->companyA->getKey() => [['pii'], 40],
             $this->companyB->getKey() => [['payroll', 'banking'], 7],
         ]);
-        $this->assertSame([[['pii'], 40], [['payroll', 'banking'], 7]], array_map(
-            fn (array $company): array => [$company['data_types'], $company['estimated_count']],
-            $response->json('data.companies'),
-        ));
+        $shown = array_column($response->json('data.companies'), null, 'company_id');
+        $this->assertSame(
+            [[['pii'], 40], [['payroll', 'banking'], 7]],
+            [
+                [$shown[$this->companyA->getKey()]['data_types'], $shown[$this->companyA->getKey()]['estimated_count']],
+                [$shown[$this->companyB->getKey()]['data_types'], $shown[$this->companyB->getKey()]['estimated_count']],
+            ],
+        );
     }
 
     #[Test]
@@ -279,12 +283,28 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
             'deadline' => '2026-05-07T14:00:00.000000Z',
             'recorded_at' => '2026-05-10T09:00:00.000000Z',
             'recorded_by' => $this->admin->getKey(),
+            'deadline_missed_at' => null,
+            'companies_notified_at' => null,
+            'resolved_at' => null,
+            'resolved_by' => null,
+            'root_cause' => null,
+            'remediation_steps' => null,
+            'resolution_summary' => null,
+            'false_alarm_at' => null,
+            'false_alarm_by' => null,
+            'false_alarm_reason' => null,
+            'false_alarm_findings' => null,
             'companies' => [[
                 'company_id' => $this->companyA->getKey(),
                 'name' => $this->companyA->name,
                 'data_types' => ['pii'],
                 'estimated_count' => 40,
+                'notified_at' => null,
+                'filing_requested_at' => null,
+                'filing_requested_by' => null,
+                'filed_at' => null,
             ]],
+            'total_estimated_count' => 40,
         ]]);
 
         return $breachId;
@@ -324,6 +344,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => $this->admin->name,
             'ip_address' => '127.0.0.1',
+            'severity' => 'critical',
         ]);
 
         $correlationId = $response->headers->get('Correlation-Id');

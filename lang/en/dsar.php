@@ -133,6 +133,8 @@ return [
             'case_queue_viewed' => 'Viewed the ownership transfer cases',
             'admin_reviewed' => 'Reviewed a record as a platform administrator',
             'breach_recorded' => 'Recorded a data breach',
+            'breach_admin_viewed' => 'Viewed a data breach',
+            'breach_queue_viewed' => 'Viewed the data breaches',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',
@@ -141,6 +143,7 @@ return [
             'ownership_transfer_case' => 'An ownership transfer case',
             'ownership_transfer_case_queue' => 'The ownership transfer cases',
             'breach_incident' => 'A data breach',
+            'breach_incident_queue' => 'The data breaches',
         ],
         'policy_type' => [
             'tos' => 'Terms of service',

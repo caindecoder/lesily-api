@@ -6,7 +6,9 @@ use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Database\Factories\BreachIncidentCompanyFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
  * @property string $id
@@ -16,11 +18,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property ?int $estimated_count
  * @property CarbonImmutable $added_at
  * @property string $added_by
+ * @property ?CarbonImmutable $notified_at
+ * @property ?CarbonImmutable $filing_requested_at
+ * @property ?string $filing_requested_by
+ * @property ?CarbonImmutable $filed_at
  * @property-read Company $company company_id is NOT NULL + restrictOnDelete
  */
 class BreachIncidentCompany extends Model
 {
-    use HasUuids;
+    /** @use HasFactory<BreachIncidentCompanyFactory> */
+    use HasFactory, HasUuids;
 
     protected $fillable = [
         'breach_incident_id',
@@ -34,6 +41,9 @@ class BreachIncidentCompany extends Model
     protected $casts = [
         'data_types' => 'array',
         'added_at' => 'immutable_datetime',
+        'notified_at' => 'immutable_datetime',
+        'filing_requested_at' => 'immutable_datetime',
+        'filed_at' => 'immutable_datetime',
     ];
 
     /**
@@ -42,5 +52,10 @@ class BreachIncidentCompany extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    protected static function newFactory(): BreachIncidentCompanyFactory
+    {
+        return BreachIncidentCompanyFactory::new();
     }
 }
