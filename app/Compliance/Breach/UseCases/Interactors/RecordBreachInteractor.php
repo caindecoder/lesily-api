@@ -52,6 +52,7 @@ class RecordBreachInteractor
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),
             'metadata' => null,
+            'severity' => 'critical',
             'recorded_at' => now(),
         ]);
     }

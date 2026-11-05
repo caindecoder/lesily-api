@@ -324,6 +324,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
             'actor_role_code' => 'platform_super_admin',
             'actor_label' => $this->admin->name,
             'ip_address' => '127.0.0.1',
+            'severity' => 'critical',
         ]);
 
         $correlationId = $response->headers->get('Correlation-Id');
