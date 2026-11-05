@@ -461,3 +461,8 @@ Route::get('/v1/admin/dsar-requests/{requestId}', [PlatformAdminDsarRequestsCont
 // idempotency-key:required - a replay must never open a second incident with its own 72-hour clock.
 Route::post('/v1/admin/breach-incidents', [PlatformAdminBreachIncidentsController::class, 'store'])
     ->middleware(['auth:sanctum', 'platform.admin', 'idempotency-key:required']);
+
+// A platform admin views one breach incident (UC-1-129) - auth:sanctum + platform.admin only, no auth.company;
+// one audit row per read, written with the read (an audit failure vetoes it).
+Route::get('/v1/admin/breach-incidents/{breachId}', [PlatformAdminBreachIncidentsController::class, 'show'])
+    ->middleware(['auth:sanctum', 'platform.admin']);

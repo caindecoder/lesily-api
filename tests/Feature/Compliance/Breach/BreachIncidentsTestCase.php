@@ -9,6 +9,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Notification;
 use App\Compliance\Breach\Events\BreachRecorded;
+use Database\Factories\BreachIncidentRecordFactory;
 use Tests\Feature\PlatformAdmin\PlatformAdminTestCase;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
@@ -47,6 +48,11 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         return $admin;
     }
 
+    protected function anIncident(): BreachIncidentRecordFactory
+    {
+        return BreachIncidentRecord::factory()->recordedBy($this->admin);
+    }
+
     protected function recordBreach(?User $caller, array $body): TestResponse
     {
         if ($caller !== null) {
@@ -71,6 +77,13 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
             ],
             ...$overrides,
         ];
+    }
+
+    protected function assertFailedClosed(TestResponse $response): void
+    {
+        $response->assertInternalServerError();
+        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
+        $response->assertJsonMissingPath('data');
     }
 
     protected function assertNothingRecorded(): void

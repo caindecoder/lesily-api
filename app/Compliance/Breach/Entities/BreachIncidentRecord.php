@@ -7,8 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 use App\Compliance\Breach\Enums\BreachStage;
 use Illuminate\Database\Eloquent\Collection;
 use App\Compliance\Breach\Enums\BreachSeverity;
+use Database\Factories\BreachIncidentRecordFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
  * @property string $id
@@ -25,7 +27,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class BreachIncidentRecord extends Model
 {
-    use HasUuids;
+    /** @use HasFactory<BreachIncidentRecordFactory> */
+    use HasFactory, HasUuids;
 
     protected $table = 'breach_incidents';
 
@@ -56,5 +59,10 @@ class BreachIncidentRecord extends Model
     public function companies(): HasMany
     {
         return $this->hasMany(BreachIncidentCompany::class, 'breach_incident_id');
+    }
+
+    protected static function newFactory(): BreachIncidentRecordFactory
+    {
+        return BreachIncidentRecordFactory::new();
     }
 }

@@ -6,7 +6,9 @@ use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Database\Factories\BreachIncidentCompanyFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
  * @property string $id
@@ -20,7 +22,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class BreachIncidentCompany extends Model
 {
-    use HasUuids;
+    /** @use HasFactory<BreachIncidentCompanyFactory> */
+    use HasFactory, HasUuids;
 
     protected $fillable = [
         'breach_incident_id',
@@ -42,5 +45,10 @@ class BreachIncidentCompany extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    protected static function newFactory(): BreachIncidentCompanyFactory
+    {
+        return BreachIncidentCompanyFactory::new();
     }
 }
