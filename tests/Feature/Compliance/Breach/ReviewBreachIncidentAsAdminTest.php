@@ -9,6 +9,8 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Compliance\Breach\Entities\BreachIncidentRecord;
+use App\Compliance\Breach\Entities\BreachIncidentCompany;
 
 class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
 {
@@ -89,6 +91,23 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         $this->assertSame($expectedTotal, $response->json('data.total_estimated_count'));
     }
 
+    #[Test]
+    public function when_an_admin_opens_an_incident_then_every_company_and_the_sum_are_shown_and_the_read_is_audited(): void
+    {
+        // Given an incident whose companies were notified — company A's owner has asked Lesily to file
+        $incident = $this->anIncident()->companiesNotified()->createOne();
+        $owner = $this->aCompanyMember($this->companyA, 'owner');
+        BreachIncidentCompany::factory()->forIncident($incident, $this->companyA)->withFigures(['pii'], 40)->filingRequested($owner->getKey())->createOne();
+        BreachIncidentCompany::factory()->forIncident($incident, $this->companyB)->withFigures(['payroll', 'banking'], 7)->notified()->createOne();
+
+        // When the admin opens the incident
+        $response = $this->showIncident($this->admin, $incident->getKey());
+
+        // Then every fact of the incident and of each company is shown with the sum, and the read left its evidence
+        $this->assertIncidentShown($response, $incident);
+        $this->assertDetailReadAudited($response, $incident);
+    }
+
     /**
      * @return array<string, array{?int, ?int, ?int}>
      */
@@ -119,6 +138,74 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         }
 
         return $this->getJson('/api/v1/admin/breach-incidents/'.$breachId);
+    }
+
+    protected function assertIncidentShown(TestResponse $response, BreachIncidentRecord $incident): void
+    {
+        $response->assertOk();
+        $companies = BreachIncidentCompany::query()->with('company')->where('breach_incident_id', $incident->getKey())->orderBy('company_id')->get();
+        $this->assertCount(2, $companies);
+
+        $response->assertExactJson(['data' => [
+            'id' => $incident->getKey(),
+            'stage' => 'companies_notified',
+            'severity' => 'high',
+            'description' => $incident->description,
+            'likely_consequences' => $incident->likely_consequences,
+            'measures' => $incident->measures,
+            'date_discovered' => '2026-05-04T14:00:00.000000Z',
+            'deadline' => '2026-05-07T14:00:00.000000Z',
+            'recorded_at' => '2026-05-04T14:00:00.000000Z',
+            'recorded_by' => $this->admin->getKey(),
+            'deadline_missed_at' => null,
+            'companies_notified_at' => '2026-05-05T14:00:00.000000Z',
+            'resolved_at' => null,
+            'resolved_by' => null,
+            'root_cause' => null,
+            'remediation_steps' => null,
+            'resolution_summary' => null,
+            'false_alarm_at' => null,
+            'false_alarm_by' => null,
+            'false_alarm_reason' => null,
+            'false_alarm_findings' => null,
+            'companies' => $companies->map(fn (BreachIncidentCompany $company): array => [
+                'company_id' => $company->company_id,
+                'name' => $company->company->name,
+                'data_types' => $company->data_types,
+                'estimated_count' => $company->estimated_count,
+                'notified_at' => '2026-05-05T14:00:00.000000Z',
+                'filing_requested_at' => $company->company_id === $this->companyA->getKey() ? '2026-05-06T14:00:00.000000Z' : null,
+                'filing_requested_by' => $company->filing_requested_by,
+                'filed_at' => null,
+            ])->all(),
+            'total_estimated_count' => 47,
+        ]]);
+    }
+
+    protected function assertDetailReadAudited(TestResponse $response, BreachIncidentRecord $incident): void
+    {
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+        $entry = AuditEntry::query()->where('action', 'breach_admin_viewed')->sole();
+
+        $this->assertDatabaseHas('audit_trail', [
+            'id' => $entry->getKey(),
+            'company_id' => null,
+            'stored_event_id' => null,
+            'event_class' => 'BreachIncidentViewedByAdmin',
+            'subject_type' => 'breach_incident',
+            'subject_id' => $incident->getKey(),
+            'subject_label' => null,
+            'description' => 'Platform admin viewed a data breach.',
+            'actor_user_id' => $this->admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $this->admin->name,
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'Symfony',
+            'request_id' => $correlationId,
+            'metadata' => null,
+            'severity' => 'info',
+        ]);
     }
 
     protected function assertNoDetailReadRecorded(): void

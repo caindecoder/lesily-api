@@ -23,6 +23,17 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property CarbonImmutable $deadline
  * @property CarbonImmutable $recorded_at
  * @property string $recorded_by
+ * @property ?CarbonImmutable $deadline_missed_at
+ * @property ?CarbonImmutable $companies_notified_at
+ * @property ?CarbonImmutable $resolved_at
+ * @property ?string $resolved_by
+ * @property ?string $root_cause
+ * @property ?string $remediation_steps
+ * @property ?string $resolution_summary
+ * @property ?CarbonImmutable $false_alarm_at
+ * @property ?string $false_alarm_by
+ * @property ?string $false_alarm_reason
+ * @property ?string $false_alarm_findings
  * @property-read Collection<int, BreachIncidentCompany> $companies
  */
 class BreachIncidentRecord extends Model
@@ -51,6 +62,10 @@ class BreachIncidentRecord extends Model
         'date_discovered' => 'immutable_datetime',
         'deadline' => 'immutable_datetime',
         'recorded_at' => 'immutable_datetime',
+        'deadline_missed_at' => 'immutable_datetime',
+        'companies_notified_at' => 'immutable_datetime',
+        'resolved_at' => 'immutable_datetime',
+        'false_alarm_at' => 'immutable_datetime',
     ];
 
     /**

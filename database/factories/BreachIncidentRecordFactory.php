@@ -70,6 +70,14 @@ class BreachIncidentRecordFactory extends Factory
         return $this->state(['recorded_by' => $admin->getKey()]);
     }
 
+    public function companiesNotified(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'stage' => BreachStage::CompaniesNotified,
+            'companies_notified_at' => CarbonImmutable::parse($attributes['date_discovered'])->addDay(),
+        ]);
+    }
+
     /**
      * @param  list<string>  $dataTypes
      */

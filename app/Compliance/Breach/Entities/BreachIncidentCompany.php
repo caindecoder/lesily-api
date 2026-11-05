@@ -18,6 +18,10 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property ?int $estimated_count
  * @property CarbonImmutable $added_at
  * @property string $added_by
+ * @property ?CarbonImmutable $notified_at
+ * @property ?CarbonImmutable $filing_requested_at
+ * @property ?string $filing_requested_by
+ * @property ?CarbonImmutable $filed_at
  * @property-read Company $company company_id is NOT NULL + restrictOnDelete
  */
 class BreachIncidentCompany extends Model
@@ -37,6 +41,9 @@ class BreachIncidentCompany extends Model
     protected $casts = [
         'data_types' => 'array',
         'added_at' => 'immutable_datetime',
+        'notified_at' => 'immutable_datetime',
+        'filing_requested_at' => 'immutable_datetime',
+        'filed_at' => 'immutable_datetime',
     ];
 
     /**
