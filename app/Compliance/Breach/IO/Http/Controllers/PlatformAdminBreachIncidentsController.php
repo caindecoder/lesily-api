@@ -11,10 +11,12 @@ use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
 use App\Compliance\Breach\UseCases\Interactors\RecordBreachInteractor;
 use App\Compliance\Breach\UseCases\Commands\BreachIncidentAdminFilters;
+use App\Compliance\Breach\UseCases\Commands\NotifyBreachCompaniesCommand;
 use App\Compliance\Breach\IO\Http\Resources\BreachIncidentAdminCollection;
 use App\Compliance\Breach\UseCases\Interactors\ReviewBreachQueueInteractor;
 use App\Compliance\Breach\UseCases\Interactors\ReviewBreachAsAdminInteractor;
 use App\Compliance\Breach\IO\Http\Resources\BreachIncidentAdminDetailResource;
+use App\Compliance\Breach\UseCases\Interactors\NotifyBreachCompaniesInteractor;
 
 class PlatformAdminBreachIncidentsController extends Controller
 {
@@ -52,8 +54,13 @@ class PlatformAdminBreachIncidentsController extends Controller
         return new BreachIncidentAdminDetailResource($interactor->execute($breachId, $admin, RequestOrigin::fromRequest($request)));
     }
 
-    public function notifyCompanies(): never
+    public function notifyCompanies(Request $request, string $breachId, NotifyBreachCompaniesInteractor $interactor): BreachIncidentAdminDetailResource
     {
-        abort(Response::HTTP_NOT_IMPLEMENTED);
+        /** @var User $admin */
+        $admin = $request->user();
+
+        $command = NotifyBreachCompaniesCommand::validateAndCreate(['breachId' => $breachId]);
+
+        return new BreachIncidentAdminDetailResource($interactor->execute($command, $admin, RequestOrigin::fromRequest($request)));
     }
 }
