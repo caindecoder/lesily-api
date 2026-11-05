@@ -75,6 +75,18 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         return $this->postJson("/api/v1/admin/breach-incidents/{$breachId}/notifications/companies");
     }
 
+    /**
+     * @return list<User>
+     */
+    protected function anOwnerAndAdmins(Company $company): array
+    {
+        return [
+            $this->aCompanyMember($company, 'owner'),
+            $this->aCompanyMember($company, 'admin'),
+            $this->aCompanyMember($company, 'admin'),
+        ];
+    }
+
     protected function recordBreach(?User $caller, array $body): TestResponse
     {
         if ($caller !== null) {

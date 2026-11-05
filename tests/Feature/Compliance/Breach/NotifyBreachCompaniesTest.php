@@ -10,9 +10,11 @@ use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Breach\Events\BreachRecorded;
+use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
+use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
@@ -111,6 +113,21 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
             'resolved' => ['resolved'],
             'false alarm' => ['false_alarm'],
         ];
+    }
+
+    #[Test]
+    public function when_the_companies_are_notified_then_no_notice_leaves_before_the_commit(): void
+    {
+        // Given a recorded incident naming company A, which has an owner and two admins
+        $breachId = $this->aRecordedIncident();
+        $this->anOwnerAndAdmins($this->companyA);
+
+        // When the admin presses notify
+        $response = $this->notifyCompanies($this->admin, $breachId);
+
+        // Then no notice has gone out yet: each company's notice waits on the queue for the commit
+        $response->assertOk();
+        $this->assertReactorDeferred(BreachCompanyNotified::class, SystemNotification::class);
     }
 
     protected function assertRefusedAt(TestResponse $response, string $stage): void
