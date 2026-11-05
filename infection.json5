@@ -142,6 +142,7 @@
                 "App\\Foundation\\Auth\\Reactors\\GoogleAccountNotificationReactor::onUserGoogleOAuthUnlinked",
                 "App\\Foundation\\Auth\\Reactors\\EmailVerificationReactor::onUserSignedUpAsOwner",
                 "App\\Consent\\Projectors\\ConsentRecordProjector::onConsentRecorded",
+                "App\\Compliance\\Breach\\Projectors\\BreachIncidentProjector::onBreachRecorded",
                 // OQ-1-172 PR-0 L-RELATIONS: lazy relations resolved from Model scope
                 // (Model::getRelationValue calls $this->company() / $this->settings() /
                 // $this->country() from inside the class, so protected still resolves); no
@@ -208,6 +209,11 @@
                 // re-inferred to the same rules by Spatie. REMOVE WHEN
                 // idToken gains a rule beyond required+type.
                 "App\\Foundation\\Auth\\UseCases\\Commands\\LinkGoogleAccountCommand::rules::17",
+                // L-COLLECTION-REQUIRED: 'required' on the non-nullable #[DataCollectionOf]
+                // companies list is prepended again by Spatie's RequiredRuleInferrer, so a
+                // missing or null list still answers the 'companies.required' message. REMOVE
+                // WHEN companies becomes nullable or optional.
+                "App\\Compliance\\Breach\\UseCases\\Commands\\RecordBreachCommand::rules::47",
                 // L-CHROMIUM: addChromiumArguments(['disable-dev-shm-usage']) is container
                 // tuning (cd-invoices.md:34 names it as config); the rendered PDF bytes are
                 // identical either way. Pinned so loadMissing('lineItems') at :24 stays killable.

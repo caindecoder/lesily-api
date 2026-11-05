@@ -9,4 +9,5 @@ enum AuditSubjectType: string
     case Invoice = 'invoice';
     case OwnershipTransferCase = 'ownership_transfer_case';
     case OwnershipTransferCaseQueue = 'ownership_transfer_case_queue';
+    case BreachIncident = 'breach_incident';
 }
