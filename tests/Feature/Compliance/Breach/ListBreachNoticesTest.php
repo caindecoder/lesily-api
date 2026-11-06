@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Compliance\Breach;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -129,6 +130,73 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
 
         // Then the incident is not listed
         $this->assertNothingListed($response);
+    }
+
+    #[Test]
+    public function when_notified_times_tie_then_the_order_falls_back_to_the_id(): void
+    {
+        // Given two notices to company A sent at the same instant, and A's owner
+        $sentAt = CarbonImmutable::parse('2026-05-05 09:00:00');
+        $first = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, $sentAt);
+        $second = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, $sentAt);
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner lists company A's breach notices
+        $response = $this->listNotices($owner, $this->companyA);
+
+        // Then the later row comes first
+        $this->assertNoticesListed($response, [$second->breach_incident_id, $first->breach_incident_id]);
+    }
+
+    #[Test]
+    public function when_the_notices_span_pages_then_they_are_listed_page_by_page(): void
+    {
+        // Given three notices to company A sent a day apart, and A's owner
+        $oldest = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-05 09:00:00'));
+        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-06 09:00:00'));
+        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-07 09:00:00'));
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner reads the second page, two notices a page
+        $response = $this->listNotices($owner, $this->companyA, ['page' => 2, 'per_page' => 2]);
+
+        // Then the second page holds the oldest notice, with the page counts
+        $this->assertNoticesListed($response, [$oldest->breach_incident_id]);
+        $response->assertJsonPath('meta.pagination', ['page' => 2, 'per_page' => 2, 'total' => 3, 'last_page' => 2]);
+    }
+
+    #[Test]
+    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
+    {
+        // Given sixteen notices to company A, and A's owner
+        foreach (range(1, 16) as $day) {
+            $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-01')->addDays($day));
+        }
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner sends the page in the request body instead of the query string
+        $response = $this->listNoticesWithBody($owner, $this->companyA, ['page' => 2]);
+
+        // Then the first page is listed
+        $response->assertOk();
+        $response->assertJsonPath('meta.pagination.page', 1);
+        $response->assertJsonCount(15, 'data');
+    }
+
+    #[Test]
+    public function when_notices_are_listed_then_the_newest_notice_comes_first(): void
+    {
+        // Given three notices to company A, created in an order unlike the order they were sent, and A's owner
+        $middle = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-06 09:00:00'));
+        $newest = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-07 09:00:00'));
+        $oldest = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-05 09:00:00'));
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner lists company A's breach notices
+        $response = $this->listNotices($owner, $this->companyA);
+
+        // Then the notices come newest first
+        $this->assertNoticesListed($response, [$newest->breach_incident_id, $middle->breach_incident_id, $oldest->breach_incident_id]);
     }
 
     /**

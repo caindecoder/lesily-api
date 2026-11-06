@@ -17,6 +17,8 @@ class ListBreachNoticesInteractor
         return BreachIncidentCompany::query()
             ->whereCompany($company)
             ->whereNotified()
+            ->orderByDesc('notified_at')
+            ->orderByDesc('id')
             ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
     }
 }

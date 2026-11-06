@@ -111,6 +111,15 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         $response->assertJsonPath('required_permission', $permission);
     }
 
+    /**
+     * @param  list<string>  $breachIds
+     */
+    protected function assertNoticesListed(TestResponse $response, array $breachIds): void
+    {
+        $response->assertOk();
+        $this->assertSame($breachIds, $response->json('data.*.breach_id'));
+    }
+
     protected function assertNothingListed(TestResponse $response): void
     {
         $response->assertOk();
@@ -125,6 +134,13 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         }
 
         return $this->getJson("/api/v1/companies/{$company->getKey()}/breach-notices?".http_build_query($query));
+    }
+
+    protected function listNoticesWithBody(User $actor, Company $company, array $body): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->json('GET', "/api/v1/companies/{$company->getKey()}/breach-notices", $body);
     }
 
     protected function recordBreach(?User $caller, array $body): TestResponse
