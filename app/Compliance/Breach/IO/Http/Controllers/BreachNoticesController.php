@@ -6,13 +6,15 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
 use App\Compliance\Breach\UseCases\Commands\BreachNoticeFilters;
+use App\Compliance\Breach\IO\Http\Resources\BreachNoticeCollection;
+use App\Compliance\Breach\UseCases\Interactors\ListBreachNoticesInteractor;
 
 class BreachNoticesController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, ListBreachNoticesInteractor $interactor): JsonResponse
     {
-        BreachNoticeFilters::fromQuery($request);
+        $notices = $interactor->execute(BreachNoticeFilters::fromQuery($request), $request->company());
 
-        return response()->json(['data' => []]);
+        return (new BreachNoticeCollection($notices))->response($request);
     }
 }

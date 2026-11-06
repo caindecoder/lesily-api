@@ -111,6 +111,13 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         $response->assertJsonPath('required_permission', $permission);
     }
 
+    protected function assertNothingListed(TestResponse $response): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data', []);
+        $response->assertJsonPath('meta.pagination.total', 0);
+    }
+
     protected function listNotices(?User $actor, Company $company, array $query = []): TestResponse
     {
         if ($actor !== null) {

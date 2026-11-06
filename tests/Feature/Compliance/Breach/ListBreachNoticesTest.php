@@ -101,6 +101,36 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         $this->assertEmptyFilterValueRejected(BreachNoticeFilters::class, $field, $value);
     }
 
+    #[Test]
+    public function when_the_company_is_on_no_incident_then_the_list_is_empty(): void
+    {
+        // Given an incident that notified company A only, and the owner of company B
+        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, now()->toImmutable());
+        $owner = $this->aConsentingMember($this->companyB, 'owner');
+
+        // When B's owner lists company B's breach notices
+        $response = $this->listNotices($owner, $this->companyB);
+
+        // Then the list is empty
+        $this->assertNothingListed($response);
+    }
+
+    #[Test]
+    #[DataProvider('provideStagesNeverShown')]
+    public function when_the_company_has_not_been_told_of_an_incident_then_it_is_not_listed(string $stage): void
+    {
+        // Given an incident naming company A that never reached its notices, and A's owner
+        $incident = $stage === 'false_alarm' ? $this->anIncident()->falseAlarm() : $this->anIncident();
+        $incident->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner lists company A's breach notices
+        $response = $this->listNotices($owner, $this->companyA);
+
+        // Then the incident is not listed
+        $this->assertNothingListed($response);
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -128,6 +158,17 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
             'array-valued per_page' => [['per_page' => ['2']], 'per_page', 'The per page field must be an integer.'],
             'page below floor' => [['page' => 0], 'page', 'The page field must be at least 1.'],
             'page not a number' => [['page' => 'abc'], 'page', 'The page field must be an integer.'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideStagesNeverShown(): array
+    {
+        return [
+            'recorded' => ['recorded'],
+            'false alarm' => ['false_alarm'],
         ];
     }
 
