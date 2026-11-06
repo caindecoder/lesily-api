@@ -13,6 +13,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use Database\Factories\BreachIncidentRecordFactory;
+use App\Compliance\Breach\Aggregates\BreachIncident;
 use Database\Factories\BreachIncidentCompanyFactory;
 use App\Compliance\Breach\Events\BreachFilingRequested;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
@@ -96,6 +97,66 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
         $this->assertNothingRequested($notice->breach_incident_id, $before);
     }
 
+    #[Test]
+    #[DataProvider('provideUnknownBreachIds')]
+    public function when_the_incident_does_not_exist_then_it_is_not_found(string $breachId): void
+    {
+        // Given no incident under that id, and company A's owner
+        $owner = $this->anOwnerOf($this->companyA);
+
+        // When the owner asks Lesily to file it for company A
+        $response = $this->requestFiling($owner, $this->companyA, $breachId);
+
+        // Then it is not found and nothing is requested
+        $this->assertResourceNotFoundNoLeak($response);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', BreachFilingRequested::class)->count());
+        $this->assertNoHandlersQueuedFor(BreachFilingRequested::class);
+    }
+
+    #[Test]
+    public function when_the_company_is_not_on_the_incident_then_it_is_not_found(): void
+    {
+        // Given an incident that notified company B only, and company A's owner
+        $breachId = $this->aNotifiedIncident($this->companyB);
+        $before = $this->snapshotOf($breachId);
+        $owner = $this->anOwnerOf($this->companyA);
+
+        // When A's owner asks Lesily to file that incident for company A
+        $response = $this->requestFiling($owner, $this->companyA, $breachId);
+
+        // Then it is not found and nothing is requested
+        $this->assertResourceNotFoundNoLeak($response);
+        $this->assertNothingRequested($breachId, $before);
+    }
+
+    #[Test]
+    #[DataProvider('provideStagesNeverTold')]
+    public function when_the_company_has_not_been_told_of_the_incident_then_it_is_not_found(Closure $atStage): void
+    {
+        // Given an incident naming company A that never reached A, and A's owner
+        $notice = $this->aFactoryNotice($atStage($this->anIncident()), fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $row);
+        $before = $this->snapshotOf($notice->breach_incident_id);
+        $owner = $this->anOwnerOf($this->companyA);
+
+        // When the owner asks Lesily to file it for company A
+        $response = $this->requestFiling($owner, $this->companyA, $notice->breach_incident_id);
+
+        // Then it is not found and nothing is requested
+        $this->assertResourceNotFoundNoLeak($response);
+        $this->assertNothingRequested($notice->breach_incident_id, $before);
+    }
+
+    /**
+     * @return array<string, array{Closure(BreachIncidentRecordFactory): BreachIncidentRecordFactory}>
+     */
+    public static function provideStagesNeverTold(): array
+    {
+        return [
+            'recorded' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident],
+            'a false alarm' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->falseAlarm()],
+        ];
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -109,6 +170,31 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
             'auditor' => ['auditor'],
             'manager' => ['manager'],
         ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideUnknownBreachIds(): array
+    {
+        return [
+            'a random uuid' => ['019a5b2e-7c1d-7f00-8a00-000000000000'],
+            'not a uuid' => ['not-a-breach'],
+        ];
+    }
+
+    protected function aNotifiedIncident(Company ...$companies): string
+    {
+        $breachId = $this->aRecordedIncident(['companies' => array_map(fn (Company $company): array => [
+            'companyId' => $company->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40,
+        ], $companies)]);
+
+        $parts = collect($companies)->mapWithKeys(fn (Company $company): array => [
+            $company->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.'],
+        ])->all();
+        BreachIncident::retrieve($breachId)->notifyCompanies($this->admin, $parts)->persist();
+
+        return $breachId;
     }
 
     protected function anOwnerOf(Company $company): User

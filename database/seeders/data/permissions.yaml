@@ -104,3 +104,9 @@
   name: View Breach Notices
   description: See the data-breach notices Lesily sent the company - its own part of each incident, the deadline and whether Lesily has been asked to file with the regulator.
   module: breach
+
+- code: breach.request-filing
+  id: 0193abcd-2222-7000-8000-000000000012
+  name: Request Breach Filing
+  description: Ask Lesily to file a notified data breach with the Data Protection Authority for the company - the controller's written instruction, once per incident.
+  module: breach

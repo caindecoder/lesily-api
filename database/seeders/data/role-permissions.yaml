@@ -24,6 +24,7 @@ owner:
   - roles.view
   - privacy.view-register
   - breach.view-notices
+  - breach.request-filing
 
 admin:
   - users.invite
