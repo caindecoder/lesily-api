@@ -2,6 +2,7 @@
 
 namespace App\Compliance\Breach\IO\Http\Resources;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
@@ -17,6 +18,8 @@ class BreachNoticeResource extends JsonResource
     public function toArray(Request $request): array
     {
         $breach = $this->resource->breach;
+        /** @var CarbonImmutable $notifiedAt the list holds notified rows only (whereNotified) */
+        $notifiedAt = $this->resource->notified_at;
 
         return [
             'breach_id' => $this->resource->breach_incident_id,
@@ -29,7 +32,7 @@ class BreachNoticeResource extends JsonResource
             'deadline' => $breach->deadline->toISOString(),
             'data_types' => $this->resource->data_types,
             'estimated_count' => $this->resource->estimated_count,
-            'notified_at' => $this->resource->notified_at?->toISOString(),
+            'notified_at' => $notifiedAt->toISOString(),
             'filing_status' => $this->resource->filingStatus()->value,
             'filing_requested_at' => $this->resource->filing_requested_at?->toISOString(),
             'filing_requested_by' => $this->resource->filing_requested_by,
