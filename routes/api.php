@@ -482,3 +482,9 @@ Route::post('/v1/admin/breach-incidents/{breachId}/notifications/companies', [Pl
 // part of each notified incident, newest first; a plain read, not audited.
 Route::get('/v1/companies/{companyId}/breach-notices', [BreachNoticesController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:breach.view-notices']);
+
+// The owner asks Lesily to file a notified breach with the regulator for the company (UC-1-143) - the
+// controller's written instruction, once per company; no idempotency mount - the once-only guard is the
+// dedup (a repeat answers 409).
+Route::post('/v1/companies/{companyId}/breach-notices/{breachId}/filing-request', [BreachNoticesController::class, 'requestFiling'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:breach.request-filing']);
