@@ -174,6 +174,7 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
             'a failed data export' => [NotificationType::DsarExportFailed],
             'a missed data-request deadline' => [NotificationType::DsarDeadlineMissed],
             'a breach notice to a company' => [NotificationType::BreachCompanyNotice],
+            "a company's breach filing request" => [NotificationType::BreachFilingRequested],
         ];
     }
 

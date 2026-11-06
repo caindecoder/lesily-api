@@ -136,6 +136,7 @@ return [
             'breach_admin_viewed' => 'Viewed a data breach',
             'breach_queue_viewed' => 'Viewed the data breaches',
             'breach_companies_notified' => 'Notified the companies affected by a data breach',
+            'breach_filing_requested' => 'Asked Lesily to file a data breach with the regulator',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',
@@ -193,6 +194,7 @@ return [
             'dsar_request_withdrawn' => 'Data request withdrawn',
             'dsar_deadline_missed' => 'Data request deadline missed',
             'breach_company_notice' => 'Data breach notice',
+            'breach_filing_requested' => 'Data breach filing requested',
         ],
         'channel' => [
             'mail' => 'Email',

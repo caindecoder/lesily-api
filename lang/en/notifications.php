@@ -53,6 +53,10 @@ return [
         'body' => 'Lesily found a breach of personal data that :company keeps in Lesily. It was discovered on :discovered. As the data controller, :company should notify the Data Protection Authority by :deadline. What happened: :description Likely consequences: :consequences Measures taken or planned: :measures Personal data affected: :data_types. People affected: :count.',
         'count_not_known' => 'Not yet known',
     ],
+    'breach_filing_requested' => [
+        'subject' => ':company asked Lesily to file a personal data breach',
+        'body' => ':company asked Lesily to file the personal data breach :incident with the Data Protection Authority for it. Please file it for them.',
+    ],
     'breach_data_types' => [
         'pii' => 'Personal details',
         'payroll' => 'Payroll records',

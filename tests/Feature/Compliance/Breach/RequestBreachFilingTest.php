@@ -11,15 +11,19 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Database\Factories\BreachIncidentRecordFactory;
 use App\Compliance\Breach\Aggregates\BreachIncident;
 use Database\Factories\BreachIncidentCompanyFactory;
 use App\Compliance\Breach\Events\BreachFilingRequested;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
+use App\Foundation\Notifications\Enums\NotificationType;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
+use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RequestBreachFilingTest extends BreachIncidentsTestCase
@@ -224,6 +228,29 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
         );
     }
 
+    #[Test]
+    public function when_the_owner_asks_lesily_to_file_then_it_is_recorded_projected_audited_and_the_admins_alerted(): void
+    {
+        // Given an incident that notified companies A and B, two allowlisted Lesily admins, and A's and B's owners
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $this->allowlist([$this->admin->getKey(), User::factory()->create()->getKey()]);
+        $owner = $this->anOwnerOf($this->companyA);
+        $otherOwner = $this->anOwnerOf($this->companyB);
+        $this->travelTo(self::REQUESTED_AT);
+
+        // When A's owner asks Lesily to file it for company A and the alerts leave the queue
+        $response = $this->requestFiling($owner, $this->companyA, $breachId);
+        $this->runTheAlerts();
+
+        // Then the request is recorded, projected and audited for A, each admin is alerted once,
+        // and company B's filing and owner are left as they were
+        $this->assertFilingRequestedFor($response, $this->companyA, $owner);
+        $storedEventId = $this->assertRequestStored($breachId, $this->companyA, $owner);
+        $this->assertRequestAudited($response, $breachId, $storedEventId);
+        $this->assertAdminsAlertedAbout($this->companyA, $breachId);
+        $this->assertCompanyUntouched($breachId, $this->companyB, $otherOwner);
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -292,6 +319,71 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
             BreachIncidentRecord::query()->whereKey($breachId)->firstOrFail()->getAttributes(),
             BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->orderBy('id')->get()->map->getAttributes()->all(),
         ];
+    }
+
+    protected function runTheAlerts(): void
+    {
+        $this->runQueuedHandlersFor(BreachFilingRequested::class);
+    }
+
+    protected function assertFilingRequestedFor(TestResponse $response, Company $company, User $owner): void
+    {
+        $response->assertOk();
+        $this->assertSame(
+            [$company->name, 'requested', self::REQUESTED_AT_JSON, $owner->getKey(), null],
+            [$response->json('data.company_name'), $response->json('data.filing_status'), $response->json('data.filing_requested_at'), $response->json('data.filing_requested_by'), $response->json('data.filed_at')],
+        );
+
+        $notice = BreachIncidentCompany::query()->whereCompany($company)->sole();
+        $this->assertTrue(CarbonImmutable::parse(self::REQUESTED_AT)->equalTo($notice->filing_requested_at));
+        $this->assertSame($owner->getKey(), $notice->filing_requested_by);
+    }
+
+    protected function assertRequestAudited(TestResponse $response, string $breachId, int $storedEventId): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $this->companyA->getKey(),
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'BreachFilingRequested',
+            'subject_type' => 'breach_incident',
+            'subject_id' => $breachId,
+            'subject_label' => null,
+            'action' => 'breach_filing_requested',
+            'description' => 'Owner asked Lesily to file a data breach with the Data Protection Authority.',
+            'metadata' => null,
+            'recorded_at' => self::REQUESTED_AT,
+            'actor_role_code' => 'owner',
+            'ip_address' => '127.0.0.1',
+            'severity' => 'critical',
+        ]);
+
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+        $entry = AuditEntry::query()->sole();
+        $requester = LesilyStoredEvent::query()->findOrFail($storedEventId)->event_properties['requestedByUserId'];
+        $this->assertSame([$correlationId, 'Symfony', $requester], [$entry->request_id, $entry->user_agent, $entry->actor_user_id]);
+    }
+
+    protected function assertAdminsAlertedAbout(Company $company, string $breachId): void
+    {
+        $admins = User::query()->whereKey(config('platform.admin_user_ids'))->get();
+        $this->assertCount(2, $admins);
+        foreach ($admins as $admin) {
+            Notification::assertSentToTimes($admin, SystemNotification::class, 1);
+            Notification::assertSentTo($admin, SystemNotification::class, fn (SystemNotification $alert): bool => $alert->type === NotificationType::BreachFilingRequested
+                && $alert->companyName === $company->name
+                && $alert->companyId === null
+                && $alert->details === ['incident' => $breachId]);
+        }
+        Notification::assertCount(2);
+    }
+
+    protected function assertCompanyUntouched(string $breachId, Company $company, User $owner): void
+    {
+        $notice = BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->whereCompany($company)->sole();
+        $this->assertSame([null, null], [$notice->filing_requested_at, $notice->filing_requested_by]);
+        Notification::assertNothingSentTo($owner);
     }
 
     protected function assertRequestStored(string $breachId, Company $company, User $owner): int
