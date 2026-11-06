@@ -4,6 +4,7 @@ namespace Tests\Feature\Compliance\Breach;
 
 use Closure;
 use App\Models\User;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
@@ -11,6 +12,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -25,6 +27,7 @@ use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
 
 class RequestBreachFilingTest extends BreachIncidentsTestCase
 {
@@ -205,6 +208,97 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
                 'A resolved breach incident takes no filing request.',
             ],
         ];
+    }
+
+    #[Test]
+    public function when_the_audit_row_cannot_be_written_then_nothing_is_recorded_and_nobody_is_alerted(): void
+    {
+        // Given company A was notified of a breach, A's owner, and an audit trail that refuses every write
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $before = $this->snapshotOf($breachId);
+        $owner = $this->anOwnerOf($this->companyA);
+        AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the owner asks Lesily to file it for company A
+        $response = $this->requestFiling($owner, $this->companyA, $breachId);
+
+        // Then the request fails closed: nothing recorded, so nobody is alerted
+        $this->assertFailedClosed($response);
+        $this->assertNothingStored($breachId, $before);
+    }
+
+    #[Test]
+    public function when_the_request_is_recorded_then_no_alert_is_sent_until_the_queued_reactor_runs(): void
+    {
+        // Given company A was notified of a breach, and A's owner
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $owner = $this->anOwnerOf($this->companyA);
+
+        // When the owner asks Lesily to file it for company A
+        $response = $this->requestFiling($owner, $this->companyA, $breachId);
+
+        // Then no admin is alerted yet: the alert waits on the queue
+        $response->assertOk();
+        $this->assertReactorDeferred(BreachFilingRequested::class, SystemNotification::class);
+    }
+
+    #[Test]
+    public function when_no_platform_admin_is_listed_then_the_gap_is_reported_and_the_request_is_kept(): void
+    {
+        // Given company A was notified of a breach, A's owner, and no platform admin listed
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $owner = $this->anOwnerOf($this->companyA);
+        $this->allowlist([]);
+        Exceptions::fake();
+
+        // When the owner asks Lesily to file it for company A and the alert leaves the queue
+        $this->requestFiling($owner, $this->companyA, $breachId);
+        $this->runTheAlerts();
+
+        // Then the missing recipient is reported, nobody is alerted, and the request is kept
+        Exceptions::assertReported(fn (RuntimeException $gap): bool => $gap->getMessage() === "No platform admin to alert about the filing request of company {$this->companyA->getKey()} on breach incident {$breachId}.");
+        Notification::assertNothingSent();
+        $this->assertSame($owner->getKey(), BreachIncidentCompany::query()->whereCompany($this->companyA)->sole()->filing_requested_by);
+    }
+
+    #[Test]
+    public function when_another_company_already_asked_then_this_company_may_still_ask(): void
+    {
+        // Given an incident that notified companies A and B, B's request already recorded, and A's owner
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        BreachIncident::retrieve($breachId)
+            ->requestFiling(RequestBreachFilingCommand::from(['breachId' => $breachId, 'company' => $this->companyB]), $this->anOwnerOf($this->companyB))
+            ->persist();
+        $owner = $this->anOwnerOf($this->companyA);
+        $this->travelTo(self::REQUESTED_AT);
+
+        // When A's owner asks Lesily to file it for company A
+        $response = $this->requestFiling($owner, $this->companyA, $breachId);
+
+        // Then A's request is recorded beside B's, and A's audit row cites A's own request
+        $this->assertFilingRequestedFor($response, $this->companyA, $owner);
+        $this->assertSame(2, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachFilingRequested::class)->count());
+        $requestOfA = LesilyStoredEvent::query()->where('event_class', BreachFilingRequested::class)->where('event_properties->companyId', $this->companyA->getKey())->sole();
+        $this->assertSame($requestOfA->getKey(), AuditEntry::query()->sole()->stored_event_id);
+    }
+
+    #[Test]
+    public function when_the_company_is_on_two_incidents_then_only_the_asked_incident_is_stamped(): void
+    {
+        // Given company A was notified of two incidents, and A's owner
+        $askedId = $this->aNotifiedIncident($this->companyA);
+        $otherId = $this->aNotifiedIncident($this->companyA);
+        $before = $this->snapshotOf($otherId);
+        $owner = $this->anOwnerOf($this->companyA);
+
+        // When the owner asks Lesily to file the first incident for company A
+        $response = $this->requestFiling($owner, $this->companyA, $askedId);
+
+        // Then the first is stamped requested and the other is left as it was
+        $response->assertOk();
+        $this->assertSame('requested', $response->json('data.filing_status'));
+        $this->assertSame($before, $this->snapshotOf($otherId));
+        $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $otherId)->where('event_class', BreachFilingRequested::class)->count());
     }
 
     #[Test]
@@ -413,9 +507,17 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
      */
     protected function assertNothingRequested(string $breachId, array $before): void
     {
+        $this->assertNothingStored($breachId, $before);
+        $this->assertNoHandlersQueuedFor(BreachFilingRequested::class);
+    }
+
+    /**
+     * @param  array{0: array<string, mixed>, 1: list<array<string, mixed>>}  $before
+     */
+    protected function assertNothingStored(string $breachId, array $before): void
+    {
         $this->assertSame($before, $this->snapshotOf($breachId));
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', BreachFilingRequested::class)->count());
         $this->assertNoAuditRecorded();
-        $this->assertNoHandlersQueuedFor(BreachFilingRequested::class);
     }
 }

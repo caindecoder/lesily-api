@@ -74,6 +74,7 @@ class RequestBreachFilingInteractor
         return LesilyStoredEvent::query()
             ->where('aggregate_uuid', $notice->breach_incident_id)
             ->where('event_class', BreachFilingRequested::class)
+            ->where('event_properties->companyId', $notice->company_id)
             ->sole()
             ->getKey();
     }
