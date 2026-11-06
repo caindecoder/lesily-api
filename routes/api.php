@@ -26,6 +26,7 @@ use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
 use App\Foundation\Auth\IO\Http\Controllers\ChangePasswordController;
 use App\Foundation\Auth\IO\Http\Controllers\DefaultCompanyController;
 use App\Foundation\Auth\IO\Http\Controllers\ForgotPasswordController;
+use App\Compliance\Breach\IO\Http\Controllers\BreachNoticesController;
 use App\Foundation\Auth\IO\Http\Controllers\EnableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
 use App\Compliance\Privacy\IO\Http\Controllers\PrivacyNoticeController;
@@ -476,3 +477,8 @@ Route::get('/v1/admin/breach-incidents/{breachId}', [PlatformAdminBreachIncident
 // auth.company; no idempotency mount - the recorded-only stage guard is the dedup (a re-press answers 409).
 Route::post('/v1/admin/breach-incidents/{breachId}/notifications/companies', [PlatformAdminBreachIncidentsController::class, 'notifyCompanies'])
     ->middleware(['auth:sanctum', 'platform.admin']);
+
+// The owner and admins list the breach notices Lesily sent their company (UC-1-142) - the company's own
+// part of each notified incident, newest first; a plain read, not audited.
+Route::get('/v1/companies/{companyId}/breach-notices', [BreachNoticesController::class, 'index'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:breach.view-notices']);

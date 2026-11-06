@@ -3,6 +3,7 @@
 namespace Tests\Feature\Compliance\Breach;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
@@ -85,6 +86,38 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
             $this->aCompanyMember($company, 'admin'),
             $this->aCompanyMember($company, 'admin'),
         ];
+    }
+
+    protected function aNoticeFor(BreachIncidentRecordFactory $incident, Company $company, CarbonImmutable $notifiedAt): BreachIncidentCompany
+    {
+        return BreachIncidentCompany::factory()
+            ->forIncident($incident->createOne(), $company)
+            ->notifiedAt($notifiedAt)
+            ->createOne();
+    }
+
+    protected function aConsentingMember(Company $company, string $roleCode): User
+    {
+        $member = $this->aCompanyMember($company, $roleCode);
+        $this->aConsentRecordedBy($member, $company);
+
+        return $member;
+    }
+
+    protected function assertRoleInsufficient(TestResponse $response, string $permission): void
+    {
+        $response->assertForbidden();
+        $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
+        $response->assertJsonPath('required_permission', $permission);
+    }
+
+    protected function listNotices(?User $actor, Company $company, array $query = []): TestResponse
+    {
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
+        }
+
+        return $this->getJson("/api/v1/companies/{$company->getKey()}/breach-notices?".http_build_query($query));
     }
 
     protected function recordBreach(?User $caller, array $body): TestResponse
