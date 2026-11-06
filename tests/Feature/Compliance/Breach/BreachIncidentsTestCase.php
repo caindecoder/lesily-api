@@ -3,6 +3,7 @@
 namespace Tests\Feature\Compliance\Breach;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\Notification;
 use App\Compliance\Breach\Events\BreachRecorded;
 use Database\Factories\BreachIncidentRecordFactory;
 use App\Compliance\Breach\Aggregates\BreachIncident;
+use Database\Factories\BreachIncidentCompanyFactory;
 use Tests\Feature\PlatformAdmin\PlatformAdminTestCase;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
@@ -85,6 +87,66 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
             $this->aCompanyMember($company, 'admin'),
             $this->aCompanyMember($company, 'admin'),
         ];
+    }
+
+    protected function aNoticeFor(BreachIncidentRecordFactory $incident, Company $company, CarbonImmutable $notifiedAt): BreachIncidentCompany
+    {
+        return BreachIncidentCompany::factory()
+            ->forIncident($incident->createOne(), $company)
+            ->notifiedAt($notifiedAt)
+            ->createOne();
+    }
+
+    protected function aPartFor(BreachIncidentRecord $incident, Company $company): BreachIncidentCompanyFactory
+    {
+        return BreachIncidentCompany::factory()->forIncident($incident, $company);
+    }
+
+    protected function aConsentingMember(Company $company, string $roleCode): User
+    {
+        $member = $this->aCompanyMember($company, $roleCode);
+        $this->aConsentRecordedBy($member, $company);
+
+        return $member;
+    }
+
+    protected function assertRoleInsufficient(TestResponse $response, string $permission): void
+    {
+        $response->assertForbidden();
+        $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
+        $response->assertJsonPath('required_permission', $permission);
+    }
+
+    /**
+     * @param  list<string>  $breachIds
+     */
+    protected function assertNoticesListed(TestResponse $response, array $breachIds): void
+    {
+        $response->assertOk();
+        $this->assertSame($breachIds, $response->json('data.*.breach_id'));
+    }
+
+    protected function assertNothingListed(TestResponse $response): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data', []);
+        $response->assertJsonPath('meta.pagination.total', 0);
+    }
+
+    protected function listNotices(?User $actor, Company $company, array $query = []): TestResponse
+    {
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
+        }
+
+        return $this->getJson("/api/v1/companies/{$company->getKey()}/breach-notices?".http_build_query($query));
+    }
+
+    protected function listNoticesWithBody(User $actor, Company $company, array $body): TestResponse
+    {
+        Sanctum::actingAs($actor);
+
+        return $this->json('GET', "/api/v1/companies/{$company->getKey()}/breach-notices", $body);
     }
 
     protected function recordBreach(?User $caller, array $body): TestResponse

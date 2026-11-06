@@ -23,6 +23,7 @@ owner:
   - dsar.view-all
   - roles.view
   - privacy.view-register
+  - breach.view-notices
 
 admin:
   - users.invite
@@ -38,6 +39,7 @@ admin:
   - dsar.view-all
   - roles.view
   - privacy.view-register
+  - breach.view-notices
 
 hr_officer:
   - users.invite

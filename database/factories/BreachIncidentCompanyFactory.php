@@ -62,6 +62,11 @@ class BreachIncidentCompanyFactory extends Factory
         ]);
     }
 
+    public function notifiedAt(CarbonImmutable $at): static
+    {
+        return $this->state(['notified_at' => $at]);
+    }
+
     public function filed(string $ownerId, string $adminId): static
     {
         return $this->filingRequested($ownerId)->state(fn (array $attributes): array => [

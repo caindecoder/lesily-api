@@ -5,6 +5,8 @@ namespace App\Compliance\Breach\Entities;
 use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
+use App\Compliance\Breach\Enums\BreachFilingStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Database\Factories\BreachIncidentCompanyFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,6 +25,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property ?string $filing_requested_by
  * @property ?CarbonImmutable $filed_at
  * @property-read Company $company company_id is NOT NULL + restrictOnDelete
+ * @property-read BreachIncidentRecord $breach breach_incident_id is NOT NULL
  */
 class BreachIncidentCompany extends Model
 {
@@ -52,6 +55,39 @@ class BreachIncidentCompany extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    /**
+     * @return BelongsTo<BreachIncidentRecord, $this>
+     */
+    public function breach(): BelongsTo
+    {
+        return $this->belongsTo(BreachIncidentRecord::class, 'breach_incident_id');
+    }
+
+    public function filingStatus(): BreachFilingStatus
+    {
+        if ($this->filed_at !== null) {
+            return BreachFilingStatus::Filed;
+        }
+
+        return $this->filing_requested_at !== null ? BreachFilingStatus::Requested : BreachFilingStatus::NotRequested;
+    }
+
+    /**
+     * @param  Builder<self>  $query
+     */
+    protected function scopeWhereCompany(Builder $query, Company $company): void
+    {
+        $query->where('company_id', $company->getKey());
+    }
+
+    /**
+     * @param  Builder<self>  $query
+     */
+    protected function scopeWhereNotified(Builder $query): void
+    {
+        $query->whereNotNull('notified_at');
     }
 
     protected static function newFactory(): BreachIncidentCompanyFactory

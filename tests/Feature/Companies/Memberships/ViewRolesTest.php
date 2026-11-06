@@ -85,8 +85,8 @@ class ViewRolesTest extends MembershipsTestCase
 
         // Then only the company's live members are counted
         $this->assertRoleSummaries($response, [
-            'owner' => [16, 1],
-            'admin' => [13, 0],
+            'owner' => [17, 1],
+            'admin' => [14, 0],
             'hr_officer' => [5, 1],
             'payroll_officer' => [1, 0],
             'auditor' => [6, 0],
@@ -135,8 +135,8 @@ class ViewRolesTest extends MembershipsTestCase
 
         // Then each role arrives in display order with its permission and member counts
         $this->assertRoleSummaries($response, [
-            'owner' => [16, 1],
-            'admin' => [13, 1],
+            'owner' => [17, 1],
+            'admin' => [14, 1],
             'hr_officer' => [5, 0],
             'payroll_officer' => [1, 0],
             'auditor' => [6, 0],
