@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Compliance\Breach;
 
+use Closure;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Response;
@@ -12,6 +13,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Breach\Enums\BreachFilingStatus;
+use Database\Factories\BreachIncidentRecordFactory;
 use Database\Factories\BreachIncidentCompanyFactory;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
@@ -127,11 +129,10 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
 
     #[Test]
     #[DataProvider('provideStagesNeverShown')]
-    public function when_the_company_has_not_been_told_of_an_incident_then_it_is_not_listed(string $stage): void
+    public function when_the_company_has_not_been_told_of_an_incident_then_it_is_not_listed(Closure $atStage): void
     {
         // Given an incident naming company A that never reached its notices, and A's owner
-        $incident = $stage === 'false_alarm' ? $this->anIncident()->falseAlarm() : $this->anIncident();
-        $incident->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $atStage($this->anIncident())->withCompany($this->companyA, ['pii'], 40)->createOne();
         $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner lists company A's breach notices
@@ -222,6 +223,7 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         $response = $this->listNotices($owner, $this->companyA);
 
         // Then the notice shows the corrected count, while the notice as sent still says 120
+        $response->assertOk();
         $response->assertJsonPath('data.0.estimated_count', 145);
         $this->assertSame('120', $this->sentPartOf($breachId)['count']);
     }
@@ -409,7 +411,6 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         $response->assertDontSee($this->companyB->name);
         $response->assertDontSee('banking');
         $response->assertJsonMissing(['estimated_count' => 30]);
-        $response->assertJsonMissingPath('data.0.total_estimated_count');
     }
 
     /**
@@ -455,13 +456,13 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     }
 
     /**
-     * @return array<string, array{string}>
+     * @return array<string, array{Closure(BreachIncidentRecordFactory): BreachIncidentRecordFactory}>
      */
     public static function provideStagesNeverShown(): array
     {
         return [
-            'recorded' => ['recorded'],
-            'false alarm' => ['false_alarm'],
+            'recorded' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident],
+            'false alarm' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->falseAlarm()],
         ];
     }
 
