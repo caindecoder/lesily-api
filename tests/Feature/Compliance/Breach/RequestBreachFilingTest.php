@@ -391,7 +391,7 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
     }
 
     /**
-     * @return array{0: array<string, mixed>, 1: list<array<string, mixed>>}
+     * @return array{0: array<string, mixed>, 1: array<int, array<string, mixed>>}
      */
     protected function snapshotOf(string $breachId): array
     {
@@ -415,6 +415,7 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
         );
 
         $notice = BreachIncidentCompany::query()->whereCompany($company)->sole();
+        $this->assertNotNull($notice->filing_requested_at);
         $this->assertTrue(CarbonImmutable::parse(self::REQUESTED_AT)->equalTo($notice->filing_requested_at));
         $this->assertSame($owner->getKey(), $notice->filing_requested_by);
     }
@@ -489,7 +490,7 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
     }
 
     /**
-     * @param  array{0: array<string, mixed>, 1: list<array<string, mixed>>}  $before
+     * @param  array{0: array<string, mixed>, 1: array<int, array<string, mixed>>}  $before
      */
     protected function assertNothingRequested(string $breachId, array $before): void
     {
@@ -498,7 +499,7 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
     }
 
     /**
-     * @param  array{0: array<string, mixed>, 1: list<array<string, mixed>>}  $before
+     * @param  array{0: array<string, mixed>, 1: array<int, array<string, mixed>>}  $before
      */
     protected function assertNothingStored(string $breachId, array $before): void
     {

@@ -4,6 +4,7 @@ namespace App\Compliance\Breach\Aggregates;
 
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use App\Compliance\Breach\Enums\BreachStage;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Compliance\Breach\Events\BreachRecorded;
@@ -23,11 +24,11 @@ class BreachIncident extends AggregateRoot
 
     protected ?BreachStage $stage = null;
 
-    /** @var array<string, true> */
-    protected array $notifiedCompanyIds = [];
+    /** @var array<string, CarbonInterface> each notified company's notice time, keyed by company id */
+    protected array $notifiedAt = [];
 
-    /** @var array<string, true> */
-    protected array $filingRequestedCompanyIds = [];
+    /** @var array<string, CarbonInterface> each company's filing-request time, keyed by company id */
+    protected array $filingRequestedAt = [];
 
     public function record(RecordBreachCommand $command, User $admin): static
     {
@@ -81,11 +82,11 @@ class BreachIncident extends AggregateRoot
     {
         $companyId = $command->company->getKey();
 
-        if (! isset($this->notifiedCompanyIds[$companyId])) {
+        if (! isset($this->notifiedAt[$companyId])) {
             throw BreachFilingNotOpenException::notNotified();
         }
 
-        if (isset($this->filingRequestedCompanyIds[$companyId])) {
+        if (isset($this->filingRequestedAt[$companyId])) {
             throw BreachFilingNotOpenException::alreadyRequested();
         }
 
@@ -104,7 +105,7 @@ class BreachIncident extends AggregateRoot
 
     protected function applyBreachCompanyNotified(BreachCompanyNotified $event): void
     {
-        $this->notifiedCompanyIds[$event->companyId] = true;
+        $this->notifiedAt[$event->companyId] = $event->notifiedAt;
     }
 
     protected function applyBreachCompaniesNotified(BreachCompaniesNotified $event): void
@@ -114,6 +115,6 @@ class BreachIncident extends AggregateRoot
 
     protected function applyBreachFilingRequested(BreachFilingRequested $event): void
     {
-        $this->filingRequestedCompanyIds[$event->companyId] = true;
+        $this->filingRequestedAt[$event->companyId] = $event->requestedAt;
     }
 }

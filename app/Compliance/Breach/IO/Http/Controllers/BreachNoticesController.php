@@ -16,7 +16,7 @@ use App\Compliance\Breach\UseCases\Interactors\RequestBreachFilingInteractor;
 
 class BreachNoticesController extends Controller
 {
-    public function __construct(protected readonly RequestBreachFilingInteractor $requestFiling) {}
+    public function __construct(protected readonly RequestBreachFilingInteractor $requestBreachFiling) {}
 
     public function index(Request $request, ListBreachNoticesInteractor $interactor): JsonResponse
     {
@@ -35,6 +35,6 @@ class BreachNoticesController extends Controller
             'company' => $companyId,
         ]);
 
-        return new BreachNoticeResource($this->requestFiling->execute($command, $owner, RequestOrigin::fromRequest($request)));
+        return new BreachNoticeResource($this->requestBreachFiling->execute($command, $owner, RequestOrigin::fromRequest($request)));
     }
 }

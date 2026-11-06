@@ -42,7 +42,7 @@ class RequestBreachFilingInteractor
 
             $this->recordAudit($notice, $owner, $context);
 
-            return BreachIncidentCompany::query()->with(['breach', 'company'])->whereKey($notice->getKey())->firstOrFail();
+            return BreachIncidentCompany::query()->whereKey($notice->getKey())->firstOrFail();
         });
     }
 
