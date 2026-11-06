@@ -4,13 +4,17 @@ namespace App\Compliance\Breach\Aggregates;
 
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use App\Compliance\Breach\Enums\BreachStage;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
+use App\Compliance\Breach\Events\BreachFilingRequested;
 use App\Compliance\Breach\Events\BreachCompaniesNotified;
 use App\Compliance\Breach\UseCases\Commands\AffectedCompanyData;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
+use App\Compliance\Breach\Exceptions\BreachFilingNotOpenException;
+use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
 use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
 use App\Compliance\Breach\Exceptions\BreachIncidentAlreadyRecordedException;
 
@@ -19,6 +23,12 @@ class BreachIncident extends AggregateRoot
     private const int DEADLINE_HOURS = 72;
 
     protected ?BreachStage $stage = null;
+
+    /** @var array<string, CarbonInterface> each notified company's notice time, keyed by company id */
+    protected array $notifiedAt = [];
+
+    /** @var array<string, CarbonInterface> each company's filing-request time, keyed by company id */
+    protected array $filingRequestedAt = [];
 
     public function record(RecordBreachCommand $command, User $admin): static
     {
@@ -68,13 +78,43 @@ class BreachIncident extends AggregateRoot
         ));
     }
 
+    public function requestFiling(RequestBreachFilingCommand $command, User $owner): static
+    {
+        $companyId = $command->company->getKey();
+
+        if (! isset($this->notifiedAt[$companyId])) {
+            throw BreachFilingNotOpenException::notNotified();
+        }
+
+        if (isset($this->filingRequestedAt[$companyId])) {
+            throw BreachFilingNotOpenException::alreadyRequested();
+        }
+
+        return $this->recordThat(new BreachFilingRequested(
+            breachId: $this->uuid(),
+            companyId: $companyId,
+            requestedAt: CarbonImmutable::now(),
+            requestedByUserId: $owner->getKey(),
+        ));
+    }
+
     protected function applyBreachRecorded(BreachRecorded $event): void
     {
         $this->stage = BreachStage::Recorded;
     }
 
+    protected function applyBreachCompanyNotified(BreachCompanyNotified $event): void
+    {
+        $this->notifiedAt[$event->companyId] = $event->notifiedAt;
+    }
+
     protected function applyBreachCompaniesNotified(BreachCompaniesNotified $event): void
     {
         $this->stage = BreachStage::CompaniesNotified;
+    }
+
+    protected function applyBreachFilingRequested(BreachFilingRequested $event): void
+    {
+        $this->filingRequestedAt[$event->companyId] = $event->requestedAt;
     }
 }

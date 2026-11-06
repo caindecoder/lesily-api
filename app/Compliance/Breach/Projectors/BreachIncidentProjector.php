@@ -5,6 +5,7 @@ namespace App\Compliance\Breach\Projectors;
 use App\Compliance\Breach\Enums\BreachStage;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
+use App\Compliance\Breach\Events\BreachFilingRequested;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use App\Compliance\Breach\Events\BreachCompaniesNotified;
@@ -38,6 +39,14 @@ class BreachIncidentProjector extends Projector
             ->where('breach_incident_id', $event->breachId)
             ->where('company_id', $event->companyId)
             ->update(['notified_at' => $event->notifiedAt]);
+    }
+
+    public function onBreachFilingRequested(BreachFilingRequested $event): void
+    {
+        BreachIncidentCompany::query()
+            ->where('breach_incident_id', $event->breachId)
+            ->where('company_id', $event->companyId)
+            ->update(['filing_requested_at' => $event->requestedAt, 'filing_requested_by' => $event->requestedByUserId]);
     }
 
     public function onBreachCompaniesNotified(BreachCompaniesNotified $event): void

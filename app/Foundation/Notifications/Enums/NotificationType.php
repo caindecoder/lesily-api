@@ -16,11 +16,12 @@ enum NotificationType: string
     case DsarRequestWithdrawn = 'dsar_request_withdrawn';
     case DsarDeadlineMissed = 'dsar_deadline_missed';
     case BreachCompanyNotice = 'breach_company_notice';
+    case BreachFilingRequested = 'breach_filing_requested';
 
     /**
      * Critical notifications (account-security alerts, password-change
      * confirmations, ownership-received notices, the outcome of a data
-     * export, a missed data-request deadline, a breach notice to a company)
+     * export, a missed data-request deadline, a breach notice to a company, a company's request that Lesily file a breach)
      * are mandatory: users cannot opt
      * their email out of them. Security notices per foundation-brief /
      * questionnaire S16 L474; ownership-received is a control-surface change —
@@ -43,6 +44,7 @@ enum NotificationType: string
             self::GeneralAccountNotice => false,
             self::TeamWelcome => false,
             self::BreachCompanyNotice => true,
+            self::BreachFilingRequested => true,
         };
     }
 }

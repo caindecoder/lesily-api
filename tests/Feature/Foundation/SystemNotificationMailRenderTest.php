@@ -134,6 +134,19 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
         $mail->assertSeeInHtml('Lesily found a breach of personal data that Contoso keeps in Lesily. It was discovered on 4 May 2026, 14:00 UTC. As the data controller, Contoso should notify the Data Protection Authority by 7 May 2026, 14:00 UTC. What happened: A payroll export was emailed to the wrong recipient. Likely consequences: Salary and bank details may be read by one outside person. Measures taken or planned: The recipient was asked to delete the file. Personal data affected: Payroll records, Bank details. People affected: 30.');
     }
 
+    #[Test]
+    public function when_a_breach_filing_request_alert_is_rendered_then_its_mail_names_the_company_and_the_incident(): void
+    {
+        // Given the platform admins' alert that Contoso asked Lesily to file an incident
+        $mail = new SystemNotificationMail(NotificationType::BreachFilingRequested, 'Contoso', [
+            'incident' => '019a5b2e-7c1d-7f00-8a00-0000000000aa',
+        ]);
+
+        // When / Then — its subject names the company and its body names the incident to file
+        $mail->assertHasSubject('Contoso asked Lesily to file a personal data breach');
+        $mail->assertSeeInHtml('Contoso asked Lesily to file the personal data breach 019a5b2e-7c1d-7f00-8a00-0000000000aa with the Data Protection Authority for it. Please file it for them.');
+    }
+
     /**
      * @return array<string, array{NotificationType, string, string}>
      */
