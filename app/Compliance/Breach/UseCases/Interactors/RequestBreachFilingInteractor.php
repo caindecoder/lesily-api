@@ -3,10 +3,10 @@
 namespace App\Compliance\Breach\UseCases\Interactors;
 
 use App\Models\User;
-use RuntimeException;
 use Illuminate\Support\Facades\DB;
 use App\Compliance\Breach\Enums\BreachStage;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
+use App\Compliance\Breach\Aggregates\BreachIncident;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
@@ -17,7 +17,7 @@ class RequestBreachFilingInteractor
 {
     public function execute(RequestBreachFilingCommand $command, User $owner, RequestOrigin $context): BreachIncidentCompany
     {
-        return DB::transaction(function () use ($command): BreachIncidentCompany {
+        return DB::transaction(function () use ($command, $owner): BreachIncidentCompany {
             $breach = BreachIncidentRecord::query()->whereKey($command->breachId)->lockForUpdate()->first()
                 ?? throw new ModelNotFoundException;
 
@@ -30,7 +30,9 @@ class RequestBreachFilingInteractor
 
             $this->guardFilingOpen($breach, $notice);
 
-            throw new RuntimeException('Not implemented');
+            BreachIncident::retrieve($breach->getKey())->requestFiling($command, $owner)->persist();
+
+            return BreachIncidentCompany::query()->with(['breach', 'company'])->whereKey($notice->getKey())->firstOrFail();
         });
     }
 

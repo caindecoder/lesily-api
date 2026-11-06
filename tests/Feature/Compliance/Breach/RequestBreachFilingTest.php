@@ -4,6 +4,7 @@ namespace Tests\Feature\Compliance\Breach;
 
 use Closure;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
@@ -24,6 +25,10 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 class RequestBreachFilingTest extends BreachIncidentsTestCase
 {
     use InteractsWithQueuedReactors;
+
+    protected const string REQUESTED_AT = '2026-05-05 09:30:00';
+
+    protected const string REQUESTED_AT_JSON = '2026-05-05T09:30:00.000000Z';
 
     protected function setUp(): void
     {
@@ -198,6 +203,27 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
         ];
     }
 
+    #[Test]
+    public function when_the_owner_asks_then_the_instruction_is_recorded_and_the_notices_list_shows_it_requested(): void
+    {
+        // Given company A was notified of a breach, and A's owner
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $owner = $this->anOwnerOf($this->companyA);
+        $this->travelTo(self::REQUESTED_AT);
+
+        // When the owner asks Lesily to file it for company A
+        $this->requestFiling($owner, $this->companyA, $breachId);
+
+        // Then the instruction is recorded with A, the owner and when, and A's notices list shows it requested
+        $this->assertRequestStored($breachId, $this->companyA, $owner);
+        $listed = $this->listNotices($owner, $this->companyA);
+        $listed->assertOk();
+        $this->assertSame(
+            ['requested', self::REQUESTED_AT_JSON, $owner->getKey()],
+            [$listed->json('data.0.filing_status'), $listed->json('data.0.filing_requested_at'), $listed->json('data.0.filing_requested_by')],
+        );
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -266,6 +292,22 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
             BreachIncidentRecord::query()->whereKey($breachId)->firstOrFail()->getAttributes(),
             BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->orderBy('id')->get()->map->getAttributes()->all(),
         ];
+    }
+
+    protected function assertRequestStored(string $breachId, Company $company, User $owner): int
+    {
+        $request = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $breachId)
+            ->where('event_class', BreachFilingRequested::class)
+            ->sole();
+
+        $this->assertSame([$company->getKey(), $owner->getKey(), CarbonImmutable::parse(self::REQUESTED_AT)->toIso8601String()], [
+            $request->event_properties['companyId'],
+            $request->event_properties['requestedByUserId'],
+            CarbonImmutable::parse($request->event_properties['requestedAt'])->toIso8601String(),
+        ]);
+
+        return (int) $request->getKey();
     }
 
     protected function assertRefusedAsNotOpen(TestResponse $response, string $message): void

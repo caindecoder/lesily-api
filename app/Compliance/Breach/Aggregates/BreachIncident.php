@@ -8,9 +8,11 @@ use App\Compliance\Breach\Enums\BreachStage;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
+use App\Compliance\Breach\Events\BreachFilingRequested;
 use App\Compliance\Breach\Events\BreachCompaniesNotified;
 use App\Compliance\Breach\UseCases\Commands\AffectedCompanyData;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
+use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
 use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
 use App\Compliance\Breach\Exceptions\BreachIncidentAlreadyRecordedException;
 
@@ -65,6 +67,16 @@ class BreachIncident extends AggregateRoot
             breachId: $this->uuid(),
             notifiedAt: $notifiedAt,
             notifiedByUserId: $admin->getKey(),
+        ));
+    }
+
+    public function requestFiling(RequestBreachFilingCommand $command, User $owner): static
+    {
+        return $this->recordThat(new BreachFilingRequested(
+            breachId: $this->uuid(),
+            companyId: $command->company->getKey(),
+            requestedAt: CarbonImmutable::now(),
+            requestedByUserId: $owner->getKey(),
         ));
     }
 
