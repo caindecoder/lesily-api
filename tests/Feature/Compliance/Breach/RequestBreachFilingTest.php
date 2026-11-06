@@ -286,19 +286,39 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
     public function when_the_company_is_on_two_incidents_then_only_the_asked_incident_is_stamped(): void
     {
         // Given company A was notified of two incidents, and A's owner
-        $askedId = $this->aNotifiedIncident($this->companyA);
         $otherId = $this->aNotifiedIncident($this->companyA);
+        $askedId = $this->aNotifiedIncident($this->companyA);
         $before = $this->snapshotOf($otherId);
         $owner = $this->anOwnerOf($this->companyA);
 
-        // When the owner asks Lesily to file the first incident for company A
+        // When the owner asks Lesily to file the second incident for company A
         $response = $this->requestFiling($owner, $this->companyA, $askedId);
 
-        // Then the first is stamped requested and the other is left as it was
+        // Then the asked incident's notice is stamped requested and the other is left as it was
         $response->assertOk();
-        $this->assertSame('requested', $response->json('data.filing_status'));
+        $this->assertSame([$askedId, 'requested'], [$response->json('data.breach_id'), $response->json('data.filing_status')]);
         $this->assertSame($before, $this->snapshotOf($otherId));
         $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $otherId)->where('event_class', BreachFilingRequested::class)->count());
+    }
+
+    #[Test]
+    public function when_the_company_already_asked_on_another_incident_then_this_request_is_recorded_and_audited(): void
+    {
+        // Given company A was notified of two incidents and already asked Lesily to file the first, and A's owner
+        $firstId = $this->aNotifiedIncident($this->companyA);
+        $owner = $this->anOwnerOf($this->companyA);
+        BreachIncident::retrieve($firstId)
+            ->requestFiling(RequestBreachFilingCommand::from(['breachId' => $firstId, 'company' => $this->companyA]), $owner)
+            ->persist();
+        $secondId = $this->aNotifiedIncident($this->companyA);
+
+        // When the owner asks Lesily to file the second incident for company A
+        $response = $this->requestFiling($owner, $this->companyA, $secondId);
+
+        // Then the second request is recorded, and its audit row cites the second incident's request
+        $response->assertOk();
+        $request = LesilyStoredEvent::query()->where('aggregate_uuid', $secondId)->where('event_class', BreachFilingRequested::class)->sole();
+        $this->assertSame([$request->getKey(), $secondId], [AuditEntry::query()->sole()->stored_event_id, AuditEntry::query()->sole()->subject_id]);
     }
 
     #[Test]
