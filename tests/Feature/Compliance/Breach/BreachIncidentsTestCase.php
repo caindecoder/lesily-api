@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Notification;
 use App\Compliance\Breach\Events\BreachRecorded;
 use Database\Factories\BreachIncidentRecordFactory;
 use App\Compliance\Breach\Aggregates\BreachIncident;
+use Database\Factories\BreachIncidentCompanyFactory;
 use Tests\Feature\PlatformAdmin\PlatformAdminTestCase;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
@@ -94,6 +95,11 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
             ->forIncident($incident->createOne(), $company)
             ->notifiedAt($notifiedAt)
             ->createOne();
+    }
+
+    protected function aPartFor(BreachIncidentRecord $incident, Company $company): BreachIncidentCompanyFactory
+    {
+        return BreachIncidentCompany::factory()->forIncident($incident, $company);
     }
 
     protected function aConsentingMember(Company $company, string $roleCode): User

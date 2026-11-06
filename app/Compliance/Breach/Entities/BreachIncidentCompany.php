@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
+use App\Compliance\Breach\Enums\BreachFilingStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Database\Factories\BreachIncidentCompanyFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -62,6 +63,15 @@ class BreachIncidentCompany extends Model
     public function breach(): BelongsTo
     {
         return $this->belongsTo(BreachIncidentRecord::class, 'breach_incident_id');
+    }
+
+    public function filingStatus(): BreachFilingStatus
+    {
+        if ($this->filed_at !== null) {
+            return BreachFilingStatus::Filed;
+        }
+
+        return $this->filing_requested_at !== null ? BreachFilingStatus::Requested : BreachFilingStatus::NotRequested;
     }
 
     /**
