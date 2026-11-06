@@ -12,6 +12,7 @@ use App\Compliance\Breach\Events\BreachFilingRequested;
 use App\Compliance\Breach\Events\BreachCompaniesNotified;
 use App\Compliance\Breach\UseCases\Commands\AffectedCompanyData;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
+use App\Compliance\Breach\Exceptions\BreachFilingNotOpenException;
 use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
 use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
 use App\Compliance\Breach\Exceptions\BreachIncidentAlreadyRecordedException;
@@ -21,6 +22,12 @@ class BreachIncident extends AggregateRoot
     private const int DEADLINE_HOURS = 72;
 
     protected ?BreachStage $stage = null;
+
+    /** @var array<string, true> */
+    protected array $notifiedCompanyIds = [];
+
+    /** @var array<string, true> */
+    protected array $filingRequestedCompanyIds = [];
 
     public function record(RecordBreachCommand $command, User $admin): static
     {
@@ -72,9 +79,19 @@ class BreachIncident extends AggregateRoot
 
     public function requestFiling(RequestBreachFilingCommand $command, User $owner): static
     {
+        $companyId = $command->company->getKey();
+
+        if (! isset($this->notifiedCompanyIds[$companyId])) {
+            throw BreachFilingNotOpenException::notNotified();
+        }
+
+        if (isset($this->filingRequestedCompanyIds[$companyId])) {
+            throw BreachFilingNotOpenException::alreadyRequested();
+        }
+
         return $this->recordThat(new BreachFilingRequested(
             breachId: $this->uuid(),
-            companyId: $command->company->getKey(),
+            companyId: $companyId,
             requestedAt: CarbonImmutable::now(),
             requestedByUserId: $owner->getKey(),
         ));
@@ -85,8 +102,18 @@ class BreachIncident extends AggregateRoot
         $this->stage = BreachStage::Recorded;
     }
 
+    protected function applyBreachCompanyNotified(BreachCompanyNotified $event): void
+    {
+        $this->notifiedCompanyIds[$event->companyId] = true;
+    }
+
     protected function applyBreachCompaniesNotified(BreachCompaniesNotified $event): void
     {
         $this->stage = BreachStage::CompaniesNotified;
+    }
+
+    protected function applyBreachFilingRequested(BreachFilingRequested $event): void
+    {
+        $this->filingRequestedCompanyIds[$event->companyId] = true;
     }
 }

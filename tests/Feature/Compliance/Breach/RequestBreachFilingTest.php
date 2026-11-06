@@ -371,20 +371,6 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
         ];
     }
 
-    protected function aNotifiedIncident(Company ...$companies): string
-    {
-        $breachId = $this->aRecordedIncident(['companies' => array_map(fn (Company $company): array => [
-            'companyId' => $company->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40,
-        ], $companies)]);
-
-        $parts = collect($companies)->mapWithKeys(fn (Company $company): array => [
-            $company->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.'],
-        ])->all();
-        BreachIncident::retrieve($breachId)->notifyCompanies($this->admin, $parts)->persist();
-
-        return $breachId;
-    }
-
     protected function anOwnerOf(Company $company): User
     {
         return $this->aConsentingMember($company, 'owner');

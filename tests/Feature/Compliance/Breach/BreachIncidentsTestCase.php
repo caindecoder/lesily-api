@@ -68,6 +68,20 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         return $breachId;
     }
 
+    protected function aNotifiedIncident(Company ...$companies): string
+    {
+        $breachId = $this->aRecordedIncident(['companies' => array_map(fn (Company $company): array => [
+            'companyId' => $company->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40,
+        ], $companies)]);
+
+        $parts = collect($companies)->mapWithKeys(fn (Company $company): array => [
+            $company->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.'],
+        ])->all();
+        BreachIncident::retrieve($breachId)->notifyCompanies($this->admin, $parts)->persist();
+
+        return $breachId;
+    }
+
     protected function notifyCompanies(?User $caller, string $breachId): TestResponse
     {
         if ($caller !== null) {
