@@ -6,9 +6,13 @@ use Illuminate\Http\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use Tests\Concerns\AssertsFilterEmptyValueRejection;
+use App\Compliance\Breach\UseCases\Commands\BreachNoticeFilters;
 
 class ListBreachNoticesTest extends BreachIncidentsTestCase
 {
+    use AssertsFilterEmptyValueRejection;
+
     #[Test]
     public function when_a_guest_lists_breach_notices_then_they_are_unauthenticated(): void
     {
@@ -71,6 +75,33 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     }
 
     /**
+     * @param  array<string, mixed>  $query
+     */
+    #[Test]
+    #[DataProvider('provideInvalidListQueries')]
+    public function when_the_list_query_is_invalid_then_it_is_refused_with_the_reason(array $query, string $field, string $message): void
+    {
+        // Given company A's owner
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner lists company A's breach notices with an invalid query
+        $response = $this->listNotices($owner, $this->companyA, $query);
+
+        // Then the query is refused with the reason
+        $this->assertValidationRejected($response, $field, $message);
+    }
+
+    #[Test]
+    #[DataProvider('provideEmptyFilterValues')]
+    public function when_a_notices_filter_is_built_with_an_empty_value_then_it_is_rejected(string $field, string $value): void
+    {
+        // Given an empty or blank value for one of the list's query keys
+        // When the notices filter is built from it
+        // Then the value is rejected
+        $this->assertEmptyFilterValueRejected(BreachNoticeFilters::class, $field, $value);
+    }
+
+    /**
      * @return array<string, array{string}>
      */
     public static function provideRolesWithoutTheViewPermission(): array
@@ -81,6 +112,35 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
             'employee' => ['employee'],
             'auditor' => ['auditor'],
             'manager' => ['manager'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string, string}>
+     */
+    public static function provideInvalidListQueries(): array
+    {
+        return [
+            'unknown key' => [['sort' => 'notified_at'], 'sort', 'This filter is not supported.'],
+            'per_page below floor' => [['per_page' => 0], 'per_page', 'The per page field must be at least 1.'],
+            'per_page above cap' => [['per_page' => 101], 'per_page', 'The per page field must not be greater than 100.'],
+            'per_page not a number' => [['per_page' => 'abc'], 'per_page', 'The per page field must be an integer.'],
+            'array-valued per_page' => [['per_page' => ['2']], 'per_page', 'The per page field must be an integer.'],
+            'page below floor' => [['page' => 0], 'page', 'The page field must be at least 1.'],
+            'page not a number' => [['page' => 'abc'], 'page', 'The page field must be an integer.'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function provideEmptyFilterValues(): array
+    {
+        return [
+            'empty page' => ['page', ''],
+            'empty per_page' => ['per_page', ''],
+            'whitespace page' => ['page', ' '],
+            'whitespace per_page' => ['per_page', ' '],
         ];
     }
 }
