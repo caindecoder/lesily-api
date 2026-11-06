@@ -48,6 +48,7 @@ use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\Exceptions\RegistrationConflictException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use App\Companies\Exceptions\OwnershipTransferContentionException;
+use App\Compliance\Breach\Exceptions\BreachFilingNotOpenException;
 use App\Compliance\Dsar\Exceptions\DsarRequesterMismatchException;
 use App\Compliance\Dsar\Exceptions\DsarRequestInProgressException;
 use App\Foundation\Billing\Exceptions\FeatureUnavailableException;
@@ -374,6 +375,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // Only a recorded breach incident may have its companies notified - a re-press,
         // a resolved or a false-alarm incident refuses with the stage named (UC-1-132 2b, 2c → 409).
         $exceptions->render(fn (BreachIncidentNotRecordedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // A company's filing request on a breach is open once - already asked, already
+        // filed for, or a resolved incident refuses with the reason named (UC-1-143 2c-2e → 409).
+        $exceptions->render(fn (BreachFilingNotOpenException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));

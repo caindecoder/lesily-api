@@ -157,6 +157,47 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
         ];
     }
 
+    #[Test]
+    #[DataProvider('provideClosedFilings')]
+    public function when_the_filing_is_no_longer_open_then_the_request_is_refused_with_the_reason(Closure $atStage, Closure $rowState, string $message): void
+    {
+        // Given company A was told of an incident whose filing is no longer open to a request, and A's owner
+        $owner = $this->anOwnerOf($this->companyA);
+        $notice = $this->aFactoryNotice($atStage($this->anIncident()), fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $rowState($row, $owner->getKey(), $this->admin->getKey()));
+        $before = $this->snapshotOf($notice->breach_incident_id);
+
+        // When the owner asks Lesily to file it for company A
+        $response = $this->requestFiling($owner, $this->companyA, $notice->breach_incident_id);
+
+        // Then the request is refused with the reason and nothing is requested
+        $this->assertRefusedAsNotOpen($response, $message);
+        $this->assertNothingRequested($notice->breach_incident_id, $before);
+    }
+
+    /**
+     * @return array<string, array{Closure(BreachIncidentRecordFactory): BreachIncidentRecordFactory, Closure(BreachIncidentCompanyFactory, string, string): BreachIncidentCompanyFactory, string}>
+     */
+    public static function provideClosedFilings(): array
+    {
+        return [
+            'already requested' => [
+                fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->companiesNotified(),
+                fn (BreachIncidentCompanyFactory $row, string $ownerId): BreachIncidentCompanyFactory => $row->filingRequested($ownerId),
+                'Lesily has already been asked to file this breach for the company.',
+            ],
+            'already filed for' => [
+                fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->companiesNotified(),
+                fn (BreachIncidentCompanyFactory $row, string $ownerId, string $adminId): BreachIncidentCompanyFactory => $row->filed($ownerId, $adminId),
+                'Lesily has already filed this breach with the regulator for the company.',
+            ],
+            'resolved' => [
+                fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->resolved(),
+                fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $row->notified(),
+                'A resolved breach incident takes no filing request.',
+            ],
+        ];
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -225,6 +266,12 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
             BreachIncidentRecord::query()->whereKey($breachId)->firstOrFail()->getAttributes(),
             BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->orderBy('id')->get()->map->getAttributes()->all(),
         ];
+    }
+
+    protected function assertRefusedAsNotOpen(TestResponse $response, string $message): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::StateGuardViolation);
+        $response->assertJsonPath('message', $message);
     }
 
     /**

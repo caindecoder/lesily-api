@@ -1,0 +1,28 @@
+<?php
+
+namespace App\Compliance\Breach\Exceptions;
+
+use DomainException;
+
+class BreachFilingNotOpenException extends DomainException
+{
+    private function __construct(string $message)
+    {
+        parent::__construct($message);
+    }
+
+    public static function alreadyRequested(): self
+    {
+        return new self('Lesily has already been asked to file this breach for the company.');
+    }
+
+    public static function alreadyFiled(): self
+    {
+        return new self('Lesily has already filed this breach with the regulator for the company.');
+    }
+
+    public static function resolved(): self
+    {
+        return new self('A resolved breach incident takes no filing request.');
+    }
+}
