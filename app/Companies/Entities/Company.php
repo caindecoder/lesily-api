@@ -7,6 +7,7 @@ use App\Companies\Enums\CompanyStatus;
 use Database\Factories\CompanyFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Foundation\Billing\Enums\Feature;
+use Illuminate\Database\Eloquent\Collection;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -128,6 +129,20 @@ class Company extends Model
     public function owner(): ?User
     {
         return $this->users()->wherePivot('role_id', Role::findByCode('owner')?->getKey())->first();
+    }
+
+    /**
+     * The members told when the company must act as data controller — its
+     * owner and its current admins.
+     *
+     * @return Collection<int, User>
+     */
+    public function ownerAndAdmins(): Collection
+    {
+        return $this->users()
+            ->wherePivotIn('role_id', Role::query()->whereIn('code', ['owner', 'admin'])->pluck('id'))
+            ->wherePivotNull('deleted_at')
+            ->get();
     }
 
     protected static function newFactory(): CompanyFactory

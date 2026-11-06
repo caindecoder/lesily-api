@@ -73,6 +73,7 @@ use App\Companies\Memberships\Exceptions\MembershipContentionException;
 use App\Foundation\Auth\Exceptions\GoogleAccountNotRegisteredException;
 use App\Companies\Memberships\Exceptions\OwnerTransferRequiredException;
 use App\Companies\Memberships\Exceptions\SelfRoleChangeBlockedException;
+use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 use App\Companies\Exceptions\OwnershipTransferCaseAlreadyClosedException;
@@ -366,6 +367,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // Only an open ownership-transfer case may be verified — the case had
         // already moved on (UC-1-113 flow 4a; the world moved → 409).
         $exceptions->render(fn (OwnershipTransferCaseNotOpenException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // Only a recorded breach incident may have its companies notified - a re-press,
+        // a resolved or a false-alarm incident refuses with the stage named (UC-1-132 2b, 2c → 409).
+        $exceptions->render(fn (BreachIncidentNotRecordedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));

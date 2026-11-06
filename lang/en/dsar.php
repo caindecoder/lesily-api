@@ -135,6 +135,7 @@ return [
             'breach_recorded' => 'Recorded a data breach',
             'breach_admin_viewed' => 'Viewed a data breach',
             'breach_queue_viewed' => 'Viewed the data breaches',
+            'breach_companies_notified' => 'Notified the companies affected by a data breach',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',
@@ -191,6 +192,7 @@ return [
             'dsar_export_failed' => 'Data export failed',
             'dsar_request_withdrawn' => 'Data request withdrawn',
             'dsar_deadline_missed' => 'Data request deadline missed',
+            'breach_company_notice' => 'Data breach notice',
         ],
         'channel' => [
             'mail' => 'Email',

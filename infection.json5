@@ -143,6 +143,9 @@
                 "App\\Foundation\\Auth\\Reactors\\EmailVerificationReactor::onUserSignedUpAsOwner",
                 "App\\Consent\\Projectors\\ConsentRecordProjector::onConsentRecorded",
                 "App\\Compliance\\Breach\\Projectors\\BreachIncidentProjector::onBreachRecorded",
+                "App\\Compliance\\Breach\\Projectors\\BreachIncidentProjector::onBreachCompanyNotified",
+                "App\\Compliance\\Breach\\Projectors\\BreachIncidentProjector::onBreachCompaniesNotified",
+                "App\\Compliance\\Breach\\Reactors\\BreachNotificationReactor::onBreachCompanyNotified",
                 // OQ-1-172 PR-0 L-RELATIONS: lazy relations resolved from Model scope
                 // (Model::getRelationValue calls $this->company() / $this->settings() /
                 // $this->country() from inside the class, so protected still resolves); no
