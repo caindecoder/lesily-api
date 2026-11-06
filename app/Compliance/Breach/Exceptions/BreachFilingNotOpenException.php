@@ -6,11 +6,6 @@ use DomainException;
 
 class BreachFilingNotOpenException extends DomainException
 {
-    private function __construct(string $message)
-    {
-        parent::__construct($message);
-    }
-
     public static function alreadyRequested(): self
     {
         return new self('Lesily has already been asked to file this breach for the company.');
