@@ -16,7 +16,7 @@ class FlagMissedBreachDeadlines extends Command
     public function handle(FlagMissedBreachDeadlinesInteractor $interactor): int
     {
         try {
-            $cutoff = CarbonImmutable::parse($this->option('date'));
+            $cutoff = CarbonImmutable::parse($this->option('date'))->utc();
         } catch (InvalidFormatException) {
             $this->error('The --date option must be a date, such as 2026-10-31.');
 

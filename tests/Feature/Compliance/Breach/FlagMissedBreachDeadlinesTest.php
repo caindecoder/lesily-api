@@ -218,6 +218,20 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_the_replayed_date_carries_an_offset_then_the_cutoff_is_read_as_its_utc_instant(): void
+    {
+        // Given an incident due at 2026-05-08 03:00 UTC, and the clock that morning
+        $breachId = $this->aRecordedIncident(['dateDiscovered' => '2026-05-05T03:00:00Z']);
+        $this->travelTo('2026-05-08 09:00:00');
+
+        // When the scan is replayed for midnight at UTC-5 — 05:00 UTC, past the deadline
+        $this->runFlagMissedDeadlines('2026-05-08T00:00:00-05:00')->expectsOutput('1 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then the incident is flagged, stamped at that instant in UTC
+        $this->assertFlagged($breachId, CarbonImmutable::parse('2026-05-08 05:00:00'));
+    }
+
+    #[Test]
     public function when_the_admin_list_is_padded_then_the_listed_admin_is_still_alerted(): void
     {
         // Given an incident still recorded past its deadline, and the admin listed with spaces and a trailing comma
