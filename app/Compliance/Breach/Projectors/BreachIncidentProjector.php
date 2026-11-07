@@ -4,6 +4,7 @@ namespace App\Compliance\Breach\Projectors;
 
 use App\Compliance\Breach\Enums\BreachStage;
 use App\Compliance\Breach\Events\BreachRecorded;
+use App\Compliance\Breach\Events\BreachDeadlineMissed;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Events\BreachFilingRequested;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
@@ -56,6 +57,11 @@ class BreachIncidentProjector extends Projector
             ->where('breach_incident_id', $event->breachId)
             ->where('company_id', $event->companyId)
             ->update(['filed_at' => $event->filedAt, 'filed_by' => $event->filedByUserId, 'filed_body_hash' => $event->bodyHash]);
+    }
+
+    public function onBreachDeadlineMissed(BreachDeadlineMissed $event): void
+    {
+        BreachIncidentRecord::query()->whereKey($event->breachId)->update(['deadline_missed_at' => $event->missedAt]);
     }
 
     public function onBreachCompaniesNotified(BreachCompaniesNotified $event): void

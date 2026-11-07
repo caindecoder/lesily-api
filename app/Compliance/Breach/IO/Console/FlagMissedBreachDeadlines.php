@@ -7,12 +7,13 @@ use Illuminate\Console\Command;
 use Illuminate\Console\Attributes\Signature;
 use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Console\Attributes\Description;
+use App\Compliance\Breach\UseCases\Interactors\FlagMissedBreachDeadlinesInteractor;
 
 #[Signature('breaches:flag-missed-deadlines {--date=}')]
 #[Description('Flag breach incidents still recorded past their 72-hour deadline (defaults to now; --date replays a missed night).')]
 class FlagMissedBreachDeadlines extends Command
 {
-    public function handle(): int
+    public function handle(FlagMissedBreachDeadlinesInteractor $interactor): int
     {
         try {
             $cutoff = CarbonImmutable::parse($this->option('date'));
@@ -27,6 +28,10 @@ class FlagMissedBreachDeadlines extends Command
 
             return self::FAILURE;
         }
+
+        $flagged = $interactor->execute($cutoff);
+
+        $this->info("{$flagged} missed deadline(s) flagged.");
 
         return self::SUCCESS;
     }

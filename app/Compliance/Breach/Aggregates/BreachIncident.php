@@ -9,6 +9,7 @@ use App\Compliance\Breach\Enums\BreachStage;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Values\RegulatorFiling;
+use App\Compliance\Breach\Events\BreachDeadlineMissed;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Events\BreachFilingRequested;
 use App\Compliance\Breach\Events\BreachCompaniesNotified;
@@ -130,6 +131,11 @@ class BreachIncident extends AggregateRoot
             part: $filing->part,
             bodyHash: $filing->bodyHash,
         ));
+    }
+
+    public function flagMissedDeadline(CarbonInterface $at): static
+    {
+        return $this->recordThat(new BreachDeadlineMissed(breachId: $this->uuid(), missedAt: $at));
     }
 
     protected function applyBreachRecorded(BreachRecorded $event): void
