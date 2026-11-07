@@ -55,7 +55,6 @@ class FlagMissedBreachDeadlinesInteractor
     protected function recordAudit(string $breachId): void
     {
         AuditEntry::query()->create([
-            'company_id' => null,
             'stored_event_id' => $this->flaggedEventIdFor($breachId),
             'event_class' => 'BreachDeadlineMissed',
             'subject_type' => AuditSubjectType::BreachIncident,

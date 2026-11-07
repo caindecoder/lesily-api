@@ -40,16 +40,14 @@ class BreachNotificationReactor extends Reactor implements ShouldQueue
         $incident = BreachIncidentRecord::query()->findOrFail($event->breachId);
         $admins = User::query()->whereKey($this->platformAdmins->userIds())->get();
 
-        if ($admins->isEmpty()) {
+        if ($admins->isNotEmpty()) {
+            Notification::send($admins, new SystemNotification(NotificationType::BreachDeadlineMissed, $this->companyNamesOf($incident), null, [
+                'incident' => $event->breachId,
+                'deadline' => $incident->deadline->format('j M Y, H:i').' UTC',
+            ]));
+        } else {
             report(new RuntimeException("No platform admin to alert about the missed deadline of breach incident {$event->breachId}."));
-
-            return;
         }
-
-        Notification::send($admins, new SystemNotification(NotificationType::BreachDeadlineMissed, $this->companyNamesOf($incident), null, [
-            'incident' => $event->breachId,
-            'deadline' => $incident->deadline->format('j M Y, H:i').' UTC',
-        ]));
     }
 
     public function onBreachCompanyNotified(BreachCompanyNotified $event): void
