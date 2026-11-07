@@ -176,7 +176,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
     public function when_the_scan_selects_then_only_a_recorded_unflagged_incident_past_its_deadline_is_picked(): void
     {
         // Given one incident due, one not yet due, one already flagged and one whose companies were notified
-        $due = $this->anIncident()->create()->getKey();
+        $due = $this->anIncident()->createOne()->getKey();
         $this->anIncident()->dueAt('2026-05-09 00:00:00')->create();
         $this->anIncident()->deadlineMissed()->create();
         $this->anIncident()->companiesNotified()->create();
@@ -343,8 +343,8 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
     {
         return match ($stage) {
             'companies notified' => $this->aNotifiedIncident($this->companyA),
-            'resolved' => $this->anIncident()->resolved()->create()->getKey(),
-            'false alarm' => $this->anIncident()->falseAlarm()->create()->getKey(),
+            'resolved' => $this->anIncident()->resolved()->createOne()->getKey(),
+            'false alarm' => $this->anIncident()->falseAlarm()->createOne()->getKey(),
             default => throw new InvalidArgumentException("Unknown stage: {$stage}"),
         };
     }

@@ -28,7 +28,7 @@ class BreachIncident extends AggregateRoot
 
     protected ?BreachStage $stage = null;
 
-    protected ?CarbonInterface $deadline = null;
+    protected CarbonInterface $deadline;
 
     protected bool $deadlineMissed = false;
 
