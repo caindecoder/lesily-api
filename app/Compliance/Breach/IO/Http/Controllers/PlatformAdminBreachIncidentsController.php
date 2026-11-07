@@ -3,6 +3,7 @@
 namespace App\Compliance\Breach\IO\Http\Controllers;
 
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
@@ -62,5 +63,10 @@ class PlatformAdminBreachIncidentsController extends Controller
         $command = NotifyBreachCompaniesCommand::validateAndCreate(['breachId' => $breachId]);
 
         return new BreachIncidentAdminDetailResource($interactor->execute($command, $admin, RequestOrigin::fromRequest($request)));
+    }
+
+    public function fileWithRegulator(): BreachIncidentAdminDetailResource
+    {
+        throw new RuntimeException('Not implemented');
     }
 }

@@ -96,17 +96,6 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->assertNoHandlersQueuedFor(BreachCompanyNotified::class);
     }
 
-    /**
-     * @return array<string, array{string}>
-     */
-    public static function provideUnknownBreachIds(): array
-    {
-        return [
-            'a random uuid' => ['019a5b2e-7c1d-7f00-8a00-000000000000'],
-            'not a uuid' => ['not-a-breach'],
-        ];
-    }
-
     #[Test]
     #[DataProvider('provideLaterStages')]
     public function when_the_incident_is_past_recorded_then_the_notify_is_refused_with_its_stage_named(string $stage): void
@@ -119,7 +108,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
             default => $this->fail('Unknown stage: '.$stage),
         };
         $incident = $incident->withCompany($this->companyA, ['pii'], 40)->createOne();
-        $before = $this->snapshotOf($incident);
+        $before = $this->snapshotOf($incident->getKey());
 
         // When the admin presses notify
         $response = $this->notifyCompanies($this->admin, $incident->getKey());
@@ -525,22 +514,11 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     }
 
     /**
-     * @return array{0: array<string, mixed>, 1: array<int, array<string, mixed>>}
-     */
-    protected function snapshotOf(BreachIncidentRecord $incident): array
-    {
-        return [
-            BreachIncidentRecord::query()->whereKey($incident->getKey())->firstOrFail()->getAttributes(),
-            BreachIncidentCompany::query()->where('breach_incident_id', $incident->getKey())->get()->map->getAttributes()->all(),
-        ];
-    }
-
-    /**
      * @param  array{0: array<string, mixed>, 1: array<int, array<string, mixed>>}  $before
      */
     protected function assertIncidentUnchanged(BreachIncidentRecord $incident, array $before): void
     {
-        $this->assertSame($before, $this->snapshotOf($incident));
+        $this->assertSame($before, $this->snapshotOf($incident->getKey()));
         $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $incident->getKey())->count());
         $this->assertDatabaseCount('audit_trail', 0);
         $this->assertNoHandlersQueuedFor(BreachCompanyNotified::class);

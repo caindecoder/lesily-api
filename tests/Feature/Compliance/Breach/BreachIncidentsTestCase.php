@@ -2,13 +2,16 @@
 
 namespace Tests\Feature\Compliance\Breach;
 
+use Closure;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Notification;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Breach\Events\BreachRecorded;
 use Database\Factories\BreachIncidentRecordFactory;
 use App\Compliance\Breach\Aggregates\BreachIncident;
@@ -221,5 +224,43 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
             $this->assertSame([$dataTypes, $estimatedCount, $this->admin->getKey()], [$row->data_types, $row->estimated_count, $row->added_by]);
             $this->assertTrue($row->added_at->equalTo(BreachIncidentRecord::query()->findOrFail($breachId)->recorded_at));
         }
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideUnknownBreachIds(): array
+    {
+        return [
+            'a random uuid' => ['019a5b2e-7c1d-7f00-8a00-000000000000'],
+            'not a uuid' => ['not-a-breach'],
+        ];
+    }
+
+    protected function anOwnerOf(Company $company): User
+    {
+        return $this->aConsentingMember($company, 'owner');
+    }
+
+    protected function aFactoryNotice(BreachIncidentRecordFactory $incident, Closure $state): BreachIncidentCompany
+    {
+        return $state($this->aPartFor($incident->createOne(), $this->companyA))->createOne();
+    }
+
+    /**
+     * @return array{0: array<string, mixed>, 1: array<int, array<string, mixed>>}
+     */
+    protected function snapshotOf(string $breachId): array
+    {
+        return [
+            BreachIncidentRecord::query()->whereKey($breachId)->firstOrFail()->getAttributes(),
+            BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->orderBy('id')->get()->map->getAttributes()->all(),
+        ];
+    }
+
+    protected function assertRefusedAsNotOpen(TestResponse $response, string $message): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::StateGuardViolation);
+        $response->assertJsonPath('message', $message);
     }
 }
