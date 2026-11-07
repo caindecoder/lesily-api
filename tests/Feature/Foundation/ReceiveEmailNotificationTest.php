@@ -176,6 +176,7 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
             'a breach notice to a company' => [NotificationType::BreachCompanyNotice],
             "a company's breach filing request" => [NotificationType::BreachFilingRequested],
             'a breach filed with the regulator' => [NotificationType::BreachFiledWithRegulator],
+            'a missed breach deadline' => [NotificationType::BreachDeadlineMissed],
         ];
     }
 

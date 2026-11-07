@@ -161,6 +161,20 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
         $mail->assertSeeInHtml('As Contoso asked, Lesily filed its part of the personal data breach 019a5b2e-7c1d-7f00-8a00-0000000000bb with the Data Protection Authority on 6 May 2026, 11:15 UTC.');
     }
 
+    #[Test]
+    public function when_a_breach_deadline_missed_alert_is_rendered_then_its_mail_names_the_companies_the_incident_and_the_deadline(): void
+    {
+        // Given the platform admins' alert that an incident affecting Contoso and Fabrikam missed its deadline
+        $mail = new SystemNotificationMail(NotificationType::BreachDeadlineMissed, 'Contoso, Fabrikam', [
+            'incident' => '019a5b2e-7c1d-7f00-8a00-0000000000cc',
+            'deadline' => '7 May 2026, 14:00 UTC',
+        ]);
+
+        // When / Then — its subject names the companies and its body names the incident and the missed deadline
+        $mail->assertHasSubject('A personal data breach affecting Contoso, Fabrikam missed its 72-hour deadline');
+        $mail->assertSeeInHtml('The personal data breach 019a5b2e-7c1d-7f00-8a00-0000000000cc affecting Contoso, Fabrikam was due to be reported by 7 May 2026, 14:00 UTC, and its companies have not been notified. Please send their notices now.');
+    }
+
     /**
      * @return array<string, array{NotificationType, string, string}>
      */

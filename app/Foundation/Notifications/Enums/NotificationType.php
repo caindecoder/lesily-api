@@ -18,6 +18,7 @@ enum NotificationType: string
     case BreachCompanyNotice = 'breach_company_notice';
     case BreachFilingRequested = 'breach_filing_requested';
     case BreachFiledWithRegulator = 'breach_filed_with_regulator';
+    case BreachDeadlineMissed = 'breach_deadline_missed';
 
     /**
      * Critical notifications (account-security alerts, password-change
@@ -47,6 +48,7 @@ enum NotificationType: string
             self::BreachCompanyNotice => true,
             self::BreachFilingRequested => true,
             self::BreachFiledWithRegulator => true,
+            self::BreachDeadlineMissed => true,
         };
     }
 }
