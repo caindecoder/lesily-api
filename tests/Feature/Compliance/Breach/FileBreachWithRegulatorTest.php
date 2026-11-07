@@ -228,7 +228,9 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         // Then only A's row is filed and B's request still waits
         $response->assertOk();
         $this->assertNotNull($this->filingOf($breachId, $this->companyA)->filed_at);
-        $this->assertSame([null, false], [$this->filingOf($breachId, $this->companyB)->filed_at, $this->filingOf($breachId, $this->companyB)->filing_requested_at === null]);
+        $other = $this->filingOf($breachId, $this->companyB);
+        $this->assertNull($other->filed_at);
+        $this->assertNotNull($other->filing_requested_at);
         $this->assertSame(1, LesilyStoredEvent::query()->where('event_class', BreachFiledWithRegulator::class)->count());
     }
 
@@ -395,8 +397,8 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
 
         // Then A's filing is recorded, stamped on A's row and audited, and B is untouched
         $this->assertFiledFor($response, $this->companyA, $this->admin);
-        $filing = $this->assertFilingStored($breachId, $this->companyA, $this->admin);
-        $this->assertFilingAudited($response, $breachId, (int) $filing->getKey());
+        $storedEventId = $this->assertFilingStored($breachId, $this->companyA, $this->admin);
+        $this->assertFilingAudited($response, $breachId, $storedEventId);
         $this->assertSame([null, null], [$this->filingOf($breachId, $this->companyB)->filed_at, $this->filingOf($breachId, $this->companyB)->filed_body_hash]);
     }
 
@@ -511,7 +513,9 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
     protected function assertFiledFor(TestResponse $response, Company $company, User $admin): void
     {
         $response->assertOk();
-        $block = collect($response->json('data.companies'))->firstWhere('company_id', $company->getKey());
+        $companies = $response->json('data.companies');
+        $this->assertIsArray($companies);
+        $block = collect($companies)->firstWhere('company_id', $company->getKey());
         $this->assertSame(['companies_notified', self::FILED_AT_JSON], [$response->json('data.stage'), $block['filed_at'] ?? null]);
 
         $filing = $this->filingOf($response->json('data.id'), $company);
@@ -521,7 +525,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->assertMatchesRegularExpression('/^[0-9a-f]{64}$/', (string) $filing->filed_body_hash);
     }
 
-    protected function assertFilingStored(string $breachId, Company $company, User $admin): LesilyStoredEvent
+    protected function assertFilingStored(string $breachId, Company $company, User $admin): int
     {
         $event = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachFiledWithRegulator::class)->sole();
         $properties = $event->event_properties;
@@ -532,7 +536,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         );
         $this->assertTrue(CarbonImmutable::parse(self::FILED_AT)->equalTo(CarbonImmutable::parse($properties['filedAt'])));
 
-        return $event;
+        return (int) $event->getKey();
     }
 
     protected function assertFilingAudited(TestResponse $response, string $breachId, int $storedEventId): void

@@ -4,6 +4,7 @@ namespace App\Compliance\Breach\UseCases\Interactors;
 
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Config;
 use App\Compliance\Breach\Enums\BreachStage;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Compliance\Breach\Values\RegulatorFiling;
@@ -28,11 +29,13 @@ class FileBreachWithRegulatorInteractor
 
     public function execute(FileBreachWithRegulatorCommand $command, User $admin, RequestOrigin $context): BreachIncidentRecord
     {
-        if (blank(config('platform.regulator_address'))) {
+        $regulatorAddress = Config::string('platform.regulator_address');
+
+        if (blank($regulatorAddress)) {
             throw RegulatorAddressNotConfiguredException::forFiling();
         }
 
-        return DB::transaction(function () use ($command, $admin, $context): BreachIncidentRecord {
+        return DB::transaction(function () use ($command, $admin, $context, $regulatorAddress): BreachIncidentRecord {
             $breach = BreachIncidentRecord::query()->whereKey($command->breachId)->lockForUpdate()->first()
                 ?? throw new ModelNotFoundException;
 
@@ -43,10 +46,9 @@ class FileBreachWithRegulatorInteractor
                 ?? throw new ModelNotFoundException;
 
             $this->guardFilingOpen($breach, $filing);
+            $regulatorFiling = $this->regulatorFilingFor($breach, $filing, $regulatorAddress);
 
-            BreachIncident::retrieve($breach->getKey())
-                ->fileWithRegulator($command, $admin, $this->regulatorFilingFor($breach, $filing))
-                ->persist();
+            BreachIncident::retrieve($breach->getKey())->fileWithRegulator($command, $admin, $regulatorFiling)->persist();
 
             $this->recordAudit($filing, $admin, $context);
 
@@ -54,14 +56,14 @@ class FileBreachWithRegulatorInteractor
         });
     }
 
-    protected function regulatorFilingFor(BreachIncidentRecord $breach, BreachIncidentCompany $filing): RegulatorFiling
+    protected function regulatorFilingFor(BreachIncidentRecord $breach, BreachIncidentCompany $filing, string $regulatorAddress): RegulatorFiling
     {
         $companyName = $filing->company->name;
         $part = $this->renderer->render($breach, $filing);
 
         return new RegulatorFiling(
             companyName: $companyName,
-            regulatorAddress: (string) config('platform.regulator_address'),
+            regulatorAddress: $regulatorAddress,
             part: $part,
             bodyHash: hash('sha256', (new BreachRegulatorNoticeMail($companyName, $part))->render()),
         );
@@ -110,10 +112,6 @@ class FileBreachWithRegulatorInteractor
 
         if ($filing->filed_at !== null) {
             throw BreachFilingNotOpenException::alreadyFiled();
-        }
-
-        if ($filing->filing_requested_at === null) {
-            throw BreachFilingNotOpenException::notRequested();
         }
     }
 }

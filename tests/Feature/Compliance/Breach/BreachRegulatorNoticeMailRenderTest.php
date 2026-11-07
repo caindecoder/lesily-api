@@ -33,6 +33,19 @@ class BreachRegulatorNoticeMailRenderTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_built_then_it_renders_from_the_markdown_template(): void
+    {
+        // Given
+        $mail = $this->aRegulatorMail();
+
+        // When
+        $content = $mail->content();
+
+        // Then
+        $this->assertSame(['emails.breach-regulator-notice', null], [$content->markdown, $content->view]);
+    }
+
+    #[Test]
     public function when_rendered_then_the_body_reads_every_fact_of_the_companys_part(): void
     {
         // Given
