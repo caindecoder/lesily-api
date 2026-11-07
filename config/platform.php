@@ -24,4 +24,17 @@ return [
 
     'admin_user_ids' => explode(',', (string) env('PLATFORM_ADMIN_IDS', '')),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Regulator address (UC-1-131)
+    |--------------------------------------------------------------------------
+    |
+    | The Data Protection Authority's address a breach filing is mailed to. Empty
+    | until Lesily registers with the authority (MA-124) - a filing is then
+    | refused with 503 and nothing is recorded.
+    |
+    */
+
+    'regulator_address' => (string) env('PLATFORM_REGULATOR_ADDRESS', ''),
+
 ];

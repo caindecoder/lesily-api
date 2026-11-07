@@ -21,7 +21,6 @@ use Database\Factories\BreachIncidentRecordFactory;
 use App\Compliance\Breach\Aggregates\BreachIncident;
 use Database\Factories\BreachIncidentCompanyFactory;
 use App\Compliance\Breach\Events\BreachFilingRequested;
-use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
@@ -380,27 +379,6 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
         ];
     }
 
-    /**
-     * @return array<string, array{string}>
-     */
-    public static function provideUnknownBreachIds(): array
-    {
-        return [
-            'a random uuid' => ['019a5b2e-7c1d-7f00-8a00-000000000000'],
-            'not a uuid' => ['not-a-breach'],
-        ];
-    }
-
-    protected function anOwnerOf(Company $company): User
-    {
-        return $this->aConsentingMember($company, 'owner');
-    }
-
-    protected function aFactoryNotice(BreachIncidentRecordFactory $incident, Closure $state): BreachIncidentCompany
-    {
-        return $state($this->aPartFor($incident->createOne(), $this->companyA))->createOne();
-    }
-
     protected function requestFiling(?User $caller, Company $company, string $breachId): TestResponse
     {
         if ($caller !== null) {
@@ -408,17 +386,6 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
         }
 
         return $this->postJson("/api/v1/companies/{$company->getKey()}/breach-notices/{$breachId}/filing-request");
-    }
-
-    /**
-     * @return array{0: array<string, mixed>, 1: array<int, array<string, mixed>>}
-     */
-    protected function snapshotOf(string $breachId): array
-    {
-        return [
-            BreachIncidentRecord::query()->whereKey($breachId)->firstOrFail()->getAttributes(),
-            BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->orderBy('id')->get()->map->getAttributes()->all(),
-        ];
     }
 
     protected function runTheAlerts(): void
@@ -501,12 +468,6 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
         ]);
 
         return (int) $request->getKey();
-    }
-
-    protected function assertRefusedAsNotOpen(TestResponse $response, string $message): void
-    {
-        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::StateGuardViolation);
-        $response->assertJsonPath('message', $message);
     }
 
     /**

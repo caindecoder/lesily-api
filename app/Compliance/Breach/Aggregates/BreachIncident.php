@@ -8,14 +8,17 @@ use Carbon\CarbonInterface;
 use App\Compliance\Breach\Enums\BreachStage;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Compliance\Breach\Events\BreachRecorded;
+use App\Compliance\Breach\Values\RegulatorFiling;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Events\BreachFilingRequested;
 use App\Compliance\Breach\Events\BreachCompaniesNotified;
+use App\Compliance\Breach\Events\BreachFiledWithRegulator;
 use App\Compliance\Breach\UseCases\Commands\AffectedCompanyData;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
 use App\Compliance\Breach\Exceptions\BreachFilingNotOpenException;
 use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
 use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
+use App\Compliance\Breach\UseCases\Commands\FileBreachWithRegulatorCommand;
 use App\Compliance\Breach\Exceptions\BreachIncidentAlreadyRecordedException;
 
 class BreachIncident extends AggregateRoot
@@ -29,6 +32,9 @@ class BreachIncident extends AggregateRoot
 
     /** @var array<string, CarbonInterface> each company's filing-request time, keyed by company id */
     protected array $filingRequestedAt = [];
+
+    /** @var array<string, CarbonInterface> each company's regulator filing time, keyed by company id */
+    protected array $filedAt = [];
 
     public function record(RecordBreachCommand $command, User $admin): static
     {
@@ -86,6 +92,10 @@ class BreachIncident extends AggregateRoot
             throw BreachFilingNotOpenException::notNotified();
         }
 
+        if (isset($this->filedAt[$companyId])) {
+            throw BreachFilingNotOpenException::alreadyFiled();
+        }
+
         if (isset($this->filingRequestedAt[$companyId])) {
             throw BreachFilingNotOpenException::alreadyRequested();
         }
@@ -95,6 +105,30 @@ class BreachIncident extends AggregateRoot
             companyId: $companyId,
             requestedAt: CarbonImmutable::now(),
             requestedByUserId: $owner->getKey(),
+        ));
+    }
+
+    public function fileWithRegulator(FileBreachWithRegulatorCommand $command, User $admin, RegulatorFiling $filing): static
+    {
+        $companyId = $command->company->getKey();
+
+        if (isset($this->filedAt[$companyId])) {
+            throw BreachFilingNotOpenException::alreadyFiled();
+        }
+
+        if (! isset($this->filingRequestedAt[$companyId])) {
+            throw BreachFilingNotOpenException::notRequested();
+        }
+
+        return $this->recordThat(new BreachFiledWithRegulator(
+            breachId: $this->uuid(),
+            companyId: $companyId,
+            companyName: $filing->companyName,
+            filedAt: CarbonImmutable::now(),
+            filedByUserId: $admin->getKey(),
+            regulatorAddress: $filing->regulatorAddress,
+            part: $filing->part,
+            bodyHash: $filing->bodyHash,
         ));
     }
 
@@ -116,5 +150,10 @@ class BreachIncident extends AggregateRoot
     protected function applyBreachFilingRequested(BreachFilingRequested $event): void
     {
         $this->filingRequestedAt[$event->companyId] = $event->requestedAt;
+    }
+
+    protected function applyBreachFiledWithRegulator(BreachFiledWithRegulator $event): void
+    {
+        $this->filedAt[$event->companyId] = $event->filedAt;
     }
 }

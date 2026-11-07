@@ -2,14 +2,18 @@
 
 namespace Tests\Feature\Compliance\Breach;
 
+use Closure;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Notification;
+use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Breach\Events\BreachRecorded;
+use App\Compliance\Breach\Values\RegulatorFiling;
 use Database\Factories\BreachIncidentRecordFactory;
 use App\Compliance\Breach\Aggregates\BreachIncident;
 use Database\Factories\BreachIncidentCompanyFactory;
@@ -18,6 +22,8 @@ use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
+use App\Compliance\Breach\UseCases\Commands\FileBreachWithRegulatorCommand;
 
 abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
 {
@@ -80,6 +86,39 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         BreachIncident::retrieve($breachId)->notifyCompanies($this->admin, $parts)->persist();
 
         return $breachId;
+    }
+
+    protected function aFilingRequestBy(Company $company, string $breachId): User
+    {
+        $owner = $this->anOwnerOf($company);
+
+        BreachIncident::retrieve($breachId)
+            ->requestFiling(RequestBreachFilingCommand::from(['breachId' => $breachId, 'company' => $company]), $owner)
+            ->persist();
+
+        return $owner;
+    }
+
+    protected function anIncidentFiledFor(Company $company): string
+    {
+        $breachId = $this->aNotifiedIncident($company);
+        $this->aFilingRequestBy($company, $breachId);
+
+        BreachIncident::retrieve($breachId)
+            ->fileWithRegulator($this->aFilingCommandFor($breachId, $company), $this->admin, $this->aRegulatorFiling())
+            ->persist();
+
+        return $breachId;
+    }
+
+    protected function aFilingCommandFor(string $breachId, Company $company): FileBreachWithRegulatorCommand
+    {
+        return FileBreachWithRegulatorCommand::from(['breachId' => $breachId, 'company' => $company]);
+    }
+
+    protected function aRegulatorFiling(): RegulatorFiling
+    {
+        return new RegulatorFiling('Acme (Pvt) Ltd', 'dpa@regulator.test', ['count' => '40'], hash('sha256', 'the regulator notice'));
     }
 
     protected function notifyCompanies(?User $caller, string $breachId): TestResponse
@@ -221,5 +260,43 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
             $this->assertSame([$dataTypes, $estimatedCount, $this->admin->getKey()], [$row->data_types, $row->estimated_count, $row->added_by]);
             $this->assertTrue($row->added_at->equalTo(BreachIncidentRecord::query()->findOrFail($breachId)->recorded_at));
         }
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideUnknownBreachIds(): array
+    {
+        return [
+            'a random uuid' => ['019a5b2e-7c1d-7f00-8a00-000000000000'],
+            'not a uuid' => ['not-a-breach'],
+        ];
+    }
+
+    protected function anOwnerOf(Company $company): User
+    {
+        return $this->aConsentingMember($company, 'owner');
+    }
+
+    protected function aFactoryNotice(BreachIncidentRecordFactory $incident, Closure $state): BreachIncidentCompany
+    {
+        return $state($this->aPartFor($incident->createOne(), $this->companyA))->createOne();
+    }
+
+    /**
+     * @return array{0: array<string, mixed>, 1: array<int, array<string, mixed>>}
+     */
+    protected function snapshotOf(string $breachId): array
+    {
+        return [
+            BreachIncidentRecord::query()->whereKey($breachId)->firstOrFail()->getAttributes(),
+            BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->orderBy('id')->get()->map->getAttributes()->all(),
+        ];
+    }
+
+    protected function assertRefusedAsNotOpen(TestResponse $response, string $message): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::StateGuardViolation);
+        $response->assertJsonPath('message', $message);
     }
 }

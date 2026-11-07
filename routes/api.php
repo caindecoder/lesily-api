@@ -478,6 +478,11 @@ Route::get('/v1/admin/breach-incidents/{breachId}', [PlatformAdminBreachIncident
 Route::post('/v1/admin/breach-incidents/{breachId}/notifications/companies', [PlatformAdminBreachIncidentsController::class, 'notifyCompanies'])
     ->middleware(['auth:sanctum', 'platform.admin']);
 
+// A platform admin files a breach with the regulator for one company that asked (UC-1-131) - auth:sanctum +
+// platform.admin only, no auth.company; no idempotency mount - the once-per-company guard is the dedup.
+Route::post('/v1/admin/breach-incidents/{breachId}/companies/{companyId}/filing', [PlatformAdminBreachIncidentsController::class, 'fileWithRegulator'])
+    ->middleware(['auth:sanctum', 'platform.admin']);
+
 // The owner and admins list the breach notices Lesily sent their company (UC-1-142) - the company's own
 // part of each notified incident, newest first; a plain read, not audited.
 Route::get('/v1/companies/{companyId}/breach-notices', [BreachNoticesController::class, 'index'])

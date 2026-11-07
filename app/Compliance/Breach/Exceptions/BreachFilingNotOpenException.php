@@ -25,4 +25,24 @@ class BreachFilingNotOpenException extends DomainException
     {
         return new self('A resolved breach incident takes no filing request.');
     }
+
+    public static function notRequested(): self
+    {
+        return new self('The company has not asked Lesily to file this breach.');
+    }
+
+    public static function filingBeforeTheNotices(): self
+    {
+        return new self('A breach is filed with the regulator only after its companies are notified.');
+    }
+
+    public static function incidentResolved(): self
+    {
+        return new self('A resolved breach incident is not filed with the regulator.');
+    }
+
+    public static function falseAlarm(): self
+    {
+        return new self('A false alarm is not filed with the regulator.');
+    }
 }

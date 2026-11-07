@@ -13,13 +13,17 @@ use App\Compliance\Breach\UseCases\Interactors\RecordBreachInteractor;
 use App\Compliance\Breach\UseCases\Commands\BreachIncidentAdminFilters;
 use App\Compliance\Breach\UseCases\Commands\NotifyBreachCompaniesCommand;
 use App\Compliance\Breach\IO\Http\Resources\BreachIncidentAdminCollection;
+use App\Compliance\Breach\UseCases\Commands\FileBreachWithRegulatorCommand;
 use App\Compliance\Breach\UseCases\Interactors\ReviewBreachQueueInteractor;
 use App\Compliance\Breach\UseCases\Interactors\ReviewBreachAsAdminInteractor;
 use App\Compliance\Breach\IO\Http\Resources\BreachIncidentAdminDetailResource;
 use App\Compliance\Breach\UseCases\Interactors\NotifyBreachCompaniesInteractor;
+use App\Compliance\Breach\UseCases\Interactors\FileBreachWithRegulatorInteractor;
 
 class PlatformAdminBreachIncidentsController extends Controller
 {
+    public function __construct(protected readonly FileBreachWithRegulatorInteractor $fileBreachWithRegulator) {}
+
     public function store(Request $request, RecordBreachInteractor $interactor): JsonResponse
     {
         /** @var User $admin */
@@ -62,5 +66,20 @@ class PlatformAdminBreachIncidentsController extends Controller
         $command = NotifyBreachCompaniesCommand::validateAndCreate(['breachId' => $breachId]);
 
         return new BreachIncidentAdminDetailResource($interactor->execute($command, $admin, RequestOrigin::fromRequest($request)));
+    }
+
+    public function fileWithRegulator(Request $request, string $breachId, string $companyId): BreachIncidentAdminDetailResource
+    {
+        /** @var User $admin */
+        $admin = $request->user();
+
+        $command = FileBreachWithRegulatorCommand::validateAndCreate([
+            'breachId' => $breachId,
+            'company' => $companyId,
+        ]);
+
+        return new BreachIncidentAdminDetailResource(
+            $this->fileBreachWithRegulator->execute($command, $admin, RequestOrigin::fromRequest($request)),
+        );
     }
 }

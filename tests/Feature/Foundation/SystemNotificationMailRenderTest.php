@@ -147,6 +147,20 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
         $mail->assertSeeInHtml('Contoso asked Lesily to file the personal data breach 019a5b2e-7c1d-7f00-8a00-0000000000aa with the Data Protection Authority for it. Please file it for them.');
     }
 
+    #[Test]
+    public function when_a_breach_filed_notice_is_rendered_then_its_mail_says_lesily_filed_for_the_company(): void
+    {
+        // Given Contoso's owner and admins are told Lesily filed its part of an incident
+        $mail = new SystemNotificationMail(NotificationType::BreachFiledWithRegulator, 'Contoso', [
+            'incident' => '019a5b2e-7c1d-7f00-8a00-0000000000bb',
+            'filed_at' => '6 May 2026, 11:15 UTC',
+        ]);
+
+        // When / Then — its subject names the company and its body names the incident and the filing time
+        $mail->assertHasSubject('Lesily filed a personal data breach with the regulator for Contoso');
+        $mail->assertSeeInHtml('As Contoso asked, Lesily filed its part of the personal data breach 019a5b2e-7c1d-7f00-8a00-0000000000bb with the Data Protection Authority on 6 May 2026, 11:15 UTC.');
+    }
+
     /**
      * @return array<string, array{NotificationType, string, string}>
      */
