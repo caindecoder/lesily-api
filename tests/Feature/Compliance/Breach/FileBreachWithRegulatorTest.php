@@ -14,12 +14,14 @@ use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Database\Factories\BreachIncidentRecordFactory;
 use Database\Factories\BreachIncidentCompanyFactory;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
+use App\Foundation\Notifications\Enums\NotificationType;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use App\Compliance\Breach\Mail\BreachRegulatorNoticeMail;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
@@ -37,6 +39,8 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
     protected const string FILED_AT = '2026-05-06 11:15:00';
 
     protected const string FILED_AT_JSON = '2026-05-06T11:15:00.000000Z';
+
+    protected const string FILED_AT_WORDS = '6 May 2026, 11:15 UTC';
 
     protected function setUp(): void
     {
@@ -108,6 +112,18 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         // Then it is not found and nothing is filed
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertNothingFiled($breachId, $before);
+    }
+
+    /**
+     * @return array<string, array{Closure(self): string}>
+     */
+    public static function provideCompaniesNotOnTheIncident(): array
+    {
+        return [
+            'a company not on it' => [fn (self $test): string => $test->companyA->getKey()],
+            'an unknown company' => [fn (self $test): string => '019a5b2e-7c1d-7f00-8a00-0000000000c0'],
+            'not a company id' => [fn (self $test): string => 'not-a-company'],
+        ];
     }
 
     #[Test]
@@ -345,16 +361,25 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->assertStringContainsString('People affected: Not yet known.', $this->theRegulatorMail()->render());
     }
 
-    /**
-     * @return array<string, array{Closure(self): string}>
-     */
-    public static function provideCompaniesNotOnTheIncident(): array
+    #[Test]
+    public function when_the_company_has_other_members_then_only_the_owner_and_admins_are_told_it_was_filed(): void
     {
-        return [
-            'a company not on it' => [fn (self $test): string => $test->companyA->getKey()],
-            'an unknown company' => [fn (self $test): string => '019a5b2e-7c1d-7f00-8a00-0000000000c0'],
-            'not a company id' => [fn (self $test): string => 'not-a-company'],
-        ];
+        // Given company A asked Lesily to file, and A has an admin, an HR officer and an employee besides its owner
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $this->aFilingRequestBy($this->companyA, $breachId);
+        $this->aCompanyMember($this->companyA, 'admin');
+        $others = [$this->aCompanyMember($this->companyA, 'hr_officer'), $this->aCompanyMember($this->companyA, 'employee')];
+        $this->travelTo(CarbonImmutable::parse(self::FILED_AT));
+
+        // When an admin files it for company A and the queued reactors run
+        $this->fileFor($this->admin, $breachId, $this->companyA->getKey())->assertOk();
+        $this->runTheFilingReactors();
+
+        // Then only the owner and the admin are told
+        $this->assertToldFiled($this->companyA, $breachId);
+        foreach ($others as $other) {
+            Notification::assertNothingSentTo($other);
+        }
     }
 
     #[Test]
@@ -390,6 +415,27 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->assertRegulatorMailed((string) $this->filingOf($breachId, $this->companyA)->filed_body_hash);
     }
 
+    #[Test]
+    public function when_the_filing_is_recorded_then_the_owner_and_admins_are_told_and_the_other_company_hears_nothing(): void
+    {
+        // Given an incident told to companies A and B, each with an owner and an admin, where only A asked Lesily to file
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $this->aFilingRequestBy($this->companyA, $breachId);
+        $this->aCompanyMember($this->companyA, 'admin');
+        $others = [$this->aCompanyMember($this->companyB, 'owner'), $this->aCompanyMember($this->companyB, 'admin')];
+        $this->travelTo(CarbonImmutable::parse(self::FILED_AT));
+
+        // When an admin files it for company A and the queued reactors run
+        $this->fileFor($this->admin, $breachId, $this->companyA->getKey())->assertOk();
+        $this->runTheFilingReactors();
+
+        // Then A's owner and admin are told Lesily filed for them, and B's people hear nothing
+        $this->assertToldFiled($this->companyA, $breachId);
+        foreach ($others as $other) {
+            Notification::assertNothingSentTo($other);
+        }
+    }
+
     protected function fileFor(?User $caller, string $breachId, string $companyId): TestResponse
     {
         if ($caller !== null) {
@@ -421,6 +467,20 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
     protected function partOf(string $eventClass, string $breachId): array
     {
         return LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', $eventClass)->sole()->event_properties['part'];
+    }
+
+    protected function assertToldFiled(Company $company, string $breachId): void
+    {
+        $recipients = $company->ownerAndAdmins();
+        $this->assertCount(2, $recipients);
+
+        foreach ($recipients as $recipient) {
+            Notification::assertSentToTimes($recipient, SystemNotification::class, 1);
+            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->type === NotificationType::BreachFiledWithRegulator
+                && $notice->companyName === $company->name
+                && $notice->companyId === $company->getKey()
+                && $notice->details === ['incident' => $breachId, 'filed_at' => self::FILED_AT_WORDS]);
+        }
     }
 
     protected function runTheFilingReactors(): void

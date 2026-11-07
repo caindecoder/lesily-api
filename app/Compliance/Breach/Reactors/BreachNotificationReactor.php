@@ -11,6 +11,7 @@ use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Events\BreachFilingRequested;
 use App\Foundation\Notifications\Enums\NotificationType;
 use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
+use App\Compliance\Breach\Events\BreachFiledWithRegulator;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Foundation\RolesPermissions\Services\PlatformAdminAllowlist;
 
@@ -45,5 +46,15 @@ class BreachNotificationReactor extends Reactor implements ShouldQueue
             $recipients,
             new SystemNotification(NotificationType::BreachCompanyNotice, $company->name, $company->getKey(), $event->part),
         );
+    }
+
+    public function onBreachFiledWithRegulator(BreachFiledWithRegulator $event): void
+    {
+        $company = Company::query()->findOrFail($event->companyId);
+
+        Notification::send($company->ownerAndAdmins(), new SystemNotification(NotificationType::BreachFiledWithRegulator, $company->name, $company->getKey(), [
+            'incident' => $event->breachId,
+            'filed_at' => $event->filedAt->format('j M Y, H:i').' UTC',
+        ]));
     }
 }

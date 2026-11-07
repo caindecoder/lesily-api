@@ -57,6 +57,10 @@ return [
         'subject' => ':company asked Lesily to file a personal data breach',
         'body' => ':company asked Lesily to file the personal data breach :incident with the Data Protection Authority for it. Please file it for them.',
     ],
+    'breach_filed_with_regulator' => [
+        'subject' => 'Lesily filed a personal data breach with the regulator for :company',
+        'body' => 'As :company asked, Lesily filed its part of the personal data breach :incident with the Data Protection Authority on :filed_at.',
+    ],
     'breach_regulator_notice' => [
         'subject' => 'Personal data breach notification for :company',
         'body' => 'Lesily, the data processor, notifies the Data Protection Authority of a breach of personal data on behalf of :company, the data controller, at its written request. It was discovered on :discovered; the notification deadline is :deadline. What happened: :description Likely consequences: :consequences Measures taken or planned: :measures Personal data affected: :data_types. People affected: :count.',

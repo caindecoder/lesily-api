@@ -196,6 +196,7 @@ return [
             'dsar_deadline_missed' => 'Data request deadline missed',
             'breach_company_notice' => 'Data breach notice',
             'breach_filing_requested' => 'Data breach filing requested',
+            'breach_filed_with_regulator' => 'Data breach filed with the regulator',
         ],
         'channel' => [
             'mail' => 'Email',
