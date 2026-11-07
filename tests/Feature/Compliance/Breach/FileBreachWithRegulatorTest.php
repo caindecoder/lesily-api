@@ -14,6 +14,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use Database\Factories\BreachIncidentRecordFactory;
 use Database\Factories\BreachIncidentCompanyFactory;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -117,6 +118,57 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $response->assertJsonPath('message', 'Filing with the regulator is unavailable: no regulator address is configured.');
         Exceptions::assertReported(RegulatorAddressNotConfiguredException::class);
         $this->assertNothingFiled($breachId, $before);
+    }
+
+    #[Test]
+    #[DataProvider('provideFilingsNotOpen')]
+    public function when_the_filing_is_not_open_then_it_is_refused_with_the_reason(Closure $atStage, Closure $rowState, string $message): void
+    {
+        // Given company A is on an incident whose filing is not open to the admin
+        $owner = $this->anOwnerOf($this->companyA);
+        $notice = $this->aFactoryNotice($atStage($this->anIncident()), fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $rowState($row, $owner->getKey(), $this->admin->getKey()));
+        $before = $this->snapshotOf($notice->breach_incident_id);
+
+        // When an admin files it for company A
+        $response = $this->fileFor($this->admin, $notice->breach_incident_id, $this->companyA->getKey());
+
+        // Then the filing is refused with the reason and nothing is filed
+        $this->assertRefusedAsNotOpen($response, $message);
+        $this->assertNothingFiled($notice->breach_incident_id, $before);
+    }
+
+    /**
+     * @return array<string, array{Closure(BreachIncidentRecordFactory): BreachIncidentRecordFactory, Closure(BreachIncidentCompanyFactory, string, string): BreachIncidentCompanyFactory, string}>
+     */
+    public static function provideFilingsNotOpen(): array
+    {
+        return [
+            'the company has not asked' => [
+                fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->companiesNotified(),
+                fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $row->notified(),
+                'The company has not asked Lesily to file this breach.',
+            ],
+            'already filed for' => [
+                fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->companiesNotified(),
+                fn (BreachIncidentCompanyFactory $row, string $ownerId, string $adminId): BreachIncidentCompanyFactory => $row->filed($ownerId, $adminId),
+                'Lesily has already filed this breach with the regulator for the company.',
+            ],
+            'the companies are not yet notified' => [
+                fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident,
+                fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $row,
+                'A breach is filed with the regulator only after its companies are notified.',
+            ],
+            'resolved' => [
+                fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->resolved(),
+                fn (BreachIncidentCompanyFactory $row, string $ownerId): BreachIncidentCompanyFactory => $row->filingRequested($ownerId),
+                'A resolved breach incident is not filed with the regulator.',
+            ],
+            'a false alarm' => [
+                fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->falseAlarm(),
+                fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $row,
+                'A false alarm is not filed with the regulator.',
+            ],
+        ];
     }
 
     /**
