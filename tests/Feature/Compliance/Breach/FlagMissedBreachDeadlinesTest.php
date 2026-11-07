@@ -7,6 +7,7 @@ use App\Models\User;
 use RuntimeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\PendingCommand;
@@ -75,6 +76,37 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
         $this->assertNothingFlagged();
     }
 
+    #[Test]
+    public function when_a_flagged_incident_is_scanned_again_then_it_is_not_flagged_or_alerted_twice(): void
+    {
+        // Given an incident flagged by last night's run, and the clock a day on
+        $breachId = $this->aRecordedIncident();
+        $this->runFlagMissedDeadlines()->assertSuccessful();
+        $this->travel(1)->day();
+
+        // When the daily scan runs again
+        $this->runFlagMissedDeadlines()->expectsOutput('0 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then the incident keeps its one flag, its one audit row and its one alert
+        $this->assertFlagged($breachId, CarbonImmutable::parse(self::THE_NIGHT_AFTER));
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertSame(1, $this->queuedHandlerCountFor(BreachDeadlineMissed::class));
+    }
+
+    #[Test]
+    #[DataProvider('provideStagesPastRecorded')]
+    public function when_an_incident_past_the_recorded_stage_misses_its_deadline_then_it_is_not_flagged(string $stage): void
+    {
+        // Given an incident past the recorded stage, its deadline gone
+        $this->anIncidentInStage($stage);
+
+        // When the daily scan runs
+        $this->runFlagMissedDeadlines()->expectsOutput('0 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then nothing is flagged
+        $this->assertNothingFlagged();
+    }
+
     /**
      * @param  Closure(): list<string>  $allowlisted
      */
@@ -95,6 +127,51 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
         $this->assertFlagged($breachId, CarbonImmutable::parse(self::THE_NIGHT_AFTER));
         Exceptions::assertReported(fn (RuntimeException $gap): bool => $gap->getMessage() === "No platform admin to alert about the missed deadline of breach incident {$breachId}.");
         Notification::assertNothingSent();
+    }
+
+    #[Test]
+    public function when_the_scan_selects_then_only_a_recorded_unflagged_incident_past_its_deadline_is_picked(): void
+    {
+        // Given one incident due, one not yet due, one already flagged and one whose companies were notified
+        $due = $this->anIncident()->create()->getKey();
+        $this->anIncident()->dueAt('2026-05-09 00:00:00')->create();
+        $this->anIncident()->deadlineMissed()->create();
+        $this->anIncident()->companiesNotified()->create();
+
+        // When the scan selects at the run's cutoff
+        $picked = BreachIncidentRecord::query()->whereDeadlineMissedToFlag(now())->pluck('id')->all();
+
+        // Then only the due one is picked
+        $this->assertSame([$due], $picked);
+    }
+
+    #[Test]
+    #[DataProvider('provideDeadlineEdges')]
+    public function when_the_scan_runs_at_the_deadline_edge_then_only_a_missed_deadline_is_flagged(int $secondsPastTheDeadline, int $flagged): void
+    {
+        // Given an incident whose deadline is 2026-05-07 14:00 UTC, and the clock at the deadline plus the offset
+        $this->aRecordedIncident();
+        $this->travelTo(CarbonImmutable::parse('2026-05-07 14:00:00')->addSeconds($secondsPastTheDeadline));
+
+        // When the daily scan runs
+        $this->runFlagMissedDeadlines()->expectsOutput("{$flagged} missed deadline(s) flagged.")->assertSuccessful();
+
+        // Then the flag exists only once the deadline is reached
+        $this->assertSame($flagged, BreachIncidentRecord::query()->whereNotNull('deadline_missed_at')->count());
+    }
+
+    #[Test]
+    public function when_a_missed_night_is_replayed_then_the_flag_is_stamped_with_its_date(): void
+    {
+        // Given an incident still recorded past its deadline, and the clock the morning after a missed night
+        $breachId = $this->aRecordedIncident();
+        $this->travelTo('2026-05-09 09:00:00');
+
+        // When the scan is replayed for the missed night
+        $this->runFlagMissedDeadlines('2026-05-08')->assertSuccessful();
+
+        // Then the flag carries the replayed night, not the clock
+        $this->assertFlagged($breachId, CarbonImmutable::parse('2026-05-08 00:00:00'));
     }
 
     #[Test]
@@ -150,6 +227,45 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
         $this->assertAdminsAlertedOnce($breachId, 'Acme Payroll, Zenith Retail');
     }
 
+    #[Test]
+    public function when_several_incidents_miss_their_deadline_then_one_run_flags_them_all(): void
+    {
+        // Given two incidents still recorded past their deadlines
+        $first = $this->aRecordedIncident();
+        $second = $this->aRecordedIncident(['dateDiscovered' => '2026-05-04T20:00:00Z']);
+
+        // When the daily scan runs
+        $this->runFlagMissedDeadlines()->expectsOutput('2 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then both are flagged and each alert is queued
+        $this->assertFlagged($first, CarbonImmutable::parse(self::THE_NIGHT_AFTER));
+        $this->assertFlagged($second, CarbonImmutable::parse(self::THE_NIGHT_AFTER));
+        $this->assertSame(2, $this->queuedHandlerCountFor(BreachDeadlineMissed::class));
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideStagesPastRecorded(): array
+    {
+        return [
+            'companies notified' => ['companies notified'],
+            'resolved' => ['resolved'],
+            'false alarm' => ['false alarm'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{int, int}>
+     */
+    public static function provideDeadlineEdges(): array
+    {
+        return [
+            'one second before the deadline' => [-1, 0],
+            'at the deadline' => [0, 1],
+        ];
+    }
+
     /**
      * @return array<string, array{Closure(): list<string>}>
      */
@@ -167,6 +283,16 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
         assert($command instanceof PendingCommand);
 
         return $command;
+    }
+
+    protected function anIncidentInStage(string $stage): string
+    {
+        return match ($stage) {
+            'companies notified' => $this->aNotifiedIncident($this->companyA),
+            'resolved' => $this->anIncident()->resolved()->create()->getKey(),
+            'false alarm' => $this->anIncident()->falseAlarm()->create()->getKey(),
+            default => throw new InvalidArgumentException("Unknown stage: {$stage}"),
+        };
     }
 
     protected function assertNothingFlagged(): void

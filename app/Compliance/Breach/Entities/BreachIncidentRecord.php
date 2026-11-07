@@ -101,7 +101,7 @@ class BreachIncidentRecord extends Model
      */
     protected function scopeWhereDeadlineMissedToFlag(Builder $query, CarbonInterface $at): void
     {
-        $query->where('deadline', '<=', $at);
+        $query->where('stage', BreachStage::Recorded)->where('deadline', '<=', $at)->whereNull('deadline_missed_at');
     }
 
     public function totalEstimatedCount(): ?int
