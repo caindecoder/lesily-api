@@ -54,9 +54,6 @@ class BreachRegulatorNoticeMail extends Mailable implements ShouldQueue
      */
     public function noticeText(): string
     {
-        /** @var string $text */
-        $text = __('notifications.breach_regulator_notice.body', [...$this->part, 'company' => $this->companyName]);
-
-        return $text;
+        return __('notifications.breach_regulator_notice.body', [...$this->part, 'company' => $this->companyName]);
     }
 }
