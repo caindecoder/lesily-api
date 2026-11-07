@@ -53,6 +53,11 @@ class RequestBreachFilingOnceTest extends BreachIncidentsTestCase
                 'Lesily has already been asked to file this breach for the company.',
                 1,
             ],
+            'a request after the filing' => [
+                fn (self $test): string => $test->anIncidentFiledFor($test->companyA),
+                'Lesily has already filed this breach with the regulator for the company.',
+                1,
+            ],
         ];
     }
 

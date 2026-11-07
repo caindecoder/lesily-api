@@ -13,6 +13,7 @@ use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Notification;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Breach\Events\BreachRecorded;
+use App\Compliance\Breach\Values\RegulatorFiling;
 use Database\Factories\BreachIncidentRecordFactory;
 use App\Compliance\Breach\Aggregates\BreachIncident;
 use Database\Factories\BreachIncidentCompanyFactory;
@@ -22,6 +23,7 @@ use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
+use App\Compliance\Breach\UseCases\Commands\FileBreachWithRegulatorCommand;
 
 abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
 {
@@ -95,6 +97,28 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
             ->persist();
 
         return $owner;
+    }
+
+    protected function anIncidentFiledFor(Company $company): string
+    {
+        $breachId = $this->aNotifiedIncident($company);
+        $this->aFilingRequestBy($company, $breachId);
+
+        BreachIncident::retrieve($breachId)
+            ->fileWithRegulator($this->aFilingCommandFor($breachId, $company), $this->admin, $this->aRegulatorFiling())
+            ->persist();
+
+        return $breachId;
+    }
+
+    protected function aFilingCommandFor(string $breachId, Company $company): FileBreachWithRegulatorCommand
+    {
+        return FileBreachWithRegulatorCommand::from(['breachId' => $breachId, 'company' => $company]);
+    }
+
+    protected function aRegulatorFiling(): RegulatorFiling
+    {
+        return new RegulatorFiling('Acme (Pvt) Ltd', 'dpa@regulator.test', ['count' => '40'], hash('sha256', 'the regulator notice'));
     }
 
     protected function notifyCompanies(?User $caller, string $breachId): TestResponse

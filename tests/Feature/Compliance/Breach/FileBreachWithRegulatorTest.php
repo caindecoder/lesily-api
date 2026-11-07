@@ -4,6 +4,8 @@ namespace Tests\Feature\Compliance\Breach;
 
 use Closure;
 use App\Models\User;
+use RuntimeException;
+use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
@@ -14,9 +16,12 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Database\Factories\BreachIncidentRecordFactory;
 use Database\Factories\BreachIncidentCompanyFactory;
+use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
+use App\Compliance\Breach\Events\BreachFiledWithRegulator;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Compliance\Breach\Exceptions\RegulatorAddressNotConfiguredException;
 
@@ -26,7 +31,9 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
 
     protected const string REGULATOR = 'dpa@regulator.test';
 
-    protected const string FILED_EVENT = 'App\Compliance\Breach\Events\BreachFiledWithRegulator';
+    protected const string FILED_AT = '2026-05-06 11:15:00';
+
+    protected const string FILED_AT_JSON = '2026-05-06T11:15:00.000000Z';
 
     protected function setUp(): void
     {
@@ -80,7 +87,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
 
         // Then it is not found and nothing is filed
         $this->assertResourceNotFoundNoLeak($response);
-        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', self::FILED_EVENT)->count());
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', BreachFiledWithRegulator::class)->count());
     }
 
     #[Test]
@@ -171,6 +178,98 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         ];
     }
 
+    #[Test]
+    public function when_the_audit_row_cannot_be_written_then_nothing_is_filed_and_nothing_is_sent(): void
+    {
+        // Given company A asked Lesily to file an incident it was told of, and the audit trail cannot be written
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $this->aFilingRequestBy($this->companyA, $breachId);
+        $before = $this->snapshotOf($breachId);
+        AuditEntry::creating(fn () => throw new RuntimeException('audit store down'));
+
+        // When an admin files it for company A
+        $response = $this->fileFor($this->admin, $breachId, $this->companyA->getKey());
+
+        // Then the request fails closed and the filing is rolled back
+        $this->assertFailedClosed($response);
+        $this->assertNothingFiledOrAudited($breachId, $before);
+    }
+
+    #[Test]
+    public function when_another_company_on_the_incident_asked_then_only_the_filed_company_is_stamped(): void
+    {
+        // Given companies A and B both asked Lesily to file one incident
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $this->aFilingRequestBy($this->companyA, $breachId);
+        $this->aFilingRequestBy($this->companyB, $breachId);
+
+        // When an admin files it for company A
+        $response = $this->fileFor($this->admin, $breachId, $this->companyA->getKey());
+
+        // Then only A's row is filed and B's request still waits
+        $response->assertOk();
+        $this->assertNotNull($this->filingOf($breachId, $this->companyA)->filed_at);
+        $this->assertSame([null, false], [$this->filingOf($breachId, $this->companyB)->filed_at, $this->filingOf($breachId, $this->companyB)->filing_requested_at === null]);
+        $this->assertSame(1, LesilyStoredEvent::query()->where('event_class', BreachFiledWithRegulator::class)->count());
+    }
+
+    #[Test]
+    public function when_the_company_is_on_two_incidents_then_only_the_filed_incident_is_stamped(): void
+    {
+        // Given company A asked Lesily to file two incidents
+        $first = $this->aNotifiedIncident($this->companyA);
+        $this->aFilingRequestBy($this->companyA, $first);
+        $second = $this->aNotifiedIncident($this->companyA);
+        $this->aFilingRequestBy($this->companyA, $second);
+
+        // When an admin files the second for company A
+        $response = $this->fileFor($this->admin, $second, $this->companyA->getKey());
+
+        // Then only the second incident's row is filed
+        $response->assertOk();
+        $response->assertJsonPath('data.id', $second);
+        $this->assertNotNull($this->filingOf($second, $this->companyA)->filed_at);
+        $this->assertNull($this->filingOf($first, $this->companyA)->filed_at);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $first)->where('event_class', BreachFiledWithRegulator::class)->count());
+    }
+
+    #[Test]
+    public function when_two_incidents_are_filed_then_each_audit_row_cites_its_own_event(): void
+    {
+        // Given company A asked Lesily to file two incidents, and the first is filed
+        $first = $this->aNotifiedIncident($this->companyA);
+        $this->aFilingRequestBy($this->companyA, $first);
+        $second = $this->aNotifiedIncident($this->companyA);
+        $this->aFilingRequestBy($this->companyA, $second);
+        $this->fileFor($this->admin, $first, $this->companyA->getKey())->assertOk();
+
+        // When an admin files the second for company A
+        $response = $this->fileFor($this->admin, $second, $this->companyA->getKey());
+
+        // Then each incident's audit row cites that incident's filing
+        $response->assertOk();
+        $this->assertAuditCitesTheFilingOf($first, $this->companyA);
+        $this->assertAuditCitesTheFilingOf($second, $this->companyA);
+    }
+
+    #[Test]
+    public function when_both_companies_on_an_incident_are_filed_for_then_each_audit_row_cites_its_own_filing(): void
+    {
+        // Given companies A and B both asked Lesily to file one incident, and A is filed
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $this->aFilingRequestBy($this->companyA, $breachId);
+        $this->aFilingRequestBy($this->companyB, $breachId);
+        $this->fileFor($this->admin, $breachId, $this->companyA->getKey())->assertOk();
+
+        // When an admin files it for company B
+        $response = $this->fileFor($this->admin, $breachId, $this->companyB->getKey());
+
+        // Then each company's filing has its own audit row
+        $response->assertOk();
+        $this->assertAuditCitesTheFilingOf($breachId, $this->companyA);
+        $this->assertAuditCitesTheFilingOf($breachId, $this->companyB);
+    }
+
     /**
      * @return array<string, array{Closure(self): string}>
      */
@@ -183,6 +282,24 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         ];
     }
 
+    #[Test]
+    public function when_an_admin_files_for_a_company_that_asked_then_it_is_recorded_projected_and_audited(): void
+    {
+        // Given an incident told to companies A and B, where only A's owner asked Lesily to file
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $this->aFilingRequestBy($this->companyA, $breachId);
+        $this->travelTo(CarbonImmutable::parse(self::FILED_AT));
+
+        // When an admin files it for company A
+        $response = $this->fileFor($this->admin, $breachId, $this->companyA->getKey());
+
+        // Then A's filing is recorded, stamped on A's row and audited, and B is untouched
+        $this->assertFiledFor($response, $this->companyA, $this->admin);
+        $filing = $this->assertFilingStored($breachId, $this->companyA, $this->admin);
+        $this->assertFilingAudited($response, $breachId, (int) $filing->getKey());
+        $this->assertSame([null, null], [$this->filingOf($breachId, $this->companyB)->filed_at, $this->filingOf($breachId, $this->companyB)->filed_body_hash]);
+    }
+
     protected function fileFor(?User $caller, string $breachId, string $companyId): TestResponse
     {
         if ($caller !== null) {
@@ -192,14 +309,94 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         return $this->postJson("/api/v1/admin/breach-incidents/{$breachId}/companies/{$companyId}/filing");
     }
 
+    protected function filingOf(string $breachId, Company $company): BreachIncidentCompany
+    {
+        return BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->whereCompany($company)->sole();
+    }
+
+    protected function assertFiledFor(TestResponse $response, Company $company, User $admin): void
+    {
+        $response->assertOk();
+        $block = collect($response->json('data.companies'))->firstWhere('company_id', $company->getKey());
+        $this->assertSame(['companies_notified', self::FILED_AT_JSON], [$response->json('data.stage'), $block['filed_at'] ?? null]);
+
+        $filing = $this->filingOf($response->json('data.id'), $company);
+        $this->assertNotNull($filing->filed_at);
+        $this->assertTrue(CarbonImmutable::parse(self::FILED_AT)->equalTo($filing->filed_at));
+        $this->assertSame($admin->getKey(), $filing->filed_by);
+        $this->assertMatchesRegularExpression('/^[0-9a-f]{64}$/', (string) $filing->filed_body_hash);
+    }
+
+    protected function assertFilingStored(string $breachId, Company $company, User $admin): LesilyStoredEvent
+    {
+        $event = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachFiledWithRegulator::class)->sole();
+        $properties = $event->event_properties;
+
+        $this->assertSame(
+            [$breachId, $company->getKey(), $company->name, $admin->getKey(), self::REGULATOR, $this->filingOf($breachId, $company)->filed_body_hash],
+            [$properties['breachId'], $properties['companyId'], $properties['companyName'], $properties['filedByUserId'], $properties['regulatorAddress'], $properties['bodyHash']],
+        );
+        $this->assertTrue(CarbonImmutable::parse(self::FILED_AT)->equalTo(CarbonImmutable::parse($properties['filedAt'])));
+
+        return $event;
+    }
+
+    protected function assertFilingAudited(TestResponse $response, string $breachId, int $storedEventId): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => null,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'BreachFiledWithRegulator',
+            'subject_type' => 'breach_incident',
+            'subject_id' => $breachId,
+            'subject_label' => null,
+            'action' => 'breach_filed_with_regulator',
+            'description' => 'Platform admin filed a data breach with the Data Protection Authority for a company that asked.',
+            'metadata' => null,
+            'recorded_at' => self::FILED_AT,
+            'actor_user_id' => $this->admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $this->admin->name,
+            'ip_address' => '127.0.0.1',
+            'severity' => 'critical',
+        ]);
+
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+        $entry = AuditEntry::query()->sole();
+        $this->assertSame([$correlationId, 'Symfony'], [$entry->request_id, $entry->user_agent]);
+    }
+
+    protected function assertAuditCitesTheFilingOf(string $breachId, Company $company): void
+    {
+        $filing = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $breachId)
+            ->where('event_class', BreachFiledWithRegulator::class)
+            ->where('event_properties->companyId', $company->getKey())
+            ->sole();
+
+        $this->assertDatabaseHas('audit_trail', ['stored_event_id' => $filing->getKey(), 'subject_id' => $breachId, 'action' => 'breach_filed_with_regulator']);
+    }
+
+    /**
+     * @param  array{0: array<string, mixed>, 1: array<int, array<string, mixed>>}  $before
+     */
+    protected function assertNothingFiledOrAudited(string $breachId, array $before): void
+    {
+        $this->assertSame($before, $this->snapshotOf($breachId));
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', BreachFiledWithRegulator::class)->count());
+        $this->assertNoAuditRecorded();
+    }
+
     /**
      * @param  array{0: array<string, mixed>, 1: array<int, array<string, mixed>>}  $before
      */
     protected function assertNothingFiled(string $breachId, array $before): void
     {
         $this->assertSame($before, $this->snapshotOf($breachId));
-        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', self::FILED_EVENT)->count());
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', BreachFiledWithRegulator::class)->count());
         $this->assertNoAuditRecorded();
-        $this->assertNoHandlersQueuedFor(self::FILED_EVENT);
+        $this->assertNoHandlersQueuedFor(BreachFiledWithRegulator::class);
     }
 }

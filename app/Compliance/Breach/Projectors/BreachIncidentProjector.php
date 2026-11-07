@@ -9,6 +9,7 @@ use App\Compliance\Breach\Events\BreachFilingRequested;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use App\Compliance\Breach\Events\BreachCompaniesNotified;
+use App\Compliance\Breach\Events\BreachFiledWithRegulator;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 
 class BreachIncidentProjector extends Projector
@@ -47,6 +48,14 @@ class BreachIncidentProjector extends Projector
             ->where('breach_incident_id', $event->breachId)
             ->where('company_id', $event->companyId)
             ->update(['filing_requested_at' => $event->requestedAt, 'filing_requested_by' => $event->requestedByUserId]);
+    }
+
+    public function onBreachFiledWithRegulator(BreachFiledWithRegulator $event): void
+    {
+        BreachIncidentCompany::query()
+            ->where('breach_incident_id', $event->breachId)
+            ->where('company_id', $event->companyId)
+            ->update(['filed_at' => $event->filedAt, 'filed_by' => $event->filedByUserId, 'filed_body_hash' => $event->bodyHash]);
     }
 
     public function onBreachCompaniesNotified(BreachCompaniesNotified $event): void

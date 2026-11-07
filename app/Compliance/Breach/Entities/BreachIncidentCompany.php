@@ -24,6 +24,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property ?CarbonImmutable $filing_requested_at
  * @property ?string $filing_requested_by
  * @property ?CarbonImmutable $filed_at
+ * @property ?string $filed_by
+ * @property ?string $filed_body_hash
  * @property-read Company $company company_id is NOT NULL + restrictOnDelete
  * @property-read BreachIncidentRecord $breach breach_incident_id is NOT NULL
  */
