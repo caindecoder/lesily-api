@@ -28,6 +28,10 @@ class BreachIncident extends AggregateRoot
 
     protected ?BreachStage $stage = null;
 
+    protected ?CarbonInterface $deadline = null;
+
+    protected bool $deadlineMissed = false;
+
     /** @var array<string, CarbonInterface> each notified company's notice time, keyed by company id */
     protected array $notifiedAt = [];
 
@@ -135,12 +139,22 @@ class BreachIncident extends AggregateRoot
 
     public function flagMissedDeadline(CarbonInterface $at): static
     {
+        if ($this->stage !== BreachStage::Recorded || $this->deadlineMissed || $at->lessThan($this->deadline)) {
+            return $this;
+        }
+
         return $this->recordThat(new BreachDeadlineMissed(breachId: $this->uuid(), missedAt: $at));
     }
 
     protected function applyBreachRecorded(BreachRecorded $event): void
     {
         $this->stage = BreachStage::Recorded;
+        $this->deadline = $event->deadline;
+    }
+
+    protected function applyBreachDeadlineMissed(BreachDeadlineMissed $event): void
+    {
+        $this->deadlineMissed = true;
     }
 
     protected function applyBreachCompanyNotified(BreachCompanyNotified $event): void

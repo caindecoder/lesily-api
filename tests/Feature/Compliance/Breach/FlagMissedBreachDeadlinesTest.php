@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Exceptions;
 use App\Compliance\Breach\Enums\BreachStage;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Compliance\Breach\Aggregates\BreachIncident;
 use App\Compliance\Breach\Events\BreachDeadlineMissed;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Foundation\Notifications\Enums\NotificationType;
@@ -94,6 +96,22 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_another_run_flagged_the_incident_first_then_it_is_neither_counted_nor_audited_again(): void
+    {
+        // Given a missed deadline already flagged on its stream, its row not yet showing it
+        $breachId = $this->aRecordedIncident();
+        BreachIncident::retrieve($breachId)->flagMissedDeadline(CarbonImmutable::now())->persist();
+        BreachIncidentRecord::query()->whereKey($breachId)->update(['deadline_missed_at' => null]);
+
+        // When the daily scan runs
+        $this->runFlagMissedDeadlines()->expectsOutput('0 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then no second flag is recorded and none is audited
+        $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachDeadlineMissed::class)->count());
+        $this->assertDatabaseCount('audit_trail', 0);
+    }
+
+    #[Test]
     #[DataProvider('provideStagesPastRecorded')]
     public function when_an_incident_past_the_recorded_stage_misses_its_deadline_then_it_is_not_flagged(string $stage): void
     {
@@ -105,6 +123,31 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
 
         // Then nothing is flagged
         $this->assertNothingFlagged();
+    }
+
+    #[Test]
+    #[DataProvider('provideFailingPositions')]
+    public function when_one_flag_fails_then_it_is_reported_and_the_others_are_still_flagged(int $failingPosition): void
+    {
+        // Given three incidents past their deadlines, and an audit trail that refuses the row of one of them
+        Exceptions::fake();
+        $breachIds = [
+            $this->aRecordedIncident(),
+            $this->aRecordedIncident(['dateDiscovered' => '2026-05-04T16:00:00Z']),
+            $this->aRecordedIncident(['dateDiscovered' => '2026-05-04T18:00:00Z']),
+        ];
+        $failing = $breachIds[$failingPosition];
+        $cause = new RuntimeException('induced audit failure');
+        AuditEntry::creating(fn (AuditEntry $entry) => $entry->subject_id === $failing ? throw $cause : null);
+
+        // When the daily scan runs
+        $this->runFlagMissedDeadlines()->expectsOutput('2 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then the failing incident is left unflagged and reported with its cause; the others are flagged
+        $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $failing)->where('event_class', BreachDeadlineMissed::class)->count());
+        Exceptions::assertReported(fn (RuntimeException $reported): bool => $reported->getMessage() === "Breach deadline flag failed for incident {$failing}."
+            && $reported->getPrevious() === $cause);
+        $this->assertSame(2, BreachIncidentRecord::query()->whereNotNull('deadline_missed_at')->count());
     }
 
     /**
@@ -252,6 +295,17 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
             'companies notified' => ['companies notified'],
             'resolved' => ['resolved'],
             'false alarm' => ['false alarm'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{int}>
+     */
+    public static function provideFailingPositions(): array
+    {
+        return [
+            'the first incident fails' => [0],
+            'the last incident fails' => [2],
         ];
     }
 

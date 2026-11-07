@@ -2,6 +2,8 @@
 
 namespace App\Compliance\Breach\UseCases\Interactors;
 
+use Throwable;
+use RuntimeException;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use App\Foundation\AuditTrail\Enums\AuditAction;
@@ -19,18 +21,34 @@ class FlagMissedBreachDeadlinesInteractor
         /** @var array<int, string> $breachIds */
         $breachIds = BreachIncidentRecord::query()->whereDeadlineMissedToFlag($at)->pluck('id')->all();
 
+        $flagged = 0;
+
         foreach ($breachIds as $breachId) {
-            $this->flag($breachId, $at);
+            try {
+                if ($this->flag($breachId, $at)) {
+                    $flagged++;
+                }
+            } catch (Throwable $failure) {
+                report(new RuntimeException("Breach deadline flag failed for incident {$breachId}.", previous: $failure));
+            }
         }
 
-        return count($breachIds);
+        return $flagged;
     }
 
-    protected function flag(string $breachId, CarbonInterface $at): void
+    protected function flag(string $breachId, CarbonInterface $at): bool
     {
-        DB::transaction(function () use ($breachId, $at): void {
-            BreachIncident::retrieve($breachId)->flagMissedDeadline($at)->persist();
+        return DB::transaction(function () use ($breachId, $at): bool {
+            $incident = BreachIncident::retrieve($breachId)->flagMissedDeadline($at);
+
+            if ($incident->getRecordedEvents() === []) {
+                return false;
+            }
+
+            $incident->persist();
             $this->recordAudit($breachId);
+
+            return true;
         });
     }
 

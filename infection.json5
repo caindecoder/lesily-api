@@ -151,6 +151,8 @@
                 "App\\Compliance\\Breach\\Projectors\\BreachIncidentProjector::onBreachFiledWithRegulator",
                 "App\\Compliance\\Breach\\Reactors\\BreachNotificationReactor::onBreachFiledWithRegulator",
                 "App\\Compliance\\Breach\\Reactors\\BreachRegulatorFilingReactor::onBreachFiledWithRegulator",
+                "App\\Compliance\\Breach\\Projectors\\BreachIncidentProjector::onBreachDeadlineMissed",
+                "App\\Compliance\\Breach\\Reactors\\BreachNotificationReactor::onBreachDeadlineMissed",
                 // OQ-1-172 PR-0 L-RELATIONS: lazy relations resolved from Model scope
                 // (Model::getRelationValue calls $this->company() / $this->settings() /
                 // $this->country() from inside the class, so protected still resolves); no
