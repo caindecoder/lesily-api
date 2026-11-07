@@ -14,6 +14,7 @@ use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
+use App\Compliance\Breach\Mail\BreachRegulatorNoticeMail;
 use App\Compliance\Breach\Events\BreachFiledWithRegulator;
 use App\Compliance\Breach\Exceptions\BreachFilingNotOpenException;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -55,13 +56,14 @@ class FileBreachWithRegulatorInteractor
 
     protected function regulatorFilingFor(BreachIncidentRecord $breach, BreachIncidentCompany $filing): RegulatorFiling
     {
+        $companyName = $filing->company->name;
         $part = $this->renderer->render($breach, $filing);
 
         return new RegulatorFiling(
-            companyName: $filing->company->name,
+            companyName: $companyName,
             regulatorAddress: (string) config('platform.regulator_address'),
             part: $part,
-            bodyHash: hash('sha256', implode("\n", $part)),
+            bodyHash: hash('sha256', (new BreachRegulatorNoticeMail($companyName, $part))->render()),
         );
     }
 
