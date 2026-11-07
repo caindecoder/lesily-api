@@ -52,6 +52,7 @@ enum ApiErrorCode: string
     case StateGuardViolation = 'STATE_GUARD_VIOLATION';
     case ReceiptGenerationUnavailable = 'RECEIPT_GENERATION_UNAVAILABLE';
     case GoogleSignInUnavailable = 'GOOGLE_SIGN_IN_UNAVAILABLE';
+    case RegulatorFilingUnavailable = 'REGULATOR_FILING_UNAVAILABLE';
     case DsarInProgress = 'DSAR_IN_PROGRESS';
     case DsarRequesterMismatch = 'DSAR_REQUESTER_MISMATCH';
     case DsarNotReady = 'DSAR_NOT_READY';
@@ -108,6 +109,7 @@ enum ApiErrorCode: string
             self::StateGuardViolation => Response::HTTP_CONFLICT,
             self::ReceiptGenerationUnavailable => Response::HTTP_SERVICE_UNAVAILABLE,
             self::GoogleSignInUnavailable => Response::HTTP_SERVICE_UNAVAILABLE,
+            self::RegulatorFilingUnavailable => Response::HTTP_SERVICE_UNAVAILABLE,
             self::DsarInProgress => Response::HTTP_CONFLICT,
             self::DsarRequesterMismatch => Response::HTTP_FORBIDDEN,
             self::DsarNotReady => Response::HTTP_CONFLICT,

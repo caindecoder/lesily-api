@@ -78,6 +78,7 @@ use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
 use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 use App\Foundation\Http\Exceptions\IdempotencyCacheUnavailableException;
 use App\Companies\Exceptions\OwnershipTransferCaseAlreadyClosedException;
+use App\Compliance\Breach\Exceptions\RegulatorAddressNotConfiguredException;
 use App\Companies\Memberships\Exceptions\InvitationAcceptContentionException;
 use App\Companies\Memberships\Exceptions\InvitationAllowanceExceededException;
 
@@ -384,6 +385,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (BreachFilingNotOpenException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
+        ));
+
+        // No regulator address is configured (MA-124) - an ops gap, not a passing outage, so no
+        // Retry-After; the exception stays reported (UC-1-131 2f → 503, nothing recorded).
+        $exceptions->render(fn (RegulatorAddressNotConfiguredException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::RegulatorFilingUnavailable,
+            'Filing with the regulator is unavailable: no regulator address is configured.',
         ));
 
         // Only a verified ownership-transfer case may be executed — open or

@@ -21,6 +21,7 @@ use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
 
 abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
 {
@@ -83,6 +84,17 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         BreachIncident::retrieve($breachId)->notifyCompanies($this->admin, $parts)->persist();
 
         return $breachId;
+    }
+
+    protected function aFilingRequestBy(Company $company, string $breachId): User
+    {
+        $owner = $this->anOwnerOf($company);
+
+        BreachIncident::retrieve($breachId)
+            ->requestFiling(RequestBreachFilingCommand::from(['breachId' => $breachId, 'company' => $company]), $owner)
+            ->persist();
+
+        return $owner;
     }
 
     protected function notifyCompanies(?User $caller, string $breachId): TestResponse
