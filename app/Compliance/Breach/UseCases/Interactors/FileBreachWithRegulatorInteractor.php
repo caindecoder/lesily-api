@@ -65,7 +65,7 @@ class FileBreachWithRegulatorInteractor
             companyName: $companyName,
             regulatorAddress: $regulatorAddress,
             part: $part,
-            bodyHash: hash('sha256', (new BreachRegulatorNoticeMail($companyName, $part))->render()),
+            bodyHash: hash('sha256', (new BreachRegulatorNoticeMail($companyName, $part))->noticeText()),
         );
     }
 
@@ -104,7 +104,7 @@ class FileBreachWithRegulatorInteractor
     protected function guardFilingOpen(BreachIncidentRecord $breach, BreachIncidentCompany $filing): void
     {
         match ($breach->stage) {
-            BreachStage::Recorded => throw BreachFilingNotOpenException::notYetNotified(),
+            BreachStage::Recorded => throw BreachFilingNotOpenException::filingBeforeTheNotices(),
             BreachStage::Resolved => throw BreachFilingNotOpenException::incidentResolved(),
             BreachStage::FalseAlarm => throw BreachFilingNotOpenException::falseAlarm(),
             BreachStage::CompaniesNotified => null,

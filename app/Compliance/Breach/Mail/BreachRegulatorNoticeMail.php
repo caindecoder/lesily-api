@@ -6,14 +6,12 @@ use Throwable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
-use Illuminate\Queue\SerializesModels;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Contracts\Queue\ShouldQueue;
 
 class BreachRegulatorNoticeMail extends Mailable implements ShouldQueue
 {
     use Queueable;
-    use SerializesModels;
 
     public int $tries = 3;
 
@@ -47,6 +45,18 @@ class BreachRegulatorNoticeMail extends Mailable implements ShouldQueue
 
     public function content(): Content
     {
-        return new Content(markdown: 'emails.breach-regulator-notice');
+        return new Content(markdown: 'emails.breach-regulator-notice', with: ['noticeText' => $this->noticeText()]);
+    }
+
+    /**
+     * The notice's own wording — the text the filing's hash covers, without the mail
+     * layout around it, whose year, app name and URL can change before the queue sends.
+     */
+    public function noticeText(): string
+    {
+        /** @var string $text */
+        $text = __('notifications.breach_regulator_notice.body', [...$this->part, 'company' => $this->companyName]);
+
+        return $text;
     }
 }

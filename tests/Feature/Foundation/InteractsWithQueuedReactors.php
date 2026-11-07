@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Foundation;
 
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Queue;
 use Spatie\EventSourcing\Projectionist;
 use Illuminate\Support\Facades\Notification;
@@ -28,16 +29,30 @@ trait InteractsWithQueuedReactors
         );
     }
 
-    protected function runQueuedHandlersFor(string $eventClass): void
+    protected function queuedHandlerCountFor(string $eventClass): int
+    {
+        return $this->queuedHandlersFor($eventClass)->count();
+    }
+
+    /**
+     * @return Collection<int, HandleStoredEventJob>
+     */
+    protected function queuedHandlersFor(string $eventClass): Collection
     {
         $queue = Queue::getFacadeRoot();
 
         if (! $queue instanceof QueueFake) {
-            self::fail('runQueuedHandlersFor() requires Queue::fake() to be armed first.');
+            self::fail('The queued handlers can only be read with Queue::fake() armed first.');
         }
 
-        $jobs = collect($queue->pushed(HandleStoredEventJob::class))
-            ->filter(fn (HandleStoredEventJob $job): bool => $job->storedEvent->event_class === $eventClass);
+        return collect($queue->pushed(HandleStoredEventJob::class))
+            ->filter(fn (HandleStoredEventJob $job): bool => $job->storedEvent->event_class === $eventClass)
+            ->values();
+    }
+
+    protected function runQueuedHandlersFor(string $eventClass): void
+    {
+        $jobs = $this->queuedHandlersFor($eventClass);
 
         if ($jobs->isEmpty()) {
             self::fail("No captured HandleStoredEventJob matches {$eventClass} — nothing to drain.");

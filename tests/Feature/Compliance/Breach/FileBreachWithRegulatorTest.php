@@ -262,7 +262,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->aFilingRequestBy($this->companyA, $first);
         $second = $this->aNotifiedIncident($this->companyA);
         $this->aFilingRequestBy($this->companyA, $second);
-        $this->fileFor($this->admin, $first, $this->companyA->getKey())->assertOk();
+        $this->fileFor($this->admin, $first, $this->companyA->getKey());
 
         // When an admin files the second for company A
         $response = $this->fileFor($this->admin, $second, $this->companyA->getKey());
@@ -280,7 +280,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
         $this->aFilingRequestBy($this->companyA, $breachId);
         $this->aFilingRequestBy($this->companyB, $breachId);
-        $this->fileFor($this->admin, $breachId, $this->companyA->getKey())->assertOk();
+        $this->fileFor($this->admin, $breachId, $this->companyA->getKey());
 
         // When an admin files it for company B
         $response = $this->fileFor($this->admin, $breachId, $this->companyB->getKey());
@@ -319,15 +319,16 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->aFilingRequestBy($this->companyA, $breachId);
 
         // When an admin files it for company A and the queued reactors run
-        $this->fileFor($this->admin, $breachId, $this->companyA->getKey())->assertOk();
+        $response = $this->fileFor($this->admin, $breachId, $this->companyA->getKey());
         $this->runTheFilingReactors();
 
         // Then the regulator reads A's name, its own data types and its count — and nothing of B
-        $body = $this->theRegulatorMail()->render();
-        $this->assertStringContainsString(e($this->companyA->name), $body);
-        $this->assertStringContainsString('Personal data affected: Personal details, National identity card numbers. People affected: 120.', $body);
-        foreach ([e($this->companyB->name), 'Bank details', 'People affected: 30', '150'] as $absent) {
-            $this->assertStringNotContainsString($absent, $body);
+        $response->assertOk();
+        $notice = $this->theRegulatorMail()->noticeText();
+        $this->assertStringContainsString($this->companyA->name, $notice);
+        $this->assertStringContainsString('Personal data affected: Personal details, National identity card numbers. People affected: 120.', $notice);
+        foreach ([$this->companyB->name, 'Bank details', 'People affected: 30', '150'] as $absent) {
+            $this->assertStringNotContainsString($absent, $notice);
         }
     }
 
@@ -340,11 +341,12 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->correctTheCount($breachId, $this->companyA, 145);
 
         // When an admin files it for company A and the queued reactors run
-        $this->fileFor($this->admin, $breachId, $this->companyA->getKey())->assertOk();
+        $response = $this->fileFor($this->admin, $breachId, $this->companyA->getKey());
         $this->runTheFilingReactors();
 
         // Then the regulator reads 145, while the notice A was sent still records 40
-        $this->assertStringContainsString('People affected: 145.', $this->theRegulatorMail()->render());
+        $response->assertOk();
+        $this->assertStringContainsString('People affected: 145.', $this->theRegulatorMail()->noticeText());
         $this->assertSame(['145', '40'], [$this->partOf(BreachFiledWithRegulator::class, $breachId)['count'], $this->partOf(BreachCompanyNotified::class, $breachId)['count']]);
     }
 
@@ -356,11 +358,63 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->aFilingRequestBy($this->companyA, $breachId);
 
         // When an admin files it for company A and the queued reactors run
-        $this->fileFor($this->admin, $breachId, $this->companyA->getKey())->assertOk();
+        $response = $this->fileFor($this->admin, $breachId, $this->companyA->getKey());
         $this->runTheFilingReactors();
 
         // Then the regulator reads that the count is not yet known
-        $this->assertStringContainsString('People affected: Not yet known.', $this->theRegulatorMail()->render());
+        $response->assertOk();
+        $this->assertStringContainsString('People affected: Not yet known.', $this->theRegulatorMail()->noticeText());
+    }
+
+    #[Test]
+    public function when_the_mail_layout_changes_before_it_is_sent_then_its_notice_still_hashes_to_the_filing(): void
+    {
+        // Given company A's filing was recorded, and the app's name in the mail layout changes before the queue runs
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $this->aFilingRequestBy($this->companyA, $breachId);
+        $response = $this->fileFor($this->admin, $breachId, $this->companyA->getKey());
+        config(['app.name' => 'Lesily (renamed)']);
+
+        // When the queued reactors run
+        $this->runTheFilingReactors();
+
+        // Then the notice the regulator receives still hashes to the stored value
+        $response->assertOk();
+        $this->assertRegulatorMailed((string) $this->filingOf($breachId, $this->companyA)->filed_body_hash);
+    }
+
+    #[Test]
+    public function when_the_regulator_address_changes_before_the_mail_is_sent_then_it_goes_to_the_address_filed(): void
+    {
+        // Given company A's filing was recorded, and the configured regulator address changes before the queue runs
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $this->aFilingRequestBy($this->companyA, $breachId);
+        $response = $this->fileFor($this->admin, $breachId, $this->companyA->getKey());
+        config(['platform.regulator_address' => 'new-dpa@regulator.test']);
+
+        // When the queued reactors run
+        $this->runTheFilingReactors();
+
+        // Then the mail goes to the address the filing named
+        $response->assertOk();
+        $this->assertRegulatorMailed((string) $this->filingOf($breachId, $this->companyA)->filed_body_hash);
+    }
+
+    #[Test]
+    public function when_an_admin_files_for_a_company_twice_then_the_second_is_refused_and_one_mail_is_queued(): void
+    {
+        // Given company A's filing was recorded
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $this->aFilingRequestBy($this->companyA, $breachId);
+        $this->fileFor($this->admin, $breachId, $this->companyA->getKey());
+
+        // When an admin files it for company A again
+        $response = $this->fileFor($this->admin, $breachId, $this->companyA->getKey());
+
+        // Then the second filing is refused, and one filing and one send wait in the queue
+        $this->assertRefusedAsNotOpen($response, 'Lesily has already filed this breach with the regulator for the company.');
+        $this->assertSame(1, LesilyStoredEvent::query()->where('event_class', BreachFiledWithRegulator::class)->count());
+        $this->assertSame(1, $this->queuedHandlerCountFor(BreachFiledWithRegulator::class));
     }
 
     #[Test]
@@ -374,10 +428,11 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->travelTo(CarbonImmutable::parse(self::FILED_AT));
 
         // When an admin files it for company A and the queued reactors run
-        $this->fileFor($this->admin, $breachId, $this->companyA->getKey())->assertOk();
+        $response = $this->fileFor($this->admin, $breachId, $this->companyA->getKey());
         $this->runTheFilingReactors();
 
         // Then only the owner and the admin are told
+        $response->assertOk();
         $this->assertToldFiled($this->companyA, $breachId);
         foreach ($others as $other) {
             Notification::assertNothingSentTo($other);
@@ -410,10 +465,11 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->aFilingRequestBy($this->companyA, $breachId);
 
         // When an admin files it for company A and the queued reactors run
-        $this->fileFor($this->admin, $breachId, $this->companyA->getKey())->assertOk();
+        $response = $this->fileFor($this->admin, $breachId, $this->companyA->getKey());
         $this->runTheFilingReactors();
 
         // Then one mail goes to the configured regulator address, its body the one the stored hash was taken from
+        $response->assertOk();
         $this->assertRegulatorMailed((string) $this->filingOf($breachId, $this->companyA)->filed_body_hash);
     }
 
@@ -428,10 +484,11 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->travelTo(CarbonImmutable::parse(self::FILED_AT));
 
         // When an admin files it for company A and the queued reactors run
-        $this->fileFor($this->admin, $breachId, $this->companyA->getKey())->assertOk();
+        $response = $this->fileFor($this->admin, $breachId, $this->companyA->getKey());
         $this->runTheFilingReactors();
 
         // Then A's owner and admin are told Lesily filed for them, and B's people hear nothing
+        $response->assertOk();
         $this->assertToldFiled($this->companyA, $breachId);
         foreach ($others as $other) {
             Notification::assertNothingSentTo($other);
@@ -453,7 +510,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
     protected function aNotifiedIncidentOf(array $companies): string
     {
         $breachId = $this->aRecordedIncident(['companies' => $companies]);
-        $this->notifyCompanies($this->admin, $breachId)->assertOk();
+        $this->notifyCompanies($this->admin, $breachId);
 
         return $breachId;
     }
@@ -502,7 +559,8 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $mail = $this->theRegulatorMail();
 
         $this->assertTrue($mail->hasTo(self::REGULATOR));
-        $this->assertSame($bodyHash, hash('sha256', $mail->render()));
+        $this->assertSame($bodyHash, hash('sha256', $mail->noticeText()));
+        $this->assertStringContainsString($mail->noticeText(), html_entity_decode(strip_tags($mail->render()), ENT_QUOTES));
     }
 
     protected function filingOf(string $breachId, Company $company): BreachIncidentCompany
@@ -518,7 +576,9 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $block = collect($companies)->firstWhere('company_id', $company->getKey());
         $this->assertSame(['companies_notified', self::FILED_AT_JSON], [$response->json('data.stage'), $block['filed_at'] ?? null]);
 
-        $filing = $this->filingOf($response->json('data.id'), $company);
+        $breachId = $response->json('data.id');
+        $this->assertIsString($breachId);
+        $filing = $this->filingOf($breachId, $company);
         $this->assertNotNull($filing->filed_at);
         $this->assertTrue(CarbonImmutable::parse(self::FILED_AT)->equalTo($filing->filed_at));
         $this->assertSame($admin->getKey(), $filing->filed_by);

@@ -31,7 +31,7 @@ class BreachFilingNotOpenException extends DomainException
         return new self('The company has not asked Lesily to file this breach.');
     }
 
-    public static function notYetNotified(): self
+    public static function filingBeforeTheNotices(): self
     {
         return new self('A breach is filed with the regulator only after its companies are notified.');
     }
