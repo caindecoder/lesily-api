@@ -473,6 +473,11 @@ Route::get('/v1/admin/breach-incidents', [PlatformAdminBreachIncidentsController
 Route::get('/v1/admin/breach-incidents/{breachId}', [PlatformAdminBreachIncidentsController::class, 'show'])
     ->middleware(['auth:sanctum', 'platform.admin']);
 
+// A platform admin corrects a breach incident (UC-1-130) - auth:sanctum + platform.admin only, no auth.company;
+// no idempotency mount - a repeat changes nothing and is refused as nothing to amend.
+Route::patch('/v1/admin/breach-incidents/{breachId}', [PlatformAdminBreachIncidentsController::class, 'amend'])
+    ->middleware(['auth:sanctum', 'platform.admin']);
+
 // A platform admin notifies every affected company (UC-1-132) - auth:sanctum + platform.admin only, no
 // auth.company; no idempotency mount - the recorded-only stage guard is the dedup (a re-press answers 409).
 Route::post('/v1/admin/breach-incidents/{breachId}/notifications/companies', [PlatformAdminBreachIncidentsController::class, 'notifyCompanies'])

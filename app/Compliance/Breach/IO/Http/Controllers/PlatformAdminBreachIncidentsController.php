@@ -68,6 +68,11 @@ class PlatformAdminBreachIncidentsController extends Controller
         return new BreachIncidentAdminDetailResource($interactor->execute($command, $admin, RequestOrigin::fromRequest($request)));
     }
 
+    public function amend(Request $request, string $breachId): never
+    {
+        abort(Response::HTTP_NOT_IMPLEMENTED);
+    }
+
     public function fileWithRegulator(Request $request, string $breachId, string $companyId): BreachIncidentAdminDetailResource
     {
         /** @var User $admin */
