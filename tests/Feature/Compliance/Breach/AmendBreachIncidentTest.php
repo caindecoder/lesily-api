@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Compliance\Breach;
 
+use Closure;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
@@ -10,6 +11,7 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Breach\Events\BreachAmended;
+use Database\Factories\BreachIncidentRecordFactory;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class AmendBreachIncidentTest extends BreachIncidentsTestCase
@@ -147,6 +149,32 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         // Then it is refused as nothing to amend and nothing is amended
         $this->assertValidationRejected($response, 'amendment', 'Nothing to amend: every value sent matches the incident.');
         $this->assertNothingAmended($breachId, $before);
+    }
+
+    #[Test, DataProvider('provideClosedStages')]
+    public function when_the_incident_is_closed_then_the_amendment_is_refused(Closure $closed, string $message): void
+    {
+        // Given a closed incident
+        $breachId = $closed($this->anIncident())->createOne()->getKey();
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin corrects its description
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive']));
+
+        // Then the correction is refused with the stage named, and nothing is amended
+        $this->assertRefusedAsNotOpen($response, $message);
+        $this->assertNothingAmended($breachId, $before);
+    }
+
+    /**
+     * @return array<string, array{Closure, string}>
+     */
+    public static function provideClosedStages(): array
+    {
+        return [
+            'resolved' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->resolved(), 'A resolved breach incident cannot be amended.'],
+            'a false alarm' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->falseAlarm(), 'A breach incident marked as a false alarm cannot be amended.'],
+        ];
     }
 
     /**

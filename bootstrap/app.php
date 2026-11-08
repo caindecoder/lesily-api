@@ -63,6 +63,7 @@ use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Foundation\Auth\Exceptions\GoogleSignInUnavailableException;
 use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
 use App\Companies\Memberships\Exceptions\SelfRemovalBlockedException;
+use App\Compliance\Breach\Exceptions\BreachAmendmentRefusedException;
 use App\Compliance\Dsar\Exceptions\DsarRequestNotInProgressException;
 use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
@@ -377,6 +378,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // Only a recorded breach incident may have its companies notified - a re-press,
         // a resolved or a false-alarm incident refuses with the stage named (UC-1-132 2b, 2c → 409).
         $exceptions->render(fn (BreachIncidentNotRecordedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // A breach incident takes a correction only while it is open, and only the facts its stage
+        // leaves open - resolved, false alarm, or a fact locked by the notices (UC-1-130 3a, 3c → 409).
+        $exceptions->render(fn (BreachAmendmentRefusedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));
