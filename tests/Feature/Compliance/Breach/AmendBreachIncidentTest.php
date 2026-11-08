@@ -7,6 +7,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Laravel\Sanctum\Sanctum;
+use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -166,6 +167,62 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertNothingAmended($breachId, $before);
     }
 
+    #[Test, DataProvider('provideLockedFacts')]
+    public function when_a_locked_fact_is_changed_after_the_notices_then_it_is_refused(array $change, string $message): void
+    {
+        // Given an incident discovered 2026-05-04 14:00 UTC with severity high, whose companies A and B were notified
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin changes a fact the notices locked
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection($change));
+
+        // Then the correction is refused with the fact named, the deadline stays 2026-05-07 14:00 UTC, and nothing is amended
+        $this->assertRefusedAsNotOpen($response, $message);
+        $this->assertNothingAmended($breachId, $before);
+    }
+
+    #[Test]
+    public function when_a_company_is_dropped_after_the_notices_then_it_is_refused(): void
+    {
+        // Given an incident whose companies A and B were notified
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin sends the company list with company A only
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['companies' => [$this->aNotifiedPartOf($this->companyA)]]));
+
+        // Then the correction is refused as the list is locked, and company B is still on the incident
+        $this->assertRefusedAsNotOpen($response, 'The company list is locked once the companies are notified.');
+        $this->assertNothingAmended($breachId, $before);
+    }
+
+    #[Test]
+    public function when_a_company_is_added_through_the_list_after_the_notices_then_it_is_refused(): void
+    {
+        // Given an incident whose company A was notified
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin sends the company list with companies A and B
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['companies' => [$this->aNotifiedPartOf($this->companyA), $this->aNotifiedPartOf($this->companyB)]]));
+
+        // Then the correction is refused as the list is locked, and only company A is on the incident
+        $this->assertRefusedAsNotOpen($response, 'The company list is locked once the companies are notified.');
+        $this->assertNothingAmended($breachId, $before);
+    }
+
+    /**
+     * @return array<string, array{array<string, string>, string}>
+     */
+    public static function provideLockedFacts(): array
+    {
+        return [
+            'an earlier discovery moment' => [['dateDiscovered' => '2026-05-03T14:00:00Z'], 'The discovery date is locked once the companies are notified.'],
+            'a higher severity' => [['severity' => 'critical'], 'The severity is locked once the companies are notified.'],
+        ];
+    }
+
     /**
      * @return array<string, array{Closure, string}>
      */
@@ -237,6 +294,11 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     protected function aCorrection(array $changes): array
     {
         return ['reason' => self::REASON, ...$changes];
+    }
+
+    protected function aNotifiedPartOf(Company $company): array
+    {
+        return ['companyId' => $company->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40];
     }
 
     protected function correctionWith(array $changes): array
