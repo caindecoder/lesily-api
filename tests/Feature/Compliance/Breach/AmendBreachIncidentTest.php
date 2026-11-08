@@ -112,6 +112,22 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertNothingAmended($breachId, $before);
     }
 
+    #[Test]
+    public function when_the_discovery_moment_is_corrected_to_after_the_recording_then_it_is_refused(): void
+    {
+        // Given an incident recorded 2026-05-05 09:00 UTC, and the clock a day later
+        $breachId = $this->aRecordedIncident();
+        $before = $this->snapshotOf($breachId);
+        $this->travelTo(CarbonImmutable::parse('2026-05-06T09:00:00Z'));
+
+        // When the admin corrects the discovery moment to 2026-05-05 12:00 UTC, after the recording
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['dateDiscovered' => '2026-05-05T12:00:00Z']));
+
+        // Then it is refused on the discovery moment and nothing is amended
+        $this->assertValidationRejected($response, 'dateDiscovered', 'The date discovered cannot be later than when the incident was recorded.');
+        $this->assertNothingAmended($breachId, $before);
+    }
+
     #[Test, DataProvider('provideNoChanges')]
     public function when_nothing_differs_from_the_current_record_then_it_is_refused_and_nothing_is_recorded(array $changes): void
     {
@@ -353,8 +369,8 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         BreachIncident::retrieve($breachId)->flagMissedDeadline(CarbonImmutable::now())->persist();
         $this->amendIncident($this->admin, $breachId, $this->aCorrection(['dateDiscovered' => '2026-05-04T20:00:00Z']));
 
-        // When the admin corrects the discovery moment again, to 2026-05-05 12:00 UTC - due 2026-05-08 12:00, ahead
-        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['dateDiscovered' => '2026-05-05T12:00:00Z']));
+        // When the admin corrects the discovery moment again, to the recording moment 2026-05-05 09:00 UTC - due 2026-05-08 09:00, ahead
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['dateDiscovered' => '2026-05-05T09:00:00Z']));
 
         // Then the flag the first correction kept is cleared
         $response->assertOk();

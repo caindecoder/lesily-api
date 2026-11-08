@@ -5,6 +5,7 @@ namespace App\Compliance\Breach\UseCases\Interactors;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use App\Compliance\Breach\Enums\BreachStage;
+use Illuminate\Validation\ValidationException;
 use App\Compliance\Breach\Events\BreachAmended;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -26,6 +27,7 @@ class AmendBreachInteractor
                 ?? throw new ModelNotFoundException;
 
             $this->guardOpen($breach);
+            $this->guardDiscoveredBeforeRecording($breach, $command);
 
             BreachIncident::retrieve($breach->getKey())->amend($command, $admin)->persist();
 
@@ -33,6 +35,13 @@ class AmendBreachInteractor
 
             return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breach->getKey())->firstOrFail();
         });
+    }
+
+    protected function guardDiscoveredBeforeRecording(BreachIncidentRecord $breach, AmendBreachCommand $command): void
+    {
+        if ($command->dateDiscovered?->greaterThan($breach->recorded_at)) {
+            throw ValidationException::withMessages(['dateDiscovered' => 'The date discovered cannot be later than when the incident was recorded.']);
+        }
     }
 
     protected function recordAudit(BreachIncidentRecord $breach, User $admin, RequestOrigin $context): void
