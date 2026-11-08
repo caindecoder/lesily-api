@@ -8,6 +8,7 @@ use RuntimeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\PendingCommand;
@@ -15,6 +16,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Exceptions;
 use App\Compliance\Breach\Enums\BreachStage;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Database\Events\QueryExecuted;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Breach\Aggregates\BreachIncident;
@@ -124,6 +126,26 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
 
         // Then nothing is flagged
         $this->assertNothingFlagged();
+    }
+
+    #[Test]
+    public function when_an_incident_is_flagged_then_its_row_is_read_locked_inside_the_flag_s_transaction(): void
+    {
+        // Given a recorded incident past its deadline, and every query captured with its transaction depth
+        $this->aRecordedIncident();
+        $ambient = DB::transactionLevel();
+        $queries = [];
+        DB::listen(function (QueryExecuted $query) use (&$queries): void {
+            $queries[] = ['sql' => $query->sql, 'depth' => DB::transactionLevel()];
+        });
+
+        // When the daily scan runs
+        $this->runFlagMissedDeadlines()->run();
+
+        // Then the incident row is read for update inside the flag's own transaction, so a correction cannot race it
+        $locked = collect($queries)->first(fn (array $query): bool => str_contains($query['sql'], 'from `breach_incidents`') && str_contains($query['sql'], 'for update'));
+        $this->assertNotNull($locked, 'The scan must read the incident row for update.');
+        $this->assertGreaterThan($ambient, $locked['depth']);
     }
 
     #[Test]

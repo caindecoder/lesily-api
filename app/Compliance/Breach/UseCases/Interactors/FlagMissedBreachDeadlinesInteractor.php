@@ -39,6 +39,8 @@ class FlagMissedBreachDeadlinesInteractor
     protected function flag(string $breachId, CarbonInterface $at): bool
     {
         return DB::transaction(function () use ($breachId, $at): bool {
+            BreachIncidentRecord::query()->whereKey($breachId)->lockForUpdate()->firstOrFail();
+
             $incident = BreachIncident::retrieve($breachId)->flagMissedDeadline($at);
 
             if ($incident->getRecordedEvents() === []) {
