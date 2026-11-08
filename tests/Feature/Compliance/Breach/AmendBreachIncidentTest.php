@@ -377,6 +377,40 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_a_company_is_added_before_the_notices_then_it_joins_the_incident(): void
+    {
+        // Given a recorded incident affecting company A
+        $breachId = $this->aRecordedIncident();
+
+        // When the admin sends company A and company B (payroll, about 7 people)
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['companies' => [
+            $this->aNotifiedPartOf($this->companyA),
+            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
+        ]]));
+
+        // Then company B joins the incident, added by the admin now, and the addition is in the history
+        $response->assertOk();
+        $row = BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->where('company_id', $this->companyB->getKey())->sole();
+        $this->assertSame([['payroll'], 7, $this->admin->getKey(), '2026-05-05 09:00:00'], [$row->data_types, $row->estimated_count, $row->added_by, $row->added_at->toDateTimeString()]);
+        $this->assertHistory($breachId, [['company_added', $this->companyB->getKey(), null, ['dataTypes' => ['payroll'], 'estimatedCount' => 7]]]);
+    }
+
+    #[Test]
+    public function when_a_company_is_dropped_before_the_notices_then_it_leaves_the_incident(): void
+    {
+        // Given a recorded incident affecting companies A and B (each pii, about 40 people)
+        $breachId = $this->aRecordedIncident(['companies' => [$this->aNotifiedPartOf($this->companyA), $this->aNotifiedPartOf($this->companyB)]]);
+
+        // When the admin sends company A only
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['companies' => [$this->aNotifiedPartOf($this->companyA)]]));
+
+        // Then company B leaves the incident and its removal, with its figures, is in the history
+        $response->assertOk();
+        $this->assertSame([$this->companyA->getKey()], BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->pluck('company_id')->all());
+        $this->assertHistory($breachId, [['company_removed', $this->companyB->getKey(), ['dataTypes' => ['pii'], 'estimatedCount' => 40], null]]);
+    }
+
+    #[Test]
     public function when_facts_are_corrected_before_the_notices_then_they_are_recorded_projected_audited_and_the_current_facts_are_returned(): void
     {
         // Given a recorded incident affecting company A (pii)

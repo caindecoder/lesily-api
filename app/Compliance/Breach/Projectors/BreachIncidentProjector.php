@@ -115,7 +115,15 @@ class BreachIncidentProjector extends Projector
             BreachAmendmentField::Severity => $incident->update(['severity' => $change['new']]),
             BreachAmendmentField::DataTypes => $company->update(['data_types' => $change['new']]),
             BreachAmendmentField::EstimatedCount => $company->update(['estimated_count' => $change['new']]),
-            BreachAmendmentField::CompanyAdded, BreachAmendmentField::CompanyRemoved => null,
+            BreachAmendmentField::CompanyAdded => BreachIncidentCompany::query()->create([
+                'breach_incident_id' => $event->breachId,
+                'company_id' => $change['companyId'],
+                'data_types' => $change['new']['dataTypes'],
+                'estimated_count' => $change['new']['estimatedCount'],
+                'added_at' => $event->amendedAt,
+                'added_by' => $event->amendedByUserId,
+            ]),
+            BreachAmendmentField::CompanyRemoved => $company->delete(),
         };
     }
 
