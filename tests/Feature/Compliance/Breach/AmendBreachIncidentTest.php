@@ -11,6 +11,7 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Breach\Events\BreachAmended;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -377,6 +378,72 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_several_facts_change_in_one_request_then_one_event_carries_them_and_the_history_rows_share_its_reason_and_moment(): void
+    {
+        // Given a recorded incident affecting company A (pii)
+        $breachId = $this->aRecordedIncident();
+
+        // When the admin sends company A's data types before the severity and the description in one correction
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection([
+            'companies' => [['companyId' => $this->companyA->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 40]],
+            'severity' => 'medium',
+            'description' => 'Payroll and bank export left on a shared drive',
+        ]));
+
+        // Then one event carries the three changes in the field order, and three history rows share its reason and moment
+        $response->assertOk();
+        $this->assertAmendedOnce($breachId, [
+            ['field' => 'description', 'companyId' => null, 'old' => 'A payroll export was emailed to the wrong recipient.', 'new' => 'Payroll and bank export left on a shared drive'],
+            ['field' => 'severity', 'companyId' => null, 'old' => 'high', 'new' => 'medium'],
+            ['field' => 'data_types', 'companyId' => $this->companyA->getKey(), 'old' => ['pii'], 'new' => ['payroll']],
+        ]);
+        $this->assertHistory($breachId, [
+            ['data_types', $this->companyA->getKey(), ['pii'], ['payroll']],
+            ['description', null, 'A payroll export was emailed to the wrong recipient.', 'Payroll and bank export left on a shared drive'],
+            ['severity', null, 'high', 'medium'],
+        ]);
+    }
+
+    #[Test, DataProvider('provideOpenFacts')]
+    public function when_an_open_fact_is_corrected_after_the_notices_then_it_is_recorded_and_nothing_is_sent(Closure $correction, Closure $change): void
+    {
+        // Given an incident whose companies A and B were notified
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+
+        // When the admin corrects a fact the notices leave open
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection($correction($this)));
+
+        // Then the change is recorded at the companies-notified stage and nobody is told
+        $response->assertOk();
+        $response->assertJsonPath('data.stage', 'companies_notified');
+        $this->assertAmendedOnce($breachId, [$change($this)]);
+        Notification::assertNothingSent();
+    }
+
+    #[Test]
+    public function when_a_company_count_is_corrected_after_the_notices_then_its_own_notices_list_shows_it_and_the_other_company_s_does_not_change(): void
+    {
+        // Given an incident whose companies A (about 120 people) and B (about 30) were notified, and their owners
+        $breachId = $this->aNotifiedIncidentWith([
+            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 120],
+            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 30],
+        ]);
+        $ownerA = $this->anOwnerOf($this->companyA);
+        $ownerB = $this->anOwnerOf($this->companyB);
+
+        // When the admin corrects company A's count to 145
+        $this->amendIncident($this->admin, $breachId, $this->aCorrection(['companies' => [
+            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 145],
+            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 30],
+        ]]));
+
+        // Then company A's notices list shows 145, company B's still shows 30, and nobody is told
+        $this->assertSame([145], $this->listNotices($ownerA, $this->companyA)->json('data.*.estimated_count'));
+        $this->assertSame([30], $this->listNotices($ownerB, $this->companyB)->json('data.*.estimated_count'));
+        Notification::assertNothingSent();
+    }
+
+    #[Test]
     public function when_a_company_is_added_before_the_notices_then_it_joins_the_incident(): void
     {
         // Given a recorded incident affecting company A
@@ -444,6 +511,34 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
             ['severity', null, 'high', 'critical'],
         ]);
         $this->assertAmendAudited($response, $breachId, $storedEventId);
+    }
+
+    /**
+     * @return array<string, array{Closure, Closure}>
+     */
+    public static function provideOpenFacts(): array
+    {
+        return [
+            'the description' => [
+                fn (self $test): array => ['description' => 'Payroll and bank export left on a shared drive'],
+                fn (self $test): array => ['field' => 'description', 'companyId' => null, 'old' => 'A payroll export was emailed to the wrong recipient.', 'new' => 'Payroll and bank export left on a shared drive'],
+            ],
+            'the likely consequences' => [
+                fn (self $test): array => ['likelyConsequences' => 'Bank details may be used to attempt payment fraud.'],
+                fn (self $test): array => ['field' => 'likely_consequences', 'companyId' => null, 'old' => 'Salary and bank details may be read by one outside person.', 'new' => 'Bank details may be used to attempt payment fraud.'],
+            ],
+            'the measures' => [
+                fn (self $test): array => ['measures' => 'The shared drive was locked and its access log is being reviewed.'],
+                fn (self $test): array => ['field' => 'measures', 'companyId' => null, 'old' => 'The recipient was asked to delete the file; exports now need a second check.', 'new' => 'The shared drive was locked and its access log is being reviewed.'],
+            ],
+            'a company\'s data types' => [
+                fn (self $test): array => ['companies' => [
+                    ['companyId' => $test->companyA->getKey(), 'dataTypes' => ['pii', 'banking'], 'estimatedCount' => 40],
+                    $test->aNotifiedPartOf($test->companyB),
+                ]],
+                fn (self $test): array => ['field' => 'data_types', 'companyId' => $test->companyA->getKey(), 'old' => ['pii'], 'new' => ['pii', 'banking']],
+            ],
+        ];
     }
 
     /**
@@ -539,6 +634,18 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     protected function aCorrection(array $changes): array
     {
         return ['reason' => self::REASON, ...$changes];
+    }
+
+    protected function aNotifiedIncidentWith(array $companies): string
+    {
+        $breachId = $this->aRecordedIncident(['companies' => $companies]);
+        $parts = collect($companies)->mapWithKeys(fn (array $company): array => [
+            $company['companyId'] => ['description' => 'A payroll export was emailed to the wrong recipient.'],
+        ])->all();
+        BreachIncident::retrieve($breachId)->notifyCompanies($this->admin, $parts)->persist();
+        BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->update(['notified_at' => CarbonImmutable::now()]);
+
+        return $breachId;
     }
 
     protected function aNotifiedPartOf(Company $company): array
