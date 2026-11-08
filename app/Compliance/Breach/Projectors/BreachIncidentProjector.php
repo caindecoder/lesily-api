@@ -92,6 +92,11 @@ class BreachIncidentProjector extends Projector
                 'amended_by' => $event->amendedByUserId,
             ]);
         }
+
+        BreachIncidentRecord::query()->whereKey($event->breachId)->update(array_merge(
+            ['deadline' => $event->deadline],
+            $event->missedDeadlineCleared ? ['deadline_missed_at' => null] : [],
+        ));
     }
 
     /**

@@ -16,5 +16,7 @@ class BreachAmended extends ShouldBeStored
         public string $amendedByUserId,
         public string $reason,
         public array $changes,
+        public CarbonInterface $deadline,
+        public bool $missedDeadlineCleared,
     ) {}
 }

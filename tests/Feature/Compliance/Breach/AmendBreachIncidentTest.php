@@ -16,6 +16,8 @@ use App\Compliance\Breach\Events\BreachAmended;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Breach\Entities\BreachAmendment;
 use Database\Factories\BreachIncidentRecordFactory;
+use App\Compliance\Breach\Aggregates\BreachIncident;
+use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -325,6 +327,39 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_the_discovery_date_is_corrected_then_the_deadline_moves_with_it(): void
+    {
+        // Given a recorded incident discovered 2026-05-04 14:00 UTC, due 2026-05-07 14:00 UTC
+        $breachId = $this->aRecordedIncident();
+
+        // When the admin corrects the discovery moment to 2026-05-03 20:00 UTC
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['dateDiscovered' => '2026-05-03T20:00:00Z']));
+
+        // Then the deadline is 2026-05-06 20:00 UTC on the record and in the event, and the change is in the history
+        $response->assertOk();
+        $this->assertSame(['2026-05-03T20:00:00.000000Z', '2026-05-06T20:00:00.000000Z'], [$response->json('data.date_discovered'), $response->json('data.deadline')]);
+        $this->assertTrue(CarbonImmutable::parse('2026-05-06T20:00:00Z')->equalTo(BreachIncidentRecord::query()->findOrFail($breachId)->deadline));
+        $this->assertHistory($breachId, [['date_discovered', null, '2026-05-04T14:00:00Z', '2026-05-03T20:00:00Z']]);
+    }
+
+    #[Test, DataProvider('provideNewDeadlineEdges')]
+    public function when_a_flagged_incident_s_new_deadline_is_ahead_then_the_missed_flag_is_cleared(string $correctedDiscovery, bool $cleared): void
+    {
+        // Given a recorded incident due 2026-05-07 14:00 UTC, flagged as missed by the run at 2026-05-08 00:00 UTC
+        $breachId = $this->aRecordedIncident();
+        $this->travelTo(CarbonImmutable::parse('2026-05-08T00:00:00Z'));
+        BreachIncident::retrieve($breachId)->flagMissedDeadline(CarbonImmutable::now())->persist();
+
+        // When the admin corrects the discovery moment so the new deadline falls at or just after now
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['dateDiscovered' => $correctedDiscovery]));
+
+        // Then the flag is cleared only when the new deadline is still ahead
+        $response->assertOk();
+        $this->assertSame($cleared, BreachIncidentRecord::query()->findOrFail($breachId)->deadline_missed_at === null);
+        $this->assertSame($cleared, $response->json('data.deadline_missed_at') === null);
+    }
+
+    #[Test]
     public function when_a_second_correction_is_sent_then_it_is_compared_with_the_first(): void
     {
         // Given a recorded incident whose description was already corrected once
@@ -375,6 +410,17 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
             ['severity', null, 'high', 'critical'],
         ]);
         $this->assertAmendAudited($response, $breachId, $storedEventId);
+    }
+
+    /**
+     * @return array<string, array{string, bool}>
+     */
+    public static function provideNewDeadlineEdges(): array
+    {
+        return [
+            'the new deadline is now' => ['2026-05-05T00:00:00Z', false],
+            'the new deadline is a second ahead' => ['2026-05-05T00:00:01Z', true],
+        ];
     }
 
     /**

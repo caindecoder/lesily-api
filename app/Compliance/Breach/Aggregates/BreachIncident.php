@@ -159,18 +159,25 @@ class BreachIncident extends AggregateRoot
             }
         }
 
+        $amendedAt = CarbonImmutable::now();
+        $deadline = $this->facts->amendedBy($changes)->dateDiscovered->addHours(self::DEADLINE_HOURS);
+
         return $this->recordThat(new BreachAmended(
             breachId: $this->uuid(),
-            amendedAt: CarbonImmutable::now(),
+            amendedAt: $amendedAt,
             amendedByUserId: $admin->getKey(),
             reason: $command->reason,
             changes: $changes,
+            deadline: $deadline,
+            missedDeadlineCleared: $this->deadlineMissed && $deadline->greaterThan($amendedAt),
         ));
     }
 
     protected function applyBreachAmended(BreachAmended $event): void
     {
         $this->facts = $this->facts->amendedBy($event->changes);
+        $this->deadline = $event->deadline;
+        $this->deadlineMissed = $this->deadlineMissed && ! $event->missedDeadlineCleared;
     }
 
     protected function guardOpenAfterTheNotices(BreachAmendmentField $field): void
