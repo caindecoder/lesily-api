@@ -9,6 +9,7 @@ use App\Compliance\Breach\Enums\BreachStage;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Values\RegulatorFiling;
+use App\Compliance\Breach\Events\BreachDeadlineMissed;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Events\BreachFilingRequested;
 use App\Compliance\Breach\Events\BreachCompaniesNotified;
@@ -26,6 +27,10 @@ class BreachIncident extends AggregateRoot
     private const int DEADLINE_HOURS = 72;
 
     protected ?BreachStage $stage = null;
+
+    protected CarbonInterface $deadline;
+
+    protected bool $deadlineMissed = false;
 
     /** @var array<string, CarbonInterface> each notified company's notice time, keyed by company id */
     protected array $notifiedAt = [];
@@ -132,9 +137,24 @@ class BreachIncident extends AggregateRoot
         ));
     }
 
+    public function flagMissedDeadline(CarbonInterface $at): static
+    {
+        if ($this->stage !== BreachStage::Recorded || $this->deadlineMissed || $at->lessThan($this->deadline)) {
+            return $this;
+        }
+
+        return $this->recordThat(new BreachDeadlineMissed(breachId: $this->uuid(), missedAt: $at));
+    }
+
     protected function applyBreachRecorded(BreachRecorded $event): void
     {
         $this->stage = BreachStage::Recorded;
+        $this->deadline = $event->deadline;
+    }
+
+    protected function applyBreachDeadlineMissed(BreachDeadlineMissed $event): void
+    {
+        $this->deadlineMissed = true;
     }
 
     protected function applyBreachCompanyNotified(BreachCompanyNotified $event): void

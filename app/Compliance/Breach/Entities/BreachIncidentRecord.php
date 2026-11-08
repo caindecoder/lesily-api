@@ -3,6 +3,7 @@
 namespace App\Compliance\Breach\Entities;
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 use App\Compliance\Breach\Enums\BreachStage;
@@ -93,6 +94,14 @@ class BreachIncidentRecord extends Model
     protected function scopeOrderByDeadline(Builder $query): void
     {
         $query->orderBy('deadline')->orderBy('id');
+    }
+
+    /**
+     * @param  Builder<self>  $query
+     */
+    protected function scopeWhereDeadlineMissedToFlag(Builder $query, CarbonInterface $at): void
+    {
+        $query->where('stage', BreachStage::Recorded)->where('deadline', '<=', $at)->whereNull('deadline_missed_at');
     }
 
     public function totalEstimatedCount(): ?int

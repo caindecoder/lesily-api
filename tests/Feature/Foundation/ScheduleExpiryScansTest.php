@@ -30,6 +30,7 @@ class ScheduleExpiryScansTest extends FoundationTestCase
         'invitations:expire',
         'dsar:expire-links',
         'dsar:flag-missed-deadlines',
+        'breaches:flag-missed-deadlines',
     ];
 
     #[Test]
