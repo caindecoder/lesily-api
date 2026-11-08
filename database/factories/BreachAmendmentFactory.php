@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\User;
+use App\Companies\Entities\Company;
 use App\Compliance\Breach\Entities\BreachAmendment;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use App\Compliance\Breach\Enums\BreachAmendmentField;
@@ -30,5 +31,25 @@ class BreachAmendmentFactory extends Factory
             'amended_at' => '2026-05-05 09:00:00',
             'amended_by' => User::factory(),
         ];
+    }
+
+    public function forIncident(BreachIncidentRecord $incident): static
+    {
+        return $this->state(['breach_incident_id' => $incident->getKey(), 'amended_by' => $incident->recorded_by]);
+    }
+
+    public function amendedAt(string $at): static
+    {
+        return $this->state(['amended_at' => $at]);
+    }
+
+    public function changing(BreachAmendmentField $field, mixed $old, mixed $new): static
+    {
+        return $this->state(['field' => $field, 'old_value' => $old, 'new_value' => $new]);
+    }
+
+    public function forCompany(Company $company): static
+    {
+        return $this->state(['company_id' => $company->getKey()]);
     }
 }

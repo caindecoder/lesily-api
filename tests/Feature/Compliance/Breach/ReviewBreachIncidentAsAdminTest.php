@@ -10,6 +10,8 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Compliance\Breach\Entities\BreachAmendment;
+use App\Compliance\Breach\Enums\BreachAmendmentField;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 
@@ -175,6 +177,29 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         );
     }
 
+    #[Test]
+    public function when_an_incident_was_corrected_then_its_history_is_shown_newest_first_with_who_when_and_why(): void
+    {
+        // Given an incident corrected twice - its description on 5 May, then on 6 May its severity
+        // and company A's data types - with the rows stored out of that order
+        $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $correction = BreachAmendment::factory()->forIncident($incident);
+        $correction->amendedAt('2026-05-06 10:00:00')->changing(BreachAmendmentField::Severity, 'high', 'critical')->createOne(['reason' => 'The export held bank details.']);
+        $correction->amendedAt('2026-05-05 09:00:00')->createOne();
+        $correction->amendedAt('2026-05-06 10:00:00')->forCompany($this->companyA)->changing(BreachAmendmentField::DataTypes, ['pii'], ['pii', 'banking'])->createOne(['reason' => 'The export held bank details.']);
+
+        // When the admin opens the incident
+        $response = $this->showIncident($this->admin, $incident->getKey());
+
+        // Then the history lists the 6 May request first, its changes by field, then the 5 May correction
+        $response->assertOk();
+        $this->assertSame([
+            ['field' => 'data_types', 'company_id' => $this->companyA->getKey(), 'old_value' => ['pii'], 'new_value' => ['pii', 'banking'], 'reason' => 'The export held bank details.', 'amended_by' => $this->admin->getKey(), 'amended_at' => '2026-05-06T10:00:00.000000Z'],
+            ['field' => 'severity', 'company_id' => null, 'old_value' => 'high', 'new_value' => 'critical', 'reason' => 'The export held bank details.', 'amended_by' => $this->admin->getKey(), 'amended_at' => '2026-05-06T10:00:00.000000Z'],
+            ['field' => 'description', 'company_id' => null, 'old_value' => 'A payroll export was emailed to the wrong recipient.', 'new_value' => 'Payroll and bank export left on a shared drive', 'reason' => 'An earlier log entry showed the export reached a second shared folder.', 'amended_by' => $this->admin->getKey(), 'amended_at' => '2026-05-05T09:00:00.000000Z'],
+        ], $response->json('data.amendments'));
+    }
+
     /**
      * @return array<string, array{?int, ?int, ?int}>
      */
@@ -246,6 +271,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
                 'filed_at' => null,
             ])->all(),
             'total_estimated_count' => 47,
+            'amendments' => [],
         ]]);
     }
 

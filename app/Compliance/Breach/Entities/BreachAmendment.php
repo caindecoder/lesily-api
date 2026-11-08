@@ -46,4 +46,9 @@ class BreachAmendment extends Model
         'amended_at' => 'immutable_datetime',
         'created_at' => 'immutable_datetime',
     ];
+
+    protected static function newFactory(): BreachAmendmentFactory
+    {
+        return BreachAmendmentFactory::new();
+    }
 }
