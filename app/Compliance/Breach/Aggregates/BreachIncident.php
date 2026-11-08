@@ -8,6 +8,7 @@ use Carbon\CarbonInterface;
 use App\Compliance\Breach\Enums\BreachStage;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Compliance\Breach\Values\BreachFacts;
+use App\Compliance\Breach\Events\BreachAmended;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Values\RegulatorFiling;
 use App\Compliance\Breach\Enums\BreachAmendmentField;
@@ -158,7 +159,18 @@ class BreachIncident extends AggregateRoot
             }
         }
 
-        return $this;
+        return $this->recordThat(new BreachAmended(
+            breachId: $this->uuid(),
+            amendedAt: CarbonImmutable::now(),
+            amendedByUserId: $admin->getKey(),
+            reason: $command->reason,
+            changes: $changes,
+        ));
+    }
+
+    protected function applyBreachAmended(BreachAmended $event): void
+    {
+        $this->facts = $this->facts->amendedBy($event->changes);
     }
 
     protected function guardOpenAfterTheNotices(BreachAmendmentField $field): void

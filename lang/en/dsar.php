@@ -139,6 +139,7 @@ return [
             'breach_filing_requested' => 'Asked Lesily to file a data breach with the regulator',
             'breach_filed_with_regulator' => 'Filed a data breach with the regulator for a company',
             'breach_deadline_missed' => 'A data breach missed its 72-hour deadline',
+            'breach_amended' => 'A data breach record was corrected',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',

@@ -2,8 +2,12 @@
 
 namespace App\Compliance\Breach\Projectors;
 
+use Carbon\CarbonImmutable;
 use App\Compliance\Breach\Enums\BreachStage;
+use App\Compliance\Breach\Events\BreachAmended;
 use App\Compliance\Breach\Events\BreachRecorded;
+use App\Compliance\Breach\Entities\BreachAmendment;
+use App\Compliance\Breach\Enums\BreachAmendmentField;
 use App\Compliance\Breach\Events\BreachDeadlineMissed;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Events\BreachFilingRequested;
@@ -70,6 +74,44 @@ class BreachIncidentProjector extends Projector
             'stage' => BreachStage::CompaniesNotified,
             'companies_notified_at' => $event->notifiedAt,
         ]);
+    }
+
+    public function onBreachAmended(BreachAmended $event): void
+    {
+        foreach ($event->changes as $change) {
+            $this->applyChange($event, $change);
+
+            BreachAmendment::query()->create([
+                'breach_incident_id' => $event->breachId,
+                'company_id' => $change['companyId'],
+                'field' => $change['field'],
+                'old_value' => $change['old'],
+                'new_value' => $change['new'],
+                'reason' => $event->reason,
+                'amended_at' => $event->amendedAt,
+                'amended_by' => $event->amendedByUserId,
+            ]);
+        }
+    }
+
+    /**
+     * @param  array{field: string, companyId: ?string, old: mixed, new: mixed}  $change
+     */
+    protected function applyChange(BreachAmended $event, array $change): void
+    {
+        $incident = BreachIncidentRecord::query()->whereKey($event->breachId);
+        $company = BreachIncidentCompany::query()->where('breach_incident_id', $event->breachId)->where('company_id', $change['companyId']);
+
+        match (BreachAmendmentField::from($change['field'])) {
+            BreachAmendmentField::Description => $incident->update(['description' => $change['new']]),
+            BreachAmendmentField::LikelyConsequences => $incident->update(['likely_consequences' => $change['new']]),
+            BreachAmendmentField::Measures => $incident->update(['measures' => $change['new']]),
+            BreachAmendmentField::DateDiscovered => $incident->update(['date_discovered' => CarbonImmutable::parse($change['new'])]),
+            BreachAmendmentField::Severity => $incident->update(['severity' => $change['new']]),
+            BreachAmendmentField::DataTypes => $company->update(['data_types' => $change['new']]),
+            BreachAmendmentField::EstimatedCount => $company->update(['estimated_count' => $change['new']]),
+            BreachAmendmentField::CompanyAdded, BreachAmendmentField::CompanyRemoved => null,
+        };
     }
 
     /**

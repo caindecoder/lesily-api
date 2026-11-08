@@ -12,6 +12,8 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Breach\Events\BreachAmended;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Compliance\Breach\Entities\BreachAmendment;
 use Database\Factories\BreachIncidentRecordFactory;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -212,6 +214,42 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertNothingAmended($breachId, $before);
     }
 
+    #[Test]
+    public function when_facts_are_corrected_before_the_notices_then_they_are_recorded_projected_audited_and_the_current_facts_are_returned(): void
+    {
+        // Given a recorded incident affecting company A (pii)
+        $breachId = $this->aRecordedIncident();
+
+        // When the admin corrects the description, the severity, the measures and company A's data types with one reason
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection([
+            'description' => 'Payroll and bank export left on a shared drive',
+            'severity' => 'critical',
+            'measures' => 'The shared drive was locked and its access log is being reviewed.',
+            'companies' => [['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii', 'banking'], 'estimatedCount' => 40]],
+        ]));
+
+        // Then the current facts are returned at the recorded stage, one event carries the four changes,
+        // the history holds a row for each, and the request left one audit row with no company
+        $response->assertOk();
+        $this->assertSame(
+            ['recorded', 'critical', 'Payroll and bank export left on a shared drive', 'The shared drive was locked and its access log is being reviewed.', ['pii', 'banking']],
+            [$response->json('data.stage'), $response->json('data.severity'), $response->json('data.description'), $response->json('data.measures'), $response->json('data.companies.0.data_types')],
+        );
+        $storedEventId = $this->assertAmendedOnce($breachId, [
+            ['field' => 'description', 'companyId' => null, 'old' => 'A payroll export was emailed to the wrong recipient.', 'new' => 'Payroll and bank export left on a shared drive'],
+            ['field' => 'measures', 'companyId' => null, 'old' => 'The recipient was asked to delete the file; exports now need a second check.', 'new' => 'The shared drive was locked and its access log is being reviewed.'],
+            ['field' => 'severity', 'companyId' => null, 'old' => 'high', 'new' => 'critical'],
+            ['field' => 'data_types', 'companyId' => $this->companyA->getKey(), 'old' => ['pii'], 'new' => ['pii', 'banking']],
+        ]);
+        $this->assertHistory($breachId, [
+            ['data_types', $this->companyA->getKey(), ['pii'], ['pii', 'banking']],
+            ['description', null, 'A payroll export was emailed to the wrong recipient.', 'Payroll and bank export left on a shared drive'],
+            ['measures', null, 'The recipient was asked to delete the file; exports now need a second check.', 'The shared drive was locked and its access log is being reviewed.'],
+            ['severity', null, 'high', 'critical'],
+        ]);
+        $this->assertAmendAudited($response, $breachId, $storedEventId);
+    }
+
     /**
      * @return array<string, array{array<string, string>, string}>
      */
@@ -314,6 +352,56 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         }
 
         return $correction;
+    }
+
+    protected function assertAmendedOnce(string $breachId, array $changes): int
+    {
+        $event = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachAmended::class)->sole();
+        $properties = $event->event_properties;
+
+        $this->assertEquals($changes, $properties['changes']);
+        $this->assertSame([self::REASON, $this->admin->getKey()], [$properties['reason'], $properties['amendedByUserId']]);
+        $this->assertTrue(CarbonImmutable::now()->equalTo(CarbonImmutable::parse($properties['amendedAt'])));
+
+        return (int) $event->getKey();
+    }
+
+    protected function assertHistory(string $breachId, array $rows): void
+    {
+        $history = BreachAmendment::query()->where('breach_incident_id', $breachId)->orderBy('field')->orderBy('company_id')->get();
+        $this->assertCount(count($rows), $history);
+
+        $this->assertSame($rows, $history->map(fn (BreachAmendment $row): array => [$row->field->value, $row->company_id, $row->old_value, $row->new_value])->all());
+        $this->assertSame(
+            [[self::REASON], [$this->admin->getKey()], [CarbonImmutable::now()->toDateTimeString()]],
+            [$history->pluck('reason')->unique()->values()->all(), $history->pluck('amended_by')->unique()->values()->all(), $history->map(fn (BreachAmendment $row): string => $row->amended_at->toDateTimeString())->unique()->values()->all()],
+        );
+    }
+
+    protected function assertAmendAudited(TestResponse $response, string $breachId, int $storedEventId): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => null,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'BreachAmended',
+            'subject_type' => 'breach_incident',
+            'subject_id' => $breachId,
+            'subject_label' => null,
+            'action' => 'breach_amended',
+            'description' => 'Platform admin corrected a data breach record.',
+            'metadata' => null,
+            'actor_user_id' => $this->admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $this->admin->name,
+            'ip_address' => '127.0.0.1',
+            'severity' => 'critical',
+        ]);
+
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+        $entry = AuditEntry::query()->sole();
+        $this->assertSame([$correlationId, 'Symfony'], [$entry->request_id, $entry->user_agent]);
     }
 
     protected function assertNothingAmended(string $breachId, array $before): void

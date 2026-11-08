@@ -42,6 +42,51 @@ class BreachFacts
     }
 
     /**
+     * @param  list<array{field: string, companyId: ?string, old: mixed, new: mixed}>  $changes
+     */
+    public function amendedBy(array $changes): self
+    {
+        $facts = [
+            'description' => $this->description,
+            'likelyConsequences' => $this->likelyConsequences,
+            'measures' => $this->measures,
+            'dateDiscovered' => $this->dateDiscovered,
+            'severity' => $this->severity,
+            'companies' => $this->companies,
+        ];
+
+        foreach ($changes as $change) {
+            $facts = $this->withChange($facts, $change);
+        }
+
+        return new self(...$facts);
+    }
+
+    /**
+     * @param  array{description: string, likelyConsequences: string, measures: string, dateDiscovered: CarbonImmutable, severity: string, companies: array<string, array{dataTypes: list<string>, estimatedCount: ?int}>}  $facts
+     * @param  array{field: string, companyId: ?string, old: mixed, new: mixed}  $change
+     * @return array{description: string, likelyConsequences: string, measures: string, dateDiscovered: CarbonImmutable, severity: string, companies: array<string, array{dataTypes: list<string>, estimatedCount: ?int}>}
+     */
+    protected function withChange(array $facts, array $change): array
+    {
+        $companyId = (string) $change['companyId'];
+
+        match (BreachAmendmentField::from($change['field'])) {
+            BreachAmendmentField::Description => $facts['description'] = $change['new'],
+            BreachAmendmentField::LikelyConsequences => $facts['likelyConsequences'] = $change['new'],
+            BreachAmendmentField::Measures => $facts['measures'] = $change['new'],
+            BreachAmendmentField::DateDiscovered => $facts['dateDiscovered'] = CarbonImmutable::parse($change['new']),
+            BreachAmendmentField::Severity => $facts['severity'] = $change['new'],
+            BreachAmendmentField::CompanyAdded => $facts['companies'][$companyId] = $change['new'],
+            BreachAmendmentField::CompanyRemoved => $facts['companies'] = array_diff_key($facts['companies'], [$companyId => true]),
+            BreachAmendmentField::DataTypes => $facts['companies'][$companyId]['dataTypes'] = $change['new'],
+            BreachAmendmentField::EstimatedCount => $facts['companies'][$companyId]['estimatedCount'] = $change['new'],
+        };
+
+        return $facts;
+    }
+
+    /**
      * @return list<array{field: string, companyId: ?string, old: mixed, new: mixed}>
      */
     public function changesTo(AmendBreachCommand $command): array
