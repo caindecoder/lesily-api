@@ -7,6 +7,7 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use App\Compliance\Breach\Enums\BreachStage;
 use App\Foundation\EventStore\AggregateRoot;
+use App\Compliance\Breach\Values\BreachFacts;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Values\RegulatorFiling;
 use App\Compliance\Breach\Events\BreachDeadlineMissed;
@@ -14,6 +15,8 @@ use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Events\BreachFilingRequested;
 use App\Compliance\Breach\Events\BreachCompaniesNotified;
 use App\Compliance\Breach\Events\BreachFiledWithRegulator;
+use App\Compliance\Breach\Exceptions\NothingToAmendException;
+use App\Compliance\Breach\UseCases\Commands\AmendBreachCommand;
 use App\Compliance\Breach\UseCases\Commands\AffectedCompanyData;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
 use App\Compliance\Breach\Exceptions\BreachFilingNotOpenException;
@@ -31,6 +34,8 @@ class BreachIncident extends AggregateRoot
     protected CarbonInterface $deadline;
 
     protected bool $deadlineMissed = false;
+
+    protected BreachFacts $facts;
 
     /** @var array<string, CarbonInterface> each notified company's notice time, keyed by company id */
     protected array $notifiedAt = [];
@@ -137,6 +142,15 @@ class BreachIncident extends AggregateRoot
         ));
     }
 
+    public function amend(AmendBreachCommand $command, User $admin): static
+    {
+        if ($this->facts->changesTo($command) === []) {
+            throw NothingToAmendException::everyValueMatches();
+        }
+
+        return $this;
+    }
+
     public function flagMissedDeadline(CarbonInterface $at): static
     {
         if ($this->stage !== BreachStage::Recorded || $this->deadlineMissed || $at->lessThan($this->deadline)) {
@@ -150,6 +164,7 @@ class BreachIncident extends AggregateRoot
     {
         $this->stage = BreachStage::Recorded;
         $this->deadline = $event->deadline;
+        $this->facts = BreachFacts::recordedBy($event);
     }
 
     protected function applyBreachDeadlineMissed(BreachDeadlineMissed $event): void

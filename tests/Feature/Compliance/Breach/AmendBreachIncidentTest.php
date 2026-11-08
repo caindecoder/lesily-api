@@ -102,6 +102,53 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertNothingAmended($breachId, $before);
     }
 
+    #[Test, DataProvider('provideNoChanges')]
+    public function when_nothing_differs_from_the_current_record_then_it_is_refused_and_nothing_is_recorded(array $changes): void
+    {
+        // Given a recorded incident
+        $breachId = $this->aRecordedIncident();
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin sends a correction whose every value is the current one
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection($changes));
+
+        // Then it is refused as nothing to amend, and no event, history or audit row is written
+        $this->assertValidationRejected($response, 'amendment', 'Nothing to amend: every value sent matches the incident.');
+        $this->assertNothingAmended($breachId, $before);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>}>
+     */
+    public static function provideNoChanges(): array
+    {
+        return [
+            'only a reason' => [[]],
+            'the same description' => [['description' => 'A payroll export was emailed to the wrong recipient.']],
+            'the same severity' => [['severity' => 'high']],
+            'the same likely consequences, measures and discovery moment' => [[
+                'likelyConsequences' => 'Salary and bank details may be read by one outside person.',
+                'measures' => 'The recipient was asked to delete the file; exports now need a second check.',
+                'dateDiscovered' => '2026-05-04T14:00:00Z',
+            ]],
+        ];
+    }
+
+    #[Test]
+    public function when_the_same_company_list_is_sent_then_it_is_refused_as_nothing_to_amend(): void
+    {
+        // Given a recorded incident affecting company A (pii, about 40 people)
+        $breachId = $this->aRecordedIncident();
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin sends company A with the same data types and count
+        $response = $this->amendIncident($this->admin, $breachId, $this->correctionWith([]));
+
+        // Then it is refused as nothing to amend and nothing is amended
+        $this->assertValidationRejected($response, 'amendment', 'Nothing to amend: every value sent matches the incident.');
+        $this->assertNothingAmended($breachId, $before);
+    }
+
     /**
      * @return array<string, array{string, string}>
      */
