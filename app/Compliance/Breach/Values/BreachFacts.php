@@ -69,7 +69,8 @@ class BreachFacts
      */
     protected function withChange(array $facts, array $change): array
     {
-        $companyId = (string) $change['companyId'];
+        /** @var string $companyId read only by the company arms, whose changes always name their company */
+        $companyId = $change['companyId'];
 
         match (BreachAmendmentField::from($change['field'])) {
             BreachAmendmentField::Description => $facts['description'] = $change['new'],

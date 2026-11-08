@@ -127,23 +127,6 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertNothingAmended($breachId, $before);
     }
 
-    /**
-     * @return array<string, array{array<string, mixed>}>
-     */
-    public static function provideNoChanges(): array
-    {
-        return [
-            'only a reason' => [[]],
-            'the same description' => [['description' => 'A payroll export was emailed to the wrong recipient.']],
-            'the same severity' => [['severity' => 'high']],
-            'the same likely consequences, measures and discovery moment' => [[
-                'likelyConsequences' => 'Salary and bank details may be read by one outside person.',
-                'measures' => 'The recipient was asked to delete the file; exports now need a second check.',
-                'dateDiscovered' => '2026-05-04T14:00:00Z',
-            ]],
-        ];
-    }
-
     #[Test]
     public function when_the_same_company_list_is_sent_then_it_is_refused_as_nothing_to_amend(): void
     {
@@ -361,6 +344,24 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_a_flag_kept_by_one_correction_meets_a_deadline_moved_ahead_by_the_next_then_it_is_cleared(): void
+    {
+        // Given a recorded incident flagged as missed at 2026-05-08 00:00 UTC, whose discovery was first corrected
+        // to 2026-05-04 20:00 UTC - due 2026-05-07 20:00, still behind, so the flag stayed
+        $breachId = $this->aRecordedIncident();
+        $this->travelTo(CarbonImmutable::parse('2026-05-08T00:00:00Z'));
+        BreachIncident::retrieve($breachId)->flagMissedDeadline(CarbonImmutable::now())->persist();
+        $this->amendIncident($this->admin, $breachId, $this->aCorrection(['dateDiscovered' => '2026-05-04T20:00:00Z']));
+
+        // When the admin corrects the discovery moment again, to 2026-05-05 12:00 UTC - due 2026-05-08 12:00, ahead
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['dateDiscovered' => '2026-05-05T12:00:00Z']));
+
+        // Then the flag the first correction kept is cleared
+        $response->assertOk();
+        $this->assertNull(BreachIncidentRecord::query()->findOrFail($breachId)->deadline_missed_at);
+    }
+
+    #[Test]
     public function when_a_second_correction_is_sent_then_it_is_compared_with_the_first(): void
     {
         // Given a recorded incident whose description was already corrected once
@@ -372,6 +373,23 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive']));
 
         // Then it is refused as nothing to amend, and the history keeps the one change
+        $this->assertValidationRejected($response, 'amendment', 'Nothing to amend: every value sent matches the incident.');
+        $this->assertSame($before, $this->snapshotOf($breachId));
+        $this->assertSame(1, BreachAmendment::query()->count());
+    }
+
+    #[Test]
+    public function when_a_dropped_company_is_left_out_again_then_nothing_differs(): void
+    {
+        // Given a recorded incident whose company B was already dropped, leaving company A
+        $breachId = $this->aRecordedIncident(['companies' => [$this->aNotifiedPartOf($this->companyA), $this->aNotifiedPartOf($this->companyB)]]);
+        $this->amendIncident($this->admin, $breachId, $this->aCorrection(['companies' => [$this->aNotifiedPartOf($this->companyA)]]));
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin sends company A only again
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['companies' => [$this->aNotifiedPartOf($this->companyA)]]));
+
+        // Then it is refused as nothing to amend, and the history keeps the one removal
         $this->assertValidationRejected($response, 'amendment', 'Nothing to amend: every value sent matches the incident.');
         $this->assertSame($before, $this->snapshotOf($breachId));
         $this->assertSame(1, BreachAmendment::query()->count());
@@ -405,7 +423,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     }
 
     #[Test, DataProvider('provideOpenFacts')]
-    public function when_an_open_fact_is_corrected_after_the_notices_then_it_is_recorded_and_nothing_is_sent(Closure $correction, Closure $change): void
+    public function when_an_open_fact_is_corrected_after_the_notices_then_it_is_recorded_and_nothing_is_sent(Closure $correction, Closure $change, Closure $shown): void
     {
         // Given an incident whose companies A and B were notified
         $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
@@ -413,10 +431,11 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         // When the admin corrects a fact the notices leave open
         $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection($correction($this)));
 
-        // Then the change is recorded at the companies-notified stage and nobody is told
+        // Then the change is recorded and shown at the companies-notified stage, and nobody is told
         $response->assertOk();
         $response->assertJsonPath('data.stage', 'companies_notified');
         $this->assertAmendedOnce($breachId, [$change($this)]);
+        $this->assertSame($change($this)['new'], $shown($this, $response));
         Notification::assertNothingSent();
     }
 
@@ -478,6 +497,29 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_one_company_is_dropped_and_another_s_figures_change_then_every_company_change_is_recorded(): void
+    {
+        // Given a recorded incident affecting company A (pii, about 40) and company B (banking and pii, about 40)
+        $breachId = $this->aRecordedIncident(['companies' => [
+            $this->aNotifiedPartOf($this->companyA),
+            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['banking', 'pii'], 'estimatedCount' => 40],
+        ]]);
+
+        // When the admin sends company B only, its data types now banking and payroll, about 12 people
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['companies' => [
+            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['banking', 'payroll'], 'estimatedCount' => 12],
+        ]]));
+
+        // Then company A's removal and both of company B's changes are recorded in one event
+        $response->assertOk();
+        $this->assertAmendedOnce($breachId, [
+            ['field' => 'company_removed', 'companyId' => $this->companyA->getKey(), 'old' => ['dataTypes' => ['pii'], 'estimatedCount' => 40], 'new' => null],
+            ['field' => 'data_types', 'companyId' => $this->companyB->getKey(), 'old' => ['banking', 'pii'], 'new' => ['banking', 'payroll']],
+            ['field' => 'estimated_count', 'companyId' => $this->companyB->getKey(), 'old' => 40, 'new' => 12],
+        ]);
+    }
+
+    #[Test]
     public function when_facts_are_corrected_before_the_notices_then_they_are_recorded_projected_audited_and_the_current_facts_are_returned(): void
     {
         // Given a recorded incident affecting company A (pii)
@@ -514,6 +556,23 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     }
 
     /**
+     * @return array<string, array{array<string, mixed>}>
+     */
+    public static function provideNoChanges(): array
+    {
+        return [
+            'only a reason' => [[]],
+            'the same description' => [['description' => 'A payroll export was emailed to the wrong recipient.']],
+            'the same severity' => [['severity' => 'high']],
+            'the same likely consequences, measures and discovery moment' => [[
+                'likelyConsequences' => 'Salary and bank details may be read by one outside person.',
+                'measures' => 'The recipient was asked to delete the file; exports now need a second check.',
+                'dateDiscovered' => '2026-05-04T14:00:00Z',
+            ]],
+        ];
+    }
+
+    /**
      * @return array<string, array{Closure, Closure}>
      */
     public static function provideOpenFacts(): array
@@ -522,14 +581,17 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
             'the description' => [
                 fn (self $test): array => ['description' => 'Payroll and bank export left on a shared drive'],
                 fn (self $test): array => ['field' => 'description', 'companyId' => null, 'old' => 'A payroll export was emailed to the wrong recipient.', 'new' => 'Payroll and bank export left on a shared drive'],
+                fn (self $test, TestResponse $response): mixed => $response->json('data.description'),
             ],
             'the likely consequences' => [
                 fn (self $test): array => ['likelyConsequences' => 'Bank details may be used to attempt payment fraud.'],
                 fn (self $test): array => ['field' => 'likely_consequences', 'companyId' => null, 'old' => 'Salary and bank details may be read by one outside person.', 'new' => 'Bank details may be used to attempt payment fraud.'],
+                fn (self $test, TestResponse $response): mixed => $response->json('data.likely_consequences'),
             ],
             'the measures' => [
                 fn (self $test): array => ['measures' => 'The shared drive was locked and its access log is being reviewed.'],
                 fn (self $test): array => ['field' => 'measures', 'companyId' => null, 'old' => 'The recipient was asked to delete the file; exports now need a second check.', 'new' => 'The shared drive was locked and its access log is being reviewed.'],
+                fn (self $test, TestResponse $response): mixed => $response->json('data.measures'),
             ],
             'a company\'s data types' => [
                 fn (self $test): array => ['companies' => [
@@ -537,6 +599,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
                     $test->aNotifiedPartOf($test->companyB),
                 ]],
                 fn (self $test): array => ['field' => 'data_types', 'companyId' => $test->companyA->getKey(), 'old' => ['pii'], 'new' => ['pii', 'banking']],
+                fn (self $test, TestResponse $response): mixed => $response->collect('data.companies')->firstWhere('company_id', $test->companyA->getKey())['data_types'],
             ],
         ];
     }
@@ -643,7 +706,6 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
             $company['companyId'] => ['description' => 'A payroll export was emailed to the wrong recipient.'],
         ])->all();
         BreachIncident::retrieve($breachId)->notifyCompanies($this->admin, $parts)->persist();
-        BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->update(['notified_at' => CarbonImmutable::now()]);
 
         return $breachId;
     }
