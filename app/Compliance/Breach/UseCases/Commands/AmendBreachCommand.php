@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Spatie\LaravelData\Attributes\WithCast;
+use Illuminate\Validation\ValidationException;
 use App\Compliance\Breach\Enums\BreachDataType;
 use App\Compliance\Breach\Enums\BreachSeverity;
 use Spatie\LaravelData\Attributes\DataCollectionOf;
@@ -15,6 +16,11 @@ use App\Foundation\UseCases\Attributes\OpaqueString;
 
 class AmendBreachCommand extends Data
 {
+    /**
+     * @var list<string>
+     */
+    protected const array AMENDABLE_KEYS = ['reason', 'description', 'likelyConsequences', 'measures', 'dateDiscovered', 'severity', 'companies'];
+
     #[OpaqueString('the incident is read once, locked, inside the transaction')]
     public string $breachId;
 
@@ -39,6 +45,12 @@ class AmendBreachCommand extends Data
 
     public static function fromRequest(Request $request, string $breachId): static
     {
+        $unknownKeys = array_diff(array_keys($request->all()), self::AMENDABLE_KEYS);
+
+        if ($unknownKeys !== []) {
+            throw ValidationException::withMessages(array_fill_keys($unknownKeys, 'This field cannot be updated.'));
+        }
+
         $request->merge(['breachId' => $breachId]);
 
         return static::validateAndCreate($request->all());

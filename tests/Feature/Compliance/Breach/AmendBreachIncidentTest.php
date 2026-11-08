@@ -87,6 +87,33 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertNothingAmended($breachId, $before);
     }
 
+    #[Test, DataProvider('provideFieldsThatCannotBeAmended')]
+    public function when_a_field_that_cannot_be_amended_is_sent_then_it_is_refused_and_nothing_is_amended(string $field, string $value): void
+    {
+        // Given a recorded incident
+        $breachId = $this->aRecordedIncident();
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin sends a correction that also sets a field no correction may set
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive', $field => $value]));
+
+        // Then it is refused on that field and nothing is amended
+        $this->assertValidationRejected($response, $field, 'This field cannot be updated.');
+        $this->assertNothingAmended($breachId, $before);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function provideFieldsThatCannotBeAmended(): array
+    {
+        return [
+            'the stage' => ['stage', 'resolved'],
+            'the deadline' => ['deadline', '2026-05-30T14:00:00Z'],
+            'the recording moment' => ['recordedAt', '2026-05-01T09:00:00Z'],
+        ];
+    }
+
     /**
      * @return array<string, array{array<string, mixed>, string, string}>
      */
