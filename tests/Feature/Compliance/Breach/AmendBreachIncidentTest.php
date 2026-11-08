@@ -4,6 +4,7 @@ namespace Tests\Feature\Compliance\Breach;
 
 use Closure;
 use App\Models\User;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Laravel\Sanctum\Sanctum;
@@ -15,6 +16,7 @@ use App\Compliance\Breach\Events\BreachAmended;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Breach\Entities\BreachAmendment;
 use Database\Factories\BreachIncidentRecordFactory;
+use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class AmendBreachIncidentTest extends BreachIncidentsTestCase
@@ -212,6 +214,131 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         // Then the correction is refused as the list is locked, and only company A is on the incident
         $this->assertRefusedAsNotOpen($response, 'The company list is locked once the companies are notified.');
         $this->assertNothingAmended($breachId, $before);
+    }
+
+    #[Test]
+    public function when_the_audit_row_cannot_be_written_then_nothing_is_amended(): void
+    {
+        // Given a recorded incident, and an audit trail that refuses the next row
+        $breachId = $this->aRecordedIncident();
+        $before = $this->snapshotOf($breachId);
+        AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the admin corrects its description
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive']));
+
+        // Then the request fails closed and the event, the rows and the history are rolled back
+        $this->assertFailedClosed($response);
+        $this->assertNothingAmended($breachId, $before);
+    }
+
+    #[Test]
+    public function when_a_locked_fact_is_sent_unchanged_beside_an_open_one_after_the_notices_then_only_the_open_one_is_amended(): void
+    {
+        // Given an incident discovered 2026-05-04 14:00 UTC with severity high, whose company A was notified
+        $breachId = $this->aNotifiedIncident($this->companyA);
+
+        // When the admin sends the same discovery moment and severity beside a new description
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection([
+            'dateDiscovered' => '2026-05-04T14:00:00Z',
+            'severity' => 'high',
+            'description' => 'Payroll and bank export left on a shared drive',
+        ]));
+
+        // Then only the description is amended
+        $response->assertOk();
+        $this->assertAmendedOnce($breachId, [
+            ['field' => 'description', 'companyId' => null, 'old' => 'A payroll export was emailed to the wrong recipient.', 'new' => 'Payroll and bank export left on a shared drive'],
+        ]);
+    }
+
+    #[Test]
+    public function when_only_some_values_sent_differ_then_only_those_are_recorded(): void
+    {
+        // Given a recorded incident with severity high
+        $breachId = $this->aRecordedIncident();
+
+        // When the admin sends the same severity beside new measures
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection([
+            'severity' => 'high',
+            'measures' => 'The shared drive was locked and its access log is being reviewed.',
+        ]));
+
+        // Then only the measures are recorded as changed
+        $response->assertOk();
+        $this->assertHistory($breachId, [
+            ['measures', null, 'The recipient was asked to delete the file; exports now need a second check.', 'The shared drive was locked and its access log is being reviewed.'],
+        ]);
+    }
+
+    #[Test]
+    public function when_the_same_discovery_moment_is_sent_with_an_offset_then_nothing_differs(): void
+    {
+        // Given a recorded incident discovered 2026-05-04 14:00 UTC
+        $breachId = $this->aRecordedIncident();
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin sends the same instant written at +05:30
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['dateDiscovered' => '2026-05-04T19:30:00+05:30']));
+
+        // Then it is refused as nothing to amend
+        $this->assertValidationRejected($response, 'amendment', 'Nothing to amend: every value sent matches the incident.');
+        $this->assertNothingAmended($breachId, $before);
+    }
+
+    #[Test]
+    public function when_a_company_list_is_sent_in_another_order_then_nothing_differs(): void
+    {
+        // Given a recorded incident affecting company A (pii, banking) and company B (payroll)
+        $breachId = $this->aRecordedIncident(['companies' => [
+            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii', 'banking'], 'estimatedCount' => 40],
+            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
+        ]]);
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin sends company B first and company A's data types the other way round
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['companies' => [
+            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
+            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['banking', 'pii'], 'estimatedCount' => 40],
+        ]]));
+
+        // Then it is refused as nothing to amend
+        $this->assertValidationRejected($response, 'amendment', 'Nothing to amend: every value sent matches the incident.');
+        $this->assertNothingAmended($breachId, $before);
+    }
+
+    #[Test]
+    public function when_a_company_count_is_cleared_then_it_is_recorded_as_unknown(): void
+    {
+        // Given a recorded incident affecting company A, about 40 people
+        $breachId = $this->aRecordedIncident();
+
+        // When the admin clears company A's count
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['companies' => [
+            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => null],
+        ]]));
+
+        // Then the count is recorded as unknown, on the company row and in the history
+        $response->assertOk();
+        $this->assertNull(BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->sole()->estimated_count);
+        $this->assertHistory($breachId, [['estimated_count', $this->companyA->getKey(), 40, null]]);
+    }
+
+    #[Test]
+    public function when_a_second_correction_is_sent_then_it_is_compared_with_the_first(): void
+    {
+        // Given a recorded incident whose description was already corrected once
+        $breachId = $this->aRecordedIncident();
+        $this->amendIncident($this->admin, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive']));
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin sends the corrected description again
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive']));
+
+        // Then it is refused as nothing to amend, and the history keeps the one change
+        $this->assertValidationRejected($response, 'amendment', 'Nothing to amend: every value sent matches the incident.');
+        $this->assertSame($before, $this->snapshotOf($breachId));
+        $this->assertSame(1, BreachAmendment::query()->count());
     }
 
     #[Test]
