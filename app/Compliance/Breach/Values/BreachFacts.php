@@ -3,6 +3,7 @@
 namespace App\Compliance\Breach\Values;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Arr;
 use App\Compliance\Breach\Enums\BreachDataType;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Enums\BreachAmendmentField;
@@ -79,7 +80,7 @@ class BreachFacts
             BreachAmendmentField::DateDiscovered => $facts['dateDiscovered'] = CarbonImmutable::parse($change['new']),
             BreachAmendmentField::Severity => $facts['severity'] = $change['new'],
             BreachAmendmentField::CompanyAdded => $facts['companies'][$companyId] = $change['new'],
-            BreachAmendmentField::CompanyRemoved => $facts['companies'] = array_diff_key($facts['companies'], [$companyId => true]),
+            BreachAmendmentField::CompanyRemoved => $facts['companies'] = Arr::except($facts['companies'], $companyId),
             BreachAmendmentField::DataTypes => $facts['companies'][$companyId]['dataTypes'] = $change['new'],
             BreachAmendmentField::EstimatedCount => $facts['companies'][$companyId]['estimatedCount'] = $change['new'],
         };
@@ -93,16 +94,16 @@ class BreachFacts
     public function changesTo(AmendBreachCommand $command): array
     {
         $changes = [
-            ...$this->textChange(BreachAmendmentField::Description, $this->description, $command->description),
-            ...$this->textChange(BreachAmendmentField::LikelyConsequences, $this->likelyConsequences, $command->likelyConsequences),
-            ...$this->textChange(BreachAmendmentField::Measures, $this->measures, $command->measures),
+            ...$this->valueChange(BreachAmendmentField::Description, $this->description, $command->description),
+            ...$this->valueChange(BreachAmendmentField::LikelyConsequences, $this->likelyConsequences, $command->likelyConsequences),
+            ...$this->valueChange(BreachAmendmentField::Measures, $this->measures, $command->measures),
         ];
 
         if ($command->dateDiscovered !== null && ! $command->dateDiscovered->equalTo($this->dateDiscovered)) {
             $changes[] = $this->change(BreachAmendmentField::DateDiscovered, null, [$this->dateDiscovered->toIso8601ZuluString(), $command->dateDiscovered->toIso8601ZuluString()]);
         }
 
-        $changes = [...$changes, ...$this->textChange(BreachAmendmentField::Severity, $this->severity, $command->severity?->value)];
+        $changes = [...$changes, ...$this->valueChange(BreachAmendmentField::Severity, $this->severity, $command->severity?->value)];
 
         return $command->companies === null ? $changes : [...$changes, ...$this->companyChanges($command->companies)];
     }
@@ -110,7 +111,7 @@ class BreachFacts
     /**
      * @return list<array{field: string, companyId: ?string, old: mixed, new: mixed}>
      */
-    protected function textChange(BreachAmendmentField $field, string $current, ?string $sent): array
+    protected function valueChange(BreachAmendmentField $field, string $current, ?string $sent): array
     {
         return $sent === null || $sent === $current ? [] : [$this->change($field, null, [$current, $sent])];
     }

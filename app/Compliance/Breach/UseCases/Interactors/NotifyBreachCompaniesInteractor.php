@@ -41,7 +41,7 @@ class NotifyBreachCompaniesInteractor
 
             $this->recordAudit($breach, $admin, $context);
 
-            return BreachIncidentRecord::query()->with('companies.company')->whereKey($breach->getKey())->firstOrFail();
+            return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breach->getKey())->firstOrFail();
         });
     }
 

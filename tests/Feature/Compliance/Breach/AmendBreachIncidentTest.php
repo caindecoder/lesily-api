@@ -411,6 +411,40 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertSame(1, BreachAmendment::query()->count());
     }
 
+    #[Test, DataProvider('provideCorrectionsToResend')]
+    public function when_a_corrected_value_is_sent_again_then_nothing_differs(Closure $correction): void
+    {
+        // Given a recorded incident affecting company A, already corrected once
+        $breachId = $this->aRecordedIncident(['companies' => [$this->aNotifiedPartOf($this->companyA)]]);
+        $this->amendIncident($this->admin, $breachId, $this->aCorrection($correction($this)));
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin sends the same correction again
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection($correction($this)));
+
+        // Then it is refused as nothing to amend, and the history keeps the first correction only
+        $this->assertValidationRejected($response, 'amendment', 'Nothing to amend: every value sent matches the incident.');
+        $this->assertSame($before, $this->snapshotOf($breachId));
+        $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachAmended::class)->count());
+    }
+
+    #[Test]
+    public function when_an_incident_is_corrected_twice_then_each_audit_row_cites_its_own_correction(): void
+    {
+        // Given a recorded incident whose description was corrected once
+        $breachId = $this->aRecordedIncident();
+        $this->amendIncident($this->admin, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive']));
+
+        // When the admin corrects its measures
+        $this->amendIncident($this->admin, $breachId, $this->aCorrection(['measures' => 'The shared drive was locked and its access log is being reviewed.']));
+
+        // Then each correction's audit row cites that correction's event, in order
+        $this->assertSame(
+            LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachAmended::class)->orderBy('id')->pluck('id')->all(),
+            AuditEntry::query()->where('action', 'breach_amended')->orderBy('id')->pluck('stored_event_id')->all(),
+        );
+    }
+
     #[Test]
     public function when_several_facts_change_in_one_request_then_one_event_carries_them_and_the_history_rows_share_its_reason_and_moment(): void
     {
@@ -569,6 +603,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
             ['severity', null, 'high', 'critical'],
         ]);
         $this->assertAmendAudited($response, $breachId, $storedEventId);
+        $this->assertSame(['data_types', 'description', 'measures', 'severity'], $response->json('data.amendments.*.field'));
     }
 
     /**
@@ -589,7 +624,20 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     }
 
     /**
-     * @return array<string, array{Closure, Closure}>
+     * @return array<string, array{Closure}>
+     */
+    public static function provideCorrectionsToResend(): array
+    {
+        return [
+            'a severity' => [fn (self $test): array => ['severity' => 'medium']],
+            'a company added' => [fn (self $test): array => ['companies' => [$test->aNotifiedPartOf($test->companyA), ['companyId' => $test->companyB->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7]]]],
+            'a company\'s data types' => [fn (self $test): array => ['companies' => [['companyId' => $test->companyA->getKey(), 'dataTypes' => ['pii', 'banking'], 'estimatedCount' => 40]]]],
+            'a company\'s count' => [fn (self $test): array => ['companies' => [['companyId' => $test->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 55]]]],
+        ];
+    }
+
+    /**
+     * @return array<string, array{Closure, Closure, Closure}>
      */
     public static function provideOpenFacts(): array
     {
@@ -639,6 +687,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         return [
             'an earlier discovery moment' => [['dateDiscovered' => '2026-05-03T14:00:00Z'], 'The discovery date is locked once the companies are notified.'],
             'a higher severity' => [['severity' => 'critical'], 'The severity is locked once the companies are notified.'],
+            'a higher severity beside a new description' => [['description' => 'Payroll and bank export left on a shared drive', 'severity' => 'critical'], 'The severity is locked once the companies are notified.'],
         ];
     }
 
@@ -801,5 +850,6 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertSame($before, $this->snapshotOf($breachId));
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', BreachAmended::class)->count());
         $this->assertDatabaseMissing('audit_trail', ['action' => 'breach_amended']);
+        $this->assertDatabaseCount('breach_amendments', 0);
     }
 }
