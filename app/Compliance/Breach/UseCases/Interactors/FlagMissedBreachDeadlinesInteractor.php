@@ -79,7 +79,8 @@ class FlagMissedBreachDeadlinesInteractor
         return LesilyStoredEvent::query()
             ->where('aggregate_uuid', $breachId)
             ->where('event_class', BreachDeadlineMissed::class)
-            ->sole()
+            ->latest('id')
+            ->firstOrFail()
             ->getKey();
     }
 }

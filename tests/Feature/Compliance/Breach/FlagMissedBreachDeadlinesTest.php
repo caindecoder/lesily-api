@@ -22,6 +22,7 @@ use App\Compliance\Breach\Events\BreachDeadlineMissed;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Foundation\Notifications\Enums\NotificationType;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
+use App\Compliance\Breach\UseCases\Commands\AmendBreachCommand;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -285,6 +286,39 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_a_corrected_discovery_date_puts_the_deadline_behind_then_the_scan_flags_it(): void
+    {
+        // Given an incident discovered 2026-05-06 12:00 UTC (due 2026-05-09 12:00), whose discovery was then
+        // corrected to 2026-05-04 20:00 UTC - due 2026-05-07 20:00, before tonight's run
+        $breachId = $this->aRecordedIncident(['dateDiscovered' => '2026-05-06T12:00:00Z']);
+        $this->correctTheDiscovery($breachId, '2026-05-04T20:00:00Z');
+
+        // When the daily scan runs
+        $this->runFlagMissedDeadlines()->expectsOutput('1 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then the incident is flagged against its corrected deadline
+        $this->assertFlagged($breachId, CarbonImmutable::parse(self::THE_NIGHT_AFTER));
+    }
+
+    #[Test]
+    public function when_a_cleared_flag_s_new_deadline_passes_then_the_scan_flags_it_again(): void
+    {
+        // Given an incident flagged tonight, whose discovery was then corrected to 2026-05-05 12:00 UTC -
+        // due 2026-05-08 12:00, so the flag was cleared - and the next night has come
+        $breachId = $this->aRecordedIncident();
+        $this->runFlagMissedDeadlines();
+        $this->correctTheDiscovery($breachId, '2026-05-05T12:00:00Z');
+        $this->travelTo('2026-05-09 00:00:00');
+
+        // When the daily scan runs again
+        $this->runFlagMissedDeadlines()->expectsOutput('1 missed deadline(s) flagged.')->assertSuccessful();
+
+        // Then the incident is flagged a second time, against the new night
+        $this->assertSame(2, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachDeadlineMissed::class)->count());
+        $this->assertEquals(CarbonImmutable::parse('2026-05-09 00:00:00'), BreachIncidentRecord::query()->findOrFail($breachId)->deadline_missed_at);
+    }
+
+    #[Test]
     public function when_several_incidents_miss_their_deadline_then_one_run_flags_them_all(): void
     {
         // Given two incidents still recorded past their deadlines
@@ -382,6 +416,13 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
                 && $alert->details === ['incident' => $breachId, 'deadline' => '7 May 2026, 14:00 UTC']);
         }
         Notification::assertCount(2);
+    }
+
+    protected function correctTheDiscovery(string $breachId, string $discovered): void
+    {
+        BreachIncident::retrieve($breachId)
+            ->amend(AmendBreachCommand::from(['breachId' => $breachId, 'reason' => 'An earlier log entry was found.', 'dateDiscovered' => $discovered]), $this->admin)
+            ->persist();
     }
 
     protected function assertFlagged(string $breachId, CarbonImmutable $missedAt): void
