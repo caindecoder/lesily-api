@@ -8,7 +8,9 @@ use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
+use App\Compliance\Breach\UseCases\Commands\AmendBreachCommand;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
+use App\Compliance\Breach\UseCases\Interactors\AmendBreachInteractor;
 use App\Compliance\Breach\UseCases\Interactors\RecordBreachInteractor;
 use App\Compliance\Breach\UseCases\Commands\BreachIncidentAdminFilters;
 use App\Compliance\Breach\UseCases\Commands\NotifyBreachCompaniesCommand;
@@ -64,6 +66,16 @@ class PlatformAdminBreachIncidentsController extends Controller
         $admin = $request->user();
 
         $command = NotifyBreachCompaniesCommand::validateAndCreate(['breachId' => $breachId]);
+
+        return new BreachIncidentAdminDetailResource($interactor->execute($command, $admin, RequestOrigin::fromRequest($request)));
+    }
+
+    public function amend(Request $request, string $breachId, AmendBreachInteractor $interactor): BreachIncidentAdminDetailResource
+    {
+        /** @var User $admin */
+        $admin = $request->user();
+
+        $command = AmendBreachCommand::fromRequest($request, $breachId);
 
         return new BreachIncidentAdminDetailResource($interactor->execute($command, $admin, RequestOrigin::fromRequest($request)));
     }

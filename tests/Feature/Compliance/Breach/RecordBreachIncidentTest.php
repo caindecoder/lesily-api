@@ -305,6 +305,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
                 'filed_at' => null,
             ]],
             'total_estimated_count' => 40,
+            'amendments' => [],
         ]]);
 
         return $breachId;

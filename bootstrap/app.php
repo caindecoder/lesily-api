@@ -26,6 +26,7 @@ use App\Foundation\Http\Middleware\EnsureFeatureAvailable;
 use App\Foundation\Auth\Exceptions\GoogleNotLinkedException;
 use App\Foundation\Http\Exceptions\ConsentRequiredException;
 use Illuminate\Routing\Exceptions\InvalidSignatureException;
+use App\Compliance\Breach\Exceptions\NothingToAmendException;
 use App\Foundation\Auth\Exceptions\EmailNotVerifiedException;
 use App\Foundation\Auth\Exceptions\InvalidResetLinkException;
 use App\Foundation\Http\Exceptions\RoleInsufficientException;
@@ -62,6 +63,7 @@ use App\Companies\Memberships\Exceptions\InvalidInvitationException;
 use App\Foundation\Auth\Exceptions\GoogleSignInUnavailableException;
 use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
 use App\Companies\Memberships\Exceptions\SelfRemovalBlockedException;
+use App\Compliance\Breach\Exceptions\BreachAmendmentRefusedException;
 use App\Compliance\Dsar\Exceptions\DsarRequestNotInProgressException;
 use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
@@ -378,6 +380,21 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (BreachIncidentNotRecordedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
+        ));
+
+        // A breach incident takes a correction only while it is open, and only the facts its stage
+        // leaves open - resolved, false alarm, or a fact locked by the notices (UC-1-130 3a, 3c → 409).
+        $exceptions->render(fn (BreachAmendmentRefusedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // A correction whose every value matches the incident amends nothing (UC-1-130 3b → 422),
+        // answered in the validation envelope under the key the client reads.
+        $exceptions->render(fn (NothingToAmendException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::ValidationFailed,
+            $e->getMessage(),
+            ['errors' => ['amendment' => [$e->getMessage()]]],
         ));
 
         // A company's filing request on a breach is open once - already asked, already

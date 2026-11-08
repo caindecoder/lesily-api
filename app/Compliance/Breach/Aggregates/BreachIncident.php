@@ -7,16 +7,22 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use App\Compliance\Breach\Enums\BreachStage;
 use App\Foundation\EventStore\AggregateRoot;
+use App\Compliance\Breach\Values\BreachFacts;
+use App\Compliance\Breach\Events\BreachAmended;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Values\RegulatorFiling;
+use App\Compliance\Breach\Enums\BreachAmendmentField;
 use App\Compliance\Breach\Events\BreachDeadlineMissed;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Events\BreachFilingRequested;
 use App\Compliance\Breach\Events\BreachCompaniesNotified;
 use App\Compliance\Breach\Events\BreachFiledWithRegulator;
+use App\Compliance\Breach\Exceptions\NothingToAmendException;
+use App\Compliance\Breach\UseCases\Commands\AmendBreachCommand;
 use App\Compliance\Breach\UseCases\Commands\AffectedCompanyData;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
 use App\Compliance\Breach\Exceptions\BreachFilingNotOpenException;
+use App\Compliance\Breach\Exceptions\BreachAmendmentRefusedException;
 use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
 use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
 use App\Compliance\Breach\UseCases\Commands\FileBreachWithRegulatorCommand;
@@ -31,6 +37,8 @@ class BreachIncident extends AggregateRoot
     protected CarbonInterface $deadline;
 
     protected bool $deadlineMissed = false;
+
+    protected BreachFacts $facts;
 
     /** @var array<string, CarbonInterface> each notified company's notice time, keyed by company id */
     protected array $notifiedAt = [];
@@ -137,6 +145,51 @@ class BreachIncident extends AggregateRoot
         ));
     }
 
+    public function amend(AmendBreachCommand $command, User $admin): static
+    {
+        $changes = $this->facts->changesTo($command);
+
+        if ($changes === []) {
+            throw NothingToAmendException::everyValueMatches();
+        }
+
+        if ($this->stage === BreachStage::CompaniesNotified) {
+            foreach ($changes as $change) {
+                $this->guardOpenAfterTheNotices(BreachAmendmentField::from($change['field']));
+            }
+        }
+
+        $amendedAt = CarbonImmutable::now();
+        $deadline = $this->facts->amendedBy($changes)->dateDiscovered->addHours(self::DEADLINE_HOURS);
+
+        return $this->recordThat(new BreachAmended(
+            breachId: $this->uuid(),
+            amendedAt: $amendedAt,
+            amendedByUserId: $admin->getKey(),
+            reason: $command->reason,
+            changes: $changes,
+            deadline: $deadline,
+            missedDeadlineCleared: $this->deadlineMissed && $deadline->greaterThan($amendedAt),
+        ));
+    }
+
+    protected function applyBreachAmended(BreachAmended $event): void
+    {
+        $this->facts = $this->facts->amendedBy($event->changes);
+        $this->deadline = $event->deadline;
+        $this->deadlineMissed = $this->deadlineMissed && ! $event->missedDeadlineCleared;
+    }
+
+    protected function guardOpenAfterTheNotices(BreachAmendmentField $field): void
+    {
+        match ($field) {
+            BreachAmendmentField::DateDiscovered => throw BreachAmendmentRefusedException::discoveryDateLocked(),
+            BreachAmendmentField::Severity => throw BreachAmendmentRefusedException::severityLocked(),
+            BreachAmendmentField::CompanyAdded, BreachAmendmentField::CompanyRemoved => throw BreachAmendmentRefusedException::companyListLocked(),
+            default => null,
+        };
+    }
+
     public function flagMissedDeadline(CarbonInterface $at): static
     {
         if ($this->stage !== BreachStage::Recorded || $this->deadlineMissed || $at->lessThan($this->deadline)) {
@@ -150,6 +203,7 @@ class BreachIncident extends AggregateRoot
     {
         $this->stage = BreachStage::Recorded;
         $this->deadline = $event->deadline;
+        $this->facts = BreachFacts::recordedBy($event);
     }
 
     protected function applyBreachDeadlineMissed(BreachDeadlineMissed $event): void

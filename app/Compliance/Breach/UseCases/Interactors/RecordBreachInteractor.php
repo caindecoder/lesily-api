@@ -27,7 +27,7 @@ class RecordBreachInteractor
                 ->persist();
 
             $breach = BreachIncidentRecord::query()
-                ->with('companies.company')
+                ->with(['companies.company', 'amendments'])
                 ->findOrFail($breachId);
             $this->recordAudit($breach, $admin, $context);
 

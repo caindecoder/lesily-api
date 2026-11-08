@@ -52,7 +52,7 @@ class FileBreachWithRegulatorInteractor
 
             $this->recordAudit($filing, $admin, $context);
 
-            return BreachIncidentRecord::query()->with('companies.company')->whereKey($breach->getKey())->firstOrFail();
+            return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breach->getKey())->firstOrFail();
         });
     }
 

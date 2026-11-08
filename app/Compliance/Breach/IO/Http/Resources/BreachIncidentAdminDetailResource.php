@@ -4,6 +4,7 @@ namespace App\Compliance\Breach\IO\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Compliance\Breach\Entities\BreachAmendment;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 
@@ -50,6 +51,15 @@ class BreachIncidentAdminDetailResource extends JsonResource
                 'filed_at' => $company->filed_at?->toISOString(),
             ])->all(),
             'total_estimated_count' => $this->resource->totalEstimatedCount(),
+            'amendments' => $this->resource->amendments->map(fn (BreachAmendment $amendment): array => [
+                'field' => $amendment->field->value,
+                'company_id' => $amendment->company_id,
+                'old_value' => $amendment->old_value,
+                'new_value' => $amendment->new_value,
+                'reason' => $amendment->reason,
+                'amended_by' => $amendment->amended_by,
+                'amended_at' => $amendment->amended_at->toISOString(),
+            ])->all(),
         ];
     }
 }

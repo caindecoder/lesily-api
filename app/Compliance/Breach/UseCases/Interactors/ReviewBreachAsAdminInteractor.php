@@ -19,7 +19,7 @@ class ReviewBreachAsAdminInteractor
     public function execute(string $breachId, User $admin, RequestOrigin $context): BreachIncidentRecord
     {
         return DB::transaction(function () use ($breachId, $admin, $context): BreachIncidentRecord {
-            $breach = BreachIncidentRecord::query()->with('companies.company')->whereKey($breachId)->first()
+            $breach = BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breachId)->first()
                 ?? throw new ModelNotFoundException;
 
             $this->recordAdminRead($breach, $admin, $context);
