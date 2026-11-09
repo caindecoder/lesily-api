@@ -195,6 +195,15 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         return $this->getJson("/api/v1/companies/{$company->getKey()}/breach-notices?".http_build_query($query));
     }
 
+    protected function requestFiling(?User $caller, Company $company, string $breachId): TestResponse
+    {
+        if ($caller !== null) {
+            Sanctum::actingAs($caller);
+        }
+
+        return $this->postJson("/api/v1/companies/{$company->getKey()}/breach-notices/{$breachId}/filing-request");
+    }
+
     protected function listNoticesWithBody(User $actor, Company $company, array $body): TestResponse
     {
         Sanctum::actingAs($actor);

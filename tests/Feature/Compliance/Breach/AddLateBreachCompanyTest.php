@@ -160,6 +160,22 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_a_late_company_is_added_again_then_it_is_refused_and_nobody_is_told_twice(): void
+    {
+        // Given an incident whose companies A and B have been notified, and Initech already added late
+        $breachId = $this->anIncidentNotifiedEarlier();
+        $this->addCompany($this->admin, $breachId, $this->aLateCompany());
+        $before = $this->stateOf($breachId);
+
+        // When the admin adds Initech again
+        $response = $this->addCompany($this->admin, $breachId, $this->aLateCompany());
+
+        // Then it is refused and no second notice is recorded or queued
+        $this->assertRefusedAsNotOpen($response, 'The company is already on this breach incident.');
+        $this->assertSame($before, $this->stateOf($breachId));
+    }
+
+    #[Test]
     public function when_the_audit_row_cannot_be_written_then_nothing_is_added_and_nobody_is_told(): void
     {
         // Given an incident whose companies A and B have been notified, and an audit trail that refuses every write
@@ -201,6 +217,106 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
             'a reason over 1,000 characters' => [['reason' => str_repeat('a', 1001)], 'reason', 'The reason field must not be greater than 1000 characters.'],
             'a reason that is not text' => [['reason' => ['a list']], 'reason', 'The reason field must be a string.'],
         ];
+    }
+
+    #[Test]
+    public function when_a_company_is_added_late_then_no_notice_is_sent_until_the_queued_reactor_runs(): void
+    {
+        // Given an incident at companies_notified affecting companies A and B
+        $breachId = $this->anIncidentNotifiedEarlier();
+
+        // When the admin adds Initech as a late company
+        $response = $this->addCompany($this->admin, $breachId, $this->aLateCompany());
+
+        // Then no notice has gone out yet: Initech's notice waits on the queue
+        $response->assertOk();
+        $this->assertReactorDeferred(BreachCompanyNotified::class, SystemNotification::class);
+    }
+
+    #[Test]
+    public function when_a_late_company_s_count_is_not_known_then_its_notice_says_so(): void
+    {
+        // Given an incident at companies_notified affecting companies A and B
+        $breachId = $this->anIncidentNotifiedEarlier();
+
+        // When the admin adds Initech with no count, and the notice leaves the queue
+        $this->addCompany($this->admin, $breachId, $this->aLateCompany(['estimatedCount' => null]));
+        $this->runQueuedHandlersFor(BreachCompanyNotified::class);
+
+        // Then Initech's owner and admins are told the count is not known
+        $this->assertCount(3, $this->initechMembers);
+        foreach ($this->initechMembers as $member) {
+            Notification::assertSentTo($member, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->details['count'] === 'Not yet known');
+        }
+    }
+
+    #[Test]
+    public function when_a_company_on_another_incident_is_added_late_then_that_incident_is_untouched(): void
+    {
+        // Given an incident naming Initech, and a second incident at companies_notified affecting companies A and B
+        $otherBreachId = $this->aNotifiedIncident($this->initech);
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $otherBefore = $this->stateOf($otherBreachId);
+
+        // When the admin adds Initech to the second incident as a late company
+        $response = $this->addCompany($this->admin, $breachId, $this->aLateCompany());
+
+        // Then it is added there, and the first incident's record, events and rows are unchanged
+        $response->assertOk();
+        $this->assertSame(array_slice($otherBefore, 0, 2), array_slice($this->stateOf($otherBreachId), 0, 2));
+    }
+
+    #[Test]
+    public function when_two_late_companies_are_added_then_each_audit_row_cites_its_own_event(): void
+    {
+        // Given an incident at companies_notified affecting companies A and B, and a fourth company found late too
+        $breachId = $this->anIncidentNotifiedEarlier();
+        $hooli = Company::factory()->named('Hooli Retail')->createOne();
+
+        // When the admin adds Initech, then Hooli
+        $this->addCompany($this->admin, $breachId, $this->aLateCompany());
+        $this->addCompany($this->admin, $breachId, $this->aLateCompany(['companyId' => $hooli->getKey()]));
+
+        // Then each audit row cites the BreachCompanyAdded event of its own company
+        $added = LesilyStoredEvent::query()->where('event_class', BreachCompanyAdded::class)->orderBy('id')->pluck('id')->all();
+        $cited = AuditEntry::query()->where('action', 'breach_company_added')->orderBy('id')->pluck('stored_event_id')->all();
+        $this->assertCount(2, $added);
+        $this->assertSame($added, $cited);
+    }
+
+    #[Test]
+    public function when_a_late_company_is_added_then_its_owner_sees_the_notice_in_the_company_list(): void
+    {
+        // Given an incident at companies_notified affecting companies A and B, and Initech's owner
+        $breachId = $this->anIncidentNotifiedEarlier();
+        $owner = $this->aConsentingMember($this->initech, 'owner');
+
+        // When the admin adds Initech as a late company and Initech's owner lists its breach notices
+        $this->addCompany($this->admin, $breachId, $this->aLateCompany());
+        $response = $this->listNotices($owner, $this->initech);
+
+        // Then the list holds this incident with Initech's own figures
+        $response->assertOk();
+        $this->assertSame([[$breachId, ['payroll', 'banking'], 15]], array_map(
+            fn (array $notice): array => [$notice['breach_id'], $notice['data_types'], $notice['estimated_count']],
+            $response->json('data'),
+        ));
+    }
+
+    #[Test]
+    public function when_a_late_company_is_added_then_its_owner_can_ask_lesily_to_file(): void
+    {
+        // Given an incident at companies_notified affecting companies A and B, Initech added late, and Initech's owner
+        $breachId = $this->anIncidentNotifiedEarlier();
+        $owner = $this->aConsentingMember($this->initech, 'owner');
+        $this->addCompany($this->admin, $breachId, $this->aLateCompany());
+
+        // When Initech's owner asks Lesily to file with the regulator
+        $response = $this->requestFiling($owner, $this->initech, $breachId);
+
+        // Then the request is taken and Initech's row carries it
+        $response->assertOk();
+        $this->assertNotNull(BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->where('company_id', $this->initech->getKey())->sole()->filing_requested_at);
     }
 
     #[Test]

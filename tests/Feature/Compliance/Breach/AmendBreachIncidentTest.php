@@ -13,6 +13,7 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Compliance\Breach\Enums\BreachDataType;
 use App\Compliance\Breach\Events\BreachAmended;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Breach\Entities\BreachAmendment;
@@ -20,6 +21,7 @@ use Database\Factories\BreachIncidentRecordFactory;
 use App\Compliance\Breach\Aggregates\BreachIncident;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
+use App\Compliance\Breach\UseCases\Commands\AddBreachCompanyCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class AmendBreachIncidentTest extends BreachIncidentsTestCase
@@ -510,6 +512,29 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertSame([145], $this->listNotices($ownerA, $this->companyA)->json('data.*.estimated_count'));
         $this->assertSame([30], $this->listNotices($ownerB, $this->companyB)->json('data.*.estimated_count'));
         Notification::assertNothingSent();
+    }
+
+    #[Test]
+    public function when_a_late_company_s_figures_are_corrected_then_the_list_with_it_is_accepted(): void
+    {
+        // Given an incident whose company A (about 40 people) was notified, and Initech (about 15) added late
+        $initech = Company::factory()->named('Initech Systems')->createOne();
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        BreachIncident::retrieve($breachId)->addLateCompany(AddBreachCompanyCommand::from([
+            'breachId' => $breachId, 'company' => $initech, 'dataTypes' => [BreachDataType::Payroll], 'estimatedCount' => 15, 'reason' => self::REASON,
+        ]), $this->admin, ['description' => 'A payroll export was emailed to the wrong recipient.'])->persist();
+
+        // When the admin corrects Initech's count to 20, sending the whole list with Initech on it
+        $response = $this->amendIncident($this->admin, $breachId, $this->aCorrection(['companies' => [
+            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
+            ['companyId' => $initech->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 20],
+        ]]));
+
+        // Then the correction is taken: one count change for Initech, 15 to 20, and Initech's row reads 20
+        $response->assertOk();
+        $change = BreachAmendment::query()->where('breach_incident_id', $breachId)->where('field', 'estimated_count')->sole();
+        $this->assertSame([$initech->getKey(), 15, 20], [$change->company_id, $change->old_value, $change->new_value]);
+        $this->assertSame(20, BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->where('company_id', $initech->getKey())->sole()->estimated_count);
     }
 
     #[Test]
