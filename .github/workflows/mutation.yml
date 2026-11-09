@@ -124,18 +124,19 @@ jobs:
         # Timed-out mutants count toward MSI as caught (Infection's Calculator),
         # so thread contention could silently convert survivors into "kills".
         # Baseline at --threads=1: 3 timeouts / 1,723 mutants. Bound 10 —
-        # investigate any breach, never raise the bound to quiet it.
+        # investigate any breach, never raise the bound to quiet it. A missing
+        # or unreadable report has no timeout count, so it fails here too.
         if: ${{ !cancelled() }}
         run: |
-          php -r '$s = json_decode((string) file_get_contents("infection.json"), true)["stats"] ?? null; if ($s === null) { echo "no readable report - skipping\n"; exit(0); } $t = $s["timeOutCount"] ?? 0; echo "timeOutCount: {$t} (bound 10)\n"; exit($t > 10 ? 1 : 0);'
+          php -r '$s = is_file("infection.json") ? (json_decode((string) file_get_contents("infection.json"), true)["stats"] ?? null) : null; if ($s === null) { fwrite(STDERR, "no readable report - no timeout count\n"); exit(1); } $t = $s["timeOutCount"] ?? 0; echo "timeOutCount: {$t} (bound 10)\n"; exit($t > 10 ? 1 : 0);'
       - name: Assert every mutation kill was earned by an assertion (OQ-1-167)
         # Backstop for the kill-verdict topology above: fail if any recorded
         # "kill" carries positive evidence it was a DB-race SQLSTATE error or a
         # masked surviving mutant rather than an assertion failure. Replaces the
         # R-12 interim rule (classify kill mechanisms by hand). Runs unless the
         # job was cancelled — a failing run is exactly when the verdict audit
-        # matters most. The script exits 0 on a MISSING report; a truncated one
-        # fails loudly (desired: that run's verdicts are unreadable).
+        # matters most. A missing report is exit 2 (no verdict) and a truncated
+        # one exit 1 — either way that run's verdicts were never read.
         if: ${{ !cancelled() }}
         run: php scripts/check-mutation-kills.php infection.json
       - name: Temp space and memory after the run (/tmp on RAM - see Runner class)
