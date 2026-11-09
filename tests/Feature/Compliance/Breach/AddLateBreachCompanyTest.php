@@ -176,7 +176,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     }
 
     #[Test]
-    public function when_the_audit_row_cannot_be_written_then_nothing_is_added_and_nobody_is_told(): void
+    public function when_the_audit_row_cannot_be_written_then_neither_event_nor_row_is_written(): void
     {
         // Given an incident whose companies A and B have been notified, and an audit trail that refuses every write
         $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
@@ -187,7 +187,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
         $response = $this->addCompany($this->admin, $breachId, $this->aLateCompany());
 
         // Then the request fails closed: neither event is recorded and no row is written
-        $response->assertInternalServerError();
+        $this->assertFailedClosed($response);
         $this->assertNoEventOrRowWritten($breachId, $before);
     }
 
