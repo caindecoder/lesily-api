@@ -4,6 +4,7 @@ namespace App\Compliance\Breach\Projectors;
 
 use App\Compliance\Breach\Events\BreachAmended;
 use App\Compliance\Breach\Events\BreachRecorded;
+use App\Compliance\Breach\Events\BreachCompanyAdded;
 use App\Compliance\Breach\Enums\BreachAmendmentField;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Events\BreachFilingRequested;
@@ -20,6 +21,19 @@ class BreachIncidentCompanyProjector extends Projector
         foreach ($event->companies as $company) {
             $this->insertCompany($event, $company);
         }
+    }
+
+    public function onBreachCompanyAdded(BreachCompanyAdded $event): void
+    {
+        BreachIncidentCompany::query()->create([
+            'breach_incident_id' => $event->breachId,
+            'company_id' => $event->companyId,
+            'data_types' => $event->dataTypes,
+            'estimated_count' => $event->estimatedCount,
+            'added_at' => $event->addedAt,
+            'added_by' => $event->addedByUserId,
+            'added_reason' => $event->reason,
+        ]);
     }
 
     public function onBreachCompanyNotified(BreachCompanyNotified $event): void
@@ -65,7 +79,8 @@ class BreachIncidentCompanyProjector extends Projector
             BreachAmendmentField::LikelyConsequences,
             BreachAmendmentField::Measures,
             BreachAmendmentField::DateDiscovered,
-            BreachAmendmentField::Severity => null,
+            BreachAmendmentField::Severity,
+            BreachAmendmentField::LateCompanyAdded => null,
             BreachAmendmentField::DataTypes => $company->update(['data_types' => $change['new']]),
             BreachAmendmentField::EstimatedCount => $company->update(['estimated_count' => $change['new']]),
             BreachAmendmentField::CompanyAdded => BreachIncidentCompany::query()->create([

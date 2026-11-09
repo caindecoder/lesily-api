@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property ?int $estimated_count
  * @property CarbonImmutable $added_at
  * @property string $added_by
+ * @property ?string $added_reason
  * @property ?CarbonImmutable $notified_at
  * @property ?CarbonImmutable $filing_requested_at
  * @property ?string $filing_requested_by
@@ -41,6 +42,7 @@ class BreachIncidentCompany extends Model
         'estimated_count',
         'added_at',
         'added_by',
+        'added_reason',
     ];
 
     protected $casts = [

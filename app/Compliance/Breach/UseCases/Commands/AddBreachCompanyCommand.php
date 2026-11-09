@@ -30,6 +30,17 @@ class AddBreachCompanyCommand extends Data
     public string $reason;
 
     /**
+     * @return array{dataTypes: list<string>, estimatedCount: ?int}
+     */
+    public function figures(): array
+    {
+        return [
+            'dataTypes' => array_map(fn (BreachDataType $type): string => $type->value, $this->dataTypes),
+            'estimatedCount' => $this->estimatedCount,
+        ];
+    }
+
+    /**
      * @return array<string, array<int, mixed>>
      */
     public static function rules(): array

@@ -13,4 +13,5 @@ enum BreachAmendmentField: string
     case CompanyRemoved = 'company_removed';
     case DataTypes = 'data_types';
     case EstimatedCount = 'estimated_count';
+    case LateCompanyAdded = 'late_company_added';
 }

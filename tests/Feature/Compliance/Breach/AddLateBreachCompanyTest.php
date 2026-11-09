@@ -9,9 +9,19 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
+use App\Compliance\Breach\Enums\BreachStage;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Compliance\Breach\Entities\BreachAmendment;
+use App\Compliance\Breach\Events\BreachCompanyAdded;
+use App\Compliance\Breach\Enums\BreachAmendmentField;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
+use App\Compliance\Breach\Entities\BreachIncidentRecord;
+use App\Foundation\Notifications\Enums\NotificationType;
+use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
+use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class AddLateBreachCompanyTest extends BreachIncidentsTestCase
@@ -19,6 +29,12 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     use InteractsWithQueuedReactors;
 
     protected const string REASON = "The export also reached Initech's folder.";
+
+    protected const string ADDED_AT = '2026-05-06 10:00:00';
+
+    protected const string ADDED_AT_ISO = '2026-05-06T10:00:00+00:00';
+
+    protected const string ADDED_AT_JSON = '2026-05-06T10:00:00.000000Z';
 
     protected Company $initech;
 
@@ -31,7 +47,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
 
         Queue::fake();
         $this->travelTo(CarbonImmutable::parse('2026-05-05T09:00:00Z'));
-        $this->initech = Company::factory()->create(['name' => 'Initech Systems']);
+        $this->initech = Company::factory()->named('Initech Systems')->createOne();
         $this->initechMembers = $this->anOwnerAndAdmins($this->initech);
     }
 
@@ -112,6 +128,152 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
             'no reason' => [['reason' => null], 'reason', 'The reason field is required.'],
             'a reason over 1,000 characters' => [['reason' => str_repeat('a', 1001)], 'reason', 'The reason field must not be greater than 1000 characters.'],
             'a reason that is not text' => [['reason' => ['a list']], 'reason', 'The reason field must be a string.'],
+        ];
+    }
+
+    #[Test]
+    public function when_a_company_found_late_is_added_then_it_is_recorded_projected_audited_and_told(): void
+    {
+        // Given an incident at companies_notified affecting companies A and B, whose owners and admins
+        // already hold their notices
+        $breachId = $this->anIncidentNotifiedEarlier();
+        $this->travelTo(self::ADDED_AT);
+
+        // When the admin adds Initech with its data types, about 15 people and a reason, and the notice leaves the queue
+        $response = $this->addCompany($this->admin, $breachId, $this->aLateCompany());
+        $this->runQueuedHandlersFor(BreachCompanyNotified::class);
+
+        // Then Initech is added and notified in the event store and the read model, the action is audited,
+        // and only Initech's owner and admins hear Initech's own part
+        $this->assertLateCompanyAnswered($response);
+        $storedEventId = $this->assertLateCompanyStored($breachId);
+        $this->assertLateCompanyProjected($breachId);
+        $this->assertAddAudited($response, $breachId, $storedEventId);
+        $this->assertOnlyInitechTold();
+    }
+
+    protected function anIncidentNotifiedEarlier(): string
+    {
+        $this->anOwnerAndAdmins($this->companyA);
+        $this->anOwnerAndAdmins($this->companyB);
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        Queue::fake();
+
+        return $breachId;
+    }
+
+    protected function assertLateCompanyAnswered(TestResponse $response): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data.stage', 'companies_notified');
+        /** @var list<array<string, mixed>> $companies */
+        $companies = $response->json('data.companies');
+        $initech = collect($companies)->firstWhere('company_id', $this->initech->getKey());
+        $this->assertIsArray($initech);
+        $this->assertSame([['payroll', 'banking'], 15, self::ADDED_AT_JSON], [$initech['data_types'], $initech['estimated_count'], $initech['notified_at']]);
+        $this->assertSame(['late_company_added', $this->initech->getKey(), self::REASON], [
+            $response->json('data.amendments.0.field'),
+            $response->json('data.amendments.0.company_id'),
+            $response->json('data.amendments.0.reason'),
+        ]);
+    }
+
+    protected function assertLateCompanyStored(string $breachId): int
+    {
+        $events = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->orderBy('id')->get();
+        $this->assertSame([BreachCompanyAdded::class, BreachCompanyNotified::class], $events->slice(-2)->pluck('event_class')->values()->all());
+        $this->assertCount(6, $events);
+
+        $added = $events->firstWhere('event_class', BreachCompanyAdded::class);
+        $notified = $events->last();
+        $this->assertInstanceOf(LesilyStoredEvent::class, $added);
+        $this->assertInstanceOf(LesilyStoredEvent::class, $notified);
+        $this->assertEquals([$breachId, $this->initech->getKey(), ['payroll', 'banking'], 15, self::REASON, $this->admin->getKey(), self::ADDED_AT_ISO], [
+            $added->event_properties['breachId'],
+            $added->event_properties['companyId'],
+            $added->event_properties['dataTypes'],
+            $added->event_properties['estimatedCount'],
+            $added->event_properties['reason'],
+            $added->event_properties['addedByUserId'],
+            CarbonImmutable::parse($added->event_properties['addedAt'])->toIso8601String(),
+        ]);
+        $this->assertEquals([$this->initech->getKey(), $this->admin->getKey(), self::ADDED_AT_ISO, $this->initechPart()], [
+            $notified->event_properties['companyId'],
+            $notified->event_properties['notifiedByUserId'],
+            CarbonImmutable::parse($notified->event_properties['notifiedAt'])->toIso8601String(),
+            $notified->event_properties['part'],
+        ]);
+
+        return (int) $added->getKey();
+    }
+
+    protected function assertLateCompanyProjected(string $breachId): void
+    {
+        $row = BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->where('company_id', $this->initech->getKey())->sole();
+        $this->assertSame([['payroll', 'banking'], 15, self::REASON, $this->admin->getKey()], [$row->data_types, $row->estimated_count, $row->added_reason, $row->added_by]);
+        $this->assertSame([self::ADDED_AT_ISO, self::ADDED_AT_ISO], [$row->added_at->toIso8601String(), $row->notified_at?->toIso8601String()]);
+
+        $history = BreachAmendment::query()->where('breach_incident_id', $breachId)->sole();
+        $this->assertEquals(
+            [BreachAmendmentField::LateCompanyAdded, $this->initech->getKey(), null, ['dataTypes' => ['payroll', 'banking'], 'estimatedCount' => 15], self::REASON, $this->admin->getKey()],
+            [$history->field, $history->company_id, $history->old_value, $history->new_value, $history->reason, $history->amended_by],
+        );
+        $this->assertSame(BreachStage::CompaniesNotified, BreachIncidentRecord::query()->findOrFail($breachId)->stage);
+    }
+
+    protected function assertAddAudited(TestResponse $response, string $breachId, int $storedEventId): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => null,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'BreachCompanyAdded',
+            'subject_type' => 'breach_incident',
+            'subject_id' => $breachId,
+            'subject_label' => null,
+            'action' => 'breach_company_added',
+            'description' => 'Platform admin added a company found after the breach notices and told it.',
+            'metadata' => null,
+            'recorded_at' => self::ADDED_AT,
+            'actor_user_id' => $this->admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $this->admin->name,
+            'ip_address' => '127.0.0.1',
+            'severity' => 'critical',
+        ]);
+
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+        $entry = AuditEntry::query()->sole();
+        $this->assertSame([$correlationId, 'Symfony'], [$entry->request_id, $entry->user_agent]);
+    }
+
+    protected function assertOnlyInitechTold(): void
+    {
+        $this->assertCount(3, $this->initechMembers);
+        foreach ($this->initechMembers as $member) {
+            Notification::assertSentToTimes($member, SystemNotification::class, 1);
+            Notification::assertSentTo($member, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->type === NotificationType::BreachCompanyNotice
+                && $notice->companyName === 'Initech Systems'
+                && $notice->companyId === $this->initech->getKey()
+                && $notice->details === $this->initechPart());
+        }
+        Notification::assertCount(3);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function initechPart(): array
+    {
+        return [
+            'discovered' => '4 May 2026, 14:00 UTC',
+            'deadline' => '7 May 2026, 14:00 UTC',
+            'description' => 'A payroll export was emailed to the wrong recipient.',
+            'consequences' => 'Salary and bank details may be read by one outside person.',
+            'measures' => 'The recipient was asked to delete the file; exports now need a second check.',
+            'data_types' => 'Payroll records, Bank details',
+            'count' => '15',
         ];
     }
 

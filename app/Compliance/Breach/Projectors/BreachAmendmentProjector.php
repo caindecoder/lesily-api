@@ -4,6 +4,8 @@ namespace App\Compliance\Breach\Projectors;
 
 use App\Compliance\Breach\Events\BreachAmended;
 use App\Compliance\Breach\Entities\BreachAmendment;
+use App\Compliance\Breach\Events\BreachCompanyAdded;
+use App\Compliance\Breach\Enums\BreachAmendmentField;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 
 class BreachAmendmentProjector extends Projector
@@ -22,5 +24,19 @@ class BreachAmendmentProjector extends Projector
                 'amended_by' => $event->amendedByUserId,
             ]);
         }
+    }
+
+    public function onBreachCompanyAdded(BreachCompanyAdded $event): void
+    {
+        BreachAmendment::query()->create([
+            'breach_incident_id' => $event->breachId,
+            'company_id' => $event->companyId,
+            'field' => BreachAmendmentField::LateCompanyAdded,
+            'old_value' => null,
+            'new_value' => ['dataTypes' => $event->dataTypes, 'estimatedCount' => $event->estimatedCount],
+            'reason' => $event->reason,
+            'amended_at' => $event->addedAt,
+            'amended_by' => $event->addedByUserId,
+        ]);
     }
 }

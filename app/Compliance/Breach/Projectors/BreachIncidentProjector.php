@@ -71,7 +71,8 @@ class BreachIncidentProjector extends Projector
             BreachAmendmentField::DataTypes,
             BreachAmendmentField::EstimatedCount,
             BreachAmendmentField::CompanyAdded,
-            BreachAmendmentField::CompanyRemoved => null,
+            BreachAmendmentField::CompanyRemoved,
+            BreachAmendmentField::LateCompanyAdded => null,
         };
     }
 }
