@@ -39,9 +39,12 @@
  *
  * Usage: php scripts/check-mutation-kills.php [infection.json]
  *        php scripts/check-mutation-kills.php --self-test
- * Exit:  0 = every counted kill assertion-caused (or no report / no kills);
- *        1 = at least one kill has positive false-kill evidence, or a self-test
- *            case regressed.
+ * Exit:  0 = every counted kill assertion-caused (or no kills);
+ *        1 = at least one kill has positive false-kill evidence, the report is
+ *            unreadable, or a self-test case regressed;
+ *        2 = no report — Infection wrote none, so there is no verdict to judge.
+ *            A caller that skipped Infection on purpose does not call this
+ *            script (PROC-mutation-kills-missing-report, MK3/MK4).
  */
 if (($argv[1] ?? null) === '--self-test') {
     exit(runSelfTest());
@@ -50,11 +53,11 @@ if (($argv[1] ?? null) === '--self-test') {
 $file = $argv[1] ?? 'infection.json';
 
 if (! is_file($file)) {
-    // Infection may have been skipped legitimately (no changed app/ files, empty
-    // suite, or the no-mutations guard) — those steps exit 0 before writing a
-    // report. Nothing to validate; do not invent a failure.
-    echo "check-mutation-kills: no {$file} found — skipping (Infection did not emit a report).\n";
-    exit(0);
+    // Infection writes its report whenever mutation testing finishes — zero
+    // mutants included — so a missing report means it never got that far, or
+    // could not write the file. A pass here would be a verdict nobody reached.
+    fwrite(STDERR, "check-mutation-kills: no {$file} found — no verdict: Infection wrote no report.\n");
+    exit(2);
 }
 
 $report = json_decode((string) file_get_contents($file), true);
