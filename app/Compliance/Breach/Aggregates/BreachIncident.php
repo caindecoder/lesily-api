@@ -25,6 +25,7 @@ use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
 use App\Compliance\Breach\Exceptions\BreachFilingNotOpenException;
 use App\Compliance\Breach\UseCases\Commands\AddBreachCompanyCommand;
 use App\Compliance\Breach\Exceptions\BreachAmendmentRefusedException;
+use App\Compliance\Breach\Exceptions\LateBreachCompanyRefusedException;
 use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
 use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
 use App\Compliance\Breach\UseCases\Commands\FileBreachWithRegulatorCommand;
@@ -104,6 +105,14 @@ class BreachIncident extends AggregateRoot
      */
     public function addLateCompany(AddBreachCompanyCommand $command, User $admin, array $part): static
     {
+        if ($this->stage !== BreachStage::CompaniesNotified) {
+            throw LateBreachCompanyRefusedException::notYetNotified();
+        }
+
+        if (array_key_exists($command->company->getKey(), $this->facts->companies)) {
+            throw LateBreachCompanyRefusedException::alreadyOnTheIncident();
+        }
+
         $addedAt = CarbonImmutable::now();
         $figures = $command->figures();
 

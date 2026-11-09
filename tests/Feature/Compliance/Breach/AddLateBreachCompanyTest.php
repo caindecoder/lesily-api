@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Compliance\Breach;
 
+use Closure;
 use App\Models\User;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
@@ -14,6 +16,7 @@ use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Breach\Entities\BreachAmendment;
+use Database\Factories\BreachIncidentRecordFactory;
 use App\Compliance\Breach\Events\BreachCompanyAdded;
 use App\Compliance\Breach\Enums\BreachAmendmentField;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
@@ -109,6 +112,75 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
         // Then the addition is refused on that field and nothing is added
         $this->assertValidationRejected($response, $field, $message);
         $this->assertNothingAdded($breachId, $before);
+    }
+
+    #[Test]
+    public function when_the_incident_is_not_yet_notified_then_the_late_company_is_refused(): void
+    {
+        // Given an incident still at recorded, affecting company A
+        $breachId = $this->aRecordedIncident();
+        $before = $this->stateOf($breachId);
+
+        // When the admin adds Initech as a late company
+        $response = $this->addCompany($this->admin, $breachId, $this->aLateCompany());
+
+        // Then it is refused (the list is still corrected through the amendment) and nothing is added
+        $this->assertRefusedAsNotOpen($response, 'A company is added late only after the notices; correct the company list instead.');
+        $this->assertNothingAdded($breachId, $before);
+    }
+
+    #[Test, DataProvider('provideClosedStages')]
+    public function when_the_incident_is_closed_then_the_late_company_is_refused(Closure $closed, string $message): void
+    {
+        // Given a closed incident
+        $breachId = $closed($this->anIncident())->createOne()->getKey();
+        $before = $this->stateOf($breachId);
+
+        // When the admin adds Initech as a late company
+        $response = $this->addCompany($this->admin, $breachId, $this->aLateCompany());
+
+        // Then it is refused with the stage named, and nothing is added
+        $this->assertRefusedAsNotOpen($response, $message);
+        $this->assertNothingAdded($breachId, $before);
+    }
+
+    #[Test]
+    public function when_the_company_is_already_on_the_incident_then_it_is_refused_and_nobody_is_told(): void
+    {
+        // Given an incident whose companies A and B have been notified
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $before = $this->stateOf($breachId);
+
+        // When the admin adds company A again as a late company
+        $response = $this->addCompany($this->admin, $breachId, $this->aLateCompany(['companyId' => $this->companyA->getKey()]));
+
+        // Then it is refused, nothing is added and no second notice is queued
+        $this->assertRefusedAsNotOpen($response, 'The company is already on this breach incident.');
+        $this->assertNothingAdded($breachId, $before);
+    }
+
+    #[Test]
+    public function when_the_audit_row_cannot_be_written_then_nothing_is_added_and_nobody_is_told(): void
+    {
+        // Given an incident whose companies A and B have been notified, and an audit trail that refuses every write
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $before = $this->stateOf($breachId);
+        AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the admin adds Initech as a late company
+        $response = $this->addCompany($this->admin, $breachId, $this->aLateCompany());
+
+        // Then the request fails closed: neither event is recorded and no row is written
+        $response->assertInternalServerError();
+        $this->assertNoEventOrRowWritten($breachId, $before);
+    }
+
+    public static function provideClosedStages(): array
+    {
+        return [
+            'resolved' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->resolved(), 'A company cannot be added to a resolved breach incident.'],
+            'a false alarm' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->falseAlarm(), 'A company cannot be added to a breach incident marked as a false alarm.'],
+        ];
     }
 
     public static function provideInvalidAdditions(): array
@@ -311,7 +383,13 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
 
     protected function assertNothingAdded(string $breachId, array $before): void
     {
-        $this->assertSame($before, $this->stateOf($breachId));
+        $this->assertNoEventOrRowWritten($breachId, $before);
+        $this->assertSame($before[2], $this->queuedHandlerCountFor(BreachCompanyNotified::class));
+    }
+
+    protected function assertNoEventOrRowWritten(string $breachId, array $before): void
+    {
+        $this->assertSame(array_slice($before, 0, 2), array_slice($this->stateOf($breachId), 0, 2));
         $this->assertDatabaseCount('breach_amendments', 0);
         $this->assertDatabaseCount('audit_trail', 0);
     }

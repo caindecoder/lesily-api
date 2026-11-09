@@ -4,6 +4,7 @@ namespace App\Compliance\Breach\UseCases\Interactors;
 
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use App\Compliance\Breach\Enums\BreachStage;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
@@ -15,6 +16,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use App\Compliance\Breach\UseCases\Commands\AddBreachCompanyCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Compliance\Breach\Exceptions\LateBreachCompanyRefusedException;
 use App\Compliance\Breach\UseCases\Renderers\BreachCompanyPartRenderer;
 
 class AddBreachCompanyInteractor
@@ -27,6 +29,8 @@ class AddBreachCompanyInteractor
             $breach = BreachIncidentRecord::query()->whereKey($command->breachId)->lockForUpdate()->first()
                 ?? throw new ModelNotFoundException;
 
+            $this->guardOpen($breach);
+
             BreachIncident::retrieve($breach->getKey())
                 ->addLateCompany($command, $admin, $this->partFor($breach, $command))
                 ->persist();
@@ -35,6 +39,15 @@ class AddBreachCompanyInteractor
 
             return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breach->getKey())->firstOrFail();
         });
+    }
+
+    protected function guardOpen(BreachIncidentRecord $breach): void
+    {
+        match ($breach->stage) {
+            BreachStage::Resolved => throw LateBreachCompanyRefusedException::incidentResolved(),
+            BreachStage::FalseAlarm => throw LateBreachCompanyRefusedException::falseAlarm(),
+            BreachStage::Recorded, BreachStage::CompaniesNotified => null,
+        };
     }
 
     /**
