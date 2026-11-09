@@ -4,6 +4,11 @@
         directories: ["app"],
         excludes: ["Console", "Exceptions", "Providers"]
     },
+    // 990 s (s326, PROC-mutation-kills-missing-report MK9): the initial suite
+    // reached 495 s on the public 4-vCPU runner (dispatch 42602815414) and 117
+    // whole-suite-covered mutants were skipped at 420; 990 = 2 x 495 rounded up
+    // to a minute. Both mutation jobs now fail on any skip (MK8), so outgrowing
+    // this value is a red run, not a quiet one.
     // 420 s (OQ-1-181 arm b, s201). Infection time-skips a mutant BEFORE running
     // it when its covering set's initial-run time is >= this value
     // (MutationTestingRunner::takingTooLong), and a skip leaves the MSI
@@ -15,10 +20,10 @@
     // time, 420), so only covering sets over 35 s see a different budget; a
     // genuine hang in that class now costs up to 7 min, bounded by
     // mutation.yml's timeOutCount <= 10. History: 30 -> 120 (s152) -> 180
-    // (s178: the ~10-s-boot feature-test class skipped locally at 30) -> 420.
-    // Record the runner class beside any re-measure (a timing on one runner
-    // class is not a pin for another).
-    timeout: 420,
+    // (s178: the ~10-s-boot feature-test class skipped locally at 30) -> 420
+    // -> 990 (s326). Record the runner class beside any re-measure (a timing
+    // on one runner class is not a pin for another).
+    timeout: 990,
     logs: {
         text: "infection.log",
         html: "infection.html",
