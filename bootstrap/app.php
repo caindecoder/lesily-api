@@ -73,6 +73,7 @@ use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 use App\Companies\Exceptions\OwnershipTransferCaseNotVerifiedException;
 use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
 use App\Companies\Memberships\Exceptions\MembershipContentionException;
+use App\Compliance\Breach\Exceptions\LateBreachCompanyRefusedException;
 use App\Foundation\Auth\Exceptions\GoogleAccountNotRegisteredException;
 use App\Companies\Memberships\Exceptions\OwnerTransferRequiredException;
 use App\Companies\Memberships\Exceptions\SelfRoleChangeBlockedException;
@@ -385,6 +386,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // A breach incident takes a correction only while it is open, and only the facts its stage
         // leaves open - resolved, false alarm, or a fact locked by the notices (UC-1-130 3a, 3c → 409).
         $exceptions->render(fn (BreachAmendmentRefusedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // A late company is added only after the notices, never twice, and never to a closed
+        // incident (UC-1-130 late 2a, 2b → 409).
+        $exceptions->render(fn (LateBreachCompanyRefusedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));

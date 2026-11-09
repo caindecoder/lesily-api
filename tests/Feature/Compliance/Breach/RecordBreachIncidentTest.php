@@ -8,12 +8,17 @@ use Illuminate\Support\Arr;
 use Illuminate\Http\Response;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use Spatie\EventSourcing\Projectionist;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
+use App\Compliance\Breach\Entities\BreachIncidentCompany;
+use App\Compliance\Breach\Projectors\BreachIncidentProjector;
+use App\Compliance\Breach\Projectors\BreachAmendmentProjector;
+use App\Compliance\Breach\Projectors\BreachIncidentCompanyProjector;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RecordBreachIncidentTest extends BreachIncidentsTestCase
@@ -185,6 +190,24 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
                 [$shown[$this->companyB->getKey()]['data_types'], $shown[$this->companyB->getKey()]['estimated_count']],
             ],
         );
+    }
+
+    #[Test]
+    public function when_the_company_projector_is_registered_first_then_a_recorded_breach_still_projects_its_rows(): void
+    {
+        // Given the breach projectors registered with the company projector ahead of the incident projector
+        app(Projectionist::class)->withoutEventHandlers()->addProjectors([
+            BreachIncidentCompanyProjector::class,
+            BreachAmendmentProjector::class,
+            BreachIncidentProjector::class,
+        ]);
+
+        // When a breach affecting company A is recorded
+        $breachId = $this->aRecordedIncident();
+
+        // Then the incident row and its company row are both projected
+        $this->assertTrue(BreachIncidentRecord::query()->whereKey($breachId)->exists());
+        $this->assertSame([$this->companyA->getKey()], BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->pluck('company_id')->all());
     }
 
     #[Test]

@@ -6,7 +6,6 @@ use Closure;
 use App\Models\User;
 use RuntimeException;
 use Carbon\CarbonImmutable;
-use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
@@ -377,15 +376,6 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
             'auditor' => ['auditor'],
             'manager' => ['manager'],
         ];
-    }
-
-    protected function requestFiling(?User $caller, Company $company, string $breachId): TestResponse
-    {
-        if ($caller !== null) {
-            Sanctum::actingAs($caller);
-        }
-
-        return $this->postJson("/api/v1/companies/{$company->getKey()}/breach-notices/{$breachId}/filing-request");
     }
 
     protected function runTheAlerts(): void

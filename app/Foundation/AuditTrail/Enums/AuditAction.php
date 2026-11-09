@@ -28,4 +28,5 @@ enum AuditAction: string
     case BreachFiledWithRegulator = 'breach_filed_with_regulator';
     case BreachDeadlineMissed = 'breach_deadline_missed';
     case BreachAmended = 'breach_amended';
+    case BreachCompanyAdded = 'breach_company_added';
 }

@@ -11,6 +11,7 @@ use App\Compliance\Breach\Values\BreachFacts;
 use App\Compliance\Breach\Events\BreachAmended;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Values\RegulatorFiling;
+use App\Compliance\Breach\Events\BreachCompanyAdded;
 use App\Compliance\Breach\Enums\BreachAmendmentField;
 use App\Compliance\Breach\Events\BreachDeadlineMissed;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
@@ -22,7 +23,9 @@ use App\Compliance\Breach\UseCases\Commands\AmendBreachCommand;
 use App\Compliance\Breach\UseCases\Commands\AffectedCompanyData;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
 use App\Compliance\Breach\Exceptions\BreachFilingNotOpenException;
+use App\Compliance\Breach\UseCases\Commands\AddBreachCompanyCommand;
 use App\Compliance\Breach\Exceptions\BreachAmendmentRefusedException;
+use App\Compliance\Breach\Exceptions\LateBreachCompanyRefusedException;
 use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
 use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
 use App\Compliance\Breach\UseCases\Commands\FileBreachWithRegulatorCommand;
@@ -94,6 +97,41 @@ class BreachIncident extends AggregateRoot
             breachId: $this->uuid(),
             notifiedAt: $notifiedAt,
             notifiedByUserId: $admin->getKey(),
+        ));
+    }
+
+    /**
+     * @param  array<string, string>  $part  the late company's own part of the incident, as sent
+     */
+    public function addLateCompany(AddBreachCompanyCommand $command, User $admin, array $part): static
+    {
+        if ($this->stage !== BreachStage::CompaniesNotified) {
+            throw LateBreachCompanyRefusedException::notYetNotified();
+        }
+
+        if (array_key_exists($command->company->getKey(), $this->facts->companies)) {
+            throw LateBreachCompanyRefusedException::alreadyOnTheIncident();
+        }
+
+        $addedAt = CarbonImmutable::now();
+        $figures = $command->figures();
+
+        $this->recordThat(new BreachCompanyAdded(
+            breachId: $this->uuid(),
+            companyId: $command->company->getKey(),
+            dataTypes: $figures['dataTypes'],
+            estimatedCount: $figures['estimatedCount'],
+            reason: $command->reason,
+            addedAt: $addedAt,
+            addedByUserId: $admin->getKey(),
+        ));
+
+        return $this->recordThat(new BreachCompanyNotified(
+            breachId: $this->uuid(),
+            companyId: $command->company->getKey(),
+            notifiedAt: $addedAt,
+            notifiedByUserId: $admin->getKey(),
+            part: $part,
         ));
     }
 
@@ -209,6 +247,16 @@ class BreachIncident extends AggregateRoot
     protected function applyBreachDeadlineMissed(BreachDeadlineMissed $event): void
     {
         $this->deadlineMissed = true;
+    }
+
+    protected function applyBreachCompanyAdded(BreachCompanyAdded $event): void
+    {
+        $this->facts = $this->facts->amendedBy([[
+            'field' => BreachAmendmentField::LateCompanyAdded->value,
+            'companyId' => $event->companyId,
+            'old' => null,
+            'new' => ['dataTypes' => $event->dataTypes, 'estimatedCount' => $event->estimatedCount],
+        ]]);
     }
 
     protected function applyBreachCompanyNotified(BreachCompanyNotified $event): void
