@@ -68,11 +68,7 @@ class BreachIncidentProjector extends Projector
             BreachAmendmentField::Measures => $incident->update(['measures' => $change['new']]),
             BreachAmendmentField::DateDiscovered => $incident->update(['date_discovered' => CarbonImmutable::parse($change['new'])]),
             BreachAmendmentField::Severity => $incident->update(['severity' => $change['new']]),
-            BreachAmendmentField::DataTypes,
-            BreachAmendmentField::EstimatedCount,
-            BreachAmendmentField::CompanyAdded,
-            BreachAmendmentField::CompanyRemoved,
-            BreachAmendmentField::LateCompanyAdded => null,
+            default => null,
         };
     }
 }

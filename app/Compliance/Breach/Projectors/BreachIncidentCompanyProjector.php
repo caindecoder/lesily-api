@@ -75,12 +75,6 @@ class BreachIncidentCompanyProjector extends Projector
         $company = BreachIncidentCompany::query()->where('breach_incident_id', $event->breachId)->where('company_id', $change['companyId']);
 
         match (BreachAmendmentField::from($change['field'])) {
-            BreachAmendmentField::Description,
-            BreachAmendmentField::LikelyConsequences,
-            BreachAmendmentField::Measures,
-            BreachAmendmentField::DateDiscovered,
-            BreachAmendmentField::Severity,
-            BreachAmendmentField::LateCompanyAdded => null,
             BreachAmendmentField::DataTypes => $company->update(['data_types' => $change['new']]),
             BreachAmendmentField::EstimatedCount => $company->update(['estimated_count' => $change['new']]),
             BreachAmendmentField::CompanyAdded => BreachIncidentCompany::query()->create([
@@ -92,6 +86,7 @@ class BreachIncidentCompanyProjector extends Projector
                 'added_by' => $event->amendedByUserId,
             ]),
             BreachAmendmentField::CompanyRemoved => $company->delete(),
+            default => null,
         };
     }
 
