@@ -33,9 +33,11 @@ jobs:
     # runner 4h08m and FAILED (s198 — OQ-1-181); schema reuse at 2 workers on
     # the private runner 54m33s-1h53m at Infection timeout 420 (the 10-10 cron
     # 38096134135 is the ceiling, 2,060 mutants).
-    # 240 = 2x that ceiling (226), rounded up to the hour — a run that doubles is
-    # already a failure; kill it instead of billing it.
-    timeout-minutes: 240
+    # At Infection timeout 990 with no skips (MK8/MK9, s326) the 3,448-mutant
+    # tree ran 2h42m13s on the public 4-vCPU runner (dispatch 42653259078).
+    # 360 = 2x that (324), rounded up to the hour — also GitHub's 6-hour cap
+    # for a hosted job; a run that doubles is already a failure (240 until s326).
+    timeout-minutes: 360
     services:
       mysql:
         image: mysql:8.0
