@@ -77,6 +77,7 @@
         "mutate:local": [
             "Composer\\Config::disableProcessTimeout",
             "@putenv PAO_DISABLE=1",
+            "php -r \"array_map('unlink', array_filter(['infection.json', 'infection.html', 'infection.log', 'infection-summary.log'], 'is_file'));\" @no_additional_args",
             "php -d auto_prepend_file= vendor/infection/infection/bin/infection --threads=1"
         ],
         "quality": [
