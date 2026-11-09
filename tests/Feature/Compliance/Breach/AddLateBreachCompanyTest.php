@@ -80,6 +80,41 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
         $this->assertNoHandlersQueuedFor(BreachCompanyNotified::class);
     }
 
+    #[Test, DataProvider('provideInvalidAdditions')]
+    public function when_the_addition_is_invalid_then_it_is_refused_and_nothing_is_added(array $override, string $field, string $message): void
+    {
+        // Given an incident whose companies A and B have been notified
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $before = $this->stateOf($breachId);
+
+        // When the admin adds Initech with one value wrong
+        $response = $this->addCompany($this->admin, $breachId, $this->aLateCompany($override));
+
+        // Then the addition is refused on that field and nothing is added
+        $this->assertValidationRejected($response, $field, $message);
+        $this->assertNothingAdded($breachId, $before);
+    }
+
+    public static function provideInvalidAdditions(): array
+    {
+        return [
+            'no company' => [['companyId' => null], 'companyId', 'The company id field is required.'],
+            'a company id that is not a uuid' => [['companyId' => 'initech'], 'companyId', 'The company id field must be a valid UUID.'],
+            'a company that does not exist' => [['companyId' => '01980000-0000-7000-8000-000000000000'], 'companyId', 'The selected company id is invalid.'],
+            'no data types' => [['dataTypes' => null], 'dataTypes', 'The data types field is required.'],
+            'an empty list of data types' => [['dataTypes' => []], 'dataTypes', 'The data types field is required.'],
+            'data types that are not a list' => [['dataTypes' => 'payroll'], 'dataTypes', 'The data types field must be an array.'],
+            'data types keyed by name' => [['dataTypes' => ['first' => 'payroll']], 'dataTypes', 'The data types field must be a list.'],
+            'a data type outside the seven' => [['dataTypes' => ['passwords']], 'dataTypes.0', 'The selected dataTypes.0 is invalid.'],
+            'a negative count' => [['estimatedCount' => -1], 'estimatedCount', 'The estimated count field must be at least 0.'],
+            'a count beyond the largest the record holds' => [['estimatedCount' => 4294967296], 'estimatedCount', 'The estimated count field must not be greater than 4294967295.'],
+            'a count that is not a number' => [['estimatedCount' => 'many'], 'estimatedCount', 'The estimated count field must be an integer.'],
+            'no reason' => [['reason' => null], 'reason', 'The reason field is required.'],
+            'a reason over 1,000 characters' => [['reason' => str_repeat('a', 1001)], 'reason', 'The reason field must not be greater than 1000 characters.'],
+            'a reason that is not text' => [['reason' => ['a list']], 'reason', 'The reason field must be a string.'],
+        ];
+    }
+
     protected function addCompany(?User $caller, string $breachId, array $body): TestResponse
     {
         if ($caller !== null) {
@@ -93,7 +128,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     {
         return [
             'companyId' => $this->initech->getKey(),
-            'dataTypes' => ['payroll', 'bank'],
+            'dataTypes' => ['payroll', 'banking'],
             'estimatedCount' => 15,
             'reason' => self::REASON,
             ...$overrides,
