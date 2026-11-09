@@ -449,6 +449,14 @@ jobs:
         # exactly when the verdict audit matters most.
         if: ${{ !cancelled() && steps.infection.outputs.report == 'expected' }}
         run: php scripts/check-mutation-kills.php infection.json
+      - name: Assert no mutant was skipped (MK8)
+        # Infection skips, without running it, any mutant whose covering tests
+        # took at least infection.json5's `timeout` in the initial run — a
+        # changed line in shared code (ApiErrorCode, a service provider) would
+        # pass untested. Bound 0, same check as mutation.yml.
+        if: ${{ !cancelled() && steps.infection.outputs.report == 'expected' }}
+        run: |
+          php -r '$s = is_file("infection.json") ? (json_decode((string) file_get_contents("infection.json"), true)["stats"] ?? null) : null; if (! is_int($s["skippedCount"] ?? null)) { fwrite(STDERR, "no readable report - no skip count\n"); exit(1); } $k = $s["skippedCount"]; echo "skippedCount: {$k} (bound 0)\n"; exit($k > 0 ? 1 : 0);'
 
   sonarcloud:
     needs: test

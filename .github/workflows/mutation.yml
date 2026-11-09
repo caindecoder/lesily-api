@@ -129,6 +129,16 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           php -r '$s = is_file("infection.json") ? (json_decode((string) file_get_contents("infection.json"), true)["stats"] ?? null) : null; if ($s === null) { fwrite(STDERR, "no readable report - no timeout count\n"); exit(1); } $t = $s["timeOutCount"] ?? 0; echo "timeOutCount: {$t} (bound 10)\n"; exit($t > 10 ? 1 : 0);'
+      - name: Assert no mutant was skipped (MK8)
+        # Infection skips, without running it, any mutant whose covering tests
+        # took at least infection.json5's `timeout` in the initial run, and a
+        # skip leaves the MSI denominator — the shared core went untested in
+        # dispatch 42602815414 (117 skipped) while every other step was green.
+        # Bound 0: any skip fails the run; the fix is the suite or the timeout,
+        # never the bound.
+        if: ${{ !cancelled() }}
+        run: |
+          php -r '$s = is_file("infection.json") ? (json_decode((string) file_get_contents("infection.json"), true)["stats"] ?? null) : null; if (! is_int($s["skippedCount"] ?? null)) { fwrite(STDERR, "no readable report - no skip count\n"); exit(1); } $k = $s["skippedCount"]; echo "skippedCount: {$k} (bound 0)\n"; exit($k > 0 ? 1 : 0);'
       - name: Assert every mutation kill was earned by an assertion (OQ-1-167)
         # Backstop for the kill-verdict topology above: fail if any recorded
         # "kill" carries positive evidence it was a DB-race SQLSTATE error or a
