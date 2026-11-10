@@ -10,6 +10,7 @@ use App\Foundation\EventStore\AggregateRoot;
 use App\Compliance\Breach\Values\BreachFacts;
 use App\Compliance\Breach\Events\BreachAmended;
 use App\Compliance\Breach\Events\BreachRecorded;
+use App\Compliance\Breach\Events\BreachResolved;
 use App\Compliance\Breach\Values\RegulatorFiling;
 use App\Compliance\Breach\Events\BreachCompanyAdded;
 use App\Compliance\Breach\Enums\BreachAmendmentField;
@@ -22,9 +23,11 @@ use App\Compliance\Breach\Exceptions\NothingToAmendException;
 use App\Compliance\Breach\UseCases\Commands\AmendBreachCommand;
 use App\Compliance\Breach\UseCases\Commands\AffectedCompanyData;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
+use App\Compliance\Breach\UseCases\Commands\ResolveBreachCommand;
 use App\Compliance\Breach\Exceptions\BreachFilingNotOpenException;
 use App\Compliance\Breach\UseCases\Commands\AddBreachCompanyCommand;
 use App\Compliance\Breach\Exceptions\BreachAmendmentRefusedException;
+use App\Compliance\Breach\Exceptions\BreachResolutionRefusedException;
 use App\Compliance\Breach\Exceptions\LateBreachCompanyRefusedException;
 use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
 use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
@@ -105,6 +108,10 @@ class BreachIncident extends AggregateRoot
      */
     public function addLateCompany(AddBreachCompanyCommand $command, User $admin, array $part): static
     {
+        if ($this->stage === BreachStage::Resolved) {
+            throw LateBreachCompanyRefusedException::incidentResolved();
+        }
+
         if ($this->stage !== BreachStage::CompaniesNotified) {
             throw LateBreachCompanyRefusedException::notYetNotified();
         }
@@ -137,6 +144,10 @@ class BreachIncident extends AggregateRoot
 
     public function requestFiling(RequestBreachFilingCommand $command, User $owner): static
     {
+        if ($this->stage === BreachStage::Resolved) {
+            throw BreachFilingNotOpenException::resolved();
+        }
+
         $companyId = $command->company->getKey();
 
         if (! isset($this->notifiedAt[$companyId])) {
@@ -161,6 +172,10 @@ class BreachIncident extends AggregateRoot
 
     public function fileWithRegulator(FileBreachWithRegulatorCommand $command, User $admin, RegulatorFiling $filing): static
     {
+        if ($this->stage === BreachStage::Resolved) {
+            throw BreachFilingNotOpenException::incidentResolved();
+        }
+
         $companyId = $command->company->getKey();
 
         if (isset($this->filedAt[$companyId])) {
@@ -185,6 +200,10 @@ class BreachIncident extends AggregateRoot
 
     public function amend(AmendBreachCommand $command, User $admin): static
     {
+        if ($this->stage === BreachStage::Resolved) {
+            throw BreachAmendmentRefusedException::incidentResolved();
+        }
+
         $changes = $this->facts->changesTo($command);
 
         if ($changes === []) {
@@ -209,6 +228,39 @@ class BreachIncident extends AggregateRoot
             deadline: $deadline,
             missedDeadlineCleared: $this->deadlineMissed && $deadline->greaterThan($amendedAt),
         ));
+    }
+
+    public function resolve(ResolveBreachCommand $command, User $admin): static
+    {
+        if ($this->stage === BreachStage::Resolved) {
+            throw BreachResolutionRefusedException::incidentResolved();
+        }
+
+        if ($this->stage !== BreachStage::CompaniesNotified) {
+            throw BreachResolutionRefusedException::notNotified();
+        }
+
+        if (CarbonImmutable::now()->lessThan($this->deadline)) {
+            throw BreachResolutionRefusedException::beforeTheDeadline();
+        }
+
+        if (array_diff_key($this->filingRequestedAt, $this->filedAt) !== []) {
+            throw BreachResolutionRefusedException::filingPending();
+        }
+
+        return $this->recordThat(new BreachResolved(
+            breachId: $this->uuid(),
+            resolvedAt: CarbonImmutable::now(),
+            resolvedByUserId: $admin->getKey(),
+            rootCause: $command->rootCause,
+            remediationSteps: $command->remediationSteps,
+            summary: $command->summary,
+        ));
+    }
+
+    protected function applyBreachResolved(BreachResolved $event): void
+    {
+        $this->stage = BreachStage::Resolved;
     }
 
     protected function applyBreachAmended(BreachAmended $event): void

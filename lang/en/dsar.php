@@ -141,6 +141,7 @@ return [
             'breach_deadline_missed' => 'A data breach missed its 72-hour deadline',
             'breach_amended' => 'A data breach record was corrected',
             'breach_company_added' => 'A company found after a data breach notice was added and told',
+            'breach_resolved' => 'A data breach incident was resolved',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',

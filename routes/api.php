@@ -488,6 +488,11 @@ Route::post('/v1/admin/breach-incidents/{breachId}/notifications/companies', [Pl
 Route::post('/v1/admin/breach-incidents/{breachId}/companies', [PlatformAdminBreachIncidentsController::class, 'addCompany'])
     ->middleware(['auth:sanctum', 'platform.admin']);
 
+// A platform admin resolves a breach incident once its duties are done (UC-1-134) - auth:sanctum +
+// platform.admin only, no auth.company; no idempotency mount - the stage guard is the dedup (a repeat answers 409).
+Route::patch('/v1/admin/breach-incidents/{breachId}/resolve', [PlatformAdminBreachIncidentsController::class, 'resolve'])
+    ->middleware(['auth:sanctum', 'platform.admin']);
+
 // A platform admin files a breach with the regulator for one company that asked (UC-1-131) - auth:sanctum +
 // platform.admin only, no auth.company; no idempotency mount - the once-per-company guard is the dedup.
 Route::post('/v1/admin/breach-incidents/{breachId}/companies/{companyId}/filing', [PlatformAdminBreachIncidentsController::class, 'fileWithRegulator'])

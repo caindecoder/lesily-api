@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use App\Compliance\Breach\Enums\BreachStage;
 use App\Compliance\Breach\Events\BreachAmended;
 use App\Compliance\Breach\Events\BreachRecorded;
+use App\Compliance\Breach\Events\BreachResolved;
 use App\Compliance\Breach\Enums\BreachAmendmentField;
 use App\Compliance\Breach\Events\BreachDeadlineMissed;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
@@ -40,6 +41,18 @@ class BreachIncidentProjector extends Projector
         BreachIncidentRecord::query()->whereKey($event->breachId)->update([
             'stage' => BreachStage::CompaniesNotified,
             'companies_notified_at' => $event->notifiedAt,
+        ]);
+    }
+
+    public function onBreachResolved(BreachResolved $event): void
+    {
+        BreachIncidentRecord::query()->whereKey($event->breachId)->update([
+            'stage' => BreachStage::Resolved,
+            'resolved_at' => $event->resolvedAt,
+            'resolved_by' => $event->resolvedByUserId,
+            'root_cause' => $event->rootCause,
+            'remediation_steps' => $event->remediationSteps,
+            'resolution_summary' => $event->summary,
         ]);
     }
 
