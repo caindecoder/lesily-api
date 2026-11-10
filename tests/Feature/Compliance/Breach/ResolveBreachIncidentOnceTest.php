@@ -26,6 +26,9 @@ use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
  */
 class ResolveBreachIncidentOnceTest extends BreachIncidentsTestCase
 {
+    /**
+     * @param  class-string<DomainException>  $refusal
+     */
     #[Test]
     #[DataProvider('provideCommandsAfterTheClose')]
     public function when_a_resolved_incident_takes_another_command_then_the_aggregate_refuses_it(Closure $command, string $refusal, string $message): void
@@ -47,7 +50,7 @@ class ResolveBreachIncidentOnceTest extends BreachIncidentsTestCase
     }
 
     /**
-     * @return array<string, array{Closure(self, string): void, class-string<DomainException>, string}>
+     * @return array<string, array{Closure(self, string): BreachIncident, class-string<DomainException>, string}>
      */
     public static function provideCommandsAfterTheClose(): array
     {
