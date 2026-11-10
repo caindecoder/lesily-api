@@ -16,6 +16,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Database\Factories\BreachIncidentRecordFactory;
+use App\Compliance\Breach\Aggregates\BreachIncident;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Events\BreachMarkedFalseAlarm;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -216,6 +217,58 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_a_recorded_incident_has_missed_its_deadline_then_it_is_still_marked(): void
+    {
+        // Given a recorded incident affecting company A, flagged as past its 72-hour deadline
+        $breachId = $this->aRecordedIncident();
+        $this->travelTo(CarbonImmutable::parse('2026-05-08T10:00:00Z'));
+        BreachIncident::retrieve($breachId)->flagMissedDeadline(CarbonImmutable::now())->persist();
+
+        // When the admin marks it a false alarm
+        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+
+        // Then it is marked, and the missed deadline stays on the record
+        $response->assertOk();
+        $row = BreachIncidentRecord::query()->findOrFail($breachId);
+        $this->assertSame([BreachStage::FalseAlarm, '2026-05-08T10:00:00+00:00'], [$row->stage, $row->deadline_missed_at?->toIso8601String()]);
+    }
+
+    #[Test]
+    public function when_an_incident_is_marked_then_the_queue_shows_it_as_a_false_alarm(): void
+    {
+        // Given a recorded incident affecting company A, marked a false alarm by the admin
+        $breachId = $this->aRecordedIncident();
+        $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+
+        // When the admin opens the queue at the false-alarm stage
+        $response = $this->aQueueAtFalseAlarm();
+
+        // Then the incident is the one row, shown as a false alarm
+        $response->assertOk();
+        $this->assertSame([[$breachId, 'false_alarm']], array_map(
+            fn (array $row): array => [$row['id'], $row['stage']],
+            $response->json('data'),
+        ));
+    }
+
+    #[Test]
+    public function when_the_body_names_another_incident_then_the_incident_in_the_address_is_marked(): void
+    {
+        // Given two recorded incidents affecting company A
+        $addressed = $this->aRecordedIncident();
+        $other = $this->aRecordedIncident();
+        $otherBefore = $this->snapshotOf($other);
+
+        // When the admin marks the first a false alarm, with the second's id in the body
+        $response = $this->markFalseAlarm($this->admin, $addressed, $this->aFalseAlarm(['breachId' => $other]));
+
+        // Then the incident in the address is marked and the other is untouched
+        $response->assertOk();
+        $this->assertSame(BreachStage::FalseAlarm, BreachIncidentRecord::query()->findOrFail($addressed)->stage);
+        $this->assertSame($otherBefore, $this->snapshotOf($other));
+    }
+
+    #[Test]
     public function when_a_platform_admin_marks_a_recorded_incident_then_it_is_recorded_projected_audited_and_nobody_is_told(): void
     {
         // Given a recorded incident affecting companies A and B, discovered 20 hours ago
@@ -255,6 +308,13 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
             'findings' => self::FINDINGS,
             ...$overrides,
         ];
+    }
+
+    protected function aQueueAtFalseAlarm(): TestResponse
+    {
+        Sanctum::actingAs($this->admin);
+
+        return $this->getJson('/api/v1/admin/breach-incidents?stage=false_alarm');
     }
 
     protected function assertMarkAnswered(TestResponse $response): void
