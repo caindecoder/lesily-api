@@ -4,14 +4,19 @@ namespace Tests\Feature\Compliance\Breach;
 
 use Closure;
 use App\Models\User;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Compliance\Breach\Enums\BreachStage;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Compliance\Breach\Events\BreachRecorded;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Database\Factories\BreachIncidentRecordFactory;
+use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\Events\BreachMarkedFalseAlarm;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -20,6 +25,12 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
     protected const string REASON = 'monitoring misconfiguration';
 
     protected const string FINDINGS = 'The alert fired on the company\'s own test export; no personal data left Lesily.';
+
+    protected const string MARKED_AT = '2026-05-05 10:00:00';
+
+    protected const string MARKED_AT_ISO = '2026-05-05T10:00:00+00:00';
+
+    protected const string MARKED_AT_JSON = '2026-05-05T10:00:00.000000Z';
 
     protected function setUp(): void
     {
@@ -153,6 +164,81 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         ];
     }
 
+    #[Test]
+    public function when_an_incident_already_a_false_alarm_is_marked_again_then_it_is_refused_and_recorded_once(): void
+    {
+        // Given a recorded incident affecting company A, already marked a false alarm by the admin
+        $breachId = $this->aRecordedIncident();
+        $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin marks it a false alarm again
+        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm(['findings' => 'A second look found the same.']));
+
+        // Then it is refused, the incident is unchanged, and the close is recorded and audited once
+        $this->assertRefusedAsNotOpen($response, 'A breach incident already marked as a false alarm cannot be marked again.');
+        $this->assertSame($before, $this->snapshotOf($breachId));
+        $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachMarkedFalseAlarm::class)->count());
+        $this->assertDatabaseCount('audit_trail', 1);
+    }
+
+    #[Test]
+    public function when_the_audit_row_cannot_be_written_then_nothing_is_marked(): void
+    {
+        // Given a recorded incident affecting company A, and an audit trail that refuses every write
+        $breachId = $this->aRecordedIncident();
+        $before = $this->snapshotOf($breachId);
+        AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the admin marks it a false alarm
+        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+
+        // Then the request fails closed: no BreachMarkedFalseAlarm is recorded and the incident is unchanged
+        $this->assertFailedClosed($response);
+        $this->assertNothingMarked($breachId, $before);
+    }
+
+    #[Test]
+    public function when_every_text_is_at_its_longest_then_the_incident_is_marked(): void
+    {
+        // Given a recorded incident affecting company A, and a reason and findings of 1,000 characters each
+        $breachId = $this->aRecordedIncident();
+        $reason = str_repeat('r', 1000);
+        $findings = str_repeat('f', 1000);
+
+        // When the admin marks it a false alarm
+        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm(['reason' => $reason, 'findings' => $findings]));
+
+        // Then it is marked with both texts whole
+        $response->assertOk();
+        $row = BreachIncidentRecord::query()->findOrFail($breachId);
+        $this->assertSame([BreachStage::FalseAlarm, $reason, $findings], [$row->stage, $row->false_alarm_reason, $row->false_alarm_findings]);
+    }
+
+    #[Test]
+    public function when_a_platform_admin_marks_a_recorded_incident_then_it_is_recorded_projected_audited_and_nobody_is_told(): void
+    {
+        // Given a recorded incident affecting companies A and B, discovered 20 hours ago
+        $breachId = $this->aRecordedIncident(['companies' => [
+            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
+            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 12],
+        ]]);
+        Notification::fake();
+        Mail::fake();
+        $this->travelTo(CarbonImmutable::parse(self::MARKED_AT));
+
+        // When the admin marks it a false alarm with the reason and the findings
+        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+
+        // Then the incident is a false alarm in the event store and the read model, the close is audited,
+        // and nobody - neither company nor the regulator - is told, nor any notice recorded
+        $this->assertMarkAnswered($response);
+        $storedEventId = $this->assertMarkStored($breachId);
+        $this->assertMarkProjected($breachId);
+        $this->assertMarkAudited($response, $breachId, $storedEventId);
+        $this->assertNobodyTold();
+    }
+
     protected function markFalseAlarm(?User $caller, string $breachId, array $body): TestResponse
     {
         if ($caller !== null) {
@@ -169,6 +255,74 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
             'findings' => self::FINDINGS,
             ...$overrides,
         ];
+    }
+
+    protected function assertMarkAnswered(TestResponse $response): void
+    {
+        $response->assertOk();
+        $this->assertSame(
+            ['false_alarm', self::REASON, self::FINDINGS, $this->admin->getKey(), self::MARKED_AT_JSON],
+            [
+                $response->json('data.stage'),
+                $response->json('data.false_alarm_reason'),
+                $response->json('data.false_alarm_findings'),
+                $response->json('data.false_alarm_by'),
+                $response->json('data.false_alarm_at'),
+            ],
+        );
+    }
+
+    protected function assertMarkStored(string $breachId): int
+    {
+        $events = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->orderBy('id')->get();
+        $this->assertSame([BreachRecorded::class, BreachMarkedFalseAlarm::class], $events->pluck('event_class')->all());
+
+        $marked = $events->last();
+        $this->assertSame([$breachId, self::REASON, self::FINDINGS, $this->admin->getKey(), self::MARKED_AT_ISO], [
+            $marked->event_properties['breachId'],
+            $marked->event_properties['reason'],
+            $marked->event_properties['findings'],
+            $marked->event_properties['markedByUserId'],
+            CarbonImmutable::parse($marked->event_properties['markedAt'])->toIso8601String(),
+        ]);
+
+        return (int) $marked->getKey();
+    }
+
+    protected function assertMarkProjected(string $breachId): void
+    {
+        $row = BreachIncidentRecord::query()->findOrFail($breachId);
+        $this->assertSame(
+            [BreachStage::FalseAlarm, self::REASON, self::FINDINGS, $this->admin->getKey(), self::MARKED_AT_ISO],
+            [$row->stage, $row->false_alarm_reason, $row->false_alarm_findings, $row->false_alarm_by, $row->false_alarm_at?->toIso8601String()],
+        );
+    }
+
+    protected function assertMarkAudited(TestResponse $response, string $breachId, int $storedEventId): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => null,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'BreachMarkedFalseAlarm',
+            'subject_type' => 'breach_incident',
+            'subject_id' => $breachId,
+            'subject_label' => null,
+            'action' => 'breach_marked_false_alarm',
+            'description' => 'Platform admin marked a data breach incident a false alarm.',
+            'metadata' => null,
+            'recorded_at' => self::MARKED_AT,
+            'actor_user_id' => $this->admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $this->admin->name,
+            'ip_address' => '127.0.0.1',
+            'severity' => 'critical',
+        ]);
+
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+        $entry = AuditEntry::query()->sole();
+        $this->assertSame([$correlationId, 'Symfony'], [$entry->request_id, $entry->user_agent]);
     }
 
     protected function assertNobodyTold(): void

@@ -142,6 +142,7 @@ return [
             'breach_amended' => 'A data breach record was corrected',
             'breach_company_added' => 'A company found after a data breach notice was added and told',
             'breach_resolved' => 'A data breach incident was resolved',
+            'breach_marked_false_alarm' => 'A recorded data breach was closed as a false alarm',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',

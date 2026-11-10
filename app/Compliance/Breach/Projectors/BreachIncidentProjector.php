@@ -10,6 +10,7 @@ use App\Compliance\Breach\Events\BreachResolved;
 use App\Compliance\Breach\Enums\BreachAmendmentField;
 use App\Compliance\Breach\Events\BreachDeadlineMissed;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
+use App\Compliance\Breach\Events\BreachMarkedFalseAlarm;
 use App\Compliance\Breach\Events\BreachCompaniesNotified;
 use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 
@@ -53,6 +54,17 @@ class BreachIncidentProjector extends Projector
             'root_cause' => $event->rootCause,
             'remediation_steps' => $event->remediationSteps,
             'resolution_summary' => $event->summary,
+        ]);
+    }
+
+    public function onBreachMarkedFalseAlarm(BreachMarkedFalseAlarm $event): void
+    {
+        BreachIncidentRecord::query()->whereKey($event->breachId)->update([
+            'stage' => BreachStage::FalseAlarm,
+            'false_alarm_at' => $event->markedAt,
+            'false_alarm_by' => $event->markedByUserId,
+            'false_alarm_reason' => $event->reason,
+            'false_alarm_findings' => $event->findings,
         ]);
     }
 

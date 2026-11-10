@@ -17,6 +17,7 @@ use App\Compliance\Breach\Enums\BreachAmendmentField;
 use App\Compliance\Breach\Events\BreachDeadlineMissed;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Events\BreachFilingRequested;
+use App\Compliance\Breach\Events\BreachMarkedFalseAlarm;
 use App\Compliance\Breach\Events\BreachCompaniesNotified;
 use App\Compliance\Breach\Events\BreachFiledWithRegulator;
 use App\Compliance\Breach\Exceptions\NothingToAmendException;
@@ -288,7 +289,18 @@ class BreachIncident extends AggregateRoot
             throw BreachFalseAlarmRefusedException::companiesNotified();
         }
 
-        return $this;
+        return $this->recordThat(new BreachMarkedFalseAlarm(
+            breachId: $this->uuid(),
+            markedAt: CarbonImmutable::now(),
+            markedByUserId: $admin->getKey(),
+            reason: $command->reason,
+            findings: $command->findings,
+        ));
+    }
+
+    protected function applyBreachMarkedFalseAlarm(BreachMarkedFalseAlarm $event): void
+    {
+        $this->stage = BreachStage::FalseAlarm;
     }
 
     public function flagMissedDeadline(CarbonInterface $at): static
