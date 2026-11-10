@@ -115,6 +115,10 @@ class BreachIncident extends AggregateRoot
             throw LateBreachCompanyRefusedException::incidentResolved();
         }
 
+        if ($this->stage === BreachStage::FalseAlarm) {
+            throw LateBreachCompanyRefusedException::falseAlarm();
+        }
+
         if ($this->stage !== BreachStage::CompaniesNotified) {
             throw LateBreachCompanyRefusedException::notYetNotified();
         }
@@ -179,6 +183,10 @@ class BreachIncident extends AggregateRoot
             throw BreachFilingNotOpenException::incidentResolved();
         }
 
+        if ($this->stage === BreachStage::FalseAlarm) {
+            throw BreachFilingNotOpenException::falseAlarm();
+        }
+
         $companyId = $command->company->getKey();
 
         if (isset($this->filedAt[$companyId])) {
@@ -205,6 +213,10 @@ class BreachIncident extends AggregateRoot
     {
         if ($this->stage === BreachStage::Resolved) {
             throw BreachAmendmentRefusedException::incidentResolved();
+        }
+
+        if ($this->stage === BreachStage::FalseAlarm) {
+            throw BreachAmendmentRefusedException::falseAlarm();
         }
 
         $changes = $this->facts->changesTo($command);
@@ -237,6 +249,10 @@ class BreachIncident extends AggregateRoot
     {
         if ($this->stage === BreachStage::Resolved) {
             throw BreachResolutionRefusedException::incidentResolved();
+        }
+
+        if ($this->stage === BreachStage::FalseAlarm) {
+            throw BreachResolutionRefusedException::falseAlarm();
         }
 
         if ($this->stage !== BreachStage::CompaniesNotified) {
@@ -285,9 +301,12 @@ class BreachIncident extends AggregateRoot
 
     public function markFalseAlarm(MarkBreachFalseAlarmCommand $command, User $admin): static
     {
-        if ($this->stage === BreachStage::CompaniesNotified) {
-            throw BreachFalseAlarmRefusedException::companiesNotified();
-        }
+        match ($this->stage) {
+            BreachStage::CompaniesNotified => throw BreachFalseAlarmRefusedException::companiesNotified(),
+            BreachStage::Resolved => throw BreachFalseAlarmRefusedException::incidentResolved(),
+            BreachStage::FalseAlarm => throw BreachFalseAlarmRefusedException::alreadyMarked(),
+            BreachStage::Recorded, null => null,
+        };
 
         return $this->recordThat(new BreachMarkedFalseAlarm(
             breachId: $this->uuid(),
