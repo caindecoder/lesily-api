@@ -69,6 +69,7 @@ use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 use App\Companies\Memberships\Exceptions\OwnerRemovalBlockedException;
+use App\Compliance\Breach\Exceptions\BreachResolutionRefusedException;
 use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 use App\Companies\Exceptions\OwnershipTransferCaseNotVerifiedException;
 use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
@@ -393,6 +394,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // A late company is added only after the notices, never twice, and never to a closed
         // incident (UC-1-130 late 2a, 2b → 409).
         $exceptions->render(fn (LateBreachCompanyRefusedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // A breach incident is resolved only once its duties are done - the companies notified, the
+        // deadline passed, no filing request unsent - and never twice (UC-1-134 2c-2g → 409).
+        $exceptions->render(fn (BreachResolutionRefusedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));

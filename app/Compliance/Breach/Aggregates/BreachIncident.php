@@ -22,9 +22,11 @@ use App\Compliance\Breach\Exceptions\NothingToAmendException;
 use App\Compliance\Breach\UseCases\Commands\AmendBreachCommand;
 use App\Compliance\Breach\UseCases\Commands\AffectedCompanyData;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
+use App\Compliance\Breach\UseCases\Commands\ResolveBreachCommand;
 use App\Compliance\Breach\Exceptions\BreachFilingNotOpenException;
 use App\Compliance\Breach\UseCases\Commands\AddBreachCompanyCommand;
 use App\Compliance\Breach\Exceptions\BreachAmendmentRefusedException;
+use App\Compliance\Breach\Exceptions\BreachResolutionRefusedException;
 use App\Compliance\Breach\Exceptions\LateBreachCompanyRefusedException;
 use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
 use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
@@ -209,6 +211,15 @@ class BreachIncident extends AggregateRoot
             deadline: $deadline,
             missedDeadlineCleared: $this->deadlineMissed && $deadline->greaterThan($amendedAt),
         ));
+    }
+
+    public function resolve(ResolveBreachCommand $command, User $admin): static
+    {
+        if ($this->stage !== BreachStage::CompaniesNotified) {
+            throw BreachResolutionRefusedException::notNotified();
+        }
+
+        return $this;
     }
 
     protected function applyBreachAmended(BreachAmended $event): void

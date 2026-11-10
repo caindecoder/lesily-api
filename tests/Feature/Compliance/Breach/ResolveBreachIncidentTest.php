@@ -90,6 +90,22 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertNothingResolved($breachId, $before);
     }
 
+    #[Test]
+    public function when_the_companies_are_not_yet_notified_then_the_close_is_refused(): void
+    {
+        // Given an incident still at recorded, discovered four days ago
+        $breachId = $this->aRecordedIncident();
+        $before = $this->snapshotOf($breachId);
+        $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
+
+        // When the admin resolves it with a root cause, remediation steps and a summary
+        $response = $this->resolve($this->admin, $breachId, $this->aResolution());
+
+        // Then the close is refused and nothing is resolved
+        $this->assertRefusedAsNotOpen($response, 'A breach incident is resolved only after its companies are notified.');
+        $this->assertNothingResolved($breachId, $before);
+    }
+
     public static function provideInvalidResolutions(): array
     {
         return [
