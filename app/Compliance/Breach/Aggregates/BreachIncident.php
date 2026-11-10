@@ -27,10 +27,12 @@ use App\Compliance\Breach\UseCases\Commands\ResolveBreachCommand;
 use App\Compliance\Breach\Exceptions\BreachFilingNotOpenException;
 use App\Compliance\Breach\UseCases\Commands\AddBreachCompanyCommand;
 use App\Compliance\Breach\Exceptions\BreachAmendmentRefusedException;
+use App\Compliance\Breach\Exceptions\BreachFalseAlarmRefusedException;
 use App\Compliance\Breach\Exceptions\BreachResolutionRefusedException;
 use App\Compliance\Breach\Exceptions\LateBreachCompanyRefusedException;
 use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
 use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
+use App\Compliance\Breach\UseCases\Commands\MarkBreachFalseAlarmCommand;
 use App\Compliance\Breach\UseCases\Commands\FileBreachWithRegulatorCommand;
 use App\Compliance\Breach\Exceptions\BreachIncidentAlreadyRecordedException;
 
@@ -278,6 +280,15 @@ class BreachIncident extends AggregateRoot
             BreachAmendmentField::CompanyAdded, BreachAmendmentField::CompanyRemoved => throw BreachAmendmentRefusedException::companyListLocked(),
             default => null,
         };
+    }
+
+    public function markFalseAlarm(MarkBreachFalseAlarmCommand $command, User $admin): static
+    {
+        if ($this->stage === BreachStage::CompaniesNotified) {
+            throw BreachFalseAlarmRefusedException::companiesNotified();
+        }
+
+        return $this;
     }
 
     public function flagMissedDeadline(CarbonInterface $at): static

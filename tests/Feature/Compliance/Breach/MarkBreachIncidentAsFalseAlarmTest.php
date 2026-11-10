@@ -5,8 +5,10 @@ namespace Tests\Feature\Compliance\Breach;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Breach\Events\BreachMarkedFalseAlarm;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -99,6 +101,24 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         ];
     }
 
+    #[Test]
+    public function when_the_companies_were_notified_then_the_false_alarm_is_refused(): void
+    {
+        // Given an incident whose companies A and B have been notified
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $before = $this->snapshotOf($breachId);
+        Notification::fake();
+        Mail::fake();
+
+        // When the admin marks it a false alarm
+        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+
+        // Then it is refused because the notices are out, nothing is marked and nobody is told
+        $this->assertRefusedAsNotOpen($response, 'A breach incident is marked a false alarm only before its companies are notified.');
+        $this->assertNothingMarked($breachId, $before);
+        $this->assertNobodyTold();
+    }
+
     protected function markFalseAlarm(?User $caller, string $breachId, array $body): TestResponse
     {
         if ($caller !== null) {
@@ -115,6 +135,12 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
             'findings' => self::FINDINGS,
             ...$overrides,
         ];
+    }
+
+    protected function assertNobodyTold(): void
+    {
+        Notification::assertNothingSent();
+        Mail::assertNothingOutgoing();
     }
 
     protected function assertNothingMarked(string $breachId, array $before): void
