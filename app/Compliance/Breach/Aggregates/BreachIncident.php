@@ -305,7 +305,8 @@ class BreachIncident extends AggregateRoot
             BreachStage::CompaniesNotified => throw BreachFalseAlarmRefusedException::companiesNotified(),
             BreachStage::Resolved => throw BreachFalseAlarmRefusedException::incidentResolved(),
             BreachStage::FalseAlarm => throw BreachFalseAlarmRefusedException::alreadyMarked(),
-            BreachStage::Recorded, null => null,
+            null => throw BreachFalseAlarmRefusedException::notRecorded(),
+            BreachStage::Recorded => null,
         };
 
         return $this->recordThat(new BreachMarkedFalseAlarm(

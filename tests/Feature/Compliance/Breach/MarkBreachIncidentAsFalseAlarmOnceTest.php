@@ -4,6 +4,7 @@ namespace Tests\Feature\Compliance\Breach;
 
 use Closure;
 use DomainException;
+use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Breach\Aggregates\BreachIncident;
@@ -21,13 +22,30 @@ use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
 use App\Compliance\Breach\UseCases\Commands\MarkBreachFalseAlarmCommand;
 
 /**
- * The false alarm's finality at the domain seam (conv-plan §2.14 Rule C): every
- * interactor refuses a false alarm on its locked row first, so the aggregate's
- * own false-alarm arms are unreachable via HTTP — they protect future callers
- * and replay integrity, and are provable only at this seam.
+ * The false alarm at the domain seam (conv-plan §2.14 Rule C): every interactor
+ * answers an unknown incident 404 and refuses a false alarm on its locked row
+ * first, so the aggregate's own refusals are unreachable via HTTP — they protect
+ * future callers and replay integrity, and are provable only at this seam.
  */
 class MarkBreachIncidentAsFalseAlarmOnceTest extends BreachIncidentsTestCase
 {
+    #[Test]
+    public function when_an_incident_was_never_recorded_then_the_aggregate_refuses_the_false_alarm(): void
+    {
+        // Given a breach id with no recorded incident
+        $breachId = Str::uuid7()->toString();
+
+        // When the aggregate is asked to mark it a false alarm
+        try {
+            BreachIncident::retrieve($breachId)->markFalseAlarm($this->aFalseAlarmFor($breachId), $this->admin)->persist();
+            $this->fail('A breach incident never recorded must not be marked a false alarm.');
+        } catch (BreachFalseAlarmRefusedException $refused) {
+            // Then it is refused with the reason named, and nothing is recorded
+            $this->assertSame('Only a recorded breach incident can be marked a false alarm.', $refused->getMessage());
+            $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->count());
+        }
+    }
+
     /**
      * @param  class-string<DomainException>  $refusal
      */
