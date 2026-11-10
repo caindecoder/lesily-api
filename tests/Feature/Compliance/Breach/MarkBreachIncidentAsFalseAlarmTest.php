@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Compliance\Breach;
 
+use Closure;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
@@ -10,6 +11,7 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Database\Factories\BreachIncidentRecordFactory;
 use App\Compliance\Breach\Events\BreachMarkedFalseAlarm;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -117,6 +119,38 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         $this->assertRefusedAsNotOpen($response, 'A breach incident is marked a false alarm only before its companies are notified.');
         $this->assertNothingMarked($breachId, $before);
         $this->assertNobodyTold();
+    }
+
+    #[Test, DataProvider('provideClosedStages')]
+    public function when_the_incident_is_closed_then_the_false_alarm_is_refused(Closure $closed, string $message): void
+    {
+        // Given a closed incident
+        $breachId = $closed($this->anIncident())->createOne()->getKey();
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin marks it a false alarm
+        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+
+        // Then it is refused with the stage named, and nothing is marked
+        $this->assertRefusedAsNotOpen($response, $message);
+        $this->assertNothingMarked($breachId, $before);
+    }
+
+    /**
+     * @return array<string, array{Closure(BreachIncidentRecordFactory): BreachIncidentRecordFactory, string}>
+     */
+    public static function provideClosedStages(): array
+    {
+        return [
+            'resolved' => [
+                fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->resolved(),
+                'A resolved breach incident cannot be marked a false alarm.',
+            ],
+            'a false alarm' => [
+                fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->falseAlarm(),
+                'A breach incident already marked as a false alarm cannot be marked again.',
+            ],
+        ];
     }
 
     protected function markFalseAlarm(?User $caller, string $breachId, array $body): TestResponse

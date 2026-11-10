@@ -10,4 +10,14 @@ class BreachFalseAlarmRefusedException extends DomainException
     {
         return new self('A breach incident is marked a false alarm only before its companies are notified.');
     }
+
+    public static function incidentResolved(): self
+    {
+        return new self('A resolved breach incident cannot be marked a false alarm.');
+    }
+
+    public static function alreadyMarked(): self
+    {
+        return new self('A breach incident already marked as a false alarm cannot be marked again.');
+    }
 }
