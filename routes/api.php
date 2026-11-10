@@ -493,6 +493,11 @@ Route::post('/v1/admin/breach-incidents/{breachId}/companies', [PlatformAdminBre
 Route::patch('/v1/admin/breach-incidents/{breachId}/resolve', [PlatformAdminBreachIncidentsController::class, 'resolve'])
     ->middleware(['auth:sanctum', 'platform.admin']);
 
+// A platform admin closes a recorded breach incident as a false alarm (UC-1-135) - auth:sanctum +
+// platform.admin only, no auth.company; no idempotency mount - the stage guard is the dedup (a repeat answers 409).
+Route::patch('/v1/admin/breach-incidents/{breachId}/false-alarm', [PlatformAdminBreachIncidentsController::class, 'markFalseAlarm'])
+    ->middleware(['auth:sanctum', 'platform.admin']);
+
 // A platform admin files a breach with the regulator for one company that asked (UC-1-131) - auth:sanctum +
 // platform.admin only, no auth.company; no idempotency mount - the once-per-company guard is the dedup.
 Route::post('/v1/admin/breach-incidents/{breachId}/companies/{companyId}/filing', [PlatformAdminBreachIncidentsController::class, 'fileWithRegulator'])

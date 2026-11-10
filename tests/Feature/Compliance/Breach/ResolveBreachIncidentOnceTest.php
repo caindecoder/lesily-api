@@ -14,10 +14,12 @@ use App\Compliance\Breach\Exceptions\BreachFilingNotOpenException;
 use App\Compliance\Breach\UseCases\Commands\AddBreachCompanyCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Compliance\Breach\Exceptions\BreachAmendmentRefusedException;
+use App\Compliance\Breach\Exceptions\BreachFalseAlarmRefusedException;
 use App\Compliance\Breach\Exceptions\BreachResolutionRefusedException;
 use App\Compliance\Breach\Exceptions\LateBreachCompanyRefusedException;
 use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
 use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
+use App\Compliance\Breach\UseCases\Commands\MarkBreachFalseAlarmCommand;
 
 /**
  * The close's finality at the domain seam (conv-plan §2.14 Rule C): every
@@ -60,6 +62,15 @@ class ResolveBreachIncidentOnceTest extends BreachIncidentsTestCase
                 fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)->resolve($test->aResolutionFor($breachId), $test->admin)->persist(),
                 BreachResolutionRefusedException::class,
                 'A resolved breach incident cannot be resolved again.',
+            ],
+            'mark it a false alarm' => [
+                fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)->markFalseAlarm(MarkBreachFalseAlarmCommand::from([
+                    'breachId' => $breachId,
+                    'reason' => 'monitoring misconfiguration',
+                    'findings' => 'The alert fired on the company\'s own test export.',
+                ]), $test->admin)->persist(),
+                BreachFalseAlarmRefusedException::class,
+                'A resolved breach incident cannot be marked a false alarm.',
             ],
             'notify its companies again' => [
                 fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)->notifyCompanies($test->admin, [

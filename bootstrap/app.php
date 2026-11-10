@@ -69,6 +69,7 @@ use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
 use App\Companies\Memberships\Exceptions\InviteEmailMismatchException;
 use App\Companies\Memberships\Exceptions\OwnerRemovalBlockedException;
+use App\Compliance\Breach\Exceptions\BreachFalseAlarmRefusedException;
 use App\Compliance\Breach\Exceptions\BreachResolutionRefusedException;
 use App\Foundation\AccessLog\Exceptions\AccessLogWriteFailedException;
 use App\Companies\Exceptions\OwnershipTransferCaseNotVerifiedException;
@@ -401,6 +402,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // A breach incident is resolved only once its duties are done - the companies notified, the
         // deadline passed, no filing request unsent - and never twice (UC-1-134 2c-2g → 409).
         $exceptions->render(fn (BreachResolutionRefusedException $e) => EnvelopeBuilder::build(
+            ApiErrorCode::StateGuardViolation,
+            $e->getMessage(),
+        ));
+
+        // A breach incident is marked a false alarm only while recorded - before any company is told -
+        // and never twice (UC-1-135 2b-2d → 409).
+        $exceptions->render(fn (BreachFalseAlarmRefusedException $e) => EnvelopeBuilder::build(
             ApiErrorCode::StateGuardViolation,
             $e->getMessage(),
         ));
