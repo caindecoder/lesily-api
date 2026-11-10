@@ -219,6 +219,10 @@ class BreachIncident extends AggregateRoot
             throw BreachResolutionRefusedException::notNotified();
         }
 
+        if (CarbonImmutable::now()->lessThan($this->deadline)) {
+            throw BreachResolutionRefusedException::beforeTheDeadline();
+        }
+
         return $this;
     }
 

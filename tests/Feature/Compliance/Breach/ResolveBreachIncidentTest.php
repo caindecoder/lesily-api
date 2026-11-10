@@ -106,6 +106,22 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertNothingResolved($breachId, $before);
     }
 
+    #[Test]
+    public function when_the_deadline_has_not_passed_then_the_close_is_refused(): void
+    {
+        // Given an incident at companies_notified discovered at 2026-05-04 14:00 UTC with no filing request
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $before = $this->snapshotOf($breachId);
+        $this->travelTo(CarbonImmutable::parse('2026-05-07T13:59:59Z'));
+
+        // When the admin resolves it a second before its deadline
+        $response = $this->resolve($this->admin, $breachId, $this->aResolution());
+
+        // Then the close is refused and the stage is still companies_notified
+        $this->assertRefusedAsNotOpen($response, 'A breach incident is resolved only after its 72-hour deadline has passed.');
+        $this->assertNothingResolved($breachId, $before);
+    }
+
     public static function provideInvalidResolutions(): array
     {
         return [

@@ -10,4 +10,9 @@ class BreachResolutionRefusedException extends DomainException
     {
         return new self('A breach incident is resolved only after its companies are notified.');
     }
+
+    public static function beforeTheDeadline(): self
+    {
+        return new self('A breach incident is resolved only after its 72-hour deadline has passed.');
+    }
 }
