@@ -89,6 +89,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         // Then it is not found and nothing is recorded
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertSame(0, LesilyStoredEvent::query()->count());
+        $this->assertDatabaseCount('audit_trail', 0);
     }
 
     #[Test, DataProvider('provideInvalidResolutions')]
@@ -193,6 +194,25 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     }
 
     #[Test]
+    public function when_an_incident_already_resolved_is_resolved_again_then_it_is_refused_and_recorded_once(): void
+    {
+        // Given an incident company A was notified of, already resolved by the admin after its deadline
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
+        $this->resolve($this->admin, $breachId, $this->aResolution());
+        $before = $this->snapshotOf($breachId);
+
+        // When the admin resolves it again
+        $response = $this->resolve($this->admin, $breachId, $this->aResolution(['summary' => 'A second close.']));
+
+        // Then it is refused, the incident is unchanged, and the close is recorded and audited once
+        $this->assertRefusedAsNotOpen($response, 'A resolved breach incident cannot be resolved again.');
+        $this->assertSame($before, $this->snapshotOf($breachId));
+        $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachResolved::class)->count());
+        $this->assertDatabaseCount('audit_trail', 1);
+    }
+
+    #[Test]
     public function when_the_audit_row_cannot_be_written_then_nothing_is_resolved(): void
     {
         // Given an incident at companies_notified past its deadline, and an audit trail that refuses every write
@@ -264,13 +284,13 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     #[Test]
     public function when_an_incident_is_resolved_then_its_companies_see_it_resolved_in_their_list(): void
     {
-        // Given an incident at companies_notified past its deadline, and company A's owner
+        // Given an incident company A was notified of, resolved by the admin after its deadline, and company A's owner
         $breachId = $this->aNotifiedIncident($this->companyA);
         $owner = $this->aConsentingMember($this->companyA, 'owner');
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
-
-        // When the admin resolves it and company A's owner lists its breach notices
         $this->resolve($this->admin, $breachId, $this->aResolution());
+
+        // When company A's owner lists its breach notices
         $response = $this->listNotices($owner, $this->companyA);
 
         // Then the list shows the incident resolved
@@ -279,6 +299,24 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
             fn (array $notice): array => [$notice['breach_id'], $notice['stage']],
             $response->json('data'),
         ));
+    }
+
+    #[Test]
+    public function when_the_body_names_another_incident_then_the_incident_in_the_address_is_resolved(): void
+    {
+        // Given two incidents company A was notified of, both past their deadline
+        $addressed = $this->aNotifiedIncident($this->companyA);
+        $other = $this->aNotifiedIncident($this->companyA);
+        $otherBefore = $this->snapshotOf($other);
+        $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
+
+        // When the admin resolves the first, with the second's id in the body
+        $response = $this->resolve($this->admin, $addressed, $this->aResolution(['breachId' => $other]));
+
+        // Then the incident in the address is resolved and the other is untouched
+        $response->assertOk();
+        $this->assertSame(BreachStage::Resolved, BreachIncidentRecord::query()->findOrFail($addressed)->stage);
+        $this->assertSame($otherBefore, $this->snapshotOf($other));
     }
 
     #[Test]
@@ -389,7 +427,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     {
         $resolved = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->latest('id')->firstOrFail();
         $this->assertSame(BreachResolved::class, $resolved->event_class);
-        $this->assertEquals([$breachId, self::ROOT_CAUSE, self::REMEDIATION, self::SUMMARY, $this->admin->getKey(), self::RESOLVED_AT_ISO], [
+        $this->assertSame([$breachId, self::ROOT_CAUSE, self::REMEDIATION, self::SUMMARY, $this->admin->getKey(), self::RESOLVED_AT_ISO], [
             $resolved->event_properties['breachId'],
             $resolved->event_properties['rootCause'],
             $resolved->event_properties['remediationSteps'],

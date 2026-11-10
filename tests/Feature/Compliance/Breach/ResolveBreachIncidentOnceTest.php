@@ -17,6 +17,7 @@ use App\Compliance\Breach\Exceptions\BreachAmendmentRefusedException;
 use App\Compliance\Breach\Exceptions\BreachResolutionRefusedException;
 use App\Compliance\Breach\Exceptions\LateBreachCompanyRefusedException;
 use App\Compliance\Breach\UseCases\Commands\RequestBreachFilingCommand;
+use App\Compliance\Breach\Exceptions\BreachIncidentNotRecordedException;
 
 /**
  * The close's finality at the domain seam (conv-plan §2.14 Rule C): every
@@ -59,6 +60,13 @@ class ResolveBreachIncidentOnceTest extends BreachIncidentsTestCase
                 fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)->resolve($test->aResolutionFor($breachId), $test->admin)->persist(),
                 BreachResolutionRefusedException::class,
                 'A resolved breach incident cannot be resolved again.',
+            ],
+            'notify its companies again' => [
+                fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)->notifyCompanies($test->admin, [
+                    $test->companyA->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.'],
+                ])->persist(),
+                BreachIncidentNotRecordedException::class,
+                'Only a recorded breach incident can have its companies notified; this incident is resolved.',
             ],
             'correct it' => [
                 fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)->amend(AmendBreachCommand::from([
