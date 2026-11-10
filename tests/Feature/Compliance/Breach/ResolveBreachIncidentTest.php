@@ -8,13 +8,17 @@ use RuntimeException;
 use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Compliance\Breach\Enums\BreachStage;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Breach\Events\BreachResolved;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Database\Factories\BreachIncidentRecordFactory;
 use App\Compliance\Breach\Aggregates\BreachIncident;
+use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use App\Compliance\Breach\UseCases\Commands\AddBreachCompanyCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -27,6 +31,12 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     protected const string SUMMARY = 'One file reached one outside person, who deleted it; no further reading was found.';
 
     protected const string PAST_THE_DEADLINE = '2026-05-08T10:00:00Z';
+
+    protected const string RESOLVED_AT = '2026-05-08 10:00:00';
+
+    protected const string RESOLVED_AT_ISO = '2026-05-08T10:00:00+00:00';
+
+    protected const string RESOLVED_AT_JSON = '2026-05-08T10:00:00.000000Z';
 
     protected function setUp(): void
     {
@@ -199,6 +209,102 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertNothingResolved($breachId, $before);
     }
 
+    #[Test]
+    public function when_resolved_exactly_at_the_deadline_then_the_incident_is_resolved(): void
+    {
+        // Given an incident at companies_notified discovered at 2026-05-04 14:00 UTC with no filing request
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $this->travelTo(CarbonImmutable::parse('2026-05-07T14:00:00Z'));
+
+        // When the admin resolves it at the moment its deadline is reached
+        $response = $this->resolve($this->admin, $breachId, $this->aResolution());
+
+        // Then the incident is resolved
+        $response->assertOk();
+        $response->assertJsonPath('data.stage', 'resolved');
+    }
+
+    #[Test]
+    public function when_every_fact_is_at_its_longest_then_the_incident_is_resolved(): void
+    {
+        // Given an incident at companies_notified past its deadline
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
+        $longest = [str_repeat('r', 1000), str_repeat('s', 1000), str_repeat('t', 1000)];
+
+        // When the admin resolves it with each fact at 1,000 characters
+        $response = $this->resolve($this->admin, $breachId, array_combine(['rootCause', 'remediationSteps', 'summary'], $longest));
+
+        // Then the incident is resolved with every fact kept whole
+        $response->assertOk();
+        $row = BreachIncidentRecord::query()->findOrFail($breachId);
+        $this->assertSame($longest, [$row->root_cause, $row->remediation_steps, $row->resolution_summary]);
+    }
+
+    #[Test]
+    public function when_a_critical_incident_s_requests_are_all_filed_then_it_closes_under_the_same_rule(): void
+    {
+        // Given a critical incident at companies_notified whose deadline passed an hour ago, company A's filing request sent
+        $breachId = $this->aRecordedIncident(['severity' => 'critical']);
+        BreachIncident::retrieve($breachId)->notifyCompanies($this->admin, [
+            $this->companyA->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.'],
+        ])->persist();
+        $this->aFilingRequestBy($this->companyA, $breachId);
+        $this->fileFor($this->companyA, $breachId);
+        $this->travelTo(CarbonImmutable::parse('2026-05-07T15:00:00Z'));
+
+        // When the admin resolves it
+        $response = $this->resolve($this->admin, $breachId, $this->aResolution());
+
+        // Then it is resolved under the same rule as any other severity
+        $response->assertOk();
+        $response->assertJsonPath('data.stage', 'resolved');
+    }
+
+    #[Test]
+    public function when_an_incident_is_resolved_then_its_companies_see_it_resolved_in_their_list(): void
+    {
+        // Given an incident at companies_notified past its deadline, and company A's owner
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+        $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
+
+        // When the admin resolves it and company A's owner lists its breach notices
+        $this->resolve($this->admin, $breachId, $this->aResolution());
+        $response = $this->listNotices($owner, $this->companyA);
+
+        // Then the list shows the incident resolved
+        $response->assertOk();
+        $this->assertSame([[$breachId, 'resolved']], array_map(
+            fn (array $notice): array => [$notice['breach_id'], $notice['stage']],
+            $response->json('data'),
+        ));
+    }
+
+    #[Test]
+    public function when_a_platform_admin_resolves_an_incident_then_it_is_recorded_projected_audited_and_nobody_is_told(): void
+    {
+        // Given an incident at companies_notified affecting companies A and B, its deadline passed;
+        // company A's owner asked for a filing and Lesily filed for A; company B did not ask
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $this->aFilingRequestBy($this->companyA, $breachId);
+        $this->fileFor($this->companyA, $breachId);
+        Notification::fake();
+        Mail::fake();
+        $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
+
+        // When the admin resolves it with a root cause, remediation steps and a summary
+        $response = $this->resolve($this->admin, $breachId, $this->aResolution());
+
+        // Then the incident is resolved in the event store and the read model, the close is audited,
+        // and nobody - neither company nor the regulator - is told
+        $this->assertResolvedAnswered($response);
+        $storedEventId = $this->assertResolutionStored($breachId);
+        $this->assertResolutionProjected($breachId);
+        $this->assertResolveAudited($response, $breachId, $storedEventId);
+        $this->assertNobodyTold();
+    }
+
     public static function provideClosedStages(): array
     {
         return [
@@ -254,6 +360,87 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         BreachIncident::retrieve($breachId)
             ->addLateCompany($command, $this->admin, ['description' => 'A payroll export was emailed to the wrong recipient.'])
             ->persist();
+    }
+
+    protected function fileFor(Company $company, string $breachId): void
+    {
+        BreachIncident::retrieve($breachId)
+            ->fileWithRegulator($this->aFilingCommandFor($breachId, $company), $this->admin, $this->aRegulatorFiling())
+            ->persist();
+    }
+
+    protected function assertResolvedAnswered(TestResponse $response): void
+    {
+        $response->assertOk();
+        $this->assertSame(
+            ['resolved', self::ROOT_CAUSE, self::REMEDIATION, self::SUMMARY, $this->admin->getKey(), self::RESOLVED_AT_JSON],
+            [
+                $response->json('data.stage'),
+                $response->json('data.root_cause'),
+                $response->json('data.remediation_steps'),
+                $response->json('data.resolution_summary'),
+                $response->json('data.resolved_by'),
+                $response->json('data.resolved_at'),
+            ],
+        );
+    }
+
+    protected function assertResolutionStored(string $breachId): int
+    {
+        $resolved = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->latest('id')->firstOrFail();
+        $this->assertSame(BreachResolved::class, $resolved->event_class);
+        $this->assertEquals([$breachId, self::ROOT_CAUSE, self::REMEDIATION, self::SUMMARY, $this->admin->getKey(), self::RESOLVED_AT_ISO], [
+            $resolved->event_properties['breachId'],
+            $resolved->event_properties['rootCause'],
+            $resolved->event_properties['remediationSteps'],
+            $resolved->event_properties['summary'],
+            $resolved->event_properties['resolvedByUserId'],
+            CarbonImmutable::parse($resolved->event_properties['resolvedAt'])->toIso8601String(),
+        ]);
+
+        return (int) $resolved->getKey();
+    }
+
+    protected function assertResolutionProjected(string $breachId): void
+    {
+        $row = BreachIncidentRecord::query()->findOrFail($breachId);
+        $this->assertSame(
+            [BreachStage::Resolved, self::ROOT_CAUSE, self::REMEDIATION, self::SUMMARY, $this->admin->getKey(), self::RESOLVED_AT_ISO],
+            [$row->stage, $row->root_cause, $row->remediation_steps, $row->resolution_summary, $row->resolved_by, $row->resolved_at?->toIso8601String()],
+        );
+    }
+
+    protected function assertResolveAudited(TestResponse $response, string $breachId, int $storedEventId): void
+    {
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => null,
+            'stored_event_id' => $storedEventId,
+            'event_class' => 'BreachResolved',
+            'subject_type' => 'breach_incident',
+            'subject_id' => $breachId,
+            'subject_label' => null,
+            'action' => 'breach_resolved',
+            'description' => 'Platform admin resolved a data breach incident.',
+            'metadata' => null,
+            'recorded_at' => self::RESOLVED_AT,
+            'actor_user_id' => $this->admin->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $this->admin->name,
+            'ip_address' => '127.0.0.1',
+            'severity' => 'critical',
+        ]);
+
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+        $entry = AuditEntry::query()->sole();
+        $this->assertSame([$correlationId, 'Symfony'], [$entry->request_id, $entry->user_agent]);
+    }
+
+    protected function assertNobodyTold(): void
+    {
+        Notification::assertNothingSent();
+        Mail::assertNothingOutgoing();
     }
 
     protected function assertNothingResolved(string $breachId, array $before): void

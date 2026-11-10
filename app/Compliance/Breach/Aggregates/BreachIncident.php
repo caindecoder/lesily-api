@@ -10,6 +10,7 @@ use App\Foundation\EventStore\AggregateRoot;
 use App\Compliance\Breach\Values\BreachFacts;
 use App\Compliance\Breach\Events\BreachAmended;
 use App\Compliance\Breach\Events\BreachRecorded;
+use App\Compliance\Breach\Events\BreachResolved;
 use App\Compliance\Breach\Values\RegulatorFiling;
 use App\Compliance\Breach\Events\BreachCompanyAdded;
 use App\Compliance\Breach\Enums\BreachAmendmentField;
@@ -227,7 +228,19 @@ class BreachIncident extends AggregateRoot
             throw BreachResolutionRefusedException::filingPending();
         }
 
-        return $this;
+        return $this->recordThat(new BreachResolved(
+            breachId: $this->uuid(),
+            resolvedAt: CarbonImmutable::now(),
+            resolvedByUserId: $admin->getKey(),
+            rootCause: $command->rootCause,
+            remediationSteps: $command->remediationSteps,
+            summary: $command->summary,
+        ));
+    }
+
+    protected function applyBreachResolved(BreachResolved $event): void
+    {
+        $this->stage = BreachStage::Resolved;
     }
 
     protected function applyBreachAmended(BreachAmended $event): void
