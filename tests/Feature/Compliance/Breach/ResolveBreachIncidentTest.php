@@ -5,10 +5,13 @@ namespace Tests\Feature\Compliance\Breach;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
+use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Breach\Events\BreachResolved;
+use App\Compliance\Breach\Aggregates\BreachIncident;
+use App\Compliance\Breach\UseCases\Commands\AddBreachCompanyCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class ResolveBreachIncidentTest extends BreachIncidentsTestCase
@@ -122,6 +125,43 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertNothingResolved($breachId, $before);
     }
 
+    #[Test]
+    public function when_a_filing_request_waits_then_the_close_is_refused(): void
+    {
+        // Given an incident at companies_notified past its deadline affecting companies A and B,
+        // and company A's owner asked for a filing Lesily has not sent
+        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $this->aFilingRequestBy($this->companyA, $breachId);
+        $before = $this->snapshotOf($breachId);
+        $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
+
+        // When the admin resolves it
+        $response = $this->resolve($this->admin, $breachId, $this->aResolution());
+
+        // Then the close is refused and nothing is resolved
+        $this->assertRefusedAsNotOpen($response, 'A breach incident is resolved only once every filing request has been filed.');
+        $this->assertNothingResolved($breachId, $before);
+    }
+
+    #[Test]
+    public function when_a_late_company_s_filing_request_waits_then_the_close_is_refused(): void
+    {
+        // Given an incident at companies_notified past its deadline affecting company A, with company B
+        // added late, and company B's owner asked for a filing Lesily has not sent
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $this->aLateCompanyOn($breachId, $this->companyB);
+        $this->aFilingRequestBy($this->companyB, $breachId);
+        $before = $this->snapshotOf($breachId);
+        $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
+
+        // When the admin resolves it
+        $response = $this->resolve($this->admin, $breachId, $this->aResolution());
+
+        // Then the close is refused and nothing is resolved
+        $this->assertRefusedAsNotOpen($response, 'A breach incident is resolved only once every filing request has been filed.');
+        $this->assertNothingResolved($breachId, $before);
+    }
+
     public static function provideInvalidResolutions(): array
     {
         return [
@@ -154,6 +194,21 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
             'summary' => self::SUMMARY,
             ...$overrides,
         ];
+    }
+
+    protected function aLateCompanyOn(string $breachId, Company $company): void
+    {
+        $command = AddBreachCompanyCommand::from([
+            'breachId' => $breachId,
+            'companyId' => $company,
+            'dataTypes' => ['payroll'],
+            'estimatedCount' => 12,
+            'reason' => 'The export also reached this company.',
+        ]);
+
+        BreachIncident::retrieve($breachId)
+            ->addLateCompany($command, $this->admin, ['description' => 'A payroll export was emailed to the wrong recipient.'])
+            ->persist();
     }
 
     protected function assertNothingResolved(string $breachId, array $before): void

@@ -223,6 +223,10 @@ class BreachIncident extends AggregateRoot
             throw BreachResolutionRefusedException::beforeTheDeadline();
         }
 
+        if (array_diff_key($this->filingRequestedAt, $this->filedAt) !== []) {
+            throw BreachResolutionRefusedException::filingPending();
+        }
+
         return $this;
     }
 

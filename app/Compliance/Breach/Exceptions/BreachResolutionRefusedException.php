@@ -15,4 +15,9 @@ class BreachResolutionRefusedException extends DomainException
     {
         return new self('A breach incident is resolved only after its 72-hour deadline has passed.');
     }
+
+    public static function filingPending(): self
+    {
+        return new self('A breach incident is resolved only once every filing request has been filed.');
+    }
 }
