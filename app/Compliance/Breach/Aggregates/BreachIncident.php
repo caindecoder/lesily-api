@@ -108,6 +108,10 @@ class BreachIncident extends AggregateRoot
      */
     public function addLateCompany(AddBreachCompanyCommand $command, User $admin, array $part): static
     {
+        if ($this->stage === BreachStage::Resolved) {
+            throw LateBreachCompanyRefusedException::incidentResolved();
+        }
+
         if ($this->stage !== BreachStage::CompaniesNotified) {
             throw LateBreachCompanyRefusedException::notYetNotified();
         }
@@ -140,6 +144,10 @@ class BreachIncident extends AggregateRoot
 
     public function requestFiling(RequestBreachFilingCommand $command, User $owner): static
     {
+        if ($this->stage === BreachStage::Resolved) {
+            throw BreachFilingNotOpenException::resolved();
+        }
+
         $companyId = $command->company->getKey();
 
         if (! isset($this->notifiedAt[$companyId])) {
@@ -164,6 +172,10 @@ class BreachIncident extends AggregateRoot
 
     public function fileWithRegulator(FileBreachWithRegulatorCommand $command, User $admin, RegulatorFiling $filing): static
     {
+        if ($this->stage === BreachStage::Resolved) {
+            throw BreachFilingNotOpenException::incidentResolved();
+        }
+
         $companyId = $command->company->getKey();
 
         if (isset($this->filedAt[$companyId])) {
@@ -188,6 +200,10 @@ class BreachIncident extends AggregateRoot
 
     public function amend(AmendBreachCommand $command, User $admin): static
     {
+        if ($this->stage === BreachStage::Resolved) {
+            throw BreachAmendmentRefusedException::incidentResolved();
+        }
+
         $changes = $this->facts->changesTo($command);
 
         if ($changes === []) {
@@ -216,6 +232,10 @@ class BreachIncident extends AggregateRoot
 
     public function resolve(ResolveBreachCommand $command, User $admin): static
     {
+        if ($this->stage === BreachStage::Resolved) {
+            throw BreachResolutionRefusedException::incidentResolved();
+        }
+
         if ($this->stage !== BreachStage::CompaniesNotified) {
             throw BreachResolutionRefusedException::notNotified();
         }
