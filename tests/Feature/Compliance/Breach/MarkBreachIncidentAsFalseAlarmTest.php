@@ -334,10 +334,12 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
 
     protected function assertMarkStored(string $breachId): int
     {
-        $events = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->orderBy('id')->get();
-        $this->assertSame([BreachRecorded::class, BreachMarkedFalseAlarm::class], $events->pluck('event_class')->all());
+        $this->assertSame(
+            [BreachRecorded::class, BreachMarkedFalseAlarm::class],
+            LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->orderBy('id')->pluck('event_class')->all(),
+        );
 
-        $marked = $events->last();
+        $marked = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->latest('id')->firstOrFail();
         $this->assertSame([$breachId, self::REASON, self::FINDINGS, $this->admin->getKey(), self::MARKED_AT_ISO], [
             $marked->event_properties['breachId'],
             $marked->event_properties['reason'],
