@@ -16,6 +16,7 @@ use App\Compliance\Breach\UseCases\Interactors\AmendBreachInteractor;
 use App\Compliance\Breach\UseCases\Interactors\RecordBreachInteractor;
 use App\Compliance\Breach\UseCases\Commands\BreachIncidentAdminFilters;
 use App\Compliance\Breach\UseCases\Interactors\ResolveBreachInteractor;
+use App\Compliance\Breach\UseCases\Commands\MarkBreachFalseAlarmCommand;
 use App\Compliance\Breach\UseCases\Commands\NotifyBreachCompaniesCommand;
 use App\Compliance\Breach\IO\Http\Resources\BreachIncidentAdminCollection;
 use App\Compliance\Breach\UseCases\Interactors\AddBreachCompanyInteractor;
@@ -23,6 +24,7 @@ use App\Compliance\Breach\UseCases\Commands\FileBreachWithRegulatorCommand;
 use App\Compliance\Breach\UseCases\Interactors\ReviewBreachQueueInteractor;
 use App\Compliance\Breach\UseCases\Interactors\ReviewBreachAsAdminInteractor;
 use App\Compliance\Breach\IO\Http\Resources\BreachIncidentAdminDetailResource;
+use App\Compliance\Breach\UseCases\Interactors\MarkBreachFalseAlarmInteractor;
 use App\Compliance\Breach\UseCases\Interactors\NotifyBreachCompaniesInteractor;
 use App\Compliance\Breach\UseCases\Interactors\FileBreachWithRegulatorInteractor;
 
@@ -100,6 +102,16 @@ class PlatformAdminBreachIncidentsController extends Controller
         $admin = $request->user();
 
         $command = ResolveBreachCommand::validateAndCreate([...$request->all(), 'breachId' => $breachId]);
+
+        return new BreachIncidentAdminDetailResource($interactor->execute($command, $admin, RequestOrigin::fromRequest($request)));
+    }
+
+    public function markFalseAlarm(Request $request, string $breachId, MarkBreachFalseAlarmInteractor $interactor): BreachIncidentAdminDetailResource
+    {
+        /** @var User $admin */
+        $admin = $request->user();
+
+        $command = MarkBreachFalseAlarmCommand::validateAndCreate([...$request->all(), 'breachId' => $breachId]);
 
         return new BreachIncidentAdminDetailResource($interactor->execute($command, $admin, RequestOrigin::fromRequest($request)));
     }
