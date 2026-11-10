@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Compliance\Breach;
 
+use Closure;
 use App\Models\User;
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
@@ -10,6 +12,8 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Breach\Events\BreachResolved;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
+use Database\Factories\BreachIncidentRecordFactory;
 use App\Compliance\Breach\Aggregates\BreachIncident;
 use App\Compliance\Breach\UseCases\Commands\AddBreachCompanyCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -160,6 +164,47 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         // Then the close is refused and nothing is resolved
         $this->assertRefusedAsNotOpen($response, 'A breach incident is resolved only once every filing request has been filed.');
         $this->assertNothingResolved($breachId, $before);
+    }
+
+    #[Test, DataProvider('provideClosedStages')]
+    public function when_the_incident_is_closed_then_the_close_is_refused(Closure $closed, string $message): void
+    {
+        // Given a closed incident
+        $breachId = $closed($this->anIncident())->createOne()->getKey();
+        $before = $this->snapshotOf($breachId);
+        $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
+
+        // When the admin resolves it
+        $response = $this->resolve($this->admin, $breachId, $this->aResolution());
+
+        // Then it is refused with the stage named, and nothing is resolved
+        $this->assertRefusedAsNotOpen($response, $message);
+        $this->assertNothingResolved($breachId, $before);
+    }
+
+    #[Test]
+    public function when_the_audit_row_cannot_be_written_then_nothing_is_resolved(): void
+    {
+        // Given an incident at companies_notified past its deadline, and an audit trail that refuses every write
+        $breachId = $this->aNotifiedIncident($this->companyA);
+        $before = $this->snapshotOf($breachId);
+        $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
+        AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
+
+        // When the admin resolves it
+        $response = $this->resolve($this->admin, $breachId, $this->aResolution());
+
+        // Then the request fails closed: no BreachResolved is recorded and the incident is unchanged
+        $this->assertFailedClosed($response);
+        $this->assertNothingResolved($breachId, $before);
+    }
+
+    public static function provideClosedStages(): array
+    {
+        return [
+            'resolved' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->resolved(), 'A resolved breach incident cannot be resolved again.'],
+            'a false alarm' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->falseAlarm(), 'A breach incident marked as a false alarm cannot be resolved.'],
+        ];
     }
 
     public static function provideInvalidResolutions(): array

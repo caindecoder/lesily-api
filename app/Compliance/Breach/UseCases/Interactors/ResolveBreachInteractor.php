@@ -5,11 +5,13 @@ namespace App\Compliance\Breach\UseCases\Interactors;
 use App\Models\User;
 use RuntimeException;
 use Illuminate\Support\Facades\DB;
+use App\Compliance\Breach\Enums\BreachStage;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Compliance\Breach\Aggregates\BreachIncident;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Compliance\Breach\UseCases\Commands\ResolveBreachCommand;
+use App\Compliance\Breach\Exceptions\BreachResolutionRefusedException;
 
 class ResolveBreachInteractor
 {
@@ -19,9 +21,20 @@ class ResolveBreachInteractor
             $breach = BreachIncidentRecord::query()->whereKey($command->breachId)->lockForUpdate()->first()
                 ?? throw new ModelNotFoundException;
 
+            $this->guardOpen($breach);
+
             BreachIncident::retrieve($breach->getKey())->resolve($command, $admin)->persist();
 
             throw new RuntimeException('Not implemented');
         });
+    }
+
+    protected function guardOpen(BreachIncidentRecord $breach): void
+    {
+        match ($breach->stage) {
+            BreachStage::Resolved => throw BreachResolutionRefusedException::incidentResolved(),
+            BreachStage::FalseAlarm => throw BreachResolutionRefusedException::falseAlarm(),
+            BreachStage::Recorded, BreachStage::CompaniesNotified => null,
+        };
     }
 }
