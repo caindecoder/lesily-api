@@ -10,10 +10,12 @@ use App\Http\Controllers\Controller;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Compliance\Breach\UseCases\Commands\AmendBreachCommand;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
+use App\Compliance\Breach\UseCases\Commands\ResolveBreachCommand;
 use App\Compliance\Breach\UseCases\Commands\AddBreachCompanyCommand;
 use App\Compliance\Breach\UseCases\Interactors\AmendBreachInteractor;
 use App\Compliance\Breach\UseCases\Interactors\RecordBreachInteractor;
 use App\Compliance\Breach\UseCases\Commands\BreachIncidentAdminFilters;
+use App\Compliance\Breach\UseCases\Interactors\ResolveBreachInteractor;
 use App\Compliance\Breach\UseCases\Commands\NotifyBreachCompaniesCommand;
 use App\Compliance\Breach\IO\Http\Resources\BreachIncidentAdminCollection;
 use App\Compliance\Breach\UseCases\Interactors\AddBreachCompanyInteractor;
@@ -88,6 +90,16 @@ class PlatformAdminBreachIncidentsController extends Controller
         $admin = $request->user();
 
         $command = AddBreachCompanyCommand::validateAndCreate([...$request->all(), 'breachId' => $breachId]);
+
+        return new BreachIncidentAdminDetailResource($interactor->execute($command, $admin, RequestOrigin::fromRequest($request)));
+    }
+
+    public function resolve(Request $request, string $breachId, ResolveBreachInteractor $interactor): BreachIncidentAdminDetailResource
+    {
+        /** @var User $admin */
+        $admin = $request->user();
+
+        $command = ResolveBreachCommand::validateAndCreate([...$request->all(), 'breachId' => $breachId]);
 
         return new BreachIncidentAdminDetailResource($interactor->execute($command, $admin, RequestOrigin::fromRequest($request)));
     }
