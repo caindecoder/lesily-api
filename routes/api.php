@@ -30,6 +30,7 @@ use App\Compliance\Breach\IO\Http\Controllers\BreachNoticesController;
 use App\Foundation\Auth\IO\Http\Controllers\EnableTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\VerifyTwoFactorController;
 use App\Compliance\Privacy\IO\Http\Controllers\PrivacyNoticeController;
+use App\Foundation\AuditTrail\IO\Http\Controllers\AuditTrailController;
 use App\Foundation\Auth\IO\Http\Controllers\ConfirmTwoFactorController;
 use App\Foundation\Auth\IO\Http\Controllers\DisableTwoFactorController;
 use App\Companies\Memberships\IO\Http\Controllers\InvitationsController;
@@ -319,6 +320,9 @@ Route::get('/v1/roles', [RolesController::class, 'index'])
 Route::get('/v1/privacy/processing-register', [ProcessingRegisterController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:privacy.view-register']);
 
+// View the audit trail (UC-1-066) — the company's audit rows, newest first, paginated.
+Route::get('/v1/audit-trail', [AuditTrailController::class, 'index'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:audit.view']);
 // View the privacy notice (UC-1-074) — the 13 Schedule V items; every member, open past the consent gate.
 Route::get('/v1/privacy/notice', [PrivacyNoticeController::class, 'show'])
     ->middleware(['auth:sanctum', 'auth.company']);

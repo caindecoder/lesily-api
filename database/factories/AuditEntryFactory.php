@@ -52,6 +52,23 @@ class AuditEntryFactory extends Factory
         ];
     }
 
+    public function forCompany(Company $company): static
+    {
+        return $this->state(['company_id' => $company->getKey()]);
+    }
+
+    /**
+     * A row written by a company member acting under $roleCode.
+     */
+    public function byMember(User $member, string $roleCode): static
+    {
+        return $this->state([
+            'actor_user_id' => $member->getKey(),
+            'actor_role_code' => $roleCode,
+            'actor_label' => $member->name,
+        ]);
+    }
+
     /**
      * A platform-level row — not attributable to a single tenant
      * (company_id NULL per ERD-1-11 §3; visible only to platform admins).
