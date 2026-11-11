@@ -219,6 +219,21 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     }
 
     #[Test]
+    public function when_a_page_of_one_hundred_is_asked_then_it_is_accepted(): void
+    {
+        // Given sixteen entries of company A
+        AuditEntry::factory()->count(16)->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner asks for pages of one hundred
+        $response = $this->viewAuditTrail($owner, $this->companyA, ['per_page' => 100]);
+
+        // Then all sixteen are listed on one page
+        $response->assertJsonCount(16, 'data');
+        $this->assertPageShown($response, ['page' => 1, 'per_page' => 100, 'total' => 16, 'last_page' => 1]);
+    }
+
+    #[Test]
     public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
     {
         // Given three entries of company A, and A's owner
@@ -239,14 +254,14 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     public function when_the_system_wrote_an_entry_then_who_is_empty(): void
     {
         // Given an entry of company A written by the system, with no actor
-        AuditEntry::factory()->forCompany($this->companyA)->system()->create();
+        $entry = AuditEntry::factory()->forCompany($this->companyA)->system()->createOne();
         $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail
         $response = $this->viewAuditTrail($owner, $this->companyA);
 
-        // Then the entry names no one
-        $this->assertNoActorShown($response);
+        // Then the entry is listed and names no one
+        $this->assertNoActorShown($response, $entry);
     }
 
     #[Test]
@@ -304,18 +319,19 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     public function when_an_entry_records_no_changes_then_no_changes_and_no_other_metadata_are_shown(): void
     {
         // Given an entry of company A whose metadata holds query details but no changes
-        AuditEntry::factory()
+        $entry = AuditEntry::factory()
             ->forCompany($this->companyA)
             ->byMember(User::factory()->create(), 'admin')
             ->withMetadata(['filters' => ['stage' => 'recorded'], 'result_count' => 4])
-            ->create();
+            ->createOne();
         $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail
         $response = $this->viewAuditTrail($owner, $this->companyA);
 
-        // Then no changes are shown, and none of the other metadata
-        $response->assertJsonPath('data.0.changes', null);
+        // Then the entry is listed with no changes, and none of the other metadata
+        $this->assertEntriesListed($response, [$entry->getKey()]);
+        $this->assertSame(['changes' => null], array_intersect_key($response->json('data.0'), ['changes' => true]));
         $response->assertDontSee('result_count');
     }
 
@@ -576,6 +592,7 @@ class ViewAuditTrailTest extends AuditTrailTestCase
             'page below floor' => [['page' => 0], 'page', 'The page field must be at least 1.'],
             'page not a number' => [['page' => 'abc'], 'page', 'The page field must be an integer.'],
             'within with one date' => [['within' => '2026-04-01'], 'within', 'The within filter must be two ISO-8601 (YYYY-MM-DD) dates separated by a comma.'],
+            'within with three dates' => [['within' => '2026-04-01,2026-04-15,2026-04-30'], 'within', 'The within filter must be two ISO-8601 (YYYY-MM-DD) dates separated by a comma.'],
             'within with an impossible date' => [['within' => '2026-02-31,2026-03-01'], 'within', 'The within filter must be two ISO-8601 (YYYY-MM-DD) dates separated by a comma.'],
             'array-valued within' => [['within' => ['2026-04-01']], 'within', 'The within field must be a string.'],
             'unknown action' => [['action' => 'nope'], 'action', 'The selected action is invalid.'],

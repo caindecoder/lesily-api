@@ -23,8 +23,8 @@ class ListAuditTrailInteractor
             ->select(['audit_trail.*', 'roles.name as actor_role_name'])
             ->where('audit_trail.company_id', $company->getKey())
             ->when($filters->within, fn (Builder $query, CarbonPeriod $within) => $query
-                ->whereDate('audit_trail.recorded_at', '>=', $within->getStartDate()->toDateString())
-                ->whereDate('audit_trail.recorded_at', '<=', $within->getIncludedEndDate()->toDateString()))
+                ->where('audit_trail.recorded_at', '>=', $within->getStartDate())
+                ->where('audit_trail.recorded_at', '<', $within->getIncludedEndDate()->toImmutable()->addDay()))
             ->when($filters->actor, fn (Builder $query, string $actor) => $this->byActor($query, $actor))
             ->when($filters->action, fn (Builder $query, AuditAction $action) => $query->where('audit_trail.action', $action))
             ->when($filters->subjectType, fn (Builder $query, AuditSubjectType $type) => $query->where('audit_trail.subject_type', $type))
