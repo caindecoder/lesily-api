@@ -56,7 +56,7 @@ class InvoiceAdminResource extends JsonResource
             'payment_attempts' => null,
             // Null until the dispute slice builds the thread (UC-1-054; F-c).
             'dispute_timeline' => null,
-            // Null until the UC-1-066 audit-feed slice (F-c).
+            // Null until the platform-admin audit readers are built (G11).
             'audit_trail_summary' => null,
             // Constant false until the platform-admin slice builds company
             // soft-deletion (UC-1-095 pathway; s137 F-a ruling).

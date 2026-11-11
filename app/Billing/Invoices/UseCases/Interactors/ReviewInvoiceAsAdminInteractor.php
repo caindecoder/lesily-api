@@ -42,8 +42,7 @@ class ReviewInvoiceAsAdminInteractor
     /**
      * The cd-audit-trail Direct-write shape: stored_event_id NULL (a read
      * emits no domain event — B3), severity riding the DB default 'info'.
-     * Immutable by convention — no update/delete path exists (UC-1-066
-     * enforces the invariant mechanically in its own slice).
+     * Immutable by convention — no update/delete path exists.
      */
     protected function recordAdminReview(Invoice $invoice, User $admin, RequestOrigin $context): void
     {
