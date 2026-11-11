@@ -323,6 +323,7 @@ Route::get('/v1/privacy/processing-register', [ProcessingRegisterController::cla
 // View the audit trail (UC-1-066) — the company's audit rows, newest first, paginated.
 Route::get('/v1/audit-trail', [AuditTrailController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:audit.view']);
+
 // View the privacy notice (UC-1-074) — the 13 Schedule V items; every member, open past the consent gate.
 Route::get('/v1/privacy/notice', [PrivacyNoticeController::class, 'show'])
     ->middleware(['auth:sanctum', 'auth.company']);

@@ -82,6 +82,14 @@ class AuditEntryFactory extends Factory
         ]);
     }
 
+    /**
+     * A member's row with no role on record (their membership was gone when it was written).
+     */
+    public function withoutRole(): static
+    {
+        return $this->state(['actor_role_code' => null]);
+    }
+
     public function ofAction(AuditAction $action, AuditSubjectType $subjectType): static
     {
         return $this->state(['action' => $action, 'subject_type' => $subjectType]);

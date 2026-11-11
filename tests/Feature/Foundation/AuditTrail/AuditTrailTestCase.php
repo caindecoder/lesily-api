@@ -7,9 +7,12 @@ use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Database\Factories\AuditEntryFactory;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use Tests\Feature\Foundation\FoundationTestCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
 abstract class AuditTrailTestCase extends FoundationTestCase
@@ -45,6 +48,26 @@ abstract class AuditTrailTestCase extends FoundationTestCase
             ->forCompany($this->companyA)
             ->byMember(User::factory()->create(), 'admin')
             ->recordedAt(CarbonImmutable::parse($recordedAt))
+            ->create();
+    }
+
+    /**
+     * A download of a data request in company A by $actor — each test overrides what it varies.
+     */
+    protected function anEntryBy(User $actor): AuditEntryFactory
+    {
+        return AuditEntry::factory()
+            ->forCompany($this->companyA)
+            ->byMember($actor, 'admin')
+            ->ofAction(AuditAction::DsarDownloaded, AuditSubjectType::DsarRequest);
+    }
+
+    protected function anEntryOfCompanyAFor(AuditAction $action, AuditSubjectType $subjectType): AuditEntry
+    {
+        return AuditEntry::factory()
+            ->forCompany($this->companyA)
+            ->byMember(User::factory()->create(), 'admin')
+            ->ofAction($action, $subjectType)
             ->create();
     }
 
