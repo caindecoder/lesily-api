@@ -8,9 +8,13 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use Tests\Concerns\AssertsFilterEmptyValueRejection;
+use App\Foundation\AuditTrail\UseCases\Commands\AuditTrailFilters;
 
 class ViewAuditTrailTest extends AuditTrailTestCase
 {
+    use AssertsFilterEmptyValueRejection;
+
     #[Test]
     public function when_a_guest_views_the_audit_trail_then_they_are_unauthenticated(): void
     {
@@ -71,6 +75,33 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         $response->assertJsonMissingPath('data');
     }
 
+    /**
+     * @param  array<string, mixed>  $query
+     */
+    #[Test]
+    #[DataProvider('provideInvalidAuditTrailQueries')]
+    public function when_the_audit_trail_query_is_invalid_then_it_is_refused_with_the_reason(array $query, string $field, string $message): void
+    {
+        // Given company A's owner
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner views company A's audit trail with an invalid query
+        $response = $this->viewAuditTrail($owner, $this->companyA, $query);
+
+        // Then the query is refused with the reason
+        $this->assertValidationRejected($response, $field, $message);
+    }
+
+    #[Test]
+    #[DataProvider('provideEmptyFilterValues')]
+    public function when_an_audit_trail_filter_is_built_with_an_empty_value_then_it_is_rejected(string $field, string $value): void
+    {
+        // Given an empty or blank value for one of the audit trail's query keys
+        // When the audit trail filter is built from it
+        // Then the value is rejected
+        $this->assertEmptyFilterValueRejected(AuditTrailFilters::class, $field, $value);
+    }
+
     #[Test]
     #[DataProvider('provideWriteVerbs')]
     public function when_a_write_verb_is_sent_to_the_audit_trail_then_the_method_is_not_allowed(string $verb): void
@@ -114,6 +145,46 @@ class ViewAuditTrailTest extends AuditTrailTestCase
             'employee' => ['employee'],
             'manager' => ['manager'],
         ];
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string, string}>
+     */
+    public static function provideInvalidAuditTrailQueries(): array
+    {
+        return [
+            'unknown key' => [['sort' => 'recorded_at'], 'sort', 'This filter is not supported.'],
+            'per_page below floor' => [['per_page' => 0], 'per_page', 'The per page field must be at least 1.'],
+            'per_page above cap' => [['per_page' => 101], 'per_page', 'The per page field must not be greater than 100.'],
+            'per_page not a number' => [['per_page' => 'abc'], 'per_page', 'The per page field must be an integer.'],
+            'array-valued per_page' => [['per_page' => ['2']], 'per_page', 'The per page field must be an integer.'],
+            'page below floor' => [['page' => 0], 'page', 'The page field must be at least 1.'],
+            'page not a number' => [['page' => 'abc'], 'page', 'The page field must be an integer.'],
+            'within with one date' => [['within' => '2026-04-01'], 'within', 'The within filter must be two ISO-8601 (YYYY-MM-DD) dates separated by a comma.'],
+            'within with an impossible date' => [['within' => '2026-02-31,2026-03-01'], 'within', 'The within filter must be two ISO-8601 (YYYY-MM-DD) dates separated by a comma.'],
+            'array-valued within' => [['within' => ['2026-04-01']], 'within', 'The within field must be a string.'],
+            'unknown action' => [['action' => 'nope'], 'action', 'The selected action is invalid.'],
+            'array-valued action' => [['action' => ['dsar_requested']], 'action', 'The action field must be a string.'],
+            'unknown subject type' => [['subject_type' => 'nope'], 'subject_type', 'The selected subject type is invalid.'],
+            'array-valued subject type' => [['subject_type' => ['invoice']], 'subject_type', 'The subject type field must be a string.'],
+            'actor neither a member id nor lesily support' => [['actor' => 'not-an-id'], 'actor', 'The actor filter must be a member\'s id or lesily_support.'],
+            'array-valued actor' => [['actor' => ['lesily_support']], 'actor', 'The actor field must be a string.'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function provideEmptyFilterValues(): array
+    {
+        $values = [];
+
+        foreach (['within', 'actor', 'action', 'subject_type', 'page', 'per_page'] as $field) {
+            $values["empty {$field}"] = [$field, ''];
+            $values["whitespace {$field}"] = [$field, ' '];
+        }
+
+        return $values;
     }
 
     /**

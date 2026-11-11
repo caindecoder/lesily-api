@@ -64,6 +64,13 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         $response->assertJsonPath('required_permission', 'audit.view');
     }
 
+    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
+    {
+        $response->assertUnprocessable();
+        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
+        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
+    }
+
     protected function assertUnauthenticated(TestResponse $response): void
     {
         $response->assertUnauthorized();
