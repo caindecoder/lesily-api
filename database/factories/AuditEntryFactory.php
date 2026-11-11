@@ -70,6 +70,41 @@ class AuditEntryFactory extends Factory
         ]);
     }
 
+    /**
+     * A row written by a Lesily platform admin acting on the company's data.
+     */
+    public function byStaff(User $staff): static
+    {
+        return $this->state([
+            'actor_user_id' => $staff->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $staff->name,
+        ]);
+    }
+
+    public function ofAction(AuditAction $action, AuditSubjectType $subjectType): static
+    {
+        return $this->state(['action' => $action, 'subject_type' => $subjectType]);
+    }
+
+    public function withSeverity(string $severity): static
+    {
+        return $this->state(['severity' => $severity]);
+    }
+
+    public function fromOrigin(string $ipAddress, string $userAgent): static
+    {
+        return $this->state(['ip_address' => $ipAddress, 'user_agent' => $userAgent]);
+    }
+
+    /**
+     * @param  array<string, array{old: mixed, new: mixed}>  $changes
+     */
+    public function withChanges(array $changes): static
+    {
+        return $this->withMetadata(['changes' => $changes]);
+    }
+
     public function recordedAt(DateTimeInterface $recordedAt): static
     {
         return $this->state(['recorded_at' => $recordedAt]);

@@ -28,6 +28,9 @@ class AuditEntry extends Model
 
     public const null UPDATED_AT = null;
 
+    /** The role code every platform-staff writer records. */
+    public const string STAFF_ROLE_CODE = 'platform_super_admin';
+
     /** Eloquent would guess audit_entries; the designed name is singular (F6 s129). */
     protected $table = 'audit_trail';
 

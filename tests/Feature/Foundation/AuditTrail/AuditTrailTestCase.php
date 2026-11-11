@@ -91,6 +91,24 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         $this->assertSame($pagination, $response->json('meta.pagination'));
     }
 
+    protected function assertNoActorShown(TestResponse $response): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data.0.actor_id', null);
+        $response->assertJsonPath('data.0.actor_name', null);
+        $response->assertJsonPath('data.0.actor_role', null);
+        $response->assertJsonPath('data.0.actor_role_name', null);
+    }
+
+    protected function assertStaffShownAsLesilySupport(TestResponse $response): void
+    {
+        $response->assertJsonPath('data.0.actor_name', 'Lesily support');
+        $response->assertJsonPath('data.0.actor_id', null);
+        $response->assertJsonPath('data.0.actor_role', null);
+        $response->assertJsonPath('data.0.ip_address', null);
+        $response->assertJsonPath('data.0.device', null);
+    }
+
     protected function assertRoleInsufficient(TestResponse $response): void
     {
         $response->assertForbidden();

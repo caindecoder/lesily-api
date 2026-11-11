@@ -3,13 +3,16 @@
 namespace Tests\Feature\Foundation\AuditTrail;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Foundation\AuditTrail\UseCases\Commands\AuditTrailFilters;
 
 class ViewAuditTrailTest extends AuditTrailTestCase
@@ -230,6 +233,60 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     }
 
     #[Test]
+    public function when_the_system_wrote_an_entry_then_who_is_empty(): void
+    {
+        // Given an entry of company A written by the system, with no actor
+        AuditEntry::factory()->forCompany($this->companyA)->system()->create();
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner views company A's audit trail
+        $response = $this->viewAuditTrail($owner, $this->companyA);
+
+        // Then the entry names no one
+        $this->assertNoActorShown($response);
+    }
+
+    #[Test]
+    public function when_lesily_staff_wrote_an_entry_then_it_shows_lesily_support_without_name_ip_or_device(): void
+    {
+        // Given a Lesily platform admin reviewed company A's invoice from their own address and browser
+        $staff = User::factory()->named('Pat Silva')->create();
+        AuditEntry::factory()
+            ->forCompany($this->companyA)
+            ->byStaff($staff)
+            ->fromOrigin('10.0.0.5', 'Mozilla/5.0 (Windows NT 10.0) Edge/140.0')
+            ->create();
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner views company A's audit trail
+        $response = $this->viewAuditTrail($owner, $this->companyA);
+
+        // Then the entry shows Lesily support, and nothing that names or locates the staff member
+        $this->assertStaffShownAsLesilySupport($response);
+        $response->assertDontSee('Pat Silva');
+        $response->assertDontSee('10.0.0.5');
+    }
+
+    #[Test]
+    public function when_an_entry_records_no_changes_then_no_changes_and_no_other_metadata_are_shown(): void
+    {
+        // Given an entry of company A whose metadata holds query details but no changes
+        AuditEntry::factory()
+            ->forCompany($this->companyA)
+            ->byMember(User::factory()->create(), 'admin')
+            ->withMetadata(['filters' => ['stage' => 'recorded'], 'result_count' => 4])
+            ->create();
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner views company A's audit trail
+        $response = $this->viewAuditTrail($owner, $this->companyA);
+
+        // Then no changes are shown, and none of the other metadata
+        $response->assertJsonPath('data.0.changes', null);
+        $response->assertDontSee('result_count');
+    }
+
+    #[Test]
     public function when_entries_are_listed_then_the_newest_comes_first(): void
     {
         // Given company A's entries are written in an order that is not their recorded order
@@ -243,6 +300,67 @@ class ViewAuditTrailTest extends AuditTrailTestCase
 
         // Then the newest entry comes first
         $this->assertEntriesListed($response, [$newest->getKey(), $middle->getKey(), $oldest->getKey()]);
+    }
+
+    #[Test]
+    public function when_the_owner_views_then_each_entry_shows_who_what_when_where_and_severity(): void
+    {
+        // Given an admin of company A asked for a copy of personal data
+        $alice = User::factory()->named('Alice Perera')->create();
+        $entry = AuditEntry::factory()
+            ->forCompany($this->companyA)
+            ->byMember($alice, 'admin')
+            ->ofAction(AuditAction::DsarRequested, AuditSubjectType::DsarRequest)
+            ->withSeverity('critical')
+            ->fromOrigin('203.0.113.7', 'Mozilla/5.0 (X11; Linux) Firefox/140.0')
+            ->recordedAt(CarbonImmutable::parse('2026-04-01 09:00:00'))
+            ->create();
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner views company A's audit trail
+        $response = $this->viewAuditTrail($owner, $this->companyA);
+
+        // Then the entry shows who, what, when, where and how severe
+        $response->assertOk();
+        $this->assertSame([
+            'id' => $entry->getKey(),
+            'recorded_at' => '2026-04-01T09:00:00.000000Z',
+            'actor_id' => $alice->getKey(),
+            'actor_name' => 'Alice Perera',
+            'actor_role' => 'admin',
+            'actor_role_name' => 'Admin',
+            'action' => 'dsar_requested',
+            'action_words' => 'Asked for a copy of personal data',
+            'subject_type' => 'dsar_request',
+            'subject_type_words' => 'A data request',
+            'subject_id' => $entry->subject_id,
+            'subject_label' => 'INV-2026-000001',
+            'description' => $entry->description,
+            'changes' => null,
+            'ip_address' => '203.0.113.7',
+            'device' => 'Mozilla/5.0 (X11; Linux) Firefox/140.0',
+            'severity' => 'critical',
+        ], $response->json('data.0'));
+    }
+
+    #[Test]
+    public function when_an_entry_records_changes_then_each_field_shows_its_old_and_new_value(): void
+    {
+        // Given an entry of company A recording a role changed from employee to hr_officer
+        AuditEntry::factory()
+            ->forCompany($this->companyA)
+            ->byMember(User::factory()->create(), 'admin')
+            ->withChanges(['role' => ['old' => 'employee', 'new' => 'hr_officer']])
+            ->create();
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner views company A's audit trail
+        $response = $this->viewAuditTrail($owner, $this->companyA);
+
+        // Then the entry shows the role's old and new value
+        $response->assertOk();
+        $this->assertEquals(['role' => ['old' => 'employee', 'new' => 'hr_officer']], $response->json('data.0.changes'));
+        $this->assertContainsOnlyString($response->json('data.0.changes.role'));
     }
 
     /**
