@@ -514,7 +514,7 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     {
         // Given Alice's download of a data request on 2026-04-10, and four entries that each miss one filter
         $alice = User::factory()->create();
-        $match = $this->anEntryBy($alice)->recordedAt(CarbonImmutable::parse('2026-04-10 09:00:00'))->create();
+        $match = $this->anEntryBy($alice)->recordedAt(CarbonImmutable::parse('2026-04-10 09:00:00'))->createOne();
         $this->anEntryBy($alice)->recordedAt(CarbonImmutable::parse('2026-05-10 09:00:00'))->create();
         $this->anEntryBy(User::factory()->create())->recordedAt(CarbonImmutable::parse('2026-04-10 09:00:00'))->create();
         $this->anEntryBy($alice)->ofAction(AuditAction::DsarRequested, AuditSubjectType::DsarRequest)->recordedAt(CarbonImmutable::parse('2026-04-10 09:00:00'))->create();

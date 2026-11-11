@@ -125,11 +125,17 @@ abstract class AuditTrailTestCase extends FoundationTestCase
 
     protected function assertStaffShownAsLesilySupport(TestResponse $response): void
     {
-        $response->assertJsonPath('data.0.actor_name', 'Lesily support');
-        $response->assertJsonPath('data.0.actor_id', null);
-        $response->assertJsonPath('data.0.actor_role', null);
-        $response->assertJsonPath('data.0.ip_address', null);
-        $response->assertJsonPath('data.0.device', null);
+        $expected = [
+            'actor_id' => null,
+            'actor_name' => 'Lesily support',
+            'actor_role' => null,
+            'actor_role_name' => null,
+            'ip_address' => null,
+            'device' => null,
+        ];
+
+        $response->assertOk();
+        $this->assertSame($expected, array_intersect_key($response->json('data.0'), $expected));
     }
 
     protected function assertRoleInsufficient(TestResponse $response): void

@@ -28,7 +28,7 @@ class AuditEntryResource extends JsonResource
             'subject_label' => $this->subject_label,
             'description' => $this->description,
             'changes' => $this->metadata['changes'] ?? null,
-            ...$this->where(),
+            ...$this->origin(),
             'severity' => $this->severity,
         ];
     }
@@ -55,7 +55,7 @@ class AuditEntryResource extends JsonResource
     /**
      * @return array{ip_address: ?string, device: ?string}
      */
-    protected function where(): array
+    protected function origin(): array
     {
         if ($this->isStaff()) {
             return ['ip_address' => null, 'device' => null];
