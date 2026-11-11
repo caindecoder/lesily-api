@@ -3,6 +3,7 @@
 namespace Tests\Feature\Foundation\AuditTrail;
 
 use App\Models\User;
+use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -132,6 +133,116 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         // Then no route answers, and the entry is unchanged
         $response->assertNotFound();
         $this->assertDatabaseHas('audit_trail', ['id' => $entry->getKey(), 'description' => $entry->description]);
+    }
+
+    #[Test]
+    public function when_the_company_has_no_entries_then_the_list_is_empty(): void
+    {
+        // Given only company B has an audit entry, and A's owner
+        AuditEntry::factory()->forCompany($this->companyB)->byMember(User::factory()->create(), 'admin')->create();
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner views company A's audit trail
+        $response = $this->viewAuditTrail($owner, $this->companyA);
+
+        // Then the list is empty
+        $this->assertNothingListed($response);
+    }
+
+    #[Test]
+    public function when_other_companies_and_the_platform_have_entries_then_only_the_company_own_are_listed(): void
+    {
+        // Given an entry of company A, an entry of company B and a platform-level entry
+        $own = AuditEntry::factory()->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
+        AuditEntry::factory()->forCompany($this->companyB)->byMember(User::factory()->create(), 'admin')->create();
+        AuditEntry::factory()->platformLevel()->create();
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When A's owner views company A's audit trail
+        $response = $this->viewAuditTrail($owner, $this->companyA);
+
+        // Then only company A's entry is listed
+        $this->assertEntriesListed($response, [$own->getKey()]);
+    }
+
+    #[Test]
+    public function when_recorded_times_tie_then_the_newer_entry_comes_first(): void
+    {
+        // Given two entries of company A recorded at the same moment
+        $first = $this->anEntryOfCompanyAAt('2026-04-01 09:00:00');
+        $second = $this->anEntryOfCompanyAAt('2026-04-01 09:00:00');
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner views company A's audit trail
+        $response = $this->viewAuditTrail($owner, $this->companyA);
+
+        // Then the entry written last comes first
+        $this->assertEntriesListed($response, [$second->getKey(), $first->getKey()]);
+    }
+
+    #[Test]
+    public function when_the_entries_span_pages_then_they_are_listed_page_by_page(): void
+    {
+        // Given three entries of company A
+        $this->anEntryOfCompanyAAt('2026-04-03 09:00:00');
+        $this->anEntryOfCompanyAAt('2026-04-02 09:00:00');
+        $oldest = $this->anEntryOfCompanyAAt('2026-04-01 09:00:00');
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner views the second page of two
+        $response = $this->viewAuditTrail($owner, $this->companyA, ['per_page' => 2, 'page' => 2]);
+
+        // Then the oldest entry is on it, and the page says where it sits
+        $this->assertEntriesListed($response, [$oldest->getKey()]);
+        $this->assertPageShown($response, ['page' => 2, 'per_page' => 2, 'total' => 3, 'last_page' => 2]);
+    }
+
+    #[Test]
+    public function when_no_page_size_is_given_then_fifteen_entries_are_listed(): void
+    {
+        // Given sixteen entries of company A
+        AuditEntry::factory()->count(16)->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner views company A's audit trail with no page size
+        $response = $this->viewAuditTrail($owner, $this->companyA);
+
+        // Then fifteen entries are listed on the first of two pages
+        $response->assertJsonCount(15, 'data');
+        $this->assertPageShown($response, ['page' => 1, 'per_page' => 15, 'total' => 16, 'last_page' => 2]);
+    }
+
+    #[Test]
+    public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
+    {
+        // Given three entries of company A, and A's owner
+        $newest = $this->anEntryOfCompanyAAt('2026-04-03 09:00:00');
+        $middle = $this->anEntryOfCompanyAAt('2026-04-02 09:00:00');
+        $this->anEntryOfCompanyAAt('2026-04-01 09:00:00');
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+        Sanctum::actingAs($owner);
+
+        // When the owner asks for page two in the request body, two to a page in the query
+        $response = $this->json('GET', '/api/v1/audit-trail?per_page=2', ['page' => 2], ['X-Company-Context' => $this->companyA->getKey()]);
+
+        // Then the first page is shown
+        $this->assertEntriesListed($response, [$newest->getKey(), $middle->getKey()]);
+    }
+
+    #[Test]
+    public function when_entries_are_listed_then_the_newest_comes_first(): void
+    {
+        // Given company A's entries are written in an order that is not their recorded order
+        $middle = $this->anEntryOfCompanyAAt('2026-04-02 09:00:00');
+        $newest = $this->anEntryOfCompanyAAt('2026-04-03 09:00:00');
+        $oldest = $this->anEntryOfCompanyAAt('2026-04-01 09:00:00');
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner views company A's audit trail
+        $response = $this->viewAuditTrail($owner, $this->companyA);
+
+        // Then the newest entry comes first
+        $this->assertEntriesListed($response, [$newest->getKey(), $middle->getKey(), $oldest->getKey()]);
     }
 
     /**

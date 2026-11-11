@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\User;
+use DateTimeInterface;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use App\Foundation\AuditTrail\Enums\AuditAction;
@@ -67,6 +68,11 @@ class AuditEntryFactory extends Factory
             'actor_role_code' => $roleCode,
             'actor_label' => $member->name,
         ]);
+    }
+
+    public function recordedAt(DateTimeInterface $recordedAt): static
+    {
+        return $this->state(['recorded_at' => $recordedAt]);
     }
 
     /**

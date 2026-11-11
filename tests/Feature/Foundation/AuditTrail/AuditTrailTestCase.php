@@ -3,10 +3,12 @@
 namespace Tests\Feature\Foundation\AuditTrail;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Foundation\FoundationTestCase;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
@@ -37,6 +39,15 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         return $member;
     }
 
+    protected function anEntryOfCompanyAAt(string $recordedAt): AuditEntry
+    {
+        return AuditEntry::factory()
+            ->forCompany($this->companyA)
+            ->byMember(User::factory()->create(), 'admin')
+            ->recordedAt(CarbonImmutable::parse($recordedAt))
+            ->create();
+    }
+
     /**
      * @param  array<string, mixed>  $query
      */
@@ -54,6 +65,30 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         Sanctum::actingAs($actor);
 
         return $this->json($verb, $path, [], ['X-Company-Context' => $this->companyA->getKey()]);
+    }
+
+    /**
+     * @param  list<string>  $entryIds
+     */
+    protected function assertEntriesListed(TestResponse $response, array $entryIds): void
+    {
+        $response->assertOk();
+        $this->assertSame($entryIds, $response->json('data.*.id'));
+    }
+
+    protected function assertNothingListed(TestResponse $response): void
+    {
+        $response->assertOk();
+        $response->assertJsonCount(0, 'data');
+        $response->assertJsonPath('meta.pagination.total', 0);
+    }
+
+    /**
+     * @param  array{page: int, per_page: int, total: int, last_page: int}  $pagination
+     */
+    protected function assertPageShown(TestResponse $response, array $pagination): void
+    {
+        $this->assertSame($pagination, $response->json('meta.pagination'));
     }
 
     protected function assertRoleInsufficient(TestResponse $response): void
