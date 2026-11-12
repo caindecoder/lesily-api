@@ -16,6 +16,7 @@ use App\Companies\Memberships\IO\Http\Resources\BulkInvitationResultResource;
 use App\Companies\Memberships\UseCases\Interactors\BulkInviteUsersInteractor;
 use App\Companies\Memberships\UseCases\Interactors\ResendInvitationInteractor;
 use App\Companies\Memberships\UseCases\Interactors\RevokeInvitationInteractor;
+use App\Companies\Memberships\UseCases\Commands\ResendPendingInvitationCommand;
 
 /**
  * The company's invitation resource — invite (UC-1-018), resend (UC-1-021), and
@@ -53,7 +54,12 @@ class InvitationsController
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
-        $invitation = $interactor->execute($request->company(), $actor, $invitationId);
+        $command = ResendPendingInvitationCommand::validateAndCreate([
+            'company' => $request->company(),
+            'invitationId' => $invitationId,
+        ]);
+
+        $invitation = $interactor->execute($command, $actor, RequestOrigin::fromRequest($request));
 
         return (new InvitationResource($invitation))->response($request)->setStatusCode(Response::HTTP_OK);
     }

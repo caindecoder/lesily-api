@@ -34,6 +34,7 @@ use Illuminate\Database\Events\TransactionBeginning;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
+use App\Companies\Memberships\Events\UserInvitationResent;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
@@ -1261,6 +1262,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     {
         return match ($action) {
             AuditAction::UserInvited => [UserInvited::class, 'User invited'],
+            AuditAction::InvitationResent => [UserInvitationResent::class, 'Invitation resent'],
             default => throw new RuntimeException("No expected record for {$action->value}."),
         };
     }

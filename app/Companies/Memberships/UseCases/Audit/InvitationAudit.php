@@ -23,6 +23,11 @@ class InvitationAudit
         $this->write($this->rowOf($invitation, $actor, $origin), AuditAction::UserInvited);
     }
 
+    public function resent(Invitation $invitation, User $actor, RequestOrigin $origin): void
+    {
+        $this->write($this->rowOf($invitation, $actor, $origin), AuditAction::InvitationResent);
+    }
+
     public function bulkInviteSent(BulkInviteSent $batch, User $actor, RequestOrigin $origin): void
     {
         $this->write([

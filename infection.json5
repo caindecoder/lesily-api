@@ -256,14 +256,14 @@
         // decrement at :62 stays killable.
         // L-TOKEN: Str::random(40) invite/resend token length - no design surface pins
         // 40 (P5 tuning; LeaveDates never pins Str::random lengths). Resend is pinned to
-        // :50 so its allowance spend stays killable; invite's spend sits in execute().
+        // :56 so its allowance spend stays killable; invite's spend sits in execute().
         "IncrementInteger": {
             ignore: [
                 "App\\Foundation\\Auth\\Totp\\CacheLoginChallengeStore::recordFailure::55",
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\RegenerateRecoveryCodesInteractor::execute",
                 "App\\Foundation\\Auth\\UseCases\\Interactors\\VerifyTwoFactorInteractor::consumeMatchingRecoveryCode",
                 "App\\Companies\\Memberships\\UseCases\\Interactors\\InviteUserInteractor::invite",
-                "App\\Companies\\Memberships\\UseCases\\Interactors\\ResendInvitationInteractor::execute::50",
+                "App\\Companies\\Memberships\\UseCases\\Interactors\\ResendInvitationInteractor::execute::56",
             ],
         },
         "DecrementInteger": {

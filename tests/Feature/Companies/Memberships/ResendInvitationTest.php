@@ -13,6 +13,7 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
 use App\Companies\Memberships\Events\UserInvitationResent;
@@ -99,6 +100,7 @@ class ResendInvitationTest extends MembershipsTestCase
 
         // Then
         $this->assertResendRefusedAsNotPending($response, $invitation->token_hash);
+        $this->assertNotAudited(AuditAction::InvitationResent);
     }
 
     #[Test]
@@ -208,6 +210,23 @@ class ResendInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_audit_row_cannot_be_written_then_the_token_is_not_rotated_or_mailed(): void
+    {
+        // Given a pending invitation and an audit trail that refuses the resend's row
+        [$company, $admin] = $this->aCompanyWithMember();
+        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->failTheAuditTrail();
+
+        // When the admin resends it
+        $response = $this->resendInvitation($admin, $company, $invitation->getKey());
+
+        // Then the resend fails whole: the old token stands, no event, no second email, no row
+        $this->assertResendRolledBack($response, $invitation->token_hash);
+        $this->assertNotAudited(AuditAction::InvitationResent);
+    }
+
+    #[Test]
     public function when_invitation_resent_then_previous_link_no_longer_accepts(): void
     {
         // Given
@@ -263,6 +282,24 @@ class ResendInvitationTest extends MembershipsTestCase
         $response->assertCreated();
         $this->assertMembershipActivated($company, 'invitee@contoso.lk');
         $this->assertNewUserProvisioned($company, 'invitee@contoso.lk', 'Nimal Perera');
+    }
+
+    #[Test]
+    public function when_pending_invitation_resent_then_the_audit_trail_records_the_resend(): void
+    {
+        // Given an invitation pending as an HR officer and an admin acting from a known device
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->invite($admin, $company, ['email' => 'invitee@contoso.lk', 'roleCode' => 'hr_officer'])->assertCreated();
+        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->fromADevice();
+
+        // When the admin resends it
+        $response = $this->resendInvitation($admin, $company, $invitation->getKey());
+
+        // Then the audit trail records the resend, linked to its own event, by the admin
+        $response->assertOk();
+        $this->assertInvitationAudited($response, $invitation, AuditAction::InvitationResent);
+        $this->assertActedBy(AuditAction::InvitationResent, $admin, 'admin');
     }
 
     /**
