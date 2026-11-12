@@ -10,6 +10,7 @@ use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
+use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -45,15 +46,12 @@ class UserLevelAudit
         }
     }
 
-    protected function newestEventOf(User $user): LesilyStoredEvent
+    protected function newestEventOf(User $user): EloquentStoredEvent
     {
-        /** @var LesilyStoredEvent $event */
-        $event = LesilyStoredEvent::query()
+        return LesilyStoredEvent::query()
             ->where('aggregate_uuid', $user->getKey())
             ->latest('id')
             ->firstOrFail();
-
-        return $event;
     }
 
     /** @return Collection<int, stdClass> */
