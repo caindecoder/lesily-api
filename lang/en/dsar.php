@@ -151,6 +151,11 @@ return [
             'two_factor_enabled' => '2FA enabled',
             'two_factor_disabled' => '2FA disabled',
             'recovery_codes_regenerated' => '2FA recovery codes regenerated',
+            'user_invited' => 'User invited',
+            'bulk_invite_sent' => 'Bulk invite sent',
+            'invitation_resent' => 'Invitation resent',
+            'invitation_revoked' => 'Invitation revoked',
+            'invitation_accepted' => 'Invitation accepted',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',
@@ -161,6 +166,8 @@ return [
             'breach_incident' => 'A data breach',
             'breach_incident_queue' => 'The data breaches',
             'user' => 'A user',
+            'invitation' => 'An invitation',
+            'company' => 'A company',
         ],
         'policy_type' => [
             'tos' => 'Terms of service',

@@ -16,7 +16,9 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Memberships\Entities\Invitation;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Foundation\Notifications\Enums\NotificationType;
@@ -90,10 +92,11 @@ class AcceptInvitationTest extends MembershipsTestCase
         $response = $this->acceptInvitation($deadToken, $this->validNewUserBody());
 
         // Then — the SAME collapsed envelope (no revoked-vs-unknown leak, H4);
-        // the invitation stays unconsumed and no account was created
+        // the invitation stays unconsumed, no account was created, nothing accepted is audited
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
         $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
         $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
+        $this->assertNotAudited(AuditAction::InvitationAccepted);
     }
 
     #[Test]
@@ -271,9 +274,9 @@ class AcceptInvitationTest extends MembershipsTestCase
         $capture = $this->recordedQueriesDuring(function () use ($staleSnapshot, $token): void {
             try {
                 $this->staleSnapshotAccept($staleSnapshot)->execute(
-                    AcceptInvitationCommand::validateAndCreate(['token' => $token]),
+                    AcceptInvitationCommand::validateAndCreate(['token' => $token, 'deviceName' => 'web']),
                     $this->invitee,
-                    'web',
+                    new RequestOrigin(ip: null, userAgent: null, requestId: null),
                 );
                 $this->fail('The locked re-check must refuse a dead invitation.');
             } catch (InvalidInvitationException) {
@@ -376,6 +379,42 @@ class AcceptInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_audit_row_cannot_be_written_then_the_existing_users_accept_rolls_back(): void
+    {
+        // Given — an existing account's invitation and an audit trail that refuses the accept's row
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $this->failTheAuditTrail();
+
+        // When — the invitee accepts while authenticated
+        $response = $this->acceptInvitation($token, [], $invitee);
+
+        // Then — the whole accept rolls back: nothing consumed, no membership, no row
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
+        $this->assertNotAudited(AuditAction::InvitationAccepted);
+    }
+
+    #[Test]
+    public function when_the_audit_row_cannot_be_written_then_no_account_is_created(): void
+    {
+        // Given — a brand-new email's invitation and an audit trail that refuses the accept's row
+        [$company, $actor] = $this->aCompanyWithMember();
+        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $this->failTheAuditTrail();
+
+        // When — the invitee accepts with valid registration details
+        $response = $this->acceptInvitation($token, $this->validNewUserBody());
+
+        // Then — the genesis rolls back with the join: no account, nothing consumed, no row
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
+        $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
+        $this->assertNotAudited(AuditAction::InvitationAccepted);
+    }
+
+    #[Test]
     public function when_contention_strikes_after_the_accept_committed_then_it_is_not_disguised_as_retryable(): void
     {
         // Given — a new user's invitation, with contention striking the
@@ -436,11 +475,12 @@ class AcceptInvitationTest extends MembershipsTestCase
             $this->staleSnapshotAccept($staleSnapshot)->execute(
                 AcceptInvitationCommand::validateAndCreate([
                     'token' => $token,
+                    'deviceName' => 'web',
                     'name' => 'Nimal Perera',
                     'password' => 'Str0ng-Pass!',
                 ]),
                 null,
-                'web',
+                new RequestOrigin(ip: null, userAgent: null, requestId: null),
             );
             $this->fail('The locked re-check must refuse the revoked invitation before provisioning.');
         } catch (InvalidInvitationException) {
@@ -641,6 +681,36 @@ class AcceptInvitationTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_an_active_member_accepts_a_second_invitation_then_the_accept_records_their_kept_role(): void
+    {
+        // Given — an active employee and a leftover invitation for their email as an HR officer
+        // (the alt-4a race artifact), accepted from a known device
+        [$company, $actor] = $this->aCompanyWithMember();
+        $member = User::factory()->withEmail('ruwan@member.lk')->create();
+        $this->attachMember($company, $member, $this->seededRole('employee'));
+        $plaintext = Str::random(40);
+        $invitationId = (string) Str::uuid7();
+        UserMembership::retrieve($invitationId)
+            ->invite(CreateInvitationCommand::from([
+                'company' => $company,
+                'email' => 'ruwan@member.lk',
+                'role' => $this->seededRole('hr_officer'),
+                'invitedBy' => $actor,
+                'plaintextToken' => $plaintext,
+            ]))
+            ->persist();
+        $this->fromADevice();
+
+        // When — they accept the leftover invitation while authenticated
+        $response = $this->acceptInvitation($plaintext, [], $member);
+
+        // Then — the row names the invited role, but the member acts in the role they kept
+        $response->assertOk();
+        $this->assertInvitationAudited($response, Invitation::query()->findOrFail($invitationId), AuditAction::InvitationAccepted);
+        $this->assertActedBy(AuditAction::InvitationAccepted, $member, 'employee');
+    }
+
+    #[Test]
     public function when_a_new_user_accepts_then_their_account_is_created_and_they_are_logged_in(): void
     {
         // Given — a pending invitation for a brand-new email
@@ -737,6 +807,41 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Then — the genesis + join decided under the invitation lock, in
         // one transaction
         $this->assertAcceptDecidedUnderInvitationLock($capture, $invitationId);
+    }
+
+    #[Test]
+    public function when_an_existing_user_accepts_then_the_audit_trail_records_them_joining(): void
+    {
+        // Given — an existing account invited to a company, accepting from a known device
+        [$company, $actor] = $this->aCompanyWithMember();
+        $invitee = User::factory()->withEmail('anushka@member.lk')->create();
+        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $this->fromADevice();
+
+        // When — they accept while authenticated
+        $response = $this->acceptInvitation($token, [], $invitee);
+
+        // Then — the audit trail records the accept, by the invitee in their new role
+        $response->assertOk();
+        $this->assertInvitationAudited($response, Invitation::query()->sole(), AuditAction::InvitationAccepted);
+        $this->assertActedBy(AuditAction::InvitationAccepted, $invitee, 'employee');
+    }
+
+    #[Test]
+    public function when_a_new_user_accepts_then_the_audit_trail_records_the_new_member_joining(): void
+    {
+        // Given — a pending invitation for a brand-new email, accepted from a known device
+        [$company, $actor] = $this->aCompanyWithMember();
+        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $this->fromADevice();
+
+        // When — the invitee sets their name and password on the accept link
+        $response = $this->acceptInvitation($token, $this->validNewUserBody());
+
+        // Then — the audit trail records the accept, by the account the accept created
+        $response->assertCreated();
+        $this->assertInvitationAudited($response, Invitation::query()->sole(), AuditAction::InvitationAccepted);
+        $this->assertActedBy(AuditAction::InvitationAccepted, User::query()->where('email', 'kasun@newjoiner.lk')->sole(), 'employee');
     }
 
     #[Test]

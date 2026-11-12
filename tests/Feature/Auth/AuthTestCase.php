@@ -14,6 +14,7 @@ use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use Tests\Concerns\AssertsAccessLog;
+use Tests\Concerns\AssertsAuditTrail;
 use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Password;
@@ -29,7 +30,6 @@ use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\Auth\Events\UserPasswordReset;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Companies\Memberships\Entities\Invitation;
-use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
@@ -44,7 +44,7 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class AuthTestCase extends TestCase
 {
-    use AssertsAccessLog, InducesProjectorFailures;
+    use AssertsAccessLog, AssertsAuditTrail, InducesProjectorFailures;
 
     /**
      * Canonical login-ready credentials, shared by the login and logout suites
@@ -57,10 +57,6 @@ abstract class AuthTestCase extends TestCase
     protected const NEW_PASSWORD = 'New-Str0ng-Pass!';
 
     protected const GOOGLE_SUBJECT = '109876543210';
-
-    protected const DEVICE = 'Lesily-Test/1.0 (Windows NT 10.0; Win64; x64)';
-
-    protected const DEVICE_IP = '203.0.113.7';
 
     protected Company $ownedCompany;
 
@@ -357,22 +353,6 @@ abstract class AuthTestCase extends TestCase
 
         $this->aMembershipFor($user, $this->ownedCompany, 'owner');
         $this->aMembershipFor($user, $this->employingCompany, 'employee');
-    }
-
-    protected function failTheAuditTrail(): void
-    {
-        AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
-    }
-
-    protected function assertNothingAudited(): void
-    {
-        $this->assertDatabaseCount('audit_trail', 0);
-    }
-
-    protected function fromADevice(): void
-    {
-        $this->withHeader('User-Agent', self::DEVICE)
-            ->withServerVariables(['REMOTE_ADDR' => self::DEVICE_IP]);
     }
 
     protected function assertAuditedInEachCompany(TestResponse $response, User $user, AuditAction $action): void

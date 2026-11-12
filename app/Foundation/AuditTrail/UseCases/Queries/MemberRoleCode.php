@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Compliance\Dsar\UseCases\Queries;
+namespace App\Foundation\AuditTrail\UseCases\Queries;
 
 use App\Models\User;
 use App\Companies\Entities\CompanyUser;

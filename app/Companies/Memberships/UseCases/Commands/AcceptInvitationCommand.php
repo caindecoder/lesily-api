@@ -11,11 +11,14 @@ use Spatie\LaravelData\Data;
  * invitee email lives on the invitation row, never in the request). Shape rules
  * live here; PRESENCE of name/password on the new-email branch is the
  * interactor's call — it depends on invitee existence, unknowable pre-lookup.
+ * deviceName names a new user's session; the controller fills it from the user
+ * agent, so it carries no rule.
  */
 class AcceptInvitationCommand extends Data
 {
     public function __construct(
         public string $token,
+        public string $deviceName,
         public ?string $password = null,
         public ?string $name = null,
     ) {}

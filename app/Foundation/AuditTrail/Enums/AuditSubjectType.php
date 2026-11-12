@@ -12,4 +12,6 @@ enum AuditSubjectType: string
     case BreachIncident = 'breach_incident';
     case BreachIncidentQueue = 'breach_incident_queue';
     case User = 'user';
+    case Invitation = 'invitation';
+    case Company = 'company';
 }

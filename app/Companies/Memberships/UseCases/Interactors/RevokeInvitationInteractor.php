@@ -3,9 +3,10 @@
 namespace App\Companies\Memberships\UseCases\Interactors;
 
 use Illuminate\Support\Facades\DB;
-use App\Companies\Entities\Company;
 use App\Companies\Memberships\Entities\Invitation;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Memberships\Aggregates\UserMembership;
+use App\Companies\Memberships\UseCases\Audit\InvitationAudit;
 use App\Companies\Memberships\Exceptions\InvitationNotPendingException;
 use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
 
@@ -19,11 +20,13 @@ use App\Companies\Memberships\UseCases\Commands\RevokeInvitationCommand;
  */
 class RevokeInvitationInteractor
 {
-    public function execute(Company $company, RevokeInvitationCommand $command, string $invitationId): void
+    public function __construct(private InvitationAudit $audit) {}
+
+    public function execute(RevokeInvitationCommand $command, RequestOrigin $origin): void
     {
         $invitation = Invitation::query()
-            ->where('company_id', $company->getKey())
-            ->whereKey($invitationId)
+            ->where('company_id', $command->company->getKey())
+            ->whereKey($command->invitationId)
             ->firstOrFail();
 
         $isLivePending = $invitation->accepted_at === null
@@ -34,8 +37,12 @@ class RevokeInvitationInteractor
             throw new InvitationNotPendingException;
         }
 
-        DB::transaction(fn () => UserMembership::retrieve($invitation->getKey())
-            ->revokeInvitation($command)
-            ->persist());
+        DB::transaction(function () use ($invitation, $command, $origin): void {
+            UserMembership::retrieve($invitation->getKey())
+                ->revokeInvitation($command)
+                ->persist();
+
+            $this->audit->revoked($invitation, $command->revokedBy, $origin);
+        });
     }
 }
