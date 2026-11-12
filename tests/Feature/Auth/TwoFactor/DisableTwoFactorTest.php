@@ -170,8 +170,9 @@ class DisableTwoFactorTest extends AuthTestCase
     #[Test]
     public function when_two_factor_is_disabled_then_each_company_of_the_user_records_it(): void
     {
-        // Given a 2FA user who owns one company and works for another, signed in from a known device
+        // Given a 2FA user who enrolled earlier, owns one company and works for another, signed in from a known device
         $user = $this->aTwoFactorUser();
+        UserAggregate::retrieve($user->getKey())->confirmTwoFactor()->persist();
         $this->inTwoCompanies($user);
         $current = $this->aSessionFor($user)->plainTextToken;
         $this->fromADevice();
