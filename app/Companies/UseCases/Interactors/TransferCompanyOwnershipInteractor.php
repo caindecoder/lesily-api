@@ -82,13 +82,13 @@ class TransferCompanyOwnershipInteractor
                 ->persist();
 
             $actorRoleCode = $command->source === TransferSource::Admin ? AuditEntry::STAFF_ROLE_CODE : $outgoingRoleCode;
+            $roleChanges = [
+                new RoleChange($outgoing, $outgoingRoleCode, $company->getKey(), $actorRoleCode),
+                new RoleChange($target, $targetRoleCode, $company->getKey(), $actorRoleCode),
+            ];
 
-            foreach ([[$outgoing, $outgoingRoleCode], [$target, $targetRoleCode]] as [$membership, $fromRoleCode]) {
-                $this->audit->roleChanged(
-                    new RoleChange($membership, $fromRoleCode, $company->getKey(), $actorRoleCode),
-                    $command->transferredBy,
-                    $origin,
-                );
+            foreach ($roleChanges as $roleChange) {
+                $this->audit->roleChanged($roleChange, $command->transferredBy, $origin);
             }
 
             return $target->refresh();
