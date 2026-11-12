@@ -2,14 +2,13 @@
 
 namespace App\Billing\Invoices\UseCases\Commands;
 
-use Closure;
-use DateTimeImmutable;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Spatie\LaravelData\Attributes\WithCast;
 use Illuminate\Validation\ValidationException;
+use App\Foundation\UseCases\Rules\IsoDateRange;
 use Spatie\LaravelData\Attributes\MapInputName;
 use App\Billing\Invoices\Enums\InvoiceStatusFilter;
 use App\Foundation\UseCases\Casts\CarbonPeriodCast;
@@ -84,39 +83,12 @@ class InvoiceFilters extends Data
             'status' => ['filled', 'sometimes', 'string', Rule::enum(InvoiceStatusFilter::class)],
             // bail: the closure must never run on a non-string (an array
             // within[] would fatal on the string cast before the 422).
-            'within' => ['filled', 'sometimes', 'bail', 'string', self::isoDateRangeRule()],
+            'within' => ['filled', 'sometimes', 'bail', 'string', new IsoDateRange],
             'min_amount' => ['filled', 'sometimes', 'integer', 'min:0'],
             'max_amount' => ['filled', 'sometimes', 'integer', 'min:0'],
             'sort' => ['filled', 'sometimes', 'string', Rule::in(self::SORTABLE_FIELDS)],
             'page' => ['filled', 'sometimes', 'integer', 'min:1'],
             'per_page' => ['filled', 'sometimes', 'integer', 'min:1', 'max:100'],
         ];
-    }
-
-    /**
-     * `within=from,to` — exactly two comma-separated ISO-8601 (Y-m-d) dates
-     * (api-conventions §10.1 date-range convention; UC-1-120 error flow 4c).
-     */
-    protected static function isoDateRangeRule(): Closure
-    {
-        return function (string $attribute, mixed $value, Closure $fail): void {
-            /** @var string $value bail + string precede this rule */
-            $dates = explode(',', $value);
-
-            if (count($dates) !== 2 || ! self::isCalendarDate($dates[0]) || ! self::isCalendarDate($dates[1])) {
-                $fail("The {$attribute} filter must be two ISO-8601 (YYYY-MM-DD) dates separated by a comma.");
-            }
-        };
-    }
-
-    /**
-     * A Y-m-d date that exists on the calendar — 2026-02-31 has the shape but would
-     * roll over to March, so the date must read back unchanged.
-     */
-    protected static function isCalendarDate(string $date): bool
-    {
-        $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
-
-        return $parsed !== false && $parsed->format('Y-m-d') === $date;
     }
 }

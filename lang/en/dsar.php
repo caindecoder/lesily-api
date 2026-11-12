@@ -115,6 +115,9 @@ return [
         ],
     ],
     'codes' => [
+        'actor' => [
+            'lesily_support' => 'Lesily support',
+        ],
         'action' => [
             'dsar_requested' => 'Asked for a copy of personal data',
             'dsar_withdrawn' => 'Withdrew a data request',

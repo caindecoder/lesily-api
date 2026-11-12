@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\User;
+use DateTimeInterface;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use App\Foundation\AuditTrail\Enums\AuditAction;
@@ -50,6 +51,71 @@ class AuditEntryFactory extends Factory
             'metadata' => null,
             'recorded_at' => now(),
         ];
+    }
+
+    public function forCompany(Company $company): static
+    {
+        return $this->state(['company_id' => $company->getKey()]);
+    }
+
+    /**
+     * A row written by a company member acting under $roleCode.
+     */
+    public function byMember(User $member, string $roleCode): static
+    {
+        return $this->state([
+            'actor_user_id' => $member->getKey(),
+            'actor_role_code' => $roleCode,
+            'actor_label' => $member->name,
+        ]);
+    }
+
+    /**
+     * A row written by a Lesily platform admin acting on the company's data.
+     */
+    public function byStaff(User $staff): static
+    {
+        return $this->state([
+            'actor_user_id' => $staff->getKey(),
+            'actor_role_code' => 'platform_super_admin',
+            'actor_label' => $staff->name,
+        ]);
+    }
+
+    /**
+     * A member's row with no role on record (their membership was gone when it was written).
+     */
+    public function withoutRole(): static
+    {
+        return $this->state(['actor_role_code' => null]);
+    }
+
+    public function ofAction(AuditAction $action, AuditSubjectType $subjectType): static
+    {
+        return $this->state(['action' => $action, 'subject_type' => $subjectType]);
+    }
+
+    public function withSeverity(string $severity): static
+    {
+        return $this->state(['severity' => $severity]);
+    }
+
+    public function fromOrigin(string $ipAddress, string $userAgent): static
+    {
+        return $this->state(['ip_address' => $ipAddress, 'user_agent' => $userAgent]);
+    }
+
+    /**
+     * @param  array<string, array{old: mixed, new: mixed}>  $changes
+     */
+    public function withChanges(array $changes): static
+    {
+        return $this->withMetadata(['changes' => $changes]);
+    }
+
+    public function recordedAt(DateTimeInterface $recordedAt): static
+    {
+        return $this->state(['recorded_at' => $recordedAt]);
     }
 
     /**

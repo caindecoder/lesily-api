@@ -11,13 +11,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
  * One append-only audit_trail row (ERD-1-11) — the human-readable compliance
- * evidence trail. IMMUTABLE BY CONVENTION (slice-plans-billing B3, spec §6):
- * rows are written once and never updated or deleted — no update/delete path
- * exists anywhere in the codebase, the table carries no updated_at
- * (UPDATED_AT = null) and no deleted_at. First production writer is
- * UC-1-122's admin-read direct insert (T7, stored_event_id NULL per
- * ERD-1-11 §5); the AuditTrailReactor machinery stays designed for the
- * UC-1-066 slice (cd-audit-trail).
+ * evidence trail, written by the interactor that performs the action. Rows are
+ * written once and never updated or deleted: no update/delete path exists, the
+ * table carries no updated_at (UPDATED_AT = null) and no deleted_at.
  */
 class AuditEntry extends Model
 {
@@ -27,6 +23,9 @@ class AuditEntry extends Model
     use HasUuids;
 
     public const null UPDATED_AT = null;
+
+    /** The role code every platform-staff writer records. */
+    public const string STAFF_ROLE_CODE = 'platform_super_admin';
 
     /** Eloquent would guess audit_entries; the designed name is singular (F6 s129). */
     protected $table = 'audit_trail';

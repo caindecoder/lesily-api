@@ -14,8 +14,8 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
  * Slice-plans-billing T6 — the audit_trail foundation (erd-audit-trail /
  * ERD-1-11): append-only table + AuditEntry model + factory, written first by
  * UC-1-122's read path at T7 (direct insert, NULL stored_event_id). Immutable
- * by convention — no update/delete paths are built (spec §6; the enforcement
- * scenario belongs to the UC-1-066 slice).
+ * by convention — no update/delete paths are built; no write route answers
+ * (ViewAuditTrailTest).
  *
  * @testclass-carveout: infra-primitive — the HTTP-side write is covered by
  * ReviewInvoiceAsAdminTest (T7, PR #105, via
