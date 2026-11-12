@@ -362,7 +362,9 @@ class BulkInviteUsersTest extends MembershipsTestCase
         // Then each invitation records its own row and the batch records the two sent, by the admin
         $response->assertOk();
         $this->assertDatabaseCount('audit_trail', 3);
-        foreach (Invitation::query()->get() as $invitation) {
+        $invitations = Invitation::query()->get();
+        $this->assertCount(2, $invitations);
+        foreach ($invitations as $invitation) {
             $this->assertInvitationAudited($response, $invitation, AuditAction::UserInvited);
         }
         $this->assertBatchAudited($response, $company, 2);
