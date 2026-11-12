@@ -5,6 +5,7 @@ namespace App\Foundation\Auth\IO\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use App\Http\Controllers\Controller;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\Auth\UseCases\Commands\ResetPasswordCommand;
 use App\Foundation\Auth\UseCases\Interactors\ResetPasswordInteractor;
 
@@ -18,7 +19,7 @@ class ResetPasswordController extends Controller
 {
     public function __invoke(Request $request, ResetPasswordInteractor $interactor): Response
     {
-        $interactor->execute(ResetPasswordCommand::validateAndCreate($request));
+        $interactor->execute(ResetPasswordCommand::validateAndCreate($request), RequestOrigin::fromRequest($request));
 
         return response()->noContent();
     }

@@ -410,6 +410,7 @@ abstract class AuthTestCase extends TestCase
     {
         return match ($action) {
             AuditAction::PasswordChanged => [UserPasswordChanged::class, 'Password changed'],
+            AuditAction::PasswordReset => [UserPasswordReset::class, 'Password reset completed'],
             default => throw new RuntimeException("No expected record for {$action->value}."),
         };
     }

@@ -147,6 +147,7 @@ return [
             'breach_resolved' => 'A data breach incident was resolved',
             'breach_marked_false_alarm' => 'A recorded data breach was closed as a false alarm',
             'password_changed' => 'Password changed',
+            'password_reset' => 'Password reset completed',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',

@@ -7,7 +7,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use App\Foundation\Auth\UseCases\TokenRevoker;
+use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
+use App\Foundation\AuditTrail\UseCases\Audit\UserLevelAudit;
 use App\Foundation\Auth\Exceptions\InvalidResetLinkException;
 use App\Foundation\Auth\UseCases\Commands\ResetPasswordCommand;
 
@@ -23,18 +26,23 @@ use App\Foundation\Auth\UseCases\Commands\ResetPasswordCommand;
  */
 class ResetPasswordInteractor
 {
-    public function __construct(private TokenRevoker $tokenRevoker) {}
+    public function __construct(
+        private TokenRevoker $tokenRevoker,
+        private UserLevelAudit $audit,
+    ) {}
 
-    public function execute(ResetPasswordCommand $command): void
+    public function execute(ResetPasswordCommand $command, RequestOrigin $origin): void
     {
         $status = DB::transaction(fn (): string => Password::broker()->reset(
             ['email' => $command->email, 'password' => $command->password, 'token' => $command->token],
-            function (User $user, string $plainPassword): void {
+            function (User $user, string $plainPassword) use ($origin): void {
                 UserAggregate::retrieve($user->getKey())
                     ->resetPassword(Hash::make($plainPassword))
                     ->persist();
 
                 $this->tokenRevoker->revokeAllForUserExcept($user, null);
+
+                $this->audit->record($user, AuditAction::PasswordReset, $origin);
             },
         ));
 
