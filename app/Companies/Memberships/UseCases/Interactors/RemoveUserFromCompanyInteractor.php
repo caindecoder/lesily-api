@@ -3,13 +3,14 @@
 namespace App\Companies\Memberships\UseCases\Interactors;
 
 use Illuminate\Support\Facades\DB;
-use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\DeadlockException;
 use App\Foundation\Database\LockContention;
 use App\Foundation\Auth\UseCases\TokenRevoker;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Memberships\Aggregates\UserMembership;
+use App\Companies\Memberships\UseCases\Audit\MembershipAudit;
 use App\Companies\Memberships\Exceptions\SelfRemovalBlockedException;
 use App\Companies\Memberships\Exceptions\OwnerRemovalBlockedException;
 use App\Companies\Memberships\Exceptions\MembershipContentionException;
@@ -24,12 +25,15 @@ use App\Companies\Memberships\UseCases\Commands\RemoveUserFromCompanyCommand;
  */
 class RemoveUserFromCompanyInteractor
 {
-    public function __construct(private TokenRevoker $tokenRevoker) {}
+    public function __construct(
+        private TokenRevoker $tokenRevoker,
+        protected readonly MembershipAudit $audit,
+    ) {}
 
-    public function execute(Company $company, RemoveUserFromCompanyCommand $command, string $membershipId): void
+    public function execute(RemoveUserFromCompanyCommand $command, RequestOrigin $origin): void
     {
         try {
-            $this->executeLocked($company, $command, $membershipId);
+            $this->executeLocked($command, $origin);
         } catch (DeadlockException $exception) {
             throw new MembershipContentionException($exception);
         } catch (QueryException $exception) {
@@ -39,12 +43,12 @@ class RemoveUserFromCompanyInteractor
         }
     }
 
-    protected function executeLocked(Company $company, RemoveUserFromCompanyCommand $command, string $membershipId): void
+    protected function executeLocked(RemoveUserFromCompanyCommand $command, RequestOrigin $origin): void
     {
-        DB::transaction(function () use ($company, $command, $membershipId): void {
+        DB::transaction(function () use ($command, $origin): void {
             $membership = CompanyUser::query()
-                ->where('company_id', $company->getKey())
-                ->whereKey($membershipId)
+                ->where('company_id', $command->company->getKey())
+                ->whereKey($command->membershipId)
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -64,6 +68,8 @@ class RemoveUserFromCompanyInteractor
             // ALL the removed member's tokens logs them out everywhere — the
             // company-scoped token refinement is a declared future fix.
             $this->tokenRevoker->revokeAllForUserExcept($membership->user()->sole(), null);
+
+            $this->audit->removed($membership, $command->removedBy, $origin);
         });
     }
 }

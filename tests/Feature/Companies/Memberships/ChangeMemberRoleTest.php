@@ -15,6 +15,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Companies\Memberships\Events\UserMembershipRoleChanged;
@@ -143,6 +144,7 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::OwnerTransferRequired);
         $response->assertJsonPath('message', "The Owner's role can only be changed through an ownership transfer.");
         $this->assertMembershipRoleUnchanged($ownerMembershipId, $this->seededRole('owner'));
+        $this->assertNotAudited(AuditAction::RoleChanged);
     }
 
     #[Test]
@@ -232,6 +234,23 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_role_change_cannot_be_audited_then_the_role_is_unchanged(): void
+    {
+        // Given Bob, an employee, and an audit trail that refuses the change's row
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $this->failTheAuditTrail();
+
+        // When the admin makes Bob an HR officer
+        $response = $this->changeRole($admin, $company, $membershipId);
+
+        // Then the change fails whole: Bob's role, the stream and the trail unchanged
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertMembershipRoleUnchanged($membershipId, $this->seededRole('employee'));
+        $this->assertNotAudited(AuditAction::RoleChanged);
+    }
+
+    #[Test]
     public function when_the_role_change_loses_contention_then_the_cause_and_family_message_survive(): void
     {
         // Given — a member to re-role and a lock-wait death inside the
@@ -303,14 +322,16 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         [$company, $admin] = $this->aCompanyWithMember();
         [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
         $this->roleCode = 'employee';
+        $this->fromADevice();
 
         // When
         $response = $this->changeRole($admin, $company, $membershipId);
 
         // Then a same-role change is a legitimate no-op success — the aggregate
-        // is guardless (cd-users §5), so the event records from == to
+        // is guardless (cd-users §5), so the event and its audit row record from == to
         $this->assertRoleChangeEnvelope($response, $this->seededRole('employee'), $membershipId);
         $this->assertMembershipRoleChanged($membershipId, $admin, $this->seededRole('employee'));
+        $this->assertRoleChangeAudited($response, CompanyUser::query()->findOrFail($membershipId), 'employee');
     }
 
     #[Test]
@@ -327,6 +348,23 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         // Then
         $this->assertRoleChangeEnvelope($response, $this->seededRole('hr_officer'), $membershipId);
         $this->assertMembershipRoleChanged($membershipId, $actor, $this->seededRole('hr_officer'));
+    }
+
+    #[Test]
+    public function when_an_authorized_actor_changes_a_role_then_the_change_is_audited_from_and_to(): void
+    {
+        // Given Bob, an employee of Contoso, and an admin on a known device
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $this->fromADevice();
+
+        // When the admin makes Bob an HR officer
+        $response = $this->changeRole($admin, $company, $membershipId);
+
+        // Then the change is audited from employee to HR officer, by the admin
+        $response->assertOk();
+        $this->assertRoleChangeAudited($response, CompanyUser::query()->findOrFail($membershipId), 'employee');
+        $this->assertActedBy(AuditAction::RoleChanged, $admin, 'admin');
     }
 
     #[Test]

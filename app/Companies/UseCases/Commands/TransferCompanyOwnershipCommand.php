@@ -4,6 +4,7 @@ namespace App\Companies\UseCases\Commands;
 
 use App\Models\User;
 use Spatie\LaravelData\Data;
+use App\Companies\Entities\Company;
 use App\Companies\Enums\TransferSource;
 use Spatie\LaravelData\Attributes\WithCast;
 use App\Foundation\UseCases\Casts\ModelCast;
@@ -20,6 +21,9 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  */
 class TransferCompanyOwnershipCommand extends Data
 {
+    #[WithCast(ModelCast::class, Company::class)]
+    public Company $company;
+
     #[OpaqueString('checked as a live member under the lock - TARGET_NOT_MEMBER')]
     public string $newOwnerUserId;
 
@@ -32,8 +36,9 @@ class TransferCompanyOwnershipCommand extends Data
     public ?OwnershipTransferCase $case = null;
 
     /**
-     * transferredBy, source and case are server-sourced (the actor, the
-     * calling path, the admin case) and carry no rule (amendment AQ).
+     * company, transferredBy, source and case are server-sourced (the company
+     * context, the actor, the calling path, the admin case) and carry no rule
+     * (amendment AQ).
      *
      * @return array<string, array<int, string>>
      */

@@ -60,12 +60,13 @@ class ExecuteOwnershipTransferCaseInteractor
 
             $company = Company::query()->findOrFail($case->company_id);
 
-            $this->transferInteractor->execute($company, TransferCompanyOwnershipCommand::from([
+            $this->transferInteractor->execute(TransferCompanyOwnershipCommand::from([
+                'company' => $company,
                 'newOwnerUserId' => $case->new_owner_user_id,
                 'transferredBy' => $admin,
                 'source' => TransferSource::Admin,
                 'case' => $case,
-            ]), $case->expected_owner_user_id);
+            ]), $case->expected_owner_user_id, $context);
 
             $case->update([
                 'status' => OwnershipTransferCaseStatus::Closed,

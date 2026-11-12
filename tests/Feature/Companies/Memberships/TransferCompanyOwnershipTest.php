@@ -16,6 +16,8 @@ use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Tests\Feature\Companies\CreatesTrialCompanies;
 use App\Companies\Events\CompanyOwnershipTransferred;
 use App\Foundation\Notifications\Enums\NotificationType;
@@ -98,6 +100,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         // Then
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::TargetNotMember);
         $this->assertNothingTransferred($company, $owner);
+        $this->assertNotAudited(AuditAction::RoleChanged);
     }
 
     #[Test]
@@ -189,6 +192,25 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $this->assertSame($this->seededRole('employee')->getKey(), $this->pivotOf($company, $target)->role_id);
     }
 
+    #[Test]
+    public function when_the_transfer_cannot_be_audited_then_ownership_stays(): void
+    {
+        // Given Olive, the owner, an employee to hand over to, and an audit trail
+        // that takes the first role row and refuses the second
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+        [$target] = $this->aMembership($company, 'employee');
+        $this->failTheAuditTrailAfter(1);
+
+        // When Olive transfers ownership
+        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
+
+        // Then the transfer fails whole: Olive still owns the company and no row is written
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertNothingTransferred($company, $owner);
+        $this->assertNotAudited(AuditAction::RoleChanged);
+    }
+
     /**
      * @param  array{sqlstate: string, code: int, message: string}  $failure
      */
@@ -259,6 +281,27 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $this->assertTransferRecorded($company, $owner, $target);
         $this->runQueuedHandlersFor(CompanyOwnershipTransferred::class);
         $this->assertOnlyNewOwnerNotified($company, $target, $owner);
+    }
+
+    #[Test]
+    public function when_the_owner_transfers_ownership_then_both_role_changes_are_audited(): void
+    {
+        // Given Olive, the owner, an HR officer to hand over to, and a known device
+        $owner = User::factory()->create();
+        $company = $this->aTrialCompanyOwnedBy($owner);
+        [$target] = $this->aMembership($company, 'hr_officer');
+        Queue::fake();
+        $this->fromADevice();
+
+        // When Olive transfers ownership to the HR officer
+        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
+
+        // Then both role moves are audited — Olive owner to admin, the HR officer to owner — by Olive as owner
+        $response->assertOk();
+        $this->assertRoleChangeAudited($response, $this->pivotOf($company, $owner), 'owner');
+        $this->assertRoleChangeAudited($response, $this->pivotOf($company, $target), 'hr_officer');
+        $this->assertSame(2, AuditEntry::query()->where('action', AuditAction::RoleChanged)->count());
+        $this->assertEveryRowActedBy(AuditAction::RoleChanged, $owner, 'owner');
     }
 
     #[Test]

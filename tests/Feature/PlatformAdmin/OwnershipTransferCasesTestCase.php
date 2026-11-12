@@ -6,12 +6,17 @@ use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Tests\Concerns\AssertsAuditTrail;
+use Tests\Concerns\AssertsMembershipAuditRows;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 
 abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
 {
+    use AssertsAuditTrail;
+    use AssertsMembershipAuditRows;
+
     protected User $admin;
 
     protected function setUp(): void
@@ -62,6 +67,17 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
         }
 
         return $factory->create();
+    }
+
+    /**
+     * A company whose recorded owner holds the owner membership, as registration leaves it.
+     */
+    protected function aCompanyWithItsOwner(): Company
+    {
+        $company = Company::factory()->create();
+        $company->users()->attach($company->owner_id, ['role_id' => $this->seededRole('owner')->getKey()]);
+
+        return $company;
     }
 
     protected function aVerifiedCaseFor(Company $company, ?User $proposed = null): OwnershipTransferCase

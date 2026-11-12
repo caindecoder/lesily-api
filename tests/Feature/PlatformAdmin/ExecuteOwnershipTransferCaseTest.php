@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\PlatformAdmin;
 
+use Closure;
 use App\Models\User;
 use RuntimeException;
 use Illuminate\Support\Str;
@@ -16,8 +17,10 @@ use App\Companies\Entities\CompanyUser;
 use App\Companies\Enums\TransferSource;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Companies\Events\CompanyOwnershipTransferred;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
@@ -214,12 +217,12 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     #[Test]
     public function when_the_audit_write_fails_then_the_whole_execution_rolls_back(): void
     {
-        // Given a verified case, a live incoming member, and an audit write
-        // that will fail AFTER its row is inserted (the post-insert oracle)
-        $company = Company::factory()->create();
+        // Given a verified case, a live incoming member, and a case-executed
+        // audit write that will fail AFTER its row is inserted (the post-insert oracle)
+        $company = $this->aCompanyWithItsOwner();
         $alex = $this->aCompanyMember($company, 'employee');
         $case = $this->aVerifiedCaseFor($company, $alex);
-        AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
+        $this->onTheCaseExecutedRow(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the admin executes the case
         $response = $this->executeCase($this->admin, $case->getKey());
@@ -243,10 +246,10 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given a verified case, a live incoming member, and a write inside
         // the OUTER locked transaction — after the composed transfer — that
         // dies the way the driver reports it
-        $company = Company::factory()->create();
+        $company = $this->aCompanyWithItsOwner();
         $alex = $this->aCompanyMember($company, 'employee');
         $case = $this->aVerifiedCaseFor($company, $alex);
-        AuditEntry::created(fn () => throw $this->syntheticQueryException($failure));
+        $this->onTheCaseExecutedRow(fn () => throw $this->syntheticQueryException($failure));
 
         // When the admin executes the case
         $response = $this->executeCase($this->admin, $case->getKey());
@@ -279,7 +282,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given a verified case whose incoming owner has NO emergency contact
         // on their membership (the §10b mandate flags-and-prompts, never blocks)
-        $company = Company::factory()->create();
+        $company = $this->aCompanyWithItsOwner();
         $alex = $this->aCompanyMember($company, 'employee');
         $case = $this->aVerifiedCaseFor($company, $alex);
 
@@ -298,7 +301,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_the_same_idempotency_key_is_replayed_then_the_transfer_is_not_executed_twice(): void
     {
         // Given a verified case executed once under an explicit key
-        $company = Company::factory()->create();
+        $company = $this->aCompanyWithItsOwner();
         $alex = $this->aCompanyMember($company, 'employee');
         $case = $this->aVerifiedCaseFor($company, $alex);
         $key = (string) Str::uuid7();
@@ -316,17 +319,18 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given a company whose ownership already moved once via the REAL
         // routine path (event 1, caseId NULL) …
-        $company = Company::factory()->create();
+        $company = $this->aCompanyWithItsOwner();
         $olive = User::query()->findOrFail($company->owner_id);
         $bob = $this->aCompanyMember($company, 'admin');
         app(TransferCompanyOwnershipInteractor::class)->execute(
-            $company,
             TransferCompanyOwnershipCommand::validateAndCreate([
+                'company' => $company,
                 'newOwnerUserId' => $bob->getKey(),
                 'transferredBy' => $olive,
                 'source' => TransferSource::SelfService,
             ]),
             $olive->getKey(),
+            new RequestOrigin(null, null, null),
         );
 
         // … and a case opened AFTERWARDS, verified for a third member
@@ -338,6 +342,28 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the closed case cites ITS OWN event by identity, never the older routine one
         $this->assertClosedCaseCitesItsOwnTransferEvent($case);
+    }
+
+    #[Test]
+    public function when_the_admin_executes_a_verified_case_then_both_role_changes_are_audited_as_lesily_support(): void
+    {
+        // Given Contoso with its owner Olive, a verified case naming HR officer Alex, and a known device
+        $company = $this->aCompanyWithItsOwner();
+        $olive = User::query()->findOrFail($company->owner_id);
+        $alex = $this->aCompanyMember($company, 'hr_officer');
+        $case = $this->aVerifiedCaseFor($company, $alex);
+        Queue::fake();
+        $this->fromADevice();
+
+        // When the admin executes the case
+        $response = $this->executeCase($this->admin, $case->getKey());
+
+        // Then both role moves are audited — Olive owner to admin, Alex HR officer to owner — as Lesily support
+        $response->assertOk();
+        $this->assertRoleChangeAudited($response, $this->pivotOf($case, $olive), 'owner');
+        $this->assertRoleChangeAudited($response, $this->pivotOf($case, $alex), 'hr_officer');
+        $this->assertSame(2, AuditEntry::query()->where('action', AuditAction::RoleChanged)->count());
+        $this->assertEveryRowActedBy(AuditAction::RoleChanged, $this->admin, 'platform_super_admin');
     }
 
     #[Test]
@@ -401,6 +427,19 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'IDEMPOTENCY_KEY_REQUIRED');
+    }
+
+    /**
+     * Run $failure once the case-executed row is inserted — the outer
+     * transaction's own write, after the composed transfer's role rows.
+     */
+    protected function onTheCaseExecutedRow(Closure $failure): void
+    {
+        AuditEntry::created(function (AuditEntry $entry) use ($failure): void {
+            if ($entry->action === AuditAction::CaseExecuted) {
+                $failure();
+            }
+        });
     }
 
     /**
@@ -482,7 +521,8 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
      */
     protected function assertExecutionAudited(OwnershipTransferCase $case, int $transferEventId, TestResponse $response): void
     {
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', 3);
+        $this->assertSame(1, AuditEntry::query()->where('action', AuditAction::CaseExecuted)->count());
         $this->assertDatabaseHas('audit_trail', [
             'event_class' => 'CompanyOwnershipTransferred',
             'subject_type' => 'ownership_transfer_case',
@@ -502,7 +542,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->sole();
+        $entry = AuditEntry::query()->where('action', AuditAction::CaseExecuted)->sole();
         $this->assertSame($correlationId, $entry->request_id);
         $this->assertSame('Symfony', $entry->user_agent);
     }
@@ -607,7 +647,8 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             ->where('aggregate_uuid', $case->company_id)
             ->where('event_class', CompanyOwnershipTransferred::class)
             ->count());
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', 3);
+        $this->assertSame(1, AuditEntry::query()->where('action', AuditAction::CaseExecuted)->count());
 
         $fresh = $case->fresh();
         $this->assertInstanceOf(OwnershipTransferCase::class, $fresh);

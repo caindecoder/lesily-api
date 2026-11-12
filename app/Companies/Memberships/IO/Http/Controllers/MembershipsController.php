@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 use App\Companies\Memberships\IO\Http\Resources\MembershipResource;
@@ -66,11 +67,13 @@ class MembershipsController
         $company = $request->company();
 
         $command = ChangeMembershipRoleCommand::validateAndCreate([
+            'company' => $company,
+            'membershipId' => $membershipId,
             'roleCode' => $request->input('roleCode'),
             'changedBy' => $actor,
         ]);
 
-        $interactor->execute($company, $command, $membershipId);
+        $interactor->execute($command, RequestOrigin::fromRequest($request));
 
         // The 200 envelope echoes the updated roster row (R-E s112) — the same
         // aliased shape the roster lists, so the client updates in place. A row
@@ -88,10 +91,12 @@ class MembershipsController
         $actor = $request->user();
 
         $command = RemoveUserFromCompanyCommand::validateAndCreate([
+            'company' => $request->company(),
+            'membershipId' => $membershipId,
             'removedBy' => $actor,
         ]);
 
-        $interactor->execute($request->company(), $command, $membershipId);
+        $interactor->execute($command, RequestOrigin::fromRequest($request));
 
         return response()->noContent();
     }

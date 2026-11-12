@@ -5,13 +5,18 @@ namespace App\Companies\UseCases\Interactors;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
+use App\Companies\Enums\TransferSource;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\DeadlockException;
 use App\Foundation\Database\LockContention;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Exceptions\StaleOwnershipException;
 use App\Companies\Exceptions\TargetNotMemberException;
+use App\Companies\Memberships\UseCases\Audit\RoleChange;
 use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Companies\Exceptions\SelfTransferBlockedException;
+use App\Companies\Memberships\UseCases\Audit\MembershipAudit;
 use App\Companies\Exceptions\OwnershipTransferContentionException;
 use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 
@@ -28,14 +33,16 @@ use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
  */
 class TransferCompanyOwnershipInteractor
 {
-    public function execute(Company $company, TransferCompanyOwnershipCommand $command, string $expectedOwnerUserId): CompanyUser
+    public function __construct(protected readonly MembershipAudit $audit) {}
+
+    public function execute(TransferCompanyOwnershipCommand $command, string $expectedOwnerUserId, RequestOrigin $origin): CompanyUser
     {
         if ($command->newOwnerUserId === $expectedOwnerUserId) {
             throw new SelfTransferBlockedException;
         }
 
         try {
-            return $this->executeLocked($company, $command, $expectedOwnerUserId);
+            return $this->executeLocked($command, $expectedOwnerUserId, $origin);
         } catch (DeadlockException $exception) {
             throw new OwnershipTransferContentionException($exception);
         } catch (QueryException $exception) {
@@ -45,9 +52,11 @@ class TransferCompanyOwnershipInteractor
         }
     }
 
-    protected function executeLocked(Company $company, TransferCompanyOwnershipCommand $command, string $expectedOwnerUserId): CompanyUser
+    protected function executeLocked(TransferCompanyOwnershipCommand $command, string $expectedOwnerUserId, RequestOrigin $origin): CompanyUser
     {
-        return DB::transaction(function () use ($company, $command, $expectedOwnerUserId): CompanyUser {
+        $company = $command->company;
+
+        return DB::transaction(function () use ($company, $command, $expectedOwnerUserId, $origin): CompanyUser {
             $lockedCompany = Company::query()
                 ->whereKey($company->getKey())
                 ->lockForUpdate()
@@ -64,9 +73,23 @@ class TransferCompanyOwnershipInteractor
                 throw new TargetNotMemberException;
             }
 
+            $outgoing = $memberships[$lockedCompany->owner_id];
+            $outgoingRoleCode = $outgoing->role()->sole()->code;
+            $targetRoleCode = $target->role()->sole()->code;
+
             CompanyAggregate::retrieve($company->getKey())
                 ->transferOwnership($command, $lockedCompany->owner_id)
                 ->persist();
+
+            $actorRoleCode = $command->source === TransferSource::Admin ? AuditEntry::STAFF_ROLE_CODE : $outgoingRoleCode;
+            $roleChanges = [
+                new RoleChange($outgoing, $outgoingRoleCode, $company->getKey(), $actorRoleCode),
+                new RoleChange($target, $targetRoleCode, $company->getKey(), $actorRoleCode),
+            ];
+
+            foreach ($roleChanges as $roleChange) {
+                $this->audit->roleChanged($roleChange, $command->transferredBy, $origin);
+            }
 
             return $target->refresh();
         });
