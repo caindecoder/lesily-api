@@ -12,6 +12,7 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Events\UserRemovedFromCompany;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -219,6 +220,23 @@ class RemoveMemberTest extends MembershipsTestCase
         // off the roster
         $this->assertMemberRemoved($response, $actor, $membershipId);
         $this->assertRosterExcludes($this->viewMemberships($actor, $company), $target);
+    }
+
+    #[Test]
+    public function when_an_authorized_actor_removes_a_member_then_the_removal_is_audited_with_their_role(): void
+    {
+        // Given a payroll officer of Contoso and an admin on a known device
+        [$company, $admin] = $this->aCompanyWithMember();
+        [, $membershipId] = $this->aMembership($company, 'payroll_officer');
+        $this->fromADevice();
+
+        // When the admin removes the payroll officer
+        $response = $this->removeMember($admin, $company, $membershipId);
+
+        // Then the removal is audited with the role they held, by the admin
+        $response->assertNoContent();
+        $this->assertRemovalAudited($response, CompanyUser::withTrashed()->findOrFail($membershipId), 'payroll_officer');
+        $this->assertActedBy(AuditAction::MemberRemoved, $admin, 'admin');
     }
 
     /**

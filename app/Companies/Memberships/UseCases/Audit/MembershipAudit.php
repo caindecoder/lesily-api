@@ -32,6 +32,18 @@ class MembershipAudit
         ], AuditAction::RoleChanged);
     }
 
+    public function removed(CompanyUser $membership, User $actor, RequestOrigin $origin): void
+    {
+        $this->write([
+            ...$this->rowOf($membership, $membership->getKey()),
+            ...$this->actorAndOrigin($actor, $this->memberRoleCode->of($actor, $membership->company_id), $origin),
+            'metadata' => [
+                'membership_id' => $membership->getKey(),
+                'role_code' => $membership->role()->sole()->code,
+            ],
+        ], AuditAction::MemberRemoved);
+    }
+
     /** @return array<string, mixed> */
     protected function rowOf(CompanyUser $membership, string $causeAggregateUuid): array
     {

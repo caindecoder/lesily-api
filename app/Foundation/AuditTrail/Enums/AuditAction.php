@@ -42,4 +42,5 @@ enum AuditAction: string
     case InvitationRevoked = 'invitation_revoked';
     case InvitationAccepted = 'invitation_accepted';
     case RoleChanged = 'role_changed';
+    case MemberRemoved = 'member_removed';
 }

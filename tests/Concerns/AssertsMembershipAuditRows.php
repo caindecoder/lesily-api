@@ -23,6 +23,13 @@ trait AssertsMembershipAuditRows
         $this->assertSame([$fromRoleCode, $toRoleCode], [$roleChange['from'] ?? null, $roleChange['to'] ?? null]);
     }
 
+    protected function assertRemovalAudited(TestResponse $response, CompanyUser $membership, string $roleCode): void
+    {
+        $entry = $this->memberRowOf($response, $membership, AuditAction::MemberRemoved);
+
+        $this->assertSame($roleCode, $entry->metadata['role_code'] ?? null);
+    }
+
     protected function memberRowOf(TestResponse $response, CompanyUser $membership, AuditAction $action): AuditEntry
     {
         $requestId = $response->headers->get('Correlation-Id');
@@ -40,6 +47,7 @@ trait AssertsMembershipAuditRows
             'membership_id' => $membership->getKey(),
             'description' => match ($action) {
                 AuditAction::RoleChanged => 'Role changed',
+                AuditAction::MemberRemoved => 'Member removed',
                 default => throw new RuntimeException("No member row words for {$action->value}."),
             },
             'ip_address' => self::DEVICE_IP,

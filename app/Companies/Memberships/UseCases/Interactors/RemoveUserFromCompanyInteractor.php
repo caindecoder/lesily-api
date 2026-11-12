@@ -10,6 +10,7 @@ use App\Foundation\Database\LockContention;
 use App\Foundation\Auth\UseCases\TokenRevoker;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Memberships\Aggregates\UserMembership;
+use App\Companies\Memberships\UseCases\Audit\MembershipAudit;
 use App\Companies\Memberships\Exceptions\SelfRemovalBlockedException;
 use App\Companies\Memberships\Exceptions\OwnerRemovalBlockedException;
 use App\Companies\Memberships\Exceptions\MembershipContentionException;
@@ -24,7 +25,10 @@ use App\Companies\Memberships\UseCases\Commands\RemoveUserFromCompanyCommand;
  */
 class RemoveUserFromCompanyInteractor
 {
-    public function __construct(private TokenRevoker $tokenRevoker) {}
+    public function __construct(
+        private TokenRevoker $tokenRevoker,
+        protected readonly MembershipAudit $audit,
+    ) {}
 
     public function execute(RemoveUserFromCompanyCommand $command, RequestOrigin $origin): void
     {
@@ -41,7 +45,7 @@ class RemoveUserFromCompanyInteractor
 
     protected function executeLocked(RemoveUserFromCompanyCommand $command, RequestOrigin $origin): void
     {
-        DB::transaction(function () use ($command): void {
+        DB::transaction(function () use ($command, $origin): void {
             $membership = CompanyUser::query()
                 ->where('company_id', $command->company->getKey())
                 ->whereKey($command->membershipId)
@@ -64,6 +68,8 @@ class RemoveUserFromCompanyInteractor
             // ALL the removed member's tokens logs them out everywhere — the
             // company-scoped token refinement is a declared future fix.
             $this->tokenRevoker->revokeAllForUserExcept($membership->user()->sole(), null);
+
+            $this->audit->removed($membership, $command->removedBy, $origin);
         });
     }
 }
