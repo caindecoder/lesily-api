@@ -14,7 +14,7 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
  * The audit rows of an action on a user's own account: one per company the user is an
- * active member of (AR18), written inside the caller's transaction.
+ * active member of, written inside the caller's transaction.
  */
 class UserLevelAudit
 {
