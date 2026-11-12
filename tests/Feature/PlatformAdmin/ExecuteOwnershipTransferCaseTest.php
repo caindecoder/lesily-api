@@ -345,6 +345,27 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     #[Test]
+    public function when_the_admin_executes_a_verified_case_then_both_role_changes_are_audited_as_lesily_support(): void
+    {
+        // Given Contoso with its owner Olive, a verified case naming HR officer Alex, and a known device
+        $company = $this->aCompanyWithItsOwner();
+        $olive = User::query()->findOrFail($company->owner_id);
+        $alex = $this->aCompanyMember($company, 'hr_officer');
+        $case = $this->aVerifiedCaseFor($company, $alex);
+        Queue::fake();
+        $this->fromADevice();
+
+        // When the admin executes the case
+        $response = $this->executeCase($this->admin, $case->getKey());
+
+        // Then both role moves are audited — Olive owner to admin, Alex HR officer to owner — as Lesily support
+        $response->assertOk();
+        $this->assertRoleChangeAudited($response, $this->pivotOf($case, $olive), 'owner');
+        $this->assertRoleChangeAudited($response, $this->pivotOf($case, $alex), 'hr_officer');
+        $this->assertEveryRowActedBy(AuditAction::RoleChanged, $this->admin, AuditEntry::STAFF_ROLE_CODE);
+    }
+
+    #[Test]
     public function when_the_admin_executes_a_verified_case_then_the_ownership_moves_whole(): void
     {
         // Given a frozen clock, Contoso recording Olive as its owner, and a

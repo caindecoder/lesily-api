@@ -6,12 +6,17 @@ use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Tests\Concerns\AssertsAuditTrail;
+use Tests\Concerns\AssertsMembershipAuditRows;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 
 abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
 {
+    use AssertsAuditTrail;
+    use AssertsMembershipAuditRows;
+
     protected User $admin;
 
     protected function setUp(): void

@@ -5,9 +5,11 @@ namespace App\Companies\UseCases\Interactors;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
+use App\Companies\Enums\TransferSource;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\DeadlockException;
 use App\Foundation\Database\LockContention;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Exceptions\StaleOwnershipException;
 use App\Companies\Exceptions\TargetNotMemberException;
@@ -79,9 +81,11 @@ class TransferCompanyOwnershipInteractor
                 ->transferOwnership($command, $lockedCompany->owner_id)
                 ->persist();
 
+            $actorRoleCode = $command->source === TransferSource::Admin ? AuditEntry::STAFF_ROLE_CODE : $outgoingRoleCode;
+
             foreach ([[$outgoing, $outgoingRoleCode], [$target, $targetRoleCode]] as [$membership, $fromRoleCode]) {
                 $this->audit->roleChanged(
-                    new RoleChange($membership, $fromRoleCode, $company->getKey(), $outgoingRoleCode),
+                    new RoleChange($membership, $fromRoleCode, $company->getKey(), $actorRoleCode),
                     $command->transferredBy,
                     $origin,
                 );
