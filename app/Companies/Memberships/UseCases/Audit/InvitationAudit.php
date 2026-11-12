@@ -12,7 +12,8 @@ use App\Foundation\AuditTrail\UseCases\Queries\MemberRoleCode;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
- * The audit rows of the invitation actions, written inside the caller's transaction.
+ * The audit rows of the invitation actions: each invitation's row inside the
+ * caller's transaction; a bulk invite's batch row on its own, after its rows.
  */
 class InvitationAudit
 {

@@ -93,10 +93,11 @@ class AcceptInvitationInteractor
     }
 
     /**
-     * The new-email main flow: genesis + join in ONE transaction (UC minimal
-     * guarantee), then — mirroring RegisterOwnerInteractor — materialise the
-     * read model, stamp last_logged_at, and mint the session OUTSIDE the
-     * transaction (a failed mint leaves a provisioned member who can log in).
+     * The new-email main flow: genesis + join + the audit row in ONE
+     * transaction (UC minimal guarantee; the synchronous projector has the user
+     * row in place for the row's actor), then — mirroring RegisterOwnerInteractor —
+     * stamp last_logged_at and mint the session OUTSIDE the transaction (a failed
+     * mint leaves a provisioned member who can log in).
      */
     protected function provisionAndJoin(Invitation $invitation, AcceptInvitationCommand $command, RequestOrigin $origin): NewUserJoined
     {

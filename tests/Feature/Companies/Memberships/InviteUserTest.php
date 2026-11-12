@@ -255,6 +255,26 @@ class InviteUserTest extends MembershipsTestCase
     // --- Edge ---
 
     #[Test]
+    public function when_the_body_names_another_company_then_the_invite_stays_in_the_context_company(): void
+    {
+        // Given an admin of one company and another company's id in the request body
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $other = Company::factory()->onPlan(BillingPlan::Pro)->create();
+
+        // When the admin invites a new email
+        $response = $this->invite($admin, $company, [
+            'email' => 'newhire@contoso.lk',
+            'roleCode' => 'employee',
+            'company' => $other->getKey(),
+        ]);
+
+        // Then the invitation and its audit row belong to the context company alone
+        $response->assertCreated();
+        $this->assertDatabaseHas('invitations', ['email' => 'newhire@contoso.lk', 'company_id' => $company->getKey()]);
+        $this->assertDatabaseHas('audit_trail', ['action' => 'user_invited', 'company_id' => $company->getKey()]);
+    }
+
+    #[Test]
     public function when_a_removed_member_is_reinvited_then_the_audit_row_links_the_new_invitation(): void
     {
         // Given a former member whose membership stream already holds an earlier invite

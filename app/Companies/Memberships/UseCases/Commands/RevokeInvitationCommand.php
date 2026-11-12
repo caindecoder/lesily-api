@@ -35,8 +35,9 @@ class RevokeInvitationCommand extends Data
      */
     public static function rules(ValidationContext $context): array
     {
-        // No id field: the aggregate is retrieved BY the invitation UUID and
-        // stamps membershipId from $this->uuid() — ResendInvitationCommand parity.
+        // The invitation id carries no rule (its first read is the interactor's
+        // company-scoped lookup); the aggregate stamps membershipId from
+        // $this->uuid(), never from the command — ResendInvitationCommand parity.
         return [
             'reason' => ['nullable', 'string', 'max:255'],
         ];

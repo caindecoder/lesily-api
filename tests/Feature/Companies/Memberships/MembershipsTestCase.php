@@ -1253,6 +1253,16 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $this->assertSame($actor->name, $entry->actor_label);
     }
 
+    protected function failTheAuditTrailAfter(int $rows): void
+    {
+        $written = 0;
+        AuditEntry::creating(function () use (&$written, $rows): void {
+            if (++$written > $rows) {
+                throw new RuntimeException('induced audit failure');
+            }
+        });
+    }
+
     protected function assertNotAudited(AuditAction $action): void
     {
         $this->assertDatabaseMissing('audit_trail', ['action' => $action->value]);
