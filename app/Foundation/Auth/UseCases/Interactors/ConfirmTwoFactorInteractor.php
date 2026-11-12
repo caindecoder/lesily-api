@@ -7,8 +7,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
 use App\Foundation\Auth\Totp\TotpVerifier;
+use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\Auth\Totp\RecoveryCodeGenerator;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
+use App\Foundation\AuditTrail\UseCases\Audit\UserLevelAudit;
 use App\Foundation\Auth\Exceptions\InvalidTwoFactorCodeException;
 use App\Foundation\Auth\UseCases\Commands\ConfirmTwoFactorCommand;
 use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
@@ -26,12 +29,13 @@ class ConfirmTwoFactorInteractor
     public function __construct(
         private readonly TotpVerifier $totp,
         private readonly RecoveryCodeGenerator $recoveryCodes,
+        private readonly UserLevelAudit $audit,
     ) {}
 
     /**
      * @return list<string>
      */
-    public function execute(User $user, ConfirmTwoFactorCommand $command): array
+    public function execute(User $user, ConfirmTwoFactorCommand $command, RequestOrigin $origin): array
     {
         $secret = Cache::get("2fa-setup:{$user->getKey()}");
 
@@ -48,12 +52,14 @@ class ConfirmTwoFactorInteractor
         // Atomic: the direct credential write and the marker-event persist commit
         // together, so a failure can never leave a stored secret with a null
         // two_factor_confirmed_at (which reads as "2FA disabled" — orphan material).
-        DB::transaction(function () use ($user, $secret, $plaintextCodes): void {
+        DB::transaction(function () use ($user, $secret, $plaintextCodes, $origin): void {
             $user->two_factor_secret = $secret;
             $user->two_factor_recovery_codes = array_map(Hash::make(...), $plaintextCodes);
             $user->save();
 
             UserAggregate::retrieve($user->getKey())->confirmTwoFactor()->persist();
+
+            $this->audit->record($user, AuditAction::TwoFactorEnabled, $origin);
         });
 
         // Clear AFTER commit — if the transaction rolled back, the staged secret

@@ -13,6 +13,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\Auth\Events\UserPasswordReset;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -52,8 +53,9 @@ class ResetPasswordTest extends AuthTestCase
     #[Test]
     public function when_the_reset_token_was_never_issued_then_the_reset_is_refused(): void
     {
-        // Given a registered user with an active session, and a token that was never issued
+        // Given a member of two companies with an active session, and a token that was never issued
         $user = $this->aRegisteredUser();
+        $this->inTwoCompanies($user);
         $this->aSessionFor($user);
 
         // When a reset is submitted with that garbage token
@@ -63,10 +65,11 @@ class ResetPasswordTest extends AuthTestCase
             'password' => self::NEW_PASSWORD,
         ]);
 
-        // Then it is refused, the password is untouched, and the session survives (Minimal Guarantee)
+        // Then it is refused, the password is untouched, the session survives (Minimal Guarantee), and nothing is audited
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::ResetLinkInvalid);
         $response->assertJsonPath('message', 'This reset link is invalid or has expired. Request a new one.'); // pins the non-leaking security copy (Infection-blind bootstrap)
         $this->assertResetRefused($user, self::LOGIN_PASSWORD, 1);
+        $this->assertNothingAudited();
     }
 
     #[Test]
@@ -208,6 +211,29 @@ class ResetPasswordTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_the_audit_row_cannot_be_written_then_the_password_reset_is_rolled_back(): void
+    {
+        // Given a member on two devices with a valid reset token, and an audit trail that refuses the next row
+        $user = $this->aRegisteredUser();
+        $this->inTwoCompanies($user);
+        $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $token = $this->aResetTokenFor($user);
+        $this->failTheAuditTrail();
+
+        // When they reset their password
+        $response = $this->resetPassword([
+            'token' => $token,
+            'email' => $user->email,
+            'password' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the reset fails whole and no audit row is left
+        $this->assertResetRolledBack($response, $user);
+        $this->assertNothingAudited();
+    }
+
+    #[Test]
     public function when_too_many_resets_are_attempted_then_they_are_throttled(): void
     {
         // Given the shared per-IP auth-tier allowance is exhausted against the reset endpoint
@@ -258,6 +284,26 @@ class ResetPasswordTest extends AuthTestCase
 
         // Then the reset succeeds and every one of their sessions is revoked (they re-log in with the new pw)
         $this->assertAllSessionsRevoked($response, $user, [$web->plainTextToken, $mobile->plainTextToken]);
+    }
+
+    #[Test]
+    public function when_the_password_is_reset_then_each_company_of_the_user_records_it(): void
+    {
+        // Given a user who owns one company and works for another, resetting from a known device
+        $user = $this->aRegisteredUser();
+        $this->inTwoCompanies($user);
+        $token = $this->aResetTokenFor($user);
+        $this->fromADevice();
+
+        // When they reset their password
+        $response = $this->resetPassword([
+            'token' => $token,
+            'email' => $user->email,
+            'password' => self::NEW_PASSWORD,
+        ]);
+
+        // Then each company's audit trail records the reset, with the role the user holds there
+        $this->assertAuditedInEachCompany($response, $user, AuditAction::PasswordReset);
     }
 
     /**

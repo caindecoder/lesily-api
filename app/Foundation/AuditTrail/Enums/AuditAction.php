@@ -31,4 +31,9 @@ enum AuditAction: string
     case BreachCompanyAdded = 'breach_company_added';
     case BreachResolved = 'breach_resolved';
     case BreachMarkedFalseAlarm = 'breach_marked_false_alarm';
+    case PasswordChanged = 'password_changed';
+    case PasswordReset = 'password_reset';
+    case TwoFactorEnabled = 'two_factor_enabled';
+    case TwoFactorDisabled = 'two_factor_disabled';
+    case RecoveryCodesRegenerated = 'recovery_codes_regenerated';
 }

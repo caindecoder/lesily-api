@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth\TwoFactor;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Hash;
@@ -16,6 +17,8 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Auth\Events\User2FAEnabled;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -100,10 +103,29 @@ class EnableTwoFactorTest extends AuthTestCase
         // When they submit a code the authenticator does not accept
         $response = $this->confirm($user, $company, '000000');
 
-        // Then it is rejected and 2FA stays disabled
+        // Then it is rejected, 2FA stays disabled and nothing is audited
         $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'INVALID_TWO_FACTOR_CODE');
         $this->assertNoTwoFactorPersisted($user);
+        $this->assertNothingAudited();
+    }
+
+    #[Test]
+    public function when_the_audit_row_cannot_be_written_then_two_factor_stays_off(): void
+    {
+        // Given a Pro member mid-enrollment, and an audit trail that refuses the next row
+        config(['app.debug' => false]);
+        $user = User::factory()->create();
+        $this->inTwoCompanies($user);
+        $this->fakeTotpVerifier(verifies: true);
+        $this->enable($user, $this->ownedCompany);
+        $this->failTheAuditTrail();
+
+        // When they confirm with a valid code
+        $response = $this->confirm($user, $this->ownedCompany, '123456');
+
+        // Then the enrollment fails whole: 2FA stays off, nothing recorded, the staged secret kept for a retry
+        $this->assertEnrollmentRolledBack($response, $user);
     }
 
     #[Test]
@@ -253,6 +275,23 @@ class EnableTwoFactorTest extends AuthTestCase
         $this->assertTwoFactorEnabled($response, $user, $stagedSecret);
     }
 
+    #[Test]
+    public function when_a_pro_user_completes_enrollment_then_each_company_of_the_user_records_it(): void
+    {
+        // Given a user who owns a Pro company and works for another, enrolling from a known device
+        $user = User::factory()->create();
+        $this->inTwoCompanies($user);
+        $this->fakeTotpVerifier(verifies: true);
+        $this->enable($user, $this->ownedCompany);
+        $this->fromADevice();
+
+        // When they confirm with a valid code
+        $response = $this->confirm($user, $this->ownedCompany, '123456');
+
+        // Then each company's audit trail records that 2FA was turned on, with the role the user holds there
+        $this->assertAuditedInEachCompany($response, $user, AuditAction::TwoFactorEnabled);
+    }
+
     /**
      * @return array<string, array{BillingPlan}>
      */
@@ -388,6 +427,15 @@ class EnableTwoFactorTest extends AuthTestCase
         $properties = $marker->event_properties;
         $this->assertSame(['userId', 'confirmedAt'], array_keys($properties), 'The marker must carry only non-secret metadata.');
         $this->assertStringNotContainsString($stagedSecret, (string) json_encode($properties), 'The TOTP secret must never enter the event store.');
+    }
+
+    protected function assertEnrollmentRolledBack(TestResponse $response, User $user): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertNoTwoFactorPersisted($user);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', User2FAEnabled::class)->count());
+        $this->assertIsString(Cache::get("2fa-setup:{$user->getKey()}"), 'A rolled-back confirm must keep the staged secret.');
+        $this->assertNothingAudited();
     }
 
     protected function assertNoTwoFactorPersisted(User $user): void
