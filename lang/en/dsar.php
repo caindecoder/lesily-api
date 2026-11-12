@@ -156,6 +156,7 @@ return [
             'invitation_resent' => 'Invitation resent',
             'invitation_revoked' => 'Invitation revoked',
             'invitation_accepted' => 'Invitation accepted',
+            'role_changed' => 'Role changed',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',

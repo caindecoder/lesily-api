@@ -10,6 +10,8 @@ use App\Foundation\Database\LockContention;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Memberships\Aggregates\UserMembership;
+use App\Companies\Memberships\UseCases\Audit\RoleChange;
+use App\Companies\Memberships\UseCases\Audit\MembershipAudit;
 use App\Companies\Memberships\Exceptions\MembershipContentionException;
 use App\Companies\Memberships\Exceptions\OwnerTransferRequiredException;
 use App\Companies\Memberships\Exceptions\SelfRoleChangeBlockedException;
@@ -26,6 +28,8 @@ use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
  */
 class ChangeMembershipRoleInteractor
 {
+    public function __construct(protected readonly MembershipAudit $audit) {}
+
     public function execute(ChangeMembershipRoleCommand $command, RequestOrigin $origin): CompanyUser
     {
         try {
@@ -41,7 +45,7 @@ class ChangeMembershipRoleInteractor
 
     protected function executeLocked(ChangeMembershipRoleCommand $command, RequestOrigin $origin): CompanyUser
     {
-        return DB::transaction(function () use ($command): CompanyUser {
+        return DB::transaction(function () use ($command, $origin): CompanyUser {
             $membership = CompanyUser::query()
                 ->where('company_id', $command->company->getKey())
                 ->whereKey($command->membershipId)
@@ -59,10 +63,13 @@ class ChangeMembershipRoleInteractor
             $toRole = Role::query()->where('code', $command->roleCode)->sole();
             /** @var string $toRoleId roles are UUID-keyed (HasUuids) */
             $toRoleId = $toRole->getKey();
+            $fromRoleCode = $membership->role()->sole()->code;
 
             UserMembership::retrieve($membership->getKey())
                 ->changeRole($command, $membership->role_id, $toRoleId)
                 ->persist();
+
+            $this->audit->roleChanged(new RoleChange($membership, $fromRoleCode, $membership->getKey()), $command->changedBy, $origin);
 
             return $membership;
         });
