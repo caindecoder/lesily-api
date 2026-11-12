@@ -22,6 +22,7 @@ use Tests\Concerns\InducesProjectorFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Auth\Events\User2FAEnabled;
 use App\Foundation\Auth\UseCases\TokenRevoker;
+use App\Foundation\Auth\Events\User2FADisabled;
 use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Enums\AuditAction;
@@ -413,6 +414,7 @@ abstract class AuthTestCase extends TestCase
             AuditAction::PasswordChanged => [UserPasswordChanged::class, 'Password changed'],
             AuditAction::PasswordReset => [UserPasswordReset::class, 'Password reset completed'],
             AuditAction::TwoFactorEnabled => [User2FAEnabled::class, '2FA enabled'],
+            AuditAction::TwoFactorDisabled => [User2FADisabled::class, '2FA disabled'],
             default => throw new RuntimeException("No expected record for {$action->value}."),
         };
     }

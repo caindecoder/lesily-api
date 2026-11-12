@@ -14,6 +14,7 @@ use App\Foundation\Auth\Events\User2FAEnabled;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Auth\Events\User2FADisabled;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -65,19 +66,39 @@ class DisableTwoFactorTest extends AuthTestCase
     #[Test]
     public function when_the_password_is_incorrect_then_two_factor_remains_enabled(): void
     {
-        // Given an authenticated user with 2FA enabled, signed in on a second device too
+        // Given a 2FA member of two companies, signed in on a second device too
         $user = $this->aTwoFactorUser();
+        $this->inTwoCompanies($user);
         $current = $this->aSessionFor($user, 'web')->plainTextToken;
         $this->aSessionFor($user, 'mobile');
 
         // When they submit the wrong password to disable
         $response = $this->withToken($current)->deleteJson('/api/v1/auth/2fa', ['password' => 'not-my-password']);
 
-        // Then it is refused, 2FA is left fully intact, and NO session is revoked (the Minimal Guarantee)
+        // Then it is refused, 2FA is left fully intact, NO session is revoked (the Minimal Guarantee), and nothing is audited
         $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::IncorrectPassword);
         $response->assertJsonPath('message', 'Incorrect password. Please try again.'); // pins the bootstrap copy (Infection-blind)
         $this->assertTwoFactorStillEnabled($user);
         $this->assertSame(2, $user->tokens()->count(), 'A refused disable must revoke no sessions.');
+        $this->assertNothingAudited();
+    }
+
+    #[Test]
+    public function when_the_audit_row_cannot_be_written_then_two_factor_stays_on_and_no_session_is_revoked(): void
+    {
+        // Given a 2FA member signed in on two devices, and an audit trail that refuses the next row
+        config(['app.debug' => false]);
+        $user = $this->aTwoFactorUser();
+        $this->inTwoCompanies($user);
+        $current = $this->aSessionFor($user, 'web')->plainTextToken;
+        $other = $this->aSessionFor($user, 'mobile')->plainTextToken;
+        $this->failTheAuditTrail();
+
+        // When they disable 2FA with the correct password
+        $response = $this->withToken($current)->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
+
+        // Then the disable fails whole: 2FA stays on, the other device still signs in, nothing is audited
+        $this->assertDisableRolledBack($response, $user, $other);
     }
 
     // Sad — disabling resets the enrollment flag, so a later re-enable is recorded rather
@@ -147,6 +168,22 @@ class DisableTwoFactorTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_two_factor_is_disabled_then_each_company_of_the_user_records_it(): void
+    {
+        // Given a 2FA user who owns one company and works for another, signed in from a known device
+        $user = $this->aTwoFactorUser();
+        $this->inTwoCompanies($user);
+        $current = $this->aSessionFor($user)->plainTextToken;
+        $this->fromADevice();
+
+        // When they disable 2FA with the correct password
+        $response = $this->withToken($current)->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
+
+        // Then each company's audit trail records that 2FA was turned off, with the role the user holds there
+        $this->assertAuditedInEachCompany($response, $user, AuditAction::TwoFactorDisabled);
+    }
+
+    #[Test]
     public function when_disabling_past_the_rate_limit_then_it_is_throttled(): void
     {
         // Given an authenticated user hammering the disable endpoint (the password-guessing surface)
@@ -171,6 +208,14 @@ class DisableTwoFactorTest extends AuthTestCase
             'missing password' => [[], 'The password field is required.'],
             'blank password' => [['password' => ''], 'The password field is required.'],
         ];
+    }
+
+    protected function assertDisableRolledBack(TestResponse $response, User $user, string $otherToken): void
+    {
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertTwoFactorStillEnabled($user);
+        $this->probeWith($otherToken)->assertOk();
+        $this->assertNothingAudited();
     }
 
     protected function assertTwoFactorStillEnabled(User $user): void
