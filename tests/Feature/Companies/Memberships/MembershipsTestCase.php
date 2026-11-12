@@ -36,6 +36,7 @@ use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
 use App\Companies\Memberships\Events\UserInvitationResent;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
+use App\Companies\Memberships\UseCases\Audit\InvitationAudit;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -633,7 +634,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
      */
     protected function staleSnapshotAccept(Invitation $snapshot): AcceptInvitationInteractor
     {
-        $interactor = new class(app(SessionIssuer::class)) extends AcceptInvitationInteractor
+        $interactor = new class(app(SessionIssuer::class), app(InvitationAudit::class)) extends AcceptInvitationInteractor
         {
             public ?Invitation $staleSnapshot = null;
 
@@ -1264,6 +1265,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
             AuditAction::UserInvited => [UserInvited::class, 'User invited'],
             AuditAction::InvitationResent => [UserInvitationResent::class, 'Invitation resent'],
             AuditAction::InvitationRevoked => [UserInvitationRevoked::class, 'Invitation revoked'],
+            AuditAction::InvitationAccepted => [UserJoinedCompany::class, 'Invitation accepted'],
             default => throw new RuntimeException("No expected record for {$action->value}."),
         };
     }

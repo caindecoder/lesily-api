@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Foundation\Auth\Support\DeviceName;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\Auth\IO\Http\Resources\LoginResource;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Companies\Memberships\UseCases\Results\NewUserJoined;
@@ -28,16 +29,16 @@ class AcceptInvitationController
 
     public function __invoke(Request $request, string $token, AcceptInvitationInteractor $interactor): JsonResponse
     {
-        // The token is a route param, not body input (H6) — fold it into the
-        // Command payload so one shape validates the whole request.
-        $command = AcceptInvitationCommand::validateAndCreate([...$request->all(), 'token' => $token]);
+        // The token is a route param, not body input (H6), and the device name is
+        // UA-derived like register — the accept contract has no deviceName field
+        // (H6): both fold into the Command payload so one shape validates it.
+        $command = AcceptInvitationCommand::validateAndCreate([
+            ...$request->all(),
+            'token' => $token,
+            'deviceName' => DeviceName::resolve(null, $request),
+        ]);
 
-        $outcome = $interactor->execute(
-            $command,
-            $request->user('sanctum'),
-            // UA-derived like register — the accept contract has no deviceName field (H6).
-            DeviceName::resolve(null, $request),
-        );
+        $outcome = $interactor->execute($command, $request->user('sanctum'), RequestOrigin::fromRequest($request));
 
         // New user: 201 auto-login (H5) — their session was just minted.
         if ($outcome instanceof NewUserJoined) {

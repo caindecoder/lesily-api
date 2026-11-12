@@ -33,6 +33,11 @@ class InvitationAudit
         $this->write($this->rowOf($invitation, $actor, $origin), AuditAction::InvitationRevoked);
     }
 
+    public function accepted(Invitation $invitation, User $joiner, RequestOrigin $origin): void
+    {
+        $this->write($this->rowOf($invitation, $joiner, $origin), AuditAction::InvitationAccepted);
+    }
+
     public function bulkInviteSent(BulkInviteSent $batch, User $actor, RequestOrigin $origin): void
     {
         $this->write([

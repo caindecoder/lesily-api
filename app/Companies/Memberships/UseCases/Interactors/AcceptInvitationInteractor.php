@@ -15,8 +15,10 @@ use Illuminate\Auth\AuthenticationException;
 use Illuminate\Validation\ValidationException;
 use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Companies\Memberships\Entities\Invitation;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
+use App\Companies\Memberships\UseCases\Audit\InvitationAudit;
 use App\Companies\Memberships\UseCases\Results\NewUserJoined;
 use App\Companies\Memberships\UseCases\Results\ExistingUserJoined;
 use App\Companies\Memberships\Exceptions\InvalidInvitationException;
@@ -37,9 +39,10 @@ class AcceptInvitationInteractor
 {
     public function __construct(
         private readonly SessionIssuer $sessionIssuer,
+        private readonly InvitationAudit $audit,
     ) {}
 
-    public function execute(AcceptInvitationCommand $command, ?User $authUser, string $deviceName): NewUserJoined|ExistingUserJoined
+    public function execute(AcceptInvitationCommand $command, ?User $authUser, RequestOrigin $origin): NewUserJoined|ExistingUserJoined
     {
         $invitation = $this->livePendingInvitation($command->token);
         $invitee = User::query()->where('email', $invitation->email)->first();
@@ -59,10 +62,10 @@ class AcceptInvitationInteractor
         if (! $invitee instanceof User) {
             $this->ensureRegistrationDetails($command);
 
-            return $this->provisionAndJoin($invitation, $command, $deviceName);
+            return $this->provisionAndJoin($invitation, $command, $origin);
         }
 
-        return new ExistingUserJoined($this->join($invitation, $invitee));
+        return new ExistingUserJoined($this->join($invitation, $invitee, $origin));
     }
 
     /**
@@ -95,7 +98,7 @@ class AcceptInvitationInteractor
      * read model, stamp last_logged_at, and mint the session OUTSIDE the
      * transaction (a failed mint leaves a provisioned member who can log in).
      */
-    protected function provisionAndJoin(Invitation $invitation, AcceptInvitationCommand $command, string $deviceName): NewUserJoined
+    protected function provisionAndJoin(Invitation $invitation, AcceptInvitationCommand $command, RequestOrigin $origin): NewUserJoined
     {
         $userId = Str::uuid7()->toString();
         /** @var string $password ensured by ensureRegistrationDetails */
@@ -106,7 +109,7 @@ class AcceptInvitationInteractor
         // rounds, and the invitation row lock must not be held through it.
         $passwordHash = Hash::make($password);
 
-        $this->classifyingContention(fn () => DB::transaction(function () use ($invitation, $userId, $passwordHash, $name): void {
+        $this->classifyingContention(fn () => DB::transaction(function () use ($invitation, $userId, $passwordHash, $name, $origin): void {
             $live = $this->lockedLivePendingInvitation($invitation);
 
             UserAggregate::retrieve($userId)
@@ -121,13 +124,15 @@ class AcceptInvitationInteractor
             UserMembership::retrieve($live->getKey())
                 ->acceptInvitation($userId, $live->role_id)
                 ->persist();
+
+            $this->audit->accepted($live, User::query()->findOrFail($userId), $origin);
         }));
 
         $user = User::query()->findOrFail($userId);
         $user->last_logged_at = now();
         $user->save();
 
-        return new NewUserJoined($user, $this->sessionIssuer->issue($user, $deviceName));
+        return new NewUserJoined($user, $this->sessionIssuer->issue($user, $command->deviceName));
     }
 
     /**
@@ -135,15 +140,17 @@ class AcceptInvitationInteractor
      * aggregate records UserJoinedCompany and its projection stamps
      * invitations.accepted_at + writes the pivot together, or none of it lands.
      */
-    protected function join(Invitation $invitation, User $joiner): CompanyUser
+    protected function join(Invitation $invitation, User $joiner, RequestOrigin $origin): CompanyUser
     {
-        $this->classifyingContention(fn () => DB::transaction(function () use ($invitation, $joiner): void {
+        $this->classifyingContention(fn () => DB::transaction(function () use ($invitation, $joiner, $origin): void {
             $live = $this->lockedLivePendingInvitation($invitation);
             $this->guardAgainstResurrectingARemovedMember($live, $joiner);
 
             UserMembership::retrieve($live->getKey())
                 ->acceptInvitation($joiner->getKey(), $live->role_id)
                 ->persist();
+
+            $this->audit->accepted($live, $joiner, $origin);
         }));
 
         // The live pivot for (company, joiner) — normally the invitation's own
