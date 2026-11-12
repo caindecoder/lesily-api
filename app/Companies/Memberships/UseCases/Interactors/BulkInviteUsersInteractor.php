@@ -5,6 +5,8 @@ namespace App\Companies\Memberships\UseCases\Interactors;
 use App\Models\User;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Memberships\Services\InvitationAllowance;
+use App\Companies\Memberships\UseCases\Audit\BulkInviteSent;
+use App\Companies\Memberships\UseCases\Audit\InvitationAudit;
 use App\Companies\Memberships\Exceptions\AlreadyMemberException;
 use App\Companies\Memberships\UseCases\Commands\InviteUserCommand;
 use App\Companies\Memberships\UseCases\Results\BulkInviteRowResult;
@@ -12,13 +14,15 @@ use App\Companies\Memberships\UseCases\Commands\BulkInviteUsersCommand;
 use App\Companies\Memberships\Exceptions\InvitationAllowanceExceededException;
 
 /**
- * Bulk invite (UC-1-020): each row runs through the single invite (UC-1-018).
+ * Bulk invite (UC-1-020): each row runs through the single invite (UC-1-018), each
+ * committing with its own audit row; the batch row follows, counting the rows sent.
  */
 class BulkInviteUsersInteractor
 {
     public function __construct(
         private InvitationAllowance $allowance,
         private InviteUserInteractor $inviteUser,
+        private InvitationAudit $audit,
     ) {}
 
     /**
@@ -35,7 +39,14 @@ class BulkInviteUsersInteractor
             $command->invitations,
         );
 
-        return array_map(fn (InviteUserCommand $invite): BulkInviteRowResult => $this->inviteRow($invite, $actor, $origin), $invites);
+        $results = array_map(fn (InviteUserCommand $invite): BulkInviteRowResult => $this->inviteRow($invite, $actor, $origin), $invites);
+
+        $sent = count(array_filter($results, fn (BulkInviteRowResult $result): bool => $result->wasSent()));
+        if ($sent > 0) {
+            $this->audit->bulkInviteSent(new BulkInviteSent($command->company, $sent), $actor, $origin);
+        }
+
+        return $results;
     }
 
     protected function inviteRow(InviteUserCommand $invite, User $actor, RequestOrigin $origin): BulkInviteRowResult

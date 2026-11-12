@@ -10,6 +10,8 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
 
 class BulkInviteUsersTest extends MembershipsTestCase
@@ -140,9 +142,10 @@ class BulkInviteUsersTest extends MembershipsTestCase
         // When they bulk invite five more
         $response = $this->bulkInvite($admin, $company, $this->batchOf(5));
 
-        // Then the batch is refused until the hour is up and nothing more is invited or mailed
+        // Then the batch is refused until the hour is up and nothing more is invited, mailed or audited
         $this->assertAllowanceRefusedFor($response, 3600);
         $this->assertInvitationsSentInTotal(18);
+        $this->assertNotAudited(AuditAction::BulkInviteSent);
     }
 
     #[Test]
@@ -265,6 +268,40 @@ class BulkInviteUsersTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_every_row_is_skipped_then_no_batch_is_recorded(): void
+    {
+        // Given an admin and two emails that are already members of the company
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        foreach (['nimal@contoso.lk', 'sunil@contoso.lk'] as $email) {
+            $this->attachMember($company, User::factory()->withEmail($email)->create(), $this->seededRole('employee'));
+        }
+
+        // When the admin bulk invites both
+        $response = $this->bulkInvite($admin, $company, $this->rowsFor(['nimal@contoso.lk', 'sunil@contoso.lk']));
+
+        // Then both rows are skipped and nothing is audited
+        $response->assertOk();
+        $this->assertNothingAudited();
+    }
+
+    #[Test]
+    public function when_some_rows_are_skipped_then_the_batch_counts_only_those_sent(): void
+    {
+        // Given an admin acting from a known device and one email already a member
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->attachMember($company, User::factory()->withEmail('member@contoso.lk')->create(), $this->seededRole('employee'));
+        $this->fromADevice();
+
+        // When the admin bulk invites two new emails and the member
+        $response = $this->bulkInvite($admin, $company, $this->rowsFor(['nimal@contoso.lk', 'member@contoso.lk', 'sunil@contoso.lk']));
+
+        // Then the batch records the two invitations sent, beside their own two rows
+        $response->assertOk();
+        $this->assertBatchAudited($response, $company, 2);
+        $this->assertDatabaseCount('audit_trail', 3);
+    }
+
+    #[Test]
     #[DataProvider('provideInvitingRoles')]
     public function when_an_owner_admin_or_hr_officer_bulk_invites_then_the_rows_are_sent(string $roleCode): void
     {
@@ -307,6 +344,29 @@ class BulkInviteUsersTest extends MembershipsTestCase
 
         // Then each row is sent in order, invited with its own role and mailed
         $this->assertBatchSent($response, $company, $rows);
+    }
+
+    #[Test]
+    public function when_valid_rows_are_submitted_then_each_invitation_and_the_batch_are_audited(): void
+    {
+        // Given an admin acting from a known device
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->fromADevice();
+
+        // When the admin bulk invites two new emails with their own roles
+        $response = $this->bulkInvite($admin, $company, [
+            ['email' => 'nimal@contoso.lk', 'roleCode' => 'hr_officer'],
+            ['email' => 'sunil@contoso.lk', 'roleCode' => 'employee'],
+        ]);
+
+        // Then each invitation records its own row and the batch records the two sent, by the admin
+        $response->assertOk();
+        $this->assertDatabaseCount('audit_trail', 3);
+        foreach (Invitation::query()->get() as $invitation) {
+            $this->assertInvitationAudited($response, $invitation, AuditAction::UserInvited);
+        }
+        $this->assertBatchAudited($response, $company, 2);
+        $this->assertActedBy(AuditAction::BulkInviteSent, $admin, 'admin');
     }
 
     /**

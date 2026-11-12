@@ -1220,6 +1220,28 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         ]);
     }
 
+    protected function assertBatchAudited(TestResponse $response, Company $company, int $count): void
+    {
+        $requestId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($requestId);
+
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $company->getKey(),
+            'stored_event_id' => null,
+            'event_class' => 'BulkInviteSent',
+            'subject_type' => 'company',
+            'subject_id' => $company->getKey(),
+            'subject_label' => null,
+            'action' => 'bulk_invite_sent',
+            'description' => 'Bulk invite sent',
+            'metadata->count' => $count,
+            'ip_address' => self::DEVICE_IP,
+            'user_agent' => self::DEVICE,
+            'request_id' => $requestId,
+            'severity' => 'info',
+        ]);
+    }
+
     protected function assertActedBy(AuditAction $action, User $actor, string $roleCode): void
     {
         $entry = AuditEntry::query()->where('action', $action)->sole();

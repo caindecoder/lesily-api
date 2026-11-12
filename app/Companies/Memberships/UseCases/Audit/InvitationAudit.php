@@ -23,6 +23,20 @@ class InvitationAudit
         $this->write($this->rowOf($invitation, $actor, $origin), AuditAction::UserInvited);
     }
 
+    public function bulkInviteSent(BulkInviteSent $batch, User $actor, RequestOrigin $origin): void
+    {
+        $this->write([
+            ...$this->actorAndOrigin($actor, $batch->company->getKey(), $origin),
+            'company_id' => $batch->company->getKey(),
+            'stored_event_id' => null,
+            'event_class' => 'BulkInviteSent',
+            'subject_type' => AuditSubjectType::Company,
+            'subject_id' => $batch->company->getKey(),
+            'subject_label' => null,
+            'metadata' => ['count' => $batch->count],
+        ], AuditAction::BulkInviteSent);
+    }
+
     /** @return array<string, mixed> */
     protected function rowOf(Invitation $invitation, User $actor, RequestOrigin $origin): array
     {
@@ -32,19 +46,27 @@ class InvitationAudit
             ->firstOrFail();
 
         return [
+            ...$this->actorAndOrigin($actor, $invitation->company_id, $origin),
             'company_id' => $invitation->company_id,
             'stored_event_id' => $storedEvent->getKey(),
             'event_class' => class_basename($storedEvent->event_class),
             'subject_type' => AuditSubjectType::Invitation,
             'subject_id' => $invitation->getKey(),
             'subject_label' => $invitation->email,
+            'metadata' => ['role_code' => $invitation->role()->sole()->code],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    protected function actorAndOrigin(User $actor, string $companyId, RequestOrigin $origin): array
+    {
+        return [
             'actor_user_id' => $actor->getKey(),
-            'actor_role_code' => $this->memberRoleCode->of($actor, $invitation->company_id),
+            'actor_role_code' => $this->memberRoleCode->of($actor, $companyId),
             'actor_label' => $actor->name,
             'ip_address' => $origin->ip,
             'user_agent' => $origin->boundedUserAgent(),
             'request_id' => $origin->boundedRequestId(),
-            'metadata' => ['role_code' => $invitation->role()->sole()->code],
         ];
     }
 
