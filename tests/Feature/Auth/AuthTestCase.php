@@ -36,6 +36,7 @@ use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
 use App\Foundation\Auth\UseCases\Google\GoogleIdentity;
 use App\Foundation\Auth\UseCases\Results\IssuedSession;
 use App\Foundation\Auth\UseCases\Google\GoogleIdTokenVerifier;
+use App\Foundation\Auth\Events\User2FARecoveryCodesRegenerated;
 use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
 use App\Foundation\Auth\Exceptions\GoogleSignInUnavailableException;
 use App\Foundation\Auth\Reactors\PasswordChangedNotificationReactor;
@@ -415,6 +416,7 @@ abstract class AuthTestCase extends TestCase
             AuditAction::PasswordReset => [UserPasswordReset::class, 'Password reset completed'],
             AuditAction::TwoFactorEnabled => [User2FAEnabled::class, '2FA enabled'],
             AuditAction::TwoFactorDisabled => [User2FADisabled::class, '2FA disabled'],
+            AuditAction::RecoveryCodesRegenerated => [User2FARecoveryCodesRegenerated::class, '2FA recovery codes regenerated'],
             default => throw new RuntimeException("No expected record for {$action->value}."),
         };
     }

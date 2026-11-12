@@ -11,6 +11,7 @@ use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\Auth\Events\User2FARecoveryCodesRegenerated;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -59,17 +60,38 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
     #[Test]
     public function when_the_password_is_incorrect_then_the_existing_codes_are_unchanged(): void
     {
-        // Given an authenticated 2FA user holding known recovery codes
+        // Given a 2FA member of two companies holding known recovery codes
         $user = $this->aTwoFactorUser(['KEEP-CODE', 'ALSO-KEEP']);
+        $this->inTwoCompanies($user);
         Sanctum::actingAs($user);
 
         // When they submit the wrong password to regenerate
         $response = $this->postJson('/api/v1/auth/2fa/recovery-codes', ['password' => 'not-my-password']);
 
-        // Then it is refused and the existing codes are left intact (the Minimal Guarantee)
+        // Then it is refused, the existing codes are left intact (the Minimal Guarantee), and nothing is audited
         $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::IncorrectPassword);
         $response->assertJsonPath('message', 'Incorrect password. Please try again.');
         $this->assertRecoveryCodesUnchanged($user, 'KEEP-CODE');
+        $this->assertNothingAudited();
+    }
+
+    #[Test]
+    public function when_the_audit_row_cannot_be_written_then_the_existing_codes_are_unchanged(): void
+    {
+        // Given a 2FA member holding known recovery codes, and an audit trail that refuses the next row
+        config(['app.debug' => false]);
+        $user = $this->aTwoFactorUser(['KEEP-CODE', 'ALSO-KEEP']);
+        $this->inTwoCompanies($user);
+        Sanctum::actingAs($user);
+        $this->failTheAuditTrail();
+
+        // When they regenerate with the correct password
+        $response = $this->postJson('/api/v1/auth/2fa/recovery-codes', ['password' => self::LOGIN_PASSWORD]);
+
+        // Then the regeneration fails whole: the existing codes still work, no marker, nothing audited
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertRecoveryCodesUnchanged($user, 'KEEP-CODE');
+        $this->assertNothingAudited();
     }
 
     #[Test]
@@ -119,6 +141,22 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
 
         // Then the old code no longer authenticates at verify, but a new one does (rotation end-to-end)
         $this->assertOldCodeRejectedAndNewAccepted('OLD-CODE', $newCodes[0], $user);
+    }
+
+    #[Test]
+    public function when_codes_are_regenerated_then_each_company_of_the_user_records_it(): void
+    {
+        // Given a 2FA user who owns one company and works for another, signed in from a known device
+        $user = $this->aTwoFactorUser();
+        $this->inTwoCompanies($user);
+        Sanctum::actingAs($user);
+        $this->fromADevice();
+
+        // When they regenerate their recovery codes with the correct password
+        $response = $this->postJson('/api/v1/auth/2fa/recovery-codes', ['password' => self::LOGIN_PASSWORD]);
+
+        // Then each company's audit trail records the regeneration, with the role the user holds there
+        $this->assertAuditedInEachCompany($response, $user, AuditAction::RecoveryCodesRegenerated);
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\Auth\IO\Http\Resources\RecoveryCodesResource;
 use App\Foundation\Auth\UseCases\Commands\RegenerateRecoveryCodesCommand;
 use App\Foundation\Auth\UseCases\Interactors\RegenerateRecoveryCodesInteractor;
@@ -25,7 +26,7 @@ class RegenerateRecoveryCodesController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $codes = $interactor->execute($user, $command);
+        $codes = $interactor->execute($user, $command, RequestOrigin::fromRequest($request));
 
         return (new RecoveryCodesResource($codes))->response();
     }

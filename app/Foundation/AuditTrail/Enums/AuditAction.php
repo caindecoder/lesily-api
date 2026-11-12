@@ -35,4 +35,5 @@ enum AuditAction: string
     case PasswordReset = 'password_reset';
     case TwoFactorEnabled = 'two_factor_enabled';
     case TwoFactorDisabled = 'two_factor_disabled';
+    case RecoveryCodesRegenerated = 'recovery_codes_regenerated';
 }

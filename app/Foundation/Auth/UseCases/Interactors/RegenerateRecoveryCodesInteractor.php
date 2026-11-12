@@ -6,9 +6,12 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\Auth\UseCases\PasswordVerifier;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\Auth\Totp\RecoveryCodeGenerator;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
+use App\Foundation\AuditTrail\UseCases\Audit\UserLevelAudit;
 use App\Foundation\Auth\Exceptions\TwoFactorNotEnabledException;
 use App\Foundation\Auth\UseCases\Commands\RegenerateRecoveryCodesCommand;
 
@@ -24,12 +27,13 @@ class RegenerateRecoveryCodesInteractor
     public function __construct(
         private readonly RecoveryCodeGenerator $recoveryCodes,
         private readonly PasswordVerifier $passwordVerifier,
+        private readonly UserLevelAudit $audit,
     ) {}
 
     /**
      * @return list<string>
      */
-    public function execute(User $user, RegenerateRecoveryCodesCommand $command): array
+    public function execute(User $user, RegenerateRecoveryCodesCommand $command, RequestOrigin $origin): array
     {
         if ($user->two_factor_confirmed_at === null) {
             throw new TwoFactorNotEnabledException;
@@ -46,12 +50,14 @@ class RegenerateRecoveryCodesInteractor
         // racing verify sees the rotated codes. Atomic: the direct overwrite and the marker
         // persist commit together; the TOTP secret + two_factor_confirmed_at are untouched
         // (Design-Y; the marker carries no secret material).
-        Cache::lock("2fa-recovery-lock:{$user->getKey()}", seconds: 5)->block(seconds: 5, callback: function () use ($user, $plaintextCodes): void {
-            DB::transaction(function () use ($user, $plaintextCodes): void {
+        Cache::lock("2fa-recovery-lock:{$user->getKey()}", seconds: 5)->block(seconds: 5, callback: function () use ($user, $plaintextCodes, $origin): void {
+            DB::transaction(function () use ($user, $plaintextCodes, $origin): void {
                 $user->two_factor_recovery_codes = array_map(Hash::make(...), $plaintextCodes);
                 $user->save();
 
                 UserAggregate::retrieve($user->getKey())->regenerateRecoveryCodes()->persist();
+
+                $this->audit->record($user, AuditAction::RecoveryCodesRegenerated, $origin);
             });
         });
 

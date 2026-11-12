@@ -150,6 +150,7 @@ return [
             'password_reset' => 'Password reset completed',
             'two_factor_enabled' => '2FA enabled',
             'two_factor_disabled' => '2FA disabled',
+            'recovery_codes_regenerated' => '2FA recovery codes regenerated',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',
