@@ -130,6 +130,7 @@ class RemoveMemberTest extends MembershipsTestCase
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::OwnerTransferRequired);
         $response->assertJsonPath('message', 'The company owner cannot be removed. Transfer ownership first.');
         $this->assertMemberStillActive($ownerMembershipId);
+        $this->assertNotAudited(AuditAction::MemberRemoved);
     }
 
     #[Test]
@@ -146,6 +147,25 @@ class RemoveMemberTest extends MembershipsTestCase
         // interactor's guard ORDER as contract (self before owner; s112 parity)
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::SelfRemovalBlocked);
         $this->assertMemberStillActive($ownMembershipId);
+    }
+
+    #[Test]
+    public function when_the_removal_cannot_be_audited_then_the_member_and_their_sessions_remain(): void
+    {
+        // Given Bob with a live session and an audit trail that refuses the removal's row
+        [$company, $admin] = $this->aCompanyWithMember();
+        [$target, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        $session = $this->aSessionFor($target);
+        $this->failTheAuditTrail();
+
+        // When the admin removes Bob
+        $response = $this->removeMember($admin, $company, $membershipId);
+
+        // Then the removal fails whole: Bob stays a member, his session still works, no row
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertMemberStillActive($membershipId);
+        $this->assertMemberSessionStands($target, $session);
+        $this->assertNotAudited(AuditAction::MemberRemoved);
     }
 
     #[Test]
@@ -353,5 +373,15 @@ class RemoveMemberTest extends MembershipsTestCase
         $this->withHeader('Authorization', "Bearer {$session->plainTextToken}")
             ->getJson('/api/_test/authenticated-probe')
             ->assertUnauthorized();
+    }
+
+    protected function assertMemberSessionStands(User $target, NewAccessToken $session): void
+    {
+        $this->assertTrue($target->tokens()->whereKey($session->accessToken->getKey())->exists());
+
+        Auth::forgetGuards();
+        $this->withHeader('Authorization', "Bearer {$session->plainTextToken}")
+            ->getJson('/api/_test/authenticated-probe')
+            ->assertOk();
     }
 }
