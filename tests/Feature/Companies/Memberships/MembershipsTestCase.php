@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies\Memberships;
 
 use stdClass;
 use App\Models\User;
+use RuntimeException;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Event;
+use Tests\Concerns\AssertsAuditTrail;
 use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
 use App\Consent\Entities\ConsentRecord;
@@ -22,9 +24,11 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Events\QueryExecuted;
 use Tests\Feature\Companies\CompaniesTestCase;
 use App\Foundation\Auth\UseCases\SessionIssuer;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\Events\TransactionBeginning;
 use App\Companies\Memberships\Events\UserJoinedCompany;
@@ -60,6 +64,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         'relationship' => 'parent',
     ];
 
+    use AssertsAuditTrail;
     use InducesDatabaseFailures;
     use WithRolePermissionFixtures;
 
@@ -1185,5 +1190,56 @@ abstract class MembershipsTestCase extends CompaniesTestCase
             ->sole()
             ->token_hash;
         $this->assertSame(hash('sha256', (string) $plaintextToken), $storedHash);
+    }
+
+    protected function assertInvitationAudited(TestResponse $response, Invitation $invitation, AuditAction $action): void
+    {
+        $requestId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($requestId);
+        [$eventClass, $words] = $this->expectedRecordOf($action);
+        $newestEvent = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $invitation->getKey())
+            ->latest('id')
+            ->firstOrFail();
+        $this->assertSame($eventClass, $newestEvent->event_class);
+
+        $this->assertDatabaseHas('audit_trail', [
+            'company_id' => $invitation->company_id,
+            'stored_event_id' => $newestEvent->getKey(),
+            'event_class' => class_basename($eventClass),
+            'subject_type' => 'invitation',
+            'subject_id' => $invitation->getKey(),
+            'subject_label' => $invitation->email,
+            'action' => $action->value,
+            'description' => $words,
+            'metadata->role_code' => $invitation->role()->sole()->code,
+            'ip_address' => self::DEVICE_IP,
+            'user_agent' => self::DEVICE,
+            'request_id' => $requestId,
+            'severity' => 'info',
+        ]);
+    }
+
+    protected function assertActedBy(AuditAction $action, User $actor, string $roleCode): void
+    {
+        $entry = AuditEntry::query()->where('action', $action)->sole();
+
+        $this->assertSame($actor->getKey(), $entry->actor_user_id);
+        $this->assertSame($roleCode, $entry->actor_role_code);
+        $this->assertSame($actor->name, $entry->actor_label);
+    }
+
+    protected function assertNotAudited(AuditAction $action): void
+    {
+        $this->assertDatabaseMissing('audit_trail', ['action' => $action->value]);
+    }
+
+    /** @return array{class-string, string} */
+    protected function expectedRecordOf(AuditAction $action): array
+    {
+        return match ($action) {
+            AuditAction::UserInvited => [UserInvited::class, 'User invited'],
+            default => throw new RuntimeException("No expected record for {$action->value}."),
+        };
     }
 }

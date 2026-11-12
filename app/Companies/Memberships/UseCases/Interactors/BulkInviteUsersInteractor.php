@@ -3,7 +3,7 @@
 namespace App\Companies\Memberships\UseCases\Interactors;
 
 use App\Models\User;
-use App\Companies\Entities\Company;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Memberships\Services\InvitationAllowance;
 use App\Companies\Memberships\Exceptions\AlreadyMemberException;
 use App\Companies\Memberships\UseCases\Commands\InviteUserCommand;
@@ -26,24 +26,26 @@ class BulkInviteUsersInteractor
      *
      * @throws InvitationAllowanceExceededException
      */
-    public function execute(Company $company, User $actor, BulkInviteUsersCommand $command): array
+    public function execute(BulkInviteUsersCommand $command, User $actor, RequestOrigin $origin): array
     {
         $this->allowance->spend($actor, count($command->invitations));
 
-        return array_map(fn (array $row): BulkInviteRowResult => $this->inviteRow($company, $actor, $row), $command->invitations);
+        $invites = array_map(
+            fn (array $row): InviteUserCommand => InviteUserCommand::from([...$row, 'company' => $command->company]),
+            $command->invitations,
+        );
+
+        return array_map(fn (InviteUserCommand $invite): BulkInviteRowResult => $this->inviteRow($invite, $actor, $origin), $invites);
     }
 
-    /**
-     * @param  array{email: string, roleCode: string}  $row
-     */
-    protected function inviteRow(Company $company, User $actor, array $row): BulkInviteRowResult
+    protected function inviteRow(InviteUserCommand $invite, User $actor, RequestOrigin $origin): BulkInviteRowResult
     {
         try {
-            $this->inviteUser->invite($company, $actor, InviteUserCommand::from($row));
+            $this->inviteUser->invite($invite, $actor, $origin);
         } catch (AlreadyMemberException $refusal) {
-            return new BulkInviteRowResult($row['email'], $row['roleCode'], $refusal->getMessage());
+            return new BulkInviteRowResult($invite->email, $invite->roleCode, $refusal->getMessage());
         }
 
-        return new BulkInviteRowResult($row['email'], $row['roleCode']);
+        return new BulkInviteRowResult($invite->email, $invite->roleCode);
     }
 }

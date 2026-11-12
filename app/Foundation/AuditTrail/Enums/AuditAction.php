@@ -36,4 +36,9 @@ enum AuditAction: string
     case TwoFactorEnabled = 'two_factor_enabled';
     case TwoFactorDisabled = 'two_factor_disabled';
     case RecoveryCodesRegenerated = 'recovery_codes_regenerated';
+    case UserInvited = 'user_invited';
+    case BulkInviteSent = 'bulk_invite_sent';
+    case InvitationResent = 'invitation_resent';
+    case InvitationRevoked = 'invitation_revoked';
+    case InvitationAccepted = 'invitation_accepted';
 }

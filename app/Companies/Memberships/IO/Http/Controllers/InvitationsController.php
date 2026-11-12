@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Memberships\UseCases\Commands\InviteUserCommand;
 use App\Companies\Memberships\IO\Http\Resources\InvitationResource;
 use App\Companies\Memberships\UseCases\Commands\BulkInviteUsersCommand;
@@ -25,24 +26,24 @@ class InvitationsController
 {
     public function store(Request $request, InviteUserInteractor $interactor): JsonResponse
     {
-        $command = InviteUserCommand::validateAndCreate($request);
+        $command = InviteUserCommand::validateAndCreate([...$request->all(), 'company' => $request->company()]);
 
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
-        $invitation = $interactor->execute($request->company(), $actor, $command);
+        $invitation = $interactor->execute($command, $actor, RequestOrigin::fromRequest($request));
 
         return (new InvitationResource($invitation))->response($request)->setStatusCode(Response::HTTP_CREATED);
     }
 
     public function bulkStore(Request $request, BulkInviteUsersInteractor $interactor): JsonResponse
     {
-        $command = BulkInviteUsersCommand::validateAndCreate($request);
+        $command = BulkInviteUsersCommand::validateAndCreate([...$request->all(), 'company' => $request->company()]);
 
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
-        $results = $interactor->execute($request->company(), $actor, $command);
+        $results = $interactor->execute($command, $actor, RequestOrigin::fromRequest($request));
 
         return BulkInvitationResultResource::collection($results)->response($request);
     }

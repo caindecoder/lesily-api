@@ -11,8 +11,10 @@ use App\Companies\Entities\CompanyUser;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Companies\Memberships\Services\InvitationAllowance;
+use App\Companies\Memberships\UseCases\Audit\InvitationAudit;
 use App\Companies\Memberships\Exceptions\AlreadyMemberException;
 use App\Companies\Memberships\UseCases\Commands\InviteUserCommand;
 use App\Companies\Memberships\UseCases\Commands\CreateInvitationCommand;
@@ -26,23 +28,27 @@ use App\Companies\Memberships\Exceptions\InvitationAllowanceExceededException;
  */
 class InviteUserInteractor
 {
-    public function __construct(private InvitationAllowance $allowance) {}
+    public function __construct(
+        private InvitationAllowance $allowance,
+        private InvitationAudit $audit,
+    ) {}
 
     /**
      * @throws InvitationAllowanceExceededException
      */
-    public function execute(Company $company, User $actor, InviteUserCommand $command): Invitation
+    public function execute(InviteUserCommand $command, User $actor, RequestOrigin $origin): Invitation
     {
         $this->allowance->spend($actor, 1);
 
-        return $this->invite($company, $actor, $command);
+        return $this->invite($command, $actor, $origin);
     }
 
     /**
      * The invite itself, with no allowance spent — bulk invite spends its batch first.
      */
-    public function invite(Company $company, User $actor, InviteUserCommand $command): Invitation
+    public function invite(InviteUserCommand $command, User $actor, RequestOrigin $origin): Invitation
     {
+        $company = $command->company;
         $userId = User::query()->where('email', $command->email)->value('id');
 
         // A soft-deleted (removed) membership is NOT a member — its re-invite is
@@ -72,17 +78,22 @@ class InviteUserInteractor
         $membershipId = $this->removedMembershipId($company, $userId) ?? Str::uuid7()->toString();
         $plaintextToken = Str::random(40);
 
-        DB::transaction(fn () => UserMembership::retrieve($membershipId)
-            ->invite(CreateInvitationCommand::from([
-                'company' => $company,
-                'email' => $command->email,
-                'role' => Role::query()->where('code', $command->roleCode)->sole(),
-                'invitedBy' => $actor,
-                'plaintextToken' => $plaintextToken,
-            ]))
-            ->persist());
+        $invitation = DB::transaction(function () use ($membershipId, $company, $command, $actor, $plaintextToken, $origin): Invitation {
+            UserMembership::retrieve($membershipId)
+                ->invite(CreateInvitationCommand::from([
+                    'company' => $company,
+                    'email' => $command->email,
+                    'role' => Role::query()->where('code', $command->roleCode)->sole(),
+                    'invitedBy' => $actor,
+                    'plaintextToken' => $plaintextToken,
+                ]))
+                ->persist();
 
-        $invitation = Invitation::query()->with('role')->findOrFail($membershipId);
+            $invitation = Invitation::query()->with('role')->findOrFail($membershipId);
+            $this->audit->invited($invitation, $actor, $origin);
+
+            return $invitation;
+        });
 
         Mail::to($command->email)->queue(new InvitationMail(
             companyName: $company->name,

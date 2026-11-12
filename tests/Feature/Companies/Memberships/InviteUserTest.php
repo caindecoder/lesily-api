@@ -11,6 +11,7 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
@@ -35,10 +36,11 @@ class InviteUserTest extends MembershipsTestCase
             'roleCode' => 'employee',
         ]);
 
-        // Then it is refused as an existing member and nothing is created
+        // Then it is refused as an existing member and nothing is created or audited
         $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'ALREADY_MEMBER');
         $this->assertNoInvitationCreated();
+        $this->assertNothingAudited();
     }
 
     #[Test]
@@ -231,7 +233,47 @@ class InviteUserTest extends MembershipsTestCase
         $this->assertNoInvitationCreated();
     }
 
+    #[Test]
+    public function when_the_audit_row_cannot_be_written_then_no_invitation_is_recorded_or_mailed(): void
+    {
+        // Given an admin and an audit trail that refuses the row
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->failTheAuditTrail();
+
+        // When the admin invites a new email
+        $response = $this->invite($admin, $company, [
+            'email' => 'newhire@contoso.lk',
+            'roleCode' => 'employee',
+        ]);
+
+        // Then the invite fails whole: no invitation, no recorded event, no email, no row
+        $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
+        $this->assertNoInvitationCreated();
+        $this->assertNothingAudited();
+    }
+
     // --- Edge ---
+
+    #[Test]
+    public function when_a_removed_member_is_reinvited_then_the_audit_row_links_the_new_invitation(): void
+    {
+        // Given a former member whose membership stream already holds an earlier invite
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'returning@contoso.lk');
+        $this->removeMember($admin, $company, $membershipId)->assertNoContent();
+        Auth::forgetGuards();
+        $this->fromADevice();
+
+        // When the admin re-invites that email
+        $response = $this->invite($admin, $company, [
+            'email' => 'returning@contoso.lk',
+            'roleCode' => 'hr_officer',
+        ]);
+
+        // Then the row names the re-invite and links its own event, the stream's newest
+        $response->assertCreated();
+        $this->assertInvitationAudited($response, Invitation::query()->findOrFail($membershipId), AuditAction::UserInvited);
+    }
 
     #[Test]
     public function when_a_previously_removed_member_is_reinvited_then_the_same_membership_is_reengaged(): void
@@ -443,6 +485,25 @@ class InviteUserTest extends MembershipsTestCase
             ->where('event_properties->companyId', $companyB->getKey())
             ->where('event_properties->invitedBy', $admin->getKey())
             ->count());
+    }
+
+    #[Test]
+    public function when_an_invite_is_sent_then_the_audit_trail_records_who_was_invited_as_what(): void
+    {
+        // Given an admin acting from a known device
+        [$company, $admin] = $this->aCompanyWithMember('admin');
+        $this->fromADevice();
+
+        // When the admin invites a new email as an HR officer
+        $response = $this->invite($admin, $company, [
+            'email' => 'newhire@contoso.lk',
+            'roleCode' => 'hr_officer',
+        ]);
+
+        // Then the audit trail records the invitation, who sent it and from where
+        $response->assertCreated();
+        $this->assertInvitationAudited($response, Invitation::query()->sole(), AuditAction::UserInvited);
+        $this->assertActedBy(AuditAction::UserInvited, $admin, 'admin');
     }
 
     /**
