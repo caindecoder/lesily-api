@@ -161,10 +161,11 @@ class RemoveMemberTest extends MembershipsTestCase
         // When the admin removes Bob
         $response = $this->removeMember($admin, $company, $membershipId);
 
-        // Then the removal fails whole: Bob stays a member, his session still works, no row
+        // Then the removal fails whole: Bob stays a member, his session still works, no event, no row
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
         $this->assertMemberStillActive($membershipId);
         $this->assertMemberSessionStands($target, $session);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserRemovedFromCompany::class)->count());
         $this->assertNotAudited(AuditAction::MemberRemoved);
     }
 

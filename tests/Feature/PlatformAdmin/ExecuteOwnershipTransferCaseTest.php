@@ -362,7 +362,8 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response->assertOk();
         $this->assertRoleChangeAudited($response, $this->pivotOf($case, $olive), 'owner');
         $this->assertRoleChangeAudited($response, $this->pivotOf($case, $alex), 'hr_officer');
-        $this->assertEveryRowActedBy(AuditAction::RoleChanged, $this->admin, AuditEntry::STAFF_ROLE_CODE);
+        $this->assertSame(2, AuditEntry::query()->where('action', AuditAction::RoleChanged)->count());
+        $this->assertEveryRowActedBy(AuditAction::RoleChanged, $this->admin, 'platform_super_admin');
     }
 
     #[Test]
@@ -429,10 +430,6 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     /**
-     * The execute endpoint called WITHOUT any Idempotency-Key header — the
-     * row-4 omission form of executeCase.
-     */
-    /**
      * Run $failure once the case-executed row is inserted — the outer
      * transaction's own write, after the composed transfer's role rows.
      */
@@ -445,6 +442,10 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         });
     }
 
+    /**
+     * The execute endpoint called WITHOUT any Idempotency-Key header — the
+     * row-4 omission form of executeCase.
+     */
     protected function executeCaseWithoutIdempotencyKey(?User $actor, string $caseId): TestResponse
     {
         if ($actor !== null) {
@@ -520,6 +521,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
      */
     protected function assertExecutionAudited(OwnershipTransferCase $case, int $transferEventId, TestResponse $response): void
     {
+        $this->assertDatabaseCount('audit_trail', 3);
         $this->assertSame(1, AuditEntry::query()->where('action', AuditAction::CaseExecuted)->count());
         $this->assertDatabaseHas('audit_trail', [
             'event_class' => 'CompanyOwnershipTransferred',
@@ -645,6 +647,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             ->where('aggregate_uuid', $case->company_id)
             ->where('event_class', CompanyOwnershipTransferred::class)
             ->count());
+        $this->assertDatabaseCount('audit_trail', 3);
         $this->assertSame(1, AuditEntry::query()->where('action', AuditAction::CaseExecuted)->count());
 
         $fresh = $case->fresh();

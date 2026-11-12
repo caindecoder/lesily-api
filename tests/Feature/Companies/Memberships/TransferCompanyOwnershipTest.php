@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Tests\Feature\Companies\CreatesTrialCompanies;
 use App\Companies\Events\CompanyOwnershipTransferred;
 use App\Foundation\Notifications\Enums\NotificationType;
@@ -194,11 +195,12 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     #[Test]
     public function when_the_transfer_cannot_be_audited_then_ownership_stays(): void
     {
-        // Given Olive, the owner, an employee to hand over to, and an audit trail that refuses the rows
+        // Given Olive, the owner, an employee to hand over to, and an audit trail
+        // that takes the first role row and refuses the second
         $owner = User::factory()->create();
         $company = $this->aTrialCompanyOwnedBy($owner);
         [$target] = $this->aMembership($company, 'employee');
-        $this->failTheAuditTrail();
+        $this->failTheAuditTrailAfter(1);
 
         // When Olive transfers ownership
         $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
@@ -298,6 +300,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $response->assertOk();
         $this->assertRoleChangeAudited($response, $this->pivotOf($company, $owner), 'owner');
         $this->assertRoleChangeAudited($response, $this->pivotOf($company, $target), 'hr_officer');
+        $this->assertSame(2, AuditEntry::query()->where('action', AuditAction::RoleChanged)->count());
         $this->assertEveryRowActedBy(AuditAction::RoleChanged, $owner, 'owner');
     }
 
