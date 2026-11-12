@@ -1484,6 +1484,8 @@ abstract class DsarTestCase extends TestCase
     {
         UserMembership::retrieve($invitationId)
             ->revokeInvitation(RevokeInvitationCommand::from([
+                'company' => Invitation::query()->findOrFail($invitationId)->company()->sole(),
+                'invitationId' => $invitationId,
                 'revokedBy' => User::factory()->create(),
                 'reason' => 'Sent to the wrong team',
             ]))

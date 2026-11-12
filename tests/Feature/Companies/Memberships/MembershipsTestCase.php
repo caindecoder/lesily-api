@@ -1263,6 +1263,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         return match ($action) {
             AuditAction::UserInvited => [UserInvited::class, 'User invited'],
             AuditAction::InvitationResent => [UserInvitationResent::class, 'Invitation resent'],
+            AuditAction::InvitationRevoked => [UserInvitationRevoked::class, 'Invitation revoked'],
             default => throw new RuntimeException("No expected record for {$action->value}."),
         };
     }

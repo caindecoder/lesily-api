@@ -70,11 +70,13 @@ class InvitationsController
         $actor = $request->user();
 
         $command = RevokeInvitationCommand::validateAndCreate([
+            'company' => $request->company(),
+            'invitationId' => $invitationId,
             'revokedBy' => $actor,
             'reason' => $request->input('reason'),
         ]);
 
-        $interactor->execute($request->company(), $command, $invitationId);
+        $interactor->execute($command, RequestOrigin::fromRequest($request));
 
         return response()->noContent();
     }
