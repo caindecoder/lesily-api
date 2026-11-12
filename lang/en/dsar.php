@@ -148,6 +148,7 @@ return [
             'breach_marked_false_alarm' => 'A recorded data breach was closed as a false alarm',
             'password_changed' => 'Password changed',
             'password_reset' => 'Password reset completed',
+            'two_factor_enabled' => '2FA enabled',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',

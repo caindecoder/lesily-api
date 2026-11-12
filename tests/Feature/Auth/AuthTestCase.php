@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Password;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use Tests\Concerns\InducesProjectorFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
+use App\Foundation\Auth\Events\User2FAEnabled;
 use App\Foundation\Auth\UseCases\TokenRevoker;
 use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -411,6 +412,7 @@ abstract class AuthTestCase extends TestCase
         return match ($action) {
             AuditAction::PasswordChanged => [UserPasswordChanged::class, 'Password changed'],
             AuditAction::PasswordReset => [UserPasswordReset::class, 'Password reset completed'],
+            AuditAction::TwoFactorEnabled => [User2FAEnabled::class, '2FA enabled'],
             default => throw new RuntimeException("No expected record for {$action->value}."),
         };
     }
