@@ -15,6 +15,7 @@ use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -53,8 +54,9 @@ class ChangePasswordTest extends AuthTestCase
     #[Test]
     public function when_the_current_password_is_incorrect_then_the_password_is_unchanged(): void
     {
-        // Given an authenticated user signed in on two devices — the current one plus one other
+        // Given a member of two companies signed in on two devices — the current one plus one other
         $user = $this->aRegisteredUser();
+        $this->inTwoCompanies($user);
         $current = $this->aSessionFor($user, 'web');
         $this->aSessionFor($user, 'mobile');
 
@@ -64,10 +66,11 @@ class ChangePasswordTest extends AuthTestCase
             'newPassword' => self::NEW_PASSWORD,
         ]);
 
-        // Then it is refused, the password is left intact, and NO session is revoked (Minimal Guarantee)
+        // Then it is refused, the password is left intact, NO session is revoked (Minimal Guarantee), and nothing is audited
         $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::IncorrectPassword);
         $response->assertJsonPath('message', 'Incorrect password. Please try again.'); // pins the bootstrap copy (Infection-blind)
         $this->assertPasswordUnchanged($user, 2);
+        $this->assertNothingAudited();
     }
 
     #[Test]
@@ -169,6 +172,27 @@ class ChangePasswordTest extends AuthTestCase
         $this->assertChangeRolledBack($response, $user);
     }
 
+    #[Test]
+    public function when_the_audit_row_cannot_be_written_then_the_password_change_is_rolled_back(): void
+    {
+        // Given a member on two devices, and an audit trail that refuses the next row
+        $user = $this->aRegisteredUser();
+        $this->inTwoCompanies($user);
+        $current = $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
+        $this->failTheAuditTrail();
+
+        // When they change their password
+        $response = $this->changePassword($current->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the change fails whole and no audit row is left
+        $this->assertChangeRolledBack($response, $user);
+        $this->assertNothingAudited();
+    }
+
     // --- Edge ---
 
     #[Test]
@@ -241,6 +265,66 @@ class ChangePasswordTest extends AuthTestCase
         $response->assertNoContent();
         $response->assertHeader('Idempotency-Replayed', 'true');
         $this->assertSame(1, $user->tokens()->count(), 'A replayed retry must not revoke a second time.');
+    }
+
+    #[Test]
+    public function when_the_user_was_removed_from_a_company_then_that_company_records_nothing(): void
+    {
+        // Given a user who owns one company and was removed from the other
+        $user = $this->aRegisteredUser();
+        $this->inTwoCompanies($user);
+        $this->removeMembership($this->employingCompany, $user);
+        $current = $this->aSessionFor($user);
+
+        // When they change their password
+        $this->changePassword($current->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then only the company they still belong to records it
+        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseHas('audit_trail', ['company_id' => $this->ownedCompany->getKey(), 'action' => 'password_changed']);
+    }
+
+    #[Test]
+    public function when_the_device_and_request_id_are_longer_than_their_columns_then_they_are_cut_to_fit(): void
+    {
+        // Given a member whose client sends oversized device and correlation headers
+        $user = $this->aRegisteredUser();
+        $this->inTwoCompanies($user);
+        $current = $this->aSessionFor($user);
+        $this->withHeaders(['User-Agent' => str_repeat('a', 300), 'Correlation-Id' => str_repeat('b', 300)]);
+
+        // When they change their password
+        $response = $this->changePassword($current->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the change succeeds and every audit row holds the values cut to the columns
+        $response->assertNoContent();
+        $this->assertDatabaseCount('audit_trail', 2);
+        $this->assertSame([str_repeat('a', 255)], AuditEntry::query()->distinct()->pluck('user_agent')->all());
+        $this->assertSame([str_repeat('b', 255)], AuditEntry::query()->distinct()->pluck('request_id')->all());
+    }
+
+    #[Test]
+    public function when_the_user_belongs_to_no_company_then_no_audit_row_is_written(): void
+    {
+        // Given a user with no company
+        $user = $this->aRegisteredUser();
+        $current = $this->aSessionFor($user);
+
+        // When they change their password
+        $response = $this->changePassword($current->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then the change succeeds and no audit row is written
+        $response->assertNoContent();
+        $this->assertNothingAudited();
     }
 
     // --- Happy ---

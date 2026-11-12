@@ -27,6 +27,7 @@ use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\Auth\Events\UserPasswordReset;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Companies\Memberships\Entities\Invitation;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
@@ -353,6 +354,16 @@ abstract class AuthTestCase extends TestCase
 
         $this->aMembershipFor($user, $this->ownedCompany, 'owner');
         $this->aMembershipFor($user, $this->employingCompany, 'employee');
+    }
+
+    protected function failTheAuditTrail(): void
+    {
+        AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
+    }
+
+    protected function assertNothingAudited(): void
+    {
+        $this->assertDatabaseCount('audit_trail', 0);
     }
 
     protected function fromADevice(): void
