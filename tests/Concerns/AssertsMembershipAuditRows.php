@@ -30,6 +30,16 @@ trait AssertsMembershipAuditRows
         $this->assertSame($roleCode, $entry->metadata['role_code'] ?? null);
     }
 
+    protected function assertEveryRowActedBy(AuditAction $action, User $actor, string $roleCode): void
+    {
+        $entries = AuditEntry::query()->where('action', $action)->get();
+        $this->assertNotEmpty($entries);
+
+        foreach ($entries as $entry) {
+            $this->assertSame([$actor->getKey(), $roleCode, $actor->name], [$entry->actor_user_id, $entry->actor_role_code, $entry->actor_label]);
+        }
+    }
+
     protected function memberRowOf(TestResponse $response, CompanyUser $membership, AuditAction $action): AuditEntry
     {
         $requestId = $response->headers->get('Correlation-Id');

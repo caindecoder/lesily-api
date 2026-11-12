@@ -11,8 +11,10 @@ use App\Foundation\Database\LockContention;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Exceptions\StaleOwnershipException;
 use App\Companies\Exceptions\TargetNotMemberException;
+use App\Companies\Memberships\UseCases\Audit\RoleChange;
 use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Companies\Exceptions\SelfTransferBlockedException;
+use App\Companies\Memberships\UseCases\Audit\MembershipAudit;
 use App\Companies\Exceptions\OwnershipTransferContentionException;
 use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 
@@ -29,6 +31,8 @@ use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
  */
 class TransferCompanyOwnershipInteractor
 {
+    public function __construct(protected readonly MembershipAudit $audit) {}
+
     public function execute(TransferCompanyOwnershipCommand $command, string $expectedOwnerUserId, RequestOrigin $origin): CompanyUser
     {
         if ($command->newOwnerUserId === $expectedOwnerUserId) {
@@ -50,7 +54,7 @@ class TransferCompanyOwnershipInteractor
     {
         $company = $command->company;
 
-        return DB::transaction(function () use ($company, $command, $expectedOwnerUserId): CompanyUser {
+        return DB::transaction(function () use ($company, $command, $expectedOwnerUserId, $origin): CompanyUser {
             $lockedCompany = Company::query()
                 ->whereKey($company->getKey())
                 ->lockForUpdate()
@@ -67,9 +71,21 @@ class TransferCompanyOwnershipInteractor
                 throw new TargetNotMemberException;
             }
 
+            $outgoing = $memberships[$lockedCompany->owner_id];
+            $outgoingRoleCode = $outgoing->role()->sole()->code;
+            $targetRoleCode = $target->role()->sole()->code;
+
             CompanyAggregate::retrieve($company->getKey())
                 ->transferOwnership($command, $lockedCompany->owner_id)
                 ->persist();
+
+            foreach ([[$outgoing, $outgoingRoleCode], [$target, $targetRoleCode]] as [$membership, $fromRoleCode]) {
+                $this->audit->roleChanged(
+                    new RoleChange($membership, $fromRoleCode, $company->getKey(), $outgoingRoleCode),
+                    $command->transferredBy,
+                    $origin,
+                );
+            }
 
             return $target->refresh();
         });

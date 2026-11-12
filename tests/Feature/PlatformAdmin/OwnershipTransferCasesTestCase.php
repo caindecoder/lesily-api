@@ -64,6 +64,17 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
         return $factory->create();
     }
 
+    /**
+     * A company whose recorded owner holds the owner membership, as registration leaves it.
+     */
+    protected function aCompanyWithItsOwner(): Company
+    {
+        $company = Company::factory()->create();
+        $company->users()->attach($company->owner_id, ['role_id' => $this->seededRole('owner')->getKey()]);
+
+        return $company;
+    }
+
     protected function aVerifiedCaseFor(Company $company, ?User $proposed = null): OwnershipTransferCase
     {
         $factory = OwnershipTransferCase::factory()->forCompany($company);
