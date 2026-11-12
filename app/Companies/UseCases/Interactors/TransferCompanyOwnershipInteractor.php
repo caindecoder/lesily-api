@@ -8,6 +8,7 @@ use App\Companies\Entities\CompanyUser;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\DeadlockException;
 use App\Foundation\Database\LockContention;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Exceptions\StaleOwnershipException;
 use App\Companies\Exceptions\TargetNotMemberException;
 use App\Companies\Aggregates\Company as CompanyAggregate;
@@ -28,14 +29,14 @@ use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
  */
 class TransferCompanyOwnershipInteractor
 {
-    public function execute(Company $company, TransferCompanyOwnershipCommand $command, string $expectedOwnerUserId): CompanyUser
+    public function execute(TransferCompanyOwnershipCommand $command, string $expectedOwnerUserId, RequestOrigin $origin): CompanyUser
     {
         if ($command->newOwnerUserId === $expectedOwnerUserId) {
             throw new SelfTransferBlockedException;
         }
 
         try {
-            return $this->executeLocked($company, $command, $expectedOwnerUserId);
+            return $this->executeLocked($command, $expectedOwnerUserId, $origin);
         } catch (DeadlockException $exception) {
             throw new OwnershipTransferContentionException($exception);
         } catch (QueryException $exception) {
@@ -45,8 +46,10 @@ class TransferCompanyOwnershipInteractor
         }
     }
 
-    protected function executeLocked(Company $company, TransferCompanyOwnershipCommand $command, string $expectedOwnerUserId): CompanyUser
+    protected function executeLocked(TransferCompanyOwnershipCommand $command, string $expectedOwnerUserId, RequestOrigin $origin): CompanyUser
     {
+        $company = $command->company;
+
         return DB::transaction(function () use ($company, $command, $expectedOwnerUserId): CompanyUser {
             $lockedCompany = Company::query()
                 ->whereKey($company->getKey())

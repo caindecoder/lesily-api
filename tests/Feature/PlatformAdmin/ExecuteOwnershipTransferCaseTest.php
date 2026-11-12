@@ -18,6 +18,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
 use App\Companies\Events\CompanyOwnershipTransferred;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
@@ -320,13 +321,14 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $olive = User::query()->findOrFail($company->owner_id);
         $bob = $this->aCompanyMember($company, 'admin');
         app(TransferCompanyOwnershipInteractor::class)->execute(
-            $company,
             TransferCompanyOwnershipCommand::validateAndCreate([
+                'company' => $company,
                 'newOwnerUserId' => $bob->getKey(),
                 'transferredBy' => $olive,
                 'source' => TransferSource::SelfService,
             ]),
             $olive->getKey(),
+            new RequestOrigin(null, null, null),
         );
 
         // … and a case opened AFTERWARDS, verified for a third member

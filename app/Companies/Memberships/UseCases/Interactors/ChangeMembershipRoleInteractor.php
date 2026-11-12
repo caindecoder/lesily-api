@@ -3,12 +3,12 @@
 namespace App\Companies\Memberships\UseCases\Interactors;
 
 use Illuminate\Support\Facades\DB;
-use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\DeadlockException;
 use App\Foundation\Database\LockContention;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Companies\Memberships\Exceptions\MembershipContentionException;
 use App\Companies\Memberships\Exceptions\OwnerTransferRequiredException;
@@ -26,10 +26,10 @@ use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
  */
 class ChangeMembershipRoleInteractor
 {
-    public function execute(Company $company, ChangeMembershipRoleCommand $command, string $membershipId): CompanyUser
+    public function execute(ChangeMembershipRoleCommand $command, RequestOrigin $origin): CompanyUser
     {
         try {
-            return $this->executeLocked($company, $command, $membershipId);
+            return $this->executeLocked($command, $origin);
         } catch (DeadlockException $exception) {
             throw new MembershipContentionException($exception);
         } catch (QueryException $exception) {
@@ -39,12 +39,12 @@ class ChangeMembershipRoleInteractor
         }
     }
 
-    protected function executeLocked(Company $company, ChangeMembershipRoleCommand $command, string $membershipId): CompanyUser
+    protected function executeLocked(ChangeMembershipRoleCommand $command, RequestOrigin $origin): CompanyUser
     {
-        return DB::transaction(function () use ($company, $command, $membershipId): CompanyUser {
+        return DB::transaction(function () use ($command): CompanyUser {
             $membership = CompanyUser::query()
-                ->where('company_id', $company->getKey())
-                ->whereKey($membershipId)
+                ->where('company_id', $command->company->getKey())
+                ->whereKey($command->membershipId)
                 ->lockForUpdate()
                 ->firstOrFail();
 
