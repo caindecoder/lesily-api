@@ -23,6 +23,7 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Auth\UseCases\TokenRevoker;
 use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\Auth\Events\UserPasswordReset;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Companies\Memberships\Entities\Invitation;
@@ -52,6 +53,14 @@ abstract class AuthTestCase extends TestCase
     protected const NEW_PASSWORD = 'New-Str0ng-Pass!';
 
     protected const GOOGLE_SUBJECT = '109876543210';
+
+    protected const DEVICE = 'Lesily-Test/1.0 (Windows NT 10.0; Win64; x64)';
+
+    protected const DEVICE_IP = '203.0.113.7';
+
+    protected Company $ownedCompany;
+
+    protected Company $employingCompany;
 
     /**
      * Arrange a registered, login-ready user. The raw password is hashed by the
@@ -334,6 +343,64 @@ abstract class AuthTestCase extends TestCase
             ->where('company_id', $company->getKey())
             ->where('user_id', $user->getKey())
             ->update(['deleted_at' => now()]);
+    }
+
+    protected function inTwoCompanies(User $user): void
+    {
+        $this->seedRbacCatalog();
+        $this->ownedCompany = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $this->employingCompany = Company::factory()->create();
+
+        $this->aMembershipFor($user, $this->ownedCompany, 'owner');
+        $this->aMembershipFor($user, $this->employingCompany, 'employee');
+    }
+
+    protected function fromADevice(): void
+    {
+        $this->withHeader('User-Agent', self::DEVICE)
+            ->withServerVariables(['REMOTE_ADDR' => self::DEVICE_IP]);
+    }
+
+    protected function assertAuditedInEachCompany(TestResponse $response, User $user, AuditAction $action): void
+    {
+        $requestId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($requestId);
+        [$eventClass, $words] = $this->expectedRecordOf($action);
+        $storedEvent = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $user->getKey())
+            ->where('event_class', $eventClass)
+            ->sole();
+
+        $this->assertDatabaseCount('audit_trail', 2);
+        foreach ([[$this->ownedCompany, 'owner'], [$this->employingCompany, 'employee']] as [$company, $roleCode]) {
+            $this->assertDatabaseHas('audit_trail', [
+                'company_id' => $company->getKey(),
+                'stored_event_id' => $storedEvent->getKey(),
+                'event_class' => class_basename($eventClass),
+                'subject_type' => 'user',
+                'subject_id' => $user->getKey(),
+                'subject_label' => null,
+                'action' => $action->value,
+                'description' => $words,
+                'actor_user_id' => $user->getKey(),
+                'actor_role_code' => $roleCode,
+                'actor_label' => $user->name,
+                'ip_address' => self::DEVICE_IP,
+                'user_agent' => self::DEVICE,
+                'request_id' => $requestId,
+                'metadata' => null,
+                'severity' => 'warning',
+            ]);
+        }
+    }
+
+    /** @return array{class-string, string} */
+    protected function expectedRecordOf(AuditAction $action): array
+    {
+        return match ($action) {
+            AuditAction::PasswordChanged => [UserPasswordChanged::class, 'Password changed'],
+            default => throw new RuntimeException("No expected record for {$action->value}."),
+        };
     }
 
     /**

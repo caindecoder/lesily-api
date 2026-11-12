@@ -6,8 +6,11 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use App\Foundation\Auth\UseCases\TokenRevoker;
+use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\Auth\UseCases\CurrentSession;
 use App\Foundation\Auth\UseCases\PasswordVerifier;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
+use App\Foundation\AuditTrail\UseCases\Audit\UserLevelAudit;
 use App\Foundation\Auth\UseCases\Commands\ChangePasswordCommand;
 
 /**
@@ -22,18 +25,21 @@ class ChangePasswordInteractor
     public function __construct(
         private PasswordVerifier $passwordVerifier,
         private TokenRevoker $tokenRevoker,
+        private UserLevelAudit $audit,
     ) {}
 
-    public function execute(User $user, ChangePasswordCommand $command, string $currentTokenId): void
+    public function execute(User $user, ChangePasswordCommand $command, CurrentSession $session): void
     {
         $this->passwordVerifier->verify($user, $command->currentPassword);
 
-        DB::transaction(function () use ($user, $command, $currentTokenId): void {
+        DB::transaction(function () use ($user, $command, $session): void {
             UserAggregate::retrieve($user->getKey())
                 ->changePassword(Hash::make($command->newPassword))
                 ->persist();
 
-            $this->tokenRevoker->revokeAllForUserExcept($user, $currentTokenId);
+            $this->tokenRevoker->revokeAllForUserExcept($user, $session->tokenId);
+
+            $this->audit->record($user, AuditAction::PasswordChanged, $session->origin);
         });
     }
 }

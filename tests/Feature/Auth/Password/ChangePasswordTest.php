@@ -14,6 +14,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -261,6 +262,25 @@ class ChangePasswordTest extends AuthTestCase
         $response->assertNoContent();
         $this->assertPasswordReplaced($user, self::LOGIN_PASSWORD, self::NEW_PASSWORD);
         $this->assertPasswordChangeWasEventSourced(self::NEW_PASSWORD);
+    }
+
+    #[Test]
+    public function when_the_password_is_changed_then_each_company_of_the_user_records_it_with_their_role_there(): void
+    {
+        // Given a user who owns one company and works for another, signed in from a known device
+        $user = $this->aRegisteredUser();
+        $this->inTwoCompanies($user);
+        $current = $this->aSessionFor($user);
+        $this->fromADevice();
+
+        // When they change their password
+        $response = $this->changePassword($current->plainTextToken, [
+            'currentPassword' => self::LOGIN_PASSWORD,
+            'newPassword' => self::NEW_PASSWORD,
+        ]);
+
+        // Then each company's audit trail records the change, with the role the user holds there
+        $this->assertAuditedInEachCompany($response, $user, AuditAction::PasswordChanged);
     }
 
     /**

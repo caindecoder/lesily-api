@@ -11,4 +11,5 @@ enum AuditSubjectType: string
     case OwnershipTransferCaseQueue = 'ownership_transfer_case_queue';
     case BreachIncident = 'breach_incident';
     case BreachIncidentQueue = 'breach_incident_queue';
+    case User = 'user';
 }

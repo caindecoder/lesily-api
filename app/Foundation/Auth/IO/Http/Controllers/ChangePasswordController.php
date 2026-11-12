@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use App\Http\Controllers\Controller;
 use Laravel\Sanctum\PersonalAccessToken;
+use App\Foundation\Auth\UseCases\CurrentSession;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\Auth\UseCases\Commands\ChangePasswordCommand;
 use App\Foundation\Auth\UseCases\Interactors\ChangePasswordInteractor;
 
@@ -28,7 +30,7 @@ class ChangePasswordController extends Controller
         /** @var PersonalAccessToken $current */
         $current = $user->currentAccessToken();
 
-        $interactor->execute($user, $command, $current->getKey());
+        $interactor->execute($user, $command, new CurrentSession($current->getKey(), RequestOrigin::fromRequest($request)));
 
         return response()->noContent();
     }

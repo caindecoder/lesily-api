@@ -146,6 +146,7 @@ return [
             'breach_company_added' => 'A company found after a data breach notice was added and told',
             'breach_resolved' => 'A data breach incident was resolved',
             'breach_marked_false_alarm' => 'A recorded data breach was closed as a false alarm',
+            'password_changed' => 'Password changed',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',
@@ -155,6 +156,7 @@ return [
             'ownership_transfer_case_queue' => 'The ownership transfer cases',
             'breach_incident' => 'A data breach',
             'breach_incident_queue' => 'The data breaches',
+            'user' => 'A user',
         ],
         'policy_type' => [
             'tos' => 'Terms of service',
