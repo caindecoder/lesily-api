@@ -9,7 +9,6 @@ use App\Companies\Entities\CompanySettings;
 use App\Companies\Aggregates\SettingsBaseline;
 use App\Companies\UseCases\Audit\CompanyAudit;
 use App\Companies\UseCases\Audit\CompanyChange;
-use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Values\FieldChanges;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Aggregates\Company as CompanyAggregate;
@@ -64,11 +63,11 @@ class UpdateCompanyDetailsInteractor
         $sent = $command->settingsSent();
         $ownValues = $baseline->ownValueChanges($sent);
         $changes = [
-            new CompanyChange($company, AuditAction::CompanyDetailsUpdated, FieldChanges::between(
+            CompanyChange::detailsOf($company, FieldChanges::between(
                 ['name' => $company->name],
                 $command->name === null ? [] : ['name' => $command->name],
             )),
-            new CompanyChange($company, AuditAction::CompanySettingsUpdated, FieldChanges::between(
+            CompanyChange::settingsOf($company, FieldChanges::between(
                 $this->valuesThatApplied($settings, array_keys($ownValues)),
                 $ownValues,
             )),

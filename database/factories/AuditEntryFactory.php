@@ -106,7 +106,7 @@ class AuditEntryFactory extends Factory
     }
 
     /**
-     * @param  array<string, array{old: mixed, new: mixed}>  $changes
+     * @param  array<string, array<string, mixed>>  $changes
      */
     public function withChanges(array $changes): static
     {

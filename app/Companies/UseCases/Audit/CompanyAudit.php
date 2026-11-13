@@ -8,8 +8,6 @@ use App\Companies\Events\CompanyCreated;
 use Illuminate\Database\Eloquent\Builder;
 use App\Companies\Events\CompanySettingReset;
 use App\Companies\Events\CompanyTrialExpired;
-use App\Companies\Events\CompanyDetailsUpdated;
-use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
@@ -22,13 +20,6 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class CompanyAudit
 {
-    /** @var array<string, class-string> */
-    protected const array EVENT_OF = [
-        'company_details_updated' => CompanyDetailsUpdated::class,
-        'company_settings_updated' => CompanySettingsUpdated::class,
-        'company_setting_reset' => CompanySettingReset::class,
-    ];
-
     public function __construct(
         protected readonly MemberRoleCode $memberRoleCode,
         protected readonly AuditTrailWriter $writer,
@@ -52,7 +43,7 @@ class CompanyAudit
         $company = $change->company;
 
         $this->writer->write([
-            ...$this->rowOf($company, self::EVENT_OF[$change->action->value], $change->changes->fields()[0]),
+            ...$this->rowOf($company, $change->eventClass, $change->changes->fields()[0]),
             ...$this->writer->actorAndOrigin($actor, $this->memberRoleCode->of($actor, $company->getKey()), $origin),
             'metadata' => ['changes' => $change->changes->toArray()],
         ], $change->action, 'info');
