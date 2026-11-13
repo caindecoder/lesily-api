@@ -47,4 +47,9 @@ enum AuditAction: string
     case CompanyCreated = 'company_created';
     case ConsentRecorded = 'consent_recorded';
     case TrialExpired = 'trial_expired';
+    case ProfileUpdated = 'profile_updated';
+    case EmergencyContactUpdated = 'emergency_contact_updated';
+    case CompanyDetailsUpdated = 'company_details_updated';
+    case CompanySettingsUpdated = 'company_settings_updated';
+    case CompanySettingReset = 'company_setting_reset';
 }
