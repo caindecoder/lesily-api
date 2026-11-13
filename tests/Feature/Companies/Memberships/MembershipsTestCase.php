@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
 use App\Consent\Entities\ConsentRecord;
 use App\Consent\Events\ConsentRecorded;
+use Tests\Concerns\AssertsCompanyAuditRows;
 use Tests\Concerns\InducesDatabaseFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Events\QueryExecuted;
@@ -68,6 +69,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     ];
 
     use AssertsAuditTrail;
+    use AssertsCompanyAuditRows;
     use AssertsMembershipAuditRows;
     use InducesDatabaseFailures;
     use WithRolePermissionFixtures;

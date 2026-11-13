@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Consent\Aggregates\Consent;
 use App\Foundation\Auth\Aggregates\User;
+use App\Consent\UseCases\Audit\ConsentAudit;
 use App\Companies\UseCases\Audit\CompanyAudit;
 use Illuminate\Validation\ValidationException;
 use App\Foundation\CountryConfig\Entities\Country;
@@ -34,6 +35,7 @@ class CreateCompanyInteractor
     public function __construct(
         private RegistrationUniquenessGuard $uniqueness,
         private CompanyAudit $audit,
+        private ConsentAudit $consentAudit,
     ) {}
 
     public function execute(CreateCompanyCommand $command, RequestOrigin $origin, ?string $companyId = null): Company
@@ -74,7 +76,8 @@ class CreateCompanyInteractor
                 ]))
                 ->persist();
 
-            Consent::retrieve(Str::uuid7()->toString())
+            $consentId = Str::uuid7()->toString();
+            Consent::retrieve($consentId)
                 ->record(RecordConsentCommand::from([
                     'user' => $command->owner,
                     'company' => $company,
@@ -91,6 +94,7 @@ class CreateCompanyInteractor
                 ->persist();
 
             $this->audit->created($company, $command->owner, $origin);
+            $this->consentAudit->recorded($consentId, $command->owner, $origin);
         });
     }
 

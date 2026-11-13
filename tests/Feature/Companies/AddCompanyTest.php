@@ -341,6 +341,21 @@ class AddCompanyTest extends CompaniesTestCase
         $this->assertCompanyCreationAudited($response, Company::query()->where('name', 'Fabrikam')->sole(), $this->owner);
     }
 
+    #[Test]
+    public function when_an_owner_adds_a_company_then_each_consent_is_audited(): void
+    {
+        // Given a signed-in owner on a known device, with the terms at v1.0 and the privacy policy at v2.3
+        $this->fromADevice();
+        config(['lesily.policies' => ['tos' => 'v1.0', 'privacy' => 'v2.3']]);
+
+        // When they add Fabrikam
+        $response = $this->addCompany();
+
+        // Then each policy they consented to for Fabrikam is audited on its own row
+        $response->assertCreated();
+        $this->assertConsentsAudited($response, Company::query()->where('name', 'Fabrikam')->sole(), $this->owner);
+    }
+
     protected function enrolOwnerWithContact(Company $company, User $owner): void
     {
         $company->users()->attach($owner, [
