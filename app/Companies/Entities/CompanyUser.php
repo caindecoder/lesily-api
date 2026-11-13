@@ -39,6 +39,11 @@ class CompanyUser extends Pivot
     use HasUuids;
     use SoftDeletes;
 
+    protected const string CONTACT_PREFIX = 'emergency_contact_';
+
+    /** @var list<string> */
+    protected const array CONTACT_FIELDS = ['name', 'email', 'phone', 'relationship'];
+
     protected $table = 'company_user';
 
     /**
@@ -52,6 +57,24 @@ class CompanyUser extends Pivot
             'emergency_contact_phone' => 'encrypted',
             'emergency_contact_relationship' => 'encrypted',
         ];
+    }
+
+    /**
+     * The owner's emergency contact for this company, keyed by field; null fields before one is set.
+     *
+     * @return array<string, ?string>
+     */
+    public function emergencyContact(): array
+    {
+        $contact = [];
+
+        foreach (self::CONTACT_FIELDS as $field) {
+            /** @var ?string $value */
+            $value = $this->getAttribute(self::CONTACT_PREFIX.$field);
+            $contact[$field] = $value;
+        }
+
+        return $contact;
     }
 
     /**

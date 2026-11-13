@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Crypt;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -336,6 +337,34 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     }
 
     #[Test]
+    public function when_an_entry_records_an_encrypted_change_then_it_is_shown_decrypted(): void
+    {
+        // Given an entry of company A recording an encrypted phone change, an encrypted email set
+        // for the first time, and a plain role change
+        AuditEntry::factory()
+            ->forCompany($this->companyA)
+            ->byMember(User::factory()->create(), 'owner')
+            ->withChanges([
+                'phone' => ['from' => Crypt::encryptString('+94771234567'), 'to' => Crypt::encryptString('+94777654321'), 'encrypted' => true],
+                'email' => ['from' => null, 'to' => Crypt::encryptString('kamala@contoso.lk'), 'encrypted' => true],
+                'role' => ['from' => 'employee', 'to' => 'hr_officer'],
+            ])
+            ->create();
+        $auditor = $this->aConsentingMember($this->companyA, 'auditor');
+
+        // When the auditor views company A's audit trail
+        $response = $this->viewAuditTrail($auditor, $this->companyA);
+
+        // Then the phone and email show in plain, unmarked, the email's empty old side empty, and the role as stored
+        $response->assertOk();
+        $this->assertEquals([
+            'phone' => ['from' => '+94771234567', 'to' => '+94777654321'],
+            'email' => ['from' => null, 'to' => 'kamala@contoso.lk'],
+            'role' => ['from' => 'employee', 'to' => 'hr_officer'],
+        ], $response->json('data.0.changes'));
+    }
+
+    #[Test]
     public function when_entries_are_listed_then_the_newest_comes_first(): void
     {
         // Given company A's entries are written in an order that is not their recorded order
@@ -399,7 +428,7 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         AuditEntry::factory()
             ->forCompany($this->companyA)
             ->byMember(User::factory()->create(), 'admin')
-            ->withChanges(['role' => ['old' => 'employee', 'new' => 'hr_officer']])
+            ->withChanges(['role' => ['from' => 'employee', 'to' => 'hr_officer']])
             ->create();
         $owner = $this->aConsentingMember($this->companyA, 'owner');
 
@@ -408,7 +437,7 @@ class ViewAuditTrailTest extends AuditTrailTestCase
 
         // Then the entry shows the role's old and new value
         $response->assertOk();
-        $this->assertEquals(['role' => ['old' => 'employee', 'new' => 'hr_officer']], $response->json('data.0.changes'));
+        $this->assertEquals(['role' => ['from' => 'employee', 'to' => 'hr_officer']], $response->json('data.0.changes'));
         $this->assertContainsOnlyString($response->json('data.0.changes.role'));
     }
 

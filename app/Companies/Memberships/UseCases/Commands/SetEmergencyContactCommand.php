@@ -3,23 +3,20 @@
 namespace App\Companies\Memberships\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
-use Illuminate\Validation\Rules\Enum;
+use App\Companies\Entities\CompanyUser;
 use Spatie\LaravelData\Attributes\WithCast;
-use Illuminate\Contracts\Validation\ValidationRule;
-use Spatie\LaravelData\Support\Validation\ValidationContext;
-use App\Foundation\Auth\UseCases\Commands\RegisterOwnerRules;
+use App\Foundation\AuditTrail\Values\FieldChanges;
 use App\Companies\Memberships\UseCases\Casts\SriLankanE164Cast;
 use App\Companies\Memberships\Enums\EmergencyContactRelationship;
 
 /**
- * An owner's emergency contact for one company (UC-1-029) — validated at the
- * PUT boundary; CreateCompanyInteractor builds it via ::from() from the fields
- * CreateCompanyCommand already validated.
+ * An owner's emergency contact for one company (UC-1-029) — the User aggregate's
+ * payload, built via ::from() from fields already validated: by
+ * UpdateEmergencyContactCommand at the PUT, by CreateCompanyCommand at signup and
+ * when a company is added.
  */
 class SetEmergencyContactCommand extends Data
 {
-    use RegisterOwnerRules;
-
     public string $name;
 
     public string $email;
@@ -30,36 +27,18 @@ class SetEmergencyContactCommand extends Data
     public EmergencyContactRelationship $relationship;
 
     /**
-     * @return array<string, array<int, string|Enum|ValidationRule>>
+     * Each contact field the set changes, old -> new — every contact field is
+     * stored encrypted, so every one is encrypted in the change.
      */
-    public static function rules(ValidationContext $context): array
+    public function changesFrom(CompanyUser $membership): FieldChanges
     {
-        return [
-            'name' => self::ownerNameRules(),
-            'email' => self::ownerEmailRules(),
-            'phone' => self::phoneRules(),
-            'relationship' => self::relationshipRules(),
+        $contact = [
+            'name' => $this->name,
+            'email' => $this->email,
+            'phone' => $this->phone,
+            'relationship' => $this->relationship->value,
         ];
-    }
 
-    /**
-     * @return array<string, string>
-     */
-    public static function attributes(): array
-    {
-        return [
-            'name' => 'emergency contact name',
-            'email' => 'emergency contact email',
-            'phone' => 'emergency contact phone',
-            'relationship' => 'emergency contact relationship',
-        ];
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    public static function messages(): array
-    {
-        return ['email.email' => 'The emergency contact email must be a valid email address.'];
+        return FieldChanges::between($membership->emergencyContact(), $contact, array_keys($contact));
     }
 }

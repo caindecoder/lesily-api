@@ -12,9 +12,9 @@ use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 use App\Companies\Memberships\IO\Http\Resources\MembershipResource;
 use App\Companies\Memberships\IO\Http\Resources\MembershipCollection;
 use App\Companies\Memberships\IO\Http\Resources\EmergencyContactResource;
-use App\Companies\Memberships\UseCases\Commands\SetEmergencyContactCommand;
 use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
 use App\Companies\Memberships\UseCases\Commands\RemoveUserFromCompanyCommand;
+use App\Companies\Memberships\UseCases\Commands\UpdateEmergencyContactCommand;
 use App\Companies\Memberships\UseCases\Interactors\SetEmergencyContactInteractor;
 use App\Companies\Memberships\UseCases\Interactors\ChangeMembershipRoleInteractor;
 use App\Companies\Memberships\UseCases\Interactors\RemoveUserFromCompanyInteractor;
@@ -55,9 +55,13 @@ class MembershipsController
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
-        $command = SetEmergencyContactCommand::validateAndCreate($request->only(['name', 'email', 'phone', 'relationship']));
+        $command = UpdateEmergencyContactCommand::validateAndCreate([
+            ...$request->only(['name', 'email', 'phone', 'relationship']),
+            'company' => $request->company(),
+            'setBy' => $actor,
+        ]);
 
-        return new EmergencyContactResource($interactor->execute($request->company(), $actor, $command));
+        return new EmergencyContactResource($interactor->execute($command, RequestOrigin::fromRequest($request)));
     }
 
     public function update(Request $request, string $membershipId, ChangeMembershipRoleInteractor $interactor): JsonResponse

@@ -200,9 +200,9 @@ class RegisterOwnerTest extends AuthTestCase
     public function when_the_registration_cannot_be_audited_then_no_owner_or_company_is_created(): void
     {
         // Given a guest with the full signup payload, and an audit trail that takes the
-        // company's three rows but cannot write the registration's
+        // company's four rows but cannot write the registration's
         config(['app.debug' => false]);
-        $this->failTheAuditTrailAfter(3);
+        $this->failTheAuditTrailAfter(4);
 
         // When they register as owner
         $response = $this->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
@@ -521,13 +521,34 @@ class RegisterOwnerTest extends AuthTestCase
         // When they register as owner
         $response = $this->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
 
-        // Then the new company holds four rows: the registration, its creation and each consent
+        // Then the new company holds five rows: the registration, its creation, the emergency contact and each consent
         $response->assertCreated();
         $owner = User::query()->where('email', 'nimal@contoso.lk')->sole();
         $company = Company::query()->where('owner_id', $owner->getKey())->sole();
         $this->assertCompanyCreationAudited($response, $company, $owner);
         $this->assertConsentsAudited($response, $company, $owner);
-        $this->assertSame(4, AuditEntry::query()->where('company_id', $company->getKey())->count());
+        $this->assertSame(5, AuditEntry::query()->where('company_id', $company->getKey())->count());
+    }
+
+    #[Test]
+    public function when_an_owner_registers_then_the_emergency_contact_is_audited_encrypted(): void
+    {
+        // Given a guest on a known device
+        $this->fromADevice();
+
+        // When they register as owner, naming an emergency contact
+        $response = $this->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
+
+        // Then the contact they set is audited from nothing to its four values, each encrypted
+        $response->assertCreated();
+        $owner = User::query()->where('email', 'nimal@contoso.lk')->sole();
+        $company = Company::query()->where('owner_id', $owner->getKey())->sole();
+        $this->assertContactChangeAudited($response, $this->membershipOf($company, $owner), [
+            'name' => ['from' => null, 'to' => 'Kamala Perera'],
+            'email' => ['from' => null, 'to' => 'kamala@contoso.lk'],
+            'phone' => ['from' => null, 'to' => '+94771234567'],
+            'relationship' => ['from' => null, 'to' => 'spouse'],
+        ]);
     }
 
     protected function assertRegistrationAudited(TestResponse $response, User $owner): void

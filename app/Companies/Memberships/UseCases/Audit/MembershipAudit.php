@@ -5,6 +5,7 @@ namespace App\Companies\Memberships\UseCases\Audit;
 use App\Models\User;
 use App\Companies\Entities\CompanyUser;
 use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Values\FieldChanges;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Foundation\AuditTrail\UseCases\Audit\AuditTrailWriter;
@@ -45,6 +46,24 @@ class MembershipAudit
                 'role_code' => $membership->role()->sole()->code,
             ],
         ], AuditAction::MemberRemoved, 'warning');
+    }
+
+    public function emergencyContactSet(CompanyUser $membership, FieldChanges $changes, RequestOrigin $origin): void
+    {
+        if ($changes->isEmpty()) {
+            return;
+        }
+
+        $owner = $membership->user()->sole();
+
+        $this->writer->write([
+            ...$this->rowOf($membership, $owner->getKey()),
+            ...$this->writer->actorAndOrigin($owner, $this->memberRoleCode->of($owner, $membership->company_id), $origin),
+            'metadata' => [
+                'membership_id' => $membership->getKey(),
+                'changes' => $changes->toArray(),
+            ],
+        ], AuditAction::EmergencyContactUpdated, 'info');
     }
 
     /** @return array<string, mixed> */

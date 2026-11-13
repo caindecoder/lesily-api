@@ -4,7 +4,10 @@ namespace App\Companies\UseCases\Commands;
 
 use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
+use App\Companies\Entities\Company;
 use App\Companies\Enums\ResettableSetting;
+use Spatie\LaravelData\Attributes\WithCast;
+use App\Foundation\UseCases\Casts\ModelCast;
 use Illuminate\Validation\ValidationException;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
@@ -27,6 +30,9 @@ class UpdateCompanyCommand extends Data
      */
     private const array EDITABLE_FIELDS = ['name', 'timezone', 'fiscalYearStartMonth', 'workingDaysPerWeek', 'defaultWorkHoursPerDay'];
 
+    #[WithCast(ModelCast::class, Company::class)]
+    public Company $company;
+
     public ?string $name = null;
 
     public ?string $timezone = null;
@@ -46,6 +52,8 @@ class UpdateCompanyCommand extends Data
                 array_fill_keys($unknownKeys, 'This field cannot be updated.')
             );
         }
+
+        $request->merge(['company' => $request->company()->getKey()]);
 
         return static::validateAndCreate($request->all());
     }

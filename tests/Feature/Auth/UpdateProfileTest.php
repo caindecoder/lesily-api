@@ -122,13 +122,32 @@ class UpdateProfileTest extends AuthTestCase
         $this->assertProfileRolledBack($response, $user);
     }
 
+    #[Test]
+    public function when_the_profile_change_cannot_be_audited_then_the_profile_is_unchanged(): void
+    {
+        // Given production error rendering, an established user in two companies, and an audit
+        // trail that takes the first company's row but cannot write the second's
+        config(['app.debug' => false]);
+        $user = $this->anEstablishedUser();
+        $this->inTwoCompanies($user);
+        $this->failTheAuditTrailAfter(1);
+
+        // When they submit a new name and locale
+        $response = $this->updateProfile($user, ['name' => 'Alice Fernando', 'locale' => 'si']);
+
+        // Then the update fails whole: the profile is untouched, no event is recorded and nothing is audited
+        $this->assertProfileRolledBack($response, $user);
+        $this->assertNothingAudited();
+    }
+
     // --- Edge ---
 
     #[Test]
     public function when_identical_values_are_submitted_then_no_event_is_recorded(): void
     {
-        // Given an authenticated user with an established profile
+        // Given an authenticated user with an established profile, a member of two companies
         $user = $this->anEstablishedUser();
+        $this->inTwoCompanies($user);
 
         // When they submit exactly their current name and locale
         $response = $this->updateProfile($user, [
@@ -136,10 +155,11 @@ class UpdateProfileTest extends AuthTestCase
             'locale' => self::CURRENT_LOCALE,
         ]);
 
-        // Then the request succeeds but records nothing — no event, no row change (the B5 guard)
+        // Then the request succeeds but records nothing — no event, no row change, nothing audited (the B5 guard)
         $response->assertOk();
         $this->assertNoProfileEventRecorded();
         $this->assertDatabaseHas('users', $this->unchangedProfileOf($user));
+        $this->assertNothingAudited();
     }
 
     #[Test]
@@ -158,6 +178,24 @@ class UpdateProfileTest extends AuthTestCase
             'name' => 'ඇලිස් පෙරේරා',
             'locale' => self::CURRENT_LOCALE,
             'changedFields' => ['name'],
+        ]);
+    }
+
+    #[Test]
+    public function when_only_the_name_changes_then_each_company_records_only_the_name(): void
+    {
+        // Given a user with an established profile, a member of two companies
+        $user = $this->anEstablishedUser();
+        $this->inTwoCompanies($user);
+
+        // When they change only their name from a device
+        $this->fromADevice();
+        $response = $this->updateProfile($user, ['name' => 'Alice Fernando', 'locale' => self::CURRENT_LOCALE]);
+
+        // Then each company's audit trail records the name's old and new value, and nothing else
+        $response->assertOk();
+        $this->assertProfileChangeAuditedInEachCompany($response, $user->refresh(), [
+            'name' => ['from' => self::CURRENT_NAME, 'to' => 'Alice Fernando'],
         ]);
     }
 
@@ -219,6 +257,25 @@ class UpdateProfileTest extends AuthTestCase
             'name' => 'Alice Fernando',
             'locale' => 'si',
             'changedFields' => ['name', 'locale'],
+        ]);
+    }
+
+    #[Test]
+    public function when_the_profile_changes_then_each_company_records_the_old_and_new_values_with_its_origin(): void
+    {
+        // Given a user with an established profile, the owner of one company and an employee of another
+        $user = $this->anEstablishedUser();
+        $this->inTwoCompanies($user);
+
+        // When they change their name and locale from a device
+        $this->fromADevice();
+        $response = $this->updateProfile($user, ['name' => 'Alice Fernando', 'locale' => 'si']);
+
+        // Then each company's audit trail records both fields' old and new values, with the user's role there and the origin
+        $response->assertOk();
+        $this->assertProfileChangeAuditedInEachCompany($response, $user->refresh(), [
+            'locale' => ['from' => self::CURRENT_LOCALE, 'to' => 'si'],
+            'name' => ['from' => self::CURRENT_NAME, 'to' => 'Alice Fernando'],
         ]);
     }
 

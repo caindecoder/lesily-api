@@ -2,11 +2,13 @@
 
 namespace App\Foundation\AuditTrail\UseCases\Audit;
 
+use Closure;
 use stdClass;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use App\Companies\Entities\CompanyUser;
 use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Values\FieldChanges;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
@@ -22,10 +24,29 @@ class UserLevelAudit
 
     public function record(User $user, AuditAction $action, RequestOrigin $origin): void
     {
+        $this->writeForEachMembership($user, $origin, fn (array $row) => $this->writer->write(
+            [...$row, 'metadata' => null],
+            $action,
+            'warning',
+        ));
+    }
+
+    public function profileUpdated(User $user, FieldChanges $changes, RequestOrigin $origin): void
+    {
+        $this->writeForEachMembership($user, $origin, fn (array $row) => $this->writer->write(
+            [...$row, 'metadata' => ['changes' => $changes->toArray()]],
+            AuditAction::ProfileUpdated,
+            'info',
+        ));
+    }
+
+    /** @param Closure(array<string, mixed>): void $write */
+    protected function writeForEachMembership(User $user, RequestOrigin $origin, Closure $write): void
+    {
         $storedEvent = $this->newestEventOf($user);
 
         foreach ($this->membershipsOf($user) as $membership) {
-            $this->writer->write([
+            $write([
                 'company_id' => $membership->company_id,
                 'stored_event_id' => $storedEvent->getKey(),
                 'event_class' => class_basename($storedEvent->event_class),
@@ -33,8 +54,7 @@ class UserLevelAudit
                 'subject_id' => $user->getKey(),
                 'subject_label' => null,
                 ...$this->writer->actorAndOrigin($user, $membership->role_code, $origin),
-                'metadata' => null,
-            ], $action, 'warning');
+            ]);
         }
     }
 

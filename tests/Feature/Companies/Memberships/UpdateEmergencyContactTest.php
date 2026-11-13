@@ -7,6 +7,8 @@ use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -75,9 +77,10 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
         // When the member submits a new contact
         $response = $this->updateEmergencyContact($member, $company->getKey(), self::UPDATED_CONTACT);
 
-        // Then the update is refused for the missing permission and the contact is unchanged
+        // Then the update is refused for the missing permission, the contact is unchanged and nothing is audited
         $this->assertRoleInsufficient($response, 'users.set-emergency-contact');
         $this->assertContactUnchanged($company, $owner, self::CONTACT);
+        $this->assertNothingAudited();
     }
 
     /**
@@ -118,6 +121,24 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_contact_change_cannot_be_audited_then_the_contact_is_unchanged(): void
+    {
+        // Given production error rendering, a company whose owner keeps a contact, and an audit trail that fails
+        config(['app.debug' => false]);
+        $company = Company::factory()->create();
+        $owner = $this->anOwnerWithContact($company);
+        $this->failTheAuditTrail();
+
+        // When the owner submits a new contact
+        $response = $this->updateEmergencyContact($owner, $company->getKey(), self::UPDATED_CONTACT);
+
+        // Then the update fails whole: the old contact stays and no contact event is recorded
+        $response->assertInternalServerError();
+        $this->assertContactUnchanged($company, $owner, self::CONTACT);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserMembershipEmergencyContactSet::class)->count());
+    }
+
+    #[Test]
     public function when_the_owner_of_two_companies_updates_one_then_the_other_keeps_its_contact(): void
     {
         // Given one owner of company A and company B, both naming Kamala
@@ -154,19 +175,55 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_same_contact_is_submitted_again_then_no_row_is_written(): void
+    {
+        // Given a company whose owner keeps an emergency contact
+        $company = Company::factory()->create();
+        $owner = $this->anOwnerWithContact($company);
+
+        // When the owner submits the same contact again
+        $response = $this->updateEmergencyContact($owner, $company->getKey(), self::CONTACT);
+
+        // Then the contact event is recorded as before, but nothing changed, so nothing is audited
+        $response->assertOk();
+        $this->assertContactRecorded($company, $owner, self::CONTACT);
+        $this->assertNothingAudited();
+    }
+
+    #[Test]
+    public function when_only_the_phone_changes_then_the_row_records_only_the_phone(): void
+    {
+        // Given a company whose owner keeps an emergency contact
+        $company = Company::factory()->create();
+        $owner = $this->anOwnerWithContact($company);
+
+        // When the owner submits the same contact with a new phone, from a device
+        $this->fromADevice();
+        $response = $this->updateEmergencyContact($owner, $company->getKey(), [...self::CONTACT, 'phone' => self::UPDATED_CONTACT['phone']]);
+
+        // Then the audit trail records only the phone, its old and new number encrypted
+        $response->assertOk();
+        $this->assertContactChangeAudited($response, $this->membershipOf($company, $owner), [
+            'phone' => ['from' => self::CONTACT['phone'], 'to' => self::UPDATED_CONTACT['phone']],
+        ]);
+    }
+
+    #[Test]
     public function when_the_owner_has_no_contact_yet_then_the_update_sets_it(): void
     {
         // Given a company whose owner keeps no emergency contact
         $company = Company::factory()->create();
         $owner = $this->aCompanyMember($company, 'owner');
 
-        // When the owner submits one
+        // When the owner submits one from a device
+        $this->fromADevice();
         $response = $this->updateEmergencyContact($owner, $company->getKey(), self::UPDATED_CONTACT);
 
-        // Then it is recorded for the company, stored and returned
+        // Then it is recorded for the company, stored and returned, and audited from nothing to the new values
         $response->assertOk();
         $response->assertExactJson(['data' => self::UPDATED_CONTACT]);
         $this->assertContactRecorded($company, $owner, self::UPDATED_CONTACT);
+        $this->assertContactChangeAudited($response, $this->membershipOf($company, $owner), $this->changesBetween([], self::UPDATED_CONTACT));
     }
 
     #[Test]
@@ -224,9 +281,11 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
         // When the owner submits a new contact
         $response = $this->updateEmergencyContact($owner, $company->getKey(), self::UPDATED_CONTACT);
 
-        // Then each of the four stored columns is encrypted
+        // Then each of the four stored columns is encrypted, and so is each old and new value in the audit row
         $response->assertOk();
         $this->assertStoredEncrypted($company, $owner, self::UPDATED_CONTACT);
+        $entry = AuditEntry::query()->where('action', AuditAction::EmergencyContactUpdated)->sole();
+        $this->assertEncryptedChanges($entry, $this->changesBetween(self::CONTACT, self::UPDATED_CONTACT));
     }
 
     #[Test]
@@ -236,13 +295,31 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
         $company = Company::factory()->create();
         $owner = $this->anOwnerWithContact($company);
 
-        // When the owner submits a new contact
+        // When the owner submits a new contact from a device
+        $this->fromADevice();
         $response = $this->updateEmergencyContact($owner, $company->getKey(), self::UPDATED_CONTACT);
 
-        // Then the new contact is recorded for the company, stored and returned
+        // Then the new contact is recorded for the company, stored and returned, and the change is audited
         $response->assertOk();
         $response->assertExactJson(['data' => self::UPDATED_CONTACT]);
         $this->assertContactRecorded($company, $owner, self::UPDATED_CONTACT);
+        $this->assertContactChangeAudited($response, $this->membershipOf($company, $owner), $this->changesBetween(self::CONTACT, self::UPDATED_CONTACT));
+    }
+
+    /**
+     * @param  array<string, string>  $old
+     * @param  array<string, string>  $new
+     * @return array<string, array{from: ?string, to: ?string}>
+     */
+    protected function changesBetween(array $old, array $new): array
+    {
+        $changes = [];
+
+        foreach ($new as $field => $to) {
+            $changes[$field] = ['from' => $old[$field] ?? null, 'to' => $to];
+        }
+
+        return $changes;
     }
 
     /**
