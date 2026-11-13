@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Consent\Events\ConsentRecorded;
 use App\Companies\Entities\CompanySettings;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -26,6 +27,13 @@ class ResetCompanySettingTest extends CompaniesTestCase
         'fiscal_year_start_month' => 7,
         'working_days_per_week' => 6,
         'default_work_hours_per_day' => 7.5,
+    ];
+
+    protected const array SRI_LANKA_DEFAULTS = [
+        'timezone' => 'Asia/Colombo',
+        'fiscal_year_start_month' => 4,
+        'working_days_per_week' => 5,
+        'default_work_hours_per_day' => 8,
     ];
 
     protected function setUp(): void
@@ -107,9 +115,10 @@ class ResetCompanySettingTest extends CompaniesTestCase
         // When they reset its working days
         $response = $this->resetCompanySetting($owner, $company->getKey(), 'working_days_per_week');
 
-        // Then the reset answers and nothing is recorded
+        // Then the reset answers, nothing is recorded and nothing is audited
         $response->assertNoContent();
         $this->assertNothingRecorded($company);
+        $this->assertNothingAudited();
         $this->assertSettingFollowsTheCountry($company, 'working_days_per_week');
     }
 
@@ -137,13 +146,16 @@ class ResetCompanySettingTest extends CompaniesTestCase
         $company = Company::factory()->withOwnSettings()->create();
         $member = $this->aCompanyMember($company, $role);
 
-        // When they reset one of its settings
+        // When they reset one of its settings from a device
+        $this->fromADevice();
         $response = $this->resetCompanySetting($member, $company->getKey(), $setting);
 
-        // Then the setting follows the country, the reset is recorded and the other own values stay
+        // Then the setting follows the country, the reset is recorded and audited own value -> country default, and the other own values stay
         $response->assertNoContent();
         $this->assertSettingFollowsTheCountry($company, $setting);
         $this->assertResetRecorded($company, $setting, $member->getKey());
+        $this->assertCompanyChangeAudited($company, AuditAction::CompanySettingReset, [$setting => ['from' => self::OWN_VALUES[$setting], 'to' => self::SRI_LANKA_DEFAULTS[$setting]]]);
+        $this->assertEveryRowCameFrom($response, $member, $role);
         $this->assertOtherOwnValuesKept($company, $setting);
     }
 

@@ -75,10 +75,7 @@ class UpdateCompanyDetailsInteractor
         ];
 
         foreach ($baseline->settingsFollowingAgain($sent) as $setting) {
-            $changes[] = new CompanyChange($company, AuditAction::CompanySettingReset, FieldChanges::between(
-                [$setting->value => $settings->getAttribute($setting->value)],
-                [$setting->value => $settings->countryDefault($setting->value)],
-            ));
+            $changes[] = CompanyChange::resetOf($company, $settings, $setting);
         }
 
         return $changes;

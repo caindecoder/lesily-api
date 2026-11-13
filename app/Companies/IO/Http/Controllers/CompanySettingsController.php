@@ -5,6 +5,7 @@ namespace App\Companies\IO\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use App\Companies\Enums\ResettableSetting;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\IO\Http\Resources\CompanySettingsResource;
 use App\Companies\UseCases\Commands\ResetCompanySettingCommand;
 use App\Companies\UseCases\Interactors\ResetCompanySettingInteractor;
@@ -28,7 +29,7 @@ class CompanySettingsController
             'company' => $companyId,
             'setting' => $setting,
             'resetBy' => $request->user(),
-        ]));
+        ]), RequestOrigin::fromRequest($request));
 
         return response()->noContent();
     }
