@@ -304,8 +304,7 @@ class AddCompanyTest extends CompaniesTestCase
         $companyId = $response->json('data.id');
         $this->assertIsString($companyId);
         $this->assertDatabaseMissing('audit_trail', ['company_id' => $this->companyA->getKey()]);
-        $this->assertNotSame(0, AuditEntry::query()->count());
-        $this->assertSame(0, AuditEntry::query()->where('company_id', '!=', $companyId)->count());
+        $this->assertSame([3, 3], [AuditEntry::query()->count(), AuditEntry::query()->where('company_id', $companyId)->count()]);
     }
 
     #[Test]

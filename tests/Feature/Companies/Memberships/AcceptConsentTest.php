@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Consent\Events\ConsentRecorded;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -135,5 +136,6 @@ class AcceptConsentTest extends MembershipsTestCase
         // Then each policy they accepted is audited on its own row, as theirs
         $response->assertNoContent();
         $this->assertConsentsAudited($response, $this->company, $member);
+        $this->assertEveryRowActedBy(AuditAction::ConsentRecorded, $member, 'employee');
     }
 }

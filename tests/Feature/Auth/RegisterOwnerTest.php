@@ -549,6 +549,7 @@ class RegisterOwnerTest extends AuthTestCase
             'description' => 'User registered',
             'actor' => [$owner->getKey(), 'owner', $owner->name],
             'origin' => [self::DEVICE_IP, self::DEVICE, $requestId],
+            'metadata' => null,
             'severity' => 'info',
         ], [
             'company_id' => $entry->company_id,
@@ -558,6 +559,7 @@ class RegisterOwnerTest extends AuthTestCase
             'description' => $entry->description,
             'actor' => [$entry->actor_user_id, $entry->actor_role_code, $entry->actor_label],
             'origin' => [$entry->ip_address, $entry->user_agent, $entry->request_id],
+            'metadata' => $entry->metadata,
             'severity' => $entry->severity,
         ]);
     }
@@ -698,6 +700,7 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertSame($usersBefore, User::query()->count(), 'No user may be created on a conflict.');
         $this->assertSame($companiesBefore, Company::query()->count(), 'No company may be created on a conflict.');
         $this->assertDatabaseCount('stored_events', 0);
+        $this->assertNothingAudited();
     }
 
     protected function assertNothingCreatedOrSent(int $usersBefore, int $companiesBefore): void

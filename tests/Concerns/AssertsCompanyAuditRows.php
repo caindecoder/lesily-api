@@ -71,7 +71,7 @@ trait AssertsCompanyAuditRows
             $this->assertSame([
                 'stored_event_id' => $record->stored_event_id,
                 'event_class' => 'ConsentRecorded',
-                'subject' => ['consent', $record->getKey()],
+                'subject' => ['consent', $record->getKey(), null],
                 'description' => 'Consent recorded',
                 'actor' => [$user->getKey(), $this->roleCodeIn($company, $user), $user->name],
                 'origin' => [self::DEVICE_IP, self::DEVICE, $requestId],
@@ -80,7 +80,7 @@ trait AssertsCompanyAuditRows
             ], [
                 'stored_event_id' => $entry->stored_event_id,
                 'event_class' => $entry->event_class,
-                'subject' => [$entry->subject_type->value, $entry->subject_id],
+                'subject' => [$entry->subject_type->value, $entry->subject_id, $entry->subject_label],
                 'description' => $entry->description,
                 'actor' => [$entry->actor_user_id, $entry->actor_role_code, $entry->actor_label],
                 'origin' => [$entry->ip_address, $entry->user_agent, $entry->request_id],
