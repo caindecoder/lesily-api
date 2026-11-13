@@ -36,6 +36,7 @@ class UpdateCompanyDetailsInteractor
                 ->lockForUpdate()
                 ->sole();
             $baseline = SettingsBaseline::of($settings);
+            $company->refresh();
             $changes = $this->changesOf($command, $settings, $baseline);
 
             CompanyAggregate::retrieve($company->getKey())

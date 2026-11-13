@@ -8,6 +8,7 @@ use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanyUser;
 use App\Consent\Entities\ConsentRecord;
 use App\Companies\Events\CompanyCreated;
+use Illuminate\Database\Eloquent\Builder;
 use App\Companies\Events\CompanySettingReset;
 use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsUpdated;
@@ -114,7 +115,7 @@ trait AssertsCompanyAuditRows
         $storedEvent = LesilyStoredEvent::query()
             ->where('aggregate_uuid', $company->getKey())
             ->where('event_class', $eventClass)
-            ->when($eventClass === CompanySettingReset::class, fn ($query) => $query->where('event_properties->setting', array_key_first($changes)))
+            ->when($eventClass === CompanySettingReset::class, fn (Builder $query) => $query->where('event_properties->setting', array_key_first($changes)))
             ->latest('id')
             ->firstOrFail();
 

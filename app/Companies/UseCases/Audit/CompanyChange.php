@@ -23,6 +23,7 @@ readonly class CompanyChange
         public AuditAction $action,
         public string $eventClass,
         public FieldChanges $changes,
+        public ?ResettableSetting $setting = null,
     ) {}
 
     public static function detailsOf(Company $company, FieldChanges $changes): self
@@ -43,6 +44,6 @@ readonly class CompanyChange
         return new self($company, AuditAction::CompanySettingReset, CompanySettingReset::class, FieldChanges::between(
             [$setting->value => $settings->getAttribute($setting->value)],
             [$setting->value => $settings->countryDefault($setting->value)],
-        ));
+        ), $setting);
     }
 }

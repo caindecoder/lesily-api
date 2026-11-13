@@ -77,6 +77,23 @@ class ResetCompanySettingTest extends CompaniesTestCase
     }
 
     #[Test]
+    public function when_the_reset_cannot_be_audited_then_the_own_value_is_kept(): void
+    {
+        // Given production error rendering, the owner of a company with its own settings, and an audit trail that fails
+        config(['app.debug' => false]);
+        $company = Company::factory()->withOwnSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        $this->failTheAuditTrail();
+
+        // When they reset its timezone
+        $response = $this->resetCompanySetting($owner, $company->getKey(), 'timezone');
+
+        // Then the reset fails whole: every own value is kept and no reset is recorded
+        $response->assertInternalServerError();
+        $this->assertOwnValueKept($company);
+    }
+
+    #[Test]
     #[DataProvider('provideSettingsThatCannotBeReset')]
     public function when_setting_cannot_be_reset_then_not_found_and_nothing_recorded(string $setting): void
     {

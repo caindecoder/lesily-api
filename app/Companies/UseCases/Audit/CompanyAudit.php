@@ -6,7 +6,7 @@ use App\Models\User;
 use App\Companies\Entities\Company;
 use App\Companies\Events\CompanyCreated;
 use Illuminate\Database\Eloquent\Builder;
-use App\Companies\Events\CompanySettingReset;
+use App\Companies\Enums\ResettableSetting;
 use App\Companies\Events\CompanyTrialExpired;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
@@ -43,7 +43,7 @@ class CompanyAudit
         $company = $change->company;
 
         $this->writer->write([
-            ...$this->rowOf($company, $change->eventClass, $change->changes->fields()[0]),
+            ...$this->rowOf($company, $change->eventClass, $change->setting),
             ...$this->writer->actorAndOrigin($actor, $this->memberRoleCode->of($actor, $company->getKey()), $origin),
             'metadata' => ['changes' => $change->changes->toArray()],
         ], $change->action, 'info');
@@ -64,14 +64,14 @@ class CompanyAudit
      * @param  class-string  $eventClass
      * @return array<string, mixed>
      */
-    protected function rowOf(Company $company, string $eventClass, ?string $setting = null): array
+    protected function rowOf(Company $company, string $eventClass, ?ResettableSetting $setting = null): array
     {
         return [
             'company_id' => $company->getKey(),
             'stored_event_id' => LesilyStoredEvent::query()
                 ->where('aggregate_uuid', $company->getKey())
                 ->where('event_class', $eventClass)
-                ->when($eventClass === CompanySettingReset::class, fn (Builder $query) => $query->where('event_properties->setting', $setting))
+                ->when($setting, fn (Builder $query, ResettableSetting $setting) => $query->where('event_properties->setting', $setting->value))
                 ->latest('id')
                 ->firstOrFail()
                 ->getKey(),

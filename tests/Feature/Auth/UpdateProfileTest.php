@@ -125,11 +125,12 @@ class UpdateProfileTest extends AuthTestCase
     #[Test]
     public function when_the_profile_change_cannot_be_audited_then_the_profile_is_unchanged(): void
     {
-        // Given production error rendering, an established user in two companies and an audit trail that fails
+        // Given production error rendering, an established user in two companies, and an audit
+        // trail that takes the first company's row but cannot write the second's
         config(['app.debug' => false]);
         $user = $this->anEstablishedUser();
         $this->inTwoCompanies($user);
-        $this->failTheAuditTrail();
+        $this->failTheAuditTrailAfter(1);
 
         // When they submit a new name and locale
         $response = $this->updateProfile($user, ['name' => 'Alice Fernando', 'locale' => 'si']);

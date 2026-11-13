@@ -224,10 +224,10 @@ class UpdateCompanyTest extends CompaniesTestCase
     #[Test]
     public function when_the_company_change_cannot_be_audited_then_neither_the_name_nor_the_settings_change(): void
     {
-        // Given the owner of Contoso and an audit trail that fails
+        // Given the owner of Contoso and an audit trail that takes the details row but cannot write the settings row
         $company = Company::factory()->withSettings()->named('Contoso')->create();
         $owner = $this->aCompanyMember($company, 'owner');
-        $this->failTheAuditTrail();
+        $this->failTheAuditTrailAfter(1);
 
         // When they submit a new name and a new timezone together
         $response = $this->updateCompanyDetails($owner, $company->getKey(), [

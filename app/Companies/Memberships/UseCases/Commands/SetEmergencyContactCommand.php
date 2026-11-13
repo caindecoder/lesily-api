@@ -2,13 +2,10 @@
 
 namespace App\Companies\Memberships\UseCases\Commands;
 
-use App\Models\User;
 use Spatie\LaravelData\Data;
-use App\Companies\Entities\Company;
 use Illuminate\Validation\Rules\Enum;
 use App\Companies\Entities\CompanyUser;
 use Spatie\LaravelData\Attributes\WithCast;
-use App\Foundation\UseCases\Casts\ModelCast;
 use App\Foundation\AuditTrail\Values\FieldChanges;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
@@ -24,12 +21,6 @@ use App\Companies\Memberships\Enums\EmergencyContactRelationship;
 class SetEmergencyContactCommand extends Data
 {
     use RegisterOwnerRules;
-
-    #[WithCast(ModelCast::class, Company::class)]
-    public Company $company;
-
-    #[WithCast(ModelCast::class, User::class)]
-    public User $setBy;
 
     public string $name;
 
@@ -57,8 +48,6 @@ class SetEmergencyContactCommand extends Data
     }
 
     /**
-     * The company and the owner are server-sourced and carry no rule.
-     *
      * @return array<string, array<int, string|Enum|ValidationRule>>
      */
     public static function rules(ValidationContext $context): array
