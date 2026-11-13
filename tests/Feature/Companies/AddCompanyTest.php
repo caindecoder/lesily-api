@@ -15,6 +15,7 @@ use App\Consent\Events\ConsentRecorded;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
@@ -203,6 +204,20 @@ class AddCompanyTest extends CompaniesTestCase
     }
 
     #[Test]
+    public function when_the_company_cannot_be_audited_then_nothing_is_created(): void
+    {
+        // Given a signed-in owner and an audit trail that cannot be written
+        $this->failTheAuditTrail();
+
+        // When they add a company
+        $response = $this->addCompany();
+
+        // Then the request fails and the half-opened company is rolled back whole
+        $response->assertInternalServerError();
+        $this->assertNoCompanyAdded();
+    }
+
+    #[Test]
     public function when_both_the_br_and_epf_numbers_are_taken_then_the_br_conflict_is_reported(): void
     {
         // Given a signed-in owner reusing both numbers their first company holds
@@ -277,6 +292,22 @@ class AddCompanyTest extends CompaniesTestCase
     }
 
     #[Test]
+    public function when_an_owner_with_a_company_adds_another_then_only_the_new_company_receives_its_rows(): void
+    {
+        // Given a signed-in owner whose default company is Contoso
+
+        // When they add Fabrikam
+        $response = $this->addCompany();
+
+        // Then every audit row it wrote is Fabrikam's, and Contoso's trail is untouched
+        $companyId = $response->json('data.id');
+        $this->assertIsString($companyId);
+        $this->assertDatabaseMissing('audit_trail', ['company_id' => $this->companyA->getKey()]);
+        $this->assertNotSame(0, AuditEntry::query()->count());
+        $this->assertSame(0, AuditEntry::query()->where('company_id', '!=', $companyId)->count());
+    }
+
+    #[Test]
     public function when_an_owner_adds_another_company_then_it_opens_on_its_own_trial_with_its_contact_and_consent(): void
     {
         // Given a signed-in owner of Contoso, whose contact there is Kamala Perera
@@ -294,6 +325,20 @@ class AddCompanyTest extends CompaniesTestCase
         $this->assertConsentRecordedFor($companyId);
         $this->assertConsentStoredFor($companyId);
         $this->assertNothingElseChanged();
+    }
+
+    #[Test]
+    public function when_an_owner_adds_a_company_then_its_creation_is_audited_with_its_origin(): void
+    {
+        // Given a signed-in owner of Contoso on a known device
+        $this->fromADevice();
+
+        // When they add Fabrikam
+        $response = $this->addCompany();
+
+        // Then Fabrikam's creation is audited as theirs, with where it came from
+        $response->assertCreated();
+        $this->assertCompanyCreationAudited($response, Company::query()->where('name', 'Fabrikam')->sole(), $this->owner);
     }
 
     protected function enrolOwnerWithContact(Company $company, User $owner): void
@@ -473,5 +518,6 @@ class AddCompanyTest extends CompaniesTestCase
         $this->assertDatabaseCount('company_user', 1);
         $this->assertDatabaseCount('subscriptions', 0);
         $this->assertDatabaseCount('stored_events', 0);
+        $this->assertNothingAudited();
     }
 }

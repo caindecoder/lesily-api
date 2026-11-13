@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Consent\Aggregates\Consent;
 use App\Foundation\Auth\Aggregates\User;
+use App\Companies\UseCases\Audit\CompanyAudit;
 use Illuminate\Validation\ValidationException;
 use App\Foundation\CountryConfig\Entities\Country;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
@@ -32,21 +33,21 @@ class CreateCompanyInteractor
 {
     public function __construct(
         private RegistrationUniquenessGuard $uniqueness,
+        private CompanyAudit $audit,
     ) {}
 
     public function execute(CreateCompanyCommand $command, RequestOrigin $origin, ?string $companyId = null): Company
     {
         // A consent record is evidence and is never minted without the client IP
         // it was given from (UC-1-069).
-        $clientIp = $origin->ip;
-        if (blank($clientIp)) {
+        if (blank($origin->ip)) {
             throw ValidationException::withMessages(['ip' => 'The ip field is required.']);
         }
 
         $companyId ??= Str::uuid7()->toString();
 
         try {
-            $this->open($command, $clientIp, $companyId);
+            $this->open($command, $origin, $companyId);
         } catch (UniqueConstraintViolationException $violation) {
             // A taken BR / EPF is refused by its UNIQUE index: the same field 409 as
             // signup's guard, and an unmapped violation re-raises untouched.
@@ -56,9 +57,9 @@ class CreateCompanyInteractor
         return Company::query()->findOrFail($companyId);
     }
 
-    protected function open(CreateCompanyCommand $command, string $clientIp, string $companyId): void
+    protected function open(CreateCompanyCommand $command, RequestOrigin $origin, string $companyId): void
     {
-        DB::transaction(function () use ($command, $clientIp, $companyId): void {
+        DB::transaction(function () use ($command, $origin, $companyId): void {
             $this->assertSupportedCountry($command->country);
 
             CompanyAggregate::retrieve($companyId)->create($command)->persist();
@@ -78,7 +79,7 @@ class CreateCompanyInteractor
                     'user' => $command->owner,
                     'company' => $company,
                     'policyVersions' => config('lesily.policies'),
-                    'ip' => $clientIp,
+                    'ip' => $origin->ip,
                 ]))
                 ->persist();
 
@@ -88,6 +89,8 @@ class CreateCompanyInteractor
                     'trialEndsAt' => CarbonImmutable::now()->addDays(CompanyAggregate::TRIAL_DAYS),
                 ]))
                 ->persist();
+
+            $this->audit->created($company, $command->owner, $origin);
         });
     }
 
