@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
 use App\Consent\Entities\ConsentRecord;
 use App\Consent\Events\ConsentRecorded;
+use Tests\Concerns\AssertsCompanyAuditRows;
 use Tests\Concerns\InducesDatabaseFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Events\QueryExecuted;
@@ -68,6 +69,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     ];
 
     use AssertsAuditTrail;
+    use AssertsCompanyAuditRows;
     use AssertsMembershipAuditRows;
     use InducesDatabaseFailures;
     use WithRolePermissionFixtures;
@@ -1253,16 +1255,6 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $this->assertSame($actor->getKey(), $entry->actor_user_id);
         $this->assertSame($roleCode, $entry->actor_role_code);
         $this->assertSame($actor->name, $entry->actor_label);
-    }
-
-    protected function failTheAuditTrailAfter(int $rows): void
-    {
-        $written = 0;
-        AuditEntry::creating(function () use (&$written, $rows): void {
-            if (++$written > $rows) {
-                throw new RuntimeException('induced audit failure');
-            }
-        });
     }
 
     protected function assertNotAudited(AuditAction $action): void

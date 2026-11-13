@@ -5,9 +5,9 @@ namespace App\Companies\Memberships\UseCases\Audit;
 use App\Models\User;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Memberships\Entities\Invitation;
-use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
+use App\Foundation\AuditTrail\UseCases\Audit\AuditTrailWriter;
 use App\Foundation\AuditTrail\UseCases\Queries\MemberRoleCode;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -17,7 +17,10 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class InvitationAudit
 {
-    public function __construct(protected readonly MemberRoleCode $memberRoleCode) {}
+    public function __construct(
+        protected readonly MemberRoleCode $memberRoleCode,
+        protected readonly AuditTrailWriter $writer,
+    ) {}
 
     public function invited(Invitation $invitation, User $actor, RequestOrigin $origin): void
     {
@@ -76,25 +79,12 @@ class InvitationAudit
     /** @return array<string, mixed> */
     protected function actorAndOrigin(User $actor, string $companyId, RequestOrigin $origin): array
     {
-        return [
-            'actor_user_id' => $actor->getKey(),
-            'actor_role_code' => $this->memberRoleCode->of($actor, $companyId),
-            'actor_label' => $actor->name,
-            'ip_address' => $origin->ip,
-            'user_agent' => $origin->boundedUserAgent(),
-            'request_id' => $origin->boundedRequestId(),
-        ];
+        return $this->writer->actorAndOrigin($actor, $this->memberRoleCode->of($actor, $companyId), $origin);
     }
 
     /** @param array<string, mixed> $row */
     protected function write(array $row, AuditAction $action): void
     {
-        AuditEntry::query()->create([
-            ...$row,
-            'action' => $action,
-            'description' => __('dsar.codes.action.'.$action->value),
-            'severity' => 'info',
-            'recorded_at' => now(),
-        ]);
+        $this->writer->write($row, $action, 'info');
     }
 }

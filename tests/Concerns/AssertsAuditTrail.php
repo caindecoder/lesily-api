@@ -16,6 +16,16 @@ trait AssertsAuditTrail
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
     }
 
+    protected function failTheAuditTrailAfter(int $rows): void
+    {
+        $written = 0;
+        AuditEntry::creating(function () use (&$written, $rows): void {
+            if (++$written > $rows) {
+                throw new RuntimeException('induced audit failure');
+            }
+        });
+    }
+
     protected function assertNothingAudited(): void
     {
         $this->assertDatabaseCount('audit_trail', 0);

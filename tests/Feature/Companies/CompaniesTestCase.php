@@ -7,8 +7,10 @@ use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Tests\Concerns\AssertsAuditTrail;
 use App\Consent\Events\ConsentRecorded;
 use App\Companies\Entities\CompanySettings;
+use Tests\Concerns\AssertsCompanyAuditRows;
 use Tests\Concerns\InducesProjectorFailures;
 use App\Companies\Events\CompanySettingReset;
 use App\Companies\Events\CompanyDetailsUpdated;
@@ -19,7 +21,7 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class CompaniesTestCase extends TestCase
 {
-    use InducesProjectorFailures;
+    use AssertsAuditTrail, AssertsCompanyAuditRows, InducesProjectorFailures;
 
     // Shared Companies fixtures populated on real need (§2.10) — first consumer:
     // the UC-1-032 view-company-details suite (slice-companies Task 5).

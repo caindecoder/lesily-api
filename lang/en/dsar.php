@@ -158,6 +158,10 @@ return [
             'invitation_accepted' => 'Invitation accepted',
             'role_changed' => 'Role changed',
             'member_removed' => 'Member removed',
+            'user_registered' => 'User registered',
+            'company_created' => 'Company created',
+            'consent_recorded' => 'Consent recorded',
+            'trial_expired' => 'Trial expired',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',
@@ -170,6 +174,7 @@ return [
             'user' => 'A user',
             'invitation' => 'An invitation',
             'company' => 'A company',
+            'consent' => 'A consent',
         ],
         'policy_type' => [
             'tos' => 'Terms of service',

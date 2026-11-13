@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Password;
 use App\Foundation\Auth\Totp\TotpVerifier;
+use Tests\Concerns\AssertsCompanyAuditRows;
 use Tests\Concerns\InducesProjectorFailures;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Auth\Events\User2FAEnabled;
@@ -44,7 +45,7 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class AuthTestCase extends TestCase
 {
-    use AssertsAccessLog, AssertsAuditTrail, InducesProjectorFailures;
+    use AssertsAccessLog, AssertsAuditTrail, AssertsCompanyAuditRows, InducesProjectorFailures;
 
     /**
      * Canonical login-ready credentials, shared by the login and logout suites

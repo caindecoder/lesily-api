@@ -5,6 +5,9 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Consent\Events\ConsentRecorded;
+use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
  * UC-1-069 — a member accepts the live Terms of Service and Privacy Policy
@@ -33,6 +36,7 @@ class AcceptConsentTest extends MembershipsTestCase
         // Then access is denied and no consent is kept for them
         $this->assertCompanyAccessDenied($response);
         $this->assertDatabaseMissing('consent_records', ['user_id' => $outsider->getKey()]);
+        $this->assertNothingAudited();
     }
 
     #[Test]
@@ -49,6 +53,24 @@ class AcceptConsentTest extends MembershipsTestCase
         // Then the accept is refused as invalid and the new version is not kept
         $this->assertValidationRejected($response, 'ip', 'The ip field is required.');
         $this->assertDatabaseMissing('consent_records', ['user_id' => $member->getKey(), 'version' => 'v1.1']);
+        $this->assertNothingAudited();
+    }
+
+    #[Test]
+    public function when_the_consent_cannot_be_audited_then_no_consent_is_recorded(): void
+    {
+        // Given a member facing a new privacy policy version, and an audit trail that cannot be written
+        $member = $this->aCompanyMember($this->company);
+        config(['lesily.policies.privacy' => 'v1.1', 'app.debug' => false]);
+        $this->failTheAuditTrail();
+
+        // When they accept the policies
+        $response = $this->acceptConsent($member, $this->company);
+
+        // Then the request fails and the new version is neither kept nor stored
+        $response->assertInternalServerError();
+        $this->assertDatabaseMissing('consent_records', ['user_id' => $member->getKey(), 'version' => 'v1.1']);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', ConsentRecorded::class)->where('event_properties->version', 'v1.1')->count());
     }
 
     #[Test]
@@ -66,6 +88,7 @@ class AcceptConsentTest extends MembershipsTestCase
         // Then the new version is kept for the first company only
         $this->assertDatabaseHas('consent_records', ['user_id' => $member->getKey(), 'company_id' => $this->company->getKey(), 'version' => 'v1.1']);
         $this->assertDatabaseMissing('consent_records', ['user_id' => $member->getKey(), 'company_id' => $second->getKey(), 'version' => 'v1.1']);
+        $this->assertDatabaseMissing('audit_trail', ['company_id' => $second->getKey()]);
     }
 
     #[Test]
@@ -97,5 +120,22 @@ class AcceptConsentTest extends MembershipsTestCase
         // Then both live versions are recorded for them in this company, with that address
         $response->assertNoContent();
         $this->assertLiveConsentsRecorded($member, $this->company, '203.0.113.9');
+    }
+
+    #[Test]
+    public function when_a_member_accepts_then_each_policy_is_audited_with_its_origin(): void
+    {
+        // Given a member on a known device, facing new terms at v1.1 and a new privacy policy at v2.3
+        $member = $this->aCompanyMember($this->company);
+        config(['lesily.policies' => ['tos' => 'v1.1', 'privacy' => 'v2.3']]);
+        $this->fromADevice();
+
+        // When they accept the policies
+        $response = $this->acceptConsent($member, $this->company);
+
+        // Then each policy they accepted is audited on its own row, as theirs
+        $response->assertNoContent();
+        $this->assertConsentsAudited($response, $this->company, $member);
+        $this->assertEveryRowActedBy(AuditAction::ConsentRecorded, $member, 'employee');
     }
 }

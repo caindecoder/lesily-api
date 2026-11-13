@@ -7,7 +7,6 @@ use App\Models\User;
 use Illuminate\Support\Collection;
 use App\Companies\Entities\CompanyUser;
 use App\Foundation\AuditTrail\Enums\AuditAction;
-use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
@@ -19,30 +18,23 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class UserLevelAudit
 {
+    public function __construct(protected readonly AuditTrailWriter $writer) {}
+
     public function record(User $user, AuditAction $action, RequestOrigin $origin): void
     {
         $storedEvent = $this->newestEventOf($user);
 
         foreach ($this->membershipsOf($user) as $membership) {
-            AuditEntry::query()->create([
+            $this->writer->write([
                 'company_id' => $membership->company_id,
                 'stored_event_id' => $storedEvent->getKey(),
                 'event_class' => class_basename($storedEvent->event_class),
                 'subject_type' => AuditSubjectType::User,
                 'subject_id' => $user->getKey(),
                 'subject_label' => null,
-                'action' => $action,
-                'description' => __('dsar.codes.action.'.$action->value),
-                'actor_user_id' => $user->getKey(),
-                'actor_role_code' => $membership->role_code,
-                'actor_label' => $user->name,
-                'ip_address' => $origin->ip,
-                'user_agent' => $origin->boundedUserAgent(),
-                'request_id' => $origin->boundedRequestId(),
+                ...$this->writer->actorAndOrigin($user, $membership->role_code, $origin),
                 'metadata' => null,
-                'severity' => 'warning',
-                'recorded_at' => now(),
-            ]);
+            ], $action, 'warning');
         }
     }
 

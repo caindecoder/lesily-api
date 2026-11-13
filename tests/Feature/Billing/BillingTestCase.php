@@ -11,6 +11,7 @@ use Laravel\Sanctum\Sanctum;
 use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
+use Tests\Concerns\AssertsAuditTrail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Exceptions;
 use App\Billing\Invoices\Aggregates\Invoice;
@@ -34,6 +35,8 @@ use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 abstract class BillingTestCase extends TestCase
 {
+    use AssertsAuditTrail;
+
     /**
      * Look up a seeded RBAC-catalog role by code — requires seedRbacCatalog() in
      * the calling suite's setUp. Duplicated from CompaniesTestCase/AuthTestCase

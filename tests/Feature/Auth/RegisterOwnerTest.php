@@ -13,8 +13,11 @@ use App\Consent\Entities\ConsentRecord;
 use App\Consent\Events\ConsentRecorded;
 use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\CountryConfig\Entities\Country;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Foundation\Auth\Events\UserSignedUpAsOwner;
 use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
@@ -190,6 +193,22 @@ class RegisterOwnerTest extends AuthTestCase
         // and the refusal happens before anything is written — the guard sits ahead of
         // the transaction, so a relocation below it would leave an orphan account
         $this->assertValidationRejected($response, 'ip', 'The ip field is required.');
+        $this->assertNothingPersisted();
+    }
+
+    #[Test]
+    public function when_the_registration_cannot_be_audited_then_no_owner_or_company_is_created(): void
+    {
+        // Given a guest with the full signup payload, and an audit trail that takes the
+        // company's three rows but cannot write the registration's
+        config(['app.debug' => false]);
+        $this->failTheAuditTrailAfter(3);
+
+        // When they register as owner
+        $response = $this->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
+
+        // Then the request fails and the owner, the company and its trial are all rolled back
+        $response->assertInternalServerError();
         $this->assertNothingPersisted();
     }
 
@@ -478,6 +497,73 @@ class RegisterOwnerTest extends AuthTestCase
         $response->assertJsonPath('company_id', $companyId);
     }
 
+    #[Test]
+    public function when_an_owner_registers_then_the_registration_is_audited_with_its_origin(): void
+    {
+        // Given a guest on a known device with the full signup payload
+        $this->fromADevice();
+
+        // When they register as owner
+        $response = $this->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
+
+        // Then their registration is audited in their new company, as theirs, with where it came from
+        $response->assertCreated();
+        $this->assertRegistrationAudited($response, User::query()->where('email', 'nimal@contoso.lk')->sole());
+    }
+
+    #[Test]
+    public function when_an_owner_registers_then_the_company_and_each_consent_are_audited(): void
+    {
+        // Given a guest on a known device, with the terms at v1.0 and the privacy policy at v2.3
+        $this->fromADevice();
+        config(['lesily.policies' => ['tos' => 'v1.0', 'privacy' => 'v2.3']]);
+
+        // When they register as owner
+        $response = $this->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
+
+        // Then the new company holds four rows: the registration, its creation and each consent
+        $response->assertCreated();
+        $owner = User::query()->where('email', 'nimal@contoso.lk')->sole();
+        $company = Company::query()->where('owner_id', $owner->getKey())->sole();
+        $this->assertCompanyCreationAudited($response, $company, $owner);
+        $this->assertConsentsAudited($response, $company, $owner);
+        $this->assertSame(4, AuditEntry::query()->where('company_id', $company->getKey())->count());
+    }
+
+    protected function assertRegistrationAudited(TestResponse $response, User $owner): void
+    {
+        $requestId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($requestId);
+        $company = Company::query()->where('owner_id', $owner->getKey())->sole();
+        $signedUpEvent = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $owner->getKey())
+            ->where('event_class', UserSignedUpAsOwner::class)
+            ->sole();
+        $entry = AuditEntry::query()->where('action', AuditAction::UserRegistered)->sole();
+
+        $this->assertSame([
+            'company_id' => $company->getKey(),
+            'stored_event_id' => $signedUpEvent->getKey(),
+            'event_class' => 'UserSignedUpAsOwner',
+            'subject' => ['user', $owner->getKey(), $owner->name],
+            'description' => 'User registered',
+            'actor' => [$owner->getKey(), 'owner', $owner->name],
+            'origin' => [self::DEVICE_IP, self::DEVICE, $requestId],
+            'metadata' => null,
+            'severity' => 'info',
+        ], [
+            'company_id' => $entry->company_id,
+            'stored_event_id' => $entry->stored_event_id,
+            'event_class' => $entry->event_class,
+            'subject' => [$entry->subject_type->value, $entry->subject_id, $entry->subject_label],
+            'description' => $entry->description,
+            'actor' => [$entry->actor_user_id, $entry->actor_role_code, $entry->actor_label],
+            'origin' => [$entry->ip_address, $entry->user_agent, $entry->request_id],
+            'metadata' => $entry->metadata,
+            'severity' => $entry->severity,
+        ]);
+    }
+
     protected function assertRegistrationSucceeded(TestResponse $response): void
     {
         $response->assertCreated();
@@ -614,6 +700,7 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertSame($usersBefore, User::query()->count(), 'No user may be created on a conflict.');
         $this->assertSame($companiesBefore, Company::query()->count(), 'No company may be created on a conflict.');
         $this->assertDatabaseCount('stored_events', 0);
+        $this->assertNothingAudited();
     }
 
     protected function assertNothingCreatedOrSent(int $usersBefore, int $companiesBefore): void
@@ -647,5 +734,6 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertDatabaseCount('subscriptions', 0);
         $this->assertDatabaseCount('company_user', 0);
         $this->assertDatabaseCount('stored_events', 0);
+        $this->assertNothingAudited();
     }
 }
