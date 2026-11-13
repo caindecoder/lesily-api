@@ -32,11 +32,13 @@ class CompanyAudit
         ], AuditAction::CompanyCreated, 'info');
     }
 
+    /**
+     * A system row: no actor, address, device or request id — those columns stay null.
+     */
     public function trialExpired(Company $company): void
     {
         $this->writer->write([
             ...$this->rowOf($company, CompanyTrialExpired::class),
-            ...$this->writer->withoutActor(),
             'metadata' => null,
         ], AuditAction::TrialExpired, 'info');
     }
