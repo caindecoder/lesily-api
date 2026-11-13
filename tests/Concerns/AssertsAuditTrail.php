@@ -31,6 +31,17 @@ trait AssertsAuditTrail
         $this->assertDatabaseCount('audit_trail', 0);
     }
 
+    /** @return array<string, mixed> */
+    protected function changesOf(AuditEntry $entry): array
+    {
+        $changes = $entry->metadata['changes'] ?? [];
+        $this->assertIsArray($changes);
+        array_walk($changes, fn (mixed &$change): bool => is_array($change) && ksort($change));
+        ksort($changes);
+
+        return $changes;
+    }
+
     protected function fromADevice(): void
     {
         $this->withHeader('User-Agent', self::DEVICE)

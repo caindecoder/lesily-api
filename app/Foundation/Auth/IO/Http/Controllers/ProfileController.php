@@ -5,6 +5,7 @@ namespace App\Foundation\Auth\IO\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\Auth\IO\Http\Resources\MeResource;
 use App\Foundation\Auth\UseCases\Commands\UpdateUserProfileCommand;
 use App\Foundation\Auth\UseCases\Interactors\UpdateUserProfileInteractor;
@@ -23,6 +24,6 @@ class ProfileController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        return new MeResource($interactor->execute($user, $command));
+        return new MeResource($interactor->execute($user, $command, RequestOrigin::fromRequest($request)));
     }
 }

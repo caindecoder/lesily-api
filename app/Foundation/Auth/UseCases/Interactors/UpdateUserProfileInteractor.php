@@ -4,7 +4,10 @@ namespace App\Foundation\Auth\UseCases\Interactors;
 
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use App\Foundation\AuditTrail\Values\FieldChanges;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
+use App\Foundation\AuditTrail\UseCases\Audit\UserLevelAudit;
 use App\Foundation\Auth\UseCases\Commands\UpdateUserProfileCommand;
 
 /**
@@ -18,29 +21,32 @@ use App\Foundation\Auth\UseCases\Commands\UpdateUserProfileCommand;
  */
 class UpdateUserProfileInteractor
 {
-    public function execute(User $user, UpdateUserProfileCommand $command): User
-    {
-        $changedFields = $this->changedFields($user, $command);
+    public function __construct(protected readonly UserLevelAudit $audit) {}
 
-        if ($changedFields === []) {
+    public function execute(User $user, UpdateUserProfileCommand $command, RequestOrigin $origin): User
+    {
+        $changes = $this->changesOf($user, $command);
+
+        if ($changes->isEmpty()) {
             return $user;
         }
 
-        DB::transaction(fn () => UserAggregate::retrieve($user->getKey())
-            ->updateProfile($command, $changedFields)
-            ->persist());
+        DB::transaction(function () use ($user, $command, $changes, $origin): void {
+            UserAggregate::retrieve($user->getKey())
+                ->updateProfile($command, $changes->fields())
+                ->persist();
 
-        return $user->refresh();
+            $this->audit->profileUpdated($user->refresh(), $changes, $origin);
+        });
+
+        return $user;
     }
 
-    /**
-     * @return list<string>
-     */
-    protected function changedFields(User $user, UpdateUserProfileCommand $command): array
+    protected function changesOf(User $user, UpdateUserProfileCommand $command): FieldChanges
     {
-        return array_keys(array_filter([
-            'name' => $user->name !== $command->name,
-            'locale' => $user->locale !== $command->locale->value,
-        ]));
+        return FieldChanges::between(
+            ['name' => $user->name, 'locale' => $user->locale],
+            ['name' => $command->name, 'locale' => $command->locale->value],
+        );
     }
 }

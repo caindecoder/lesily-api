@@ -31,6 +31,8 @@ use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\Auth\Events\UserPasswordReset;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
 use App\Companies\Memberships\Entities\Invitation;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\Auth\Events\UserProfileUpdated;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
@@ -385,6 +387,42 @@ abstract class AuthTestCase extends TestCase
                 'request_id' => $requestId,
                 'metadata' => null,
                 'severity' => 'warning',
+            ]);
+        }
+    }
+
+    /** @param array<string, array{from: mixed, to: mixed}> $changes */
+    protected function assertProfileChangeAuditedInEachCompany(TestResponse $response, User $user, array $changes): void
+    {
+        $requestId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($requestId);
+        $storedEvent = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $user->getKey())
+            ->where('event_class', UserProfileUpdated::class)
+            ->sole();
+        $entries = AuditEntry::query()->where('action', AuditAction::ProfileUpdated)->get()->keyBy('company_id');
+        $this->assertCount(2, $entries);
+        ksort($changes);
+
+        foreach ([[$this->ownedCompany, 'owner'], [$this->employingCompany, 'employee']] as [$company, $roleCode]) {
+            $entry = $entries->get($company->getKey());
+            $this->assertInstanceOf(AuditEntry::class, $entry);
+            $this->assertSame([
+                'stored_event_id' => $storedEvent->getKey(),
+                'subject' => ['user', $user->getKey(), null],
+                'description' => 'Profile updated',
+                'actor' => [$user->getKey(), $roleCode, $user->name],
+                'origin' => [self::DEVICE_IP, self::DEVICE, $requestId],
+                'changes' => $changes,
+                'severity' => 'info',
+            ], [
+                'stored_event_id' => $entry->stored_event_id,
+                'subject' => [$entry->subject_type->value, $entry->subject_id, $entry->subject_label],
+                'description' => $entry->description,
+                'actor' => [$entry->actor_user_id, $entry->actor_role_code, $entry->actor_label],
+                'origin' => [$entry->ip_address, $entry->user_agent, $entry->request_id],
+                'changes' => $this->changesOf($entry),
+                'severity' => $entry->severity,
             ]);
         }
     }
