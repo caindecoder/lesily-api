@@ -38,6 +38,23 @@ readonly class FieldChanges
         return new self($changes);
     }
 
+    /**
+     * Stored changes as a reader sees them: an encrypted change decrypted and unmarked.
+     *
+     * @param  ?array<string, array<string, mixed>>  $stored
+     * @return ?array<string, array<string, mixed>>
+     */
+    public static function readable(?array $stored): ?array
+    {
+        if ($stored === null) {
+            return null;
+        }
+
+        return array_map(static fn (array $change): array => ($change['encrypted'] ?? false) === true
+            ? ['from' => self::decrypted($change['from'] ?? null), 'to' => self::decrypted($change['to'] ?? null)]
+            : $change, $stored);
+    }
+
     public function isEmpty(): bool
     {
         return $this->changes === [];
@@ -58,5 +75,10 @@ readonly class FieldChanges
     protected static function encrypted(mixed $value): ?string
     {
         return $value === null ? null : Crypt::encryptString((string) $value);
+    }
+
+    protected static function decrypted(mixed $value): ?string
+    {
+        return is_string($value) ? Crypt::decryptString($value) : null;
     }
 }

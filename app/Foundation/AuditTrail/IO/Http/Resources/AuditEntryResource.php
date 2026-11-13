@@ -5,6 +5,7 @@ namespace App\Foundation\AuditTrail\IO\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\AuditTrail\Values\FieldChanges;
 
 /**
  * @mixin AuditEntry
@@ -27,7 +28,7 @@ class AuditEntryResource extends JsonResource
             'subject_id' => $this->subject_id,
             'subject_label' => $this->subject_label,
             'description' => $this->description,
-            'changes' => $this->metadata['changes'] ?? null,
+            'changes' => FieldChanges::readable($this->metadata['changes'] ?? null),
             ...$this->origin(),
             'severity' => $this->severity,
         ];
