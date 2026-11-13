@@ -21,10 +21,11 @@ class SetEmergencyContactInteractor
     {
         DB::transaction(function () use ($command, $origin): void {
             $membership = $this->membershipOf($command)->lockForUpdate()->sole();
-            $changes = $command->changesFrom($membership);
+            $contact = $command->contact();
+            $changes = $contact->changesFrom($membership);
 
             UserAggregate::retrieve($command->setBy->getKey())
-                ->setEmergencyContact($command->company->getKey(), $command)
+                ->setEmergencyContact($command->company->getKey(), $contact)
                 ->persist();
 
             $this->audit->emergencyContactSet($membership, $changes, $origin);

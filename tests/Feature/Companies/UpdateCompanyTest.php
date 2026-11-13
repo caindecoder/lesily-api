@@ -3,6 +3,7 @@
 namespace Tests\Feature\Companies;
 
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanySettings;
@@ -418,6 +419,23 @@ class UpdateCompanyTest extends CompaniesTestCase
     }
 
     #[Test]
+    public function when_another_rename_lands_while_this_update_waits_then_its_old_name_is_the_latest(): void
+    {
+        // Given the owner of Contoso, and another rename to "Contoso Lanka" that commits while
+        // this update waits on the settings row
+        $company = Company::factory()->named('Contoso')->withSettings()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        $this->renameOnceWhenTheSettingsAreRead($company, 'Contoso Lanka');
+
+        // When they rename it to "Contoso (Pvt) Ltd"
+        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['name' => 'Contoso (Pvt) Ltd']);
+
+        // Then the audit row's old name is the one in force when the lock was taken
+        $response->assertOk();
+        $this->assertCompanyChangeAudited($company, AuditAction::CompanyDetailsUpdated, ['name' => ['from' => 'Contoso Lanka', 'to' => 'Contoso (Pvt) Ltd']]);
+    }
+
+    #[Test]
     public function when_the_name_changes_twice_then_the_second_row_cites_the_second_event(): void
     {
         // Given the owner of a company renamed once already
@@ -559,6 +577,17 @@ class UpdateCompanyTest extends CompaniesTestCase
             'working_days_per_week' => ['from' => 5, 'to' => 6],
         ]);
         $this->assertEveryRowCameFrom($response, $owner, 'owner');
+    }
+
+    protected function renameOnceWhenTheSettingsAreRead(Company $company, string $name): void
+    {
+        $renamed = false;
+        CompanySettings::retrieved(function () use ($company, $name, &$renamed): void {
+            if (! $renamed) {
+                $renamed = true;
+                DB::table('companies')->where('id', $company->getKey())->update(['name' => $name]);
+            }
+        });
     }
 
     protected function assertOnlyWorkingDaysUpdatedTo(Company $company, int $workingDays): void
