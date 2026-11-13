@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
 use App\Foundation\Auth\Support\DeviceName;
 use Symfony\Component\HttpFoundation\Response;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 use App\Foundation\Auth\IO\Http\Resources\RegisterSuccessResource;
 use App\Foundation\Auth\UseCases\Interactors\RegisterOwnerInteractor;
@@ -23,7 +24,7 @@ class RegisterController extends Controller
     {
         $result = $interactor->execute(
             RegisterOwnerCommand::validateAndCreate($request),
-            $request->ip(),
+            RequestOrigin::fromRequest($request),
             // Register is UA-derived: pass null so a client-supplied deviceName in the body
             // can't name the token — the register contract has no deviceName field (per design).
             DeviceName::resolve(null, $request),

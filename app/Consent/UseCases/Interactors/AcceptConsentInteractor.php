@@ -8,14 +8,16 @@ use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Consent\Aggregates\Consent;
 use Illuminate\Validation\ValidationException;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 
 class AcceptConsentInteractor
 {
-    public function execute(Company $company, User $user, ?string $clientIp): void
+    public function execute(Company $company, User $user, RequestOrigin $origin): void
     {
         // A consent record is evidence and is never minted without the client IP
         // it was given from (UC-1-069).
+        $clientIp = $origin->ip;
         if (blank($clientIp)) {
             throw ValidationException::withMessages(['ip' => 'The ip field is required.']);
         }

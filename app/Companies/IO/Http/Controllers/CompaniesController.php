@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\IO\Http\Resources\CompanyResource;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use App\Companies\UseCases\Commands\UpdateCompanyCommand;
@@ -29,7 +30,7 @@ class CompaniesController
 
         $company = $interactor->execute(
             CreateCompanyCommand::validateAndCreate([...$request->all(), 'owner' => $actor]),
-            $request->ip(),
+            RequestOrigin::fromRequest($request),
         );
 
         return (new CompanyResource($company))

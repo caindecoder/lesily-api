@@ -8,6 +8,7 @@ use App\Models\User as UserReadModel;
 use App\Foundation\Auth\Aggregates\User;
 use Illuminate\Validation\ValidationException;
 use App\Foundation\Auth\UseCases\SessionIssuer;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\Auth\UseCases\Results\RegisterResult;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -29,11 +30,11 @@ class RegisterOwnerInteractor
         private CreateCompanyInteractor $createCompany,
     ) {}
 
-    public function execute(RegisterOwnerCommand $command, ?string $clientIp, string $deviceName): RegisterResult
+    public function execute(RegisterOwnerCommand $command, RequestOrigin $origin, string $deviceName): RegisterResult
     {
         // A consent record is evidence and is never minted without the client IP
         // it was given from (UC-1-069); an unresolvable IP is refused up front.
-        if (blank($clientIp)) {
+        if (blank($origin->ip)) {
             throw ValidationException::withMessages(['ip' => 'The ip field is required.']);
         }
 
@@ -42,7 +43,7 @@ class RegisterOwnerInteractor
         // or handle errors, not both).
         $this->uniqueness->ensureUnique($command);
 
-        [$userId, $companyId] = $this->persistRegistration($command, $clientIp);
+        [$userId, $companyId] = $this->persistRegistration($command, $origin);
 
         // After the transaction commits, the projectors have written the owner's `users`
         // read-model row. Materialise it and issue the session here — token mint is a
@@ -63,10 +64,10 @@ class RegisterOwnerInteractor
      *
      * @return array{string, string} [userId, companyId]
      */
-    protected function persistRegistration(RegisterOwnerCommand $command, string $clientIp): array
+    protected function persistRegistration(RegisterOwnerCommand $command, RequestOrigin $origin): array
     {
         try {
-            return DB::transaction(function () use ($command, $clientIp): array {
+            return DB::transaction(function () use ($command, $origin): array {
                 $userId = Str::uuid7()->toString();
                 $companyId = Str::uuid7()->toString();
 
@@ -74,7 +75,7 @@ class RegisterOwnerInteractor
                 // and the company opened with the id the owner's genesis already names.
                 User::retrieve($userId)->createOwner($companyId, $command)->persist();
 
-                $this->createCompany->execute($this->buildCreateCompanyCommand($command, $userId), $clientIp, $companyId);
+                $this->createCompany->execute($this->buildCreateCompanyCommand($command, $userId), $origin, $companyId);
 
                 return [$userId, $companyId];
             });

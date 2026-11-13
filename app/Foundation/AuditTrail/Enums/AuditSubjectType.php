@@ -14,4 +14,5 @@ enum AuditSubjectType: string
     case User = 'user';
     case Invitation = 'invitation';
     case Company = 'company';
+    case Consent = 'consent';
 }

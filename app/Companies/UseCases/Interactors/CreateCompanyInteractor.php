@@ -10,6 +10,7 @@ use App\Consent\Aggregates\Consent;
 use App\Foundation\Auth\Aggregates\User;
 use Illuminate\Validation\ValidationException;
 use App\Foundation\CountryConfig\Entities\Country;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Companies\Aggregates\Company as CompanyAggregate;
@@ -33,10 +34,11 @@ class CreateCompanyInteractor
         private RegistrationUniquenessGuard $uniqueness,
     ) {}
 
-    public function execute(CreateCompanyCommand $command, ?string $clientIp, ?string $companyId = null): Company
+    public function execute(CreateCompanyCommand $command, RequestOrigin $origin, ?string $companyId = null): Company
     {
         // A consent record is evidence and is never minted without the client IP
         // it was given from (UC-1-069).
+        $clientIp = $origin->ip;
         if (blank($clientIp)) {
             throw ValidationException::withMessages(['ip' => 'The ip field is required.']);
         }
