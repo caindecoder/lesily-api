@@ -5,7 +5,11 @@ namespace App\Companies\UseCases\Audit;
 use App\Models\User;
 use App\Companies\Entities\Company;
 use App\Companies\Events\CompanyCreated;
+use Illuminate\Database\Eloquent\Builder;
+use App\Companies\Events\CompanySettingReset;
 use App\Companies\Events\CompanyTrialExpired;
+use App\Companies\Events\CompanyDetailsUpdated;
+use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
@@ -18,6 +22,13 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class CompanyAudit
 {
+    /** @var array<string, class-string> */
+    protected const array EVENT_OF = [
+        'company_details_updated' => CompanyDetailsUpdated::class,
+        'company_settings_updated' => CompanySettingsUpdated::class,
+        'company_setting_reset' => CompanySettingReset::class,
+    ];
+
     public function __construct(
         protected readonly MemberRoleCode $memberRoleCode,
         protected readonly AuditTrailWriter $writer,
@@ -30,6 +41,21 @@ class CompanyAudit
             ...$this->writer->actorAndOrigin($owner, $this->memberRoleCode->of($owner, $company->getKey()), $origin),
             'metadata' => ['name' => $company->name, 'country' => $company->country],
         ], AuditAction::CompanyCreated, 'info');
+    }
+
+    public function changed(CompanyChange $change, User $actor, RequestOrigin $origin): void
+    {
+        if ($change->changes->isEmpty()) {
+            return;
+        }
+
+        $company = $change->company;
+
+        $this->writer->write([
+            ...$this->rowOf($company, self::EVENT_OF[$change->action->value], $change->changes->fields()[0]),
+            ...$this->writer->actorAndOrigin($actor, $this->memberRoleCode->of($actor, $company->getKey()), $origin),
+            'metadata' => ['changes' => $change->changes->toArray()],
+        ], $change->action, 'info');
     }
 
     /**
@@ -47,14 +73,16 @@ class CompanyAudit
      * @param  class-string  $eventClass
      * @return array<string, mixed>
      */
-    protected function rowOf(Company $company, string $eventClass): array
+    protected function rowOf(Company $company, string $eventClass, ?string $setting = null): array
     {
         return [
             'company_id' => $company->getKey(),
             'stored_event_id' => LesilyStoredEvent::query()
                 ->where('aggregate_uuid', $company->getKey())
                 ->where('event_class', $eventClass)
-                ->sole()
+                ->when($eventClass === CompanySettingReset::class, fn (Builder $query) => $query->where('event_properties->setting', $setting))
+                ->latest('id')
+                ->firstOrFail()
                 ->getKey(),
             'event_class' => class_basename($eventClass),
             'subject_type' => AuditSubjectType::Company,

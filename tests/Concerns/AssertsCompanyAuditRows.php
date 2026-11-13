@@ -8,6 +8,9 @@ use Illuminate\Testing\TestResponse;
 use App\Companies\Entities\CompanyUser;
 use App\Consent\Entities\ConsentRecord;
 use App\Companies\Events\CompanyCreated;
+use App\Companies\Events\CompanySettingReset;
+use App\Companies\Events\CompanyDetailsUpdated;
+use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
@@ -88,6 +91,47 @@ trait AssertsCompanyAuditRows
                 'severity' => $entry->severity,
             ]);
         }
+    }
+
+    /** @param array<string, array{from: mixed, to: mixed}> $changes */
+    protected function assertCompanyChangeAudited(Company $company, AuditAction $action, array $changes): void
+    {
+        ksort($changes);
+        $entry = AuditEntry::query()
+            ->where('company_id', $company->getKey())
+            ->where('action', $action)
+            ->latest('recorded_at')
+            ->latest('id')
+            ->get()
+            ->first(fn (AuditEntry $entry): bool => array_keys($this->changesOf($entry)) === array_keys($changes));
+        $this->assertInstanceOf(AuditEntry::class, $entry);
+        [$eventClass, $words] = match ($action) {
+            AuditAction::CompanyDetailsUpdated => [CompanyDetailsUpdated::class, 'Company details updated'],
+            AuditAction::CompanySettingsUpdated => [CompanySettingsUpdated::class, 'Company settings updated'],
+            default => [CompanySettingReset::class, 'Company setting reset to the country default'],
+        };
+        $storedEvent = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $company->getKey())
+            ->where('event_class', $eventClass)
+            ->when($eventClass === CompanySettingReset::class, fn ($query) => $query->where('event_properties->setting', array_key_first($changes)))
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertSame([
+            'stored_event_id' => $storedEvent->getKey(),
+            'event_class' => class_basename($eventClass),
+            'subject' => ['company', $company->getKey(), $company->refresh()->name],
+            'description' => $words,
+            'changes' => $changes,
+            'severity' => 'info',
+        ], [
+            'stored_event_id' => $entry->stored_event_id,
+            'event_class' => $entry->event_class,
+            'subject' => [$entry->subject_type->value, $entry->subject_id, $entry->subject_label],
+            'description' => $entry->description,
+            'changes' => $this->changesOf($entry),
+            'severity' => $entry->severity,
+        ]);
     }
 
     protected function roleCodeIn(Company $company, User $member): ?string

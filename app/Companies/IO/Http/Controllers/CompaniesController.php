@@ -50,7 +50,7 @@ class CompaniesController
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
-        $company = $interactor->execute($request->company(), $actor, $command);
+        $company = $interactor->execute($command, $actor, RequestOrigin::fromRequest($request));
 
         return new CompanyResource($company);
     }

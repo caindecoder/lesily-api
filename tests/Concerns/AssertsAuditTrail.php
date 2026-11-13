@@ -2,7 +2,9 @@
 
 namespace Tests\Concerns;
 
+use App\Models\User;
 use RuntimeException;
+use Illuminate\Testing\TestResponse;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 
 trait AssertsAuditTrail
@@ -40,6 +42,21 @@ trait AssertsAuditTrail
         ksort($changes);
 
         return $changes;
+    }
+
+    protected function assertEveryRowCameFrom(TestResponse $response, User $actor, string $roleCode): void
+    {
+        $requestId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($requestId);
+        $entries = AuditEntry::query()->get();
+        $this->assertNotEmpty($entries);
+
+        foreach ($entries as $entry) {
+            $this->assertSame(
+                [$actor->getKey(), $roleCode, $actor->name, self::DEVICE_IP, self::DEVICE, $requestId],
+                [$entry->actor_user_id, $entry->actor_role_code, $entry->actor_label, $entry->ip_address, $entry->user_agent, $entry->request_id],
+            );
+        }
     }
 
     protected function fromADevice(): void
