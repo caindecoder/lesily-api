@@ -5,6 +5,7 @@ namespace App\Companies\UseCases\Audit;
 use App\Models\User;
 use App\Companies\Entities\Company;
 use App\Companies\Events\CompanyCreated;
+use App\Companies\Events\CompanyTrialExpired;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
@@ -29,6 +30,15 @@ class CompanyAudit
             ...$this->writer->actorAndOrigin($owner, $this->memberRoleCode->of($owner, $company->getKey()), $origin),
             'metadata' => ['name' => $company->name, 'country' => $company->country],
         ], AuditAction::CompanyCreated, 'info');
+    }
+
+    public function trialExpired(Company $company): void
+    {
+        $this->writer->write([
+            ...$this->rowOf($company, CompanyTrialExpired::class),
+            ...$this->writer->withoutActor(),
+            'metadata' => null,
+        ], AuditAction::TrialExpired, 'info');
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Billing\Subscriptions\UseCases\Interactors;
 
 use Illuminate\Support\Facades\DB;
 use App\Companies\Aggregates\Company;
+use App\Companies\UseCases\Audit\CompanyAudit;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\UseCases\Commands\ApplyTrialExpirationCommand;
 
@@ -15,11 +16,19 @@ use App\Billing\Subscriptions\UseCases\Commands\ApplyTrialExpirationCommand;
  */
 class ApplyTrialExpirationInteractor
 {
+    public function __construct(protected readonly CompanyAudit $audit) {}
+
     public function execute(ApplyTrialExpirationCommand $command): void
     {
         DB::transaction(function () use ($command): void {
-            Company::retrieve($command->company->getKey())->trialExpire()->persist();
+            $company = Company::retrieve($command->company->getKey())->trialExpire();
+            $expired = $company->getRecordedEvents() !== [];
+            $company->persist();
             Subscription::retrieve($command->subscription->getKey())->endTrial('trial-expired')->persist();
+
+            if ($expired) {
+                $this->audit->trialExpired($command->company);
+            }
         });
     }
 }

@@ -25,6 +25,19 @@ class AuditTrailWriter
         ];
     }
 
+    /** @return array<string, null> */
+    public function withoutActor(): array
+    {
+        return [
+            'actor_user_id' => null,
+            'actor_role_code' => null,
+            'actor_label' => null,
+            'ip_address' => null,
+            'user_agent' => null,
+            'request_id' => null,
+        ];
+    }
+
     /** @param array<string, mixed> $row */
     public function write(array $row, AuditAction $action, string $severity): void
     {

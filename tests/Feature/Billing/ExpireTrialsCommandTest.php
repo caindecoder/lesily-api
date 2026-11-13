@@ -14,6 +14,8 @@ use PHPUnit\Framework\AssertionFailedError;
 use Illuminate\Support\Facades\Notification;
 use App\Companies\Events\CompanyTrialExpired;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Tests\Feature\Companies\CreatesTrialCompanies;
 use App\Companies\Reactors\TrialExpiredEmailReactor;
 use App\Billing\Subscriptions\Aggregates\Subscription;
@@ -61,6 +63,7 @@ class ExpireTrialsCommandTest extends BillingTestCase
 
         // Then the company is untouched
         $this->assertSame(CompanyStatus::Trial, CompanyReadModel::findOrFail($companyId)->status);
+        $this->assertNothingAudited();
     }
 
     // Sad (UC-1-049 Sc5 guard / idempotency) — once a trial has been expired, a later daily
@@ -102,8 +105,32 @@ class ExpireTrialsCommandTest extends BillingTestCase
             $this->expiryCommandFor($companyId, $subscriptionId),
         );
 
-        // Then nothing changes — each expiry event was recorded exactly once
+        // Then nothing changes — each expiry event was recorded, and audited, exactly once
         $this->assertExpiredExactlyOnce($companyId);
+        $this->assertSame(1, AuditEntry::query()->where('action', AuditAction::TrialExpired)->count());
+    }
+
+    #[Test]
+    public function when_the_trial_expiry_cannot_be_audited_then_the_company_stays_in_trial(): void
+    {
+        // Given a company whose trial elapsed yesterday, and an audit trail that cannot be written
+        $companyId = (string) Str::uuid();
+        $subscriptionId = (string) Str::uuid();
+        $this->givenTrialEndingAt($companyId, $subscriptionId, CarbonImmutable::now()->subDay());
+        $this->failTheAuditTrail();
+
+        try {
+            // When the daily scan runs
+            $this->runExpireTrials()->run();
+            $this->fail('The scan should surface the audit failure.');
+        } catch (AssertionFailedError $guard) {
+            throw $guard;
+        } catch (RuntimeException) {
+            // Then the company and its subscription are still in trial, with no expiry recorded
+            $this->assertSame(CompanyStatus::Trial, CompanyReadModel::findOrFail($companyId)->status);
+            $this->assertSame(SubscriptionStatus::Trial, SubscriptionReadModel::findOrFail($subscriptionId)->status);
+            $this->assertSame(0, LesilyStoredEvent::query()->whereIn('event_class', [CompanyTrialExpired::class, SubscriptionTrialEnded::class])->count());
+        }
     }
 
     // Sad (OQ-1-161 / F1) — a delivery-time notification failure must not undo the committed
@@ -195,8 +222,24 @@ class ExpireTrialsCommandTest extends BillingTestCase
         // When the daily scan runs
         $this->runExpireTrials()->expectsOutputToContain('2 trial(s) expired.')->assertSuccessful();
 
-        // Then both companies are read-only
+        // Then both companies are read-only, each with its own expiry audited
         $this->assertBothCompaniesExpired($firstCompanyId, $secondCompanyId);
+        $this->assertSame([1, 1], [$this->trialExpiryRowsOf($firstCompanyId), $this->trialExpiryRowsOf($secondCompanyId)]);
+    }
+
+    // Happy (UC-1-049) — the expiry is a system action: audited with no actor, no address and no device.
+    #[Test]
+    public function when_a_trial_expires_then_it_is_audited_as_a_system_action(): void
+    {
+        // Given Contoso, whose trial elapsed yesterday
+        $companyId = (string) Str::uuid();
+        $this->givenTrialEndingAt($companyId, (string) Str::uuid(), CarbonImmutable::now()->subDay());
+
+        // When the daily scan runs
+        $this->runExpireTrials()->assertSuccessful();
+
+        // Then Contoso's expiry is audited as a system action
+        $this->assertTrialExpiryAudited($companyId);
     }
 
     protected function givenTrialEndingAt(string $companyId, string $subscriptionId, CarbonInterface $trialEndsAt): void
@@ -243,6 +286,38 @@ class ExpireTrialsCommandTest extends BillingTestCase
 
         $this->assertSame(1, $companyExpiries);
         $this->assertSame(1, $subscriptionEndings);
+    }
+
+    protected function trialExpiryRowsOf(string $companyId): int
+    {
+        return AuditEntry::query()->where(['action' => AuditAction::TrialExpired, 'company_id' => $companyId])->count();
+    }
+
+    protected function assertTrialExpiryAudited(string $companyId): void
+    {
+        $expiredEvent = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $companyId)
+            ->where('event_class', CompanyTrialExpired::class)
+            ->sole();
+        $entry = AuditEntry::query()->where('action', AuditAction::TrialExpired)->sole();
+
+        $this->assertSame([
+            'company_id' => $companyId,
+            'stored_event_id' => $expiredEvent->getKey(),
+            'event_class' => 'CompanyTrialExpired',
+            'subject' => ['company', $companyId, 'Contoso'],
+            'description' => 'Trial expired',
+            'actor_and_origin' => [null, null, null, null, null, null],
+            'severity' => 'info',
+        ], [
+            'company_id' => $entry->company_id,
+            'stored_event_id' => $entry->stored_event_id,
+            'event_class' => $entry->event_class,
+            'subject' => [$entry->subject_type->value, $entry->subject_id, $entry->subject_label],
+            'description' => $entry->description,
+            'actor_and_origin' => [$entry->actor_user_id, $entry->actor_role_code, $entry->actor_label, $entry->ip_address, $entry->user_agent, $entry->request_id],
+            'severity' => $entry->severity,
+        ]);
     }
 
     protected function assertBothCompaniesExpired(string $firstCompanyId, string $secondCompanyId): void
