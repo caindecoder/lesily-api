@@ -11,6 +11,7 @@ use App\Foundation\Auth\UseCases\SessionIssuer;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\Auth\UseCases\Results\RegisterResult;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
+use App\Foundation\Auth\UseCases\Audit\RegistrationAudit;
 use Illuminate\Database\UniqueConstraintViolationException;
 use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
 use App\Companies\UseCases\Interactors\CreateCompanyInteractor;
@@ -28,6 +29,7 @@ class RegisterOwnerInteractor
         private RegistrationUniquenessGuard $uniqueness,
         private SessionIssuer $sessionIssuer,
         private CreateCompanyInteractor $createCompany,
+        private RegistrationAudit $audit,
     ) {}
 
     public function execute(RegisterOwnerCommand $command, RequestOrigin $origin, string $deviceName): RegisterResult
@@ -75,7 +77,9 @@ class RegisterOwnerInteractor
                 // and the company opened with the id the owner's genesis already names.
                 User::retrieve($userId)->createOwner($companyId, $command)->persist();
 
-                $this->createCompany->execute($this->buildCreateCompanyCommand($command, $userId), $origin, $companyId);
+                $createCompany = $this->buildCreateCompanyCommand($command, $userId);
+                $company = $this->createCompany->execute($createCompany, $origin, $companyId);
+                $this->audit->registered($createCompany->owner, $company, $origin);
 
                 return [$userId, $companyId];
             });

@@ -206,8 +206,9 @@ class AddCompanyTest extends CompaniesTestCase
     #[Test]
     public function when_the_company_cannot_be_audited_then_nothing_is_created(): void
     {
-        // Given a signed-in owner and an audit trail that cannot be written
-        $this->failTheAuditTrail();
+        // Given a signed-in owner and an audit trail that takes two of the company's rows
+        // but cannot write its last
+        $this->failTheAuditTrailAfter(2);
 
         // When they add a company
         $response = $this->addCompany();
