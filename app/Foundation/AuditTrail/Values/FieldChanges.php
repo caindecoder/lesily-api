@@ -74,7 +74,7 @@ readonly class FieldChanges
 
     protected static function encrypted(mixed $value): ?string
     {
-        return $value === null ? null : Crypt::encryptString((string) $value);
+        return is_string($value) ? Crypt::encryptString($value) : null;
     }
 
     protected static function decrypted(mixed $value): ?string

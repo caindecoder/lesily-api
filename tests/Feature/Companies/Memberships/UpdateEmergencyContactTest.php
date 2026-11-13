@@ -121,6 +121,24 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
     }
 
     #[Test]
+    public function when_the_contact_change_cannot_be_audited_then_the_contact_is_unchanged(): void
+    {
+        // Given production error rendering, a company whose owner keeps a contact, and an audit trail that fails
+        config(['app.debug' => false]);
+        $company = Company::factory()->create();
+        $owner = $this->anOwnerWithContact($company);
+        $this->failTheAuditTrail();
+
+        // When the owner submits a new contact
+        $response = $this->updateEmergencyContact($owner, $company->getKey(), self::UPDATED_CONTACT);
+
+        // Then the update fails whole: the old contact stays and no contact event is recorded
+        $response->assertInternalServerError();
+        $this->assertContactUnchanged($company, $owner, self::CONTACT);
+        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserMembershipEmergencyContactSet::class)->count());
+    }
+
+    #[Test]
     public function when_the_owner_of_two_companies_updates_one_then_the_other_keeps_its_contact(): void
     {
         // Given one owner of company A and company B, both naming Kamala
@@ -154,24 +172,6 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
         $response->assertExactJson(['data' => self::UPDATED_CONTACT]);
         $this->assertSame(self::UPDATED_CONTACT, $this->storedContact($company, $owner));
         $this->assertSame(self::CONTACT, $this->storedContact($company, $formerOwner));
-    }
-
-    #[Test]
-    public function when_the_contact_change_cannot_be_audited_then_the_contact_is_unchanged(): void
-    {
-        // Given production error rendering, a company whose owner keeps a contact, and an audit trail that fails
-        config(['app.debug' => false]);
-        $company = Company::factory()->create();
-        $owner = $this->anOwnerWithContact($company);
-        $this->failTheAuditTrail();
-
-        // When the owner submits a new contact
-        $response = $this->updateEmergencyContact($owner, $company->getKey(), self::UPDATED_CONTACT);
-
-        // Then the update fails whole: the old contact stays and no contact event is recorded
-        $response->assertInternalServerError();
-        $this->assertContactUnchanged($company, $owner, self::CONTACT);
-        $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserMembershipEmergencyContactSet::class)->count());
     }
 
     #[Test]

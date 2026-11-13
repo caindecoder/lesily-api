@@ -71,8 +71,6 @@ class CreateCompanyInteractor
             $company = Company::query()->findOrFail($companyId);
 
             $contact = SetEmergencyContactCommand::from([
-                'company' => $company,
-                'setBy' => $command->owner,
                 'name' => $command->emergencyContactName,
                 'email' => $command->emergencyContactEmail,
                 'phone' => $command->emergencyContactPhone,

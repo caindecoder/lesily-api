@@ -78,20 +78,6 @@ class CompanyUser extends Pivot
     }
 
     /**
-     * The contact fields stored encrypted — read from the casts, so the audit
-     * trail encrypts whatever the row encrypts.
-     *
-     * @return list<string>
-     */
-    public function encryptedContactFields(): array
-    {
-        return array_values(array_filter(
-            self::CONTACT_FIELDS,
-            fn (string $field): bool => ($this->getCasts()[self::CONTACT_PREFIX.$field] ?? null) === 'encrypted',
-        ));
-    }
-
-    /**
      * @return BelongsTo<User, $this>
      */
     public function user(): BelongsTo

@@ -41,20 +41,23 @@ class SetEmergencyContactCommand extends Data
     public EmergencyContactRelationship $relationship;
 
     /**
-     * Each contact field the set changes, old -> new, encrypted as the row stores it.
+     * Each contact field the set changes, old -> new — every contact field is
+     * stored encrypted, so every one is encrypted in the change.
      */
     public function changesFrom(CompanyUser $membership): FieldChanges
     {
-        return FieldChanges::between($membership->emergencyContact(), [
+        $contact = [
             'name' => $this->name,
             'email' => $this->email,
             'phone' => $this->phone,
             'relationship' => $this->relationship->value,
-        ], $membership->encryptedContactFields());
+        ];
+
+        return FieldChanges::between($membership->emergencyContact(), $contact, array_keys($contact));
     }
 
     /**
-     * The company and the owner are server-sourced and carry no rule (amendment AQ).
+     * The company and the owner are server-sourced and carry no rule.
      *
      * @return array<string, array<int, string|Enum|ValidationRule>>
      */

@@ -53,7 +53,7 @@ class UpdateCompanyDetailsInteractor
     }
 
     /**
-     * Each kind of change with the values that applied before and after it (AR44, AR45).
+     * Each kind of change with the values that applied before and after it.
      *
      * @return list<CompanyChange>
      */
