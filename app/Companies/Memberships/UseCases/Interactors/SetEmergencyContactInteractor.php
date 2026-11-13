@@ -2,11 +2,12 @@
 
 namespace App\Companies\Memberships\UseCases\Interactors;
 
-use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use App\Companies\Entities\Company;
 use App\Companies\Entities\CompanyUser;
+use Illuminate\Database\Eloquent\Builder;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
+use App\Companies\Memberships\UseCases\Audit\MembershipAudit;
 use App\Companies\Memberships\UseCases\Commands\SetEmergencyContactCommand;
 
 /**
@@ -14,17 +15,29 @@ use App\Companies\Memberships\UseCases\Commands\SetEmergencyContactCommand;
  */
 class SetEmergencyContactInteractor
 {
-    public function execute(Company $company, User $owner, SetEmergencyContactCommand $command): CompanyUser
+    public function __construct(protected readonly MembershipAudit $audit) {}
+
+    public function execute(SetEmergencyContactCommand $command, RequestOrigin $origin): CompanyUser
     {
-        DB::transaction(function () use ($company, $owner, $command): void {
-            UserAggregate::retrieve($owner->getKey())
-                ->setEmergencyContact($company->getKey(), $command)
+        DB::transaction(function () use ($command, $origin): void {
+            $membership = $this->membershipOf($command)->lockForUpdate()->sole();
+            $changes = $command->changesFrom($membership);
+
+            UserAggregate::retrieve($command->setBy->getKey())
+                ->setEmergencyContact($command->company->getKey(), $command)
                 ->persist();
+
+            $this->audit->emergencyContactSet($membership, $changes, $origin);
         });
 
+        return $this->membershipOf($command)->sole();
+    }
+
+    /** @return Builder<CompanyUser> */
+    protected function membershipOf(SetEmergencyContactCommand $command): Builder
+    {
         return CompanyUser::query()
-            ->where('company_id', $company->getKey())
-            ->where('user_id', $owner->getKey())
-            ->sole();
+            ->where('company_id', $command->company->getKey())
+            ->where('user_id', $command->setBy->getKey());
     }
 }

@@ -55,9 +55,13 @@ class MembershipsController
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
-        $command = SetEmergencyContactCommand::validateAndCreate($request->only(['name', 'email', 'phone', 'relationship']));
+        $command = SetEmergencyContactCommand::validateAndCreate([
+            ...$request->only(['name', 'email', 'phone', 'relationship']),
+            'company' => $request->company(),
+            'setBy' => $actor,
+        ]);
 
-        return new EmergencyContactResource($interactor->execute($request->company(), $actor, $command));
+        return new EmergencyContactResource($interactor->execute($command, RequestOrigin::fromRequest($request)));
     }
 
     public function update(Request $request, string $membershipId, ChangeMembershipRoleInteractor $interactor): JsonResponse

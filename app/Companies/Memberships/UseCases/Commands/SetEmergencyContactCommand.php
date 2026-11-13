@@ -2,9 +2,14 @@
 
 namespace App\Companies\Memberships\UseCases\Commands;
 
+use App\Models\User;
 use Spatie\LaravelData\Data;
+use App\Companies\Entities\Company;
 use Illuminate\Validation\Rules\Enum;
+use App\Companies\Entities\CompanyUser;
 use Spatie\LaravelData\Attributes\WithCast;
+use App\Foundation\UseCases\Casts\ModelCast;
+use App\Foundation\AuditTrail\Values\FieldChanges;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 use App\Foundation\Auth\UseCases\Commands\RegisterOwnerRules;
@@ -20,6 +25,12 @@ class SetEmergencyContactCommand extends Data
 {
     use RegisterOwnerRules;
 
+    #[WithCast(ModelCast::class, Company::class)]
+    public Company $company;
+
+    #[WithCast(ModelCast::class, User::class)]
+    public User $setBy;
+
     public string $name;
 
     public string $email;
@@ -30,6 +41,21 @@ class SetEmergencyContactCommand extends Data
     public EmergencyContactRelationship $relationship;
 
     /**
+     * Each contact field the set changes, old -> new, encrypted as the row stores it.
+     */
+    public function changesFrom(CompanyUser $membership): FieldChanges
+    {
+        return FieldChanges::between($membership->emergencyContact(), [
+            'name' => $this->name,
+            'email' => $this->email,
+            'phone' => $this->phone,
+            'relationship' => $this->relationship->value,
+        ], $membership->encryptedContactFields());
+    }
+
+    /**
+     * The company and the owner are server-sourced and carry no rule (amendment AQ).
+     *
      * @return array<string, array<int, string|Enum|ValidationRule>>
      */
     public static function rules(ValidationContext $context): array

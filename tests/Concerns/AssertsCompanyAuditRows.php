@@ -14,6 +14,7 @@ use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 trait AssertsCompanyAuditRows
@@ -132,6 +133,43 @@ trait AssertsCompanyAuditRows
             'changes' => $this->changesOf($entry),
             'severity' => $entry->severity,
         ]);
+    }
+
+    /** @param array<string, array{from: ?string, to: ?string}> $plain */
+    protected function assertContactChangeAudited(TestResponse $response, CompanyUser $membership, array $plain): void
+    {
+        $requestId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($requestId);
+        $owner = User::query()->findOrFail($membership->user_id);
+        $storedEvent = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $owner->getKey())
+            ->where('event_class', UserMembershipEmergencyContactSet::class)
+            ->whereForCompany($membership->company_id)
+            ->latest('id')
+            ->firstOrFail();
+        $entry = AuditEntry::query()->where('action', AuditAction::EmergencyContactUpdated)->where('company_id', $membership->company_id)->sole();
+
+        $this->assertSame([
+            'stored_event_id' => $storedEvent->getKey(),
+            'subject' => ['user', $owner->getKey(), $owner->name],
+            'membership_id' => $membership->getKey(),
+            'actor' => [$owner->getKey(), 'owner', $owner->name],
+            'origin' => [self::DEVICE_IP, self::DEVICE, $requestId],
+            'severity' => 'info',
+        ], [
+            'stored_event_id' => $entry->stored_event_id,
+            'subject' => [$entry->subject_type->value, $entry->subject_id, $entry->subject_label],
+            'membership_id' => $entry->metadata['membership_id'] ?? null,
+            'actor' => [$entry->actor_user_id, $entry->actor_role_code, $entry->actor_label],
+            'origin' => [$entry->ip_address, $entry->user_agent, $entry->request_id],
+            'severity' => $entry->severity,
+        ]);
+        $this->assertEncryptedChanges($entry, $plain);
+    }
+
+    protected function membershipOf(Company $company, User $member): CompanyUser
+    {
+        return CompanyUser::query()->where(['company_id' => $company->getKey(), 'user_id' => $member->getKey()])->sole();
     }
 
     protected function roleCodeIn(Company $company, User $member): ?string

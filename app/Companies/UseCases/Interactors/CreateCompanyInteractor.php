@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use App\Consent\Aggregates\Consent;
+use App\Companies\Entities\CompanyUser;
 use App\Foundation\Auth\Aggregates\User;
 use App\Consent\UseCases\Audit\ConsentAudit;
 use App\Companies\UseCases\Audit\CompanyAudit;
@@ -19,6 +20,7 @@ use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Companies\Exceptions\UnsupportedCountryException;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use Illuminate\Database\UniqueConstraintViolationException;
+use App\Companies\Memberships\UseCases\Audit\MembershipAudit;
 use App\Foundation\Auth\UseCases\RegistrationUniquenessGuard;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Companies\Memberships\UseCases\Commands\SetEmergencyContactCommand;
@@ -36,6 +38,7 @@ class CreateCompanyInteractor
         private RegistrationUniquenessGuard $uniqueness,
         private CompanyAudit $audit,
         private ConsentAudit $consentAudit,
+        private MembershipAudit $membershipAudit,
     ) {}
 
     public function execute(CreateCompanyCommand $command, RequestOrigin $origin, ?string $companyId = null): Company
@@ -67,13 +70,19 @@ class CreateCompanyInteractor
             CompanyAggregate::retrieve($companyId)->create($command)->persist();
             $company = Company::query()->findOrFail($companyId);
 
+            $contact = SetEmergencyContactCommand::from([
+                'company' => $company,
+                'setBy' => $command->owner,
+                'name' => $command->emergencyContactName,
+                'email' => $command->emergencyContactEmail,
+                'phone' => $command->emergencyContactPhone,
+                'relationship' => $command->emergencyContactRelationship,
+            ]);
+            $membership = CompanyUser::query()->where(['company_id' => $companyId, 'user_id' => $command->owner->getKey()])->sole();
+            $contactChanges = $contact->changesFrom($membership);
+
             User::retrieve($command->owner->getKey())
-                ->setEmergencyContact($companyId, SetEmergencyContactCommand::from([
-                    'name' => $command->emergencyContactName,
-                    'email' => $command->emergencyContactEmail,
-                    'phone' => $command->emergencyContactPhone,
-                    'relationship' => $command->emergencyContactRelationship,
-                ]))
+                ->setEmergencyContact($companyId, $contact)
                 ->persist();
 
             $consentId = Str::uuid7()->toString();
@@ -94,6 +103,7 @@ class CreateCompanyInteractor
                 ->persist();
 
             $this->audit->created($company, $command->owner, $origin);
+            $this->membershipAudit->emergencyContactSet($membership, $contactChanges, $origin);
             $this->consentAudit->recorded($consentId, $command->owner, $origin);
         });
     }

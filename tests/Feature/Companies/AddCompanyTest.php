@@ -206,9 +206,9 @@ class AddCompanyTest extends CompaniesTestCase
     #[Test]
     public function when_the_company_cannot_be_audited_then_nothing_is_created(): void
     {
-        // Given a signed-in owner and an audit trail that takes two of the company's rows
+        // Given a signed-in owner and an audit trail that takes three of the company's rows
         // but cannot write its last
-        $this->failTheAuditTrailAfter(2);
+        $this->failTheAuditTrailAfter(3);
 
         // When they add a company
         $response = $this->addCompany();
@@ -304,7 +304,7 @@ class AddCompanyTest extends CompaniesTestCase
         $companyId = $response->json('data.id');
         $this->assertIsString($companyId);
         $this->assertDatabaseMissing('audit_trail', ['company_id' => $this->companyA->getKey()]);
-        $this->assertSame([3, 3], [AuditEntry::query()->count(), AuditEntry::query()->where('company_id', $companyId)->count()]);
+        $this->assertSame([4, 4], [AuditEntry::query()->count(), AuditEntry::query()->where('company_id', $companyId)->count()]);
     }
 
     #[Test]
@@ -354,6 +354,26 @@ class AddCompanyTest extends CompaniesTestCase
         // Then each policy they consented to for Fabrikam is audited on its own row
         $response->assertCreated();
         $this->assertConsentsAudited($response, Company::query()->where('name', 'Fabrikam')->sole(), $this->owner);
+    }
+
+    #[Test]
+    public function when_an_owner_adds_a_company_then_its_emergency_contact_is_audited_encrypted(): void
+    {
+        // Given a signed-in owner on a known device
+        $this->fromADevice();
+
+        // When they add Fabrikam, naming its emergency contact
+        $response = $this->addCompany();
+
+        // Then the contact they set for Fabrikam is audited from nothing to its four values, each encrypted
+        $response->assertCreated();
+        $company = Company::query()->where('name', 'Fabrikam')->sole();
+        $this->assertContactChangeAudited($response, $this->membershipOf($company, $this->owner), [
+            'name' => ['from' => null, 'to' => 'John Silva'],
+            'email' => ['from' => null, 'to' => 'john@fabrikam.lk'],
+            'phone' => ['from' => null, 'to' => '+94712345678'],
+            'relationship' => ['from' => null, 'to' => 'parent'],
+        ]);
     }
 
     protected function enrolOwnerWithContact(Company $company, User $owner): void
