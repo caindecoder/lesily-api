@@ -2,7 +2,9 @@
 
 namespace App\Compliance\Dsar\UseCases\Sections;
 
+use Illuminate\Database\Eloquent\Builder;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 
 class AuditTrailSection implements DsarSectionProvider
 {
@@ -12,8 +14,8 @@ class AuditTrailSection implements DsarSectionProvider
     }
 
     /**
-     * The audit entries the subject acted in, in this company, oldest first
-     * (ruling N25 — no writer names a user as an entry's subject yet).
+     * The audit entries in this company the subject acted in or that are
+     * about them, oldest first.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -21,7 +23,11 @@ class AuditTrailSection implements DsarSectionProvider
     {
         return AuditEntry::query()
             ->where('company_id', $companyId)
-            ->where('actor_user_id', $subjectUserId)
+            ->where(fn (Builder $query): Builder => $query
+                ->where('actor_user_id', $subjectUserId)
+                ->orWhere(fn (Builder $about): Builder => $about
+                    ->where('subject_type', AuditSubjectType::User)
+                    ->where('subject_id', $subjectUserId)))
             ->orderBy('recorded_at')
             ->orderBy('id')
             ->get()
@@ -31,9 +37,23 @@ class AuditTrailSection implements DsarSectionProvider
                 'description' => $entry->description,
                 'subject_type' => $entry->subject_type->value,
                 'subject_id' => $entry->subject_id,
-                'ip_address' => $entry->ip_address,
-                'user_agent' => $entry->user_agent,
+                ...$this->originOf($entry, $subjectUserId),
             ])
             ->all();
+    }
+
+    /**
+     * Where the entry came from — only when the subject acted; another
+     * person's network address and device are never in their export.
+     *
+     * @return array{ip_address: ?string, user_agent: ?string}
+     */
+    protected function originOf(AuditEntry $entry, string $subjectUserId): array
+    {
+        if ($entry->actor_user_id !== $subjectUserId) {
+            return ['ip_address' => null, 'user_agent' => null];
+        }
+
+        return ['ip_address' => $entry->ip_address, 'user_agent' => $entry->user_agent];
     }
 }

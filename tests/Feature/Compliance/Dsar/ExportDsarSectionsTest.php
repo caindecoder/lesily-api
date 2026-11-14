@@ -65,11 +65,13 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_member_belongs_to_two_companies_then_only_this_companys_data_is_exported(): void
     {
-        // Given a member who joined another company first, under another role, with consent, an invitation, a transfer, a case, a notice, a refused lookup and an audited submission in each — beside a co-worker's consent here
+        // Given a member who joined another company first, under another role, with consent, an invitation, a transfer, a case, a notice, a refused lookup, a role change by an admin and an audited submission in each — beside a co-worker's consent here
         $member = User::factory()->create();
         $other = Company::factory()->create();
         $other->users()->attach($member, ['role_id' => $this->seededRole('admin')->getKey()]);
         $this->company->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
+        $this->anAdminChangesTheRoleOf($member, $this->company);
+        $this->anAdminChangesTheRoleOf($member, $other);
         $this->aConsentRecordedBy($member, $this->company);
         $this->aConsentRecordedBy($member, $other);
         $this->anInvitationTo($member, $this->company);
@@ -119,6 +121,57 @@ class ExportDsarSectionsTest extends DsarTestCase
         $this->assertSame(
             [[], [], ['transfers' => [], 'cases' => []], ['notifications' => [], 'preferences' => []], []],
             [$exported['sign_ins'], $exported['invitations'], $exported['ownership_transfers'], $exported['notifications'], $exported['access_log']],
+        );
+    }
+
+    #[Test]
+    public function when_another_member_is_acted_on_then_that_row_is_not_in_their_export(): void
+    {
+        // Given an admin who changed a co-worker's role, beside a member who asked for their data
+        $member = $this->aCompanyMember($this->company);
+        $this->anAdminChangesTheRoleOf($this->aCompanyMember($this->company), $this->company);
+        $request = $this->requestFrom($this->submitDsarRequest($member, $this->company));
+
+        // When the member's export is built
+        $this->runTheExportFor($request);
+
+        // Then only the member's own submission is in their audit section
+        $this->assertSame(['dsar_requested'], array_column($this->auditSectionOf($request), 'action'));
+    }
+
+    #[Test]
+    public function when_someone_else_acted_on_them_then_the_row_holds_no_ip_or_device(): void
+    {
+        // Given a member whose role an admin changed, who then asked for their data
+        $member = $this->aCompanyMember($this->company);
+        $this->anAdminChangesTheRoleOf($member, $this->company);
+        $request = $this->requestFrom($this->submitDsarRequest($member, $this->company));
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the role change is theirs to see, without the admin's network address or device
+        $roleChange = collect($this->auditSectionOf($request))->sole('action', 'role_changed');
+        $this->assertSame([null, null], [$roleChange['ip_address'], $roleChange['user_agent']]);
+    }
+
+    #[Test]
+    public function when_they_changed_their_own_record_then_the_row_appears_once_with_its_ip_and_device(): void
+    {
+        // Given an owner who set their emergency contact, then asked for their data
+        $owner = $this->aCompanyMember($this->company, 'owner');
+        $this->theySetTheirEmergencyContact($owner, $this->company);
+        $request = $this->requestFrom($this->submitDsarRequest($owner, $this->company));
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the change is one row, from their own network address and device
+        $contactRows = collect($this->auditSectionOf($request))->where('action', 'emergency_contact_updated');
+        $this->assertCount(1, $contactRows);
+        $this->assertSame(
+            [self::MEMBER_IP, self::MEMBER_DEVICE],
+            [$contactRows->first()['ip_address'], $contactRows->first()['user_agent']],
         );
     }
 
