@@ -54,7 +54,11 @@ class AuditTrailSection implements DsarSectionProvider
         $changes = FieldChanges::readable($entry->metadata['changes'] ?? null) ?? [];
 
         return array_map(
-            fn (string $field, array $change): array => ['field' => $field, 'from' => $change['from'] ?? null, 'to' => $change['to'] ?? null],
+            fn (string $field, array $change): array => [
+                'field' => $field,
+                'from' => $change['from'] ?? null,
+                'to' => $change['to'] ?? null,
+            ],
             array_keys($changes),
             $changes,
         );

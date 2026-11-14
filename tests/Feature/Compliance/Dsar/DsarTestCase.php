@@ -1539,7 +1539,11 @@ abstract class DsarTestCase extends TestCase
 
         $this->withHeader('User-Agent', self::ADMIN_DEVICE)
             ->withServerVariables(['REMOTE_ADDR' => self::ADMIN_IP])
-            ->patchJson("/api/v1/memberships/{$membershipId}", ['roleCode' => 'hr_officer'], ['X-Company-Context' => $company->getKey()])
+            ->patchJson(
+                "/api/v1/memberships/{$membershipId}",
+                ['roleCode' => 'hr_officer'],
+                ['X-Company-Context' => $company->getKey()],
+            )
             ->assertOk();
 
         $this->withoutHeader('User-Agent')->withServerVariables([]);
