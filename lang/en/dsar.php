@@ -64,6 +64,7 @@ return [
             'subject_id' => 'Record ID',
             'ip_address' => 'Network address (IP)',
             'user_agent' => 'Browser or app',
+            'changes' => 'Changes',
         ],
         'sign_ins' => [
             'device_name' => 'Device',

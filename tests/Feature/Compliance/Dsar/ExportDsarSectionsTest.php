@@ -176,6 +176,41 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_a_change_was_encrypted_then_the_export_holds_its_plain_values(): void
+    {
+        // Given an owner who set their emergency contact, stored encrypted in its audit row, then asked for their data
+        $owner = $this->aCompanyMember($this->company, 'owner');
+        $this->theySetTheirEmergencyContact($owner, $this->company);
+        $request = $this->requestFrom($this->submitDsarRequest($owner, $this->company));
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the change shows each value in plain words, with no ciphertext and no marker anywhere in the export
+        $changes = collect($this->auditSectionOf($request))->sole('action', 'emergency_contact_updated')['changes'];
+        $this->assertSame([
+            ['field' => 'email', 'from' => null, 'to' => self::CONTACT['email']],
+            ['field' => 'name', 'from' => null, 'to' => self::CONTACT['name']],
+            ['field' => 'phone', 'from' => null, 'to' => self::CONTACT['phone']],
+            ['field' => 'relationship', 'from' => null, 'to' => self::CONTACT['relationship']],
+        ], collect($changes)->sortBy('field')->values()->all());
+        $this->assertDoesNotMatchRegularExpression('/"encrypted"|eyJpdiI6/', $this->exportedJsonOf($request));
+    }
+
+    #[Test]
+    public function when_a_row_records_no_changes_then_its_changes_are_empty(): void
+    {
+        // Given a member whose only audited action is asking for their data
+        $request = $this->requestFrom($this->submitDsarRequest($this->aCompanyMember($this->company), $this->company));
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then that row lists no changes
+        $this->assertSame([], collect($this->auditSectionOf($request))->sole('action', 'dsar_requested')['changes']);
+    }
+
+    #[Test]
     public function when_the_export_is_built_then_no_secret_is_exported(): void
     {
         // Given a member with a password, a remember token, two-factor sign-in, a sign-in token, an invitation and a verified-then-rejected case
@@ -354,28 +389,45 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
-    public function when_the_export_is_built_then_the_audit_section_holds_the_entries_they_acted_in(): void
+    public function when_the_export_is_built_then_the_audit_section_holds_the_entries_they_acted_in_and_about_them(): void
     {
-        // Given a member whose own submission is audited, beside another member's audited submission
+        // Given a member who asked for their data, and whose role an admin had changed the day before — recorded after it — beside another member's audited submission
         $member = $this->aCompanyMember($this->company);
         $request = $this->requestFrom($this->submitDsarRequest($member, $this->company));
+        $this->travelTo('2026-09-30 09:00:00');
+        $this->anAdminChangesTheRoleOf($member, $this->company);
+        $this->travelTo('2026-10-01 09:00:00');
         $this->idempotencyKey = (string) Str::uuid();
         $this->submitDsarRequest($this->aCompanyMember($this->company), $this->company)->assertCreated();
 
         // When their export is built
         $this->runTheExportFor($request);
 
-        // Then only the entry they acted in is exported
-        $entry = AuditEntry::query()->where('actor_user_id', $member->getKey())->sole();
-        $this->assertSame([[
-            'recorded_at' => $entry->recorded_at->toISOString(),
-            'action' => 'dsar_requested',
-            'description' => $entry->description,
-            'subject_type' => 'dsar_request',
-            'subject_id' => $request->getKey(),
-            'ip_address' => $entry->ip_address,
-            'user_agent' => $entry->user_agent,
-        ]], $this->exportedData($request)['audit_trail']);
+        // Then the entry about them and the entry they acted in are exported, oldest first, each with its changes
+        $roleChange = AuditEntry::query()->where('action', 'role_changed')->sole();
+        $submission = AuditEntry::query()->where('actor_user_id', $member->getKey())->sole();
+        $this->assertSame([
+            [
+                'recorded_at' => $roleChange->recorded_at->toISOString(),
+                'action' => 'role_changed',
+                'description' => $roleChange->description,
+                'subject_type' => 'user',
+                'subject_id' => $member->getKey(),
+                'ip_address' => null,
+                'user_agent' => null,
+                'changes' => [['field' => 'role', 'from' => 'employee', 'to' => 'hr_officer']],
+            ],
+            [
+                'recorded_at' => $submission->recorded_at->toISOString(),
+                'action' => 'dsar_requested',
+                'description' => $submission->description,
+                'subject_type' => 'dsar_request',
+                'subject_id' => $request->getKey(),
+                'ip_address' => $submission->ip_address,
+                'user_agent' => $submission->user_agent,
+                'changes' => [],
+            ],
+        ], $this->auditSectionOf($request));
     }
 
     #[Test]

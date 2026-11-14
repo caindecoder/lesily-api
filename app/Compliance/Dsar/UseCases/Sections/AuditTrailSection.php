@@ -4,6 +4,7 @@ namespace App\Compliance\Dsar\UseCases\Sections;
 
 use Illuminate\Database\Eloquent\Builder;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\AuditTrail\Values\FieldChanges;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 
 class AuditTrailSection implements DsarSectionProvider
@@ -38,8 +39,25 @@ class AuditTrailSection implements DsarSectionProvider
                 'subject_type' => $entry->subject_type->value,
                 'subject_id' => $entry->subject_id,
                 ...$this->originOf($entry, $subjectUserId),
+                'changes' => $this->changesOf($entry),
             ])
             ->all();
+    }
+
+    /**
+     * Each changed field with its old and new value, in plain words.
+     *
+     * @return list<array{field: string, from: mixed, to: mixed}>
+     */
+    protected function changesOf(AuditEntry $entry): array
+    {
+        $changes = FieldChanges::readable($entry->metadata['changes'] ?? null) ?? [];
+
+        return array_map(
+            fn (string $field, array $change): array => ['field' => $field, 'from' => $change['from'] ?? null, 'to' => $change['to'] ?? null],
+            array_keys($changes),
+            $changes,
+        );
     }
 
     /**
