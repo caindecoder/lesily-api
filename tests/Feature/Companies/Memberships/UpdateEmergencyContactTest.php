@@ -363,7 +363,10 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
 
         $keys = array_keys($payload);
         sort($keys);
-        $this->assertSame(['companyId', 'encryptedEmail', 'encryptedName', 'encryptedPhone', 'encryptedRelationship', 'userId'], $keys);
+        $this->assertSame(
+            ['companyId', 'encryptedEmail', 'encryptedName', 'encryptedPhone', 'encryptedRelationship', 'userId'],
+            $keys,
+        );
         $this->assertSame([$owner->getKey(), $company->getKey()], [$payload['userId'], $payload['companyId']]);
         $this->assertCount(4, $expected);
         foreach ($expected as $field => $plain) {
