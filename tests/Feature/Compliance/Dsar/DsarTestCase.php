@@ -1803,7 +1803,7 @@ abstract class DsarTestCase extends TestCase
     /**
      * Every section of $exported belongs to $company alone: $member's
      * membership of it, the consent they gave in it, the audit entries they
-     * acted in there, and — of its invitations, transfers, cases, notices and
+     * acted in there or that are about them, and — of its invitations, transfers, cases, notices and
      * refusals — only the pending invitation, the transfer that made them
      * owner, the open case naming them, the notice about $company and the
      * lookup refused there.

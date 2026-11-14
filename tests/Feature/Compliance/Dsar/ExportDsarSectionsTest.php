@@ -140,6 +140,21 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_a_row_about_another_kind_of_record_carries_their_id_then_it_is_not_in_their_export(): void
+    {
+        // Given a co-worker's audit row about an invoice whose id matches the member's, beside the member's own request
+        $member = $this->aCompanyMember($this->company);
+        AuditEntry::factory()->forCompany($this->company)->concerning($member->getKey())->create();
+        $request = $this->requestFrom($this->submitDsarRequest($member, $this->company));
+
+        // When the member's export is built
+        $this->runTheExportFor($request);
+
+        // Then only the member's own submission is in their audit section
+        $this->assertSame(['dsar_requested'], array_column($this->auditSectionOf($request), 'action'));
+    }
+
+    #[Test]
     public function when_someone_else_acted_on_them_then_the_row_holds_no_ip_or_device(): void
     {
         // Given a member whose role an admin changed, who then asked for their data
@@ -184,7 +199,8 @@ class ExportDsarSectionsTest extends DsarTestCase
         // When their export is built
         $this->runTheExportFor($request);
 
-        // Then the change shows each value in plain words, with no ciphertext and no marker anywhere in the export
+        // Then the stored change is encrypted, yet the export shows each value in plain words, with no ciphertext and no marker anywhere
+        $this->assertTrue(AuditEntry::query()->where('action', 'emergency_contact_updated')->sole()->metadata['changes']['name']['encrypted'] ?? false);
         /** @var list<array<string, mixed>> $changes */
         $changes = collect($this->auditSectionOf($request))->sole('action', 'emergency_contact_updated')['changes'];
         $this->assertSame([
