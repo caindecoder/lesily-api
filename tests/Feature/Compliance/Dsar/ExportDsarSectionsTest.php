@@ -169,10 +169,8 @@ class ExportDsarSectionsTest extends DsarTestCase
         // Then the change is one row, from their own network address and device
         $contactRows = collect($this->auditSectionOf($request))->where('action', 'emergency_contact_updated');
         $this->assertCount(1, $contactRows);
-        $this->assertSame(
-            [self::MEMBER_IP, self::MEMBER_DEVICE],
-            [$contactRows->first()['ip_address'], $contactRows->first()['user_agent']],
-        );
+        $contactRow = $contactRows->sole();
+        $this->assertSame([self::MEMBER_IP, self::MEMBER_DEVICE], [$contactRow['ip_address'], $contactRow['user_agent']]);
     }
 
     #[Test]
@@ -187,6 +185,7 @@ class ExportDsarSectionsTest extends DsarTestCase
         $this->runTheExportFor($request);
 
         // Then the change shows each value in plain words, with no ciphertext and no marker anywhere in the export
+        /** @var list<array<string, mixed>> $changes */
         $changes = collect($this->auditSectionOf($request))->sole('action', 'emergency_contact_updated')['changes'];
         $this->assertSame([
             ['field' => 'email', 'from' => null, 'to' => self::CONTACT['email']],
