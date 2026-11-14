@@ -77,6 +77,21 @@ abstract class DsarTestCase extends TestCase
 
     public const STAND_IN_REPORT = '%PDF stand-in';
 
+    protected const ADMIN_IP = '198.51.100.20';
+
+    protected const ADMIN_DEVICE = 'Lesily-Admin/2.0 (Macintosh)';
+
+    protected const MEMBER_IP = '198.51.100.30';
+
+    protected const MEMBER_DEVICE = 'Lesily-Member/3.1 (Android 15)';
+
+    protected const CONTACT = [
+        'name' => 'Nimal Fernando',
+        'email' => 'nimal@contoso.lk',
+        'phone' => '+94771234567',
+        'relationship' => 'sibling',
+    ];
+
     protected ?string $idempotencyKey;
 
     protected RecordingDsarReportRenderer $reportRenderer;
@@ -1508,6 +1523,63 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
+     * A fresh admin of $company makes $member an HR officer through the
+     * role-change endpoint, from the admin's own network address and device.
+     */
+    protected function anAdminChangesTheRoleOf(User $member, Company $company): void
+    {
+        $membershipId = CompanyUser::query()
+            ->where('company_id', $company->getKey())
+            ->where('user_id', $member->getKey())
+            ->sole()
+            ->getKey();
+        $admin = $this->aCompanyMember($company, 'admin');
+        parent::aConsentRecordedBy($admin, $company);
+        Sanctum::actingAs($admin);
+
+        $this->withHeader('User-Agent', self::ADMIN_DEVICE)
+            ->withServerVariables(['REMOTE_ADDR' => self::ADMIN_IP])
+            ->patchJson(
+                "/api/v1/memberships/{$membershipId}",
+                ['roleCode' => 'hr_officer'],
+                ['X-Company-Context' => $company->getKey()],
+            )
+            ->assertOk();
+
+        $this->withoutHeader('User-Agent')->withServerVariables([]);
+    }
+
+    /**
+     * $owner sets $company's emergency contact to CONTACT through the
+     * endpoint, from their own network address and device.
+     */
+    protected function theySetTheirEmergencyContact(User $owner, Company $company): void
+    {
+        parent::aConsentRecordedBy($owner, $company);
+        Sanctum::actingAs($owner);
+
+        $this->withHeader('User-Agent', self::MEMBER_DEVICE)
+            ->withServerVariables(['REMOTE_ADDR' => self::MEMBER_IP])
+            ->putJson("/api/v1/companies/{$company->getKey()}/emergency-contact", self::CONTACT)
+            ->assertOk();
+
+        $this->withoutHeader('User-Agent')->withServerVariables([]);
+    }
+
+    /**
+     * The audit section of $request's export.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function auditSectionOf(DsarRequestRecord $request): array
+    {
+        $section = $this->exportedData($request)['audit_trail'];
+        $this->assertIsArray($section);
+
+        return $section;
+    }
+
+    /**
      * The employee who joined through $membershipId becomes a $roleCode.
      */
     protected function changeTheRole(string $membershipId, string $roleCode): void
@@ -1731,7 +1803,7 @@ abstract class DsarTestCase extends TestCase
     /**
      * Every section of $exported belongs to $company alone: $member's
      * membership of it, the consent they gave in it, the audit entries they
-     * acted in there, and — of its invitations, transfers, cases, notices and
+     * acted in there or that are about them, and — of its invitations, transfers, cases, notices and
      * refusals — only the pending invitation, the transfer that made them
      * owner, the open case naming them, the notice about $company and the
      * lookup refused there.
@@ -1746,8 +1818,8 @@ abstract class DsarTestCase extends TestCase
         );
         $this->assertCount(2, $exported['consent_records']);
         $this->assertSame(
-            AuditEntry::query()->where('company_id', $company->getKey())->where('actor_user_id', $member->getKey())->pluck('subject_id')->all(),
-            array_column($exported['audit_trail'], 'subject_id'),
+            [['role_changed', 'user'], ['dsar_requested', 'dsar_request']],
+            array_map(fn (array $entry): array => [$entry['action'], $entry['subject_type']], $exported['audit_trail']),
         );
         $this->assertSame(
             [[1], ['new_owner'], ['open'], [$company->name], ['not_found']],

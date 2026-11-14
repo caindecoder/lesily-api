@@ -95,6 +95,11 @@ class AuditEntryFactory extends Factory
         return $this->state(['action' => $action, 'subject_type' => $subjectType]);
     }
 
+    public function concerning(string $subjectId): static
+    {
+        return $this->state(['subject_id' => $subjectId]);
+    }
+
     public function withSeverity(string $severity): static
     {
         return $this->state(['severity' => $severity]);
