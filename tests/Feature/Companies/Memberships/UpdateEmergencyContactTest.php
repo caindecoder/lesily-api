@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
+use Illuminate\Support\Facades\Crypt;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Enums\AuditAction;
@@ -323,24 +324,30 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
     }
 
     /**
-     * The contact event was recorded once for $company with $expected, and the
-     * stored contact reads $expected.
+     * The contact event was recorded once for $company, each contact field
+     * encrypted from $expected, and the stored contact reads $expected.
      *
      * @param  array<string, string>  $expected
      */
     protected function assertContactRecorded(Company $company, User $owner, array $expected): void
     {
-        $event = LesilyStoredEvent::query()
+        $payload = LesilyStoredEvent::query()
             ->whereForCompany($company->getKey())
             ->where('event_class', UserMembershipEmergencyContactSet::class)
-            ->sole();
+            ->sole()
+            ->event_properties;
 
-        $expectedPayload = ['userId' => $owner->getKey(), 'companyId' => $company->getKey(), ...$expected];
-        $payload = $event->event_properties;
-        ksort($expectedPayload);
-        ksort($payload);
-
-        $this->assertSame($expectedPayload, $payload);
+        $keys = array_keys($payload);
+        sort($keys);
+        $this->assertSame(['companyId', 'encryptedEmail', 'encryptedName', 'encryptedPhone', 'encryptedRelationship', 'userId'], $keys);
+        $this->assertSame([$owner->getKey(), $company->getKey()], [$payload['userId'], $payload['companyId']]);
+        $this->assertCount(4, $expected);
+        foreach ($expected as $field => $plain) {
+            $encrypted = $payload['encrypted'.ucfirst($field)];
+            $this->assertIsString($encrypted);
+            $this->assertNotSame($plain, $encrypted);
+            $this->assertSame($plain, Crypt::decryptString($encrypted));
+        }
         $this->assertSame($expected, $this->storedContact($company, $owner));
     }
 }
