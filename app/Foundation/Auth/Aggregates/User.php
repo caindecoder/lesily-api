@@ -4,6 +4,7 @@ namespace App\Foundation\Auth\Aggregates;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Crypt;
 use App\Foundation\EventStore\AggregateRoot;
 use App\Foundation\Auth\Events\User2FAEnabled;
 use App\Foundation\Auth\Events\User2FADisabled;
@@ -85,10 +86,10 @@ class User extends AggregateRoot
         return $this->forCompany($companyId)->recordThat(new UserMembershipEmergencyContactSet(
             userId: $this->uuid(),
             companyId: $companyId,
-            name: $command->name,
-            email: $command->email,
-            phone: $command->phone,
-            relationship: $command->relationship->value,
+            encryptedName: Crypt::encryptString($command->name),
+            encryptedEmail: Crypt::encryptString($command->email),
+            encryptedPhone: Crypt::encryptString($command->phone),
+            encryptedRelationship: Crypt::encryptString($command->relationship->value),
         ));
     }
 

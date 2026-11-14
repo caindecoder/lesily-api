@@ -2,6 +2,7 @@
 
 namespace App\Companies\Memberships\Projectors;
 
+use Illuminate\Support\Facades\Crypt;
 use App\Companies\Entities\CompanyUser;
 use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
@@ -165,17 +166,18 @@ class MembershipProjector extends Projector
 
     public function onUserMembershipEmergencyContactSet(UserMembershipEmergencyContactSet $event): void
     {
-        // Saved through the model so its encrypted casts apply — a query update skips them.
+        // The event holds ciphertext; the decrypted values are saved through the model so its
+        // encrypted casts apply — a query update skips them.
         // withTrashed for replay fidelity (onUserMembershipRoleChanged parity).
         CompanyUser::withTrashed()
             ->where('company_id', $event->companyId)
             ->where('user_id', $event->userId)
             ->sole()
             ->forceFill([
-                'emergency_contact_name' => $event->name,
-                'emergency_contact_email' => $event->email,
-                'emergency_contact_phone' => $event->phone,
-                'emergency_contact_relationship' => $event->relationship,
+                'emergency_contact_name' => Crypt::decryptString($event->encryptedName),
+                'emergency_contact_email' => Crypt::decryptString($event->encryptedEmail),
+                'emergency_contact_phone' => Crypt::decryptString($event->encryptedPhone),
+                'emergency_contact_relationship' => Crypt::decryptString($event->encryptedRelationship),
             ])
             ->save();
     }
