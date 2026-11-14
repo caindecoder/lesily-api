@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Crypt;
 use PHPUnit\Framework\Attributes\Test;
@@ -273,7 +274,7 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
     }
 
     #[Test]
-    public function when_the_contact_is_saved_then_the_row_holds_no_plain_text(): void
+    public function when_the_contact_is_saved_then_no_stored_copy_holds_plain_text(): void
     {
         // Given a company whose owner keeps an emergency contact
         $company = Company::factory()->create();
@@ -282,11 +283,13 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
         // When the owner submits a new contact
         $response = $this->updateEmergencyContact($owner, $company->getKey(), self::UPDATED_CONTACT);
 
-        // Then each of the four stored columns is encrypted, and so is each old and new value in the audit row
+        // Then each of the four stored columns is encrypted, so is each old and new value in the audit row,
+        // and the recorded event holds none of the new values
         $response->assertOk();
         $this->assertStoredEncrypted($company, $owner, self::UPDATED_CONTACT);
         $entry = AuditEntry::query()->where('action', AuditAction::EmergencyContactUpdated)->sole();
         $this->assertEncryptedChanges($entry, $this->changesBetween(self::CONTACT, self::UPDATED_CONTACT));
+        $this->assertEventHoldsNoPlainText($company, self::UPDATED_CONTACT);
     }
 
     #[Test]
@@ -321,6 +324,27 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
         }
 
         return $changes;
+    }
+
+    /**
+     * The stored text of $company's contact event, read past its model, contains
+     * none of the $plain values.
+     *
+     * @param  array<string, string>  $plain
+     */
+    protected function assertEventHoldsNoPlainText(Company $company, array $plain): void
+    {
+        $stored = DB::table('stored_events')
+            ->where('company_id', $company->getKey())
+            ->where('event_class', UserMembershipEmergencyContactSet::class)
+            ->sole(['event_properties'])
+            ->event_properties;
+
+        $this->assertIsString($stored);
+        $this->assertCount(4, $plain);
+        foreach ($plain as $value) {
+            $this->assertStringNotContainsString($value, $stored);
+        }
     }
 
     /**
