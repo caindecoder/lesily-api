@@ -85,7 +85,7 @@ class ExportDsarReportTest extends DsarTestCase
         $this->assertReportShowsInOrder([
             'Notifications and preferences',
             'Consent records', 'None recorded',
-            'Actions you took', 'None recorded',
+            'Audit trail: your actions and changes to your record', 'None recorded',
             'Sign-ins', 'None recorded',
             'Invitations', 'None recorded',
             'Ownership transfers', 'Transfers', 'None recorded', 'Cases', 'None recorded',
@@ -192,9 +192,35 @@ class ExportDsarReportTest extends DsarTestCase
 
         // Then the entries are rows under labelled column headings, each value readable, in order
         $this->assertReportShowsInOrder([
-            'When', 'What you did',
+            'When', 'What happened',
             '15 Sep 2026, 14:30 UTC', 'Asked for a copy of personal data (dsar_requested)',
             '16 Sep 2026, 08:05 UTC', 'Withdrew a data request (dsar_withdrawn)',
+        ]);
+    }
+
+    #[Test]
+    public function when_an_audit_row_lists_changes_then_the_report_tables_them_by_field_from_and_to(): void
+    {
+        // Given an export whose audit section holds a row that changed a role and set a name
+        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $this->withSections($this->aSectionHolding('audit_trail', [[
+            'recorded_at' => '2026-09-15T14:30:00.000000Z',
+            'action' => 'role_changed',
+            'changes' => [
+                ['field' => 'role', 'from' => 'employee', 'to' => 'hr_officer'],
+                ['field' => 'name', 'from' => null, 'to' => 'Asha Perera'],
+            ],
+        ]]));
+
+        // When their export is built
+        $this->runTheExportFor($request);
+
+        // Then the section's changes are a table of each field with its old and new value, a dash for none
+        $this->assertReportShowsInOrder([
+            'Audit trail: your actions and changes to your record',
+            'Changes', 'Field', 'From', 'To',
+            'role', 'employee', 'hr_officer',
+            'name', '—', 'Asha Perera',
         ]);
     }
 
@@ -268,7 +294,7 @@ class ExportDsarReportTest extends DsarTestCase
         $this->runTheExportFor($request);
 
         // Then the contents list names every section, and each follows under its title, in the same order
-        $titles = ['Your profile', 'Your membership', 'Consent records', 'Actions you took', 'Sign-ins', 'Invitations', 'Ownership transfers', 'Notifications and preferences', 'Account access history'];
+        $titles = ['Your profile', 'Your membership', 'Consent records', 'Audit trail: your actions and changes to your record', 'Sign-ins', 'Invitations', 'Ownership transfers', 'Notifications and preferences', 'Account access history'];
         $this->assertReportShowsInOrder(['Contents', ...$titles, ...$titles]);
     }
 
@@ -299,7 +325,7 @@ class ExportDsarReportTest extends DsarTestCase
     }
 
     /**
-     * A member who joined through an invitation, consented, signed in, was
+     * A member who joined through an invitation, had their role changed, consented, signed in, was
      * handed the company and named on a rejected case, received a notice,
      * switched an email off, signed in with their password, was refused a
      * lookup — and then submitted their request themselves.
@@ -308,6 +334,7 @@ class ExportDsarReportTest extends DsarTestCase
     {
         $member = User::factory()->create();
         $this->acceptTheInvitation($this->anInvitationTo($member, $this->company), $member);
+        $this->anAdminChangesTheRoleOf($member, $this->company);
         $this->aConsentRecordedBy($member, $this->company);
         $this->aSignInFor($member, 'iPhone', now()->addDays(90));
         $this->signInThroughTheApi($member);
