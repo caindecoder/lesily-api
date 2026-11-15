@@ -123,6 +123,19 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         $this->assertSame($expected, array_intersect_key($row, $expected));
     }
 
+    /**
+     * Rows that share a time are listed by id, newest first.
+     *
+     * @param  list<string>  $ids
+     * @return list<string>
+     */
+    protected function newestIdFirst(array $ids): array
+    {
+        rsort($ids, SORT_STRING);
+
+        return $ids;
+    }
+
     protected function assertListStartsOn(TestResponse $response, string $date): void
     {
         $from = $response->json('meta.retention.from');

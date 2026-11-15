@@ -28,12 +28,14 @@ class ListAuditLogsInteractor
         AuditAction::DsarDownloaded,
     ];
 
+    protected const int NO_PLAN_HORIZON_YEARS = 1;
+
     public function execute(AuditLogFilters $filters, Company $company): AuditLogPage
     {
-        $retentionFrom = CarbonImmutable::now()->startOfDay()->subYearsNoOverflow(7);
+        $retentionFrom = $this->retentionFrom($company);
 
-        $rows = $this->accessRows($company)
-            ->unionAll($this->securityRows($company))
+        $rows = $this->accessRows($company, $retentionFrom)
+            ->unionAll($this->securityRows($company, $retentionFrom))
             ->orderByDesc('time')
             ->orderByDesc('id')
             ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
@@ -41,7 +43,17 @@ class ListAuditLogsInteractor
         return new AuditLogPage($rows, $retentionFrom);
     }
 
-    protected function accessRows(Company $company): Builder
+    /**
+     * The first day the company's plan keeps — a company with no plan in force keeps one year (AR22).
+     */
+    protected function retentionFrom(Company $company): CarbonImmutable
+    {
+        $years = $company->planInForce()?->auditLogHorizonYears() ?? self::NO_PLAN_HORIZON_YEARS;
+
+        return CarbonImmutable::now()->startOfDay()->subYearsNoOverflow($years);
+    }
+
+    protected function accessRows(Company $company, CarbonImmutable $from): Builder
     {
         return DB::table('access_log')
             ->leftJoin('users', 'users.id', '=', 'access_log.user_id')
@@ -59,10 +71,11 @@ class ListAuditLogsInteractor
                 'access_log.ip_address',
                 'access_log.user_agent as device',
             ])
-            ->where('access_log.company_id', $company->getKey());
+            ->where('access_log.company_id', $company->getKey())
+            ->where('access_log.last_seen_at', '>=', $from);
     }
 
-    protected function securityRows(Company $company): Builder
+    protected function securityRows(Company $company, CarbonImmutable $from): Builder
     {
         return DB::table('audit_trail')
             ->select([
@@ -80,6 +93,7 @@ class ListAuditLogsInteractor
                 'user_agent as device',
             ])
             ->where('company_id', $company->getKey())
-            ->whereIn('action', self::SECURITY_ACTIONS);
+            ->whereIn('action', self::SECURITY_ACTIONS)
+            ->where('recorded_at', '>=', $from);
     }
 }

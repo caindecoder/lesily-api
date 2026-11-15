@@ -2,9 +2,13 @@
 
 namespace Tests\Feature\Foundation\AuditTrail;
 
+use Closure;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Response;
+use App\Companies\Entities\Company;
+use Database\Factories\CompanyFactory;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -125,15 +129,15 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     #[Test]
     public function when_the_company_has_no_logs_then_an_empty_list_with_its_start_is_shown(): void
     {
-        // Given company A, on its trial, with no sign-in or security record
+        // Given company A, on the Free plan, with no sign-in or security record
         $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit logs
         $response = $this->viewAuditLogs($owner, $this->companyA);
 
-        // Then nothing is listed, and the list starts seven years back
+        // Then nothing is listed, and the list starts one year back
         $this->assertNothingListed($response);
-        $this->assertListStartsOn($response, '2019-11-15');
+        $this->assertListStartsOn($response, '2025-11-15');
     }
 
     #[Test]
@@ -185,6 +189,39 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     }
 
     #[Test]
+    public function when_a_row_is_just_inside_the_horizon_then_it_is_shown_and_one_just_outside_is_not(): void
+    {
+        // Given company A on the Free plan, with a sign-in and a password change at the first moment it keeps,
+        // and one of each a second earlier
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+        $signInInside = $this->anAccessRowOfCompanyAAt('2025-11-15 00:00:00');
+        $passwordChangeInside = $this->aSecurityEntryOfCompanyAAt('2025-11-15 00:00:00');
+        $this->anAccessRowOfCompanyAAt('2025-11-14 23:59:59');
+        $this->aSecurityEntryOfCompanyAAt('2025-11-14 23:59:59');
+
+        // When the owner views company A's audit logs
+        $response = $this->viewAuditLogs($owner, $this->companyA);
+
+        // Then only the two rows inside the year are listed
+        $this->assertEntriesListed($response, $this->newestIdFirst([$signInInside->getKey(), $passwordChangeInside->getKey()]));
+    }
+
+    #[Test]
+    public function when_the_horizon_falls_on_a_leap_day_then_it_starts_on_the_last_day_of_february(): void
+    {
+        // Given company A on the Free plan, viewed on 29 February 2028
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+        $this->travelTo('2028-02-29 10:00:00');
+
+        // When the owner views company A's audit logs
+        $response = $this->viewAuditLogs($owner, $this->companyA);
+
+        // Then the year it keeps starts on 28 February 2027, never in March
+        $response->assertOk();
+        $this->assertListStartsOn($response, '2027-02-28');
+    }
+
+    #[Test]
     public function when_a_folded_refusal_is_listed_then_its_count_and_first_time_are_shown(): void
     {
         // Given a refusal first seen at 14:02 and repeated six times until 14:06, and a password change at 14:04
@@ -232,6 +269,40 @@ class ViewAuditLogsTest extends AuditTrailTestCase
         return [
             'no user' => [null],
             'an id with no account' => ['01970000-0000-7000-8000-000000000001'],
+        ];
+    }
+
+    /**
+     * @param  Closure(CompanyFactory): CompanyFactory  $standing
+     */
+    #[Test]
+    #[DataProvider('providePlansAndTheirHorizons')]
+    public function when_the_plan_sets_the_horizon_then_the_list_starts_there(Closure $standing, string $firstDay): void
+    {
+        // Given a company on the plan, and its owner
+        $company = $standing(Company::factory())->create();
+        $owner = $this->aConsentingMember($company, 'owner');
+
+        // When the owner views the company's audit logs
+        $response = $this->viewAuditLogs($owner, $company);
+
+        // Then the list starts on the first day the plan keeps
+        $response->assertOk();
+        $this->assertListStartsOn($response, $firstDay);
+    }
+
+    /**
+     * @return array<string, array{Closure(CompanyFactory): CompanyFactory, string}>
+     */
+    public static function providePlansAndTheirHorizons(): array
+    {
+        return [
+            'free keeps one year' => [fn (CompanyFactory $company) => $company->onPlan(BillingPlan::Free), '2025-11-15'],
+            'starter keeps one year' => [fn (CompanyFactory $company) => $company->onPlan(BillingPlan::Starter), '2025-11-15'],
+            'pro keeps three years' => [fn (CompanyFactory $company) => $company->onPlan(BillingPlan::Pro), '2023-11-15'],
+            'enterprise keeps seven years' => [fn (CompanyFactory $company) => $company->onPlan(BillingPlan::Enterprise), '2019-11-15'],
+            'the trial keeps seven years' => [fn (CompanyFactory $company) => $company->onTrial(), '2019-11-15'],
+            'an expired trial keeps one year' => [fn (CompanyFactory $company) => $company->trialExpired(), '2025-11-15'],
         ];
     }
 
