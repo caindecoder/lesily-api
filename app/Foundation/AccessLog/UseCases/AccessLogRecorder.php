@@ -113,7 +113,7 @@ class AccessLogRecorder
         $row = $this->rowFor($outcome, $request, $response);
 
         AccessLogEntry::query()->insert(array_map(
-            fn (?string $companyId): array => [...$row, 'id' => (string) Str::uuid7(), 'company_id' => $companyId],
+            fn (?string $companyId): array => [...$row, 'id' => Str::uuid7(), 'company_id' => $companyId],
             $this->companiesOf($outcome->userId) ?: [null],
         ));
     }
