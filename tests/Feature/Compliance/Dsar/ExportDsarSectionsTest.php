@@ -642,6 +642,22 @@ class ExportDsarSectionsTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_a_member_of_two_companies_is_exported_then_the_access_section_holds_only_this_company_copy(): void
+    {
+        // Given a member of this company and of another, who signed in once — a copy logged for each company
+        $member = $this->aCompanyMember($this->company);
+        $this->alsoAMemberOf(Company::factory()->create(), $member);
+        $this->signInThroughTheApi($member);
+        $request = $this->aSubmittedRequest($this->company, $member);
+
+        // When their export for this company is built
+        $this->runTheExportFor($request);
+
+        // Then the access section holds this company's copy of the sign-in, never the other company's
+        $this->assertSame(['login_succeeded'], array_column($this->exportedData($request)['access_log'], 'access_event'));
+    }
+
+    #[Test]
     public function when_the_export_is_built_then_the_access_section_holds_their_sign_ins_and_refusals_oldest_first(): void
     {
         // Given a member refused twice here a minute apart, and — recorded after it — who mistyped their password an hour before, then signed in

@@ -122,6 +122,11 @@ abstract class DsarTestCase extends TestCase
         return $user;
     }
 
+    protected function alsoAMemberOf(Company $company, User $member): void
+    {
+        $company->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
+    }
+
     /**
      * Who asks for $member's export: $member themselves, or an owner of
      * $company on their behalf.

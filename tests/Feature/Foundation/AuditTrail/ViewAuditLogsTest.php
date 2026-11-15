@@ -16,6 +16,7 @@ use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\RolesPermissions\Entities\Role;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
@@ -488,6 +489,25 @@ class ViewAuditLogsTest extends AuditTrailTestCase
         // Then the view leaves no audit-trail row
         $response->assertOk();
         $this->assertDatabaseCount('audit_trail', 0);
+    }
+
+    #[Test]
+    public function when_a_member_signs_in_then_the_sign_in_reaches_the_company_audit_logs(): void
+    {
+        // Given Alice, a member of company A and of company B, and A's owner
+        $alice = User::factory()->named('Alice')->withPassword('Str0ng-Pass!')->create();
+        $employee = Role::query()->where('code', 'employee')->sole();
+        $this->attachMember($this->companyA, $alice, $employee);
+        $this->attachMember($this->companyB, $alice, $employee);
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+        $this->postJson('/api/v1/auth/login', ['email' => $alice->email, 'password' => 'Str0ng-Pass!']);
+
+        // When the owner views company A's audit logs
+        $response = $this->viewAuditLogs($owner, $this->companyA);
+
+        // Then Alice's sign-in is listed
+        $response->assertJsonCount(1, 'data');
+        $this->assertRowShows($response, 0, ['kind' => 'access', 'user_id' => $alice->getKey(), 'user_name' => 'Alice', 'event' => 'login_succeeded']);
     }
 
     /**

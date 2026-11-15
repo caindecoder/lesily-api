@@ -39,6 +39,22 @@ class RecordSessionEndingsTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_a_member_of_two_companies_logs_out_then_each_company_logs_it(): void
+    {
+        // Given a signed-in member of two companies
+        $user = $this->aRegisteredUser();
+        $this->inTwoCompanies($user);
+        $token = $this->aSessionFor($user)->plainTextToken;
+
+        // When they log out
+        $response = $this->withToken($token)->postJson('/api/v1/auth/logout');
+
+        // Then each company logs the logout
+        $response->assertNoContent();
+        $this->assertAccessLoggedInEachCompany(AccessEvent::LoggedOut, $user, [$this->ownedCompany, $this->employingCompany]);
+    }
+
+    #[Test]
     public function when_the_user_logs_out_then_the_logout_is_logged(): void
     {
         // Given a signed-in user
