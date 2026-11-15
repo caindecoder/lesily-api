@@ -2,12 +2,16 @@
 
 namespace Tests\Feature\Foundation\AuditTrail;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
+use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Foundation\AuditTrail\UseCases\Commands\AuditLogFilters;
 
@@ -133,6 +137,38 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     }
 
     #[Test]
+    public function when_another_company_has_logs_then_only_this_company_logs_are_shown(): void
+    {
+        // Given company A and company B each have a sign-in and a password change
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+        $signIn = $this->anAccessRowOfCompanyAAt('2026-11-15 10:00:00');
+        $passwordChange = $this->aSecurityEntryOfCompanyAAt('2026-11-15 09:00:00');
+        AccessLogEntry::factory()->forCompany($this->companyB)->create();
+        AuditEntry::factory()->forCompany($this->companyB)->ofAction(AuditAction::PasswordChanged, AuditSubjectType::User)->create();
+
+        // When the owner views company A's audit logs
+        $response = $this->viewAuditLogs($owner, $this->companyA);
+
+        // Then only company A's two rows are listed, newest first
+        $this->assertEntriesListed($response, [$signIn->getKey(), $passwordChange->getKey()]);
+    }
+
+    #[Test]
+    public function when_a_platform_row_exists_then_it_is_not_shown(): void
+    {
+        // Given a member of company A refused at another company's door (a row with no company), and a sign-in in A
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+        AccessLogEntry::factory()->byUser($owner)->ofEvent(AccessEvent::Forbidden)->create();
+        $signIn = $this->anAccessRowOfCompanyAAt('2026-11-15 10:00:00');
+
+        // When the owner views company A's audit logs
+        $response = $this->viewAuditLogs($owner, $this->companyA);
+
+        // Then only the company's own row is listed
+        $this->assertEntriesListed($response, [$signIn->getKey()]);
+    }
+
+    #[Test]
     public function when_audit_rows_outside_the_security_set_exist_then_they_are_not_listed(): void
     {
         // Given company A recorded an invitation, a data request and a password change
@@ -146,6 +182,57 @@ class ViewAuditLogsTest extends AuditTrailTestCase
 
         // Then only the password change is listed
         $this->assertEntriesListed($response, [$passwordChange->getKey()]);
+    }
+
+    #[Test]
+    public function when_a_folded_refusal_is_listed_then_its_count_and_first_time_are_shown(): void
+    {
+        // Given a refusal first seen at 14:02 and repeated six times until 14:06, and a password change at 14:04
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+        $refusals = AccessLogEntry::factory()
+            ->forCompany($this->companyA)
+            ->ofEvent(AccessEvent::Forbidden)
+            ->seenAt(CarbonImmutable::parse('2026-11-15 14:06:00'))
+            ->foldedSince(CarbonImmutable::parse('2026-11-15 14:02:00'), 6)
+            ->create();
+        $passwordChange = $this->aSecurityEntryOfCompanyAAt('2026-11-15 14:04:00');
+
+        // When the owner views company A's audit logs
+        $response = $this->viewAuditLogs($owner, $this->companyA);
+
+        // Then the refusals come first, by their last time, with their count and first time
+        $this->assertEntriesListed($response, [$refusals->getKey(), $passwordChange->getKey()]);
+        $this->assertRowShows($response, 0, [
+            'time' => '2026-11-15T14:06:00.000000Z',
+            'first_seen_at' => '2026-11-15T14:02:00.000000Z',
+            'occurrences' => 6,
+        ]);
+    }
+
+    #[Test]
+    #[DataProvider('provideUnknownUsers')]
+    public function when_the_user_of_a_row_is_unknown_then_no_user_name_is_shown(?string $userId): void
+    {
+        // Given a refusal in company A whose user is unknown to the accounts
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+        AccessLogEntry::factory()->forCompany($this->companyA)->ofEvent(AccessEvent::NotFound)->forUserId($userId)->create();
+
+        // When the owner views company A's audit logs
+        $response = $this->viewAuditLogs($owner, $this->companyA);
+
+        // Then the row keeps the stored user id and shows no name
+        $this->assertRowShows($response, 0, ['user_id' => $userId, 'user_name' => null]);
+    }
+
+    /**
+     * @return array<string, array{?string}>
+     */
+    public static function provideUnknownUsers(): array
+    {
+        return [
+            'no user' => [null],
+            'an id with no account' => ['01970000-0000-7000-8000-000000000001'],
+        ];
     }
 
     /**

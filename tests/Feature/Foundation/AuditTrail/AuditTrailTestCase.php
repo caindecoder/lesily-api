@@ -12,6 +12,7 @@ use App\Foundation\AuditTrail\Enums\AuditAction;
 use Tests\Feature\Foundation\FoundationTestCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
@@ -111,12 +112,32 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         $this->assertSame($entryIds, $response->json('data.*.id'));
     }
 
+    /**
+     * @param  array<string, mixed>  $expected  the fields to check, in the row's order
+     */
+    protected function assertRowShows(TestResponse $response, int $position, array $expected): void
+    {
+        $row = $response->json("data.{$position}");
+
+        $this->assertIsArray($row);
+        $this->assertSame($expected, array_intersect_key($row, $expected));
+    }
+
     protected function assertListStartsOn(TestResponse $response, string $date): void
     {
         $from = $response->json('meta.retention.from');
 
         $this->assertIsString($from);
         $this->assertSame($date, $from);
+    }
+
+    protected function anAccessRowOfCompanyAAt(string $lastSeenAt): AccessLogEntry
+    {
+        return AccessLogEntry::factory()
+            ->forCompany($this->companyA)
+            ->byUser(User::factory()->create())
+            ->seenAt(CarbonImmutable::parse($lastSeenAt))
+            ->create();
     }
 
     protected function aSecurityEntryOfCompanyAAt(string $recordedAt): AuditEntry
