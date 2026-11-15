@@ -33,9 +33,11 @@ class ListAuditLogsInteractor
     public function execute(AuditLogFilters $filters, Company $company): AuditLogPage
     {
         $retentionFrom = $this->retentionFrom($company);
+        $from = $filters->within === null ? $retentionFrom : $retentionFrom->max($filters->within->getStartDate());
+        $until = $filters->within?->getIncludedEndDate()->toImmutable()->addDay();
 
-        $rows = $this->accessRows($company, $retentionFrom)
-            ->unionAll($this->securityRows($company, $retentionFrom))
+        $rows = $this->accessRows($company, $from, $until)
+            ->unionAll($this->securityRows($company, $from, $until))
             ->orderByDesc('time')
             ->orderByDesc('id')
             ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
@@ -53,7 +55,7 @@ class ListAuditLogsInteractor
         return CarbonImmutable::now()->startOfDay()->subYearsNoOverflow($years);
     }
 
-    protected function accessRows(Company $company, CarbonImmutable $from): Builder
+    protected function accessRows(Company $company, CarbonImmutable $from, ?CarbonImmutable $until): Builder
     {
         return DB::table('access_log')
             ->leftJoin('users', 'users.id', '=', 'access_log.user_id')
@@ -72,10 +74,11 @@ class ListAuditLogsInteractor
                 'access_log.user_agent as device',
             ])
             ->where('access_log.company_id', $company->getKey())
-            ->where('access_log.last_seen_at', '>=', $from);
+            ->where('access_log.last_seen_at', '>=', $from)
+            ->when($until, fn (Builder $query, CarbonImmutable $until) => $query->where('access_log.last_seen_at', '<', $until));
     }
 
-    protected function securityRows(Company $company, CarbonImmutable $from): Builder
+    protected function securityRows(Company $company, CarbonImmutable $from, ?CarbonImmutable $until): Builder
     {
         return DB::table('audit_trail')
             ->select([
@@ -94,6 +97,7 @@ class ListAuditLogsInteractor
             ])
             ->where('company_id', $company->getKey())
             ->whereIn('action', self::SECURITY_ACTIONS)
-            ->where('recorded_at', '>=', $from);
+            ->where('recorded_at', '>=', $from)
+            ->when($until, fn (Builder $query, CarbonImmutable $until) => $query->where('recorded_at', '<', $until));
     }
 }

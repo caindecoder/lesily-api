@@ -207,6 +207,37 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     }
 
     #[Test]
+    public function when_the_dates_reach_past_the_horizon_then_the_list_is_clamped_to_it(): void
+    {
+        // Given company A on the Free plan, with a sign-in inside its year and one before it
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+        $inside = $this->anAccessRowOfCompanyAAt('2026-06-01 12:00:00');
+        $this->anAccessRowOfCompanyAAt('2025-06-01 12:00:00');
+
+        // When the owner asks for the audit logs from 2024
+        $response = $this->viewAuditLogs($owner, $this->companyA, ['within' => '2024-01-01,2026-11-15']);
+
+        // Then only the row inside the plan's year is listed, and the list says where it starts
+        $this->assertEntriesListed($response, [$inside->getKey()]);
+        $this->assertListStartsOn($response, '2025-11-15');
+    }
+
+    #[Test]
+    public function when_the_dates_lie_wholly_before_the_horizon_then_the_list_is_empty(): void
+    {
+        // Given company A on the Free plan, with a sign-in in 2024
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+        $this->anAccessRowOfCompanyAAt('2024-06-01 12:00:00');
+
+        // When the owner asks for the audit logs of 2024
+        $response = $this->viewAuditLogs($owner, $this->companyA, ['within' => '2024-01-01,2024-12-31']);
+
+        // Then nothing is listed, and the list says where it starts
+        $this->assertNothingListed($response);
+        $this->assertListStartsOn($response, '2025-11-15');
+    }
+
+    #[Test]
     public function when_the_horizon_falls_on_a_leap_day_then_it_starts_on_the_last_day_of_february(): void
     {
         // Given company A on the Free plan, viewed on 29 February 2028
@@ -289,6 +320,32 @@ class ViewAuditLogsTest extends AuditTrailTestCase
         // Then the list starts on the first day the plan keeps
         $response->assertOk();
         $this->assertListStartsOn($response, $firstDay);
+    }
+
+    #[Test]
+    public function when_filtered_by_date_then_only_rows_in_range_are_listed(): void
+    {
+        // Given company A on Enterprise, with a sign-in and a password change on each side of each end of April
+        $company = Company::factory()->onPlan(BillingPlan::Enterprise)->create();
+        $owner = $this->aConsentingMember($company, 'owner');
+        $this->companyA = $company;
+        $this->anAccessRowOfCompanyAAt('2026-03-31 23:59:59');
+        $this->aSecurityEntryOfCompanyAAt('2026-03-31 23:59:59');
+        $firstSignIn = $this->anAccessRowOfCompanyAAt('2026-04-01 00:00:00');
+        $firstPasswordChange = $this->aSecurityEntryOfCompanyAAt('2026-04-01 00:00:00');
+        $lastSignIn = $this->anAccessRowOfCompanyAAt('2026-04-30 23:59:59');
+        $lastPasswordChange = $this->aSecurityEntryOfCompanyAAt('2026-04-30 23:59:59');
+        $this->anAccessRowOfCompanyAAt('2026-05-01 00:00:00');
+        $this->aSecurityEntryOfCompanyAAt('2026-05-01 00:00:00');
+
+        // When the owner views the audit logs within April
+        $response = $this->viewAuditLogs($owner, $company, ['within' => '2026-04-01,2026-04-30']);
+
+        // Then both ends of April are inside, newest first, and nothing outside
+        $this->assertEntriesListed($response, [
+            ...$this->newestIdFirst([$lastSignIn->getKey(), $lastPasswordChange->getKey()]),
+            ...$this->newestIdFirst([$firstSignIn->getKey(), $firstPasswordChange->getKey()]),
+        ]);
     }
 
     /**
