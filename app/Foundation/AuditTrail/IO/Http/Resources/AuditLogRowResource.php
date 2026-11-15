@@ -72,7 +72,7 @@ class AuditLogRowResource extends JsonResource
         return $this->resource->kind === 'access' ? 'access_event' : 'action';
     }
 
-    protected function isoTime(string $storedTime): string
+    protected function isoTime(string $storedTime): ?string
     {
         return CarbonImmutable::parse($storedTime, 'UTC')->toISOString();
     }

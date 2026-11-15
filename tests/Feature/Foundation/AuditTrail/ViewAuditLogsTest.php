@@ -530,6 +530,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_the_plan_sets_the_horizon_then_the_list_starts_there(Closure $standing, string $firstDay): void
     {
         // Given a company on the plan, and its owner
+        /** @var Company $company */
         $company = $standing(Company::factory())->create();
         $owner = $this->aConsentingMember($company, 'owner');
 
