@@ -23,6 +23,7 @@ use App\Foundation\Auth\IO\Http\Controllers\GoogleAccountController;
 use App\Foundation\Auth\IO\Http\Controllers\ResetPasswordController;
 use App\Foundation\Auth\IO\Http\Controllers\RevokeSessionController;
 use App\Foundation\Health\IO\Http\Controllers\HealthCheckController;
+use App\Foundation\AuditTrail\IO\Http\Controllers\AuditLogController;
 use App\Foundation\Auth\IO\Http\Controllers\ChangePasswordController;
 use App\Foundation\Auth\IO\Http\Controllers\DefaultCompanyController;
 use App\Foundation\Auth\IO\Http\Controllers\ForgotPasswordController;
@@ -322,6 +323,10 @@ Route::get('/v1/privacy/processing-register', [ProcessingRegisterController::cla
 
 // View the audit trail (UC-1-066) — the company's audit rows, newest first, paginated.
 Route::get('/v1/audit-trail', [AuditTrailController::class, 'index'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:audit.view']);
+
+// View the audit logs (UC-1-067) — sign-ins, refusals and security changes, newest first, cut to the plan horizon.
+Route::get('/v1/audit-logs', [AuditLogController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:audit.view']);
 
 // View the privacy notice (UC-1-074) — the 13 Schedule V items; every member, open past the consent gate.

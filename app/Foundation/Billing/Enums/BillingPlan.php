@@ -31,6 +31,18 @@ enum BillingPlan: string
     }
 
     /**
+     * How many years of sign-in and security records the plan shows (questionnaire §14).
+     */
+    public function auditLogHorizonYears(): int
+    {
+        return match ($this) {
+            self::Free, self::Starter => 1,
+            self::Pro => 3,
+            self::Enterprise => 7,
+        };
+    }
+
+    /**
      * The lowest tier whose plan grants the feature, or null when no plan does
      * (e.g. an add-on-only or deprecated feature) — drives the upgrade prompt.
      *

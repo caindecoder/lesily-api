@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth\AccessLog;
 use App\Models\User;
 use RuntimeException;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
@@ -172,7 +173,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
     {
         // Given a registered user, and an access log that refuses every write
         $user = $this->aRegisteredUser();
-        $this->failAccessLogWrites();
+        $this->failAccessLogInsertStatements();
         $logged = $this->collectLogRecords();
 
         // When they sign in
@@ -181,6 +182,24 @@ class RecordSignInOutcomesTest extends AuthTestCase
         // Then the sign-in answers as usual and the failure is reported as critical
         $response->assertOk();
         $this->assertSame(1, $user->tokens()->count());
+        $this->assertWriteFailureReported($logged, ['event' => 'login_succeeded', 'reason' => null, 'user_id' => $user->getKey()]);
+    }
+
+    #[Test]
+    public function when_the_log_write_fails_for_a_member_of_two_companies_then_no_copy_is_kept_and_one_failure_is_reported(): void
+    {
+        // Given a member of two companies, and an access log that refuses every write
+        $user = $this->aRegisteredUser();
+        $this->inTwoCompanies($user);
+        $this->failAccessLogInsertStatements();
+        $logged = $this->collectLogRecords();
+
+        // When they sign in
+        $response = $this->signIn(self::LOGIN_PASSWORD);
+
+        // Then the sign-in answers as usual, no company keeps a copy, and the one failure is reported
+        $response->assertOk();
+        $this->assertDatabaseCount('access_log', 0);
         $this->assertWriteFailureReported($logged, ['event' => 'login_succeeded', 'reason' => null, 'user_id' => $user->getKey()]);
     }
 
@@ -212,6 +231,55 @@ class RecordSignInOutcomesTest extends AuthTestCase
         // Then the sign-in is logged with the user agent cut to the column's 255 characters
         $response->assertOk();
         $this->assertSame(str_repeat('a', 255), AccessLogEntry::query()->sole()->user_agent);
+    }
+
+    #[Test]
+    public function when_a_member_of_two_companies_signs_in_then_each_company_logs_it(): void
+    {
+        // Given a user who is a member of two companies
+        $user = $this->aRegisteredUser();
+        $this->inTwoCompanies($user);
+        DB::enableQueryLog();
+
+        // When they sign in
+        $response = $this->signIn(self::LOGIN_PASSWORD);
+
+        // Then each company logs the sign-in, in one write
+        $response->assertOk();
+        $this->assertAccessLoggedInEachCompany(AccessEvent::LoginSucceeded, $user, [$this->ownedCompany, $this->employingCompany]);
+        $this->assertOneAccessLogInsert();
+    }
+
+    #[Test]
+    public function when_a_member_of_two_companies_gives_a_wrong_password_then_each_company_logs_the_failure(): void
+    {
+        // Given a user who is a member of two companies
+        $user = $this->aRegisteredUser();
+        $this->inTwoCompanies($user);
+
+        // When they sign in with the wrong password
+        $response = $this->signIn('not-the-password');
+
+        // Then each company logs the failed sign-in, with its reason
+        $response->assertUnauthorized();
+        $this->assertAccessLoggedInEachCompany(AccessEvent::LoginFailed, $user, [$this->ownedCompany, $this->employingCompany]);
+        $this->assertSame([AccessEventReason::WrongPassword], AccessLogEntry::query()->pluck('reason')->unique()->values()->all());
+    }
+
+    #[Test]
+    public function when_a_removed_member_signs_in_then_the_removed_company_does_not_log_it(): void
+    {
+        // Given a user in two companies, removed from one
+        $user = $this->aRegisteredUser();
+        $this->inTwoCompanies($user);
+        $this->removeMembership($this->employingCompany, $user);
+
+        // When they sign in
+        $response = $this->signIn(self::LOGIN_PASSWORD);
+
+        // Then only the company they still belong to logs it
+        $response->assertOk();
+        $this->assertAccessLoggedInEachCompany(AccessEvent::LoginSucceeded, $user, [$this->ownedCompany]);
     }
 
     #[Test]

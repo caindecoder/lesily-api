@@ -5,6 +5,9 @@ namespace Tests\Concerns;
 use ArrayObject;
 use App\Models\User;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
+use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Database\QueryException;
@@ -32,6 +35,29 @@ trait AssertsAccessLog
         $this->assertSame($user?->getKey(), $entry->user_id);
 
         return $entry;
+    }
+
+    /**
+     * Assert one $event row for $user in each of $companies — sharing one time, each with its own uuid v7 id.
+     *
+     * @param  list<Company>  $companies
+     */
+    protected function assertAccessLoggedInEachCompany(AccessEvent $event, User $user, array $companies): void
+    {
+        $rows = AccessLogEntry::query()->get();
+
+        $this->assertCount(count($companies), $rows);
+        $this->assertEqualsCanonicalizing(array_map(fn (Company $company) => $company->getKey(), $companies), $rows->pluck('company_id')->all());
+        $this->assertCount(1, $rows->map(fn (AccessLogEntry $row): string => $row->first_seen_at->toDateTimeString())->unique());
+        $this->assertSame([[$event, $user->getKey(), true]], $rows->map(fn (AccessLogEntry $row): array => [$row->event, $row->user_id, Str::isUuid($row->getKey(), 7)])->unique()->values()->all());
+        $this->assertCount(count($companies), $rows->pluck('id')->unique());
+    }
+
+    protected function assertOneAccessLogInsert(): void
+    {
+        $inserts = array_filter(DB::getQueryLog(), fn (array $query): bool => str_starts_with($query['query'], 'insert into `access_log`'));
+
+        $this->assertCount(1, $inserts);
     }
 
     protected function assertNoAccessLogged(AccessEvent $event): void
@@ -89,6 +115,16 @@ trait AssertsAccessLog
             'code' => 2006,
             'message' => 'MySQL server has gone away',
         ]));
+    }
+
+    /** Refuses the insert statement itself — the bulk write of a member's copies fires no model event. */
+    protected function failAccessLogInsertStatements(): void
+    {
+        DB::beforeExecuting(function (string $query): void {
+            if (str_starts_with($query, 'insert into `access_log`')) {
+                throw $this->syntheticQueryException(['sqlstate' => 'HY000', 'code' => 2006, 'message' => 'MySQL server has gone away']);
+            }
+        });
     }
 
     /** @return ArrayObject<int, MessageLogged> */

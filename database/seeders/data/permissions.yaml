@@ -72,7 +72,7 @@
 - code: audit.view
   id: 0193abcd-2222-7000-8000-000000000008
   name: View Audit Trail
-  description: Read the immutable audit log of data changes.
+  description: Read the audit trail of data changes and the audit logs of sign-ins, refusals and security changes.
   module: audit
 
 - code: dsar.request-for-others

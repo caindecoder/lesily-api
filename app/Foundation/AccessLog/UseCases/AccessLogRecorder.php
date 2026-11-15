@@ -5,10 +5,12 @@ namespace App\Foundation\AccessLog\UseCases;
 use Closure;
 use Throwable;
 use App\Models\User;
+use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
 use Illuminate\Http\JsonResponse;
 use App\Companies\Entities\Company;
+use App\Companies\Entities\CompanyUser;
 use Symfony\Component\HttpFoundation\Response;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\AccessLog\Values\AccessOutcome;
@@ -35,14 +37,14 @@ class AccessLogRecorder
         $this->outcome = new AccessOutcome($event, $reason, $user?->getKey());
     }
 
-    /** A noted outcome is always its own row; a refusal folds into a recent twin. */
+    /** A noted outcome is never folded — one row per company of its user; a refusal folds into a recent twin. */
     public function write(Request $request, Response $response): void
     {
         $noted = $this->outcome;
         $this->outcome = null;
 
         if ($noted !== null) {
-            $this->writeOrReport($noted, fn () => $this->insert($noted, $request, $response));
+            $this->writeOrReport($noted, fn () => $this->insertForEachCompany($noted, $request, $response));
 
             return;
         }
@@ -102,18 +104,48 @@ class AccessLogRecorder
         }
     }
 
+    /**
+     * A noted outcome reaches each company its user is an active member of, all copies in one
+     * statement so none is kept without the others; with no company it is the one platform row.
+     */
+    protected function insertForEachCompany(AccessOutcome $outcome, Request $request, Response $response): void
+    {
+        $row = $this->rowFor($outcome, $request, $response);
+
+        AccessLogEntry::query()->insert(array_map(
+            fn (?string $companyId): array => [...$row, 'id' => Str::uuid7(), 'company_id' => $companyId],
+            $this->companiesOf($outcome->userId) ?: [null],
+        ));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected function companiesOf(?string $userId): array
+    {
+        return CompanyUser::query()->where('user_id', $userId)->pluck('company_id')->all();
+    }
+
     protected function insert(AccessOutcome $outcome, Request $request, Response $response): void
+    {
+        AccessLogEntry::query()->create($this->rowFor($outcome, $request, $response));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function rowFor(AccessOutcome $outcome, Request $request, Response $response): array
     {
         $origin = RequestOrigin::fromRequest($request);
         /** @var Route $route */
         $route = $request->route();
         $seenAt = now();
 
-        AccessLogEntry::query()->create([
+        return [
             'company_id' => $outcome->companyId,
             'user_id' => $outcome->userId,
-            'event' => $outcome->event,
-            'reason' => $outcome->reason,
+            'event' => $outcome->event->value,
+            'reason' => $outcome->reason?->value,
             'http_method' => $request->method(),
             'route' => $route->uri(),
             'status' => $response->getStatusCode(),
@@ -123,7 +155,7 @@ class AccessLogRecorder
             'request_id' => $origin->boundedRequestId(),
             'first_seen_at' => $seenAt,
             'last_seen_at' => $seenAt,
-        ]);
+        ];
     }
 
     /** The error envelope's code; a success body, or a body that is not JSON, has none. */

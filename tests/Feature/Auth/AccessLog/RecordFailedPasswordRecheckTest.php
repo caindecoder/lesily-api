@@ -33,6 +33,22 @@ class RecordFailedPasswordRecheckTest extends AuthTestCase
     }
 
     #[Test]
+    public function when_a_member_of_two_companies_fails_the_password_check_then_each_company_logs_it(): void
+    {
+        // Given a signed-in member of two companies
+        $user = $this->aRegisteredUser();
+        $this->inTwoCompanies($user);
+        $token = $this->aSessionFor($user)->plainTextToken;
+
+        // When they change their password with the wrong current password
+        $response = $this->confirmWith($token, ['PUT', '/api/v1/me/password', 'currentPassword'], 'not-my-password');
+
+        // Then each company logs the failed re-check
+        $response->assertUnauthorized();
+        $this->assertAccessLoggedInEachCompany(AccessEvent::ReauthFailed, $user, [$this->ownedCompany, $this->employingCompany]);
+    }
+
+    #[Test]
     #[DataProvider('passwordRecheckProvider')]
     public function when_the_current_password_is_right_then_no_failed_recheck_is_logged(string $method, string $uri, string $passwordField): void
     {

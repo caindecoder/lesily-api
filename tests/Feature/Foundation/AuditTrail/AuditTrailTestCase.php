@@ -12,6 +12,7 @@ use App\Foundation\AuditTrail\Enums\AuditAction;
 use Tests\Feature\Foundation\FoundationTestCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
@@ -83,6 +84,18 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         return $this->getJson('/api/v1/audit-trail?'.http_build_query($query), ['X-Company-Context' => $company->getKey()]);
     }
 
+    /**
+     * @param  array<string, mixed>  $query
+     */
+    protected function viewAuditLogs(?User $actor, Company $company, array $query = []): TestResponse
+    {
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
+        }
+
+        return $this->getJson('/api/v1/audit-logs?'.http_build_query($query), ['X-Company-Context' => $company->getKey()]);
+    }
+
     protected function sendToAuditTrail(string $verb, User $actor, string $path): TestResponse
     {
         Sanctum::actingAs($actor);
@@ -97,6 +110,59 @@ abstract class AuditTrailTestCase extends FoundationTestCase
     {
         $response->assertOk();
         $this->assertSame($entryIds, $response->json('data.*.id'));
+    }
+
+    /**
+     * @param  array<string, mixed>  $expected  the fields to check, in the row's order
+     */
+    protected function assertRowShows(TestResponse $response, int $position, array $expected): void
+    {
+        $row = $response->json("data.{$position}");
+
+        $this->assertIsArray($row);
+        $this->assertSame($expected, array_intersect_key($row, $expected));
+    }
+
+    /**
+     * Rows that share a time are listed by id, newest first.
+     *
+     * @param  list<string>  $ids
+     * @return list<string>
+     */
+    protected function newestIdFirst(array $ids): array
+    {
+        rsort($ids, SORT_STRING);
+
+        return $ids;
+    }
+
+    protected function assertListStartsOn(TestResponse $response, string $date): void
+    {
+        $from = $response->json('meta.retention.from');
+
+        $this->assertIsString($from);
+        $this->assertSame($date, $from);
+    }
+
+    protected function anAccessRowOfCompanyAAt(string $lastSeenAt): AccessLogEntry
+    {
+        return AccessLogEntry::factory()
+            ->forCompany($this->companyA)
+            ->byUser(User::factory()->create())
+            ->seenAt(CarbonImmutable::parse($lastSeenAt))
+            ->create();
+    }
+
+    protected function aSecurityEntryOfCompanyAAt(string $recordedAt): AuditEntry
+    {
+        $actor = User::factory()->create();
+
+        return AuditEntry::factory()
+            ->forCompany($this->companyA)
+            ->byMember($actor, 'admin')
+            ->ofAction(AuditAction::PasswordChanged, AuditSubjectType::User)
+            ->recordedAt(CarbonImmutable::parse($recordedAt))
+            ->create();
     }
 
     protected function assertNothingListed(TestResponse $response): void

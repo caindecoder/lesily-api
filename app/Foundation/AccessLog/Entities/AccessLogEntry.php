@@ -3,9 +3,11 @@
 namespace App\Foundation\AccessLog\Entities;
 
 use Illuminate\Database\Eloquent\Model;
+use Database\Factories\AccessLogEntryFactory;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
  * One access_log row: an access outcome, never a data change. Rows are written
@@ -13,6 +15,9 @@ use App\Foundation\AccessLog\Enums\AccessEventReason;
  */
 class AccessLogEntry extends Model
 {
+    /** @use HasFactory<AccessLogEntryFactory> */
+    use HasFactory;
+
     use HasUuids;
 
     public $timestamps = false;
@@ -42,4 +47,9 @@ class AccessLogEntry extends Model
         'first_seen_at' => 'datetime',
         'last_seen_at' => 'datetime',
     ];
+
+    protected static function newFactory(): AccessLogEntryFactory
+    {
+        return AccessLogEntryFactory::new();
+    }
 }
