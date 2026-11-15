@@ -37,7 +37,7 @@ class AccessLogRecorder
         $this->outcome = new AccessOutcome($event, $reason, $user?->getKey());
     }
 
-    /** A noted outcome is always its own row; a refusal folds into a recent twin. */
+    /** A noted outcome is never folded — one row per company of its user; a refusal folds into a recent twin. */
     public function write(Request $request, Response $response): void
     {
         $noted = $this->outcome;

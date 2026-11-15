@@ -7,10 +7,12 @@ use Ramsey\Uuid\Uuid;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Illuminate\Notifications\DatabaseNotification;
+use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Foundation\Notifications\Entities\NotificationPreference;
 use App\Compliance\Dsar\Exceptions\DsarExportArchiveFailedException;
@@ -644,17 +646,19 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_a_member_of_two_companies_is_exported_then_the_access_section_holds_only_this_company_copy(): void
     {
-        // Given a member of this company and of another, who signed in once — a copy logged for each company
+        // Given a member of this company and of another, refused an hour ago at a door no company owns,
+        // who then signed in once — a copy logged for each company
         $member = $this->aCompanyMember($this->company);
         $this->alsoAMemberOf(Company::factory()->create(), $member);
+        AccessLogEntry::factory()->byUser($member)->ofEvent(AccessEvent::Forbidden)->seenAt(now()->subHour())->create();
         $this->signInThroughTheApi($member);
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When their export for this company is built
         $this->runTheExportFor($request);
 
-        // Then the access section holds this company's copy of the sign-in, never the other company's
-        $this->assertSame(['login_succeeded'], array_column($this->exportedData($request)['access_log'], 'access_event'));
+        // Then the section holds the no-company refusal and this company's copy of the sign-in, never the other company's
+        $this->assertSame(['forbidden', 'login_succeeded'], array_column($this->exportedData($request)['access_log'], 'access_event'));
     }
 
     #[Test]

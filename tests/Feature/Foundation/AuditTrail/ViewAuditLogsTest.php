@@ -462,6 +462,38 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     }
 
     #[Test]
+    #[DataProvider('provideSecurityActions')]
+    public function when_a_security_change_is_recorded_then_it_is_listed(AuditAction $action, AuditSubjectType $subjectType): void
+    {
+        // Given company A recorded the security change, and its owner
+        $entry = $this->anEntryOfCompanyAFor($action, $subjectType);
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner views company A's audit logs
+        $response = $this->viewAuditLogs($owner, $this->companyA);
+
+        // Then the change is listed
+        $this->assertEntriesListed($response, [$entry->getKey()]);
+    }
+
+    /**
+     * @return array<string, array{AuditAction, AuditSubjectType}>
+     */
+    public static function provideSecurityActions(): array
+    {
+        return [
+            'password changed' => [AuditAction::PasswordChanged, AuditSubjectType::User],
+            'password reset' => [AuditAction::PasswordReset, AuditSubjectType::User],
+            'two-factor enabled' => [AuditAction::TwoFactorEnabled, AuditSubjectType::User],
+            'two-factor disabled' => [AuditAction::TwoFactorDisabled, AuditSubjectType::User],
+            'recovery codes regenerated' => [AuditAction::RecoveryCodesRegenerated, AuditSubjectType::User],
+            'role changed' => [AuditAction::RoleChanged, AuditSubjectType::User],
+            'member removed' => [AuditAction::MemberRemoved, AuditSubjectType::User],
+            'data request downloaded' => [AuditAction::DsarDownloaded, AuditSubjectType::DsarRequest],
+        ];
+    }
+
+    #[Test]
     #[DataProvider('provideRolesWithTheAuditPermission')]
     public function when_permitted_roles_view_then_the_logs_are_shown(string $roleCode): void
     {
