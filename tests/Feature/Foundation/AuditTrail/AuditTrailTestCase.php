@@ -111,6 +111,26 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         $this->assertSame($entryIds, $response->json('data.*.id'));
     }
 
+    protected function assertListStartsOn(TestResponse $response, string $date): void
+    {
+        $from = $response->json('meta.retention.from');
+
+        $this->assertIsString($from);
+        $this->assertSame($date, $from);
+    }
+
+    protected function aSecurityEntryOfCompanyAAt(string $recordedAt): AuditEntry
+    {
+        $actor = User::factory()->create();
+
+        return AuditEntry::factory()
+            ->forCompany($this->companyA)
+            ->byMember($actor, 'admin')
+            ->ofAction(AuditAction::PasswordChanged, AuditSubjectType::User)
+            ->recordedAt(CarbonImmutable::parse($recordedAt))
+            ->create();
+    }
+
     protected function assertNothingListed(TestResponse $response): void
     {
         $response->assertOk();

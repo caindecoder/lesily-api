@@ -6,7 +6,9 @@ use Illuminate\Http\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Foundation\AuditTrail\UseCases\Commands\AuditLogFilters;
 
 class ViewAuditLogsTest extends AuditTrailTestCase
@@ -114,6 +116,36 @@ class ViewAuditLogsTest extends AuditTrailTestCase
 
         // Then no route answers it
         $this->assertRefusedWith($response, Response::HTTP_METHOD_NOT_ALLOWED, ApiErrorCode::HttpError);
+    }
+
+    #[Test]
+    public function when_the_company_has_no_logs_then_an_empty_list_with_its_start_is_shown(): void
+    {
+        // Given company A, on its trial, with no sign-in or security record
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner views company A's audit logs
+        $response = $this->viewAuditLogs($owner, $this->companyA);
+
+        // Then nothing is listed, and the list starts seven years back
+        $this->assertNothingListed($response);
+        $this->assertListStartsOn($response, '2019-11-15');
+    }
+
+    #[Test]
+    public function when_audit_rows_outside_the_security_set_exist_then_they_are_not_listed(): void
+    {
+        // Given company A recorded an invitation, a data request and a password change
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+        $this->anEntryOfCompanyAFor(AuditAction::UserInvited, AuditSubjectType::Invitation);
+        $this->anEntryOfCompanyAFor(AuditAction::DsarRequested, AuditSubjectType::DsarRequest);
+        $passwordChange = $this->aSecurityEntryOfCompanyAAt('2026-11-15 09:00:00');
+
+        // When the owner views company A's audit logs
+        $response = $this->viewAuditLogs($owner, $this->companyA);
+
+        // Then only the password change is listed
+        $this->assertEntriesListed($response, [$passwordChange->getKey()]);
     }
 
     /**
