@@ -105,24 +105,16 @@ class AccessLogRecorder
     }
 
     /**
-     * A noted outcome for a known user reaches each company the user is an active member of,
-     * all copies in one statement (AR54–AR57); with no company it is the one platform row.
+     * A noted outcome reaches each company its user is an active member of, all copies in one
+     * statement so none is kept without the others; with no company it is the one platform row.
      */
     protected function insertForEachCompany(AccessOutcome $outcome, Request $request, Response $response): void
     {
-        $companyIds = $this->companiesOf($outcome->userId);
-
-        if ($companyIds === []) {
-            $this->insert($outcome, $request, $response);
-
-            return;
-        }
-
         $row = $this->rowFor($outcome, $request, $response);
 
         AccessLogEntry::query()->insert(array_map(
-            fn (string $companyId): array => [...$row, 'id' => (string) Str::uuid7(), 'company_id' => $companyId],
-            $companyIds,
+            fn (?string $companyId): array => [...$row, 'id' => (string) Str::uuid7(), 'company_id' => $companyId],
+            $this->companiesOf($outcome->userId) ?: [null],
         ));
     }
 
@@ -131,10 +123,6 @@ class AccessLogRecorder
      */
     protected function companiesOf(?string $userId): array
     {
-        if ($userId === null) {
-            return [];
-        }
-
         /** @var list<string> $companyIds */
         $companyIds = CompanyUser::query()->where('user_id', $userId)->pluck('company_id')->all();
 

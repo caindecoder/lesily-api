@@ -13,7 +13,7 @@ use App\Foundation\AuditTrail\UseCases\Commands\AuditLogFilters;
 class ListAuditLogsInteractor
 {
     /**
-     * The audit-trail actions the audit logs show beside the access log (AR16).
+     * The audit-trail actions the audit logs show beside the access log.
      *
      * @var list<AuditAction>
      */
@@ -46,7 +46,7 @@ class ListAuditLogsInteractor
     }
 
     /**
-     * The first day the company's plan keeps — a company with no plan in force keeps one year (AR22).
+     * The first day the company's plan keeps — a company with no plan in force keeps one year.
      */
     protected function retentionFrom(Company $company): CarbonImmutable
     {

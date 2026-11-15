@@ -173,7 +173,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
     {
         // Given a registered user, and an access log that refuses every write
         $user = $this->aRegisteredUser();
-        $this->failAccessLogWrites();
+        $this->failAccessLogInsertStatements();
         $logged = $this->collectLogRecords();
 
         // When they sign in

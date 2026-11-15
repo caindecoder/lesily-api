@@ -37,7 +37,7 @@ class AuditLogRowResource extends JsonResource
     }
 
     /**
-     * Lesily staff act on a company's data as "Lesily support" — never by name (AR21).
+     * Lesily staff act on a company's data as "Lesily support" — never by name.
      *
      * @return array{user_id: ?string, user_name: ?string}
      */
