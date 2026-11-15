@@ -83,6 +83,18 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         return $this->getJson('/api/v1/audit-trail?'.http_build_query($query), ['X-Company-Context' => $company->getKey()]);
     }
 
+    /**
+     * @param  array<string, mixed>  $query
+     */
+    protected function viewAuditLogs(?User $actor, Company $company, array $query = []): TestResponse
+    {
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
+        }
+
+        return $this->getJson('/api/v1/audit-logs?'.http_build_query($query), ['X-Company-Context' => $company->getKey()]);
+    }
+
     protected function sendToAuditTrail(string $verb, User $actor, string $path): TestResponse
     {
         Sanctum::actingAs($actor);
