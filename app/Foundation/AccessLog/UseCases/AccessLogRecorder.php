@@ -119,14 +119,11 @@ class AccessLogRecorder
     }
 
     /**
-     * @return list<string>
+     * @return array<int, string>
      */
     protected function companiesOf(?string $userId): array
     {
-        /** @var list<string> $companyIds */
-        $companyIds = CompanyUser::query()->where('user_id', $userId)->pluck('company_id')->all();
-
-        return $companyIds;
+        return CompanyUser::query()->where('user_id', $userId)->pluck('company_id')->all();
     }
 
     protected function insert(AccessOutcome $outcome, Request $request, Response $response): void
