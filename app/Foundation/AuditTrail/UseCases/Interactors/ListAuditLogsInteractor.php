@@ -41,14 +41,16 @@ class ListAuditLogsInteractor
     {
         return $rows
             ->when($filters->user, fn (Builder $query, string $user) => $query->where('access_log.user_id', $user))
-            ->when($filters->event, fn (Builder $query, string $event) => $query->where('access_log.event', $event));
+            ->when($filters->event, fn (Builder $query, string $event) => $query->where('access_log.event', $event))
+            ->when($filters->ip, fn (Builder $query, string $ip) => $query->where('access_log.ip_address', $ip));
     }
 
     protected function searchedSecurityRows(Builder $rows, AuditLogFilters $filters): Builder
     {
         return $rows
             ->when($filters->user, fn (Builder $query, string $user) => $this->byUser($query, $user))
-            ->when($filters->event, fn (Builder $query, string $event) => $query->where('action', $event));
+            ->when($filters->event, fn (Builder $query, string $event) => $query->where('action', $event))
+            ->when($filters->ip, fn (Builder $query, string $ip) => $this->exceptStaff($query->where('ip_address', $ip)));
     }
 
     protected function byUser(Builder $rows, string $user): Builder
@@ -57,11 +59,17 @@ class ListAuditLogsInteractor
             return $rows->where('actor_role_code', AuditEntry::STAFF_ROLE_CODE);
         }
 
-        return $rows
-            ->where('actor_user_id', $user)
-            ->where(fn (Builder $member) => $member
-                ->whereNull('actor_role_code')
-                ->orWhere('actor_role_code', '!=', AuditEntry::STAFF_ROLE_CODE));
+        return $this->exceptStaff($rows->where('actor_user_id', $user));
+    }
+
+    /**
+     * A staff row's actor and address are never shown, so no search may match them.
+     */
+    protected function exceptStaff(Builder $rows): Builder
+    {
+        return $rows->where(fn (Builder $member) => $member
+            ->whereNull('actor_role_code')
+            ->orWhere('actor_role_code', '!=', AuditEntry::STAFF_ROLE_CODE));
     }
 
     /**

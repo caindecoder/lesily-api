@@ -107,6 +107,19 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     }
 
     #[Test]
+    public function when_a_plan_without_search_sends_an_invalid_search_then_it_is_rejected_before_the_plan(): void
+    {
+        // Given the owner of company A, whose plan has no log search
+        $owner = $this->aConsentingMember($this->companyA, 'owner');
+
+        // When the owner searches company A's audit logs with an invalid address
+        $response = $this->viewAuditLogs($owner, $this->companyA, ['ip' => 'nowhere']);
+
+        // Then the address is rejected before the plan is checked
+        $this->assertValidationRejected($response, 'ip', 'The ip field must be a valid IP address.');
+    }
+
+    #[Test]
     public function when_filtered_by_a_member_then_staff_rows_under_their_id_are_not_listed(): void
     {
         // Given the member's change, and a change written by the same user as Lesily staff
@@ -123,6 +136,20 @@ class SearchAuditLogsTest extends AuditTrailTestCase
 
         // Then only the member's own change is listed
         $this->assertEntriesListed($response, [$change->getKey()]);
+    }
+
+    #[Test]
+    public function when_filtered_by_an_ip_then_staff_rows_from_it_are_not_listed(): void
+    {
+        // Given the member's sign-in and a staff change, both from the address
+        $signIn = $this->aSignInBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->create();
+        $this->aStaffChange()->fromOrigin('203.0.113.5', 'Firefox')->recordedAt(CarbonImmutable::parse('2026-11-11 12:00:00'))->create();
+
+        // When the owner searches by the address
+        $response = $this->searchAuditLogs(['ip' => '203.0.113.5']);
+
+        // Then only the member's sign-in is listed
+        $this->assertEntriesListed($response, [$signIn->getKey()]);
     }
 
     #[Test]
@@ -220,6 +247,22 @@ class SearchAuditLogsTest extends AuditTrailTestCase
         $this->assertEntriesListed($response, [$passwordChange->getKey()]);
     }
 
+    #[Test]
+    public function when_filtered_by_an_ip_then_only_rows_from_it_of_both_kinds_are_listed(): void
+    {
+        // Given a sign-in and a change from the address, and a pair from another
+        $signIn = $this->aSignInBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->seenAt(CarbonImmutable::parse('2026-11-10 09:00:00'))->create();
+        $change = $this->aChangeBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->recordedAt(CarbonImmutable::parse('2026-11-11 09:00:00'))->create();
+        $this->aSignInBy($this->member)->fromOrigin('198.51.100.7', 'Safari')->create();
+        $this->aChangeBy($this->member)->fromOrigin('198.51.100.7', 'Safari')->create();
+
+        // When the owner searches by the address
+        $response = $this->searchAuditLogs(['ip' => '203.0.113.5']);
+
+        // Then only the rows from the address are listed, newest first
+        $this->assertEntriesListed($response, [$change->getKey(), $signIn->getKey()]);
+    }
+
     /**
      * @return array<string, array{Closure(CompanyFactory): CompanyFactory, array<string, string>}>
      */
@@ -270,6 +313,8 @@ class SearchAuditLogsTest extends AuditTrailTestCase
             'event that is no logged code' => [['event' => 'sideways'], 'event', 'The selected event is invalid.'],
             'event the audit logs never show' => [['event' => 'invitation_sent'], 'event', 'The selected event is invalid.'],
             'array-valued event' => [['event' => ['login_failed']], 'event', 'The event field must be a string.'],
+            'ip that is only part of an address' => [['ip' => '203.0.113'], 'ip', 'The ip field must be a valid IP address.'],
+            'array-valued ip' => [['ip' => ['203.0.113.5']], 'ip', 'The ip field must be a string.'],
         ];
     }
 
@@ -281,6 +326,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
         return [
             'empty user' => ['user', ''],
             'empty event' => ['event', ''],
+            'empty ip' => ['ip', ''],
         ];
     }
 

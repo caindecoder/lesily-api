@@ -68,7 +68,7 @@ class AuditLogFilters extends Data
             'within' => ['filled', 'sometimes', 'bail', 'string', new IsoDateRange],
             'user' => ['filled', 'sometimes', 'bail', 'string', new MemberOrLesilySupport],
             'event' => ['filled', 'sometimes', 'string', Rule::in([...AccessEvent::cases(), ...AuditAction::SECURITY_ACTIONS])],
-            'ip' => ['filled', 'sometimes', 'string'],
+            'ip' => ['filled', 'sometimes', 'string', 'ip'],
             'page' => ['filled', 'sometimes', 'integer', 'min:1'],
             'per_page' => ['filled', 'sometimes', 'integer', 'min:1', 'max:100'],
         ];
