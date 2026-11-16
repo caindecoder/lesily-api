@@ -12,6 +12,7 @@ use Spatie\LaravelData\Attributes\MapInputName;
 use App\Foundation\UseCases\Casts\CarbonPeriodCast;
 use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
+use App\Foundation\AuditTrail\UseCases\Rules\MemberOrLesilySupport;
 
 class AuditLogFilters extends Data
 {
@@ -62,7 +63,7 @@ class AuditLogFilters extends Data
     {
         return [
             'within' => ['filled', 'sometimes', 'bail', 'string', new IsoDateRange],
-            'user' => ['filled', 'sometimes', 'string'],
+            'user' => ['filled', 'sometimes', 'bail', 'string', new MemberOrLesilySupport],
             'event' => ['filled', 'sometimes', 'string'],
             'ip' => ['filled', 'sometimes', 'string'],
             'page' => ['filled', 'sometimes', 'integer', 'min:1'],

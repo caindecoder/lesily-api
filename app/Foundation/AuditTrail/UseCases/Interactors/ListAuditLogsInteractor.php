@@ -8,9 +8,11 @@ use App\Companies\Entities\Company;
 use Illuminate\Database\Query\Builder;
 use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AuditTrail\Values\AuditLogPage;
 use App\Foundation\AuditTrail\UseCases\Commands\AuditLogFilters;
 use App\Foundation\Billing\Exceptions\FeatureUnavailableException;
+use App\Foundation\AuditTrail\UseCases\Rules\MemberOrLesilySupport;
 
 class ListAuditLogsInteractor
 {
@@ -42,13 +44,36 @@ class ListAuditLogsInteractor
         $from = $filters->within === null ? $retentionFrom : $retentionFrom->max($filters->within->getStartDate());
         $until = $filters->within?->getIncludedEndDate()->toImmutable()->addDay();
 
-        $rows = $this->accessRows($company, $from, $until)
-            ->unionAll($this->securityRows($company, $from, $until))
+        $rows = $this->searchedAccessRows($this->accessRows($company, $from, $until), $filters)
+            ->unionAll($this->searchedSecurityRows($this->securityRows($company, $from, $until), $filters))
             ->orderByDesc('time')
             ->orderByDesc('id')
             ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
 
         return new AuditLogPage($rows, $retentionFrom);
+    }
+
+    protected function searchedAccessRows(Builder $rows, AuditLogFilters $filters): Builder
+    {
+        return $rows->when($filters->user, fn (Builder $query, string $user) => $query->where('access_log.user_id', $user));
+    }
+
+    protected function searchedSecurityRows(Builder $rows, AuditLogFilters $filters): Builder
+    {
+        return $rows->when($filters->user, fn (Builder $query, string $user) => $this->byUser($query, $user));
+    }
+
+    protected function byUser(Builder $rows, string $user): Builder
+    {
+        if ($user === MemberOrLesilySupport::LESILY_SUPPORT) {
+            return $rows->where('actor_role_code', AuditEntry::STAFF_ROLE_CODE);
+        }
+
+        return $rows
+            ->where('actor_user_id', $user)
+            ->where(fn (Builder $member) => $member
+                ->whereNull('actor_role_code')
+                ->orWhere('actor_role_code', '!=', AuditEntry::STAFF_ROLE_CODE));
     }
 
     /**
