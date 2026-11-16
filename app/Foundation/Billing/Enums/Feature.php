@@ -18,6 +18,7 @@ enum Feature: string
     case TemplateEngine = 'template_engine';
     case GoogleOAuth = 'google_oauth';
     case AuditLogSearch = 'audit_log_search';
+    case AuditLogExport = 'audit_log_export';
 
     // Deprecated — retained as a case (never hard-removed per S10b) but granted by
     // no plan or add-on, so the billing gate fails closed on it.
