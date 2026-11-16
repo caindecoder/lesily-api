@@ -30,11 +30,24 @@ class AuditLogRows
         return CarbonImmutable::now()->startOfDay()->subYearsNoOverflow($years);
     }
 
-    public function of(AuditLogFilters|AuditLogExportFilters $filters, Company $company): Builder
+    /**
+     * The first day the rows start on: the requested start, clamped to the plan's horizon.
+     */
+    public function from(AuditLogFilters|AuditLogExportFilters $filters, Company $company): CarbonImmutable
     {
         $retentionFrom = $this->retentionFrom($company);
-        $from = $filters->within === null ? $retentionFrom : $retentionFrom->max($filters->within->getStartDate());
+
+        return $filters->within === null ? $retentionFrom : $retentionFrom->max($filters->within->getStartDate());
+    }
+
+    /**
+     * @param  CarbonImmutable|null  $before  a moment the rows must come before (an export's start)
+     */
+    public function of(AuditLogFilters|AuditLogExportFilters $filters, Company $company, ?CarbonImmutable $before = null): Builder
+    {
+        $from = $this->from($filters, $company);
         $until = $filters->within?->getIncludedEndDate()->toImmutable()->addDay();
+        $until = $before === null ? $until : ($until?->min($before) ?? $before);
 
         return $this->searchedAccessRows($this->accessRows($company, $from, $until), $filters)
             ->unionAll($this->searchedSecurityRows($this->securityRows($company, $from, $until), $filters))

@@ -95,6 +95,21 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         $this->assertExportUnavailable($response);
     }
 
+    #[Test]
+    public function when_the_export_is_refused_then_nothing_is_recorded(): void
+    {
+        // Given the owner of a Pro company
+        $company = Company::factory()->onPlan(BillingPlan::Pro)->createOne();
+        $owner = $this->aConsentingMember($company, 'owner');
+
+        // When the owner tries to export the audit logs
+        $response = $this->exportAuditLogs($owner, $company, ['format' => 'csv']);
+
+        // Then the export is refused and no audit row records it
+        $response->assertForbidden();
+        $this->assertDatabaseCount('audit_trail', 0);
+    }
+
     /**
      * @param  array<string, mixed>  $query
      */
@@ -243,6 +258,20 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     }
 
     #[Test]
+    public function when_the_logs_are_exported_then_the_file_stops_at_the_export_moment(): void
+    {
+        // Given a sign-in a second before the export and one at its moment
+        $before = $this->aSignInAt('2026-11-15 14:29:59')->createOne();
+        $this->aSignInAt('2026-11-15 14:30:00')->createOne();
+
+        // When the owner exports the audit logs
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+
+        // Then the file holds only what was logged before the export began, not the export's own row
+        $this->assertSame([$before->getKey()], array_column($this->csvRowsOf($response), 'id'));
+    }
+
+    #[Test]
     public function when_a_live_trial_company_exports_then_it_is_served(): void
     {
         // Given a company on its trial, and its owner
@@ -325,15 +354,47 @@ class ExportAuditLogsTest extends AuditTrailTestCase
             ->foldedSince(CarbonImmutable::parse('2026-11-10 09:02:00'), 6)
             ->createOne();
         $this->aChangeAt('2026-11-09 16:45:00')->createOne();
+        $listed = $this->viewAuditLogs($this->owner, $this->enterprise, ['per_page' => 100])->json('data');
 
         // When the owner exports the audit logs as JSON
         $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'json']);
 
-        // Then the file holds the rows the list shows, in the list's order
+        // Then the file holds the rows the list showed, in the list's order
         $this->assertExportServed($response, 'json');
-        $listed = $this->viewAuditLogs($this->owner, $this->enterprise, ['per_page' => 100])->json('data');
         $this->assertCount(2, $listed);
         $this->assertSame($listed, $this->exportedRowsOf($response, 'json'));
+    }
+
+    #[Test]
+    public function when_the_logs_are_exported_then_one_warning_row_records_the_format_range_and_filters(): void
+    {
+        // Given the owner of the Enterprise company (setUp)
+
+        // When the owner exports failed sign-ins from a date range further back than the plan keeps, as JSON
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, [
+            'format' => 'json', 'within' => '2015-01-01,2026-11-14', 'event' => 'login_failed',
+        ]);
+
+        // Then one warning row records the export: the company, the range exported and the filter used
+        $response->assertOk();
+        $this->assertExportRecorded(['format' => 'json', 'from' => '2019-11-15', 'until' => '2026-11-14', 'event' => 'login_failed']);
+    }
+
+    #[Test]
+    public function when_the_logs_are_exported_then_the_export_shows_in_the_audit_logs(): void
+    {
+        // Given the owner exported the audit logs
+        $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv'])->assertOk();
+
+        // When the owner searches the audit logs for exports
+        $response = $this->viewAuditLogs($this->owner, $this->enterprise, ['event' => 'audit_logs_exported']);
+
+        // Then the export is listed under the owner's name
+        $response->assertOk();
+        $this->assertSame([['event' => 'audit_logs_exported', 'user_id' => $this->owner->getKey()]], array_map(
+            fn (array $row): array => ['event' => $row['event'], 'user_id' => $row['user_id']],
+            $response->json('data'),
+        ));
     }
 
     /**
@@ -510,6 +571,25 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         $response->assertOk();
         $response->assertDownload("audit-logs-2026-11-15.{$format}");
         $response->assertHeader('Content-Type', self::CONTENT_TYPES[$format]);
+    }
+
+    /**
+     * @param  array<string, string>  $metadata
+     */
+    protected function assertExportRecorded(array $metadata): void
+    {
+        $entry = AuditEntry::query()->sole();
+
+        $this->assertSame(
+            [AuditAction::AuditLogsExported, 'warning', AuditSubjectType::Company, $this->enterprise->getKey(), $this->owner->getKey()],
+            [$entry->action, $entry->severity, $entry->subject_type, $entry->subject_id, $entry->actor_user_id],
+        );
+        $this->assertSame($this->enterprise->getKey(), $entry->company_id);
+        $stored = $entry->metadata;
+        $this->assertIsArray($stored);
+        ksort($stored);
+        ksort($metadata);
+        $this->assertSame($metadata, $stored);
     }
 
     protected function assertExportUnavailable(TestResponse $response): void

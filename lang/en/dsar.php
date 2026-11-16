@@ -171,6 +171,7 @@ return [
             'company_details_updated' => 'Company details updated',
             'company_settings_updated' => 'Company settings updated',
             'company_setting_reset' => 'Company setting reset to the country default',
+            'audit_logs_exported' => 'Audit logs exported',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',

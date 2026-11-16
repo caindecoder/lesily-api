@@ -4,11 +4,13 @@ namespace App\Foundation\AuditTrail\IO\Http\Controllers;
 
 use stdClass;
 use SplFileObject;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\LazyCollection;
 use App\Foundation\AuditTrail\Enums\ExportFormat;
+use App\Foundation\AuditTrail\Values\RequestOrigin;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Foundation\AuditTrail\UseCases\Commands\AuditLogFilters;
 use App\Foundation\AuditTrail\IO\Http\Resources\AuditLogRowResource;
@@ -31,7 +33,10 @@ class AuditLogController extends Controller
     public function export(Request $request, ExportAuditLogsInteractor $interactor): StreamedResponse
     {
         $filters = AuditLogExportFilters::fromQuery($request);
-        $rows = $interactor->execute($filters, $request->company());
+        /** @var User $actor — guaranteed by auth:sanctum */
+        $actor = $request->user();
+
+        $rows = $interactor->execute($filters, $actor, RequestOrigin::fromRequest($request));
 
         return response()->streamDownload(
             fn () => $filters->format === ExportFormat::Json ? $this->writeJson($rows, $request) : $this->writeCsv($rows, $request),
