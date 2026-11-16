@@ -17,6 +17,16 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
 class AuditLogRowResource extends JsonResource
 {
     /**
+     * The row's fields, in the order the row shows them.
+     *
+     * @var list<string>
+     */
+    public const array FIELDS = [
+        'id', 'kind', 'time', 'first_seen_at', 'occurrences', 'user_id', 'user_name',
+        'event', 'event_words', 'outcome', 'outcome_words', 'ip_address', 'device',
+    ];
+
+    /**
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array

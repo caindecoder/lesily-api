@@ -4,6 +4,7 @@ namespace Tests\Feature\Foundation\AuditTrail;
 
 use Closure;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
@@ -11,8 +12,15 @@ use Illuminate\Testing\TestResponse;
 use Database\Factories\CompanyFactory;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
+use Database\Factories\AccessLogEntryFactory;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\AccessLog\Entities\AccessLogEntry;
+use App\Foundation\AccessLog\Enums\AccessEventReason;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 
 class ExportAuditLogsTest extends AuditTrailTestCase
 {
@@ -20,6 +28,14 @@ class ExportAuditLogsTest extends AuditTrailTestCase
      * @var array<string, string>
      */
     protected const array CONTENT_TYPES = ['csv' => 'text/csv; charset=UTF-8', 'json' => 'application/json'];
+
+    /**
+     * @var list<string>
+     */
+    protected const array CSV_HEADER = [
+        'id', 'kind', 'time', 'first_seen_at', 'occurrences', 'user_id', 'user_name',
+        'event', 'event_words', 'outcome', 'outcome_words', 'ip_address', 'device',
+    ];
 
     protected Company $enterprise;
 
@@ -124,6 +140,108 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     }
 
     #[Test]
+    public function when_another_company_has_logs_then_its_rows_are_not_exported(): void
+    {
+        // Given a sign-in in the Enterprise company and one in company B
+        $ours = $this->aSignInAt('2026-11-10 12:00:00')->createOne();
+        $this->aSignInAt('2026-11-10 12:00:00')->forCompany($this->companyB)->createOne();
+
+        // When the owner exports the audit logs
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+
+        // Then only the company's own row is in the file
+        $this->assertSame([$ours->getKey()], array_column($this->csvRowsOf($response), 'id'));
+    }
+
+    #[Test]
+    public function when_rows_lie_past_the_horizon_then_the_export_starts_at_the_horizon(): void
+    {
+        // Given a sign-in on the horizon's first moment and one just before it
+        $first = $this->aSignInAt('2019-11-15 00:00:00')->createOne();
+        $this->aSignInAt('2019-11-14 23:59:59')->createOne();
+
+        // When the owner exports from further back than the plan keeps
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv', 'within' => '2015-01-01,2026-11-15']);
+
+        // Then the file starts at the horizon
+        $this->assertSame([$first->getKey()], array_column($this->csvRowsOf($response), 'id'));
+    }
+
+    #[Test]
+    #[DataProvider('provideFormats')]
+    public function when_a_staff_row_is_exported_then_it_shows_lesily_support_without_address(string $format): void
+    {
+        // Given a change Lesily staff made in the Enterprise company
+        AuditEntry::factory()
+            ->forCompany($this->enterprise)
+            ->byStaff(User::factory()->named('Staff Member')->createOne())
+            ->ofAction(AuditAction::RoleChanged, AuditSubjectType::User)
+            ->fromOrigin('192.0.2.44', 'Staff browser')
+            ->recordedAt(CarbonImmutable::parse('2026-11-10 12:00:00'))
+            ->createOne();
+
+        // When the owner exports the audit logs
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => $format]);
+
+        // Then the row names Lesily support and shows no address or device
+        $expected = ['user_id' => null, 'user_name' => 'Lesily support', 'ip_address' => null, 'device' => null];
+        $this->assertSame([$expected], array_map(
+            fn (array $row): array => array_intersect_key($row, $expected),
+            $this->exportedRowsOf($response, $format),
+        ));
+    }
+
+    #[Test]
+    #[DataProvider('provideEmptyFiles')]
+    public function when_nothing_matches_then_the_file_holds_no_rows(string $format, string $file): void
+    {
+        // Given no audit-log rows in the Enterprise company
+
+        // When the owner exports the audit logs
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => $format]);
+
+        // Then the file holds no rows
+        $this->assertSame($file, $response->streamedContent());
+    }
+
+    #[Test]
+    #[DataProvider('provideSearchKeys')]
+    public function when_a_search_filter_is_given_then_only_matching_rows_are_exported(string $key): void
+    {
+        // Given a member's failed sign-in and another person's sign-in from elsewhere
+        $member = User::factory()->createOne();
+        $match = $this->aSignInAt('2026-11-10 12:00:00')->byUser($member)
+            ->ofEvent(AccessEvent::LoginFailed, AccessEventReason::WrongPassword)
+            ->fromOrigin('203.0.113.5', 'Firefox on Linux')->createOne();
+        $this->aSignInAt('2026-11-10 12:00:00')->fromOrigin('198.51.100.7', 'Edge on Windows')->createOne();
+        $search = ['user' => $member->getKey(), 'event' => 'login_failed', 'ip' => '203.0.113.5'];
+
+        // When the owner exports with the one search key
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv', $key => $search[$key]]);
+
+        // Then only the matching row is in the file
+        $this->assertSame([$match->getKey()], array_column($this->csvRowsOf($response), 'id'));
+    }
+
+    #[Test]
+    public function when_rows_were_inserted_out_of_order_then_they_export_newest_first(): void
+    {
+        // Given two sign-ins sharing a time, and a newer one inserted between them
+        $earlier = $this->aSignInAt('2026-11-10 10:00:00')->createOne();
+        $newest = $this->aSignInAt('2026-11-10 12:00:00')->createOne();
+        $sameTime = $this->aSignInAt('2026-11-10 10:00:00')->createOne();
+
+        // When the owner exports the audit logs
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+
+        // Then the newest comes first, and rows that share a time by id, newest first
+        $this->assertSame(
+            [$newest->getKey(), ...$this->newestIdFirst([$earlier->getKey(), $sameTime->getKey()])],
+            array_column($this->csvRowsOf($response), 'id'),
+        );
+    }
+
+    #[Test]
     public function when_a_live_trial_company_exports_then_it_is_served(): void
     {
         // Given a company on its trial, and its owner
@@ -149,6 +267,52 @@ class ExportAuditLogsTest extends AuditTrailTestCase
 
         // Then the file is served
         $this->assertExportServed($response, 'csv');
+    }
+
+    #[Test]
+    public function when_an_enterprise_owner_exports_csv_then_the_rows_stream_as_a_csv_file(): void
+    {
+        // Given a member's folded failed sign-in and an admin's password change
+        $member = User::factory()->named('Nimal Perera')->createOne();
+        $signIn = AccessLogEntry::factory()
+            ->forCompany($this->enterprise)
+            ->byUser($member)
+            ->ofEvent(AccessEvent::LoginFailed, AccessEventReason::WrongPassword)
+            ->fromOrigin('203.0.113.5', 'Firefox on Linux')
+            ->seenAt(CarbonImmutable::parse('2026-11-10 09:06:00'))
+            ->foldedSince(CarbonImmutable::parse('2026-11-10 09:02:00'), 6)
+            ->createOne();
+        $change = AuditEntry::factory()
+            ->forCompany($this->enterprise)
+            ->byMember(User::factory()->named('Kamala Silva')->createOne(), 'admin')
+            ->ofAction(AuditAction::PasswordChanged, AuditSubjectType::User)
+            ->fromOrigin('198.51.100.20', 'Safari on macOS')
+            ->recordedAt(CarbonImmutable::parse('2026-11-09 16:45:00'))
+            ->createOne();
+
+        // When the owner exports the audit logs as CSV
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+
+        // Then the file holds both rows, newest first, every field shown
+        $this->assertExportServed($response, 'csv');
+        $this->assertSame([
+            [
+                'id' => $signIn->getKey(), 'kind' => 'access', 'time' => '2026-11-10T09:06:00.000000Z',
+                'first_seen_at' => '2026-11-10T09:02:00.000000Z', 'occurrences' => '6',
+                'user_id' => $member->getKey(), 'user_name' => 'Nimal Perera',
+                'event' => 'login_failed', 'event_words' => 'Sign-in failed',
+                'outcome' => 'wrong_password', 'outcome_words' => 'Wrong password',
+                'ip_address' => '203.0.113.5', 'device' => 'Firefox on Linux',
+            ],
+            [
+                'id' => $change->getKey(), 'kind' => 'audit', 'time' => '2026-11-09T16:45:00.000000Z',
+                'first_seen_at' => '2026-11-09T16:45:00.000000Z', 'occurrences' => '1',
+                'user_id' => $change->actor_user_id, 'user_name' => 'Kamala Silva',
+                'event' => 'password_changed', 'event_words' => 'Password changed',
+                'outcome' => '', 'outcome_words' => '',
+                'ip_address' => '198.51.100.20', 'device' => 'Safari on macOS',
+            ],
+        ], $this->csvRowsOf($response));
     }
 
     /**
@@ -217,6 +381,38 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     /**
      * @return array<string, array{string}>
      */
+    public static function provideFormats(): array
+    {
+        return [
+            'csv' => ['csv'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function provideEmptyFiles(): array
+    {
+        return [
+            'csv: the header only' => ['csv', "id,kind,time,first_seen_at,occurrences,user_id,user_name,event,event_words,outcome,outcome_words,ip_address,device\n"],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideSearchKeys(): array
+    {
+        return [
+            'by user' => ['user'],
+            'by event' => ['event'],
+            'by ip' => ['ip'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
     public static function provideExportingRoles(): array
     {
         return [
@@ -235,6 +431,46 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         }
 
         return $this->getJson('/api/v1/audit-logs/export?'.http_build_query($query), ['X-Company-Context' => $company->getKey()]);
+    }
+
+    protected function aSignInAt(string $seenAt): AccessLogEntryFactory
+    {
+        return AccessLogEntry::factory()
+            ->forCompany($this->enterprise)
+            ->byUser(User::factory()->createOne())
+            ->seenAt(CarbonImmutable::parse($seenAt));
+    }
+
+    /**
+     * The exported rows, each keyed by its field names; a CSV's empty cell reads as null.
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function exportedRowsOf(TestResponse $response, string $format): array
+    {
+        if ($format === 'json') {
+            return json_decode((string) $response->streamedContent(), associative: true, flags: JSON_THROW_ON_ERROR);
+        }
+
+        return array_map(
+            fn (array $row): array => array_map(fn (?string $cell): ?string => $cell === '' ? null : $cell, $row),
+            $this->csvRowsOf($response),
+        );
+    }
+
+    /**
+     * The CSV's lines after its header, each keyed by the header's names.
+     *
+     * @return list<array<string, ?string>>
+     */
+    protected function csvRowsOf(TestResponse $response): array
+    {
+        $lines = array_map(str_getcsv(...), explode("\n", rtrim((string) $response->streamedContent(), "\n")));
+        $header = array_shift($lines);
+
+        $this->assertSame(self::CSV_HEADER, $header);
+
+        return array_map(fn (array $line): array => array_combine(self::CSV_HEADER, $line), $lines);
     }
 
     protected function assertExportServed(TestResponse $response, string $format): void

@@ -10,6 +10,7 @@ use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AuditTrail\UseCases\Commands\AuditLogFilters;
 use App\Foundation\AuditTrail\UseCases\Rules\MemberOrLesilySupport;
+use App\Foundation\AuditTrail\UseCases\Commands\AuditLogExportFilters;
 
 /**
  * A company's audit logs: its access-log rows and its security-relevant audit-trail rows,
@@ -29,7 +30,7 @@ class AuditLogRows
         return CarbonImmutable::now()->startOfDay()->subYearsNoOverflow($years);
     }
 
-    public function of(AuditLogFilters $filters, Company $company): Builder
+    public function of(AuditLogFilters|AuditLogExportFilters $filters, Company $company): Builder
     {
         $retentionFrom = $this->retentionFrom($company);
         $from = $filters->within === null ? $retentionFrom : $retentionFrom->max($filters->within->getStartDate());
@@ -41,7 +42,7 @@ class AuditLogRows
             ->orderByDesc('id');
     }
 
-    protected function searchedAccessRows(Builder $rows, AuditLogFilters $filters): Builder
+    protected function searchedAccessRows(Builder $rows, AuditLogFilters|AuditLogExportFilters $filters): Builder
     {
         return $rows
             ->when($filters->user, fn (Builder $query, string $user) => $query->where('access_log.user_id', $user))
@@ -49,7 +50,7 @@ class AuditLogRows
             ->when($filters->ip, fn (Builder $query, string $ip) => $query->where('access_log.ip_address', $ip));
     }
 
-    protected function searchedSecurityRows(Builder $rows, AuditLogFilters $filters): Builder
+    protected function searchedSecurityRows(Builder $rows, AuditLogFilters|AuditLogExportFilters $filters): Builder
     {
         return $rows
             ->when($filters->user, fn (Builder $query, string $user) => $this->byUser($query, $user))
