@@ -4,7 +4,6 @@ namespace App\Foundation\AuditTrail\UseCases\Commands;
 
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
-use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Spatie\LaravelData\Attributes\WithCast;
 use Illuminate\Validation\ValidationException;
@@ -18,7 +17,7 @@ use App\Foundation\AuditTrail\UseCases\Rules\MemberOrLesilySupport;
 /**
  * Which audit-log rows are wanted: a date range and the Pro search keys.
  */
-abstract class AuditLogCriteria extends Data
+trait FiltersAuditLogs
 {
     #[WithCast(CarbonPeriodCast::class)]
     public ?CarbonPeriod $within = null;
@@ -54,7 +53,7 @@ abstract class AuditLogCriteria extends Data
     /**
      * @return array<string, array<int, mixed>>
      */
-    protected static function criteriaRules(): array
+    protected static function filterRules(): array
     {
         return [
             'within' => ['filled', 'sometimes', 'bail', 'string', new IsoDateRange],

@@ -3,11 +3,14 @@
 namespace App\Foundation\AuditTrail\UseCases\Commands;
 
 use Illuminate\Http\Request;
+use Spatie\LaravelData\Data;
 use Spatie\LaravelData\Attributes\MapInputName;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
-class AuditLogFilters extends AuditLogCriteria
+class AuditLogFilters extends Data
 {
+    use FiltersAuditLogs;
+
     /**
      * @var list<string>
      */
@@ -31,7 +34,7 @@ class AuditLogFilters extends AuditLogCriteria
     public static function rules(ValidationContext $context): array
     {
         return [
-            ...static::criteriaRules(),
+            ...static::filterRules(),
             'page' => ['filled', 'sometimes', 'integer', 'min:1'],
             'per_page' => ['filled', 'sometimes', 'integer', 'min:1', 'max:100'],
         ];

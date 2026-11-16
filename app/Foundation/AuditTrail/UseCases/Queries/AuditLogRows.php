@@ -8,7 +8,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Database\Query\Builder;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use App\Foundation\AuditTrail\UseCases\Commands\AuditLogCriteria;
+use App\Foundation\AuditTrail\UseCases\Commands\AuditLogFilters;
 use App\Foundation\AuditTrail\UseCases\Rules\MemberOrLesilySupport;
 
 /**
@@ -29,32 +29,32 @@ class AuditLogRows
         return CarbonImmutable::now()->startOfDay()->subYearsNoOverflow($years);
     }
 
-    public function of(AuditLogCriteria $criteria, Company $company): Builder
+    public function of(AuditLogFilters $filters, Company $company): Builder
     {
         $retentionFrom = $this->retentionFrom($company);
-        $from = $criteria->within === null ? $retentionFrom : $retentionFrom->max($criteria->within->getStartDate());
-        $until = $criteria->within?->getIncludedEndDate()->toImmutable()->addDay();
+        $from = $filters->within === null ? $retentionFrom : $retentionFrom->max($filters->within->getStartDate());
+        $until = $filters->within?->getIncludedEndDate()->toImmutable()->addDay();
 
-        return $this->searchedAccessRows($this->accessRows($company, $from, $until), $criteria)
-            ->unionAll($this->searchedSecurityRows($this->securityRows($company, $from, $until), $criteria))
+        return $this->searchedAccessRows($this->accessRows($company, $from, $until), $filters)
+            ->unionAll($this->searchedSecurityRows($this->securityRows($company, $from, $until), $filters))
             ->orderByDesc('time')
             ->orderByDesc('id');
     }
 
-    protected function searchedAccessRows(Builder $rows, AuditLogCriteria $criteria): Builder
+    protected function searchedAccessRows(Builder $rows, AuditLogFilters $filters): Builder
     {
         return $rows
-            ->when($criteria->user, fn (Builder $query, string $user) => $query->where('access_log.user_id', $user))
-            ->when($criteria->event, fn (Builder $query, string $event) => $query->where('access_log.event', $event))
-            ->when($criteria->ip, fn (Builder $query, string $ip) => $query->where('access_log.ip_address', $ip));
+            ->when($filters->user, fn (Builder $query, string $user) => $query->where('access_log.user_id', $user))
+            ->when($filters->event, fn (Builder $query, string $event) => $query->where('access_log.event', $event))
+            ->when($filters->ip, fn (Builder $query, string $ip) => $query->where('access_log.ip_address', $ip));
     }
 
-    protected function searchedSecurityRows(Builder $rows, AuditLogCriteria $criteria): Builder
+    protected function searchedSecurityRows(Builder $rows, AuditLogFilters $filters): Builder
     {
         return $rows
-            ->when($criteria->user, fn (Builder $query, string $user) => $this->byUser($query, $user))
-            ->when($criteria->event, fn (Builder $query, string $event) => $query->where('action', $event))
-            ->when($criteria->ip, fn (Builder $query, string $ip) => $this->exceptStaff($query->where('ip_address', $ip)));
+            ->when($filters->user, fn (Builder $query, string $user) => $this->byUser($query, $user))
+            ->when($filters->event, fn (Builder $query, string $event) => $query->where('action', $event))
+            ->when($filters->ip, fn (Builder $query, string $ip) => $this->exceptStaff($query->where('ip_address', $ip)));
     }
 
     protected function byUser(Builder $rows, string $user): Builder
