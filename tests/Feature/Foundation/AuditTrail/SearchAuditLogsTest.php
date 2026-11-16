@@ -165,6 +165,36 @@ class SearchAuditLogsTest extends AuditTrailTestCase
         $this->assertEntriesListed($response, [$change->getKey()]);
     }
 
+    #[Test]
+    public function when_another_company_has_matching_rows_then_they_are_not_listed(): void
+    {
+        // Given the member's sign-in here, and the member's sign-in and change from the same address in company B
+        $signIn = $this->aSignInBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->create();
+        AccessLogEntry::factory()->forCompany($this->companyB)->byUser($this->member)->fromOrigin('203.0.113.5', 'Firefox')->create();
+        AuditEntry::factory()->forCompany($this->companyB)->byMember($this->member, 'admin')
+            ->ofAction(AuditAction::PasswordChanged, AuditSubjectType::User)->fromOrigin('203.0.113.5', 'Firefox')->create();
+
+        // When the owner searches by the member and the address
+        $response = $this->searchAuditLogs(['user' => $this->member->getKey(), 'ip' => '203.0.113.5']);
+
+        // Then only this company's sign-in is listed
+        $this->assertEntriesListed($response, [$signIn->getKey()]);
+    }
+
+    #[Test]
+    public function when_a_matching_row_is_past_the_horizon_then_it_is_not_listed(): void
+    {
+        // Given the member's sign-ins on the first day Pro keeps and the second before it
+        $onTheFirstDay = $this->aSignInBy($this->member)->seenAt(CarbonImmutable::parse('2023-11-15 00:00:00'))->create();
+        $this->aSignInBy($this->member)->seenAt(CarbonImmutable::parse('2023-11-14 23:59:59'))->create();
+
+        // When the owner searches by the member
+        $response = $this->searchAuditLogs(['user' => $this->member->getKey()]);
+
+        // Then only the sign-in inside the horizon is listed
+        $this->assertEntriesListed($response, [$onTheFirstDay->getKey()]);
+    }
+
     /**
      * @param  Closure(CompanyFactory): CompanyFactory  $standing
      */
@@ -261,6 +291,29 @@ class SearchAuditLogsTest extends AuditTrailTestCase
 
         // Then only the rows from the address are listed, newest first
         $this->assertEntriesListed($response, [$change->getKey(), $signIn->getKey()]);
+    }
+
+    #[Test]
+    public function when_search_filters_combine_with_dates_then_only_rows_matching_all_are_listed_newest_first(): void
+    {
+        // Given the member's rows from the address inside the dates, inserted out of time order, and rows each missing one condition
+        $other = User::factory()->create();
+        $second = $this->aChangeBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->recordedAt(CarbonImmutable::parse('2026-11-05 09:00:00'))->create();
+        $newest = $this->aSignInBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->seenAt(CarbonImmutable::parse('2026-11-14 23:59:59'))->create();
+        $oldest = $this->aSignInBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->seenAt(CarbonImmutable::parse('2026-11-01 00:00:00'))->create();
+        $this->aSignInBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->seenAt(CarbonImmutable::parse('2026-11-15 00:00:00'))->create();
+        $this->aSignInBy($other)->fromOrigin('203.0.113.5', 'Firefox')->seenAt(CarbonImmutable::parse('2026-11-06 09:00:00'))->create();
+        $this->aChangeBy($this->member)->fromOrigin('198.51.100.7', 'Safari')->recordedAt(CarbonImmutable::parse('2026-11-07 09:00:00'))->create();
+
+        // When the owner searches by the member and the address within the dates
+        $response = $this->searchAuditLogs([
+            'user' => $this->member->getKey(),
+            'ip' => '203.0.113.5',
+            'within' => '2026-11-01,2026-11-14',
+        ]);
+
+        // Then only the rows matching all three are listed, newest first
+        $this->assertEntriesListed($response, [$newest->getKey(), $second->getKey(), $oldest->getKey()]);
     }
 
     /**
