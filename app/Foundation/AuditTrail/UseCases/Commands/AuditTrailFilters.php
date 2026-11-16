@@ -2,9 +2,7 @@
 
 namespace App\Foundation\AuditTrail\UseCases\Commands;
 
-use Closure;
 use Carbon\CarbonPeriod;
-use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
@@ -17,11 +15,10 @@ use App\Foundation\UseCases\Casts\CarbonPeriodCast;
 use App\Foundation\UseCases\Attributes\OpaqueString;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
+use App\Foundation\AuditTrail\UseCases\Rules\MemberOrLesilySupport;
 
 class AuditTrailFilters extends Data
 {
-    public const string LESILY_SUPPORT = 'lesily_support';
-
     /**
      * @var list<string>
      */
@@ -63,21 +60,11 @@ class AuditTrailFilters extends Data
     {
         return [
             'within' => ['filled', 'sometimes', 'bail', 'string', new IsoDateRange],
-            'actor' => ['filled', 'sometimes', 'bail', 'string', self::memberOrLesilySupportRule()],
+            'actor' => ['filled', 'sometimes', 'bail', 'string', new MemberOrLesilySupport],
             'action' => ['filled', 'sometimes', 'string', Rule::enum(AuditAction::class)],
             'subject_type' => ['filled', 'sometimes', 'string', Rule::enum(AuditSubjectType::class)],
             'page' => ['filled', 'sometimes', 'integer', 'min:1'],
             'per_page' => ['filled', 'sometimes', 'integer', 'min:1', 'max:100'],
         ];
-    }
-
-    protected static function memberOrLesilySupportRule(): Closure
-    {
-        return function (string $attribute, mixed $value, Closure $fail): void {
-            /** @var string $value bail + string precede this rule */
-            if ($value !== self::LESILY_SUPPORT && ! Str::isUuid($value)) {
-                $fail("The {$attribute} filter must be a member's id or lesily_support.");
-            }
-        };
     }
 }
