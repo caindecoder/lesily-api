@@ -52,4 +52,20 @@ enum AuditAction: string
     case CompanyDetailsUpdated = 'company_details_updated';
     case CompanySettingsUpdated = 'company_settings_updated';
     case CompanySettingReset = 'company_setting_reset';
+
+    /**
+     * The actions the audit logs show beside the access log (AR16).
+     *
+     * @var list<AuditAction>
+     */
+    public const array SECURITY_ACTIONS = [
+        self::PasswordChanged,
+        self::PasswordReset,
+        self::TwoFactorEnabled,
+        self::TwoFactorDisabled,
+        self::RecoveryCodesRegenerated,
+        self::RoleChanged,
+        self::MemberRemoved,
+        self::DsarDownloaded,
+    ];
 }

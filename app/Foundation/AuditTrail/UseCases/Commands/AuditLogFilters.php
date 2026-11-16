@@ -5,10 +5,13 @@ namespace App\Foundation\AuditTrail\UseCases\Commands;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
 use Spatie\LaravelData\Data;
+use Illuminate\Validation\Rule;
 use Spatie\LaravelData\Attributes\WithCast;
 use Illuminate\Validation\ValidationException;
+use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\UseCases\Rules\IsoDateRange;
 use Spatie\LaravelData\Attributes\MapInputName;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\UseCases\Casts\CarbonPeriodCast;
 use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
@@ -64,7 +67,7 @@ class AuditLogFilters extends Data
         return [
             'within' => ['filled', 'sometimes', 'bail', 'string', new IsoDateRange],
             'user' => ['filled', 'sometimes', 'bail', 'string', new MemberOrLesilySupport],
-            'event' => ['filled', 'sometimes', 'string'],
+            'event' => ['filled', 'sometimes', 'string', Rule::in([...AccessEvent::cases(), ...AuditAction::SECURITY_ACTIONS])],
             'ip' => ['filled', 'sometimes', 'string'],
             'page' => ['filled', 'sometimes', 'integer', 'min:1'],
             'per_page' => ['filled', 'sometimes', 'integer', 'min:1', 'max:100'],

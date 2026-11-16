@@ -16,22 +16,6 @@ use App\Foundation\AuditTrail\UseCases\Rules\MemberOrLesilySupport;
 
 class ListAuditLogsInteractor
 {
-    /**
-     * The audit-trail actions the audit logs show beside the access log.
-     *
-     * @var list<AuditAction>
-     */
-    protected const array SECURITY_ACTIONS = [
-        AuditAction::PasswordChanged,
-        AuditAction::PasswordReset,
-        AuditAction::TwoFactorEnabled,
-        AuditAction::TwoFactorDisabled,
-        AuditAction::RecoveryCodesRegenerated,
-        AuditAction::RoleChanged,
-        AuditAction::MemberRemoved,
-        AuditAction::DsarDownloaded,
-    ];
-
     protected const int NO_PLAN_HORIZON_YEARS = 1;
 
     public function execute(AuditLogFilters $filters, Company $company): AuditLogPage
@@ -55,12 +39,16 @@ class ListAuditLogsInteractor
 
     protected function searchedAccessRows(Builder $rows, AuditLogFilters $filters): Builder
     {
-        return $rows->when($filters->user, fn (Builder $query, string $user) => $query->where('access_log.user_id', $user));
+        return $rows
+            ->when($filters->user, fn (Builder $query, string $user) => $query->where('access_log.user_id', $user))
+            ->when($filters->event, fn (Builder $query, string $event) => $query->where('access_log.event', $event));
     }
 
     protected function searchedSecurityRows(Builder $rows, AuditLogFilters $filters): Builder
     {
-        return $rows->when($filters->user, fn (Builder $query, string $user) => $this->byUser($query, $user));
+        return $rows
+            ->when($filters->user, fn (Builder $query, string $user) => $this->byUser($query, $user))
+            ->when($filters->event, fn (Builder $query, string $event) => $query->where('action', $event));
     }
 
     protected function byUser(Builder $rows, string $user): Builder
@@ -127,7 +115,7 @@ class ListAuditLogsInteractor
                 'user_agent as device',
             ])
             ->where('company_id', $company->getKey())
-            ->whereIn('action', self::SECURITY_ACTIONS)
+            ->whereIn('action', AuditAction::SECURITY_ACTIONS)
             ->where('recorded_at', '>=', $from)
             ->when($until, fn (Builder $query, CarbonImmutable $until) => $query->where('recorded_at', '<', $until));
     }

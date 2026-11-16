@@ -14,11 +14,13 @@ use Database\Factories\AuditEntryFactory;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Database\Factories\AccessLogEntryFactory;
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
+use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Foundation\AuditTrail\UseCases\Commands\AuditLogFilters;
 
@@ -188,6 +190,36 @@ class SearchAuditLogsTest extends AuditTrailTestCase
         $this->assertEntriesListed($response, [$staffChange->getKey()]);
     }
 
+    #[Test]
+    public function when_filtered_by_a_sign_in_event_then_only_those_access_rows_are_listed(): void
+    {
+        // Given a failed sign-in, a successful one and a change
+        $failed = $this->aSignInBy($this->member)->ofEvent(AccessEvent::LoginFailed, AccessEventReason::WrongPassword)->create();
+        $this->aSignInBy($this->member)->create();
+        $this->aChangeBy($this->member)->create();
+
+        // When the owner searches by the failed sign-in event
+        $response = $this->searchAuditLogs(['event' => 'login_failed']);
+
+        // Then only the failed sign-in is listed
+        $this->assertEntriesListed($response, [$failed->getKey()]);
+    }
+
+    #[Test]
+    public function when_filtered_by_a_security_action_then_only_those_changes_are_listed(): void
+    {
+        // Given a password change, a 2FA disable and a sign-in
+        $passwordChange = $this->aChangeBy($this->member)->create();
+        $this->aChangeBy($this->member)->ofAction(AuditAction::TwoFactorDisabled, AuditSubjectType::User)->create();
+        $this->aSignInBy($this->member)->create();
+
+        // When the owner searches by the password-change action
+        $response = $this->searchAuditLogs(['event' => 'password_changed']);
+
+        // Then only the password change is listed
+        $this->assertEntriesListed($response, [$passwordChange->getKey()]);
+    }
+
     /**
      * @return array<string, array{Closure(CompanyFactory): CompanyFactory, array<string, string>}>
      */
@@ -235,6 +267,9 @@ class SearchAuditLogsTest extends AuditTrailTestCase
         return [
             'user neither a member id nor lesily_support' => [['user' => 'someone'], 'user', "The user filter must be a member's id or lesily_support."],
             'array-valued user' => [['user' => ['someone']], 'user', 'The user field must be a string.'],
+            'event that is no logged code' => [['event' => 'sideways'], 'event', 'The selected event is invalid.'],
+            'event the audit logs never show' => [['event' => 'invitation_sent'], 'event', 'The selected event is invalid.'],
+            'array-valued event' => [['event' => ['login_failed']], 'event', 'The event field must be a string.'],
         ];
     }
 
@@ -245,6 +280,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     {
         return [
             'empty user' => ['user', ''],
+            'empty event' => ['event', ''],
         ];
     }
 
