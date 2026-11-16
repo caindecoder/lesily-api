@@ -22,7 +22,7 @@ enum BillingPlan: string
         return match ($this) {
             self::Free => [],
             self::Starter => [Feature::EmployeeDirectory, Feature::GoogleOAuth],
-            self::Pro => [...self::Starter->features(), Feature::TwoFactorAuth],
+            self::Pro => [...self::Starter->features(), Feature::TwoFactorAuth, Feature::AuditLogSearch],
             // Enterprise adds nothing over Pro in chunk-1; returns Pro's set directly
             // (a re-spread [...] would be a no-op). Becomes [...self::Pro->features(), …]
             // when an Enterprise-only feature lands.

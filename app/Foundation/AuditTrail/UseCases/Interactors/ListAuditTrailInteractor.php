@@ -10,6 +10,7 @@ use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Foundation\AuditTrail\UseCases\Commands\AuditTrailFilters;
+use App\Foundation\AuditTrail\UseCases\Rules\MemberOrLesilySupport;
 
 class ListAuditTrailInteractor
 {
@@ -39,7 +40,7 @@ class ListAuditTrailInteractor
      */
     protected function byActor(Builder $query, string $actor): Builder
     {
-        if ($actor === AuditTrailFilters::LESILY_SUPPORT) {
+        if ($actor === MemberOrLesilySupport::LESILY_SUPPORT) {
             return $query->where('audit_trail.actor_role_code', AuditEntry::STAFF_ROLE_CODE);
         }
 

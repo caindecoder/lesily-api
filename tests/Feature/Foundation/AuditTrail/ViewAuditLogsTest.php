@@ -625,9 +625,6 @@ class ViewAuditLogsTest extends AuditTrailTestCase
 
         return [
             'unknown key' => [['sort' => 'time'], 'sort', $notSupported],
-            'search by user before Pro search exists' => [['user' => 'someone'], 'user', $notSupported],
-            'search by event before Pro search exists' => [['event' => 'login_failed'], 'event', $notSupported],
-            'search by ip before Pro search exists' => [['ip' => '203.0.113.5'], 'ip', $notSupported],
             'per_page below floor' => [['per_page' => 0], 'per_page', 'The per page field must be at least 1.'],
             'per_page above cap' => [['per_page' => 101], 'per_page', 'The per page field must not be greater than 100.'],
             'per_page not a number' => [['per_page' => 'abc'], 'per_page', 'The per page field must be an integer.'],

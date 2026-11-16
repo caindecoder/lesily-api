@@ -6,43 +6,70 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Database\Query\Builder;
+use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AuditTrail\Values\AuditLogPage;
 use App\Foundation\AuditTrail\UseCases\Commands\AuditLogFilters;
+use App\Foundation\Billing\Exceptions\FeatureUnavailableException;
+use App\Foundation\AuditTrail\UseCases\Rules\MemberOrLesilySupport;
 
 class ListAuditLogsInteractor
 {
-    /**
-     * The audit-trail actions the audit logs show beside the access log.
-     *
-     * @var list<AuditAction>
-     */
-    protected const array SECURITY_ACTIONS = [
-        AuditAction::PasswordChanged,
-        AuditAction::PasswordReset,
-        AuditAction::TwoFactorEnabled,
-        AuditAction::TwoFactorDisabled,
-        AuditAction::RecoveryCodesRegenerated,
-        AuditAction::RoleChanged,
-        AuditAction::MemberRemoved,
-        AuditAction::DsarDownloaded,
-    ];
-
     protected const int NO_PLAN_HORIZON_YEARS = 1;
 
     public function execute(AuditLogFilters $filters, Company $company): AuditLogPage
     {
+        if ($filters->usesSearch() && ! $company->canUseFeature(Feature::AuditLogSearch)) {
+            throw FeatureUnavailableException::forFeature(Feature::AuditLogSearch);
+        }
+
         $retentionFrom = $this->retentionFrom($company);
         $from = $filters->within === null ? $retentionFrom : $retentionFrom->max($filters->within->getStartDate());
         $until = $filters->within?->getIncludedEndDate()->toImmutable()->addDay();
 
-        $rows = $this->accessRows($company, $from, $until)
-            ->unionAll($this->securityRows($company, $from, $until))
+        $rows = $this->searchedAccessRows($this->accessRows($company, $from, $until), $filters)
+            ->unionAll($this->searchedSecurityRows($this->securityRows($company, $from, $until), $filters))
             ->orderByDesc('time')
             ->orderByDesc('id')
             ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
 
         return new AuditLogPage($rows, $retentionFrom);
+    }
+
+    protected function searchedAccessRows(Builder $rows, AuditLogFilters $filters): Builder
+    {
+        return $rows
+            ->when($filters->user, fn (Builder $query, string $user) => $query->where('access_log.user_id', $user))
+            ->when($filters->event, fn (Builder $query, string $event) => $query->where('access_log.event', $event))
+            ->when($filters->ip, fn (Builder $query, string $ip) => $query->where('access_log.ip_address', $ip));
+    }
+
+    protected function searchedSecurityRows(Builder $rows, AuditLogFilters $filters): Builder
+    {
+        return $rows
+            ->when($filters->user, fn (Builder $query, string $user) => $this->byUser($query, $user))
+            ->when($filters->event, fn (Builder $query, string $event) => $query->where('action', $event))
+            ->when($filters->ip, fn (Builder $query, string $ip) => $this->exceptStaff($query->where('ip_address', $ip)));
+    }
+
+    protected function byUser(Builder $rows, string $user): Builder
+    {
+        if ($user === MemberOrLesilySupport::LESILY_SUPPORT) {
+            return $rows->where('actor_role_code', AuditEntry::STAFF_ROLE_CODE);
+        }
+
+        return $this->exceptStaff($rows->where('actor_user_id', $user));
+    }
+
+    /**
+     * A staff row's actor and address are never shown, so no search may match them.
+     */
+    protected function exceptStaff(Builder $rows): Builder
+    {
+        return $rows->where(fn (Builder $member) => $member
+            ->whereNull('actor_role_code')
+            ->orWhere('actor_role_code', '!=', AuditEntry::STAFF_ROLE_CODE));
     }
 
     /**
@@ -96,7 +123,7 @@ class ListAuditLogsInteractor
                 'user_agent as device',
             ])
             ->where('company_id', $company->getKey())
-            ->whereIn('action', self::SECURITY_ACTIONS)
+            ->whereIn('action', AuditAction::SECURITY_ACTIONS)
             ->where('recorded_at', '>=', $from)
             ->when($until, fn (Builder $query, CarbonImmutable $until) => $query->where('recorded_at', '<', $until));
     }
