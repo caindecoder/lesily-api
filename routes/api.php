@@ -329,6 +329,10 @@ Route::get('/v1/audit-trail', [AuditTrailController::class, 'index'])
 Route::get('/v1/audit-logs', [AuditLogController::class, 'index'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:audit.view']);
 
+// Export the audit logs (UC-1-067 alt 3b) — the filtered list streamed as CSV or JSON, Enterprise.
+Route::get('/v1/audit-logs/export', [AuditLogController::class, 'export'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:audit.view', 'feature:audit_log_export']);
+
 // View the privacy notice (UC-1-074) — the 13 Schedule V items; every member, open past the consent gate.
 Route::get('/v1/privacy/notice', [PrivacyNoticeController::class, 'show'])
     ->middleware(['auth:sanctum', 'auth.company']);
