@@ -54,7 +54,7 @@ class AuditLogFilters extends Data
         return static::validateAndCreate($request->query());
     }
 
-    public function searches(): bool
+    public function usesSearch(): bool
     {
         return $this->user !== null || $this->event !== null || $this->ip !== null;
     }

@@ -8,7 +8,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Translation\PotentiallyTranslatedString;
 
 /**
- * A member's id, or the word for every Lesily staff row (AR24). The property's
+ * A member's id, or the word for every Lesily staff row. The property's
  * `bail` + `string` rules precede it.
  */
 class MemberOrLesilySupport implements ValidationRule

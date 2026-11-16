@@ -265,16 +265,16 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     #[Test]
     public function when_filtered_by_a_security_action_then_only_those_changes_are_listed(): void
     {
-        // Given a password change, a 2FA disable and a sign-in
-        $passwordChange = $this->aChangeBy($this->member)->createOne();
-        $this->aChangeBy($this->member)->ofAction(AuditAction::TwoFactorDisabled, AuditSubjectType::User)->createOne();
+        // Given a 2FA disable, a password change and a sign-in
+        $twoFactorDisabled = $this->aChangeBy($this->member)->ofAction(AuditAction::TwoFactorDisabled, AuditSubjectType::User)->createOne();
+        $this->aChangeBy($this->member)->createOne();
         $this->aSignInBy($this->member)->createOne();
 
-        // When the owner searches by the password-change action
-        $response = $this->searchAuditLogs(['event' => 'password_changed']);
+        // When the owner searches by the 2FA-disable action
+        $response = $this->searchAuditLogs(['event' => 'two_factor_disabled']);
 
-        // Then only the password change is listed
-        $this->assertEntriesListed($response, [$passwordChange->getKey()]);
+        // Then only the 2FA disable is listed
+        $this->assertEntriesListed($response, [$twoFactorDisabled->getKey()]);
     }
 
     #[Test]

@@ -20,7 +20,7 @@ class ListAuditLogsInteractor
 
     public function execute(AuditLogFilters $filters, Company $company): AuditLogPage
     {
-        if ($filters->searches() && ! $company->canUseFeature(Feature::AuditLogSearch)) {
+        if ($filters->usesSearch() && ! $company->canUseFeature(Feature::AuditLogSearch)) {
             throw FeatureUnavailableException::forFeature(Feature::AuditLogSearch);
         }
 

@@ -54,7 +54,7 @@ enum AuditAction: string
     case CompanySettingReset = 'company_setting_reset';
 
     /**
-     * The actions the audit logs show beside the access log (AR16).
+     * The actions the audit logs show beside the access log.
      *
      * @var list<AuditAction>
      */
