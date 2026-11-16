@@ -316,6 +316,20 @@ class SearchAuditLogsTest extends AuditTrailTestCase
         $this->assertEntriesListed($response, [$newest->getKey(), $second->getKey(), $oldest->getKey()]);
     }
 
+    #[Test]
+    public function when_the_audit_logs_are_searched_then_no_audit_entry_is_written(): void
+    {
+        // Given the member's sign-in
+        $this->aSignInBy($this->member)->createOne();
+
+        // When the owner searches by the member
+        $response = $this->searchAuditLogs(['user' => $this->member->getKey()]);
+
+        // Then the search leaves no audit-trail row
+        $response->assertOk();
+        $this->assertDatabaseCount('audit_trail', 0);
+    }
+
     /**
      * @return array<string, array{Closure(CompanyFactory): CompanyFactory, array<string, string>}>
      */
@@ -328,6 +342,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
         ];
         $searches = [
             'by user' => ['user' => '0199a0b0-0000-7000-8000-000000000001'],
+            'by lesily support' => ['user' => 'lesily_support'],
             'by event' => ['event' => 'login_failed'],
             'by ip' => ['ip' => '203.0.113.5'],
         ];
@@ -364,7 +379,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
             'user neither a member id nor lesily_support' => [['user' => 'someone'], 'user', "The user filter must be a member's id or lesily_support."],
             'array-valued user' => [['user' => ['someone']], 'user', 'The user field must be a string.'],
             'event that is no logged code' => [['event' => 'sideways'], 'event', 'The selected event is invalid.'],
-            'event the audit logs never show' => [['event' => 'invitation_sent'], 'event', 'The selected event is invalid.'],
+            'event the audit logs never show' => [['event' => 'user_invited'], 'event', 'The selected event is invalid.'],
             'array-valued event' => [['event' => ['login_failed']], 'event', 'The event field must be a string.'],
             'ip that is only part of an address' => [['ip' => '203.0.113'], 'ip', 'The ip field must be a valid IP address.'],
             'array-valued ip' => [['ip' => ['203.0.113.5']], 'ip', 'The ip field must be a string.'],
