@@ -170,6 +170,47 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     }
 
     #[Test]
+    public function when_the_company_is_named_in_other_letter_case_then_the_hourly_limit_still_applies(): void
+    {
+        // Given the owner has exported the audit logs ten times this hour
+        $this->exhaustTheHourlyExports($this->owner, $this->enterprise);
+
+        // When the owner exports again, naming the company in capital letters
+        Sanctum::actingAs($this->owner);
+        $response = $this->getJson('/api/v1/audit-logs/export?format=csv', ['X-Company-Context' => strtoupper($this->enterprise->getKey())]);
+
+        // Then the export is throttled
+        $this->assertRefusedWith($response, Response::HTTP_TOO_MANY_REQUESTS, ApiErrorCode::RateLimitExceeded);
+    }
+
+    #[Test]
+    public function when_less_than_an_hour_has_passed_then_the_export_is_still_throttled(): void
+    {
+        // Given the owner exported the audit logs ten times, 59 minutes ago
+        $this->exhaustTheHourlyExports($this->owner, $this->enterprise);
+        $this->travel(59)->minutes();
+
+        // When the owner exports again
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+
+        // Then the export is throttled
+        $this->assertRefusedWith($response, Response::HTTP_TOO_MANY_REQUESTS, ApiErrorCode::RateLimitExceeded);
+    }
+
+    #[Test]
+    public function when_nine_exports_were_made_this_hour_then_the_tenth_is_served(): void
+    {
+        // Given the owner has exported the audit logs nine times this hour
+        $this->exportRepeatedly($this->owner, $this->enterprise, 9);
+
+        // When the owner exports a tenth time
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+
+        // Then the export is served
+        $response->assertOk();
+    }
+
+    #[Test]
     public function when_an_hour_has_passed_then_the_export_is_allowed_again(): void
     {
         // Given the owner exported the audit logs ten times, an hour ago
@@ -188,7 +229,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
      */
     #[Test]
     #[DataProvider('provideOtherExporters')]
-    public function when_another_exporter_is_unaffected_by_one_members_limit(Closure $exporter): void
+    public function when_one_member_used_the_hourly_limit_then_another_exporter_is_served(Closure $exporter): void
     {
         // Given the owner has used this hour's ten exports of the Enterprise company
         $this->exhaustTheHourlyExports($this->owner, $this->enterprise);
@@ -636,7 +677,12 @@ class ExportAuditLogsTest extends AuditTrailTestCase
 
     protected function exhaustTheHourlyExports(User $actor, Company $company): void
     {
-        for ($export = 0; $export < 10; $export++) {
+        $this->exportRepeatedly($actor, $company, 10);
+    }
+
+    protected function exportRepeatedly(User $actor, Company $company, int $times): void
+    {
+        for ($export = 0; $export < $times; $export++) {
             $this->exportAuditLogs($actor, $company, ['format' => 'csv']);
         }
     }
