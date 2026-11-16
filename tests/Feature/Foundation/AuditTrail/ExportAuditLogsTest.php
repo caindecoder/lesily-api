@@ -19,6 +19,7 @@ use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
@@ -153,6 +154,51 @@ class ExportAuditLogsTest extends AuditTrailTestCase
 
         // Then the key is rejected
         $this->assertValidationRejected($response, $key, 'This filter is not supported.');
+    }
+
+    #[Test]
+    public function when_an_eleventh_export_is_made_within_the_hour_then_it_is_throttled(): void
+    {
+        // Given the owner has exported the audit logs ten times this hour
+        $this->exhaustTheHourlyExports($this->owner, $this->enterprise);
+
+        // When the owner exports an eleventh time
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+
+        // Then the export is throttled
+        $this->assertRefusedWith($response, Response::HTTP_TOO_MANY_REQUESTS, ApiErrorCode::RateLimitExceeded);
+    }
+
+    #[Test]
+    public function when_an_hour_has_passed_then_the_export_is_allowed_again(): void
+    {
+        // Given the owner exported the audit logs ten times, an hour ago
+        $this->exhaustTheHourlyExports($this->owner, $this->enterprise);
+        $this->travel(61)->minutes();
+
+        // When the owner exports again
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+
+        // Then the export is served
+        $response->assertOk();
+    }
+
+    /**
+     * @param  Closure(self): array{User, Company}  $exporter
+     */
+    #[Test]
+    #[DataProvider('provideOtherExporters')]
+    public function when_another_exporter_is_unaffected_by_one_members_limit(Closure $exporter): void
+    {
+        // Given the owner has used this hour's ten exports of the Enterprise company
+        $this->exhaustTheHourlyExports($this->owner, $this->enterprise);
+        [$actor, $company] = $exporter($this);
+
+        // When the other exporter exports
+        $response = $this->exportAuditLogs($actor, $company, ['format' => 'csv']);
+
+        // Then the export is served
+        $response->assertOk();
     }
 
     #[Test]
@@ -461,6 +507,17 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     }
 
     /**
+     * @return array<string, array{Closure(self): array{User, Company}}>
+     */
+    public static function provideOtherExporters(): array
+    {
+        return [
+            'another member of the company' => [fn (self $test) => [$test->aConsentingMember($test->enterprise, 'admin'), $test->enterprise]],
+            'the same owner in another company' => [fn (self $test) => $test->theOwnerInAnotherEnterprise()],
+        ];
+    }
+
+    /**
      * @return array<string, array{string}>
      */
     public static function provideFormats(): array
@@ -515,6 +572,25 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         }
 
         return $this->getJson('/api/v1/audit-logs/export?'.http_build_query($query), ['X-Company-Context' => $company->getKey()]);
+    }
+
+    /**
+     * @return array{User, Company}
+     */
+    protected function theOwnerInAnotherEnterprise(): array
+    {
+        $company = Company::factory()->onPlan(BillingPlan::Enterprise)->createOne();
+        $this->attachMember($company, $this->owner, Role::query()->where('code', 'owner')->sole());
+        $this->aConsentRecordedBy($this->owner, $company);
+
+        return [$this->owner, $company];
+    }
+
+    protected function exhaustTheHourlyExports(User $actor, Company $company): void
+    {
+        for ($export = 0; $export < 10; $export++) {
+            $this->exportAuditLogs($actor, $company, ['format' => 'csv']);
+        }
     }
 
     protected function aSignInAt(string $seenAt): AccessLogEntryFactory
