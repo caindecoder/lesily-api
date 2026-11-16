@@ -23,10 +23,7 @@ enum BillingPlan: string
             self::Free => [],
             self::Starter => [Feature::EmployeeDirectory, Feature::GoogleOAuth],
             self::Pro => [...self::Starter->features(), Feature::TwoFactorAuth, Feature::AuditLogSearch],
-            // Enterprise adds nothing over Pro in chunk-1; returns Pro's set directly
-            // (a re-spread [...] would be a no-op). Becomes [...self::Pro->features(), …]
-            // when an Enterprise-only feature lands.
-            self::Enterprise => self::Pro->features(),
+            self::Enterprise => [...self::Pro->features(), Feature::AuditLogExport],
         };
     }
 

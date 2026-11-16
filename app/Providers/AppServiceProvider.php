@@ -96,5 +96,13 @@ class AppServiceProvider extends ServiceProvider
         // One fresh verification link per signed-in person per minute, keyed by the person,
         // not the IP. Mounted before auth-tier, so a refused repeat spends no shared budget.
         RateLimiter::for('email-verification', fn (Request $request) => Limit::perMinute(1)->by((string) $request->user()?->getAuthIdentifier()));
+
+        // Ten audit-log exports an hour per person per company (questionnaire §14, "bulk export
+        // 10/hr"). Laravel sorts throttles before auth.company, so the company is the one the
+        // request names, lower-cased because a company id matches in any letter case; a company the
+        // person is not in is refused right after.
+        RateLimiter::for('audit-log-export', fn (Request $request) => Limit::perHour(10)->by(
+            Str::lower(trim((string) $request->header('X-Company-Context'))).':'.$request->user()?->getAuthIdentifier()
+        ));
     }
 }

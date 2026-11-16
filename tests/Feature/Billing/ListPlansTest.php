@@ -162,7 +162,7 @@ class ListPlansTest extends BillingTestCase
             [
                 'code' => 'enterprise',
                 'label' => 'Enterprise',
-                'features' => ['employee_directory', 'google_oauth', 'two_factor_auth', 'audit_log_search'],
+                'features' => ['employee_directory', 'google_oauth', 'two_factor_auth', 'audit_log_search', 'audit_log_export'],
                 'monthly_price_cents' => 75000,
                 'annual_price_cents' => 60000,
                 'currency' => 'LKR',

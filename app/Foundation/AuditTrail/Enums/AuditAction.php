@@ -52,6 +52,7 @@ enum AuditAction: string
     case CompanyDetailsUpdated = 'company_details_updated';
     case CompanySettingsUpdated = 'company_settings_updated';
     case CompanySettingReset = 'company_setting_reset';
+    case AuditLogsExported = 'audit_logs_exported';
 
     /**
      * The actions the audit logs show beside the access log.
@@ -67,5 +68,6 @@ enum AuditAction: string
         self::RoleChanged,
         self::MemberRemoved,
         self::DsarDownloaded,
+        self::AuditLogsExported,
     ];
 }
