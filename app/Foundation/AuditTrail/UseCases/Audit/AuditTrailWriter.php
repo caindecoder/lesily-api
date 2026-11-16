@@ -8,7 +8,7 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 
 /**
- * The fields every audit row fills the same way, written inside the caller's transaction.
+ * The fields every audit row fills the same way, written inside the caller's transaction when it has one.
  */
 class AuditTrailWriter
 {

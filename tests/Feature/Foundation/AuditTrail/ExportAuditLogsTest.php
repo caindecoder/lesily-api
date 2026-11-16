@@ -114,6 +114,32 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         $this->assertDatabaseCount('audit_trail', 0);
     }
 
+    #[Test]
+    public function when_the_export_is_rejected_as_invalid_then_nothing_is_recorded(): void
+    {
+        // Given the owner of the Enterprise company (setUp)
+
+        // When the owner exports in a format not offered
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'xlsx']);
+
+        // Then the export is rejected and no audit row records it
+        $response->assertUnprocessable();
+        $this->assertDatabaseCount('audit_trail', 0);
+    }
+
+    #[Test]
+    public function when_a_member_exports_a_company_they_are_not_in_then_access_is_denied(): void
+    {
+        // Given the owner of the Enterprise company, who is not a member of another Enterprise company
+        $other = Company::factory()->onPlan(BillingPlan::Enterprise)->createOne();
+
+        // When the owner exports the other company's audit logs
+        $response = $this->exportAuditLogs($this->owner, $other, ['format' => 'csv']);
+
+        // Then access to the other company is denied
+        $this->assertCompanyAccessDenied($response);
+    }
+
     /**
      * @param  array<string, mixed>  $query
      */
@@ -542,10 +568,23 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     }
 
     #[Test]
+    public function when_the_whole_log_is_exported_then_the_row_records_the_horizon_to_today_and_no_filters(): void
+    {
+        // Given the owner of the Enterprise company (setUp)
+
+        // When the owner exports everything, with no date range and no search
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+
+        // Then the row records the plan's horizon to today and no filter
+        $response->assertOk();
+        $this->assertExportRecorded(['format' => 'csv', 'from' => '2019-11-15', 'until' => '2026-11-15']);
+    }
+
+    #[Test]
     public function when_the_logs_are_exported_then_the_export_shows_in_the_audit_logs(): void
     {
         // Given the owner exported the audit logs
-        $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv'])->assertOk();
+        $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
 
         // When the owner searches the audit logs for exports
         $response = $this->viewAuditLogs($this->owner, $this->enterprise, ['event' => 'audit_logs_exported']);
@@ -813,7 +852,10 @@ class ExportAuditLogsTest extends AuditTrailTestCase
             [AuditAction::AuditLogsExported, 'warning', AuditSubjectType::Company, $this->enterprise->getKey(), $this->owner->getKey()],
             [$entry->action, $entry->severity, $entry->subject_type, $entry->subject_id, $entry->actor_user_id],
         );
-        $this->assertSame($this->enterprise->getKey(), $entry->company_id);
+        $this->assertSame(
+            [$this->enterprise->getKey(), 'owner', '127.0.0.1', 'Symfony'],
+            [$entry->company_id, $entry->actor_role_code, $entry->ip_address, $entry->user_agent],
+        );
         $stored = $entry->metadata;
         $this->assertIsArray($stored);
         ksort($stored);
