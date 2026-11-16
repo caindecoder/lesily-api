@@ -6,9 +6,11 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Database\Query\Builder;
+use App\Foundation\Billing\Enums\Feature;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Values\AuditLogPage;
 use App\Foundation\AuditTrail\UseCases\Commands\AuditLogFilters;
+use App\Foundation\Billing\Exceptions\FeatureUnavailableException;
 
 class ListAuditLogsInteractor
 {
@@ -32,6 +34,10 @@ class ListAuditLogsInteractor
 
     public function execute(AuditLogFilters $filters, Company $company): AuditLogPage
     {
+        if ($filters->searches() && ! $company->canUseFeature(Feature::AuditLogSearch)) {
+            throw FeatureUnavailableException::forFeature(Feature::AuditLogSearch);
+        }
+
         $retentionFrom = $this->retentionFrom($company);
         $from = $filters->within === null ? $retentionFrom : $retentionFrom->max($filters->within->getStartDate());
         $until = $filters->within?->getIncludedEndDate()->toImmutable()->addDay();
