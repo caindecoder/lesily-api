@@ -30,7 +30,7 @@ class ExportAuditLogsInteractor
         $exportedAt = CarbonImmutable::now();
         $this->recordExport($filters, $actor, $origin);
 
-        return $this->auditLogRows->of($filters, $filters->company, $exportedAt)->lazy();
+        return $this->auditLogRows->newestFirst($filters, $exportedAt);
     }
 
     protected function recordExport(AuditLogExportFilters $filters, User $actor, RequestOrigin $origin): void

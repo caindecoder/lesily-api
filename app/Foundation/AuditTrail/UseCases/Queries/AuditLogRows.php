@@ -2,10 +2,13 @@
 
 namespace App\Foundation\AuditTrail\UseCases\Queries;
 
+use stdClass;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\LazyCollection;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AuditTrail\UseCases\Commands\AuditLogFilters;
@@ -19,6 +22,31 @@ use App\Foundation\AuditTrail\UseCases\Commands\AuditLogExportFilters;
 class AuditLogRows
 {
     protected const int NO_PLAN_HORIZON_YEARS = 1;
+
+    public function __construct(protected int $pageSize = 1000) {}
+
+    /**
+     * Every row, newest first, read a page at a time; each page starts after the last row read,
+     * so a row that leaves the list mid-read never shifts the pages after it.
+     *
+     * @return LazyCollection<int, stdClass>
+     */
+    public function newestFirst(AuditLogExportFilters $filters, CarbonImmutable $before): LazyCollection
+    {
+        return LazyCollection::make(function () use ($filters, $before) {
+            $last = null;
+
+            do {
+                $page = $this->merged($this->halves($filters, $filters->company, $before), $last)->limit($this->pageSize)->get();
+
+                foreach ($page as $row) {
+                    yield $row;
+                }
+
+                $last = $page->last();
+            } while ($page->count() === $this->pageSize);
+        });
+    }
 
     /**
      * The first day the company's plan keeps — a company with no plan in force keeps one year.
@@ -45,14 +73,53 @@ class AuditLogRows
      */
     public function of(AuditLogFilters|AuditLogExportFilters $filters, Company $company, ?CarbonImmutable $before = null): Builder
     {
+        return $this->merged($this->halves($filters, $company, $before), null);
+    }
+
+    /**
+     * The access-log half and the audit-trail half, each filtered and cut to the range.
+     *
+     * @return array{Builder, Builder}
+     */
+    protected function halves(AuditLogFilters|AuditLogExportFilters $filters, Company $company, ?CarbonImmutable $before): array
+    {
         $from = $this->from($filters, $company);
         $until = $filters->within?->getIncludedEndDate()->toImmutable()->addDay();
         $until = $before === null ? $until : ($until?->min($before) ?? $before);
 
-        return $this->searchedAccessRows($this->accessRows($company, $from, $until), $filters)
-            ->unionAll($this->searchedSecurityRows($this->securityRows($company, $from, $until), $filters))
-            ->orderByDesc('time')
-            ->orderByDesc('id');
+        return [
+            $this->searchedAccessRows($this->accessRows($company, $from, $until), $filters),
+            $this->searchedSecurityRows($this->securityRows($company, $from, $until), $filters),
+        ];
+    }
+
+    /**
+     * The two halves as one list, newest first; with a row given, only the rows after it.
+     *
+     * @param  array{Builder, Builder}  $halves
+     */
+    protected function merged(array $halves, ?stdClass $after): Builder
+    {
+        [$access, $security] = $halves;
+
+        if ($after !== null) {
+            $access = $this->olderThan($access, $after, 'access_log.last_seen_at');
+            $security = $this->olderThan($security, $after, 'audit_trail.recorded_at');
+        }
+
+        return $access->unionAll($security)->orderByDesc('time')->orderByDesc('id');
+    }
+
+    /**
+     * The rows that come after $row in the newest-first order: older, or as old with a lower id.
+     */
+    protected function olderThan(Builder $rows, stdClass $row, string $timeColumn): Builder
+    {
+        $idColumn = Str::before($timeColumn, '.').'.id';
+
+        return $rows->where(fn (Builder $older) => $older
+            ->where($timeColumn, '<', $row->time)
+            ->orWhere(fn (Builder $sameTime) => $sameTime->where($timeColumn, $row->time)->where($idColumn, '<', $row->id)));
     }
 
     protected function searchedAccessRows(Builder $rows, AuditLogFilters|AuditLogExportFilters $filters): Builder

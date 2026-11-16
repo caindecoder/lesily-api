@@ -7,6 +7,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Database\Factories\CompanyFactory;
@@ -14,6 +15,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Database\Factories\AuditEntryFactory;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Database\Factories\AccessLogEntryFactory;
+use Illuminate\Database\Events\QueryExecuted;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -23,6 +25,7 @@ use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
+use App\Foundation\AuditTrail\UseCases\Queries\AuditLogRows;
 
 class ExportAuditLogsTest extends AuditTrailTestCase
 {
@@ -374,6 +377,44 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     }
 
     #[Test]
+    public function when_an_exported_row_is_folded_during_the_export_then_no_other_row_is_skipped(): void
+    {
+        // Given five sign-ins read two to a page, the newest folded again once the first page is written
+        $this->app->instance(AuditLogRows::class, new AuditLogRows(pageSize: 2));
+        $rows = array_map(fn (string $time): AccessLogEntry => $this->aSignInAt($time)->createOne(), [
+            '2026-11-10 15:00:00', '2026-11-10 14:00:00', '2026-11-10 13:00:00', '2026-11-10 12:00:00', '2026-11-10 11:00:00',
+        ]);
+        $this->foldAfterTheFirstPage($rows[0]);
+
+        // When the owner exports the audit logs
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+
+        // Then every row is in the file once, newest first
+        $this->assertSame(
+            array_map(fn (AccessLogEntry $row): string => $row->getKey(), $rows),
+            array_column($this->csvRowsOf($response), 'id'),
+        );
+    }
+
+    #[Test]
+    public function when_rows_sharing_a_time_span_two_pages_then_each_is_exported_once(): void
+    {
+        // Given two changes and a sign-in at the same moment, read two to a page
+        $this->app->instance(AuditLogRows::class, new AuditLogRows(pageSize: 2));
+        $ids = [
+            $this->aChangeAt('2026-11-10 12:00:00')->createOne()->getKey(),
+            $this->aChangeAt('2026-11-10 12:00:00')->createOne()->getKey(),
+            $this->aSignInAt('2026-11-10 12:00:00')->createOne()->getKey(),
+        ];
+
+        // When the owner exports the audit logs
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+
+        // Then each row is in the file once, by id, newest first
+        $this->assertSame($this->newestIdFirst($ids), array_column($this->csvRowsOf($response), 'id'));
+    }
+
+    #[Test]
     public function when_the_logs_are_exported_then_the_file_stops_at_the_export_moment(): void
     {
         // Given a sign-in a second before the export and one at its moment
@@ -673,6 +714,24 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         $this->aConsentRecordedBy($this->owner, $company);
 
         return [$this->owner, $company];
+    }
+
+    /**
+     * Once the export's first page has been read, the row is seen again after the export began,
+     * as the access log folds a repeated refusal.
+     */
+    protected function foldAfterTheFirstPage(AccessLogEntry $row): void
+    {
+        $folded = false;
+
+        DB::listen(function (QueryExecuted $query) use (&$folded, $row): void {
+            if ($folded || ! str_contains($query->sql, 'union all')) {
+                return;
+            }
+
+            $folded = true;
+            DB::table('access_log')->where('id', $row->getKey())->update(['last_seen_at' => '2026-11-15 14:31:00']);
+        });
     }
 
     protected function exhaustTheHourlyExports(User $actor, Company $company): void
