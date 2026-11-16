@@ -11,6 +11,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Database\Factories\CompanyFactory;
 use PHPUnit\Framework\Attributes\Test;
+use Database\Factories\AuditEntryFactory;
 use App\Foundation\Billing\Enums\BillingPlan;
 use Database\Factories\AccessLogEntryFactory;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -315,6 +316,26 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         ], $this->csvRowsOf($response));
     }
 
+    #[Test]
+    public function when_exported_as_json_then_the_rows_stream_as_the_lists_rows(): void
+    {
+        // Given a member's folded failed sign-in and an admin's password change
+        $this->aSignInAt('2026-11-10 09:06:00')
+            ->ofEvent(AccessEvent::LoginFailed, AccessEventReason::WrongPassword)
+            ->foldedSince(CarbonImmutable::parse('2026-11-10 09:02:00'), 6)
+            ->createOne();
+        $this->aChangeAt('2026-11-09 16:45:00')->createOne();
+
+        // When the owner exports the audit logs as JSON
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'json']);
+
+        // Then the file holds the rows the list shows, in the list's order
+        $this->assertExportServed($response, 'json');
+        $listed = $this->viewAuditLogs($this->owner, $this->enterprise, ['per_page' => 100])->json('data');
+        $this->assertCount(2, $listed);
+        $this->assertSame($listed, $this->exportedRowsOf($response, 'json'));
+    }
+
     /**
      * @return array<string, array{string}>
      */
@@ -385,6 +406,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     {
         return [
             'csv' => ['csv'],
+            'json' => ['json'],
         ];
     }
 
@@ -395,6 +417,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     {
         return [
             'csv: the header only' => ['csv', "id,kind,time,first_seen_at,occurrences,user_id,user_name,event,event_words,outcome,outcome_words,ip_address,device\n"],
+            'json: an empty list' => ['json', '[]'],
         ];
     }
 
@@ -439,6 +462,15 @@ class ExportAuditLogsTest extends AuditTrailTestCase
             ->forCompany($this->enterprise)
             ->byUser(User::factory()->createOne())
             ->seenAt(CarbonImmutable::parse($seenAt));
+    }
+
+    protected function aChangeAt(string $recordedAt): AuditEntryFactory
+    {
+        return AuditEntry::factory()
+            ->forCompany($this->enterprise)
+            ->byMember(User::factory()->createOne(), 'admin')
+            ->ofAction(AuditAction::PasswordChanged, AuditSubjectType::User)
+            ->recordedAt(CarbonImmutable::parse($recordedAt));
     }
 
     /**
