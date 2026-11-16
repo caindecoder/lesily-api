@@ -304,6 +304,35 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     }
 
     #[Test]
+    #[DataProvider('provideFormulaStarts')]
+    public function when_a_value_would_start_a_spreadsheet_formula_then_the_csv_keeps_it_as_text(string $start): void
+    {
+        // Given a sign-in whose device names a formula
+        $this->aSignInAt('2026-11-10 12:00:00')->fromOrigin('203.0.113.5', "{$start}HYPERLINK(\"http://x.test\")")->createOne();
+
+        // When the owner exports the audit logs as CSV
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+
+        // Then the device is written as text, not as a formula
+        $this->assertSame(["'{$start}HYPERLINK(\"http://x.test\")"], array_column($this->csvRowsOf($response), 'device'));
+    }
+
+    #[Test]
+    public function when_a_date_range_is_given_then_only_its_rows_are_exported(): void
+    {
+        // Given sign-ins before, inside and after a date range
+        $this->aSignInAt('2026-10-31 23:59:59')->createOne();
+        $inside = $this->aSignInAt('2026-11-05 12:00:00')->createOne();
+        $this->aSignInAt('2026-11-11 00:00:00')->createOne();
+
+        // When the owner exports the range
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv', 'within' => '2026-11-01,2026-11-10']);
+
+        // Then only the row inside the range is in the file
+        $this->assertSame([$inside->getKey()], array_column($this->csvRowsOf($response), 'id'));
+    }
+
+    #[Test]
     public function when_the_logs_are_exported_then_the_file_stops_at_the_export_moment(): void
     {
         // Given a sign-in a second before the export and one at its moment
@@ -392,7 +421,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     }
 
     #[Test]
-    public function when_exported_as_json_then_the_rows_stream_as_the_lists_rows(): void
+    public function when_exported_as_structured_data_then_the_rows_stream_as_the_lists_rows(): void
     {
         // Given a member's folded failed sign-in and an admin's password change
         $this->aSignInAt('2026-11-10 09:06:00')
@@ -416,14 +445,18 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     {
         // Given the owner of the Enterprise company (setUp)
 
-        // When the owner exports failed sign-ins from a date range further back than the plan keeps, as JSON
+        // When the owner exports their own failed sign-ins from one address, from further back than the plan keeps, as JSON
         $response = $this->exportAuditLogs($this->owner, $this->enterprise, [
-            'format' => 'json', 'within' => '2015-01-01,2026-11-14', 'event' => 'login_failed',
+            'format' => 'json', 'within' => '2015-01-01,2026-11-14',
+            'user' => $this->owner->getKey(), 'event' => 'login_failed', 'ip' => '203.0.113.5',
         ]);
 
-        // Then one warning row records the export: the company, the range exported and the filter used
+        // Then one warning row records the export: the company, the range exported and the filters used
         $response->assertOk();
-        $this->assertExportRecorded(['format' => 'json', 'from' => '2019-11-15', 'until' => '2026-11-14', 'event' => 'login_failed']);
+        $this->assertExportRecorded([
+            'format' => 'json', 'from' => '2019-11-15', 'until' => '2026-11-14',
+            'user' => $this->owner->getKey(), 'event' => 'login_failed', 'ip' => '203.0.113.5',
+        ]);
     }
 
     #[Test]
@@ -514,6 +547,21 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         return [
             'another member of the company' => [fn (self $test) => [$test->aConsentingMember($test->enterprise, 'admin'), $test->enterprise]],
             'the same owner in another company' => [fn (self $test) => $test->theOwnerInAnotherEnterprise()],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideFormulaStarts(): array
+    {
+        return [
+            'equals' => ['='],
+            'plus' => ['+'],
+            'minus' => ['-'],
+            'at' => ['@'],
+            'tab' => ["\t"],
+            'carriage return' => ["\r"],
         ];
     }
 

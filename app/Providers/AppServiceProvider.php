@@ -98,7 +98,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('email-verification', fn (Request $request) => Limit::perMinute(1)->by((string) $request->user()?->getAuthIdentifier()));
 
         // Ten audit-log exports an hour per person per company (questionnaire §14, "bulk export
-        // 10/hr"; AR70). Laravel sorts throttles before auth.company, so the company is the one the
+        // 10/hr"). Laravel sorts throttles before auth.company, so the company is the one the
         // request names; a company the person is not in is refused right after.
         RateLimiter::for('audit-log-export', fn (Request $request) => Limit::perHour(10)->by(
             $request->header('X-Company-Context').':'.$request->user()?->getAuthIdentifier()

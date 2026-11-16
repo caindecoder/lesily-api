@@ -71,7 +71,19 @@ class AuditLogController extends Controller
         $output->fputcsv(AuditLogRowResource::FIELDS, escape: '');
 
         foreach ($rows as $row) {
-            $output->fputcsv((new AuditLogRowResource($row))->toArray($request), escape: '');
+            $output->fputcsv(array_map($this->asText(...), (new AuditLogRowResource($row))->toArray($request)), escape: '');
         }
+    }
+
+    /**
+     * A spreadsheet runs a cell that starts with one of these as a formula; a leading apostrophe keeps it text.
+     */
+    protected function asText(mixed $cell): mixed
+    {
+        if (is_string($cell) && $cell !== '' && in_array($cell[0], ['=', '+', '-', '@', "\t", "\r"], strict: true)) {
+            return "'".$cell;
+        }
+
+        return $cell;
     }
 }
