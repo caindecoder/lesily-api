@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Compliance\Breach\UseCases\Commands;
+namespace App\Compliance\Breach\Values;
 
 use Spatie\LaravelData\Data;
 use App\Companies\Entities\Company;
@@ -13,7 +13,7 @@ use Spatie\LaravelData\Attributes\MapInputName;
  * One affected company with its own figures. Its rules live on
  * RecordBreachCommand::rules() under companies.*.
  */
-class AffectedCompanyData extends Data
+class AffectedCompany extends Data
 {
     #[MapInputName('companyId')]
     #[WithCast(ModelCast::class, Company::class)]

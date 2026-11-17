@@ -3,13 +3,11 @@
 namespace App\Billing\Invoices\UseCases\Commands;
 
 use Carbon\CarbonPeriod;
-use Illuminate\Http\Request;
-use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Spatie\LaravelData\Attributes\WithCast;
-use Illuminate\Validation\ValidationException;
 use App\Foundation\UseCases\Rules\IsoDateRange;
 use Spatie\LaravelData\Attributes\MapInputName;
+use App\Foundation\UseCases\Commands\QueryCommand;
 use App\Billing\Invoices\Enums\InvoiceStatusFilter;
 use App\Foundation\UseCases\Casts\CarbonPeriodCast;
 use App\Foundation\UseCases\Attributes\OpaqueString;
@@ -20,16 +18,16 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  * params per api-conventions §9 + §10. Shape-only validation; unknown query keys
  * are refused (the per-endpoint whitelist rule — §10.1, s134 F-a ruling: a
  * company_id tenant-override attempt 422s like any unknown key) because Data
- * would silently ignore them. MembershipFilters precedent.
+ * would silently ignore them. ListMembershipsCommand precedent.
  */
-class InvoiceFilters extends Data
+class ListInvoicesCommand extends QueryCommand
 {
     /**
      * The query keys this endpoint accepts (api-conventions §10.1 whitelist).
      *
      * @var list<string>
      */
-    private const array QUERY_KEY_WHITELIST = ['status', 'within', 'min_amount', 'max_amount', 'sort', 'page', 'per_page'];
+    protected const array QUERY_KEY_WHITELIST = ['status', 'within', 'min_amount', 'max_amount', 'sort', 'page', 'per_page'];
 
     /**
      * The sort tokens this endpoint accepts (api-1-invoices §2; `amount` maps to
@@ -53,24 +51,6 @@ class InvoiceFilters extends Data
     #[OpaqueString('a per-endpoint sort token the repository maps to columns')]
     public ?string $sort = null;
 
-    public ?int $page = null;
-
-    #[MapInputName('per_page')]
-    public ?int $perPage = null;
-
-    public static function fromQuery(Request $request): static
-    {
-        $unknownKeys = array_diff(array_keys($request->query()), self::QUERY_KEY_WHITELIST);
-
-        if ($unknownKeys !== []) {
-            throw ValidationException::withMessages(
-                array_fill_keys($unknownKeys, 'This filter is not supported.')
-            );
-        }
-
-        return static::validateAndCreate($request->query());
-    }
-
     /**
      * @return array<string, array<int, mixed>>
      */
@@ -80,6 +60,7 @@ class InvoiceFilters extends Data
         // only an implicit rule can refuse '' at this seam. Listed first so
         // its removal stays test-visible and the empty-value message leads.
         return [
+            ...parent::rules($context),
             'status' => ['filled', 'sometimes', 'string', Rule::enum(InvoiceStatusFilter::class)],
             // bail: the closure must never run on a non-string (an array
             // within[] would fatal on the string cast before the 422).
@@ -87,8 +68,6 @@ class InvoiceFilters extends Data
             'min_amount' => ['filled', 'sometimes', 'integer', 'min:0'],
             'max_amount' => ['filled', 'sometimes', 'integer', 'min:0'],
             'sort' => ['filled', 'sometimes', 'string', Rule::in(self::SORTABLE_FIELDS)],
-            'page' => ['filled', 'sometimes', 'integer', 'min:1'],
-            'per_page' => ['filled', 'sometimes', 'integer', 'min:1', 'max:100'],
         ];
     }
 }

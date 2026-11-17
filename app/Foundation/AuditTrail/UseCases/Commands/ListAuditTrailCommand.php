@@ -3,21 +3,19 @@
 namespace App\Foundation\AuditTrail\UseCases\Commands;
 
 use Carbon\CarbonPeriod;
-use Illuminate\Http\Request;
-use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Spatie\LaravelData\Attributes\WithCast;
-use Illuminate\Validation\ValidationException;
 use App\Foundation\UseCases\Rules\IsoDateRange;
 use Spatie\LaravelData\Attributes\MapInputName;
 use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\UseCases\Commands\QueryCommand;
 use App\Foundation\UseCases\Casts\CarbonPeriodCast;
 use App\Foundation\UseCases\Attributes\OpaqueString;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 use App\Foundation\AuditTrail\UseCases\Rules\MemberOrLesilySupport;
 
-class AuditTrailFilters extends Data
+class ListAuditTrailCommand extends QueryCommand
 {
     /**
      * @var list<string>
@@ -35,36 +33,17 @@ class AuditTrailFilters extends Data
     #[MapInputName('subject_type')]
     public ?AuditSubjectType $subjectType = null;
 
-    public ?int $page = null;
-
-    #[MapInputName('per_page')]
-    public ?int $perPage = null;
-
-    public static function fromQuery(Request $request): static
-    {
-        $unknownKeys = array_diff(array_keys($request->query()), self::QUERY_KEY_WHITELIST);
-
-        if ($unknownKeys !== []) {
-            throw ValidationException::withMessages(
-                array_fill_keys($unknownKeys, 'This filter is not supported.')
-            );
-        }
-
-        return static::validateAndCreate($request->query());
-    }
-
     /**
      * @return array<string, array<int, mixed>>
      */
     public static function rules(ValidationContext $context): array
     {
         return [
+            ...parent::rules($context),
             'within' => ['filled', 'sometimes', 'bail', 'string', new IsoDateRange],
             'actor' => ['filled', 'sometimes', 'bail', 'string', new MemberOrLesilySupport],
             'action' => ['filled', 'sometimes', 'string', Rule::enum(AuditAction::class)],
             'subject_type' => ['filled', 'sometimes', 'string', Rule::enum(AuditSubjectType::class)],
-            'page' => ['filled', 'sometimes', 'integer', 'min:1'],
-            'per_page' => ['filled', 'sometimes', 'integer', 'min:1', 'max:100'],
         ];
     }
 }

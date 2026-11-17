@@ -8,7 +8,6 @@ use App\Compliance\Breach\Enums\BreachDataType;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Enums\BreachAmendmentField;
 use App\Compliance\Breach\UseCases\Commands\AmendBreachCommand;
-use App\Compliance\Breach\UseCases\Commands\AffectedCompanyData;
 
 class BreachFacts
 {
@@ -118,7 +117,7 @@ class BreachFacts
     }
 
     /**
-     * @param  list<AffectedCompanyData>  $sent
+     * @param  list<AffectedCompany>  $sent
      * @return list<array{field: string, companyId: ?string, old: mixed, new: mixed}>
      */
     protected function companyChanges(array $sent): array

@@ -19,6 +19,7 @@ use App\Foundation\UseCases\Casts\ModelCast;
 use Spatie\LaravelData\Support\DataProperty;
 use Spatie\LaravelData\Casts\BuiltinTypeCast;
 use Illuminate\Validation\ValidationRuleParser;
+use App\Foundation\UseCases\Commands\QueryCommand;
 use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationPath;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
@@ -29,7 +30,7 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  */
 class CommandPropertiesAreTypedTest extends FoundationTestCase
 {
-    protected const int COMMANDS_AT_LEAST = 52;
+    protected const int COMMANDS_AT_LEAST = 75;
 
     #[Test]
     public function when_the_commands_are_walked_then_no_property_is_untyped(): void
@@ -73,7 +74,31 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
             }
         }
 
-        return $commands;
+        return [...$commands, ...$this->listItemClasses($commands)];
+    }
+
+    /**
+     * The item class of every #[DataCollectionOf] list a command holds, wherever it lives.
+     *
+     * @param  list<class-string<Data>>  $commands
+     * @return list<class-string<Data>>
+     */
+    protected function listItemClasses(array $commands): array
+    {
+        $items = [];
+
+        foreach ($commands as $command) {
+            foreach (app(DataConfig::class)->getDataClass($command)->properties as $property) {
+                /** @var class-string<Data>|null $item */
+                $item = $property->type->dataClass;
+
+                if ($item !== null && ! in_array($item, $commands, true)) {
+                    $items[] = $item;
+                }
+            }
+        }
+
+        return array_values(array_unique($items));
     }
 
     /**
@@ -135,7 +160,7 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
             'a date that is not Carbon' => ($this->holdsADate($parsed) && ! $this->isCarbon($typeName))
                 || $this->holdsANestedDateNotCarbon($property, $rules),
             'a mapper outside the id shape' => $property->inputMappedName !== null
-                && ! str_ends_with($property->className, 'Filters')
+                && ! is_a($property->className, QueryCommand::class, true)
                 && ! (is_subclass_of($typeName, Model::class) && $property->inputMappedName === $property->name.'Id'),
             'a model without ModelCast' => $this->holdsAModelWithoutCast($command, $property, $typeName),
         ];

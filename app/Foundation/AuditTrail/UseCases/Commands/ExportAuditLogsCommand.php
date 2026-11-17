@@ -3,7 +3,6 @@
 namespace App\Foundation\AuditTrail\UseCases\Commands;
 
 use Illuminate\Http\Request;
-use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use App\Companies\Entities\Company;
 use Spatie\LaravelData\Attributes\WithCast;
@@ -11,10 +10,8 @@ use App\Foundation\UseCases\Casts\ModelCast;
 use App\Foundation\AuditTrail\Enums\ExportFormat;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
 
-class AuditLogExportFilters extends Data
+class ExportAuditLogsCommand extends AuditLogsQueryCommand
 {
-    use FiltersAuditLogs;
-
     /**
      * @var list<string>
      */
@@ -25,13 +22,12 @@ class AuditLogExportFilters extends Data
 
     public ExportFormat $format;
 
-    public static function fromQuery(Request $request): static
+    /**
+     * @return array<string, mixed>
+     */
+    protected static function serverFilledKeys(Request $request): array
     {
-        static::refuseUnknownKeys($request, self::QUERY_KEY_WHITELIST);
-
-        $request->query->set('company', $request->company()->getKey());
-
-        return static::validateAndCreate($request->query());
+        return ['company' => $request->company()->getKey()];
     }
 
     /**
@@ -40,7 +36,7 @@ class AuditLogExportFilters extends Data
     public static function rules(ValidationContext $context): array
     {
         return [
-            ...static::filterRules(),
+            ...parent::rules($context),
             'format' => ['required', Rule::enum(ExportFormat::class)],
         ];
     }

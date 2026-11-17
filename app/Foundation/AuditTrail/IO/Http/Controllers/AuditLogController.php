@@ -12,10 +12,10 @@ use Illuminate\Support\LazyCollection;
 use App\Foundation\AuditTrail\Enums\ExportFormat;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use Symfony\Component\HttpFoundation\StreamedResponse;
-use App\Foundation\AuditTrail\UseCases\Commands\AuditLogFilters;
 use App\Foundation\AuditTrail\IO\Http\Resources\AuditLogRowResource;
+use App\Foundation\AuditTrail\UseCases\Commands\ListAuditLogsCommand;
 use App\Foundation\AuditTrail\IO\Http\Resources\AuditLogRowCollection;
-use App\Foundation\AuditTrail\UseCases\Commands\AuditLogExportFilters;
+use App\Foundation\AuditTrail\UseCases\Commands\ExportAuditLogsCommand;
 use App\Foundation\AuditTrail\UseCases\Interactors\ListAuditLogsInteractor;
 use App\Foundation\AuditTrail\UseCases\Interactors\ExportAuditLogsInteractor;
 
@@ -23,7 +23,7 @@ class AuditLogController extends Controller
 {
     public function index(Request $request, ListAuditLogsInteractor $interactor): JsonResponse
     {
-        $page = $interactor->execute(AuditLogFilters::fromQuery($request), $request->company());
+        $page = $interactor->execute(ListAuditLogsCommand::fromQuery($request), $request->company());
 
         return (new AuditLogRowCollection($page->rows))
             ->additional(['meta' => ['retention' => ['from' => $page->retentionFrom->toDateString()]]])
@@ -32,7 +32,7 @@ class AuditLogController extends Controller
 
     public function export(Request $request, ExportAuditLogsInteractor $interactor): StreamedResponse
     {
-        $filters = AuditLogExportFilters::fromQuery($request);
+        $filters = ExportAuditLogsCommand::fromQuery($request);
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 

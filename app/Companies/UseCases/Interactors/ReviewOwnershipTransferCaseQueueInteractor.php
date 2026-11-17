@@ -11,7 +11,7 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
-use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
+use App\Companies\UseCases\Commands\ReviewOwnershipTransferCaseQueueCommand;
 
 /**
  * The admin case-queue read (UC-1-127): a deliberately cross-tenant page of
@@ -27,7 +27,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
     /**
      * @return LengthAwarePaginator<int, OwnershipTransferCase>
      */
-    public function execute(OwnershipTransferCaseAdminFilters $filters, User $admin, RequestOrigin $context): LengthAwarePaginator
+    public function execute(ReviewOwnershipTransferCaseQueueCommand $filters, User $admin, RequestOrigin $context): LengthAwarePaginator
     {
         return DB::transaction(function () use ($filters, $admin, $context): LengthAwarePaginator {
             $page = OwnershipTransferCase::query()
@@ -49,7 +49,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
      * @param  LengthAwarePaginator<int, OwnershipTransferCase>  $page
      * @return array<string, mixed>
      */
-    protected function queryContextOf(OwnershipTransferCaseAdminFilters $filters, LengthAwarePaginator $page): array
+    protected function queryContextOf(ReviewOwnershipTransferCaseQueueCommand $filters, LengthAwarePaginator $page): array
     {
         return [
             'filters' => array_filter(

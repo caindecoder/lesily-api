@@ -8,13 +8,13 @@ use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
-use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminResource;
 use App\Companies\UseCases\Commands\RejectOwnershipTransferCaseCommand;
 use App\Companies\UseCases\Commands\VerifyOwnershipTransferCaseCommand;
 use App\Companies\UseCases\Commands\ExecuteOwnershipTransferCaseCommand;
 use App\Companies\IO\Http\Resources\OwnershipTransferCaseAdminCollection;
 use App\Companies\UseCases\Interactors\OpenOwnershipTransferCaseInteractor;
+use App\Companies\UseCases\Commands\ReviewOwnershipTransferCaseQueueCommand;
 use App\Companies\UseCases\Interactors\RejectOwnershipTransferCaseInteractor;
 use App\Companies\UseCases\Interactors\VerifyOwnershipTransferCaseInteractor;
 use App\Companies\UseCases\Interactors\ExecuteOwnershipTransferCaseInteractor;
@@ -36,7 +36,7 @@ class PlatformAdminOwnershipTransferCasesController
         $admin = $request->user();
 
         $page = $interactor->execute(
-            OwnershipTransferCaseAdminFilters::fromQuery($request),
+            ReviewOwnershipTransferCaseQueueCommand::fromQuery($request),
             $admin,
             RequestOrigin::fromRequest($request),
         );

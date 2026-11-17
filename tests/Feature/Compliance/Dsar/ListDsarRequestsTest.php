@@ -8,7 +8,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
-use App\Compliance\Dsar\UseCases\Commands\DsarRequestFilters;
+use App\Compliance\Dsar\UseCases\Commands\ListDsarRequestsCommand;
 
 class ListDsarRequestsTest extends DsarTestCase
 {
@@ -45,7 +45,7 @@ class ListDsarRequestsTest extends DsarTestCase
         // neutralise it over HTTP)
 
         // When the filter is built, then construction is rejected on that field
-        $this->assertEmptyFilterValueRejected(DsarRequestFilters::class, $field, $value);
+        $this->assertEmptyFilterValueRejected(ListDsarRequestsCommand::class, $field, $value);
     }
 
     /**

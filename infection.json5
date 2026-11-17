@@ -63,6 +63,12 @@
                 // The re-consent gate's check (UC-1-069): the same Model::__callStatic
                 // equivalent class as Role::findByCode — protected is still reached.
                 "App\\Consent\\Entities\\ConsentRecord::livePoliciesAcceptedBy",
+                // An abstract parent command whose every child overrides rules() publicly
+                // and spreads parent::rules(): spatie calls rules() on the concrete class
+                // (DataValidationRulesResolver), and a protected parent method is still
+                // reachable through parent::, so public->protected changes nothing. REMOVE
+                // WHEN a child of RegisterCompanyCommand inherits rules() without overriding.
+                "App\\Companies\\UseCases\\Commands\\RegisterCompanyCommand::rules",
                 "App\\Companies\\Projectors\\CompanyProjector::onCompanyCreated",
                 "App\\Companies\\Projectors\\CompanyProjector::onCompanyTrialExpired",
                 "App\\Billing\\Subscriptions\\Projectors\\SubscriptionProjector::onSubscriptionTrialStarted",
@@ -211,9 +217,7 @@
             ignore: [
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ChangePasswordCommand::rules::19",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ConfirmTwoFactorCommand::rules::22",
-                "App\\Foundation\\Auth\\UseCases\\Commands\\DisableTwoFactorCommand::rules::23",
-                "App\\Foundation\\Auth\\UseCases\\Commands\\LogoutAllCommand::rules::23",
-                "App\\Foundation\\Auth\\UseCases\\Commands\\RegenerateRecoveryCodesCommand::rules::23",
+                "App\\Foundation\\Auth\\UseCases\\Commands\\ConfirmPasswordCommand::rules::22",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ResetPasswordCommand::rules::21",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\VerifyTwoFactorCommand::rules::30",
                 // The one-key [required, string] on a typed string property: return [] is

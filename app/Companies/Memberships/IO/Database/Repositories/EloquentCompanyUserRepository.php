@@ -9,7 +9,7 @@ use Illuminate\Database\Query\Builder;
 use App\Companies\Entities\CompanyUser;
 use App\Companies\Memberships\Enums\MembershipStatus;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
+use App\Companies\Memberships\UseCases\Commands\ListMembershipsCommand;
 use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterface;
 
 /**
@@ -35,7 +35,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
     /**
      * @return LengthAwarePaginator<int, stdClass>
      */
-    public function listForCompany(string $companyId, MembershipFilters $filters): LengthAwarePaginator
+    public function listForCompany(string $companyId, ListMembershipsCommand $filters): LengthAwarePaginator
     {
         $rows = match ($filters->status) {
             MembershipStatus::Active => $this->activeMembers($companyId, $filters),
@@ -90,7 +90,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
 
     public function findById(string $companyId, string $membershipId): ?stdClass
     {
-        return $this->activeMembers($companyId, MembershipFilters::from([]))
+        return $this->activeMembers($companyId, ListMembershipsCommand::from([]))
             ->where('company_user.id', $membershipId)
             ->first();
     }
@@ -104,7 +104,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             ->first();
     }
 
-    protected function activeMembers(string $companyId, MembershipFilters $filters): Builder
+    protected function activeMembers(string $companyId, ListMembershipsCommand $filters): Builder
     {
         return DB::table('company_user')
             ->join('users', 'users.id', '=', 'company_user.user_id')
@@ -129,7 +129,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             ]);
     }
 
-    protected function pendingInvitations(string $companyId, MembershipFilters $filters): Builder
+    protected function pendingInvitations(string $companyId, ListMembershipsCommand $filters): Builder
     {
         return DB::table('invitations')
             ->join('roles', 'roles.id', '=', 'invitations.role_id')

@@ -8,9 +8,9 @@ use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
 use App\Companies\Memberships\IO\Http\Resources\MembershipResource;
 use App\Companies\Memberships\IO\Http\Resources\MembershipCollection;
+use App\Companies\Memberships\UseCases\Commands\ListMembershipsCommand;
 use App\Companies\Memberships\IO\Http\Resources\EmergencyContactResource;
 use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
 use App\Companies\Memberships\UseCases\Commands\RemoveUserFromCompanyCommand;
@@ -32,7 +32,7 @@ class MembershipsController
 
     public function index(Request $request): MembershipCollection
     {
-        $filters = MembershipFilters::fromQuery($request);
+        $filters = ListMembershipsCommand::fromQuery($request);
 
         return new MembershipCollection(
             $this->memberships->listForCompany($request->company()->getKey(), $filters)

@@ -9,7 +9,7 @@ use App\Billing\Invoices\Entities\Invoice;
 use App\Billing\Invoices\Enums\InvoiceStatus;
 use App\Billing\Invoices\Enums\InvoiceStatusFilter;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use App\Billing\Invoices\UseCases\Commands\InvoiceFilters;
+use App\Billing\Invoices\UseCases\Commands\ListInvoicesCommand;
 use App\Billing\Invoices\UseCases\Repositories\InvoiceRepositoryInterface;
 
 /**
@@ -21,7 +21,7 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
     /**
      * @return LengthAwarePaginator<int, Invoice>
      */
-    public function listForCompany(string $companyId, InvoiceFilters $filters): LengthAwarePaginator
+    public function listForCompany(string $companyId, ListInvoicesCommand $filters): LengthAwarePaginator
     {
         $query = Invoice::query()->where('company_id', $companyId);
 
@@ -61,7 +61,7 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
     /**
      * `within=from,to` filters on the issue date, both edges inclusive
      * (api-conventions §10.1 date-range convention; validated upstream by
-     * InvoiceFilters and cast to a period, so both edges are dates here).
+     * ListInvoicesCommand and cast to a period, so both edges are dates here).
      *
      * @param  Builder<Invoice>  $query
      * @return Builder<Invoice>

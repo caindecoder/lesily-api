@@ -9,15 +9,15 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
-use App\Foundation\AuditTrail\UseCases\Commands\AuditTrailFilters;
 use App\Foundation\AuditTrail\UseCases\Rules\MemberOrLesilySupport;
+use App\Foundation\AuditTrail\UseCases\Commands\ListAuditTrailCommand;
 
 class ListAuditTrailInteractor
 {
     /**
      * @return LengthAwarePaginator<int, AuditEntry>
      */
-    public function execute(AuditTrailFilters $filters, Company $company): LengthAwarePaginator
+    public function execute(ListAuditTrailCommand $filters, Company $company): LengthAwarePaginator
     {
         return AuditEntry::query()
             ->leftJoin('roles', 'roles.code', '=', 'audit_trail.actor_role_code')

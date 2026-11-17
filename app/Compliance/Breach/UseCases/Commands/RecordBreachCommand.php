@@ -8,6 +8,7 @@ use Illuminate\Validation\Rule;
 use Spatie\LaravelData\Attributes\WithCast;
 use App\Compliance\Breach\Enums\BreachDataType;
 use App\Compliance\Breach\Enums\BreachSeverity;
+use App\Compliance\Breach\Values\AffectedCompany;
 use Spatie\LaravelData\Attributes\DataCollectionOf;
 use Spatie\LaravelData\Casts\DateTimeInterfaceCast;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
@@ -28,9 +29,9 @@ class RecordBreachCommand extends Data
     public BreachSeverity $severity;
 
     /**
-     * @var list<AffectedCompanyData>
+     * @var list<AffectedCompany>
      */
-    #[DataCollectionOf(AffectedCompanyData::class)]
+    #[DataCollectionOf(AffectedCompany::class)]
     public array $companies;
 
     /**

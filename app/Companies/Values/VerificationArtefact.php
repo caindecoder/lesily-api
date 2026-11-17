@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Companies\UseCases\Commands;
+namespace App\Companies\Values;
 
 use Carbon\CarbonImmutable;
 use Spatie\LaravelData\Data;

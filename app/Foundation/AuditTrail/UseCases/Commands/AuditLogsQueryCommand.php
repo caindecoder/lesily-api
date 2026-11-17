@@ -3,21 +3,21 @@
 namespace App\Foundation\AuditTrail\UseCases\Commands;
 
 use Carbon\CarbonPeriod;
-use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Spatie\LaravelData\Attributes\WithCast;
-use Illuminate\Validation\ValidationException;
 use App\Foundation\AccessLog\Enums\AccessEvent;
 use App\Foundation\UseCases\Rules\IsoDateRange;
 use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\UseCases\Commands\QueryCommand;
 use App\Foundation\UseCases\Casts\CarbonPeriodCast;
 use App\Foundation\UseCases\Attributes\OpaqueString;
+use Spatie\LaravelData\Support\Validation\ValidationContext;
 use App\Foundation\AuditTrail\UseCases\Rules\MemberOrLesilySupport;
 
 /**
  * Which audit-log rows are wanted: a date range and the Pro search keys.
  */
-trait FiltersAuditLogs
+abstract class AuditLogsQueryCommand extends QueryCommand
 {
     #[WithCast(CarbonPeriodCast::class)]
     public ?CarbonPeriod $within = null;
@@ -37,25 +37,12 @@ trait FiltersAuditLogs
     }
 
     /**
-     * @param  list<string>  $whitelist
-     */
-    protected static function refuseUnknownKeys(Request $request, array $whitelist): void
-    {
-        $unknownKeys = array_diff(array_keys($request->query()), $whitelist);
-
-        if ($unknownKeys !== []) {
-            throw ValidationException::withMessages(
-                array_fill_keys($unknownKeys, 'This filter is not supported.')
-            );
-        }
-    }
-
-    /**
      * @return array<string, array<int, mixed>>
      */
-    protected static function filterRules(): array
+    public static function rules(ValidationContext $context): array
     {
         return [
+            ...parent::rules($context),
             'within' => ['filled', 'sometimes', 'bail', 'string', new IsoDateRange],
             'user' => ['filled', 'sometimes', 'bail', 'string', new MemberOrLesilySupport],
             'event' => ['filled', 'sometimes', 'string', Rule::in([...AccessEvent::cases(), ...AuditAction::SECURITY_ACTIONS])],

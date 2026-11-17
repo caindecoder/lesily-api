@@ -8,9 +8,9 @@ use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
-use App\Compliance\Dsar\UseCases\Commands\DsarRequestFilters;
 use App\Compliance\Dsar\IO\Http\Resources\DsarRequestResource;
 use App\Compliance\Dsar\IO\Http\Resources\DsarRequestCollection;
+use App\Compliance\Dsar\UseCases\Commands\ListDsarRequestsCommand;
 use App\Compliance\Dsar\UseCases\Commands\CancelDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Commands\SubmitDsarRequestCommand;
 use App\Compliance\Dsar\UseCases\Interactors\ShowDsarRequestInteractor;
@@ -26,7 +26,7 @@ class DsarRequestsController extends Controller
         $actor = $request->user();
 
         return new DsarRequestCollection(
-            $interactor->execute(DsarRequestFilters::fromQuery($request), $actor, $request->company())
+            $interactor->execute(ListDsarRequestsCommand::fromQuery($request), $actor, $request->company())
         );
     }
 

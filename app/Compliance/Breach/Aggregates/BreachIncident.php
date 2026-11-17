@@ -11,6 +11,7 @@ use App\Compliance\Breach\Values\BreachFacts;
 use App\Compliance\Breach\Events\BreachAmended;
 use App\Compliance\Breach\Events\BreachRecorded;
 use App\Compliance\Breach\Events\BreachResolved;
+use App\Compliance\Breach\Values\AffectedCompany;
 use App\Compliance\Breach\Values\RegulatorFiling;
 use App\Compliance\Breach\Events\BreachCompanyAdded;
 use App\Compliance\Breach\Enums\BreachAmendmentField;
@@ -22,7 +23,6 @@ use App\Compliance\Breach\Events\BreachCompaniesNotified;
 use App\Compliance\Breach\Events\BreachFiledWithRegulator;
 use App\Compliance\Breach\Exceptions\NothingToAmendException;
 use App\Compliance\Breach\UseCases\Commands\AmendBreachCommand;
-use App\Compliance\Breach\UseCases\Commands\AffectedCompanyData;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
 use App\Compliance\Breach\UseCases\Commands\ResolveBreachCommand;
 use App\Compliance\Breach\Exceptions\BreachFilingNotOpenException;
@@ -74,7 +74,7 @@ class BreachIncident extends AggregateRoot
             dateDiscovered: $command->dateDiscovered,
             severity: $command->severity->value,
             deadline: $command->dateDiscovered->addHours(self::DEADLINE_HOURS),
-            companies: array_map(fn (AffectedCompanyData $company): array => $company->facts(), $command->companies),
+            companies: array_map(fn (AffectedCompany $company): array => $company->facts(), $command->companies),
         ));
     }
 

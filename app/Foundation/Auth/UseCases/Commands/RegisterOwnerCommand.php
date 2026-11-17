@@ -2,22 +2,17 @@
 
 namespace App\Foundation\Auth\UseCases\Commands;
 
-use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rules\Enum;
 use Illuminate\Contracts\Validation\ValidationRule;
+use App\Companies\UseCases\Commands\RegisterCompanyCommand;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
-use App\Companies\UseCases\Commands\CompanyRegistrationRules;
-use App\Companies\Memberships\Enums\EmergencyContactRelationship;
 
 /**
  * The fused owner-signup payload (UC-1-001 + UC-1-031 + UC-1-029 + UC-1-069).
  * Uniqueness of email, BR and EPF is a 409 from RegistrationUniquenessGuard, not a rule here.
  */
-class RegisterOwnerCommand extends Data
+class RegisterOwnerCommand extends RegisterCompanyCommand
 {
-    use CompanyRegistrationRules;
-    use RegisterOwnerRules;
-
     public string $name;
 
     public string $email;
@@ -28,38 +23,17 @@ class RegisterOwnerCommand extends Data
 
     public string $companyName;
 
-    public string $brNumber;
-
-    public string $epfNumber;
-
-    public string $country;
-
-    public string $emergencyContactName;
-
-    public string $emergencyContactEmail;
-
-    public string $emergencyContactPhone;
-
-    public EmergencyContactRelationship $emergencyContactRelationship;
-
     /**
      * @return array<string, array<int, string|Enum|ValidationRule>>
      */
     public static function rules(ValidationContext $context): array
     {
         return [
-            'name' => self::ownerNameRules(),
-            'email' => self::ownerEmailRules(),
-            'password' => self::passwordRules(),
-            'acceptedTos' => self::acceptedTosRules(),
-            'companyName' => self::nameRules(),
-            'brNumber' => self::brNumberRules(),
-            'epfNumber' => self::epfNumberRules(),
-            'country' => self::countryRules(),
-            'emergencyContactName' => self::ownerNameRules(),
-            'emergencyContactEmail' => self::ownerEmailRules(),
-            'emergencyContactPhone' => self::phoneRules(),
-            'emergencyContactRelationship' => self::relationshipRules(),
+            ...parent::rules($context),
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255'],
+            'password' => ['required', 'string', 'min:8', 'max:255'],
+            'companyName' => ['required', 'string', 'max:255'],
         ];
     }
 
@@ -68,6 +42,9 @@ class RegisterOwnerCommand extends Data
      */
     public static function messages(): array
     {
-        return [...self::ownerMessages(), ...self::companyRegistrationMessages()];
+        return [
+            ...parent::messages(),
+            'password.min' => 'Password must be at least 8 characters.',
+        ];
     }
 }

@@ -15,7 +15,7 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  * The editable company-details payload (UC-1-033). A per-endpoint whitelist:
  * only name + the four editable settings may change. Immutable columns
  * (br_number, epf_number, country, owner_id, current_billing_plan) and any
- * unknown key are refused with a 422 (MembershipFilters guard precedent),
+ * unknown key are refused with a 422 (ListMembershipsCommand guard precedent),
  * because Spatie Data would otherwise silently drop them. Built at the HTTP
  * boundary via ::validateAndCreate (amendment AQ).
  */

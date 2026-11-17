@@ -14,14 +14,14 @@ use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Compliance\Dsar\UseCases\Responses\DsarRequestQueue;
-use App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters;
+use App\Compliance\Dsar\UseCases\Commands\ReviewDsarRequestQueueCommand;
 
 class ReviewDsarRequestQueueInteractor
 {
     /**
      * The read and its audit row share one transaction — no read without its evidence.
      */
-    public function execute(DsarRequestAdminFilters $filters, User $admin, RequestOrigin $context): DsarRequestQueue
+    public function execute(ReviewDsarRequestQueueCommand $filters, User $admin, RequestOrigin $context): DsarRequestQueue
     {
         $now = CarbonImmutable::now();
 
@@ -46,7 +46,7 @@ class ReviewDsarRequestQueueInteractor
      *
      * @return Builder<DsarRequestRecord>
      */
-    protected function selectedBy(DsarRequestAdminFilters $filters, CarbonImmutable $now): Builder
+    protected function selectedBy(ReviewDsarRequestQueueCommand $filters, CarbonImmutable $now): Builder
     {
         return DsarRequestRecord::query()
             ->when($filters->status, fn (Builder $query, DsarRequestStatus $status) => $query->where('status', $status))
@@ -89,7 +89,7 @@ class ReviewDsarRequestQueueInteractor
      * @param  LengthAwarePaginator<int, DsarRequestRecord>  $page
      * @return array<string, mixed>
      */
-    protected function queryContextOf(DsarRequestAdminFilters $filters, LengthAwarePaginator $page): array
+    protected function queryContextOf(ReviewDsarRequestQueueCommand $filters, LengthAwarePaginator $page): array
     {
         return [
             'filters' => array_filter(

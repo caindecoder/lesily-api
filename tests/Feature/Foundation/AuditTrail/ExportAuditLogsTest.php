@@ -657,6 +657,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
             'page' => ['page'],
             'per page' => ['per_page'],
             'sort' => ['sort'],
+            'company' => ['company'],
         ];
     }
 

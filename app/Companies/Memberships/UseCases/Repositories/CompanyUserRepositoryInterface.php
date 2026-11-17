@@ -6,7 +6,7 @@ use stdClass;
 use Illuminate\Support\Collection;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
+use App\Companies\Memberships\UseCases\Commands\ListMembershipsCommand;
 
 interface CompanyUserRepositoryInterface
 {
@@ -28,7 +28,7 @@ interface CompanyUserRepositoryInterface
      *
      * @return LengthAwarePaginator<int, stdClass>
      */
-    public function listForCompany(string $companyId, MembershipFilters $filters): LengthAwarePaginator;
+    public function listForCompany(string $companyId, ListMembershipsCommand $filters): LengthAwarePaginator;
 
     /**
      * One ACTIVE membership as its roster-row shape (the same aliased columns

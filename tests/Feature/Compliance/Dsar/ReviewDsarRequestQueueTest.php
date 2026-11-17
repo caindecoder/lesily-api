@@ -14,7 +14,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
-use App\Compliance\Dsar\UseCases\Commands\DsarRequestAdminFilters;
+use App\Compliance\Dsar\UseCases\Commands\ReviewDsarRequestQueueCommand;
 
 class ReviewDsarRequestQueueTest extends DsarTestCase
 {
@@ -92,7 +92,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         // the DTO seam (TrimStrings + ConvertEmptyStringsToNull neutralise it over HTTP)
 
         // When the filter is built directly, then construction is rejected on that field
-        $this->assertEmptyFilterValueRejected(DsarRequestAdminFilters::class, $field, $value);
+        $this->assertEmptyFilterValueRejected(ReviewDsarRequestQueueCommand::class, $field, $value);
     }
 
     #[Test]
@@ -211,7 +211,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     {
         // Given no query values at all
         // When the filter is built
-        $filters = DsarRequestAdminFilters::validateAndCreate([]);
+        $filters = ReviewDsarRequestQueueCommand::validateAndCreate([]);
 
         // Then nothing is filtered, neither flag is set, and pagination falls to its defaults
         $this->assertSame(
