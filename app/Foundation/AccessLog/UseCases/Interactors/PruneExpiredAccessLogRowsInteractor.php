@@ -27,12 +27,12 @@ class PruneExpiredAccessLogRowsInteractor
 
     public function execute(CarbonInterface $at): int
     {
-        $expired = $this->expiredRows($at->toImmutable()->startOfDay())
-            ->orderBy('last_seen_at')
-            ->limit(self::ROWS_PER_RUN)
-            ->get(['id', 'company_id']);
+        return DB::transaction(function () use ($at): int {
+            $expired = $this->expiredRows($at->toImmutable()->startOfDay())
+                ->orderBy('last_seen_at')
+                ->limit(self::ROWS_PER_RUN)
+                ->get(['id', 'company_id']);
 
-        return DB::transaction(function () use ($expired): int {
             $deleted = AccessLogEntry::query()->whereIn('id', $expired->modelKeys())->delete();
 
             $expired->whereNotNull('company_id')->countBy('company_id')
