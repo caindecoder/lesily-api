@@ -7,7 +7,7 @@ use PHPUnit\Framework\TestCase;
 use Illuminate\Validation\ValidationException;
 
 /**
- * DTO-seam guard for the Filters family (OQ-1-163): construction is driven
+ * DTO-seam guard for the list commands under QueryCommand (OQ-1-163): construction is driven
  * directly because the global TrimStrings + ConvertEmptyStringsToNull pair
  * neutralises '' and ASCII-whitespace values before HTTP validation can see
  * one — the empty-string path is reachable only at this seam. Lives in an
