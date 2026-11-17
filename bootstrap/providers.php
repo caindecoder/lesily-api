@@ -6,6 +6,7 @@ use App\Compliance\Dsar\ComplianceDsarServiceProvider;
 use App\Billing\Invoices\BillingInvoicesServiceProvider;
 use App\Compliance\Breach\ComplianceBreachServiceProvider;
 use App\Compliance\Privacy\CompliancePrivacyServiceProvider;
+use App\Foundation\AccessLog\FoundationAccessLogServiceProvider;
 use App\Billing\Subscriptions\BillingSubscriptionsServiceProvider;
 use App\Companies\Memberships\CompaniesMembershipsServiceProvider;
 
@@ -17,5 +18,6 @@ return [
     ComplianceBreachServiceProvider::class,
     ComplianceDsarServiceProvider::class,
     CompliancePrivacyServiceProvider::class,
+    FoundationAccessLogServiceProvider::class,
     TelescopeServiceProvider::class,
 ];

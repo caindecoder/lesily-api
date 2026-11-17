@@ -13,3 +13,4 @@ Schedule::command('invitations:expire')->dailyAt('00:00')->onOneServer();
 Schedule::command('dsar:expire-links')->dailyAt('00:00')->onOneServer();
 Schedule::command('dsar:flag-missed-deadlines')->dailyAt('00:00')->onOneServer();
 Schedule::command('breaches:flag-missed-deadlines')->dailyAt('00:00')->onOneServer();
+Schedule::command('access-log:prune')->dailyAt('00:00')->onOneServer()->withoutOverlapping();

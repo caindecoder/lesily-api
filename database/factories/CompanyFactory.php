@@ -55,6 +55,13 @@ class CompanyFactory extends Factory
         ]);
     }
 
+    public function keepingAccessLogFor(int $years): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'access_log_retention_years' => $years,
+        ]);
+    }
+
     public function onPlan(BillingPlan $plan): static
     {
         return $this->state(fn (array $attributes): array => [

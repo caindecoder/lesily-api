@@ -53,6 +53,7 @@ enum AuditAction: string
     case CompanySettingsUpdated = 'company_settings_updated';
     case CompanySettingReset = 'company_setting_reset';
     case AuditLogsExported = 'audit_logs_exported';
+    case AccessLogPurged = 'access_log_purged';
 
     /**
      * The actions the audit logs show beside the access log.
