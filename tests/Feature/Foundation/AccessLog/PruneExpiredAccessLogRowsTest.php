@@ -65,6 +65,21 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_a_company_row_was_last_seen_at_its_cutoff_then_only_the_row_just_before_is_deleted(): void
+    {
+        // Given a company keeping seven years, with a row at its cutoff and one a second before it
+        $company = Company::factory()->create();
+        $atCutoff = $this->anAccessRow($company, '2019-11-17 00:00:00');
+        $this->anAccessRow($company, '2019-11-16 23:59:59');
+
+        // When the purge runs
+        $this->runPrune()->assertSuccessful();
+
+        // Then only the row at the cutoff is left
+        $this->assertRemaining([$atCutoff]);
+    }
+
+    #[Test]
     public function when_a_row_with_no_company_reaches_one_year_then_only_the_row_just_before_the_cutoff_is_deleted(): void
     {
         // Given two rows with no company: one at the one-year cutoff, one a second before it
@@ -76,6 +91,37 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
 
         // Then only the row at the cutoff is left
         $this->assertRemaining([$atCutoff]);
+    }
+
+    #[Test]
+    public function when_two_companies_hold_different_retentions_then_each_is_cut_at_its_own_years(): void
+    {
+        // Given a two-year-old row in a company keeping one year, and one in a company on the default seven
+        $this->anAccessRow(Company::factory()->keepingAccessLogFor(1)->create(), '2024-11-17 10:00:00');
+        $sevenYearRow = $this->anAccessRow(Company::factory()->create(), '2024-11-17 10:00:00');
+
+        // When the purge runs
+        $this->runPrune()->assertSuccessful();
+
+        // Then only the seven-year company's row is left
+        $this->assertRemaining([$sevenYearRow]);
+    }
+
+    #[Test]
+    public function when_a_folded_row_was_first_seen_before_the_cutoff_and_last_seen_after_it_then_it_is_kept(): void
+    {
+        // Given a refusal first seen before the seven-year cutoff and repeated after it
+        $folded = AccessLogEntry::factory()
+            ->forCompany(Company::factory()->create())
+            ->seenAt(CarbonImmutable::parse('2020-01-01 00:00:00'))
+            ->foldedSince(CarbonImmutable::parse('2019-11-10 00:00:00'), 4)
+            ->create();
+
+        // When the purge runs
+        $this->runPrune()->assertSuccessful();
+
+        // Then the row is kept: its last sighting is inside the retention
+        $this->assertRemaining([$folded]);
     }
 
     #[Test]
