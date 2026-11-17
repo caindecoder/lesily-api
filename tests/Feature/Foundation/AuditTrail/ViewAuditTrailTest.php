@@ -17,7 +17,7 @@ use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
-use App\Foundation\AuditTrail\UseCases\Commands\AuditTrailFilters;
+use App\Foundation\AuditTrail\UseCases\Commands\ListAuditTrailCommand;
 
 class ViewAuditTrailTest extends AuditTrailTestCase
 {
@@ -107,7 +107,7 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         // Given an empty or blank value for one of the audit trail's query keys
         // When the audit trail filter is built from it
         // Then the value is rejected
-        $this->assertEmptyFilterValueRejected(AuditTrailFilters::class, $field, $value);
+        $this->assertEmptyFilterValueRejected(ListAuditTrailCommand::class, $field, $value);
     }
 
     #[Test]

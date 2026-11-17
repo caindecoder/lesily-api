@@ -19,10 +19,6 @@ class CommandFoldersHoldOnlyCommandsTest extends FoundationTestCase
         'Companies/UseCases/Commands/CompanyRegistrationRules.php',
         'Companies/UseCases/Commands/VerificationArtefact.php',
         'Compliance/Breach/UseCases/Commands/AffectedCompanyData.php',
-        'Foundation/AuditTrail/UseCases/Commands/AuditLogExportFilters.php',
-        'Foundation/AuditTrail/UseCases/Commands/AuditLogFilters.php',
-        'Foundation/AuditTrail/UseCases/Commands/AuditTrailFilters.php',
-        'Foundation/AuditTrail/UseCases/Commands/FiltersAuditLogs.php',
         'Foundation/Auth/UseCases/Commands/RegisterOwnerRules.php',
     ];
 

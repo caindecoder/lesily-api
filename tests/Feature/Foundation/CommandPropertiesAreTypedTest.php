@@ -137,7 +137,6 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
                 || $this->holdsANestedDateNotCarbon($property, $rules),
             'a mapper outside the id shape' => $property->inputMappedName !== null
                 && ! is_a($property->className, QueryCommand::class, true)
-                && ! str_ends_with($property->className, 'Filters')
                 && ! (is_subclass_of($typeName, Model::class) && $property->inputMappedName === $property->name.'Id'),
             'a model without ModelCast' => $this->holdsAModelWithoutCast($command, $property, $typeName),
         ];

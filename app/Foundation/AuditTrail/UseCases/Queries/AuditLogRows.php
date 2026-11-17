@@ -11,9 +11,9 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Support\LazyCollection;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use App\Foundation\AuditTrail\UseCases\Commands\AuditLogFilters;
 use App\Foundation\AuditTrail\UseCases\Rules\MemberOrLesilySupport;
-use App\Foundation\AuditTrail\UseCases\Commands\AuditLogExportFilters;
+use App\Foundation\AuditTrail\UseCases\Commands\AuditLogsQueryCommand;
+use App\Foundation\AuditTrail\UseCases\Commands\ExportAuditLogsCommand;
 
 /**
  * A company's audit logs: its access-log rows and its security-relevant audit-trail rows,
@@ -31,7 +31,7 @@ class AuditLogRows
      *
      * @return LazyCollection<int, stdClass>
      */
-    public function newestFirst(AuditLogExportFilters $filters, CarbonImmutable $before): LazyCollection
+    public function newestFirst(ExportAuditLogsCommand $filters, CarbonImmutable $before): LazyCollection
     {
         return LazyCollection::make(function () use ($filters, $before) {
             $last = null;
@@ -61,7 +61,7 @@ class AuditLogRows
     /**
      * The first day the rows start on: the requested start, clamped to the plan's horizon.
      */
-    public function from(AuditLogFilters|AuditLogExportFilters $filters, Company $company): CarbonImmutable
+    public function from(AuditLogsQueryCommand $filters, Company $company): CarbonImmutable
     {
         $retentionFrom = $this->retentionFrom($company);
 
@@ -71,7 +71,7 @@ class AuditLogRows
     /**
      * @param  CarbonImmutable|null  $before  a moment the rows must come before (an export's start)
      */
-    public function of(AuditLogFilters|AuditLogExportFilters $filters, Company $company, ?CarbonImmutable $before = null): Builder
+    public function of(AuditLogsQueryCommand $filters, Company $company, ?CarbonImmutable $before = null): Builder
     {
         return $this->merged($this->halves($filters, $company, $before), null);
     }
@@ -81,7 +81,7 @@ class AuditLogRows
      *
      * @return array{Builder, Builder}
      */
-    protected function halves(AuditLogFilters|AuditLogExportFilters $filters, Company $company, ?CarbonImmutable $before): array
+    protected function halves(AuditLogsQueryCommand $filters, Company $company, ?CarbonImmutable $before): array
     {
         $from = $this->from($filters, $company);
         $until = $filters->within?->getIncludedEndDate()->toImmutable()->addDay();
@@ -122,7 +122,7 @@ class AuditLogRows
             ->orWhere(fn (Builder $sameTime) => $sameTime->where($timeColumn, $row->time)->where($idColumn, '<', $row->id)));
     }
 
-    protected function searchedAccessRows(Builder $rows, AuditLogFilters|AuditLogExportFilters $filters): Builder
+    protected function searchedAccessRows(Builder $rows, AuditLogsQueryCommand $filters): Builder
     {
         return $rows
             ->when($filters->user, fn (Builder $query, string $user) => $query->where('access_log.user_id', $user))
@@ -130,7 +130,7 @@ class AuditLogRows
             ->when($filters->ip, fn (Builder $query, string $ip) => $query->where('access_log.ip_address', $ip));
     }
 
-    protected function searchedSecurityRows(Builder $rows, AuditLogFilters|AuditLogExportFilters $filters): Builder
+    protected function searchedSecurityRows(Builder $rows, AuditLogsQueryCommand $filters): Builder
     {
         return $rows
             ->when($filters->user, fn (Builder $query, string $user) => $this->byUser($query, $user))

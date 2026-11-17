@@ -21,7 +21,7 @@ use Tests\Concerns\AssertsFilterEmptyValueRejection;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
-use App\Foundation\AuditTrail\UseCases\Commands\AuditLogFilters;
+use App\Foundation\AuditTrail\UseCases\Commands\ListAuditLogsCommand;
 
 class ViewAuditLogsTest extends AuditTrailTestCase
 {
@@ -113,7 +113,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
         // Given an empty or blank value for one of the audit logs' query keys
         // When the audit logs filter is built from it
         // Then the value is rejected
-        $this->assertEmptyFilterValueRejected(AuditLogFilters::class, $field, $value);
+        $this->assertEmptyFilterValueRejected(ListAuditLogsCommand::class, $field, $value);
     }
 
     #[Test]

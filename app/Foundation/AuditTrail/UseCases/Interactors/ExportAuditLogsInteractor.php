@@ -12,7 +12,7 @@ use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Foundation\AuditTrail\UseCases\Queries\AuditLogRows;
 use App\Foundation\AuditTrail\UseCases\Audit\AuditTrailWriter;
 use App\Foundation\AuditTrail\UseCases\Queries\MemberRoleCode;
-use App\Foundation\AuditTrail\UseCases\Commands\AuditLogExportFilters;
+use App\Foundation\AuditTrail\UseCases\Commands\ExportAuditLogsCommand;
 
 class ExportAuditLogsInteractor
 {
@@ -25,7 +25,7 @@ class ExportAuditLogsInteractor
     /**
      * @return LazyCollection<int, stdClass>
      */
-    public function execute(AuditLogExportFilters $filters, User $actor, RequestOrigin $origin): LazyCollection
+    public function execute(ExportAuditLogsCommand $filters, User $actor, RequestOrigin $origin): LazyCollection
     {
         $exportedAt = CarbonImmutable::now();
         $this->recordExport($filters, $actor, $origin);
@@ -33,7 +33,7 @@ class ExportAuditLogsInteractor
         return $this->auditLogRows->newestFirst($filters, $exportedAt);
     }
 
-    protected function recordExport(AuditLogExportFilters $filters, User $actor, RequestOrigin $origin): void
+    protected function recordExport(ExportAuditLogsCommand $filters, User $actor, RequestOrigin $origin): void
     {
         $companyId = $filters->company->getKey();
 

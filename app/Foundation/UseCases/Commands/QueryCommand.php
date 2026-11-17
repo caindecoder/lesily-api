@@ -34,7 +34,17 @@ abstract class QueryCommand extends Data
             );
         }
 
-        return static::validateAndCreate($request->query());
+        return static::validateAndCreate($request->query() + static::serverFilledKeys($request));
+    }
+
+    /**
+     * Keys the server fills from the request context, never the client.
+     *
+     * @return array<string, mixed>
+     */
+    protected static function serverFilledKeys(Request $request): array
+    {
+        return [];
     }
 
     /**
