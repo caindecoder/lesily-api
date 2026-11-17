@@ -3,7 +3,6 @@
 namespace App\Billing\Invoices\UseCases\Commands;
 
 use Carbon\CarbonPeriod;
-use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Spatie\LaravelData\Attributes\WithCast;
 use App\Foundation\UseCases\Rules\IsoDateRange;

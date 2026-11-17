@@ -30,7 +30,7 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
  */
 class CommandPropertiesAreTypedTest extends FoundationTestCase
 {
-    protected const int COMMANDS_AT_LEAST = 52;
+    protected const int COMMANDS_AT_LEAST = 75;
 
     #[Test]
     public function when_the_commands_are_walked_then_no_property_is_untyped(): void

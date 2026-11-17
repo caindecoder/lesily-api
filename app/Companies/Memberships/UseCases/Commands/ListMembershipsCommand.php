@@ -2,7 +2,6 @@
 
 namespace App\Companies\Memberships\UseCases\Commands;
 
-use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use App\Foundation\UseCases\Commands\QueryCommand;
 use App\Foundation\UseCases\Attributes\OpaqueString;

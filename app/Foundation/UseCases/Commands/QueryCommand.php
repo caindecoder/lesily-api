@@ -10,7 +10,8 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 /**
  * A list or queue request read from the query string: only the keys its
- * QUERY_KEY_WHITELIST names are accepted, and it pages.
+ * QUERY_KEY_WHITELIST names are accepted — page / per_page among them when it
+ * pages. A key the server fills is never whitelisted.
  */
 abstract class QueryCommand extends Data
 {

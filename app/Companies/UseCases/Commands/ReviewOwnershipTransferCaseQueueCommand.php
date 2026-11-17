@@ -2,7 +2,6 @@
 
 namespace App\Companies\UseCases\Commands;
 
-use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use Spatie\LaravelData\Attributes\MapInputName;
 use App\Foundation\UseCases\Commands\QueryCommand;

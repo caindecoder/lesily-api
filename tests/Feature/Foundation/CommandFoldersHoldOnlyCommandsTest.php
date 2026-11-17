@@ -12,6 +12,8 @@ use PHPUnit\Framework\Attributes\Test;
  */
 class CommandFoldersHoldOnlyCommandsTest extends FoundationTestCase
 {
+    protected const int COMMAND_FILES_AT_LEAST = 73;
+
     #[Test]
     public function when_the_command_folders_are_walked_then_every_file_declares_a_data_class(): void
     {
@@ -22,8 +24,7 @@ class CommandFoldersHoldOnlyCommandsTest extends FoundationTestCase
         $notData = array_keys(array_filter($files, fn (string $class): bool => ! is_subclass_of($class, Data::class)));
 
         // Then the walk read the folders and listed none
-        $this->assertNotEmpty($files);
-        $this->assertSame([], $notData);
+        $this->assertWalkedAndNoneListed($files, $notData);
     }
 
     #[Test]
@@ -36,8 +37,17 @@ class CommandFoldersHoldOnlyCommandsTest extends FoundationTestCase
         $misnamed = array_keys(array_filter($files, fn (string $class): bool => ! str_ends_with(class_basename($class), 'Command')));
 
         // Then the walk read the folders and listed none
-        $this->assertNotEmpty($files);
-        $this->assertSame([], $misnamed);
+        $this->assertWalkedAndNoneListed($files, $misnamed);
+    }
+
+    /**
+     * @param  array<string, string>  $files
+     * @param  list<string>  $listed
+     */
+    protected function assertWalkedAndNoneListed(array $files, array $listed): void
+    {
+        $this->assertGreaterThanOrEqual(self::COMMAND_FILES_AT_LEAST, count($files));
+        $this->assertSame([], $listed);
     }
 
     /**
