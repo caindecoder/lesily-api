@@ -16,10 +16,8 @@ class CommandFoldersHoldOnlyCommandsTest extends FoundationTestCase
      * @var list<string>
      */
     protected const array KNOWN_NOT_COMMANDS = [
-        'Companies/UseCases/Commands/CompanyRegistrationRules.php',
         'Companies/UseCases/Commands/VerificationArtefact.php',
         'Compliance/Breach/UseCases/Commands/AffectedCompanyData.php',
-        'Foundation/Auth/UseCases/Commands/RegisterOwnerRules.php',
     ];
 
     #[Test]

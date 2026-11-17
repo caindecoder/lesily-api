@@ -4,15 +4,16 @@ namespace App\Companies\Memberships\UseCases\Commands;
 
 use App\Models\User;
 use Spatie\LaravelData\Data;
+use Illuminate\Validation\Rule;
 use App\Companies\Entities\Company;
 use Illuminate\Validation\Rules\Enum;
 use Spatie\LaravelData\Attributes\WithCast;
 use App\Foundation\UseCases\Casts\ModelCast;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
-use App\Foundation\Auth\UseCases\Commands\RegisterOwnerRules;
 use App\Companies\Memberships\UseCases\Casts\SriLankanE164Cast;
 use App\Companies\Memberships\Enums\EmergencyContactRelationship;
+use App\Companies\Memberships\UseCases\Rules\SriLankanPhoneNumber;
 
 /**
  * The owner's request to replace their emergency contact for one company (UC-1-029),
@@ -21,8 +22,6 @@ use App\Companies\Memberships\Enums\EmergencyContactRelationship;
  */
 class UpdateEmergencyContactCommand extends Data
 {
-    use RegisterOwnerRules;
-
     #[WithCast(ModelCast::class, Company::class)]
     public Company $company;
 
@@ -54,10 +53,10 @@ class UpdateEmergencyContactCommand extends Data
     public static function rules(ValidationContext $context): array
     {
         return [
-            'name' => self::ownerNameRules(),
-            'email' => self::ownerEmailRules(),
-            'phone' => self::phoneRules(),
-            'relationship' => self::relationshipRules(),
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255'],
+            'phone' => ['required', 'string', 'max:255', new SriLankanPhoneNumber],
+            'relationship' => ['required', 'string', Rule::enum(EmergencyContactRelationship::class)],
         ];
     }
 
