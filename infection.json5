@@ -211,9 +211,7 @@
             ignore: [
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ChangePasswordCommand::rules::19",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ConfirmTwoFactorCommand::rules::22",
-                "App\\Foundation\\Auth\\UseCases\\Commands\\DisableTwoFactorCommand::rules::23",
-                "App\\Foundation\\Auth\\UseCases\\Commands\\LogoutAllCommand::rules::23",
-                "App\\Foundation\\Auth\\UseCases\\Commands\\RegenerateRecoveryCodesCommand::rules::23",
+                "App\\Foundation\\Auth\\UseCases\\Commands\\ConfirmPasswordCommand::rules::22",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\ResetPasswordCommand::rules::21",
                 "App\\Foundation\\Auth\\UseCases\\Commands\\VerifyTwoFactorCommand::rules::30",
                 // The one-key [required, string] on a typed string property: return [] is
