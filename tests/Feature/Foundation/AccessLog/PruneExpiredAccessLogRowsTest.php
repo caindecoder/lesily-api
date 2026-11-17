@@ -4,6 +4,7 @@ namespace Tests\Feature\Foundation\AccessLog;
 
 use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
+use Tests\Concerns\AssertsAuditTrail;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\Feature\Foundation\FoundationTestCase;
@@ -11,6 +12,8 @@ use App\Foundation\AccessLog\Entities\AccessLogEntry;
 
 class PruneExpiredAccessLogRowsTest extends FoundationTestCase
 {
+    use AssertsAuditTrail;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -42,6 +45,80 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
 
         // Then the row is still there
         $this->assertRemaining([$row]);
+    }
+
+    #[Test]
+    public function when_no_row_is_past_its_retention_then_nothing_is_deleted_or_audited(): void
+    {
+        // Given a company row at its seven-year cutoff and a row with no company at its one-year cutoff
+        $rows = [
+            $this->anAccessRow(Company::factory()->create(), '2019-11-17 00:00:00'),
+            $this->anAccessRow(null, '2025-11-17 00:00:00'),
+        ];
+
+        // When the purge runs
+        $this->runPrune()->expectsOutput('0 expired access-log row(s) deleted.')->assertSuccessful();
+
+        // Then both rows are still there and nothing is audited
+        $this->assertRemaining($rows);
+        $this->assertNothingAudited();
+    }
+
+    #[Test]
+    public function when_a_row_with_no_company_reaches_one_year_then_only_the_row_just_before_the_cutoff_is_deleted(): void
+    {
+        // Given two rows with no company: one at the one-year cutoff, one a second before it
+        $atCutoff = $this->anAccessRow(null, '2025-11-17 00:00:00');
+        $this->anAccessRow(null, '2025-11-16 23:59:59');
+
+        // When the purge runs
+        $this->runPrune()->assertSuccessful();
+
+        // Then only the row at the cutoff is left
+        $this->assertRemaining([$atCutoff]);
+    }
+
+    #[Test]
+    public function when_the_run_falls_on_29_february_then_the_cutoff_is_28_february(): void
+    {
+        // Given a run on 29 February, and rows with no company on 28 February a year back and a second before
+        $this->travelTo(CarbonImmutable::parse('2028-02-29 10:00:00'));
+        $onThe28th = $this->anAccessRow(null, '2027-02-28 00:00:00');
+        $this->anAccessRow(null, '2027-02-27 23:59:59');
+
+        // When the purge runs
+        $this->runPrune()->assertSuccessful();
+
+        // Then the row on the 28th is kept
+        $this->assertRemaining([$onThe28th]);
+    }
+
+    #[Test]
+    public function when_a_missed_night_is_replayed_then_the_cutoff_counts_back_from_the_given_date(): void
+    {
+        // Given rows with no company just inside and just outside a year before 10 November
+        $insideTheReplayYear = $this->anAccessRow(null, '2025-11-10 00:00:00');
+        $this->anAccessRow(null, '2025-11-09 23:59:59');
+
+        // When the night of 10 November is replayed
+        $this->runPrune('2026-11-10')->assertSuccessful();
+
+        // Then the row inside that year is kept, though it is more than a year before today
+        $this->assertRemaining([$insideTheReplayYear]);
+    }
+
+    #[Test]
+    public function when_a_replayed_date_carries_an_offset_then_its_utc_day_sets_the_cutoff(): void
+    {
+        // Given rows with no company at the cutoff of 16 November UTC and a second before it
+        $onTheUtcDay = $this->anAccessRow(null, '2025-11-16 00:00:00');
+        $this->anAccessRow(null, '2025-11-15 23:59:59');
+
+        // When a date of 17 November in Colombo, still 16 November in UTC, is replayed
+        $this->runPrune('2026-11-17T03:00:00+05:30')->assertSuccessful();
+
+        // Then the cutoff is the UTC day's, so the row on 16 November is kept
+        $this->assertRemaining([$onTheUtcDay]);
     }
 
     protected function runPrune(?string $date = null): PendingCommand

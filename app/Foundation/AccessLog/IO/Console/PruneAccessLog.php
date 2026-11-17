@@ -7,12 +7,13 @@ use Illuminate\Console\Command;
 use Illuminate\Console\Attributes\Signature;
 use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Console\Attributes\Description;
+use App\Foundation\AccessLog\UseCases\Interactors\PruneExpiredAccessLogRowsInteractor;
 
 #[Signature('access-log:prune {--date=}')]
 #[Description('Delete access-log rows past their retention (defaults to now; --date replays a missed night).')]
 class PruneAccessLog extends Command
 {
-    public function handle(): int
+    public function handle(PruneExpiredAccessLogRowsInteractor $interactor): int
     {
         try {
             $at = CarbonImmutable::parse($this->option('date'))->utc();
@@ -27,6 +28,10 @@ class PruneAccessLog extends Command
 
             return self::FAILURE;
         }
+
+        $deleted = $interactor->execute($at);
+
+        $this->info("{$deleted} expired access-log row(s) deleted.");
 
         return self::SUCCESS;
     }
