@@ -2,9 +2,9 @@
 # Amendment AQ (/tdd-red s187; coding-conventions-plan sec 2.15.B.2; OQ-1-172 design P1):
 # validation lives at the HTTP boundary only. Four checks over app/:
 #  1. every request DTO referenced from app/**/IO/Http/Controllers/*Controller.php
-#     defines rules() - the *Command names a controller mentions plus every class
-#     that `extends Data` (filters DTOs included; the population is read from the
-#     code, never from a name suffix)
+#     defines rules() or inherits them from a parent - the *Command names a
+#     controller mentions plus every class that reaches Data through its parents
+#     (the population is read from the code, never from a name suffix)
 #  2. no <DataClass>::from( inside a controller (a controller never bypasses
 #     rules(); an enum's ::from( is outside the population and never fires)
 #  3. no ::validateAndCreate( on ANY receiver outside IO/Http - internal callers
@@ -12,8 +12,9 @@
 #     one sanctioned line shape: static:: / self:: fed straight by $request->,
 #     in a file under UseCases/Commands/ (a Request-fed named constructor counts
 #     as the HTTP boundary, sec 2.15.B.2)
-#  4. those Request-fed named constructors are called from IO/Http only, and a
-#     file carrying the sanctioned line declares such a constructor
+#  4. those Request-fed named constructors are called from IO/Http only - on the
+#     declaring class or any class below it - and a file carrying the sanctioned
+#     line declares such a constructor
 # Comment lines (`*`, `/*`, `//`, `#` openers) are excluded from checks 2-4; the
 # filters are anchored to the `file:line:` prefix grep -rn prints, so a code
 # line that merely contains a `:NN:` pair or a path fragment is never swallowed.
@@ -39,7 +40,7 @@ http_boundary_path='^[^:]*/IO/Http/'
 controller_path='^[^:]*/IO/Http/Controllers/'
 controller_file='/IO/Http/Controllers/.*Controller\.php$'
 command_name='\b[A-Z][A-Za-z0-9_]*Command\b'
-data_class='^[[:space:]]*(final[[:space:]]+|abstract[[:space:]]+)?class[[:space:]]+[A-Za-z0-9_]+[[:space:]]+extends[[:space:]]+Data\b'
+class_extends='^[[:space:]]*(final[[:space:]]+|abstract[[:space:]]+)?class[[:space:]]+[A-Za-z0-9_]+[[:space:]]+extends[[:space:]]+[\A-Za-z0-9_]+'
 defines_rules='^[[:space:]]*public static function rules\('
 validate_call='::validateAndCreate\('
 sanctioned_call='(static|self)::validateAndCreate\(\$request->'
@@ -60,6 +61,29 @@ constructor_names() {
 # stdin = source paths; prints their class names (the basename, PSR-4) joined by `|`
 class_alternation_of() {
   sed -E 's#.*/##; s#\.php$##' | sort -u | tr '\n' '|' | sed 's/|$//'
+}
+# stdin = `grep -rnE "$class_extends"` lines; prints `path Class Parent` (the parent's short name)
+extends_table_of() {
+  sed -E 's#^([^:]+):[0-9]+:[[:space:]]*(final[[:space:]]+|abstract[[:space:]]+)?class[[:space:]]+([A-Za-z0-9_]+)[[:space:]]+extends[[:space:]]+([\A-Za-z0-9_]*\\)?([A-Za-z0-9_]+).*$#\1 \3 \5#'
+}
+# stdin = the extends table; prints the path of every class that reaches Data through its parents
+data_descendants() {
+  awk '{ path[$2] = $1; parent[$2] = $3 }
+    END { for (c in parent) { p = c; for (d = 0; d < 50 && (p in parent); d++) { if (parent[p] == "Data") { print path[c]; break } p = parent[p] } } }' | sort
+}
+# $1 = a class name; stdin = the extends table; prints every class below it
+descendants_of() {
+  awk -v root="$1" '{ parent[$2] = $3 }
+    END { for (c in parent) { p = parent[c]; for (d = 0; d < 50; d++) { if (p == root) { print c; break } if (!(p in parent)) break; p = parent[p] } } }' | sort
+}
+# $1 = a source path, $2 = paths joined by newlines; stdin = the extends table;
+# succeeds when an ancestor of the class declared in $1 lives in one of $2
+ancestor_in() {
+  HOLDERS="$2" awk -v start="$1" '{ path[$2] = $1; parent[$2] = $3; class_at[$1] = $2 }
+    END { n = split(ENVIRON["HOLDERS"], held, "\n"); for (i = 1; i <= n; i++) holder[held[i]] = 1
+      c = parent[class_at[start]]
+      for (d = 0; d < 50 && (c in path); d++) { if (path[c] in holder) exit 0; c = parent[c] }
+      exit 1 }'
 }
 
 self_test() {
@@ -104,9 +128,6 @@ self_test 'controller file' "$controller_file" \
 self_test 'command name' "$command_name" \
   '        $command = UpdateCompanyCommand::fromRequest($request);' \
   '        $response = $interactor->execute($command);'
-self_test 'data class' "$data_class" \
-  'class InvoiceFilters extends Data' \
-  'class InvoiceCollection extends DataCollection'
 self_test 'rules() definition' "$defines_rules" \
   '    public static function rules(): array' \
   '    public function rules(): array'
@@ -152,6 +173,25 @@ expect_equal 'constructor names (not Request-fed)' \
   "$(printf '%s\n' '    public static function fromArray(array $data): static' | constructor_names)" ''
 expect_equal 'class alternation' \
   "$(printf '%s\n' 'app/A/UseCases/Commands/FooCommand.php' 'app/B/UseCases/Commands/BarFilters.php' | class_alternation_of)" 'BarFilters|FooCommand'
+self_test 'class declaration' "$class_extends" \
+  'abstract class QueryCommand extends Data' \
+  '// class OldFilters extends Data'
+expect_equal 'extends table (implements, abstract)' \
+  "$(printf '%s\n' 'app/A/UseCases/Commands/C.php:7:abstract class C extends B implements Z' | extends_table_of)" 'app/A/UseCases/Commands/C.php C B'
+expect_equal 'extends table (qualified parent)' \
+  "$(printf '%s\n' 'app/A/UseCases/Commands/B.php:9:class B extends \Spatie\LaravelData\Data' | extends_table_of)" 'app/A/UseCases/Commands/B.php B Data'
+chain_table='app/B.php B Data
+app/C.php C B
+app/E.php E C
+app/D.php D DataCollection'
+expect_equal 'population follows parent chains' \
+  "$(printf '%s\n' "$chain_table" | data_descendants | tr '\n' ' ')" 'app/B.php app/C.php app/E.php '
+expect_equal 'descendants of a parent' \
+  "$(printf '%s\n' "$chain_table" | descendants_of B | tr '\n' ' ')" 'C E '
+expect_equal 'rules() declared by an ancestor' \
+  "$(printf '%s\n' "$chain_table" | ancestor_in 'app/E.php' 'app/B.php' && echo yes || echo no)" 'yes'
+expect_equal 'rules() declared by no ancestor' \
+  "$(printf '%s\n' "$chain_table" | ancestor_in 'app/E.php' 'app/D.php' && echo yes || echo no)" 'no'
 
 fail=0
 violations=0
@@ -160,11 +200,13 @@ skipped=0
 newline='
 '
 all_php=$(find app -name '*.php')
-population_files=$(grep -rlE --include='*.php' -e "$data_class" app)
+extends_table=$(grep -rnE --include='*.php' -e "$class_extends" app | extends_table_of)
+population_files=$(printf '%s\n' "$extends_table" | data_descendants)
 if [ -z "$population_files" ]; then
-  echo "self-test failed - no class under app/ extends Data (checks 1 and 2 would scan nothing)"
+  echo "self-test failed - no class under app/ reaches Data (checks 1 and 2 would scan nothing)"
   exit 2
 fi
+rules_files=$(grep -rlE --include='*.php' -e "$defines_rules" app)
 population=$(printf '%s\n' "$population_files" | class_alternation_of)
 
 violation() {
@@ -225,7 +267,9 @@ check_controller_request_dtos_define_rules() {
       src=${entry%%|*}
       dto=${entry#*|}
       case "$newline$without_rules$newline" in
-        *"$newline$src$newline"*) violation "HTTP-boundary command without rules(): ${dto%%|*} (referenced from ${dto#*|})" ;;
+        *"$newline$src$newline"*)
+          printf '%s\n' "$extends_table" | ancestor_in "$src" "$rules_files" \
+            || violation "HTTP-boundary command without rules(): ${dto%%|*} (referenced from ${dto#*|})" ;;
       esac
     done
   fi
@@ -252,7 +296,9 @@ check_request_constructors_called_from_http_only() {
       violation "Request-fed validateAndCreate outside a from...(Request ...) named constructor: $file"
       continue
     fi
-    for method in $methods; do pairs="${pairs:+$pairs|}${cls}::${method}"; done
+    for owner in $cls $(printf '%s\n' "$extends_table" | descendants_of "$cls"); do
+      for method in $methods; do pairs="${pairs:+$pairs|}${owner}::${method}"; done
+    done
   done
   unset IFS
   [ -n "$pairs" ] || return 0
