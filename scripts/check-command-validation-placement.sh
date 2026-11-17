@@ -1,6 +1,8 @@
 #!/bin/sh
 # Amendment AQ (/tdd-red s187; coding-conventions-plan sec 2.15.B.2; OQ-1-172 design P1):
 # validation lives at the HTTP boundary only. Four checks over app/:
+#  0. a short class name declared twice on a Data chain is a loud skip (the
+#     parent walk keys classes by short name)
 #  1. every request DTO referenced from app/**/IO/Http/Controllers/*Controller.php
 #     defines rules() or inherits them from a parent - the *Command names a
 #     controller mentions plus every class that reaches Data through its parents
@@ -40,7 +42,7 @@ http_boundary_path='^[^:]*/IO/Http/'
 controller_path='^[^:]*/IO/Http/Controllers/'
 controller_file='/IO/Http/Controllers/.*Controller\.php$'
 command_name='\b[A-Z][A-Za-z0-9_]*Command\b'
-class_extends='^[[:space:]]*(final[[:space:]]+|abstract[[:space:]]+)?class[[:space:]]+[A-Za-z0-9_]+[[:space:]]+extends[[:space:]]+[\A-Za-z0-9_]+'
+class_extends='^[[:space:]]*((final|abstract|readonly)[[:space:]]+)*class[[:space:]]+[A-Za-z0-9_]+[[:space:]]+extends[[:space:]]+[\A-Za-z0-9_]+'
 defines_rules='^[[:space:]]*public static function rules\('
 validate_call='::validateAndCreate\('
 sanctioned_call='(static|self)::validateAndCreate\(\$request->'
@@ -64,7 +66,16 @@ class_alternation_of() {
 }
 # stdin = `grep -rnE "$class_extends"` lines; prints `path Class Parent` (the parent's short name)
 extends_table_of() {
-  sed -E 's#^([^:]+):[0-9]+:[[:space:]]*(final[[:space:]]+|abstract[[:space:]]+)?class[[:space:]]+([A-Za-z0-9_]+)[[:space:]]+extends[[:space:]]+([\A-Za-z0-9_]*\\)?([A-Za-z0-9_]+).*$#\1 \3 \5#'
+  sed -E 's#^([^:]+):[0-9]+:[[:space:]]*((final|abstract|readonly)[[:space:]]+)*class[[:space:]]+([A-Za-z0-9_]+)[[:space:]]+extends[[:space:]]+([\A-Za-z0-9_]*\\)?([A-Za-z0-9_]+).*$#\1 \4 \6#'
+}
+# stdin = the extends table; prints each short class name declared more than once
+# where a declaration of it sits on a Data chain - the walks key classes by short
+# name, so such a clash would drop a command or mislead its chain
+ambiguous_chain_names() {
+  awk '{ n++; name[n] = $2; up[n] = $3; count[$2]++ }
+    END { chain["Data"] = 1
+      do { grew = 0; for (i = 1; i <= n; i++) if ((up[i] in chain) && !(name[i] in chain)) { chain[name[i]] = 1; grew = 1 } } while (grew)
+      for (c in count) if (count[c] > 1 && (c in chain)) print c }' | sort
 }
 # stdin = the extends table; prints the path of every class that reaches Data through its parents
 data_descendants() {
@@ -178,6 +189,14 @@ self_test 'class declaration' "$class_extends" \
   '// class OldFilters extends Data'
 expect_equal 'extends table (implements, abstract)' \
   "$(printf '%s\n' 'app/A/UseCases/Commands/C.php:7:abstract class C extends B implements Z' | extends_table_of)" 'app/A/UseCases/Commands/C.php C B'
+expect_equal 'extends table (final)' \
+  "$(printf '%s\n' 'app/A/UseCases/Commands/F.php:7:final class F extends B' | extends_table_of)" 'app/A/UseCases/Commands/F.php F B'
+expect_equal 'extends table (readonly, final readonly)' \
+  "$(printf '%s\n' 'app/A/R.php:7:readonly class R extends Data' 'app/A/S.php:7:final readonly class S extends R' | extends_table_of | tr '\n' ' ')" 'app/A/R.php R Data app/A/S.php S R '
+expect_equal 'a name declared twice on a Data chain' \
+  "$(printf '%s\n' 'app/A/B.php B Data' 'app/C/B.php B Model' 'app/D/C.php C B' | ambiguous_chain_names)" 'B'
+expect_equal 'a name declared twice off every Data chain' \
+  "$(printf '%s\n' 'app/A/User.php User AggregateRoot' 'app/B/User.php User Model' 'app/D/C.php C Data' | ambiguous_chain_names)" ''
 expect_equal 'extends table (qualified parent)' \
   "$(printf '%s\n' 'app/A/UseCases/Commands/B.php:9:class B extends \Spatie\LaravelData\Data' | extends_table_of)" 'app/A/UseCases/Commands/B.php B Data'
 chain_table='app/B.php B Data
@@ -207,6 +226,7 @@ if [ -z "$population_files" ]; then
   exit 2
 fi
 rules_files=$(grep -rlE --include='*.php' -e "$defines_rules" app)
+ambiguous_names=$(printf '%s\n' "$extends_table" | ambiguous_chain_names)
 population=$(printf '%s\n' "$population_files" | class_alternation_of)
 
 violation() {
@@ -306,6 +326,7 @@ check_request_constructors_called_from_http_only() {
   [ -z "$sites" ] || violation_per_site "$sites" "Request-fed named constructor called outside the HTTP boundary"
 }
 
+for name in $ambiguous_names; do skip "class name $name is declared twice and sits on a Data chain - the parent walk cannot tell them apart"; done
 check_controller_request_dtos_define_rules
 check_no_from_in_controllers
 check_no_validate_outside_http_boundary
