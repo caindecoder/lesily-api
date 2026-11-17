@@ -125,6 +125,20 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
     }
 
     #[Test]
+    public function when_more_than_a_night_s_cap_has_expired_then_the_oldest_thousand_are_deleted(): void
+    {
+        // Given 1,001 expired rows: the newest, with no company, inserted first; then a company's thousand older ones
+        $newestExpired = $this->anAccessRow(null, '2025-11-16 00:00:00');
+        AccessLogEntry::factory()->count(1000)->forCompany(Company::factory()->create())->seenAt(CarbonImmutable::parse('2018-01-01 00:00:00'))->create();
+
+        // When the purge runs
+        $this->runPrune()->expectsOutput('1000 expired access-log row(s) deleted.')->assertSuccessful();
+
+        // Then the thousand oldest are gone and the newest expired row waits for the next night
+        $this->assertRemaining([$newestExpired]);
+    }
+
+    #[Test]
     public function when_the_run_falls_on_29_february_then_the_cutoff_is_28_february(): void
     {
         // Given a run on 29 February, and rows with no company on 28 February a year back and a second before
