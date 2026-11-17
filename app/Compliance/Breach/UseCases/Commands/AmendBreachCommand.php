@@ -10,6 +10,7 @@ use Spatie\LaravelData\Attributes\WithCast;
 use Illuminate\Validation\ValidationException;
 use App\Compliance\Breach\Enums\BreachDataType;
 use App\Compliance\Breach\Enums\BreachSeverity;
+use App\Compliance\Breach\Values\AffectedCompany;
 use Spatie\LaravelData\Attributes\DataCollectionOf;
 use Spatie\LaravelData\Casts\DateTimeInterfaceCast;
 use App\Foundation\UseCases\Attributes\OpaqueString;
@@ -38,9 +39,9 @@ class AmendBreachCommand extends Data
     public ?BreachSeverity $severity = null;
 
     /**
-     * @var list<AffectedCompanyData>|null
+     * @var list<AffectedCompany>|null
      */
-    #[DataCollectionOf(AffectedCompanyData::class)]
+    #[DataCollectionOf(AffectedCompany::class)]
     public ?array $companies = null;
 
     public static function fromRequest(Request $request, string $breachId): static

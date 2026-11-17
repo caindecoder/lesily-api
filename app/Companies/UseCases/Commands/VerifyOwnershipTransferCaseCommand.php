@@ -4,6 +4,7 @@ namespace App\Companies\UseCases\Commands;
 
 use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
+use App\Companies\Values\VerificationArtefact;
 use App\Companies\Enums\VerificationArtefactType;
 use Spatie\LaravelData\Attributes\DataCollectionOf;
 use App\Foundation\UseCases\Attributes\OpaqueString;

@@ -74,7 +74,31 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
             }
         }
 
-        return $commands;
+        return [...$commands, ...$this->listItemClasses($commands)];
+    }
+
+    /**
+     * The item class of every #[DataCollectionOf] list a command holds, wherever it lives.
+     *
+     * @param  list<class-string<Data>>  $commands
+     * @return list<class-string<Data>>
+     */
+    protected function listItemClasses(array $commands): array
+    {
+        $items = [];
+
+        foreach ($commands as $command) {
+            foreach (app(DataConfig::class)->getDataClass($command)->properties as $property) {
+                /** @var class-string<Data>|null $item */
+                $item = $property->type->dataClass;
+
+                if ($item !== null && ! in_array($item, $commands, true)) {
+                    $items[] = $item;
+                }
+            }
+        }
+
+        return array_values(array_unique($items));
     }
 
     /**
