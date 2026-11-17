@@ -3,7 +3,6 @@
 namespace App\Companies\Memberships\UseCases\Commands;
 
 use App\Models\User;
-use Spatie\LaravelData\Data;
 use Illuminate\Validation\Rule;
 use App\Companies\Entities\Company;
 use Illuminate\Validation\Rules\Enum;
@@ -11,7 +10,6 @@ use Spatie\LaravelData\Attributes\WithCast;
 use App\Foundation\UseCases\Casts\ModelCast;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
-use App\Companies\Memberships\UseCases\Casts\SriLankanE164Cast;
 use App\Companies\Memberships\Enums\EmergencyContactRelationship;
 use App\Companies\Memberships\UseCases\Rules\SriLankanPhoneNumber;
 
@@ -20,22 +18,13 @@ use App\Companies\Memberships\UseCases\Rules\SriLankanPhoneNumber;
  * validated at the PUT boundary; the company and the owner are server-sourced and
  * carry no rule.
  */
-class UpdateEmergencyContactCommand extends Data
+class UpdateEmergencyContactCommand extends SetEmergencyContactCommand
 {
     #[WithCast(ModelCast::class, Company::class)]
     public Company $company;
 
     #[WithCast(ModelCast::class, User::class)]
     public User $setBy;
-
-    public string $name;
-
-    public string $email;
-
-    #[WithCast(SriLankanE164Cast::class)]
-    public string $phone;
-
-    public EmergencyContactRelationship $relationship;
 
     public function contact(): SetEmergencyContactCommand
     {
