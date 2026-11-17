@@ -172,6 +172,7 @@ return [
             'company_settings_updated' => 'Company settings updated',
             'company_setting_reset' => 'Company setting reset to the country default',
             'audit_logs_exported' => 'Audit logs exported',
+            'access_log_purged' => 'Old sign-in records deleted',
         ],
         'subject_type' => [
             'dsar_request' => 'A data request',

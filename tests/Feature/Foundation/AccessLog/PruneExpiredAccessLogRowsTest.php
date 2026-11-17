@@ -2,12 +2,16 @@
 
 namespace Tests\Feature\Foundation\AccessLog;
 
+use RuntimeException;
 use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use Tests\Concerns\AssertsAuditTrail;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\AssertionFailedError;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use Tests\Feature\Foundation\FoundationTestCase;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 
 class PruneExpiredAccessLogRowsTest extends FoundationTestCase
@@ -62,6 +66,25 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
         // Then both rows are still there and nothing is audited
         $this->assertRemaining($rows);
         $this->assertNothingAudited();
+    }
+
+    #[Test]
+    public function when_the_audit_row_cannot_be_written_then_no_row_is_deleted(): void
+    {
+        // Given an expired company row, and an audit trail that cannot be written
+        $row = $this->anAccessRow(Company::factory()->create(), '2018-01-01 00:00:00');
+        $this->failTheAuditTrail();
+
+        try {
+            // When the purge runs
+            $this->runPrune()->run();
+            $this->fail('The purge should surface the audit failure.');
+        } catch (AssertionFailedError $guard) {
+            throw $guard;
+        } catch (RuntimeException) {
+            // Then the row is still there
+            $this->assertRemaining([$row]);
+        }
     }
 
     #[Test]
@@ -181,6 +204,67 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
         $this->assertRemaining([$onTheUtcDay]);
     }
 
+    #[Test]
+    public function when_the_purge_runs_twice_then_the_second_run_deletes_and_audits_nothing(): void
+    {
+        // Given an expired company row, already purged once
+        $company = Company::factory()->create();
+        $this->anAccessRow($company, '2018-01-01 00:00:00');
+        $this->runPrune()->assertSuccessful();
+
+        // When the purge runs again
+        $this->runPrune()->expectsOutput('0 expired access-log row(s) deleted.')->assertSuccessful();
+
+        // Then the company still has its one audit row
+        $this->assertSame(1, AuditEntry::query()->where(['action' => AuditAction::AccessLogPurged, 'company_id' => $company->getKey()])->count());
+    }
+
+    #[Test]
+    public function when_only_rows_with_no_company_are_deleted_then_no_audit_row_is_written(): void
+    {
+        // Given an expired row with no company
+        $this->anAccessRow(null, '2024-01-01 00:00:00');
+
+        // When the purge runs
+        $this->runPrune()->expectsOutput('1 expired access-log row(s) deleted.')->assertSuccessful();
+
+        // Then nothing is audited
+        $this->assertNothingAudited();
+    }
+
+    #[Test]
+    public function when_old_rows_are_purged_then_each_affected_company_gets_one_info_audit_row_with_its_count(): void
+    {
+        // Given two expired rows in a seven-year company, three in a one-year company, and one with no company
+        $sevenYears = Company::factory()->create();
+        $oneYear = Company::factory()->keepingAccessLogFor(1)->create();
+        AccessLogEntry::factory()->count(2)->forCompany($sevenYears)->seenAt(CarbonImmutable::parse('2018-01-01 00:00:00'))->create();
+        AccessLogEntry::factory()->count(3)->forCompany($oneYear)->seenAt(CarbonImmutable::parse('2024-01-01 00:00:00'))->create();
+        $this->anAccessRow(null, '2024-01-01 00:00:00');
+
+        // When the purge runs
+        $this->runPrune()->expectsOutput('6 expired access-log row(s) deleted.')->assertSuccessful();
+
+        // Then each company has one system audit row with its own count
+        $this->assertPurgeAudited($sevenYears, 2);
+        $this->assertPurgeAudited($oneYear, 3);
+    }
+
+    #[Test]
+    public function when_rows_are_purged_then_no_audit_trail_row_is_deleted(): void
+    {
+        // Given an audit-trail row eight years old, and an expired access-log row of its company
+        $company = Company::factory()->create();
+        $oldAuditRow = AuditEntry::factory()->forCompany($company)->recordedAt(CarbonImmutable::parse('2018-01-01 00:00:00'))->create();
+        $this->anAccessRow($company, '2018-01-01 00:00:00');
+
+        // When the purge runs
+        $this->runPrune()->assertSuccessful();
+
+        // Then the old audit-trail row is still there
+        $this->assertModelExists($oldAuditRow);
+    }
+
     protected function runPrune(?string $date = null): PendingCommand
     {
         $command = $this->artisan('access-log:prune', $date !== null ? ['--date' => $date] : []);
@@ -205,5 +289,20 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
         sort($expected);
 
         $this->assertSame($expected, AccessLogEntry::query()->orderBy('id')->pluck('id')->all());
+    }
+
+    protected function assertPurgeAudited(Company $company, int $count): void
+    {
+        $entry = AuditEntry::query()->where(['action' => AuditAction::AccessLogPurged, 'company_id' => $company->getKey()])->sole();
+
+        $this->assertSame([
+            'row' => [null, 'AccessLogPurged', 'company', $company->getKey(), null, 'Old sign-in records deleted'],
+            'actor_and_origin' => [null, null, null, null, null, null],
+            'severity_and_count' => ['info', ['count' => $count]],
+        ], [
+            'row' => [$entry->stored_event_id, $entry->event_class, $entry->subject_type->value, $entry->subject_id, $entry->subject_label, $entry->description],
+            'actor_and_origin' => [$entry->actor_user_id, $entry->actor_role_code, $entry->actor_label, $entry->ip_address, $entry->user_agent, $entry->request_id],
+            'severity_and_count' => [$entry->severity, $entry->metadata],
+        ]);
     }
 }

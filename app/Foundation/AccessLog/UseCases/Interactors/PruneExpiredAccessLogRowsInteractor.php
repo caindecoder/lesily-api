@@ -7,7 +7,10 @@ use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\Builder;
+use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
+use App\Foundation\AuditTrail\Enums\AuditSubjectType;
+use App\Foundation\AuditTrail\UseCases\Audit\AuditTrailWriter;
 
 /**
  * Deletes access-log rows past their retention, oldest first, at most a night's cap a run.
@@ -18,14 +21,38 @@ class PruneExpiredAccessLogRowsInteractor
 
     protected const int ROWS_PER_RUN = 1000;
 
+    public function __construct(
+        protected readonly AuditTrailWriter $writer,
+    ) {}
+
     public function execute(CarbonInterface $at): int
     {
-        $expiredIds = $this->expiredRows($at->toImmutable()->startOfDay())
+        $expired = $this->expiredRows($at->toImmutable()->startOfDay())
             ->orderBy('last_seen_at')
             ->limit(self::ROWS_PER_RUN)
-            ->pluck('id');
+            ->get(['id', 'company_id']);
 
-        return AccessLogEntry::query()->whereIn('id', $expiredIds)->delete();
+        return DB::transaction(function () use ($expired): int {
+            $deleted = AccessLogEntry::query()->whereIn('id', $expired->modelKeys())->delete();
+
+            $expired->whereNotNull('company_id')->countBy('company_id')
+                ->each(fn (int $count, string $companyId) => $this->audit($companyId, $count));
+
+            return $deleted;
+        });
+    }
+
+    protected function audit(string $companyId, int $count): void
+    {
+        $this->writer->write([
+            'company_id' => $companyId,
+            'stored_event_id' => null,
+            'event_class' => 'AccessLogPurged',
+            'subject_type' => AuditSubjectType::Company,
+            'subject_id' => $companyId,
+            'subject_label' => null,
+            'metadata' => ['count' => $count],
+        ], AuditAction::AccessLogPurged, 'info');
     }
 
     /**
