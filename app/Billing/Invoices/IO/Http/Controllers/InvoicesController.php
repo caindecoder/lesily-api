@@ -4,8 +4,8 @@ namespace App\Billing\Invoices\IO\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use App\Billing\Invoices\UseCases\Commands\InvoiceFilters;
 use App\Billing\Invoices\IO\Http\Resources\InvoiceCollection;
+use App\Billing\Invoices\UseCases\Commands\ListInvoicesCommand;
 use App\Billing\Invoices\UseCases\Commands\DownloadInvoiceReceiptCommand;
 use App\Billing\Invoices\UseCases\Repositories\InvoiceRepositoryInterface;
 use App\Billing\Invoices\UseCases\Interactors\DownloadInvoiceReceiptInteractor;
@@ -23,7 +23,7 @@ class InvoicesController
 
     public function index(Request $request): InvoiceCollection
     {
-        $filters = InvoiceFilters::fromQuery($request);
+        $filters = ListInvoicesCommand::fromQuery($request);
 
         return new InvoiceCollection(
             $this->invoices->listForCompany($request->company()->getKey(), $filters)

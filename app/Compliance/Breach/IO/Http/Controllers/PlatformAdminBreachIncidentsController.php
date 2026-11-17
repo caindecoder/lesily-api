@@ -12,9 +12,9 @@ use App\Compliance\Breach\UseCases\Commands\AmendBreachCommand;
 use App\Compliance\Breach\UseCases\Commands\RecordBreachCommand;
 use App\Compliance\Breach\UseCases\Commands\ResolveBreachCommand;
 use App\Compliance\Breach\UseCases\Commands\AddBreachCompanyCommand;
+use App\Compliance\Breach\UseCases\Commands\ReviewBreachQueueCommand;
 use App\Compliance\Breach\UseCases\Interactors\AmendBreachInteractor;
 use App\Compliance\Breach\UseCases\Interactors\RecordBreachInteractor;
-use App\Compliance\Breach\UseCases\Commands\BreachIncidentAdminFilters;
 use App\Compliance\Breach\UseCases\Interactors\ResolveBreachInteractor;
 use App\Compliance\Breach\UseCases\Commands\MarkBreachFalseAlarmCommand;
 use App\Compliance\Breach\UseCases\Commands\NotifyBreachCompaniesCommand;
@@ -53,7 +53,7 @@ class PlatformAdminBreachIncidentsController extends Controller
         /** @var User $admin */
         $admin = $request->user();
 
-        $page = $interactor->execute(BreachIncidentAdminFilters::fromQuery($request), $admin, RequestOrigin::fromRequest($request));
+        $page = $interactor->execute(ReviewBreachQueueCommand::fromQuery($request), $admin, RequestOrigin::fromRequest($request));
 
         return (new BreachIncidentAdminCollection($page))->response($request);
     }

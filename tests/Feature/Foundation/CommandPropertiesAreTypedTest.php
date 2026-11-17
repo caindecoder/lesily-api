@@ -19,6 +19,7 @@ use App\Foundation\UseCases\Casts\ModelCast;
 use Spatie\LaravelData\Support\DataProperty;
 use Spatie\LaravelData\Casts\BuiltinTypeCast;
 use Illuminate\Validation\ValidationRuleParser;
+use App\Foundation\UseCases\Commands\QueryCommand;
 use App\Foundation\UseCases\Attributes\OpaqueString;
 use Spatie\LaravelData\Support\Validation\ValidationPath;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
@@ -135,6 +136,7 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
             'a date that is not Carbon' => ($this->holdsADate($parsed) && ! $this->isCarbon($typeName))
                 || $this->holdsANestedDateNotCarbon($property, $rules),
             'a mapper outside the id shape' => $property->inputMappedName !== null
+                && ! is_a($property->className, QueryCommand::class, true)
                 && ! str_ends_with($property->className, 'Filters')
                 && ! (is_subclass_of($typeName, Model::class) && $property->inputMappedName === $property->name.'Id'),
             'a model without ModelCast' => $this->holdsAModelWithoutCast($command, $property, $typeName),

@@ -10,7 +10,7 @@ use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use App\Compliance\Breach\UseCases\Commands\BreachIncidentAdminFilters;
+use App\Compliance\Breach\UseCases\Commands\ReviewBreachQueueCommand;
 
 class ReviewBreachQueueInteractor
 {
@@ -19,7 +19,7 @@ class ReviewBreachQueueInteractor
      *
      * @return LengthAwarePaginator<int, BreachIncidentRecord>
      */
-    public function execute(BreachIncidentAdminFilters $filters, User $admin, RequestOrigin $context): LengthAwarePaginator
+    public function execute(ReviewBreachQueueCommand $filters, User $admin, RequestOrigin $context): LengthAwarePaginator
     {
         return DB::transaction(function () use ($filters, $admin, $context): LengthAwarePaginator {
             $page = BreachIncidentRecord::query()
@@ -41,7 +41,7 @@ class ReviewBreachQueueInteractor
      * @param  LengthAwarePaginator<int, BreachIncidentRecord>  $page
      * @return array<string, mixed>
      */
-    protected function queryContextOf(BreachIncidentAdminFilters $filters, LengthAwarePaginator $page): array
+    protected function queryContextOf(ReviewBreachQueueCommand $filters, LengthAwarePaginator $page): array
     {
         return [
             'filters' => array_filter(

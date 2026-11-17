@@ -11,7 +11,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
 use App\Compliance\Breach\Entities\BreachIncidentRecord;
-use App\Compliance\Breach\UseCases\Commands\BreachIncidentAdminFilters;
+use App\Compliance\Breach\UseCases\Commands\ReviewBreachQueueCommand;
 
 class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
 {
@@ -89,7 +89,7 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
         // (TrimStrings + ConvertEmptyStringsToNull neutralise it over HTTP)
 
         // When the filter is built directly, then construction is rejected on that field
-        $this->assertEmptyFilterValueRejected(BreachIncidentAdminFilters::class, $field, $value);
+        $this->assertEmptyFilterValueRejected(ReviewBreachQueueCommand::class, $field, $value);
     }
 
     #[Test]

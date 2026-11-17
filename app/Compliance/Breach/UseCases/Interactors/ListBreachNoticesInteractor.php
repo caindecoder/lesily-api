@@ -5,14 +5,14 @@ namespace App\Compliance\Breach\UseCases\Interactors;
 use App\Companies\Entities\Company;
 use Illuminate\Pagination\LengthAwarePaginator;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
-use App\Compliance\Breach\UseCases\Commands\BreachNoticeFilters;
+use App\Compliance\Breach\UseCases\Commands\ListBreachNoticesCommand;
 
 class ListBreachNoticesInteractor
 {
     /**
      * @return LengthAwarePaginator<int, BreachIncidentCompany>
      */
-    public function execute(BreachNoticeFilters $filters, Company $company): LengthAwarePaginator
+    public function execute(ListBreachNoticesCommand $filters, Company $company): LengthAwarePaginator
     {
         return BreachIncidentCompany::query()
             ->whereCompany($company)

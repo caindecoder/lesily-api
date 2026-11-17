@@ -4,7 +4,7 @@ namespace App\Billing\Invoices\UseCases\Repositories;
 
 use App\Billing\Invoices\Entities\Invoice;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use App\Billing\Invoices\UseCases\Commands\InvoiceFilters;
+use App\Billing\Invoices\UseCases\Commands\ListInvoicesCommand;
 
 /**
  * Read access to the invoices projection (UC-1-120; cd-invoices §Repositories).
@@ -17,7 +17,7 @@ interface InvoiceRepositoryInterface
      *
      * @return LengthAwarePaginator<int, Invoice>
      */
-    public function listForCompany(string $companyId, InvoiceFilters $filters): LengthAwarePaginator;
+    public function listForCompany(string $companyId, ListInvoicesCommand $filters): LengthAwarePaginator;
 
     /**
      * One invoice by id, tenant-scoped — null when the id is unknown OR belongs

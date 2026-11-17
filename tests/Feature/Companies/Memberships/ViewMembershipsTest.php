@@ -14,7 +14,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Memberships\Entities\Invitation;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
-use App\Companies\Memberships\UseCases\Commands\MembershipFilters;
+use App\Companies\Memberships\UseCases\Commands\ListMembershipsCommand;
 
 class ViewMembershipsTest extends MembershipsTestCase
 {
@@ -118,7 +118,7 @@ class ViewMembershipsTest extends MembershipsTestCase
         // the DTO seam (TrimStrings + ConvertEmptyStringsToNull neutralise it over HTTP)
 
         // When the filter is built directly, then construction is rejected on that field
-        $this->assertEmptyFilterValueRejected(MembershipFilters::class, $field, $value);
+        $this->assertEmptyFilterValueRejected(ListMembershipsCommand::class, $field, $value);
     }
 
     /**
@@ -204,7 +204,7 @@ class ViewMembershipsTest extends MembershipsTestCase
 
         // When the filter is built at the DTO seam (the roster echo path builds
         // exactly this shape in production — EloquentCompanyUserRepository::findById)
-        $filters = MembershipFilters::validateAndCreate([]);
+        $filters = ListMembershipsCommand::validateAndCreate([]);
 
         // Then it constructs with every property at its null default — the
         // filled guard must never fire on an absent key

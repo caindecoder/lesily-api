@@ -7,8 +7,8 @@ use App\Companies\Entities\Company;
 use Illuminate\Pagination\LengthAwarePaginator;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Compliance\Dsar\Entities\DsarRequestRecord;
-use App\Compliance\Dsar\UseCases\Commands\DsarRequestFilters;
 use App\Compliance\Dsar\UseCases\Queries\DsarRequestVisibility;
+use App\Compliance\Dsar\UseCases\Commands\ListDsarRequestsCommand;
 
 class ListDsarRequestsInteractor
 {
@@ -17,7 +17,7 @@ class ListDsarRequestsInteractor
     /**
      * @return LengthAwarePaginator<int, DsarRequestRecord>
      */
-    public function execute(DsarRequestFilters $filters, User $actor, Company $company): LengthAwarePaginator
+    public function execute(ListDsarRequestsCommand $filters, User $actor, Company $company): LengthAwarePaginator
     {
         return $this->visibility->visibleTo($actor, $company)
             ->with(['subject', 'requestedBy'])

@@ -18,8 +18,8 @@ use Database\Factories\BreachIncidentCompanyFactory;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
 use App\Compliance\Breach\Events\BreachCompanyNotified;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
-use App\Compliance\Breach\UseCases\Commands\BreachNoticeFilters;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
+use App\Compliance\Breach\UseCases\Commands\ListBreachNoticesCommand;
 
 class ListBreachNoticesTest extends BreachIncidentsTestCase
 {
@@ -110,7 +110,7 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         // Given an empty or blank value for one of the list's query keys
         // When the notices filter is built from it
         // Then the value is rejected
-        $this->assertEmptyFilterValueRejected(BreachNoticeFilters::class, $field, $value);
+        $this->assertEmptyFilterValueRejected(ListBreachNoticesCommand::class, $field, $value);
     }
 
     #[Test]

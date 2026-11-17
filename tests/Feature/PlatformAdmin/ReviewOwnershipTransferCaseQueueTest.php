@@ -12,7 +12,7 @@ use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
-use App\Companies\UseCases\Commands\OwnershipTransferCaseAdminFilters;
+use App\Companies\UseCases\Commands\ReviewOwnershipTransferCaseQueueCommand;
 
 class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCase
 {
@@ -69,7 +69,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
         // the DTO seam (TrimStrings + ConvertEmptyStringsToNull neutralise it over HTTP)
 
         // When the filter is built directly, then construction is rejected on that field
-        $this->assertEmptyFilterValueRejected(OwnershipTransferCaseAdminFilters::class, $field, $value);
+        $this->assertEmptyFilterValueRejected(ReviewOwnershipTransferCaseQueueCommand::class, $field, $value);
     }
 
     #[Test]
@@ -152,7 +152,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
         // Given no query values at all
 
         // When the filter is built at the DTO seam
-        $filters = OwnershipTransferCaseAdminFilters::validateAndCreate([]);
+        $filters = ReviewOwnershipTransferCaseQueueCommand::validateAndCreate([]);
 
         // Then it constructs with every property at its null default — the
         // filled guard must never fire on an absent key
