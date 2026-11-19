@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Consent\Events\ConsentRecorded;
@@ -19,6 +20,8 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class ResetCompanySettingTest extends CompaniesTestCase
 {
+    use FreeTierCompany;
+
     /**
      * The own values CompanySettingsFactory::ownValues() gives a company.
      */
@@ -40,7 +43,7 @@ class ResetCompanySettingTest extends CompaniesTestCase
     {
         parent::setUp();
 
-        $this->seedRbacCatalog();
+        $this->makeFreeTierCompany();
 
         config(['app.debug' => false]);
     }
@@ -49,31 +52,30 @@ class ResetCompanySettingTest extends CompaniesTestCase
     public function when_member_without_update_permission_resets_a_setting_then_refused_and_own_value_kept(): void
     {
         // Given an HR officer of a company with its own settings
-        $company = Company::factory()->withOwnSettings()->create();
-        $hrOfficer = $this->aCompanyMember($company, 'hr_officer');
+        $this->giveOwnSettings($this->company);
+        $hrOfficer = $this->aCompanyMember($this->company, 'hr_officer');
 
         // When they reset the company's timezone
-        $response = $this->resetCompanySetting($hrOfficer, $company->getKey(), 'timezone');
+        $response = $this->resetCompanySetting($hrOfficer, $this->company->getKey(), 'timezone');
 
         // Then they are refused and the company keeps its own value
         $this->assertRoleInsufficient($response, 'companies.update');
-        $this->assertOwnValueKept($company);
+        $this->assertOwnValueKept($this->company, self::READY_MADE_COMPANY_EVENTS);
     }
 
     #[Test]
     public function when_member_of_another_company_resets_a_setting_then_refused_and_own_value_kept(): void
     {
         // Given the owner of company A and company B with its own settings
-        $companyA = Company::factory()->withOwnSettings()->create();
+        $this->giveOwnSettings($this->company);
         $companyB = Company::factory()->withOwnSettings()->create();
-        $ownerOfA = $this->aCompanyMember($companyA, 'owner');
 
         // When they reset company B's timezone
-        $response = $this->resetCompanySetting($ownerOfA, $companyB->getKey(), 'timezone');
+        $response = $this->resetCompanySetting($this->owner, $companyB->getKey(), 'timezone');
 
         // Then company access is denied and company B keeps its own value
         $this->assertCompanyAccessDenied($response);
-        $this->assertOwnValueKept($companyB);
+        $this->assertOwnValueKept($companyB, 0);
     }
 
     #[Test]
@@ -81,16 +83,15 @@ class ResetCompanySettingTest extends CompaniesTestCase
     {
         // Given production error rendering, the owner of a company with its own settings, and an audit trail that fails
         config(['app.debug' => false]);
-        $company = Company::factory()->withOwnSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        $this->giveOwnSettings($this->company);
         $this->failTheAuditTrail();
 
         // When they reset its timezone
-        $response = $this->resetCompanySetting($owner, $company->getKey(), 'timezone');
+        $response = $this->resetCompanySetting($this->owner, $this->company->getKey(), 'timezone');
 
         // Then the reset fails whole: every own value is kept and no reset is recorded
         $response->assertInternalServerError();
-        $this->assertOwnValueKept($company);
+        $this->assertOwnValueKept($this->company, self::READY_MADE_COMPANY_EVENTS);
     }
 
     #[Test]
@@ -98,15 +99,14 @@ class ResetCompanySettingTest extends CompaniesTestCase
     public function when_setting_cannot_be_reset_then_not_found_and_nothing_recorded(string $setting): void
     {
         // Given the owner of a company with its own settings
-        $company = Company::factory()->withOwnSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        $this->giveOwnSettings($this->company);
 
         // When they reset a setting that cannot be reset
-        $response = $this->resetCompanySetting($owner, $company->getKey(), $setting);
+        $response = $this->resetCompanySetting($this->owner, $this->company->getKey(), $setting);
 
         // Then it is not found and nothing is recorded
         $this->assertResourceNotFound($response);
-        $this->assertNothingRecorded($company, 0);
+        $this->assertNothingRecorded($this->company, self::READY_MADE_COMPANY_EVENTS);
     }
 
     /**
@@ -126,33 +126,30 @@ class ResetCompanySettingTest extends CompaniesTestCase
     public function when_setting_already_follows_the_country_then_nothing_is_recorded(): void
     {
         // Given the owner of a company that follows its country on every setting
-        $company = Company::factory()->withSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
 
         // When they reset its working days
-        $response = $this->resetCompanySetting($owner, $company->getKey(), 'working_days_per_week');
+        $response = $this->resetCompanySetting($this->owner, $this->company->getKey(), 'working_days_per_week');
 
         // Then the reset answers, nothing is recorded and nothing is audited
         $response->assertNoContent();
-        $this->assertNothingRecorded($company, 0);
-        $this->assertNothingAudited();
-        $this->assertSettingFollowsTheCountry($company, 'working_days_per_week');
+        $this->assertNothingRecorded($this->company, self::READY_MADE_COMPANY_EVENTS);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
+        $this->assertSettingFollowsTheCountry($this->company, 'working_days_per_week');
     }
 
     #[Test]
     public function when_a_company_resets_a_setting_then_another_company_keeps_its_own_value(): void
     {
         // Given two companies with their own settings and the owner of company A
-        $companyA = Company::factory()->withOwnSettings()->create();
+        $this->giveOwnSettings($this->company);
         $companyB = Company::factory()->withOwnSettings()->create();
-        $ownerOfA = $this->aCompanyMember($companyA, 'owner');
 
         // When they reset company A's timezone
-        $response = $this->resetCompanySetting($ownerOfA, $companyA->getKey(), 'timezone');
+        $response = $this->resetCompanySetting($this->owner, $this->company->getKey(), 'timezone');
 
         // Then company B keeps its own value and records nothing
         $response->assertNoContent();
-        $this->assertOwnValueKept($companyB);
+        $this->assertOwnValueKept($companyB, 0);
     }
 
     #[Test]
@@ -160,20 +157,21 @@ class ResetCompanySettingTest extends CompaniesTestCase
     public function when_a_setting_with_an_own_value_is_reset_then_it_follows_the_country(string $setting, string $role): void
     {
         // Given a member allowed to update a company with its own settings
-        $company = Company::factory()->withOwnSettings()->create();
-        $member = $this->aCompanyMember($company, $role);
+        $this->giveOwnSettings($this->company);
+        $member = $this->memberWithRole($role);
 
         // When they reset one of its settings from a device
         $this->fromADevice();
-        $response = $this->resetCompanySetting($member, $company->getKey(), $setting);
+        $response = $this->resetCompanySetting($member, $this->company->getKey(), $setting);
 
         // Then the setting follows the country, the reset is recorded and audited own value -> country default, and the other own values stay
         $response->assertNoContent();
-        $this->assertSettingFollowsTheCountry($company, $setting);
-        $this->assertResetRecorded($company, $setting, $member->getKey());
-        $this->assertCompanyChangeAudited($company, AuditAction::CompanySettingReset, [$setting => ['from' => self::OWN_VALUES[$setting], 'to' => self::SRI_LANKA_DEFAULTS[$setting]]]);
+        $this->assertSettingFollowsTheCountry($this->company, $setting);
+        $this->assertResetRecorded($this->company, $setting, $member->getKey());
+        $this->assertCompanyChangeAudited($this->company, AuditAction::CompanySettingReset, [$setting => ['from' => self::OWN_VALUES[$setting], 'to' => self::SRI_LANKA_DEFAULTS[$setting]]]);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertEveryRowCameFrom($response, $member, $role);
-        $this->assertOtherOwnValuesKept($company, $setting);
+        $this->assertOtherOwnValuesKept($this->company, $setting);
     }
 
     /**
@@ -196,7 +194,7 @@ class ResetCompanySettingTest extends CompaniesTestCase
         return $this->deleteJson('/api/v1/companies/'.$companyId.'/settings/'.$setting);
     }
 
-    protected function assertOwnValueKept(Company $company): void
+    protected function assertOwnValueKept(Company $company, int $eventsBefore): void
     {
         $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
 
@@ -204,7 +202,7 @@ class ResetCompanySettingTest extends CompaniesTestCase
         $this->assertSame(7, $settings->fiscal_year_start_month);
         $this->assertSame(6, $settings->working_days_per_week);
         $this->assertSame(7.5, $settings->default_work_hours_per_day);
-        $this->assertNothingRecorded($company, 0);
+        $this->assertNothingRecorded($company, $eventsBefore);
     }
 
     protected function assertOtherOwnValuesKept(Company $company, string $resetSetting): void
