@@ -106,7 +106,7 @@ class ResetCompanySettingTest extends CompaniesTestCase
 
         // Then it is not found and nothing is recorded
         $this->assertResourceNotFound($response);
-        $this->assertNothingRecorded($company);
+        $this->assertNothingRecorded($company, 0);
     }
 
     /**
@@ -134,7 +134,7 @@ class ResetCompanySettingTest extends CompaniesTestCase
 
         // Then the reset answers, nothing is recorded and nothing is audited
         $response->assertNoContent();
-        $this->assertNothingRecorded($company);
+        $this->assertNothingRecorded($company, 0);
         $this->assertNothingAudited();
         $this->assertSettingFollowsTheCountry($company, 'working_days_per_week');
     }
@@ -204,7 +204,7 @@ class ResetCompanySettingTest extends CompaniesTestCase
         $this->assertSame(7, $settings->fiscal_year_start_month);
         $this->assertSame(6, $settings->working_days_per_week);
         $this->assertSame(7.5, $settings->default_work_hours_per_day);
-        $this->assertNothingRecorded($company);
+        $this->assertNothingRecorded($company, 0);
     }
 
     protected function assertOtherOwnValuesKept(Company $company, string $resetSetting): void
@@ -218,8 +218,8 @@ class ResetCompanySettingTest extends CompaniesTestCase
         }
     }
 
-    protected function assertNothingRecorded(Company $company): void
+    protected function assertNothingRecorded(Company $company, int $eventsBefore): void
     {
-        $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
+        $this->assertSame($eventsBefore, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
     }
 }

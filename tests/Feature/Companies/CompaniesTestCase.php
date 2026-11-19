@@ -4,6 +4,7 @@ namespace Tests\Feature\Companies;
 
 use Tests\TestCase;
 use App\Models\User;
+use Illuminate\Support\Arr;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
@@ -200,19 +201,18 @@ abstract class CompaniesTestCase extends TestCase
 
     /**
      * A rejected update left the company untouched — the name still reads
-     * $expectedName, the settings still follow the country, and no update
-     * event escaped the guard (factory companies carry no genesis events, so the
-     * only events that could exist are the update's). The LD / amendment-R
+     * $expectedName, the settings still follow the country, and the company holds
+     * no event beyond the $eventsBefore it was arranged with. The LD / amendment-R
      * state-unchanged discipline for sad paths.
      */
-    protected function assertCompanyUnchanged(Company $company, string $expectedName): void
+    protected function assertCompanyUnchanged(Company $company, string $expectedName, int $eventsBefore): void
     {
         $company->refresh();
         $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
 
         $this->assertSame($expectedName, $company->name);
         $this->assertNull($settings->timezone);
-        $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
+        $this->assertSame($eventsBefore, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
     }
 
     /**
@@ -287,9 +287,9 @@ abstract class CompaniesTestCase extends TestCase
     /**
      * A name-only update recorded exactly one CompanyDetailsUpdated event (the
      * settings event stays silent — conditional emission) and the name landed on
-     * the read model. The single total event proves nothing else was recorded.
+     * the read model. One event beyond the $eventsBefore proves nothing else was recorded.
      */
-    protected function assertOnlyDetailsEventRecorded(Company $company, string $expectedName): void
+    protected function assertOnlyDetailsEventRecorded(Company $company, string $expectedName, int $eventsBefore): void
     {
         $company->refresh();
 
@@ -297,16 +297,16 @@ abstract class CompaniesTestCase extends TestCase
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', CompanyDetailsUpdated::class)
             ->whereForCompany($company->getKey())->count());
-        $this->assertSame(1, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
+        $this->assertSame($eventsBefore + 1, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
     }
 
     /**
      * A settings-only update recorded exactly one CompanySettingsUpdated event
      * (the details event stays silent — conditional emission) and the settings
      * read model holds $expectedTimezone (null: it still follows the country).
-     * The single total event proves nothing else was recorded.
+     * One event beyond the $eventsBefore proves nothing else was recorded.
      */
-    protected function assertOnlySettingsEventRecorded(Company $company, ?string $expectedTimezone): void
+    protected function assertOnlySettingsEventRecorded(Company $company, ?string $expectedTimezone, int $eventsBefore): void
     {
         $settings = CompanySettings::query()->where('company_id', $company->getKey())->sole();
 
@@ -314,7 +314,14 @@ abstract class CompaniesTestCase extends TestCase
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', CompanySettingsUpdated::class)
             ->whereForCompany($company->getKey())->count());
-        $this->assertSame(1, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
+        $this->assertSame($eventsBefore + 1, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
+    }
+
+    protected function giveOwnSettings(Company $company): void
+    {
+        $ownValues = Arr::except(CompanySettings::factory()->ownValues()->raw(['company_id' => $company->getKey()]), ['company_id']);
+
+        CompanySettings::query()->where('company_id', $company->getKey())->update($ownValues);
     }
 
     /**

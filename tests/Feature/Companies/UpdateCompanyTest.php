@@ -133,7 +133,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the update is rejected and the company is untouched
         $this->assertValidationRejected($response, 'name', 'The name field is required.');
-        $this->assertCompanyUnchanged($company, 'Contoso');
+        $this->assertCompanyUnchanged($company, 'Contoso', 0);
     }
 
     // Sad — R8 teeth on the write route: the URL names a company the member does
@@ -219,7 +219,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the update fails whole: the old name and settings, no recorded events
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
-        $this->assertCompanyUnchanged($company, 'Contoso');
+        $this->assertCompanyUnchanged($company, 'Contoso', 0);
     }
 
     #[Test]
@@ -238,7 +238,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the update fails whole: the old name and settings, no recorded events, nothing audited
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
-        $this->assertCompanyUnchanged($company, 'Contoso');
+        $this->assertCompanyUnchanged($company, 'Contoso', 0);
         $this->assertNothingAudited();
     }
 
@@ -257,7 +257,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then only the details event is recorded and the name is updated
         $response->assertOk();
-        $this->assertOnlyDetailsEventRecorded($company, 'New Co');
+        $this->assertOnlyDetailsEventRecorded($company, 'New Co', 0);
     }
 
     // Edge — a settings-only update records the settings event and nothing else:
@@ -274,7 +274,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then only the settings event is recorded and the timezone is updated
         $response->assertOk();
-        $this->assertOnlySettingsEventRecorded($company, 'Asia/Singapore');
+        $this->assertOnlySettingsEventRecorded($company, 'Asia/Singapore', 0);
     }
 
     #[Test]
@@ -292,7 +292,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then only the name is recorded and the timezone still follows the country
         $response->assertOk();
-        $this->assertOnlyDetailsEventRecorded($company, 'Same Co');
+        $this->assertOnlyDetailsEventRecorded($company, 'Same Co', 0);
         $this->assertSettingFollowsTheCountry($company, 'timezone');
     }
 
@@ -382,7 +382,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the request succeeds, nothing changed and nothing is audited
         $response->assertOk();
-        $this->assertCompanyUnchanged($company, 'Idle Co');
+        $this->assertCompanyUnchanged($company, 'Idle Co', 0);
         $this->assertNothingAudited();
     }
 
@@ -398,7 +398,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the details event is recorded as before, but nothing changed, so nothing is audited
         $response->assertOk();
-        $this->assertOnlyDetailsEventRecorded($company, 'Contoso');
+        $this->assertOnlyDetailsEventRecorded($company, 'Contoso', 0);
         $this->assertNothingAudited();
     }
 
@@ -414,7 +414,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the settings event is recorded as before, but nothing changed, so nothing is audited
         $response->assertOk();
-        $this->assertOnlySettingsEventRecorded($company, 'Asia/Singapore');
+        $this->assertOnlySettingsEventRecorded($company, 'Asia/Singapore', 0);
         $this->assertNothingAudited();
     }
 
@@ -491,7 +491,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the settings event fires (the timezone still follows) and the read model reads zero
         $response->assertOk();
-        $this->assertOnlySettingsEventRecorded($company, null);
+        $this->assertOnlySettingsEventRecorded($company, null, 0);
         $this->assertDatabaseHas('company_settings', [
             'company_id' => $company->getKey(),
             'default_work_hours_per_day' => 0,
