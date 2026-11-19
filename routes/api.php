@@ -288,6 +288,11 @@ Route::get('/v1/companies/{companyId}/data-protection-officer', [CompanyDataProt
 Route::put('/v1/companies/{companyId}/data-protection-officer', [CompanyDataProtectionOfficerController::class, 'update'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:companies.update']);
 
+// Remove the company's data protection officer (UC-1-146 alt 3c) — 204, also when none
+// is recorded (nothing is then recorded). Same gates as the record.
+Route::delete('/v1/companies/{companyId}/data-protection-officer', [CompanyDataProtectionOfficerController::class, 'destroy'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:companies.update']);
+
 // Accept the live Terms of Service and Privacy Policy versions for the company
 // (UC-1-069) — any member, the request IP recorded; open past the consent gate.
 Route::post('/v1/companies/{companyId}/consents', AcceptConsentController::class)
