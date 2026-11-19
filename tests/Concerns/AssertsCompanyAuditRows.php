@@ -14,7 +14,10 @@ use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
+use App\Foundation\AuditTrail\Values\FieldChanges;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Companies\Events\CompanyDataProtectionOfficerSet;
+use App\Companies\Events\CompanyDataProtectionOfficerRemoved;
 use App\Foundation\Auth\Events\UserMembershipEmergencyContactSet;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -105,9 +108,11 @@ trait AssertsCompanyAuditRows
             ->latest('recorded_at')
             ->latest('id')
             ->get()
-            ->first(fn (AuditEntry $entry): bool => array_keys($this->changesOf($entry)) === array_keys($changes));
+            ->first(fn (AuditEntry $entry): bool => array_keys($this->readableChangesOf($entry)) === array_keys($changes));
         $this->assertInstanceOf(AuditEntry::class, $entry);
         [$eventClass, $words] = match ($action) {
+            AuditAction::DataProtectionOfficerSet => [CompanyDataProtectionOfficerSet::class, 'Data protection officer set'],
+            AuditAction::DataProtectionOfficerRemoved => [CompanyDataProtectionOfficerRemoved::class, 'Data protection officer removed'],
             AuditAction::CompanyDetailsUpdated => [CompanyDetailsUpdated::class, 'Company details updated'],
             AuditAction::CompanySettingsUpdated => [CompanySettingsUpdated::class, 'Company settings updated'],
             default => [CompanySettingReset::class, 'Company setting reset to the country default'],
@@ -131,9 +136,20 @@ trait AssertsCompanyAuditRows
             'event_class' => $entry->event_class,
             'subject' => [$entry->subject_type->value, $entry->subject_id, $entry->subject_label],
             'description' => $entry->description,
-            'changes' => $this->changesOf($entry),
+            'changes' => $this->readableChangesOf($entry),
             'severity' => $entry->severity,
         ]);
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    protected function readableChangesOf(AuditEntry $entry): array
+    {
+        $changes = FieldChanges::readable($this->changesOf($entry)) ?? [];
+        array_walk($changes, fn (array &$change): bool => ksort($change));
+
+        return $changes;
     }
 
     /** @param array<string, array{from: ?string, to: ?string}> $plain */

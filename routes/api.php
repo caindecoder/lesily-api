@@ -40,6 +40,7 @@ use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
 use App\Billing\Subscriptions\IO\Http\Controllers\SubscriptionsController;
 use App\Compliance\Privacy\IO\Http\Controllers\ProcessingRegisterController;
 use App\Billing\Invoices\IO\Http\Controllers\PlatformAdminInvoicesController;
+use App\Companies\IO\Http\Controllers\CompanyDataProtectionOfficerController;
 use App\Companies\Memberships\IO\Http\Controllers\AcceptInvitationController;
 use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
 use App\Foundation\Auth\IO\Http\Controllers\ResendVerificationEmailController;
@@ -276,6 +277,11 @@ Route::get('/v1/companies/{companyId}/emergency-contact', [MembershipsController
 // No idempotency-key — a PUT is naturally idempotent. No throttle.
 Route::put('/v1/companies/{companyId}/emergency-contact', [MembershipsController::class, 'setEmergencyContact'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.set-emergency-contact']);
+
+// Record the company's data protection officer (UC-1-146) — through the event-sourced
+// Company aggregate; owner and admin (companies.update). No throttle (OQ-1-098).
+Route::put('/v1/companies/{companyId}/data-protection-officer', [CompanyDataProtectionOfficerController::class, 'update'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:companies.update']);
 
 // Accept the live Terms of Service and Privacy Policy versions for the company
 // (UC-1-069) — any member, the request IP recorded; open past the consent gate.

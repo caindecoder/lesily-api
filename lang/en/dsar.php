@@ -171,6 +171,8 @@ return [
             'company_details_updated' => 'Company details updated',
             'company_settings_updated' => 'Company settings updated',
             'company_setting_reset' => 'Company setting reset to the country default',
+            'data_protection_officer_set' => 'Data protection officer set',
+            'data_protection_officer_removed' => 'Data protection officer removed',
             'audit_logs_exported' => 'Audit logs exported',
             'access_log_purged' => 'Old sign-in records deleted',
         ],

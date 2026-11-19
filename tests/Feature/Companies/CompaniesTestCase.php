@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies;
 use Tests\TestCase;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
+use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Tests\Concerns\AssertsAuditTrail;
@@ -17,6 +18,8 @@ use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\CountryConfig\Entities\Country;
 use App\Foundation\RolesPermissions\Entities\Role;
+use App\Companies\Entities\CompanyDataProtectionOfficer;
+use App\Companies\Events\CompanyDataProtectionOfficerSet;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class CompaniesTestCase extends TestCase
@@ -78,6 +81,76 @@ abstract class CompaniesTestCase extends TestCase
      *
      * @param  array<string, mixed>  $payload
      */
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function setDataProtectionOfficer(User $user, string $companyId, array $payload): TestResponse
+    {
+        Sanctum::actingAs($user);
+
+        return $this->putJson('/api/v1/companies/'.$companyId.'/data-protection-officer', $payload);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function setDataProtectionOfficerAsGuest(string $companyId, array $payload): TestResponse
+    {
+        return $this->putJson('/api/v1/companies/'.$companyId.'/data-protection-officer', $payload);
+    }
+
+    protected function viewDataProtectionOfficer(User $user, string $companyId): TestResponse
+    {
+        Sanctum::actingAs($user);
+
+        return $this->getJson('/api/v1/companies/'.$companyId.'/data-protection-officer');
+    }
+
+    protected function viewDataProtectionOfficerAsGuest(string $companyId): TestResponse
+    {
+        return $this->getJson('/api/v1/companies/'.$companyId.'/data-protection-officer');
+    }
+
+    protected function removeDataProtectionOfficer(User $user, string $companyId): TestResponse
+    {
+        Sanctum::actingAs($user);
+
+        return $this->deleteJson('/api/v1/companies/'.$companyId.'/data-protection-officer');
+    }
+
+    protected function removeDataProtectionOfficerAsGuest(string $companyId): TestResponse
+    {
+        return $this->deleteJson('/api/v1/companies/'.$companyId.'/data-protection-officer');
+    }
+
+    /**
+     * The company's DPO row reads back as $expected, and none of its three columns
+     * holds a plain value.
+     *
+     * @param  array{name: string, email: string, phone: ?string}  $expected
+     */
+    protected function assertDpoStored(Company $company, array $expected): void
+    {
+        $officer = CompanyDataProtectionOfficer::query()->where('company_id', $company->getKey())->sole();
+        $raw = DB::table('company_data_protection_officers')->where('company_id', $company->getKey())->sole();
+
+        $this->assertSame($expected, ['name' => $officer->name, 'email' => $officer->email, 'phone' => $officer->phone]);
+        $this->assertNotContains($raw->name, array_filter($expected));
+        $this->assertNotContains($raw->email, array_filter($expected));
+    }
+
+    /**
+     * The company has no DPO row and no DPO was ever set on its stream.
+     */
+    protected function assertNoDpo(Company $company): void
+    {
+        $this->assertFalse(CompanyDataProtectionOfficer::query()->where('company_id', $company->getKey())->exists());
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $company->getKey())
+            ->where('event_class', CompanyDataProtectionOfficerSet::class)
+            ->count());
+    }
+
     protected function updateCompanyDetailsAsGuest(string $companyId, array $payload): TestResponse
     {
         return $this->putJson('/api/v1/companies/'.$companyId, $payload);
