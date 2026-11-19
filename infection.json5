@@ -70,6 +70,8 @@
                 // WHEN a child of RegisterCompanyCommand inherits rules() without overriding.
                 "App\\Companies\\UseCases\\Commands\\RegisterCompanyCommand::rules",
                 "App\\Companies\\Projectors\\CompanyProjector::onCompanyCreated",
+                "App\\Companies\\Projectors\\DataProtectionOfficerProjector::onCompanyDataProtectionOfficerSet",
+                "App\\Companies\\Projectors\\DataProtectionOfficerProjector::onCompanyDataProtectionOfficerRemoved",
                 "App\\Companies\\Projectors\\CompanyProjector::onCompanyTrialExpired",
                 "App\\Billing\\Subscriptions\\Projectors\\SubscriptionProjector::onSubscriptionTrialStarted",
                 "App\\Billing\\Subscriptions\\Projectors\\SubscriptionProjector::onSubscriptionTrialEnded",

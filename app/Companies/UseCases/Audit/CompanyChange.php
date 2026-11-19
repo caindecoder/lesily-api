@@ -10,6 +10,8 @@ use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Values\FieldChanges;
+use App\Companies\Events\CompanyDataProtectionOfficerSet;
+use App\Companies\Events\CompanyDataProtectionOfficerRemoved;
 
 /**
  * One kind of change a company update made — its details, its own settings, or one
@@ -34,6 +36,16 @@ readonly class CompanyChange
     public static function settingsOf(Company $company, FieldChanges $changes): self
     {
         return new self($company, AuditAction::CompanySettingsUpdated, CompanySettingsUpdated::class, $changes);
+    }
+
+    public static function dataProtectionOfficerSetOf(Company $company, FieldChanges $changes): self
+    {
+        return new self($company, AuditAction::DataProtectionOfficerSet, CompanyDataProtectionOfficerSet::class, $changes);
+    }
+
+    public static function dataProtectionOfficerRemovedOf(Company $company, FieldChanges $changes): self
+    {
+        return new self($company, AuditAction::DataProtectionOfficerRemoved, CompanyDataProtectionOfficerRemoved::class, $changes);
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Companies\Aggregates;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Crypt;
 use App\Companies\Enums\CompanyStatus;
 use App\Companies\Events\CompanyCreated;
 use App\Companies\Enums\ResettableSetting;
@@ -14,10 +15,13 @@ use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsCreated;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Companies\Events\CompanyOwnershipTransferred;
+use App\Companies\Events\CompanyDataProtectionOfficerSet;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use App\Companies\UseCases\Commands\UpdateCompanyCommand;
 use App\Companies\Exceptions\CompanyAlreadyExistsException;
+use App\Companies\Events\CompanyDataProtectionOfficerRemoved;
 use App\Companies\Events\CompanyOwnershipVerificationRecorded;
+use App\Companies\UseCases\Commands\SetDataProtectionOfficerCommand;
 use App\Companies\UseCases\Commands\TransferCompanyOwnershipCommand;
 use App\Companies\UseCases\Commands\VerifyOwnershipTransferCaseCommand;
 
@@ -109,6 +113,33 @@ class Company extends AggregateRoot
             setting: $setting->value,
             resetBy: $resetBy,
             resetAt: CarbonImmutable::now(),
+        ));
+    }
+
+    /**
+     * Record or replace the company's data protection officer (UC-1-146) — the values
+     * encrypted before they reach the stream. Guardless: the interactor decides the no-op.
+     */
+    public function setDataProtectionOfficer(SetDataProtectionOfficerCommand $command, string $setBy): static
+    {
+        $this->forCompany($this->uuid());
+
+        return $this->recordThat(new CompanyDataProtectionOfficerSet(
+            encryptedName: Crypt::encryptString($command->name),
+            encryptedEmail: Crypt::encryptString($command->email),
+            encryptedPhone: $command->phone === null ? null : Crypt::encryptString($command->phone),
+            setBy: $setBy,
+            setAt: CarbonImmutable::now(),
+        ));
+    }
+
+    public function removeDataProtectionOfficer(string $removedBy): static
+    {
+        $this->forCompany($this->uuid());
+
+        return $this->recordThat(new CompanyDataProtectionOfficerRemoved(
+            removedBy: $removedBy,
+            removedAt: CarbonImmutable::now(),
         ));
     }
 

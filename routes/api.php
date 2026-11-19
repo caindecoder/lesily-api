@@ -40,6 +40,7 @@ use App\Foundation\Auth\IO\Http\Controllers\EmailVerificationController;
 use App\Billing\Subscriptions\IO\Http\Controllers\SubscriptionsController;
 use App\Compliance\Privacy\IO\Http\Controllers\ProcessingRegisterController;
 use App\Billing\Invoices\IO\Http\Controllers\PlatformAdminInvoicesController;
+use App\Companies\IO\Http\Controllers\CompanyDataProtectionOfficerController;
 use App\Companies\Memberships\IO\Http\Controllers\AcceptInvitationController;
 use App\Foundation\Auth\IO\Http\Controllers\RegenerateRecoveryCodesController;
 use App\Foundation\Auth\IO\Http\Controllers\ResendVerificationEmailController;
@@ -276,6 +277,21 @@ Route::get('/v1/companies/{companyId}/emergency-contact', [MembershipsController
 // No idempotency-key — a PUT is naturally idempotent. No throttle.
 Route::put('/v1/companies/{companyId}/emergency-contact', [MembershipsController::class, 'setEmergencyContact'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.set-emergency-contact']);
+
+// View the company's data protection officer (UC-1-146 alt 2a) — 404 when none is
+// recorded; owner and admin (companies.update), every member sees it on the notice.
+Route::get('/v1/companies/{companyId}/data-protection-officer', [CompanyDataProtectionOfficerController::class, 'show'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:companies.update']);
+
+// Record the company's data protection officer (UC-1-146) — through the event-sourced
+// Company aggregate; owner and admin (companies.update). No throttle (OQ-1-098).
+Route::put('/v1/companies/{companyId}/data-protection-officer', [CompanyDataProtectionOfficerController::class, 'update'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:companies.update']);
+
+// Remove the company's data protection officer (UC-1-146 alt 3c) — 204, also when none
+// is recorded (nothing is then recorded). Same gates as the record.
+Route::delete('/v1/companies/{companyId}/data-protection-officer', [CompanyDataProtectionOfficerController::class, 'destroy'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:companies.update']);
 
 // Accept the live Terms of Service and Privacy Policy versions for the company
 // (UC-1-069) — any member, the request IP recorded; open past the consent gate.

@@ -9,6 +9,7 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Companies\Entities\CompanyDataProtectionOfficer;
 
 class ViewPrivacyNoticeTest extends PrivacyTestCase
 {
@@ -106,6 +107,32 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         $this->assertOnlyThisCompanyAppears($response);
     }
 
+    #[Test]
+    public function when_another_company_has_recorded_a_dpo_then_this_notice_still_says_none_is_designated(): void
+    {
+        // Given Fabrikam has recorded a DPO and Contoso has not
+        CompanyDataProtectionOfficer::factory()->for(Company::factory()->named('Fabrikam (Pvt) Ltd'))->create();
+
+        // When Contoso's owner views its privacy notice
+        $response = $this->viewNotice($this->owner, $this->company);
+
+        // Then item 2 still says no data protection officer is designated
+        $this->assertDpoItem($response, 'No data protection officer has been designated; contact the controller above');
+    }
+
+    #[Test]
+    public function when_the_company_has_recorded_a_dpo_without_a_phone_then_the_dpo_item_gives_name_and_email(): void
+    {
+        // Given Contoso has recorded Nimal Silva as its DPO, with no phone
+        CompanyDataProtectionOfficer::factory()->for($this->company)->withoutPhone()->create();
+
+        // When its owner views the privacy notice
+        $response = $this->viewNotice($this->owner, $this->company);
+
+        // Then item 2 gives Nimal Silva's name and email as the contact
+        $this->assertDpoItem($response, 'Contact: Nimal Silva, dpo@contoso.lk');
+    }
+
     #[Test, DataProvider('provideEveryRole')]
     public function when_any_member_views_the_notice_then_all_thirteen_items_appear_in_order(string $roleCode): void
     {
@@ -133,6 +160,21 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         // Then item 1 names Contoso, its BR number and country, with Asha Perera as the contact
         // And item 2 says no data protection officer is designated
         $this->assertControllerItems($response);
+    }
+
+    #[Test]
+    public function when_the_company_has_recorded_a_dpo_then_the_dpo_item_gives_their_contact(): void
+    {
+        // Given Contoso has recorded Nimal Silva as its DPO, and an employee of Contoso
+        CompanyDataProtectionOfficer::factory()->for($this->company)->create();
+        $employee = User::factory()->create();
+        $this->attachMember($this->company, $employee, $this->seededRole('employee'));
+
+        // When the employee views the privacy notice
+        $response = $this->viewNotice($employee, $this->company);
+
+        // Then item 2 gives Nimal Silva's name, email and phone as the contact
+        $this->assertDpoItem($response, 'Contact: Nimal Silva, dpo@contoso.lk, +94771234567');
     }
 
     #[Test]
@@ -217,6 +259,11 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         ], $items['dpo']['body']);
     }
 
+    protected function assertDpoItem(TestResponse $response, string $line): void
+    {
+        $this->assertSame([$line], $this->itemsOf($response)['dpo']['body']);
+    }
+
     protected function assertActivityItems(TestResponse $response): void
     {
         $items = $this->itemsOf($response);
@@ -264,7 +311,8 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
             'Company identity (name, BR number, EPF number, country)',
             'Memberships and roles',
             'Invitations (email address)',
-            "Emergency contact's name, phone and relationship (encrypted)",
+            "Data protection officer's name, email and phone (encrypted)",
+            "Emergency contact's name, email, phone and relationship (encrypted)",
             'Accepted policy versions',
             'Invoices',
             'Billing address',

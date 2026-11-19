@@ -29,7 +29,6 @@ class PrivacyNotice
      * The fixed items' lines, by key; their words are in lang/en/privacy.php.
      */
     protected const array FIXED_LINES = [
-        'dpo' => ['none_designated'],
         'withdraw_consent' => ['how'],
         'cross_border_transfer' => ['where'],
         'data_subject_rights' => ['access', 'correction_erasure_objection', 'answer_time'],
@@ -60,6 +59,7 @@ class PrivacyNotice
     {
         return match ($key) {
             'controller' => $this->controllerLines(),
+            'dpo' => $this->dpoLines(),
             'purposes' => $this->activityLines($key, $this->activities, fn (ProcessingActivity $activity): array => [
                 'purpose' => __("privacy.activities.{$activity->key()}.purpose"),
                 'basis' => __("privacy.legal_bases.{$activity->legalBasis->value}"),
@@ -101,6 +101,25 @@ class PrivacyNotice
                 ? __('privacy.notice.controller.no_contact')
                 : __('privacy.notice.controller.contact', ['name' => $owner->name, 'email' => $owner->email]),
         ];
+    }
+
+    /**
+     * The company's recorded data protection officer as the contact, or the line saying none
+     * is designated.
+     *
+     * @return list<mixed>
+     */
+    protected function dpoLines(): array
+    {
+        $officer = $this->company->dataProtectionOfficer;
+
+        if ($officer === null) {
+            return [__('privacy.notice.dpo.lines.none_designated')];
+        }
+
+        return [$officer->phone === null
+            ? __('privacy.notice.dpo.contact_without_phone', ['name' => $officer->name, 'email' => $officer->email])
+            : __('privacy.notice.dpo.contact', ['name' => $officer->name, 'email' => $officer->email, 'phone' => $officer->phone])];
     }
 
     /**

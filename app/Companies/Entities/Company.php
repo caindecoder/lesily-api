@@ -105,6 +105,16 @@ class Company extends Model
     }
 
     /**
+     * The company's data protection officer (UC-1-146) — none when it has not recorded one.
+     *
+     * @return HasOne<CompanyDataProtectionOfficer, $this>
+     */
+    public function dataProtectionOfficer(): HasOne
+    {
+        return $this->hasOne(CompanyDataProtectionOfficer::class, 'company_id');
+    }
+
+    /**
      * Members of this company; the pivot carries the member's role_id, which the
      * PermissionEvaluator resolves to evaluate the role gate. attach() routes
      * through the CompanyUser pivot so its UUID primary key is minted;

@@ -52,6 +52,8 @@ enum AuditAction: string
     case CompanyDetailsUpdated = 'company_details_updated';
     case CompanySettingsUpdated = 'company_settings_updated';
     case CompanySettingReset = 'company_setting_reset';
+    case DataProtectionOfficerSet = 'data_protection_officer_set';
+    case DataProtectionOfficerRemoved = 'data_protection_officer_removed';
     case AuditLogsExported = 'audit_logs_exported';
     case AccessLogPurged = 'access_log_purged';
 

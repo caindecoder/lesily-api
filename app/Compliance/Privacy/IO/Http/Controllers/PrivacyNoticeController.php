@@ -11,6 +11,6 @@ class PrivacyNoticeController
 {
     public function show(Request $request, ProcessingRegister $register): PrivacyNoticeResource
     {
-        return new PrivacyNoticeResource(new PrivacyNotice($request->company(), $register->activities()));
+        return new PrivacyNoticeResource(new PrivacyNotice($request->company()->load('dataProtectionOfficer'), $register->activities()));
     }
 }

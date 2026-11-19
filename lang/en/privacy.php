@@ -77,7 +77,8 @@ return [
         'company_identity' => 'Company identity (name, BR number, EPF number, country)',
         'memberships_and_roles' => 'Memberships and roles',
         'invitations' => 'Invitations (email address)',
-        'emergency_contact' => "Emergency contact's name, phone and relationship (encrypted)",
+        'data_protection_officer' => "Data protection officer's name, email and phone (encrypted)",
+        'emergency_contact' => "Emergency contact's name, email, phone and relationship (encrypted)",
         'accepted_policy_versions' => 'Accepted policy versions',
         'invoices' => 'Invoices',
         'billing_address' => 'Billing address',
@@ -115,6 +116,8 @@ return [
         'dpo' => [
             'heading' => 'Data protection officer',
             'lines' => ['none_designated' => 'No data protection officer has been designated; contact the controller above'],
+            'contact' => 'Contact: :name, :email, :phone',
+            'contact_without_phone' => 'Contact: :name, :email',
         ],
         'purposes' => [
             'heading' => 'Purposes and legal basis',
