@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanySettings;
@@ -18,11 +19,13 @@ use App\Foundation\CountryConfig\Entities\Country;
  */
 class ViewCompanySettingsTest extends CompaniesTestCase
 {
+    use FreeTierCompany;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->seedRbacCatalog();
+        $this->makeFreeTierCompany();
 
         config(['app.debug' => false]);
     }
@@ -31,10 +34,9 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     public function when_unauthenticated_then_the_settings_request_is_rejected(): void
     {
         // Given an existing company and no authenticated session
-        $company = Company::factory()->create();
 
         // When a guest requests its settings
-        $response = $this->viewCompanySettingsAsGuest($company->getKey());
+        $response = $this->viewCompanySettingsAsGuest($this->company->getKey());
 
         // Then the request is rejected as unauthenticated
         $this->assertUnauthenticated($response);
@@ -44,12 +46,10 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     public function when_a_member_requests_another_companys_settings_then_company_access_is_denied(): void
     {
         // Given a member of company A holding company B's id
-        $companyA = Company::factory()->withSettings()->create();
         $companyB = Company::factory()->withSettings()->create();
-        $member = $this->aCompanyMember($companyA);
 
         // When they request company B's settings
-        $response = $this->viewCompanySettings($member, $companyB->getKey());
+        $response = $this->viewCompanySettings($this->employee, $companyB->getKey());
 
         // Then company access is denied
         $this->assertCompanyAccessDenied($response);
@@ -60,10 +60,9 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     public function when_the_requested_company_is_unknown_then_the_settings_are_not_found(string $companyId): void
     {
         // Given a member of a real company
-        $member = $this->aCompanyMember(Company::factory()->withSettings()->create());
 
         // When they request the settings of an unknown company id
-        $response = $this->viewCompanySettings($member, $companyId);
+        $response = $this->viewCompanySettings($this->employee, $companyId);
 
         // Then the resource is not found
         $this->assertResourceNotFound($response);
@@ -85,11 +84,10 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     public function when_a_manager_requests_the_settings_then_the_role_is_insufficient(): void
     {
         // Given a manager of the company — the one seeded role without companies.view
-        $company = Company::factory()->withSettings()->create();
-        $manager = $this->aCompanyMember($company, 'manager');
+        $manager = $this->aCompanyMember($this->company, 'manager');
 
         // When they request the company's settings
-        $response = $this->viewCompanySettings($manager, $company->getKey());
+        $response = $this->viewCompanySettings($manager, $this->company->getKey());
 
         // Then their role is insufficient for companies.view
         $this->assertRoleInsufficient($response, 'companies.view');
@@ -99,12 +97,10 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     public function when_the_companys_country_has_no_row_then_the_country_defaults_are_empty(): void
     {
         // Given the owner of a following company whose country row is removed
-        $company = Company::factory()->withSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
         Country::query()->delete();
 
         // When they view the company's settings
-        $response = $this->viewCompanySettings($owner, $company->getKey());
+        $response = $this->viewCompanySettings($this->owner, $this->company->getKey());
 
         // Then the country has no name and every setting has no default to follow
         $response->assertExactJson(['data' => [
@@ -118,11 +114,10 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     {
         // Given the owner of a following company in a stored country other than Sri Lanka
         $country = Country::factory()->create();
-        $company = Company::factory()->inCountry($country)->withSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        $this->company->update(['country' => $country->code]);
 
         // When they view the company's settings
-        $response = $this->viewCompanySettings($owner, $company->getKey());
+        $response = $this->viewCompanySettings($this->owner, $this->company->getKey());
 
         // Then the country and its defaults are that country's
         $response->assertOk();
@@ -134,11 +129,9 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     public function when_a_new_company_views_its_settings_then_every_setting_follows_the_country(): void
     {
         // Given an employee of a new Sri Lankan company that chose no own values
-        $company = Company::factory()->withSettings()->create();
-        $employee = $this->aCompanyMember($company, 'employee');
 
         // When they view the company's settings
-        $response = $this->viewCompanySettings($employee, $company->getKey());
+        $response = $this->viewCompanySettings($this->employee, $this->company->getKey());
 
         // Then every setting follows Sri Lanka's default
         $response->assertExactJson(['data' => [
@@ -159,11 +152,10 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     public function when_role_holds_companies_view_then_the_settings_are_returned(string $roleCode): void
     {
         // Given a member under a companies.view-holding role
-        $company = Company::factory()->withSettings()->create();
-        $member = $this->aCompanyMember($company, $roleCode);
+        $member = $this->memberWithRole($roleCode);
 
         // When they view the company's settings
-        $response = $this->viewCompanySettings($member, $company->getKey());
+        $response = $this->viewCompanySettings($member, $this->company->getKey());
 
         // Then the settings are returned
         $response->assertOk();
@@ -188,11 +180,10 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     public function when_the_company_has_its_own_value_then_it_applies_over_the_country_default(): void
     {
         // Given the owner of a Sri Lankan company that set its own six-day week
-        $company = Company::factory()->withOwnSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        $this->giveOwnSettings($this->company);
 
         // When they view the company's settings
-        $response = $this->viewCompanySettings($owner, $company->getKey());
+        $response = $this->viewCompanySettings($this->owner, $this->company->getKey());
 
         // Then the own value applies over Sri Lanka's five days
         $this->assertSettingShows($response, 'working_days_per_week', [
@@ -207,12 +198,10 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     public function when_the_country_default_changes_then_a_following_company_picks_it_up(): void
     {
         // Given the owner of a company that follows Sri Lanka, whose working week becomes six days
-        $company = Company::factory()->withSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
         Country::query()->where('code', 'LK')->update(['working_days_per_week' => 6]);
 
         // When they view the company's settings
-        $response = $this->viewCompanySettings($owner, $company->getKey());
+        $response = $this->viewCompanySettings($this->owner, $this->company->getKey());
 
         // Then the company follows Sri Lanka's new six-day week
         $this->assertSettingShows($response, 'working_days_per_week', $this->aFollowedSetting(6));
@@ -222,12 +211,11 @@ class ViewCompanySettingsTest extends CompaniesTestCase
     public function when_the_country_default_changes_to_the_own_value_then_the_company_keeps_its_own_value(): void
     {
         // Given the owner of a company with its own six-day week, and Sri Lanka's week becomes six days too
-        $company = Company::factory()->withOwnSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        $this->giveOwnSettings($this->company);
         Country::query()->where('code', 'LK')->update(['working_days_per_week' => 6]);
 
         // When they view the company's settings
-        $response = $this->viewCompanySettings($owner, $company->getKey());
+        $response = $this->viewCompanySettings($this->owner, $this->company->getKey());
 
         // Then the six days are still the company's own, not followed
         $this->assertSettingShows($response, 'working_days_per_week', [

@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies;
 use Illuminate\Support\Str;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -16,13 +17,15 @@ use App\Companies\Entities\CompanyDataProtectionOfficer;
  */
 class ViewDataProtectionOfficerTest extends CompaniesTestCase
 {
+    use FreeTierCompany;
+
     protected const array DPO = ['name' => 'Nimal Silva', 'email' => 'dpo@contoso.lk', 'phone' => '+94771234567'];
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->seedRbacCatalog();
+        $this->makeFreeTierCompany();
         config(['app.debug' => false]);
     }
 
@@ -30,11 +33,10 @@ class ViewDataProtectionOfficerTest extends CompaniesTestCase
     public function when_unauthenticated_then_the_dpo_request_is_rejected(): void
     {
         // Given a company whose DPO is recorded
-        $company = Company::factory()->create();
-        CompanyDataProtectionOfficer::factory()->for($company)->create();
+        CompanyDataProtectionOfficer::factory()->for($this->company)->create();
 
         // When a guest asks for it
-        $response = $this->viewDataProtectionOfficerAsGuest($company->getKey());
+        $response = $this->viewDataProtectionOfficerAsGuest($this->company->getKey());
 
         // Then the request is rejected as unauthenticated
         $this->assertUnauthenticated($response);
@@ -44,12 +46,11 @@ class ViewDataProtectionOfficerTest extends CompaniesTestCase
     public function when_a_member_requests_another_companys_dpo_then_company_access_denied(): void
     {
         // Given the owner of company A, and company B whose DPO is recorded
-        $ownerA = $this->aCompanyMember(Company::factory()->create(), 'owner');
         $companyB = Company::factory()->create();
         CompanyDataProtectionOfficer::factory()->for($companyB)->create();
 
         // When owner A asks for company B's DPO
-        $response = $this->viewDataProtectionOfficer($ownerA, $companyB->getKey());
+        $response = $this->viewDataProtectionOfficer($this->owner, $companyB->getKey());
 
         // Then company access is denied
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::CompanyAccessDenied);
@@ -59,10 +60,10 @@ class ViewDataProtectionOfficerTest extends CompaniesTestCase
     public function when_the_requested_company_is_unknown_then_resource_not_found(): void
     {
         // Given an owner, and a company id that matches no company
-        $owner = $this->aCompanyMember(Company::factory()->create(), 'owner');
+        $unknownCompanyId = (string) Str::uuid();
 
         // When they ask for the unknown company's DPO
-        $response = $this->viewDataProtectionOfficer($owner, (string) Str::uuid());
+        $response = $this->viewDataProtectionOfficer($this->owner, $unknownCompanyId);
 
         // Then the resource is not found
         $this->assertResourceNotFound($response);
@@ -73,12 +74,11 @@ class ViewDataProtectionOfficerTest extends CompaniesTestCase
     public function when_a_role_lacks_the_permission_then_the_dpo_is_withheld(string $roleCode): void
     {
         // Given a member whose role does not hold companies.update, in a company whose DPO is recorded
-        $company = Company::factory()->create();
-        $member = $this->aCompanyMember($company, $roleCode);
-        CompanyDataProtectionOfficer::factory()->for($company)->create();
+        $member = $this->memberWithRole($roleCode);
+        CompanyDataProtectionOfficer::factory()->for($this->company)->create();
 
         // When they ask for the DPO
-        $response = $this->viewDataProtectionOfficer($member, $company->getKey());
+        $response = $this->viewDataProtectionOfficer($member, $this->company->getKey());
 
         // Then the role is insufficient
         $this->assertRoleInsufficient($response, 'companies.update');
@@ -101,12 +101,10 @@ class ViewDataProtectionOfficerTest extends CompaniesTestCase
     #[Test]
     public function when_no_dpo_is_recorded_then_it_is_not_found(): void
     {
-        // Given the owner of a company with no DPO recorded
-        $company = Company::factory()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        // Given the owner of a company with no DPO recorded (the ready-made company)
 
         // When they ask for the DPO
-        $response = $this->viewDataProtectionOfficer($owner, $company->getKey());
+        $response = $this->viewDataProtectionOfficer($this->owner, $this->company->getKey());
 
         // Then it is not found
         $this->assertResourceNotFound($response);
@@ -116,15 +114,13 @@ class ViewDataProtectionOfficerTest extends CompaniesTestCase
     public function when_the_owner_of_two_companies_views_one_then_only_that_companys_dpo_is_returned(): void
     {
         // Given the owner of two companies, each with its own DPO
-        $companyA = Company::factory()->create();
-        $owner = $this->aCompanyMember($companyA, 'owner');
         $companyB = Company::factory()->create();
-        $companyB->users()->attach($owner, ['role_id' => $this->seededRole('owner')->getKey()]);
-        CompanyDataProtectionOfficer::factory()->for($companyA)->create();
+        $companyB->users()->attach($this->owner, ['role_id' => $this->seededRole('owner')->getKey()]);
+        CompanyDataProtectionOfficer::factory()->for($this->company)->create();
         CompanyDataProtectionOfficer::factory()->for($companyB)->withoutPhone()->create(['name' => 'Kamala Fernando']);
 
         // When they ask for company A's DPO
-        $response = $this->viewDataProtectionOfficer($owner, $companyA->getKey());
+        $response = $this->viewDataProtectionOfficer($this->owner, $this->company->getKey());
 
         // Then only company A's DPO is returned
         $response->assertOk();
@@ -136,12 +132,11 @@ class ViewDataProtectionOfficerTest extends CompaniesTestCase
     public function when_a_role_with_the_permission_views_the_dpo_then_it_is_returned(string $roleCode): void
     {
         // Given a member holding companies.update, in a company whose DPO is recorded
-        $company = Company::factory()->create();
-        $member = $this->aCompanyMember($company, $roleCode);
-        CompanyDataProtectionOfficer::factory()->for($company)->create();
+        $member = $this->memberWithRole($roleCode);
+        CompanyDataProtectionOfficer::factory()->for($this->company)->create();
 
         // When they ask for the DPO
-        $response = $this->viewDataProtectionOfficer($member, $company->getKey());
+        $response = $this->viewDataProtectionOfficer($member, $this->company->getKey());
 
         // Then it is returned
         $response->assertOk();

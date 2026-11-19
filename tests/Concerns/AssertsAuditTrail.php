@@ -85,7 +85,7 @@ trait AssertsAuditTrail
     {
         $requestId = $response->headers->get('Correlation-Id');
         $this->assertIsString($requestId);
-        $entries = AuditEntry::query()->get();
+        $entries = AuditEntry::query()->where('request_id', $requestId)->get();
         $this->assertNotEmpty($entries);
 
         foreach ($entries as $entry) {

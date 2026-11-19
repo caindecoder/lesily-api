@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanySettings;
 use App\Companies\Events\CompanySettingReset;
@@ -13,6 +14,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -23,11 +25,13 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class UpdateCompanyTest extends CompaniesTestCase
 {
+    use FreeTierCompany;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->seedRbacCatalog();
+        $this->makeFreeTierCompany();
 
         // Error-path tests must exercise the production render path (the
         // bootstrap catch-all behaves differently under debug — amendment M).
@@ -40,10 +44,9 @@ class UpdateCompanyTest extends CompaniesTestCase
     public function when_unauthenticated_then_company_update_rejected(): void
     {
         // Given an existing company and no authenticated session
-        $company = Company::factory()->withSettings()->create();
 
         // When a guest submits an update
-        $response = $this->updateCompanyDetailsAsGuest($company->getKey(), ['name' => 'New Name']);
+        $response = $this->updateCompanyDetailsAsGuest($this->company->getKey(), ['name' => 'New Name']);
 
         // Then the request is rejected as unauthenticated
         $this->assertUnauthenticated($response);
@@ -57,11 +60,9 @@ class UpdateCompanyTest extends CompaniesTestCase
     public function when_immutable_field_submitted_then_update_rejected(array $payload, string $field, string $message): void
     {
         // Given the owner of a company
-        $company = Company::factory()->withSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
 
         // When they submit an update touching a non-editable field
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), $payload);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), $payload);
 
         // Then the update is rejected with an error naming that field
         $this->assertValidationRejected($response, $field, $message);
@@ -90,11 +91,9 @@ class UpdateCompanyTest extends CompaniesTestCase
     public function when_editable_field_is_invalid_then_update_rejected(array $payload, string $field, string $message): void
     {
         // Given the owner of a company
-        $company = Company::factory()->withSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
 
         // When they submit an out-of-range value for an editable field
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), $payload);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), $payload);
 
         // Then the update is rejected with an error naming that field
         $this->assertValidationRejected($response, $field, $message);
@@ -125,15 +124,13 @@ class UpdateCompanyTest extends CompaniesTestCase
     public function when_editable_field_is_invalid_then_company_is_unchanged(): void
     {
         // Given the owner of a company named Contoso
-        $company = Company::factory()->withSettings()->named('Contoso')->create();
-        $owner = $this->aCompanyMember($company, 'owner');
 
         // When they submit a blank company name
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['name' => '']);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), ['name' => '']);
 
         // Then the update is rejected and the company is untouched
         $this->assertValidationRejected($response, 'name', 'The name field is required.');
-        $this->assertCompanyUnchanged($company, 'Contoso');
+        $this->assertCompanyUnchanged($this->company, 'Contoso', self::READY_MADE_NON_CONSENT_EVENTS);
     }
 
     // Sad — R8 teeth on the write route: the URL names a company the member does
@@ -143,12 +140,10 @@ class UpdateCompanyTest extends CompaniesTestCase
     public function when_member_updates_another_companys_details_then_company_access_denied(): void
     {
         // Given a member of Company A holding a foreign Company B's id
-        $companyA = Company::factory()->withSettings()->create();
         $companyB = Company::factory()->withSettings()->create();
-        $member = $this->aCompanyMember($companyA, 'owner');
 
         // When they submit an update against Company B
-        $response = $this->updateCompanyDetails($member, $companyB->getKey(), ['name' => 'New Name']);
+        $response = $this->updateCompanyDetails($this->owner, $companyB->getKey(), ['name' => 'New Name']);
 
         // Then company access is denied
         $this->assertCompanyAccessDenied($response);
@@ -160,11 +155,9 @@ class UpdateCompanyTest extends CompaniesTestCase
     public function when_requested_company_is_unknown_then_resource_not_found(): void
     {
         // Given a member of a real company holding an unknown company id
-        $company = Company::factory()->withSettings()->create();
-        $member = $this->aCompanyMember($company, 'owner');
 
         // When they submit an update for an unknown company id
-        $response = $this->updateCompanyDetails($member, '0193abcd-0000-7000-8000-000000000000', ['name' => 'New Name']);
+        $response = $this->updateCompanyDetails($this->owner, '0193abcd-0000-7000-8000-000000000000', ['name' => 'New Name']);
 
         // Then the resource is not found
         $this->assertResourceNotFound($response);
@@ -177,11 +170,10 @@ class UpdateCompanyTest extends CompaniesTestCase
     public function when_role_lacks_companies_update_then_update_forbidden(string $roleCode): void
     {
         // Given a member under a role without companies.update
-        $company = Company::factory()->withSettings()->create();
-        $member = $this->aCompanyMember($company, $roleCode);
+        $member = $this->memberWithRole($roleCode);
 
         // When they submit an update
-        $response = $this->updateCompanyDetails($member, $company->getKey(), ['name' => 'New Name']);
+        $response = $this->updateCompanyDetails($member, $this->company->getKey(), ['name' => 'New Name']);
 
         // Then the update is refused for the missing companies.update grant
         $this->assertRoleInsufficient($response, 'companies.update');
@@ -207,39 +199,35 @@ class UpdateCompanyTest extends CompaniesTestCase
     public function when_the_settings_projection_fails_then_neither_the_name_nor_the_settings_change(): void
     {
         // Given the owner of Contoso and a settings projection that fails mid-update
-        $company = Company::factory()->withSettings()->named('Contoso')->create();
-        $owner = $this->aCompanyMember($company, 'owner');
         $this->induceProjectorFailureFor(CompanySettingsUpdated::class);
 
         // When they submit a new name and a new timezone together
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), [
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), [
             'name' => 'Contoso (Pvt) Ltd',
             'timezone' => 'Asia/Singapore',
         ]);
 
         // Then the update fails whole: the old name and settings, no recorded events
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
-        $this->assertCompanyUnchanged($company, 'Contoso');
+        $this->assertCompanyUnchanged($this->company, 'Contoso', self::READY_MADE_NON_CONSENT_EVENTS);
     }
 
     #[Test]
     public function when_the_company_change_cannot_be_audited_then_neither_the_name_nor_the_settings_change(): void
     {
         // Given the owner of Contoso and an audit trail that takes the details row but cannot write the settings row
-        $company = Company::factory()->withSettings()->named('Contoso')->create();
-        $owner = $this->aCompanyMember($company, 'owner');
         $this->failTheAuditTrailAfter(1);
 
         // When they submit a new name and a new timezone together
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), [
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), [
             'name' => 'Contoso (Pvt) Ltd',
             'timezone' => 'Asia/Singapore',
         ]);
 
         // Then the update fails whole: the old name and settings, no recorded events, nothing audited
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
-        $this->assertCompanyUnchanged($company, 'Contoso');
-        $this->assertNothingAudited();
+        $this->assertCompanyUnchanged($this->company, 'Contoso', self::READY_MADE_NON_CONSENT_EVENTS);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     // Edge — a name-only update records the details event and nothing else:
@@ -248,16 +236,14 @@ class UpdateCompanyTest extends CompaniesTestCase
     #[Test]
     public function when_only_name_submitted_then_only_the_details_event_is_recorded(): void
     {
-        // Given the owner of a company named Old Co
-        $company = Company::factory()->withSettings()->named('Old Co')->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        // Given the owner of a company named Contoso
 
         // When they submit only a new name
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['name' => 'New Co']);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), ['name' => 'New Co']);
 
         // Then only the details event is recorded and the name is updated
         $response->assertOk();
-        $this->assertOnlyDetailsEventRecorded($company, 'New Co');
+        $this->assertOnlyDetailsEventRecorded($this->company, 'New Co', self::READY_MADE_NON_CONSENT_EVENTS);
     }
 
     // Edge — a settings-only update records the settings event and nothing else:
@@ -266,34 +252,30 @@ class UpdateCompanyTest extends CompaniesTestCase
     public function when_only_settings_submitted_then_only_the_settings_event_is_recorded(): void
     {
         // Given the owner of a company whose timezone defaults to Asia/Colombo
-        $company = Company::factory()->withSettings()->named('Steady Co')->create();
-        $owner = $this->aCompanyMember($company, 'owner');
 
         // When they submit only a new timezone
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['timezone' => 'Asia/Singapore']);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), ['timezone' => 'Asia/Singapore']);
 
         // Then only the settings event is recorded and the timezone is updated
         $response->assertOk();
-        $this->assertOnlySettingsEventRecorded($company, 'Asia/Singapore');
+        $this->assertOnlySettingsEventRecorded($this->company, 'Asia/Singapore', self::READY_MADE_NON_CONSENT_EVENTS);
     }
 
     #[Test]
     public function when_submitted_setting_equals_the_country_default_while_following_then_nothing_is_recorded_for_it(): void
     {
         // Given the owner of a company that follows Sri Lanka's timezone
-        $company = Company::factory()->withSettings()->named('Same Co')->create();
-        $owner = $this->aCompanyMember($company, 'owner');
 
         // When they submit the current name and Sri Lanka's own timezone
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), [
-            'name' => 'Same Co',
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), [
+            'name' => 'Contoso',
             'timezone' => 'Asia/Colombo',
         ]);
 
         // Then only the name is recorded and the timezone still follows the country
         $response->assertOk();
-        $this->assertOnlyDetailsEventRecorded($company, 'Same Co');
-        $this->assertSettingFollowsTheCountry($company, 'timezone');
+        $this->assertOnlyDetailsEventRecorded($this->company, 'Contoso', self::READY_MADE_NON_CONSENT_EVENTS);
+        $this->assertSettingFollowsTheCountry($this->company, 'timezone');
     }
 
     #[Test]
@@ -301,58 +283,56 @@ class UpdateCompanyTest extends CompaniesTestCase
     public function when_submitted_setting_equals_the_country_default_over_an_own_value_then_it_follows_the_country(string $field, string $setting, int|string $sriLankaDefault, float|int|string $ownValue): void
     {
         // Given the owner of a company with its own settings
-        $company = Company::factory()->withOwnSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        $this->giveOwnSettings($this->company);
 
         // When they submit Sri Lanka's own value for one of them from a device
         $this->fromADevice();
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), [$field => $sriLankaDefault]);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), [$field => $sriLankaDefault]);
 
         // Then that setting follows the country again, the reset is recorded and audited own value -> country default
         $response->assertOk();
-        $this->assertSettingFollowsTheCountry($company, $setting);
-        $this->assertResetRecorded($company, $setting, $owner->getKey());
-        $this->assertCompanyChangeAudited($company, AuditAction::CompanySettingReset, [$setting => ['from' => $ownValue, 'to' => $sriLankaDefault]]);
-        $this->assertEveryRowCameFrom($response, $owner, 'owner');
+        $this->assertSettingFollowsTheCountry($this->company, $setting);
+        $this->assertResetRecorded($this->company, $setting, $this->owner->getKey());
+        $this->assertCompanyChangeAudited($this->company, AuditAction::CompanySettingReset, [$setting => ['from' => $ownValue, 'to' => $sriLankaDefault]]);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
+        $this->assertEveryRowCameFrom($response, $this->owner, 'owner');
     }
 
     #[Test]
     public function when_two_settings_are_submitted_at_the_country_default_over_own_values_then_both_follow_the_country(): void
     {
         // Given the owner of a company with its own settings
-        $company = Company::factory()->withOwnSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        $this->giveOwnSettings($this->company);
 
         // When they submit Sri Lanka's timezone and working days together
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['timezone' => 'Asia/Colombo', 'workingDaysPerWeek' => 5]);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), ['timezone' => 'Asia/Colombo', 'workingDaysPerWeek' => 5]);
 
         // Then both follow the country again, each with its own reset
         $response->assertOk();
-        $this->assertResetRecorded($company, 'timezone', $owner->getKey());
-        $this->assertResetRecorded($company, 'working_days_per_week', $owner->getKey());
-        $this->assertSettingFollowsTheCountry($company, 'timezone');
-        $this->assertSettingFollowsTheCountry($company, 'working_days_per_week');
-        $this->assertCompanyChangeAudited($company, AuditAction::CompanySettingReset, ['timezone' => ['from' => 'Asia/Singapore', 'to' => 'Asia/Colombo']]);
-        $this->assertCompanyChangeAudited($company, AuditAction::CompanySettingReset, ['working_days_per_week' => ['from' => 6, 'to' => 5]]);
+        $this->assertResetRecorded($this->company, 'timezone', $this->owner->getKey());
+        $this->assertResetRecorded($this->company, 'working_days_per_week', $this->owner->getKey());
+        $this->assertSettingFollowsTheCountry($this->company, 'timezone');
+        $this->assertSettingFollowsTheCountry($this->company, 'working_days_per_week');
+        $this->assertCompanyChangeAudited($this->company, AuditAction::CompanySettingReset, ['timezone' => ['from' => 'Asia/Singapore', 'to' => 'Asia/Colombo']]);
+        $this->assertCompanyChangeAudited($this->company, AuditAction::CompanySettingReset, ['working_days_per_week' => ['from' => 6, 'to' => 5]]);
     }
 
     #[Test]
     public function when_one_setting_is_submitted_at_the_country_default_and_another_changes_then_each_is_recorded_as_such(): void
     {
         // Given the owner of a company with its own settings
-        $company = Company::factory()->withOwnSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        $this->giveOwnSettings($this->company);
 
         // When they submit Sri Lanka's timezone and new working days together
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['timezone' => 'Asia/Colombo', 'workingDaysPerWeek' => 4]);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), ['timezone' => 'Asia/Colombo', 'workingDaysPerWeek' => 4]);
 
         // Then the timezone follows the country and the working days become the company's own, each audited apart
         $response->assertOk();
-        $this->assertSettingFollowsTheCountry($company, 'timezone');
-        $this->assertOnlyWorkingDaysUpdatedTo($company, 4);
-        $this->assertDatabaseCount('audit_trail', 2);
-        $this->assertCompanyChangeAudited($company, AuditAction::CompanySettingReset, ['timezone' => ['from' => 'Asia/Singapore', 'to' => 'Asia/Colombo']]);
-        $this->assertCompanyChangeAudited($company, AuditAction::CompanySettingsUpdated, ['working_days_per_week' => ['from' => 6, 'to' => 4]]);
+        $this->assertSettingFollowsTheCountry($this->company, 'timezone');
+        $this->assertOnlyWorkingDaysUpdatedTo($this->company, 4);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 2);
+        $this->assertCompanyChangeAudited($this->company, AuditAction::CompanySettingReset, ['timezone' => ['from' => 'Asia/Singapore', 'to' => 'Asia/Colombo']]);
+        $this->assertCompanyChangeAudited($this->company, AuditAction::CompanySettingsUpdated, ['working_days_per_week' => ['from' => 6, 'to' => 4]]);
     }
 
     /**
@@ -373,49 +353,44 @@ class UpdateCompanyTest extends CompaniesTestCase
     #[Test]
     public function when_no_fields_submitted_then_update_is_a_no_op(): void
     {
-        // Given the owner of a company named Idle Co
-        $company = Company::factory()->withSettings()->named('Idle Co')->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        // Given the owner of a company named Contoso
 
         // When they submit an empty update
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), []);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), []);
 
         // Then the request succeeds, nothing changed and nothing is audited
         $response->assertOk();
-        $this->assertCompanyUnchanged($company, 'Idle Co');
-        $this->assertNothingAudited();
+        $this->assertCompanyUnchanged($this->company, 'Contoso', self::READY_MADE_NON_CONSENT_EVENTS);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
     public function when_the_same_name_is_submitted_again_then_no_details_row_is_written(): void
     {
         // Given the owner of a company named Contoso
-        $company = Company::factory()->named('Contoso')->withSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
 
         // When they submit the name it already has
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['name' => 'Contoso']);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), ['name' => 'Contoso']);
 
         // Then the details event is recorded as before, but nothing changed, so nothing is audited
         $response->assertOk();
-        $this->assertOnlyDetailsEventRecorded($company, 'Contoso');
-        $this->assertNothingAudited();
+        $this->assertOnlyDetailsEventRecorded($this->company, 'Contoso', self::READY_MADE_NON_CONSENT_EVENTS);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
     public function when_a_setting_is_submitted_at_its_own_value_again_then_no_settings_row_is_written(): void
     {
         // Given the owner of a company whose own timezone is Asia/Singapore
-        $company = Company::factory()->withOwnSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        $this->giveOwnSettings($this->company);
 
         // When they submit that timezone again
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['timezone' => 'Asia/Singapore']);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), ['timezone' => 'Asia/Singapore']);
 
         // Then the settings event is recorded as before, but nothing changed, so nothing is audited
         $response->assertOk();
-        $this->assertOnlySettingsEventRecorded($company, 'Asia/Singapore');
-        $this->assertNothingAudited();
+        $this->assertOnlySettingsEventRecorded($this->company, 'Asia/Singapore', self::READY_MADE_NON_CONSENT_EVENTS);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -423,33 +398,29 @@ class UpdateCompanyTest extends CompaniesTestCase
     {
         // Given the owner of Contoso, and another rename to "Contoso Lanka" that commits while
         // this update waits on the settings row
-        $company = Company::factory()->named('Contoso')->withSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
-        $this->renameOnceWhenTheSettingsAreRead($company, 'Contoso Lanka');
+        $this->renameOnceWhenTheSettingsAreRead($this->company, 'Contoso Lanka');
 
         // When they rename it to "Contoso (Pvt) Ltd"
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['name' => 'Contoso (Pvt) Ltd']);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), ['name' => 'Contoso (Pvt) Ltd']);
 
         // Then the audit row's old name is the one in force when the lock was taken
         $response->assertOk();
-        $this->assertCompanyChangeAudited($company, AuditAction::CompanyDetailsUpdated, ['name' => ['from' => 'Contoso Lanka', 'to' => 'Contoso (Pvt) Ltd']]);
+        $this->assertCompanyChangeAudited($this->company, AuditAction::CompanyDetailsUpdated, ['name' => ['from' => 'Contoso Lanka', 'to' => 'Contoso (Pvt) Ltd']]);
     }
 
     #[Test]
     public function when_the_name_changes_twice_then_the_second_row_cites_the_second_event(): void
     {
         // Given the owner of a company renamed once already
-        $company = Company::factory()->named('Contoso')->withSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
-        $this->updateCompanyDetails($owner, $company->getKey(), ['name' => 'Contoso Lanka'])->assertOk();
+        $this->updateCompanyDetails($this->owner, $this->company->getKey(), ['name' => 'Contoso Lanka'])->assertOk();
 
         // When they rename it again
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['name' => 'Contoso (Pvt) Ltd']);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), ['name' => 'Contoso (Pvt) Ltd']);
 
         // Then the second rename is audited against its own event
         $response->assertOk();
-        $this->assertDatabaseCount('audit_trail', 2);
-        $this->assertCompanyChangeAudited($company, AuditAction::CompanyDetailsUpdated, ['name' => ['from' => 'Contoso Lanka', 'to' => 'Contoso (Pvt) Ltd']]);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 2);
+        $this->assertCompanyChangeAudited($this->company, AuditAction::CompanyDetailsUpdated, ['name' => ['from' => 'Contoso Lanka', 'to' => 'Contoso (Pvt) Ltd']]);
     }
 
     // Edge — a single-setting update writes only the submitted field and preserves
@@ -459,16 +430,15 @@ class UpdateCompanyTest extends CompaniesTestCase
     public function when_one_setting_is_updated_then_the_others_are_preserved(): void
     {
         // Given the owner of a company with its own settings
-        $company = Company::factory()->withOwnSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        $this->giveOwnSettings($this->company);
 
         // When they change only the fiscal year start month (to the upper bound)
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['fiscalYearStartMonth' => 12]);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), ['fiscalYearStartMonth' => 12]);
 
         // Then the fiscal month changes and every other setting is preserved
         $response->assertOk();
         $this->assertDatabaseHas('company_settings', [
-            'company_id' => $company->getKey(),
+            'company_id' => $this->company->getKey(),
             'fiscal_year_start_month' => 12,
             'timezone' => 'Asia/Singapore',
             'working_days_per_week' => 6,
@@ -483,17 +453,15 @@ class UpdateCompanyTest extends CompaniesTestCase
     public function when_work_hours_are_set_to_zero_then_the_update_is_recorded(): void
     {
         // Given the owner of a company following Sri Lanka (8 work hours)
-        $company = Company::factory()->withSettings()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
 
         // When they set the default work hours to zero
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), ['defaultWorkHoursPerDay' => 0]);
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), ['defaultWorkHoursPerDay' => 0]);
 
         // Then the settings event fires (the timezone still follows) and the read model reads zero
         $response->assertOk();
-        $this->assertOnlySettingsEventRecorded($company, null);
+        $this->assertOnlySettingsEventRecorded($this->company, null, self::READY_MADE_NON_CONSENT_EVENTS);
         $this->assertDatabaseHas('company_settings', [
-            'company_id' => $company->getKey(),
+            'company_id' => $this->company->getKey(),
             'default_work_hours_per_day' => 0,
         ]);
     }
@@ -505,11 +473,10 @@ class UpdateCompanyTest extends CompaniesTestCase
     public function when_authorized_role_updates_company_then_update_succeeds(string $roleCode): void
     {
         // Given a member under a role that holds companies.update
-        $company = Company::factory()->withSettings()->named('Before')->create();
-        $member = $this->aCompanyMember($company, $roleCode);
+        $member = $this->memberWithRole($roleCode);
 
         // When they update the company name
-        $response = $this->updateCompanyDetails($member, $company->getKey(), ['name' => 'After']);
+        $response = $this->updateCompanyDetails($member, $this->company->getKey(), ['name' => 'After']);
 
         // Then the update succeeds and the new name is returned
         $response->assertOk();
@@ -535,17 +502,12 @@ class UpdateCompanyTest extends CompaniesTestCase
     public function when_owner_updates_name_and_settings_then_company_is_updated(): void
     {
         // Given the owner of a Pro company mid-trial with the default LK settings
-        $company = Company::factory()
-            ->named('Contoso')
-            ->onPlan(BillingPlan::Pro)
-            ->onTrialUntil(now()->addDays(12)->toImmutable())
-            ->withSettings()
-            ->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        $this->putOnPlan($this->company, BillingPlan::Pro);
+        $this->company->update(['trial_ends_at' => now()->addDays(12)->toImmutable()]);
 
         // When they update the name and every editable setting from a device
         $this->fromADevice();
-        $response = $this->updateCompanyDetails($owner, $company->getKey(), [
+        $response = $this->updateCompanyDetails($this->owner, $this->company->getKey(), [
             'name' => 'Contoso (Pvt) Ltd',
             'timezone' => 'Asia/Singapore',
             'fiscalYearStartMonth' => 9,
@@ -555,28 +517,31 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the updated resource is returned and both models + streams reflect it
         $response->assertOk();
-        $response->assertExactJson(['data' => $this->expectedCompanyDetails($company)]);
+        $response->assertExactJson(['data' => $this->expectedCompanyDetails($this->company)]);
         $this->assertDatabaseHas('companies', [
-            'id' => $company->getKey(),
+            'id' => $this->company->getKey(),
             'name' => 'Contoso (Pvt) Ltd',
         ]);
         $this->assertDatabaseHas('company_settings', [
-            'company_id' => $company->getKey(),
+            'company_id' => $this->company->getKey(),
             'timezone' => 'Asia/Singapore',
             'fiscal_year_start_month' => 9,
             'working_days_per_week' => 6,
             'default_work_hours_per_day' => 7.5,
         ]);
-        $this->assertCompanyUpdateWasEventSourced($company, $owner->getKey());
-        $this->assertDatabaseCount('audit_trail', 2);
-        $this->assertCompanyChangeAudited($company, AuditAction::CompanyDetailsUpdated, ['name' => ['from' => 'Contoso', 'to' => 'Contoso (Pvt) Ltd']]);
-        $this->assertCompanyChangeAudited($company, AuditAction::CompanySettingsUpdated, [
+        $this->assertCompanyUpdateWasEventSourced($this->company, $this->owner->getKey());
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 2);
+        $this->assertCompanyChangeAudited($this->company, AuditAction::CompanyDetailsUpdated, ['name' => ['from' => 'Contoso', 'to' => 'Contoso (Pvt) Ltd']]);
+        $this->assertCompanyChangeAudited($this->company, AuditAction::CompanySettingsUpdated, [
             'default_work_hours_per_day' => ['from' => 8, 'to' => 7.5],
             'fiscal_year_start_month' => ['from' => 4, 'to' => 9],
             'timezone' => ['from' => 'Asia/Colombo', 'to' => 'Asia/Singapore'],
             'working_days_per_week' => ['from' => 5, 'to' => 6],
         ]);
-        $this->assertEveryRowCameFrom($response, $owner, 'owner');
+        $this->assertEveryRowCameFrom($response, $this->owner, 'owner');
+        $requestId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($requestId);
+        $this->assertSame(2, AuditEntry::query()->where('request_id', $requestId)->count());
     }
 
     protected function renameOnceWhenTheSettingsAreRead(Company $company, string $name): void
