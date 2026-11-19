@@ -223,6 +223,7 @@ class RemoveDataProtectionOfficerTest extends CompaniesTestCase
             'phone' => ['from' => self::DPO['phone'], 'to' => null],
         ]);
         $this->assertEveryRowCameFrom($response, $member, $roleCode);
+        $this->assertDpoEventRecordedBy($company, CompanyDataProtectionOfficerRemoved::class, $member);
     }
 
     /**

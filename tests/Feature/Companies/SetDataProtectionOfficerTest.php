@@ -135,8 +135,10 @@ class SetDataProtectionOfficerTest extends CompaniesTestCase
             'name not text' => [['name' => ['Nimal']], 'name', 'The data protection officer name field must be a string.'],
             'name too long' => [['name' => str_repeat('a', 256)], 'name', 'The data protection officer name field must not be greater than 255 characters.'],
             'email missing' => [['email' => null], 'email', 'The data protection officer email field is required.'],
+            'email not text' => [['email' => ['dpo@contoso.lk']], 'email', 'The data protection officer email field must be a string.'],
             'email not an address' => [['email' => 'not-an-email'], 'email', 'The data protection officer email must be a valid email address.'],
-            'email too long' => [['email' => str_repeat('a', 247).'@contoso.lk'], 'email', 'The data protection officer email field must not be greater than 255 characters.'],
+            'email too long' => [['email' => str_repeat('a', 245).'@contoso.lk'], 'email', 'The data protection officer email field must not be greater than 255 characters.'],
+            'phone not text' => [['phone' => ['0771234567']], 'phone', 'The data protection officer phone field must be a string.'],
             'phone not a number' => [['phone' => '12345'], 'phone', 'The data protection officer phone must be a valid phone number.'],
             'phone outside Sri Lanka' => [['phone' => '+447911123456'], 'phone', 'The data protection officer phone must be a valid phone number.'],
             'phone too long' => [['phone' => str_repeat('1', 256)], 'phone', 'The data protection officer phone field must not be greater than 255 characters.'],
@@ -252,8 +254,9 @@ class SetDataProtectionOfficerTest extends CompaniesTestCase
         // When the owner submits the DPO without a phone
         $response = $this->setDataProtectionOfficer($owner, $company->getKey(), ['name' => self::DPO['name'], 'email' => self::DPO['email']]);
 
-        // Then the phone is cleared and the audit row records it, old -> none
+        // Then the phone is cleared, answered as none, and the audit row records it, old -> none
         $response->assertOk();
+        $response->assertExactJson(['data' => [...self::DPO, 'phone' => null]]);
         $this->assertDpoStored($company, [...self::DPO, 'phone' => null]);
         $this->assertCompanyChangeAudited($company, AuditAction::DataProtectionOfficerSet, [
             'phone' => ['from' => self::DPO['phone'], 'to' => null],
@@ -383,6 +386,7 @@ class SetDataProtectionOfficerTest extends CompaniesTestCase
             'phone' => ['from' => null, 'to' => self::DPO['phone']],
         ]);
         $this->assertEveryRowCameFrom($response, $member, $roleCode);
+        $this->assertDpoEventRecordedBy($company, CompanyDataProtectionOfficerSet::class, $member);
     }
 
     /**

@@ -77,11 +77,6 @@ abstract class CompaniesTestCase extends TestCase
     }
 
     /**
-     * A guest (no Sanctum session) submits a company-details update by URL id.
-     *
-     * @param  array<string, mixed>  $payload
-     */
-    /**
      * @param  array<string, mixed>  $payload
      */
     protected function setDataProtectionOfficer(User $user, string $companyId, array $payload): TestResponse
@@ -139,6 +134,23 @@ abstract class CompaniesTestCase extends TestCase
     }
 
     /**
+     * Exactly one $eventClass DPO event, filed under the company, names $actor and a time.
+     *
+     * @param  class-string  $eventClass
+     */
+    protected function assertDpoEventRecordedBy(Company $company, string $eventClass, User $actor): void
+    {
+        [$by, $at] = $eventClass === CompanyDataProtectionOfficerSet::class ? ['setBy', 'setAt'] : ['removedBy', 'removedAt'];
+
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->where('event_class', $eventClass)
+            ->where("event_properties->{$by}", $actor->getKey())
+            ->whereNotNull("event_properties->{$at}")
+            ->whereForCompany($company->getKey())
+            ->count());
+    }
+
+    /**
      * The company has no DPO row and no DPO was ever set on its stream.
      */
     protected function assertNoDpo(Company $company): void
@@ -150,6 +162,11 @@ abstract class CompaniesTestCase extends TestCase
             ->count());
     }
 
+    /**
+     * A guest (no Sanctum session) submits a company-details update by URL id.
+     *
+     * @param  array<string, mixed>  $payload
+     */
     protected function updateCompanyDetailsAsGuest(string $companyId, array $payload): TestResponse
     {
         return $this->putJson('/api/v1/companies/'.$companyId, $payload);
