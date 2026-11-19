@@ -15,7 +15,7 @@ class CompaniesProcessingActivities implements ProcessingActivityProvider
             new ProcessingActivity(
                 module: 'companies',
                 activity: 'account',
-                dataCategories: ['company_identity', 'memberships_and_roles', 'invitations'],
+                dataCategories: ['company_identity', 'memberships_and_roles', 'invitations', 'data_protection_officer'],
                 legalBasis: LegalBasis::Contract,
                 thirdParties: [ThirdParty::HostingProvider, ThirdParty::EmailDeliveryService],
             ),
