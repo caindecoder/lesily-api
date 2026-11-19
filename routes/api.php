@@ -278,6 +278,11 @@ Route::get('/v1/companies/{companyId}/emergency-contact', [MembershipsController
 Route::put('/v1/companies/{companyId}/emergency-contact', [MembershipsController::class, 'setEmergencyContact'])
     ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:users.set-emergency-contact']);
 
+// View the company's data protection officer (UC-1-146 alt 2a) — 404 when none is
+// recorded; owner and admin (companies.update), every member sees it on the notice.
+Route::get('/v1/companies/{companyId}/data-protection-officer', [CompanyDataProtectionOfficerController::class, 'show'])
+    ->middleware(['auth:sanctum', 'auth.company', 'consent', 'permission:companies.update']);
+
 // Record the company's data protection officer (UC-1-146) — through the event-sourced
 // Company aggregate; owner and admin (companies.update). No throttle (OQ-1-098).
 Route::put('/v1/companies/{companyId}/data-protection-officer', [CompanyDataProtectionOfficerController::class, 'update'])
