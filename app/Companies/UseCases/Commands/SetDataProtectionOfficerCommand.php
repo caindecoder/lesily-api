@@ -50,7 +50,7 @@ class SetDataProtectionOfficerCommand extends Data
             );
         }
 
-        $request->merge(['company' => $request->company()->getKey(), 'setBy' => $request->user()?->getKey()]);
+        $request->merge(['company' => $request->company(), 'setBy' => $request->user()]);
 
         return static::validateAndCreate($request->all());
     }
@@ -62,9 +62,8 @@ class SetDataProtectionOfficerCommand extends Data
     public function changesFrom(?CompanyDataProtectionOfficer $officer): FieldChanges
     {
         $sent = ['name' => $this->name, 'email' => $this->email, 'phone' => $this->phone];
-        $recorded = $officer === null ? [] : ['name' => $officer->name, 'email' => $officer->email, 'phone' => $officer->phone];
 
-        return FieldChanges::between($recorded, $sent, array_keys($sent));
+        return FieldChanges::between($officer?->contact() ?? [], $sent, array_keys($sent));
     }
 
     /**

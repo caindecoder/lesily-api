@@ -39,6 +39,14 @@ class CompanyDataProtectionOfficer extends Model
         ];
     }
 
+    /**
+     * @return array{name: string, email: string, phone: ?string}
+     */
+    public function contact(): array
+    {
+        return ['name' => $this->name, 'email' => $this->email, 'phone' => $this->phone];
+    }
+
     /** @return BelongsTo<Company, $this> */
     public function company(): BelongsTo
     {

@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\Entities\CompanyDataProtectionOfficer;
 use App\Companies\Events\CompanyDataProtectionOfficerRemoved;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -174,6 +175,30 @@ class RemoveDataProtectionOfficerTest extends CompaniesTestCase
         $response->assertNoContent();
         $this->assertFalse(CompanyDataProtectionOfficer::query()->where('company_id', $companyA->getKey())->exists());
         $this->assertDpoStored($companyB, self::DPO);
+    }
+
+    #[Test]
+    public function when_the_dpo_is_removed_then_the_audit_row_holds_no_plain_text(): void
+    {
+        // Given a company whose DPO is recorded
+        $company = Company::factory()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        CompanyDataProtectionOfficer::factory()->for($company)->create();
+
+        // When the owner removes the DPO
+        $response = $this->removeDataProtectionOfficer($owner, $company->getKey());
+
+        // Then the removal is filed under the company, and each old value in its audit row is encrypted
+        $response->assertNoContent();
+        $this->assertSame(1, LesilyStoredEvent::query()
+            ->whereForCompany($company->getKey())
+            ->where('event_class', CompanyDataProtectionOfficerRemoved::class)
+            ->count());
+        $this->assertEncryptedChanges(AuditEntry::query()->where('action', AuditAction::DataProtectionOfficerRemoved)->sole(), [
+            'name' => ['from' => self::DPO['name'], 'to' => null],
+            'email' => ['from' => self::DPO['email'], 'to' => null],
+            'phone' => ['from' => self::DPO['phone'], 'to' => null],
+        ]);
     }
 
     #[Test]

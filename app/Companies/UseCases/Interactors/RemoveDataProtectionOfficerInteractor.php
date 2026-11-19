@@ -34,11 +34,8 @@ class RemoveDataProtectionOfficerInteractor
 
             CompanyAggregate::retrieve($companyId)->removeDataProtectionOfficer($removedBy)->persist();
 
-            $changes = FieldChanges::between(
-                ['name' => $recorded->name, 'email' => $recorded->email, 'phone' => $recorded->phone],
-                ['name' => null, 'email' => null, 'phone' => null],
-                ['name', 'email', 'phone'],
-            );
+            $contact = $recorded->contact();
+            $changes = FieldChanges::between($contact, array_map(static fn (): null => null, $contact), array_keys($contact));
             $this->audit->changed(CompanyChange::dataProtectionOfficerRemovedOf($command->company, $changes), $command->removedBy, $origin);
         });
     }

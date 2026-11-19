@@ -134,9 +134,8 @@ abstract class CompaniesTestCase extends TestCase
         $officer = CompanyDataProtectionOfficer::query()->where('company_id', $company->getKey())->sole();
         $raw = DB::table('company_data_protection_officers')->where('company_id', $company->getKey())->sole();
 
-        $this->assertSame($expected, ['name' => $officer->name, 'email' => $officer->email, 'phone' => $officer->phone]);
-        $this->assertNotContains($raw->name, array_filter($expected));
-        $this->assertNotContains($raw->email, array_filter($expected));
+        $this->assertSame($expected, $officer->contact());
+        $this->assertSame([], array_intersect([$raw->name, $raw->email, $raw->phone], array_filter($expected)));
     }
 
     /**

@@ -261,6 +261,22 @@ class SetDataProtectionOfficerTest extends CompaniesTestCase
     }
 
     #[Test]
+    public function when_the_phone_is_sent_empty_over_a_recorded_phone_then_the_phone_is_cleared(): void
+    {
+        // Given a company whose DPO is recorded with a phone
+        $company = Company::factory()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        CompanyDataProtectionOfficer::factory()->for($company)->create();
+
+        // When the owner submits the DPO with an empty phone
+        $response = $this->setDataProtectionOfficer($owner, $company->getKey(), [...self::DPO, 'phone' => null]);
+
+        // Then the phone is cleared
+        $response->assertOk();
+        $this->assertDpoStored($company, [...self::DPO, 'phone' => null]);
+    }
+
+    #[Test]
     public function when_a_company_sets_its_dpo_then_another_company_has_none(): void
     {
         // Given the owner of two companies, neither with a DPO
@@ -386,7 +402,7 @@ class SetDataProtectionOfficerTest extends CompaniesTestCase
     protected function assertEventHoldsNoPlainText(Company $company, array $plain): void
     {
         $event = LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $company->getKey())
+            ->whereForCompany($company->getKey())
             ->where('event_class', CompanyDataProtectionOfficerSet::class)
             ->sole();
         $payload = json_encode($event->event_properties, JSON_THROW_ON_ERROR);
