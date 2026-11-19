@@ -27,13 +27,10 @@ abstract class CompaniesTestCase extends TestCase
 {
     use AssertsAuditTrail, AssertsCompanyAuditRows, InducesProjectorFailures;
 
-    // Shared Companies fixtures populated on real need (§2.10) — first consumer:
-    // the UC-1-032 view-company-details suite (slice-companies Task 5).
-
     /**
      * Look up a seeded RBAC-catalog role by code — requires seedRbacCatalog() in
-     * the calling suite's setUp. Duplicated from MembershipsTestCase/AuthTestCase
-     * (module bases are independent — established precedent).
+     * the calling suite's setUp. The Memberships classes still read this copy; a
+     * class that takes Tests\Concerns\FreeTierCompany reads the trait's.
      */
     protected function seededRole(string $code): Role
     {
@@ -187,19 +184,6 @@ abstract class CompaniesTestCase extends TestCase
     }
 
     /**
-     * The input was refused as invalid on $invalidField — 422 VALIDATION_FAILED
-     * whose field-level errors contain $expectedMessage (§S21; conv-plan §2.2
-     * Rule 10 — assertJsonValidationErrors matches by containment, so the pin
-     * fails when the rule behind the message is dropped).
-     */
-    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
-    {
-        $response->assertUnprocessable();
-        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
-        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
-    }
-
-    /**
      * A rejected update left the company untouched — the name still reads
      * $expectedName, the settings still follow the country, and the company holds
      * no event beyond the $eventsBefore it was arranged with. The LD / amendment-R
@@ -213,30 +197,6 @@ abstract class CompaniesTestCase extends TestCase
         $this->assertSame($expectedName, $company->name);
         $this->assertNull($settings->timezone);
         $this->assertSame($eventsBefore, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
-    }
-
-    /**
-     * The request was rejected as unauthenticated — 401 with the §S21
-     * UNAUTHENTICATED envelope (AuthTestCase mirror; base-level consolidation
-     * is a flagged future refactor).
-     */
-    protected function assertUnauthenticated(TestResponse $response): void
-    {
-        $response->assertUnauthorized();
-        $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
-    }
-
-    /**
-     * The requested resource does not exist — 404 with the §S21 envelope and no
-     * existence leak (AuthorizeCompanyTest mirror; module bases are independent).
-     */
-    protected function assertResourceNotFound(TestResponse $response): void
-    {
-        $response->assertNotFound();
-        $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
-        $response->assertJsonPath('message', 'The requested resource was not found.');
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
     /**

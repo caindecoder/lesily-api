@@ -99,4 +99,30 @@ abstract class TestCase extends BaseTestCase
         $response->assertStatus($expectedStatus);
         $response->assertJsonPath('error_code', $code->value);
     }
+
+    /**
+     * The input was refused as invalid on $invalidField — 422 VALIDATION_FAILED
+     * whose field-level errors contain $expectedMessage (§2.2 Rule 10).
+     */
+    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
+    {
+        $response->assertUnprocessable();
+        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
+        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
+    }
+
+    protected function assertUnauthenticated(TestResponse $response): void
+    {
+        $response->assertUnauthorized();
+        $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
+    protected function assertResourceNotFound(TestResponse $response): void
+    {
+        $response->assertNotFound();
+        $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
+        $response->assertJsonPath('message', 'The requested resource was not found.');
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
 }
