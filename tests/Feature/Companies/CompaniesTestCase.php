@@ -29,8 +29,9 @@ abstract class CompaniesTestCase extends TestCase
 
     /**
      * Look up a seeded RBAC-catalog role by code — requires seedRbacCatalog() in
-     * the calling suite's setUp. The Memberships classes still read this copy; a
-     * class that takes Tests\Concerns\FreeTierCompany reads the trait's.
+     * the calling suite's setUp. Read by the classes that do not take
+     * Tests\Concerns\FreeTierCompany — AddCompanyTest, FillConsentStoreFromRecordedConsentsTest
+     * (through aCompanyMember below) and the Memberships classes' aCompanyMember calls.
      */
     protected function seededRole(string $code): Role
     {

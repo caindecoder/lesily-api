@@ -14,6 +14,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\AuditTrail\Enums\AuditAction;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -538,6 +539,9 @@ class UpdateCompanyTest extends CompaniesTestCase
             'working_days_per_week' => ['from' => 5, 'to' => 6],
         ]);
         $this->assertEveryRowCameFrom($response, $this->owner, 'owner');
+        $requestId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($requestId);
+        $this->assertSame(2, AuditEntry::query()->where('request_id', $requestId)->count());
     }
 
     protected function renameOnceWhenTheSettingsAreRead(Company $company, string $name): void
