@@ -129,7 +129,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the update is rejected and the company is untouched
         $this->assertValidationRejected($response, 'name', 'The name field is required.');
-        $this->assertCompanyUnchanged($this->company, 'Contoso', self::READY_MADE_COMPANY_EVENTS);
+        $this->assertCompanyUnchanged($this->company, 'Contoso', self::READY_MADE_NON_CONSENT_EVENTS);
     }
 
     // Sad — R8 teeth on the write route: the URL names a company the member does
@@ -208,7 +208,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the update fails whole: the old name and settings, no recorded events
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
-        $this->assertCompanyUnchanged($this->company, 'Contoso', self::READY_MADE_COMPANY_EVENTS);
+        $this->assertCompanyUnchanged($this->company, 'Contoso', self::READY_MADE_NON_CONSENT_EVENTS);
     }
 
     #[Test]
@@ -225,7 +225,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the update fails whole: the old name and settings, no recorded events, nothing audited
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
-        $this->assertCompanyUnchanged($this->company, 'Contoso', self::READY_MADE_COMPANY_EVENTS);
+        $this->assertCompanyUnchanged($this->company, 'Contoso', self::READY_MADE_NON_CONSENT_EVENTS);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
@@ -242,7 +242,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then only the details event is recorded and the name is updated
         $response->assertOk();
-        $this->assertOnlyDetailsEventRecorded($this->company, 'New Co', self::READY_MADE_COMPANY_EVENTS);
+        $this->assertOnlyDetailsEventRecorded($this->company, 'New Co', self::READY_MADE_NON_CONSENT_EVENTS);
     }
 
     // Edge — a settings-only update records the settings event and nothing else:
@@ -257,7 +257,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then only the settings event is recorded and the timezone is updated
         $response->assertOk();
-        $this->assertOnlySettingsEventRecorded($this->company, 'Asia/Singapore', self::READY_MADE_COMPANY_EVENTS);
+        $this->assertOnlySettingsEventRecorded($this->company, 'Asia/Singapore', self::READY_MADE_NON_CONSENT_EVENTS);
     }
 
     #[Test]
@@ -273,7 +273,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then only the name is recorded and the timezone still follows the country
         $response->assertOk();
-        $this->assertOnlyDetailsEventRecorded($this->company, 'Contoso', self::READY_MADE_COMPANY_EVENTS);
+        $this->assertOnlyDetailsEventRecorded($this->company, 'Contoso', self::READY_MADE_NON_CONSENT_EVENTS);
         $this->assertSettingFollowsTheCountry($this->company, 'timezone');
     }
 
@@ -359,7 +359,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the request succeeds, nothing changed and nothing is audited
         $response->assertOk();
-        $this->assertCompanyUnchanged($this->company, 'Contoso', self::READY_MADE_COMPANY_EVENTS);
+        $this->assertCompanyUnchanged($this->company, 'Contoso', self::READY_MADE_NON_CONSENT_EVENTS);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
@@ -373,7 +373,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the details event is recorded as before, but nothing changed, so nothing is audited
         $response->assertOk();
-        $this->assertOnlyDetailsEventRecorded($this->company, 'Contoso', self::READY_MADE_COMPANY_EVENTS);
+        $this->assertOnlyDetailsEventRecorded($this->company, 'Contoso', self::READY_MADE_NON_CONSENT_EVENTS);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
@@ -388,7 +388,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the settings event is recorded as before, but nothing changed, so nothing is audited
         $response->assertOk();
-        $this->assertOnlySettingsEventRecorded($this->company, 'Asia/Singapore', self::READY_MADE_COMPANY_EVENTS);
+        $this->assertOnlySettingsEventRecorded($this->company, 'Asia/Singapore', self::READY_MADE_NON_CONSENT_EVENTS);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
@@ -458,7 +458,7 @@ class UpdateCompanyTest extends CompaniesTestCase
 
         // Then the settings event fires (the timezone still follows) and the read model reads zero
         $response->assertOk();
-        $this->assertOnlySettingsEventRecorded($this->company, null, self::READY_MADE_COMPANY_EVENTS);
+        $this->assertOnlySettingsEventRecorded($this->company, null, self::READY_MADE_NON_CONSENT_EVENTS);
         $this->assertDatabaseHas('company_settings', [
             'company_id' => $this->company->getKey(),
             'default_work_hours_per_day' => 0,

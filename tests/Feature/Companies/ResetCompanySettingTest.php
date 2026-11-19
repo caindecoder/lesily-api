@@ -60,7 +60,7 @@ class ResetCompanySettingTest extends CompaniesTestCase
 
         // Then they are refused and the company keeps its own value
         $this->assertRoleInsufficient($response, 'companies.update');
-        $this->assertOwnValueKept($this->company, self::READY_MADE_COMPANY_EVENTS);
+        $this->assertOwnValueKept($this->company, self::READY_MADE_NON_CONSENT_EVENTS);
     }
 
     #[Test]
@@ -91,7 +91,7 @@ class ResetCompanySettingTest extends CompaniesTestCase
 
         // Then the reset fails whole: every own value is kept and no reset is recorded
         $response->assertInternalServerError();
-        $this->assertOwnValueKept($this->company, self::READY_MADE_COMPANY_EVENTS);
+        $this->assertOwnValueKept($this->company, self::READY_MADE_NON_CONSENT_EVENTS);
     }
 
     #[Test]
@@ -106,7 +106,7 @@ class ResetCompanySettingTest extends CompaniesTestCase
 
         // Then it is not found and nothing is recorded
         $this->assertResourceNotFound($response);
-        $this->assertNothingRecorded($this->company, self::READY_MADE_COMPANY_EVENTS);
+        $this->assertNothingRecorded($this->company, self::READY_MADE_NON_CONSENT_EVENTS);
     }
 
     /**
@@ -132,7 +132,7 @@ class ResetCompanySettingTest extends CompaniesTestCase
 
         // Then the reset answers, nothing is recorded and nothing is audited
         $response->assertNoContent();
-        $this->assertNothingRecorded($this->company, self::READY_MADE_COMPANY_EVENTS);
+        $this->assertNothingRecorded($this->company, self::READY_MADE_NON_CONSENT_EVENTS);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
         $this->assertSettingFollowsTheCountry($this->company, 'working_days_per_week');
     }

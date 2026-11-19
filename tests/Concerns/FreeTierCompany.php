@@ -19,7 +19,7 @@ trait FreeTierCompany
 
     protected const int READY_MADE_AUDIT_ROWS = 4;
 
-    protected const int READY_MADE_COMPANY_EVENTS = 5;
+    protected const int READY_MADE_NON_CONSENT_EVENTS = 5;
 
     protected Company $company;
 
