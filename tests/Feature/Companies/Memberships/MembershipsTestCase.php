@@ -22,7 +22,6 @@ use App\Consent\Entities\ConsentRecord;
 use App\Consent\Events\ConsentRecorded;
 use Tests\Concerns\AssertsCompanyAuditRows;
 use Tests\Concerns\InducesDatabaseFailures;
-use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Events\QueryExecuted;
 use Tests\Concerns\AssertsMembershipAuditRows;
 use Tests\Feature\Companies\CompaniesTestCase;
@@ -47,10 +46,10 @@ use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterfa
 use App\Companies\Memberships\IO\Database\Repositories\EloquentCompanyUserRepository;
 
 /**
- * Shared fixtures for the membership (team-invite) feature tests (§2.10). Callers
- * compose a company + a member holding a SEEDED role (a factory role carries no
- * permission grants, so the RBAC catalog is seeded here), then drive the invite
- * endpoint through the actor's company context.
+ * The membership feature tests' own action helpers and grouped asserts (§2.10).
+ * A class takes the ready-made company (Tests\Concerns\FreeTierCompany); joining,
+ * removing and soft-deleting a member live in CreatesMemberships. The RBAC catalog
+ * is seeded here for the classes that start without the ready-made company.
  */
 abstract class MembershipsTestCase extends CompaniesTestCase
 {
@@ -85,25 +84,6 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         // mapped envelopes the way CI/prod do.
         config(['app.debug' => false]);
         Mail::fake();
-    }
-
-    /**
-     * A company on $plan with $actor attached under the SEEDED $roleCode.
-     *
-     * @return array{0: Company, 1: User}
-     */
-    protected function aCompanyWithMember(string $roleCode = 'admin', BillingPlan $plan = BillingPlan::Pro): array
-    {
-        $company = Company::factory()->onPlan($plan)->create();
-        $actor = User::factory()->create();
-        $this->attachMember($company, $actor, $this->seededRole($roleCode));
-
-        return [$company, $actor];
-    }
-
-    protected function seededRole(string $code): Role
-    {
-        return Role::query()->where('code', $code)->sole();
     }
 
     /**
@@ -853,14 +833,14 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
-     * A refused accept changed nothing: no user account was created, no
-     * membership pivot was written, and no invitation was marked accepted —
-     * the guard rejected before any state change.
+     * A refused accept changed nothing: no user account or membership pivot was
+     * written beyond the $peopleBefore already there, and no invitation was
+     * marked accepted — the guard rejected before any state change.
      */
-    protected function assertNothingAccepted(): void
+    protected function assertNothingAccepted(int $peopleBefore): void
     {
-        $this->assertDatabaseCount('users', 0);
-        $this->assertDatabaseCount('company_user', 0);
+        $this->assertDatabaseCount('users', $peopleBefore);
+        $this->assertDatabaseCount('company_user', $peopleBefore);
         $this->assertSame(0, Invitation::query()->whereNotNull('accepted_at')->count());
     }
 

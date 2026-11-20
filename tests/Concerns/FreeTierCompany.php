@@ -23,6 +23,8 @@ trait FreeTierCompany
 
     protected const int READY_MADE_CONTACT_EVENTS = 1;
 
+    protected const int READY_MADE_PEOPLE = 3;
+
     protected Company $company;
 
     protected User $owner;

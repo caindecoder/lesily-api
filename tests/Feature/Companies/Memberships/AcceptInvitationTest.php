@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -42,11 +43,16 @@ use App\Companies\Memberships\Exceptions\InvitationAcceptContentionException;
  */
 class AcceptInvitationTest extends MembershipsTestCase
 {
-    protected Company $company;
-
-    protected User $actor;
+    use FreeTierCompany;
 
     protected User $invitee;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
 
     #[Test]
     public function when_the_token_is_unknown_then_acceptance_is_refused(): void
@@ -59,15 +65,14 @@ class AcceptInvitationTest extends MembershipsTestCase
 
         // Then — the collapsed invite-invalid envelope; no state was created
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
-        $this->assertNothingAccepted();
+        $this->assertNothingAccepted(self::READY_MADE_PEOPLE);
     }
 
     #[Test]
     public function when_the_invitation_has_expired_then_acceptance_is_refused(): void
     {
         // Given — a pending invitation whose 7-day window has elapsed
-        [$company, $actor] = $this->aCompanyWithMember();
-        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'kasun@newjoiner.lk');
         $this->travel(8)->days();
 
         // When — the invitee follows the stale link with valid details
@@ -76,7 +81,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Then — the SAME collapsed envelope (no expired-vs-unknown leak, H4);
         // the invitation stays unconsumed and no account was created
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
-        $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
+        $this->assertInvitationNotConsumed($this->company, 'kasun@newjoiner.lk');
         $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
     }
 
@@ -85,8 +90,7 @@ class AcceptInvitationTest extends MembershipsTestCase
     {
         // Given — a pending invitation the admin then revoked (UC-1-022); the
         // original link is dead thereafter
-        [$company, $actor] = $this->aCompanyWithMember();
-        $deadToken = $this->aRevokedInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $deadToken = $this->aRevokedInvitation($this->company, $this->admin, 'kasun@newjoiner.lk');
 
         // When — the invitee follows the revoked link with valid details
         $response = $this->acceptInvitation($deadToken, $this->validNewUserBody());
@@ -94,7 +98,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Then — the SAME collapsed envelope (no revoked-vs-unknown leak, H4);
         // the invitation stays unconsumed, no account was created, nothing accepted is audited
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
-        $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
+        $this->assertInvitationNotConsumed($this->company, 'kasun@newjoiner.lk');
         $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
         $this->assertNotAudited(AuditAction::InvitationAccepted);
     }
@@ -103,8 +107,7 @@ class AcceptInvitationTest extends MembershipsTestCase
     public function when_an_accepted_invitation_is_replayed_then_it_is_refused(): void
     {
         // Given — an invitation already consumed by its new user
-        [$company, $actor] = $this->aCompanyWithMember();
-        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'kasun@newjoiner.lk');
         $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
         Auth::forgetGuards();
 
@@ -123,33 +126,31 @@ class AcceptInvitationTest extends MembershipsTestCase
     public function when_an_existing_users_invitation_is_accepted_as_guest_then_authentication_is_required(): void
     {
         // Given — the invitee already has an account (a multi-company joiner)
-        [$company, $actor] = $this->aCompanyWithMember();
         User::factory()->withEmail('anushka@member.lk')->create();
-        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'anushka@member.lk');
 
         // When — the invitation is accepted without logging in
         $response = $this->acceptInvitation($token);
 
         // Then — authentication is demanded first (R9/D7); nothing joined
         $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
-        $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
+        $this->assertInvitationNotConsumed($this->company, 'anushka@member.lk');
     }
 
     #[Test]
     public function when_the_authenticated_user_is_not_the_invitee_then_acceptance_is_refused(): void
     {
         // Given — an invitation for one account, a session belonging to another
-        [$company, $actor] = $this->aCompanyWithMember();
         User::factory()->withEmail('anushka@member.lk')->create();
         $someoneElse = User::factory()->withEmail('other@member.lk')->create();
-        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'anushka@member.lk');
 
         // When — the wrong account tries to consume the invitation
         $response = $this->acceptInvitation($token, [], $someoneElse);
 
         // Then — only the invited email may accept (UC alt-4b); nothing joined
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::InviteEmailMismatch);
-        $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
+        $this->assertInvitationNotConsumed($this->company, 'anushka@member.lk');
     }
 
     /**
@@ -159,15 +160,14 @@ class AcceptInvitationTest extends MembershipsTestCase
     public function when_a_new_users_registration_details_are_invalid_then_no_account_is_created(array $body, string $field, string $message): void
     {
         // Given — a pending invitation for a brand-new email
-        [$company, $actor] = $this->aCompanyWithMember();
-        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'kasun@newjoiner.lk');
 
         // When — accepting with a broken registration body
         $response = $this->acceptInvitation($token, $body);
 
         // Then — shape-rejected on the offending field; nothing was created
         $this->assertValidationRejected($response, $field, $message);
-        $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
+        $this->assertInvitationNotConsumed($this->company, 'kasun@newjoiner.lk');
         $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
     }
 
@@ -208,9 +208,8 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Given — an existing account's invitation, with the new membership
         // removed by a concurrent request between the join and the response's
         // roster-row echo
-        [$company, $actor] = $this->aCompanyWithMember();
         $invitee = User::factory()->withEmail('anushka@member.lk')->create();
-        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'anushka@member.lk');
         $this->removeMembershipWhenEchoed();
 
         // When — the invitee accepts while authenticated
@@ -218,7 +217,7 @@ class AcceptInvitationTest extends MembershipsTestCase
 
         // Then — the echo reports the membership gone; the join itself stands
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
-        $this->assertJoinStoodOnRemovedMembership($company, 'anushka@member.lk');
+        $this->assertJoinStoodOnRemovedMembership($this->company, 'anushka@member.lk');
     }
 
     #[Test]
@@ -228,16 +227,15 @@ class AcceptInvitationTest extends MembershipsTestCase
         // invitation for their email on a DIFFERENT stream (the OQ-1-126 race
         // artifact, seeded through the guardless aggregate); their trashed
         // pivot still occupies the (company, user) unique slot
-        [$company, $actor] = $this->aCompanyWithMember();
         $removed = User::factory()->withEmail('ruwan@member.lk')->create();
-        $membershipId = $this->aRemovedMembership($company, $removed);
+        $membershipId = $this->aRemovedMembership($this->company, $removed);
         $plaintext = Str::random(40);
         UserMembership::retrieve((string) Str::uuid7())
             ->invite(CreateInvitationCommand::from([
-                'company' => $company,
+                'company' => $this->company,
                 'email' => 'ruwan@member.lk',
                 'role' => $this->seededRole('employee'),
-                'invitedBy' => $actor,
+                'invitedBy' => $this->admin,
                 'plaintextToken' => $plaintext,
             ]))
             ->persist();
@@ -250,7 +248,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // invitation cannot resurrect a removed member — re-entry is the
         // deliberate same-UUID re-invite — and the removal stays intact
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
-        $this->assertRefusalLeftMemberRemoved($company, 'ruwan@member.lk', $membershipId);
+        $this->assertRefusalLeftMemberRemoved($this->company, 'ruwan@member.lk', $membershipId);
     }
 
     /**
@@ -262,9 +260,8 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Given — an accept holding a STALE snapshot of the invitation (its
         // pre-transaction look) while the row moves on before the locked
         // re-read; the seam feeds the snapshot, the re-check is production
-        [$this->company, $this->actor] = $this->aCompanyWithMember();
         $this->invitee = User::factory()->withEmail('anushka@member.lk')->create();
-        $token = $this->aPendingInvitation($this->company, $this->actor, 'anushka@member.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'anushka@member.lk');
         $staleSnapshot = Invitation::query()->where('email', 'anushka@member.lk')->sole();
         $this->applyInvitationDeath($death, $token);
         $joinsBefore = LesilyStoredEvent::query()->where('event_class', UserJoinedCompany::class)->count();
@@ -313,7 +310,7 @@ class AcceptInvitationTest extends MembershipsTestCase
     {
         match ($death) {
             'consumed' => $this->acceptInvitation($token, [], $this->invitee)->assertOk(),
-            'revoked' => $this->revokeInvitation($this->actor, $this->company,
+            'revoked' => $this->revokeInvitation($this->admin, $this->company,
                 (string) Invitation::query()->where('email', $this->invitee->email)->sole()->getKey())->assertNoContent(),
             'expired' => $this->travel(8)->days(),
             'superseded' => $this->resendInvitationAsAdmin(),
@@ -329,7 +326,7 @@ class AcceptInvitationTest extends MembershipsTestCase
      */
     protected function resendInvitationAsAdmin(): void
     {
-        Sanctum::actingAs($this->actor);
+        Sanctum::actingAs($this->admin);
         $invitationId = Invitation::query()->where('email', $this->invitee->email)->sole()->getKey();
         $this->postJson("/api/v1/invitations/{$invitationId}/resend", [], ['X-Company-Context' => $this->company->getKey()])
             ->assertSuccessful();
@@ -341,9 +338,8 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Given — an existing account's invitation and a lock-wait death
         // inside the accept transaction
         Exceptions::fake();
-        [$company, $actor] = $this->aCompanyWithMember();
         $invitee = User::factory()->withEmail('anushka@member.lk')->create();
-        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'anushka@member.lk');
         $this->induceProjectorFailureFor(UserJoinedCompany::class, $this->syntheticQueryException(
             ['sqlstate' => 'HY000', 'code' => 1205, 'message' => 'SQLSTATE[HY000]: General error: 1205'],
         ));
@@ -365,9 +361,8 @@ class AcceptInvitationTest extends MembershipsTestCase
     {
         // Given — an existing account's invitation and a write that fails
         // AFTER the projector ran, inside the accept transaction
-        [$company, $actor] = $this->aCompanyWithMember();
         $invitee = User::factory()->withEmail('anushka@member.lk')->create();
-        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'anushka@member.lk');
         $this->induceProjectorFailureFor(UserJoinedCompany::class, new RuntimeException('induced join failure'));
 
         // When — the invitee accepts while authenticated
@@ -375,16 +370,15 @@ class AcceptInvitationTest extends MembershipsTestCase
 
         // Then — the whole accept rolls back: nothing consumed, no membership
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
-        $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
+        $this->assertInvitationNotConsumed($this->company, 'anushka@member.lk');
     }
 
     #[Test]
     public function when_the_audit_row_cannot_be_written_then_the_existing_users_accept_rolls_back(): void
     {
         // Given — an existing account's invitation and an audit trail that refuses the accept's row
-        [$company, $actor] = $this->aCompanyWithMember();
         $invitee = User::factory()->withEmail('anushka@member.lk')->create();
-        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'anushka@member.lk');
         $this->failTheAuditTrail();
 
         // When — the invitee accepts while authenticated
@@ -392,7 +386,7 @@ class AcceptInvitationTest extends MembershipsTestCase
 
         // Then — the whole accept rolls back: nothing consumed, no membership, no row
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
-        $this->assertInvitationNotConsumed($company, 'anushka@member.lk');
+        $this->assertInvitationNotConsumed($this->company, 'anushka@member.lk');
         $this->assertNotAudited(AuditAction::InvitationAccepted);
     }
 
@@ -400,8 +394,7 @@ class AcceptInvitationTest extends MembershipsTestCase
     public function when_the_audit_row_cannot_be_written_then_no_account_is_created(): void
     {
         // Given — a brand-new email's invitation and an audit trail that refuses the accept's row
-        [$company, $actor] = $this->aCompanyWithMember();
-        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'kasun@newjoiner.lk');
         $this->failTheAuditTrail();
 
         // When — the invitee accepts with valid registration details
@@ -410,7 +403,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Then — the genesis rolls back with the join: no account, nothing consumed, no row
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
         $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
-        $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
+        $this->assertInvitationNotConsumed($this->company, 'kasun@newjoiner.lk');
         $this->assertNotAudited(AuditAction::InvitationAccepted);
     }
 
@@ -420,8 +413,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Given — a new user's invitation, with contention striking the
         // POST-COMMIT write: the account and membership are already durable,
         // so a "please retry" would send the invitee to a consumed link
-        [$company, $actor] = $this->aCompanyWithMember();
-        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'kasun@newjoiner.lk');
         User::updated(fn () => throw $this->syntheticQueryException(
             ['sqlstate' => 'HY000', 'code' => 1205, 'message' => 'SQLSTATE[HY000]: General error: 1205'],
         ));
@@ -432,7 +424,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Then — a plain failure, never the 409 retry hint; the membership
         // itself is already durable
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
-        $this->assertMembershipActivated($company, 'kasun@newjoiner.lk');
+        $this->assertMembershipActivated($this->company, 'kasun@newjoiner.lk');
     }
 
     /**
@@ -447,9 +439,8 @@ class AcceptInvitationTest extends MembershipsTestCase
     ): void {
         // Given an existing account's invitation and a write inside the
         // accept transaction that dies the way the driver reports it
-        [$company, $actor] = $this->aCompanyWithMember();
         $invitee = User::factory()->withEmail('anushka@member.lk')->create();
-        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'anushka@member.lk');
         $this->induceProjectorFailureFor(UserJoinedCompany::class, $this->syntheticQueryException($failure));
 
         // When — the invitee accepts while authenticated
@@ -464,10 +455,9 @@ class AcceptInvitationTest extends MembershipsTestCase
     {
         // Given — a brand-new email's invitation, revoked after the accept's
         // first look (the stale-snapshot seam on the genesis branch)
-        [$company, $actor] = $this->aCompanyWithMember();
-        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'kasun@newjoiner.lk');
         $staleSnapshot = Invitation::query()->where('email', 'kasun@newjoiner.lk')->sole();
-        $this->revokeInvitation($actor, $company, (string) $staleSnapshot->getKey())->assertNoContent();
+        $this->revokeInvitation($this->admin, $this->company, (string) $staleSnapshot->getKey())->assertNoContent();
         Auth::forgetGuards();
 
         // When — the stale genesis accept reaches the transaction
@@ -489,7 +479,7 @@ class AcceptInvitationTest extends MembershipsTestCase
 
         // Then — no account was provisioned and nothing was consumed
         $this->assertDatabaseMissing('users', ['email' => 'kasun@newjoiner.lk']);
-        $this->assertInvitationNotConsumed($company, 'kasun@newjoiner.lk');
+        $this->assertInvitationNotConsumed($this->company, 'kasun@newjoiner.lk');
     }
 
     #[Test]
@@ -497,16 +487,15 @@ class AcceptInvitationTest extends MembershipsTestCase
     {
         // Given — an account already on the platform, invited to a company it
         // doesn't belong to, whose client sends the new-user fields blank
-        [$company, $actor] = $this->aCompanyWithMember();
         $invitee = User::factory()->withEmail('anushka@member.lk')->create();
-        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'anushka@member.lk');
 
         // When — they accept while authenticated, with a blank name and password
         $response = $this->acceptInvitation($token, ['name' => '', 'password' => ''], $invitee);
 
         // Then — the blanks are optional on this branch: the membership activates and is returned
         $this->assertMembershipReturned($response, $invitee, 'employee');
-        $this->assertMembershipActivated($company, 'anushka@member.lk');
+        $this->assertMembershipActivated($this->company, 'anushka@member.lk');
     }
 
     #[Test]
@@ -514,10 +503,9 @@ class AcceptInvitationTest extends MembershipsTestCase
     {
         // Given — an existing account that opted its email out of team-welcome
         // notices (non-critical, so the opt-out binds; questionnaire S16)
-        [$company, $actor] = $this->aCompanyWithMember();
         $invitee = User::factory()->withEmail('anushka@member.lk')->create();
         NotificationPreference::factory()->mailDisabled($invitee, NotificationType::TeamWelcome)->create();
-        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'anushka@member.lk');
 
         // When — they accept
         $response = $this->acceptInvitation($token, [], $invitee);
@@ -525,7 +513,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Then — the join succeeds; the welcome mail is suppressed while the
         // in-app notification survives
         $response->assertOk();
-        $this->assertTeamWelcomeSuppressed('anushka@member.lk', $company);
+        $this->assertTeamWelcomeSuppressed('anushka@member.lk', $this->company);
     }
 
     #[Test]
@@ -533,9 +521,8 @@ class AcceptInvitationTest extends MembershipsTestCase
     {
         // Given — an account already on the platform, invited to a company it
         // doesn't belong to; the invitation email differs only in case (alt-4c)
-        [$company, $actor] = $this->aCompanyWithMember();
         $invitee = User::factory()->withEmail('anushka@member.lk')->create();
-        $token = $this->aPendingInvitation($company, $actor, 'Anushka@Member.LK');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'Anushka@Member.LK');
         $accountsBefore = User::query()->count();
 
         // When — they accept while authenticated; no registration details needed
@@ -545,9 +532,9 @@ class AcceptInvitationTest extends MembershipsTestCase
         // the invited role, no second account appears, and the welcome goes out
         $response->assertOk();
         $response->assertJsonPath('data.user.id', $invitee->getKey());
-        $this->assertMembershipActivated($company, 'Anushka@Member.LK');
+        $this->assertMembershipActivated($this->company, 'Anushka@Member.LK');
         $this->assertSame($accountsBefore, User::query()->count());
-        $this->assertTeamWelcomeQueued('anushka@member.lk', $company);
+        $this->assertTeamWelcomeQueued('anushka@member.lk', $this->company);
     }
 
     #[Test]
@@ -555,9 +542,8 @@ class AcceptInvitationTest extends MembershipsTestCase
     {
         // Given — an account already on the platform, invited to a company it
         // doesn't belong to
-        [$company, $actor] = $this->aCompanyWithMember();
         $invitee = User::factory()->withEmail('anushka@member.lk')->create();
-        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'anushka@member.lk');
 
         // When — they accept while authenticated
         $response = $this->acceptInvitation($token, [], $invitee);
@@ -566,7 +552,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // keyed by the (company, invitee) canonical pivot (findById's scope)
         $this->assertMembershipReturned($response, $invitee, 'employee');
         $response->assertJsonPath('data.id', CompanyUser::query()
-            ->where('company_id', $company->getKey())
+            ->where('company_id', $this->company->getKey())
             ->where('user_id', $invitee->getKey())
             ->sole()
             ->getKey());
@@ -624,10 +610,9 @@ class AcceptInvitationTest extends MembershipsTestCase
     {
         // Given — a member removed from the company (soft-deleted pivot),
         // re-invited onto the SAME membership stream (D5b)
-        [$company, $actor] = $this->aCompanyWithMember();
         $removed = User::factory()->withEmail('ruwan@member.lk')->create();
-        $membershipId = $this->aRemovedMembership($company, $removed);
-        $token = $this->aPendingInvitation($company, $actor, 'ruwan@member.lk');
+        $membershipId = $this->aRemovedMembership($this->company, $removed);
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'ruwan@member.lk');
 
         // When — they accept the re-invite while authenticated
         $response = $this->acceptInvitation($token, [], $removed);
@@ -636,7 +621,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         // not a second row
         $response->assertOk();
         $response->assertJsonPath('data.id', $membershipId);
-        $this->assertMembershipActivated($company, 'ruwan@member.lk');
+        $this->assertMembershipActivated($this->company, 'ruwan@member.lk');
     }
 
     #[Test]
@@ -645,21 +630,20 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Given — an active member, plus a leftover pending invitation for their
         // email: the OQ-1-126 concurrent-invite race artifact, seeded through the
         // guardless aggregate exactly as the race would produce it
-        [$company, $actor] = $this->aCompanyWithMember();
         $member = User::factory()->withEmail('ruwan@member.lk')->create();
-        $this->attachMember($company, $member, $this->seededRole('employee'));
+        $this->attachMember($this->company, $member, $this->seededRole('employee'));
         $originalMembershipId = CompanyUser::query()
-            ->where('company_id', $company->getKey())
+            ->where('company_id', $this->company->getKey())
             ->where('user_id', $member->getKey())
             ->sole()
             ->getKey();
         $plaintext = Str::random(40);
         UserMembership::retrieve((string) Str::uuid7())
             ->invite(CreateInvitationCommand::from([
-                'company' => $company,
+                'company' => $this->company,
                 'email' => 'ruwan@member.lk',
                 'role' => $this->seededRole('employee'),
-                'invitedBy' => $actor,
+                'invitedBy' => $this->admin,
                 'plaintextToken' => $plaintext,
             ]))
             ->persist();
@@ -674,7 +658,7 @@ class AcceptInvitationTest extends MembershipsTestCase
         $response->assertJsonPath('data.id', $originalMembershipId);
         $this->assertNotNull(Invitation::query()->where('email', 'ruwan@member.lk')->sole()->accepted_at);
         $this->assertSame(1, CompanyUser::withTrashed()
-            ->where('company_id', $company->getKey())
+            ->where('company_id', $this->company->getKey())
             ->where('user_id', $member->getKey())
             ->count());
         $this->assertDatabaseHas('company_user', ['id' => $originalMembershipId]);
@@ -685,17 +669,16 @@ class AcceptInvitationTest extends MembershipsTestCase
     {
         // Given — an active employee and a leftover invitation for their email as an HR officer
         // (the alt-4a race artifact), accepted from a known device
-        [$company, $actor] = $this->aCompanyWithMember();
         $member = User::factory()->withEmail('ruwan@member.lk')->create();
-        $this->attachMember($company, $member, $this->seededRole('employee'));
+        $this->attachMember($this->company, $member, $this->seededRole('employee'));
         $plaintext = Str::random(40);
         $invitationId = (string) Str::uuid7();
         UserMembership::retrieve($invitationId)
             ->invite(CreateInvitationCommand::from([
-                'company' => $company,
+                'company' => $this->company,
                 'email' => 'ruwan@member.lk',
                 'role' => $this->seededRole('hr_officer'),
-                'invitedBy' => $actor,
+                'invitedBy' => $this->admin,
                 'plaintextToken' => $plaintext,
             ]))
             ->persist();
@@ -714,8 +697,7 @@ class AcceptInvitationTest extends MembershipsTestCase
     public function when_a_new_user_accepts_then_their_account_is_created_and_they_are_logged_in(): void
     {
         // Given — a pending invitation for a brand-new email
-        [$company, $actor] = $this->aCompanyWithMember();
-        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'kasun@newjoiner.lk');
 
         // When — the invitee sets their name + password on the accept link
         $response = $this->acceptInvitation($token, $this->validNewUserBody());
@@ -724,18 +706,17 @@ class AcceptInvitationTest extends MembershipsTestCase
         // membership activates on the invitation's UUID, a working session is
         // issued (auto-login), and the welcome goes out
         $response->assertCreated();
-        $this->assertNewUserProvisioned($company, 'kasun@newjoiner.lk', 'Nimal Perera');
-        $this->assertMembershipActivated($company, 'kasun@newjoiner.lk');
-        $this->assertAutoLoggedIn($response, $company);
-        $this->assertTeamWelcomeQueued('kasun@newjoiner.lk', $company);
+        $this->assertNewUserProvisioned($this->company, 'kasun@newjoiner.lk', 'Nimal Perera');
+        $this->assertMembershipActivated($this->company, 'kasun@newjoiner.lk');
+        $this->assertAutoLoggedIn($response, $this->company);
+        $this->assertTeamWelcomeQueued('kasun@newjoiner.lk', $this->company);
     }
 
     #[Test]
     public function when_a_new_user_accepts_then_their_chosen_password_becomes_their_login_credential(): void
     {
         // Given — an invitation accepted with a chosen password
-        [$company, $actor] = $this->aCompanyWithMember();
-        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'kasun@newjoiner.lk');
         $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
         Auth::forgetGuards();
 
@@ -754,9 +735,8 @@ class AcceptInvitationTest extends MembershipsTestCase
     public function when_the_accept_reads_the_invitation_it_will_consume_then_it_locks_it(): void
     {
         // Given — an existing account invited to a company it doesn't belong to
-        [$company, $actor] = $this->aCompanyWithMember();
         $invitee = User::factory()->withEmail('anushka@member.lk')->create();
-        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'anushka@member.lk');
         $invitationId = (string) Invitation::query()->where('email', 'anushka@member.lk')->sole()->getKey();
 
         // When — the accept runs with every SQL statement recorded
@@ -766,7 +746,7 @@ class AcceptInvitationTest extends MembershipsTestCase
 
         // Then — the consume decided under held locks, in one transaction
         $this->assertAcceptDecidedUnderInvitationLock($capture, $invitationId);
-        $this->assertPivotSetLockedBeforeWrite($capture, (string) $company->getKey(), (string) $invitee->getKey());
+        $this->assertPivotSetLockedBeforeWrite($capture, (string) $this->company->getKey(), (string) $invitee->getKey());
     }
 
     #[Test]
@@ -775,12 +755,12 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Given — an invitee removed from a DIFFERENT company (their trashed
         // pivot lives there), another removed member in THIS company, and a
         // valid invitation from this company
-        [$otherCompany] = $this->aCompanyWithMember();
-        [$company, $actor] = $this->aCompanyWithMember();
+        $otherCompany = Company::factory()->create();
+        $this->aCompanyMember($otherCompany, 'admin');
         $invitee = User::factory()->withEmail('ruwan@member.lk')->create();
         $this->aRemovedMembership($otherCompany, $invitee);
-        $this->aRemovedMembership($company, User::factory()->withEmail('sunil@member.lk')->create());
-        $token = $this->aPendingInvitation($company, $actor, 'ruwan@member.lk');
+        $this->aRemovedMembership($this->company, User::factory()->withEmail('sunil@member.lk')->create());
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'ruwan@member.lk');
 
         // When — they accept while authenticated
         $response = $this->acceptInvitation($token, [], $invitee);
@@ -788,15 +768,14 @@ class AcceptInvitationTest extends MembershipsTestCase
         // Then — a removal elsewhere (or someone else's removal here) does
         // not block this join
         $response->assertOk();
-        $this->assertMembershipActivated($company, 'ruwan@member.lk');
+        $this->assertMembershipActivated($this->company, 'ruwan@member.lk');
     }
 
     #[Test]
     public function when_a_new_user_accepts_then_the_provisioning_decides_under_the_invitation_lock(): void
     {
         // Given — a pending invitation for a brand-new email
-        [$company, $actor] = $this->aCompanyWithMember();
-        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'kasun@newjoiner.lk');
         $invitationId = (string) Invitation::query()->where('email', 'kasun@newjoiner.lk')->sole()->getKey();
 
         // When — the accept runs with every SQL statement recorded
@@ -813,9 +792,8 @@ class AcceptInvitationTest extends MembershipsTestCase
     public function when_an_existing_user_accepts_then_the_audit_trail_records_them_joining(): void
     {
         // Given — an existing account invited to a company, accepting from a known device
-        [$company, $actor] = $this->aCompanyWithMember();
         $invitee = User::factory()->withEmail('anushka@member.lk')->create();
-        $token = $this->aPendingInvitation($company, $actor, 'anushka@member.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'anushka@member.lk');
         $this->fromADevice();
 
         // When — they accept while authenticated
@@ -831,8 +809,7 @@ class AcceptInvitationTest extends MembershipsTestCase
     public function when_a_new_user_accepts_then_the_audit_trail_records_the_new_member_joining(): void
     {
         // Given — a pending invitation for a brand-new email, accepted from a known device
-        [$company, $actor] = $this->aCompanyWithMember();
-        $token = $this->aPendingInvitation($company, $actor, 'kasun@newjoiner.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'kasun@newjoiner.lk');
         $this->fromADevice();
 
         // When — the invitee sets their name and password on the accept link
