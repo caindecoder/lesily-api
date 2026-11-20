@@ -3,11 +3,9 @@
 namespace Tests\Feature\Billing;
 
 use App\Models\User;
-use Carbon\CarbonImmutable;
-use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
-use App\Foundation\Billing\Enums\BillingPlan;
 use App\Billing\Invoices\Events\InvoiceVoided;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Billing\Invoices\Exceptions\InvoiceNotVoidableException;
@@ -23,14 +21,22 @@ use App\Billing\Invoices\Exceptions\InvoiceNotVoidableException;
  */
 class VoidInvoiceTest extends BillingTestCase
 {
+    use FreeTierCompany;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
+
     #[Test, DataProvider('provideNonVoidableStates')]
     public function when_a_paid_or_terminal_invoice_is_voided_then_the_void_is_rejected(
         string $state,
         int $storedEventCount,
     ): void {
         // Given an invoice in a state that cannot be voided
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $subscription = $this->subscriptionOf($this->company);
         $invoice = $this->anInvoiceInState($state, $subscription);
 
         // When an admin voids it
@@ -51,9 +57,8 @@ class VoidInvoiceTest extends BillingTestCase
     public function when_a_pending_invoice_is_voided_then_the_invoice_is_voided(): void
     {
         // Given a pending invoice and the admin correcting it
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->anIssuedInvoiceFor($this->company, $subscription);
         $admin = User::factory()->create();
 
         // When the admin voids it as issued-in-error
@@ -79,9 +84,8 @@ class VoidInvoiceTest extends BillingTestCase
     public function when_a_failed_invoice_is_voided_then_the_invoice_is_voided(): void
     {
         // Given an invoice in dunning whose dispute resolved before any successful retry
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->aFailedInvoiceFor($company, $subscription);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->aFailedInvoiceFor($this->company, $subscription);
 
         // When it is voided pre-payment
         Invoice::retrieve($invoice->getKey())
