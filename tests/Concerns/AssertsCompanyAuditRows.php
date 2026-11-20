@@ -60,14 +60,15 @@ trait AssertsCompanyAuditRows
     {
         $requestId = $response->headers->get('Correlation-Id');
         $this->assertIsString($requestId);
-        $entries = AuditEntry::query()
+        $rows = AuditEntry::query()
             ->where('company_id', $company->getKey())
             ->where('action', AuditAction::ConsentRecorded)
-            ->get()
-            ->keyBy(fn (AuditEntry $entry): string => $entry->metadata['policy'] ?? '');
+            ->where('request_id', $requestId)
+            ->get();
+        $this->assertCount(2, $rows);
+        $entries = $rows->keyBy(fn (AuditEntry $entry): string => $entry->metadata['policy'] ?? '');
         /** @var array<string, string> $liveVersions */
         $liveVersions = config('lesily.policies');
-        $this->assertCount(2, $entries);
 
         foreach ($liveVersions as $policy => $version) {
             $record = ConsentRecord::query()

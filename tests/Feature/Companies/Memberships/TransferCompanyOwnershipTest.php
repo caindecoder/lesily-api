@@ -3,11 +3,11 @@
 namespace Tests\Feature\Companies\Memberships;
 
 use App\Models\User;
-use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Queue;
@@ -18,10 +18,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use Tests\Feature\Companies\CreatesTrialCompanies;
 use App\Companies\Events\CompanyOwnershipTransferred;
 use App\Foundation\Notifications\Enums\NotificationType;
-use App\Companies\Aggregates\Company as CompanyAggregate;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Foundation\Notifications\Mail\SystemNotificationMail;
 use App\Foundation\Notifications\Entities\NotificationPreference;
@@ -35,71 +33,68 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class TransferCompanyOwnershipTest extends MembershipsTestCase
 {
-    use CreatesTrialCompanies;
+    use FreeTierCompany;
     use InteractsWithQueuedReactors;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
 
     #[Test]
     public function when_a_non_owner_member_attempts_the_transfer_then_it_is_refused(): void
     {
-        // Given
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
-        [$admin] = $this->aMembership($company, 'admin');
-        [$target] = $this->aMembership($company, 'employee');
+        // Given Contoso's owner, admin and employee
 
         // When
-        $response = $this->transferOwnership($admin, $company, ['newOwnerUserId' => $target->getKey()]);
+        $response = $this->transferOwnership($this->admin, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
-        $this->assertNothingTransferred($company, $owner);
+        $this->assertNothingTransferred($this->company, $this->owner);
     }
 
     #[Test]
     public function when_the_target_reference_is_missing_then_the_transfer_is_refused_as_invalid(): void
     {
-        // Given
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
+        // Given Contoso's owner
 
         // When
-        $response = $this->transferOwnership($owner, $company, []);
+        $response = $this->transferOwnership($this->owner, $this->company, []);
 
         // Then
         $this->assertValidationRejected($response, 'newOwnerUserId', 'The new owner user id field is required.');
-        $this->assertNothingTransferred($company, $owner);
+        $this->assertNothingTransferred($this->company, $this->owner);
     }
 
     #[Test]
     public function when_the_target_reference_is_malformed_then_the_transfer_is_refused_as_invalid(): void
     {
-        // Given
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
+        // Given Contoso's owner
 
         // When
-        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => 'not-a-uuid']);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => 'not-a-uuid']);
 
         // Then — the HTTP command boundary enforces its rules() (amendment AQ:
         // a ::from swap at the controller leaves them dead; this row REDs on it)
         $this->assertValidationRejected($response, 'newOwnerUserId', 'The new owner user id field must be a valid UUID.');
-        $this->assertNothingTransferred($company, $owner);
+        $this->assertNothingTransferred($this->company, $this->owner);
     }
 
     #[Test]
     public function when_the_target_is_not_a_member_of_the_company_then_the_transfer_is_refused(): void
     {
         // Given
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
         $outsider = User::factory()->create();
 
         // When
-        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $outsider->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $outsider->getKey()]);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::TargetNotMember);
-        $this->assertNothingTransferred($company, $owner);
+        $this->assertNothingTransferred($this->company, $this->owner);
         $this->assertNotAudited(AuditAction::RoleChanged);
     }
 
@@ -107,51 +102,45 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     public function when_the_target_holds_only_a_pending_invitation_then_the_transfer_is_refused(): void
     {
         // Given
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
         $invitee = User::factory()->create();
-        $this->aPendingInvitation($company, $owner, $invitee->email);
+        $this->aPendingInvitation($this->company, $this->owner, $invitee->email);
 
         // When
-        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $invitee->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $invitee->getKey()]);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::TargetNotMember);
-        $this->assertNothingTransferred($company, $owner);
-        $this->assertInvitationNotConsumed($company, $invitee->email);
+        $this->assertNothingTransferred($this->company, $this->owner);
+        $this->assertInvitationNotConsumed($this->company, $invitee->email);
     }
 
     #[Test]
     public function when_the_target_membership_was_removed_then_the_transfer_is_refused(): void
     {
         // Given
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
         $removed = User::factory()->create();
-        $this->aRemovedMembership($company, $removed);
+        $this->aRemovedMembership($this->company, $removed);
 
         // When
-        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $removed->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $removed->getKey()]);
 
         // Then — a soft-deleted pivot is not membership; the locked lookup's
         // live scope decides (the projector's withTrashed is replay-only)
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::TargetNotMember);
-        $this->assertNothingTransferred($company, $owner);
+        $this->assertNothingTransferred($this->company, $this->owner);
     }
 
     #[Test]
     public function when_the_owner_targets_themselves_then_the_transfer_is_refused(): void
     {
-        // Given
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
+        // Given Contoso's owner
 
         // When
-        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $owner->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->owner->getKey()]);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::SelfTransferBlocked);
-        $this->assertNothingTransferred($company, $owner);
+        $this->assertNothingTransferred($this->company, $this->owner);
     }
 
     #[Test]
@@ -160,36 +149,30 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         // Given — the split-brain a concurrent transfer commit leaves: the column
         // no longer names the actor while their pivot still reads owner, so the
         // permission gate passes and the request reaches the in-tx guard (P9).
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
-        [$target] = $this->aMembership($company, 'employee');
         $usurper = User::factory()->create();
-        $company->update(['owner_id' => $usurper->getKey()]);
+        $this->company->update(['owner_id' => $usurper->getKey()]);
 
         // When
-        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::StateGuardViolation);
-        $this->assertNothingTransferred($company, $usurper);
+        $this->assertNothingTransferred($this->company, $usurper);
     }
 
     #[Test]
     public function when_the_projector_fails_mid_transfer_then_nothing_is_persisted(): void
     {
         // Given
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
-        [$target] = $this->aMembership($company, 'employee');
         $this->induceProjectorFailureFor(CompanyOwnershipTransferred::class);
 
         // When
-        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
-        $this->assertNothingTransferred($company, $owner);
-        $this->assertSame($this->seededRole('employee')->getKey(), $this->pivotOf($company, $target)->role_id);
+        $this->assertNothingTransferred($this->company, $this->owner);
+        $this->assertSame($this->seededRole('employee')->getKey(), $this->pivotOf($this->company, $this->employee)->role_id);
     }
 
     #[Test]
@@ -197,17 +180,14 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     {
         // Given Olive, the owner, an employee to hand over to, and an audit trail
         // that takes the first role row and refuses the second
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
-        [$target] = $this->aMembership($company, 'employee');
         $this->failTheAuditTrailAfter(1);
 
         // When Olive transfers ownership
-        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
 
         // Then the transfer fails whole: Olive still owns the company and no row is written
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
-        $this->assertNothingTransferred($company, $owner);
+        $this->assertNothingTransferred($this->company, $this->owner);
         $this->assertNotAudited(AuditAction::RoleChanged);
     }
 
@@ -223,13 +203,10 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     ): void {
         // Given — a write inside the locked transaction that dies the way the
         // driver reports it (a REAL two-connection deadlock stays out per P9)
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
-        [$target] = $this->aMembership($company, 'employee');
         $this->induceProjectorFailureFor(CompanyOwnershipTransferred::class, $this->syntheticQueryException($failure));
 
         // When
-        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
 
         // Then — contention answers as a conflict; anything else passes
         // through (render only — a detector-matched deadlock skips the
@@ -246,7 +223,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         // [owner, target] argument order and only a real sort can produce it
         $target = User::factory()->create();
         $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
+        $company = $this->createFreeCompanyFor($owner);
         $this->attachMember($company, $target, $this->seededRole('employee'));
         $expectedOrder = collect([$owner->getKey(), $target->getKey()])->sort()->values()->all();
 
@@ -263,64 +240,57 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     public function when_the_owner_transfers_ownership_to_an_active_teammate_then_ownership_moves_atomically(): void
     {
         // Given
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
-        [$target] = $this->aMembership($company, 'employee');
         Queue::fake();
 
         // When
-        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
 
         // Then
         $response->assertOk();
         $this->assertSame([
-            'company_id' => $company->getKey(),
-            'owner' => ['id' => $target->getKey(), 'name' => $target->name, 'email' => $target->email],
+            'company_id' => $this->company->getKey(),
+            'owner' => ['id' => $this->employee->getKey(), 'name' => $this->employee->name, 'email' => $this->employee->email],
         ], $response->json('data'));
-        $this->assertOwnershipMoved($company, $owner, $target);
-        $this->assertTransferRecorded($company, $owner, $target);
+        $this->assertOwnershipMoved($this->company, $this->owner, $this->employee);
+        $this->assertTransferRecorded($this->company, $this->owner, $this->employee);
         $this->runQueuedHandlersFor(CompanyOwnershipTransferred::class);
-        $this->assertOnlyNewOwnerNotified($company, $target, $owner);
+        $this->assertOnlyNewOwnerNotified($this->company, $this->employee, $this->owner);
     }
 
     #[Test]
     public function when_the_owner_transfers_ownership_then_both_role_changes_are_audited(): void
     {
         // Given Olive, the owner, an HR officer to hand over to, and a known device
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
-        [$target] = $this->aMembership($company, 'hr_officer');
+        [$target] = $this->aMembership($this->company, 'hr_officer');
         Queue::fake();
         $this->fromADevice();
 
         // When Olive transfers ownership to the HR officer
-        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $target->getKey()]);
 
         // Then both role moves are audited — Olive owner to admin, the HR officer to owner — by Olive as owner
         $response->assertOk();
-        $this->assertRoleChangeAudited($response, $this->pivotOf($company, $owner), 'owner');
-        $this->assertRoleChangeAudited($response, $this->pivotOf($company, $target), 'hr_officer');
+        $this->assertRoleChangeAudited($response, $this->pivotOf($this->company, $this->owner), 'owner');
+        $this->assertRoleChangeAudited($response, $this->pivotOf($this->company, $target), 'hr_officer');
         $this->assertSame(2, AuditEntry::query()->where('action', AuditAction::RoleChanged)->count());
-        $this->assertEveryRowActedBy(AuditAction::RoleChanged, $owner, 'owner');
+        $this->assertEveryRowActedBy(AuditAction::RoleChanged, $this->owner, 'owner');
     }
 
     #[Test]
     public function when_the_outgoing_owner_owns_other_companies_then_those_are_untouched(): void
     {
-        // Given
-        $owner = User::factory()->create();
-        $contoso = $this->aTrialCompanyOwnedBy($owner, 'Contoso');
-        $acme = $this->aTrialCompanyOwnedBy($owner, 'Acme');
-        [$target] = $this->aMembership($contoso, 'employee');
+        // Given Contoso's owner also owns Acme
+        $acme = Company::factory()->ownedBy($this->owner)->create();
+        $this->attachMember($acme, $this->owner, $this->seededRole('owner'));
 
         // When
-        $response = $this->transferOwnership($owner, $contoso, ['newOwnerUserId' => $target->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
 
         // Then
         $response->assertOk();
-        $this->assertOwnershipMoved($contoso, $owner, $target);
-        $this->assertNothingTransferred($acme, $owner);
-        $this->assertSame($this->seededRole('owner')->getKey(), $this->pivotOf($acme, $owner)->role_id);
+        $this->assertOwnershipMoved($this->company, $this->owner, $this->employee);
+        $this->assertNothingTransferred($acme, $this->owner);
+        $this->assertSame($this->seededRole('owner')->getKey(), $this->pivotOf($acme, $this->owner)->role_id);
     }
 
     #[Test]
@@ -328,21 +298,18 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     {
         // Given — ownership is a control-surface change; its notice is critical
         // and cannot be silenced (s170 PAUSE-1 ruling)
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
-        [$target] = $this->aMembership($company, 'employee');
-        NotificationPreference::factory()->mailDisabled($target, NotificationType::OwnershipReceived)->create();
+        NotificationPreference::factory()->mailDisabled($this->employee, NotificationType::OwnershipReceived)->create();
         Queue::fake();
 
         // When
-        $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()])->assertOk();
+        $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()])->assertOk();
 
         // Then
         $this->runQueuedHandlersFor(CompanyOwnershipTransferred::class);
         Mail::assertQueued(
             SystemNotificationMail::class,
             fn (SystemNotificationMail $mail): bool => $mail->type === NotificationType::OwnershipReceived
-                && $mail->hasTo($target->email),
+                && $mail->hasTo($this->employee->email),
         );
     }
 
@@ -350,38 +317,18 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     public function when_the_transfer_commits_then_the_new_owner_notification_rides_the_queue(): void
     {
         // Given
-        $owner = User::factory()->create();
-        $company = $this->aTrialCompanyOwnedBy($owner);
-        [$target] = $this->aMembership($company, 'employee');
         Notification::fake();
         Queue::fake();
 
         // When
-        $response = $this->transferOwnership($owner, $company, ['newOwnerUserId' => $target->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
 
         // Then — queued, not inline: the swap is committed while zero notices
         // have been sent and the reactor job sits on the queue (the after-commit
         // half is config/queue.php after_commit, pinned app-level elsewhere)
         $response->assertOk();
-        $this->assertOwnershipMoved($company, $owner, $target);
+        $this->assertOwnershipMoved($this->company, $this->owner, $this->employee);
         $this->assertReactorDeferred(CompanyOwnershipTransferred::class, SystemNotification::class);
-    }
-
-    /**
-     * A genesis company owned by $owner: real Company stream, owner pivot and
-     * companies.owner_id both written by the production genesis projector.
-     */
-    protected function aTrialCompanyOwnedBy(User $owner, string $name = 'Contoso'): Company
-    {
-        $companyId = (string) Str::uuid7();
-
-        CompanyAggregate::retrieve($companyId)
-            ->create($this->buildCreateCompanyCommand($companyId, $name, $owner))
-            ->persist();
-        $company = Company::query()->findOrFail($companyId);
-        $this->aConsentRecordedBy($owner, $company);
-
-        return $company;
     }
 
     /**
