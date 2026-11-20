@@ -57,8 +57,7 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * Look up a seeded RBAC-catalog role by code — requires seedRbacCatalog()
-     * in the calling suite's setUp. Duplicated from Tests\TestCase (module
-     * bases are independent — established precedent).
+     * in the calling suite's setUp.
      */
     protected function seededRole(string $code): Role
     {
@@ -81,8 +80,7 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * A fresh user made a live member of $company under a seeded role — the
-     * company_user pivot row role gates read. Duplicated from FreeTierCompany
-     * (module bases are independent — established precedent).
+     * company_user pivot row role gates read.
      */
     protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
     {
@@ -372,8 +370,6 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * The request was rejected as unauthenticated — 401 §S21 UNAUTHENTICATED.
-     * Duplicated from Tests\TestCase (module bases are independent —
-     * established precedent).
      */
     protected function assertUnauthenticated(TestResponse $response): void
     {
