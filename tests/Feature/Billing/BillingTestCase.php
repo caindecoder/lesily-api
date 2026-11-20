@@ -12,7 +12,6 @@ use Tests\Concerns\AssertsAuditTrail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Exceptions;
 use App\Billing\Invoices\Aggregates\Invoice;
-use App\Foundation\Billing\Enums\BillingPlan;
 use App\Billing\Invoices\Entities\InvoiceLineItem;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Billing\Subscriptions\Aggregates\Subscription;
@@ -26,44 +25,6 @@ abstract class BillingTestCase extends TestCase
 {
     use AssertsAuditTrail;
     use CreatesInvoices;
-    use HasSubscription;
-
-    /**
-     * Look up a seeded RBAC-catalog role by code — requires seedRbacCatalog() in
-     * the calling suite's setUp. Duplicated from CompaniesTestCase/AuthTestCase
-     * (module bases are independent — established precedent).
-     */
-    protected function seededRole(string $code): Role
-    {
-        return Role::query()->where('code', $code)->sole();
-    }
-
-    /**
-     * A fresh user made a live member of $company under a seeded role — the
-     * company_user pivot row the billing.view gate reads. Duplicated from
-     * CompaniesTestCase (module bases are independent — established precedent).
-     */
-    protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
-    {
-        $user = User::factory()->create();
-
-        $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
-        $this->aConsentRecordedBy($user, $company);
-
-        return $user;
-    }
-
-    /**
-     * A company on a paid plan with one fresh member under a seeded role.
-     *
-     * @return array{0: Company, 1: User}
-     */
-    protected function aCompanyWithMember(string $roleCode): array
-    {
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-
-        return [$company, $this->aCompanyMember($company, $roleCode)];
-    }
 
     /**
      * The plan catalog came back — 200 with all four standard tiers in the
@@ -175,19 +136,6 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
-     * The input was refused as invalid on $invalidField — 422 VALIDATION_FAILED
-     * whose field-level errors contain $expectedMessage (§S21; conv-plan §2.2
-     * Rule 10 — assertJsonValidationErrors matches by containment, so the pin
-     * fails when the rule behind the message is dropped).
-     */
-    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
-    {
-        $response->assertUnprocessable();
-        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
-        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
-    }
-
-    /**
      * The invoice list came back empty — 200 with `data: []` under the exact
      * default §8.3 pagination meta (never a 404; UC-1-120 alt 6a / alt 4a).
      */
@@ -240,19 +188,6 @@ abstract class BillingTestCase extends TestCase
         sort($returned);
 
         $this->assertSame($invoiceIds, $returned);
-    }
-
-    /**
-     * The request was rejected as unauthenticated — 401 with the §S21
-     * UNAUTHENTICATED envelope. Duplicated from CompaniesTestCase/AuthTestCase
-     * (module bases are independent — established precedent; base-level
-     * consolidation stays a flagged future refactor).
-     */
-    protected function assertUnauthenticated(TestResponse $response): void
-    {
-        $response->assertUnauthorized();
-        $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
     /**
