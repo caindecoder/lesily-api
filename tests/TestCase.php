@@ -10,6 +10,7 @@ use Illuminate\Testing\TestResponse;
 use Database\Seeders\CountriesSeeder;
 use Database\Seeders\RolesPermissionsSeeder;
 use App\Foundation\Http\Responses\ApiErrorCode;
+use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Consent\UseCases\Commands\RecordConsentCommand;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
@@ -56,6 +57,11 @@ abstract class TestCase extends BaseTestCase
     protected function seedRbacCatalog(): void
     {
         RolesPermissionsSeeder::fromDefaultPaths()->run();
+    }
+
+    protected function seededRole(string $code): Role
+    {
+        return Role::query()->where('code', $code)->sole();
     }
 
     /**

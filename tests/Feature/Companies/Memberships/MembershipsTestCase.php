@@ -34,7 +34,6 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\Events\TransactionBeginning;
 use App\Companies\Memberships\Events\UserJoinedCompany;
-use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
 use App\Companies\Memberships\Events\UserInvitationResent;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
@@ -71,8 +70,8 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     use AssertsAuditTrail;
     use AssertsCompanyAuditRows;
     use AssertsMembershipAuditRows;
+    use CreatesMemberships;
     use InducesDatabaseFailures;
-    use WithRolePermissionFixtures;
 
     protected function setUp(): void
     {
@@ -781,32 +780,6 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
-     * A member of $company holding the SEEDED $roleCode. Returns the user and
-     * the membership pivot id (the aggregate identity, D5b).
-     *
-     * @return array{0: User, 1: string}
-     */
-    protected function aMembership(Company $company, string $roleCode): array
-    {
-        $user = User::factory()->create();
-        $this->attachMember($company, $user, $this->seededRole($roleCode));
-
-        return [$user, $this->membershipIdOf($company, $user)];
-    }
-
-    /**
-     * The membership pivot id for ($company, $user) — the aggregate identity.
-     */
-    protected function membershipIdOf(Company $company, User $user): string
-    {
-        return CompanyUser::query()
-            ->where('company_id', $company->getKey())
-            ->where('user_id', $user->getKey())
-            ->sole()
-            ->getKey();
-    }
-
-    /**
      * A REAL accepted membership for ($company, $email): invited through the
      * endpoint as $actor (employee role) and accepted as a new user — so the
      * membership carries a genuine UserMembership event stream whose genesis
@@ -825,26 +798,6 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $joiner = User::query()->where('email', $email)->sole();
 
         return [$joiner, $this->membershipIdOf($company, $joiner)];
-    }
-
-    /**
-     * A membership that was removed (UC-1-024 semantics): the company_user pivot
-     * exists but is soft-deleted. Returns the pivot id — the stable membership
-     * UUID a re-invite must reuse (D5b undelete-in-place).
-     */
-    protected function aRemovedMembership(Company $company, User $user): string
-    {
-        $this->attachMember($company, $user, $this->seededRole('employee'));
-
-        $membershipId = CompanyUser::query()
-            ->where('company_id', $company->getKey())
-            ->where('user_id', $user->getKey())
-            ->sole()
-            ->getKey();
-
-        CompanyUser::query()->whereKey($membershipId)->update(['deleted_at' => now()]);
-
-        return $membershipId;
     }
 
     /**
