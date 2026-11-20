@@ -353,7 +353,9 @@ class AddCompanyTest extends CompaniesTestCase
 
         // Then each policy they consented to for Fabrikam is audited on its own row
         $response->assertCreated();
-        $this->assertConsentsAudited($response, Company::query()->where('name', 'Fabrikam')->sole(), $this->owner);
+        $company = Company::query()->where('name', 'Fabrikam')->sole();
+        $this->assertConsentsAudited($response, $company, $this->owner);
+        $this->assertSame(4, AuditEntry::query()->where('company_id', $company->getKey())->count());
     }
 
     #[Test]
@@ -374,6 +376,7 @@ class AddCompanyTest extends CompaniesTestCase
             'phone' => ['from' => null, 'to' => '+94712345678'],
             'relationship' => ['from' => null, 'to' => 'parent'],
         ]);
+        $this->assertSame(4, AuditEntry::query()->where('company_id', $company->getKey())->count());
     }
 
     protected function enrolOwnerWithContact(Company $company, User $owner): void

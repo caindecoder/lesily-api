@@ -302,9 +302,8 @@ abstract class AuthTestCase extends TestCase
 
     /**
      * Look up a seeded RBAC-catalog role by code — requires seedRbacCatalog() in the
-     * calling suite's setUp. Duplicated from MembershipsTestCase (module bases are
-     * independent; assertRefusedWith precedent). Shared by the list-companies
-     * (UC-1-034) and default-company (UC-1-139) suites.
+     * calling suite's setUp. Shared by the list-companies (UC-1-034) and
+     * default-company (UC-1-139) suites.
      */
     protected function seededRole(string $code): Role
     {
@@ -324,7 +323,7 @@ abstract class AuthTestCase extends TestCase
     /**
      * A membership that was removed (UC-1-024 semantics): the company_user pivot
      * exists but is soft-deleted — the companies list must exclude it. Mirrors
-     * MembershipsTestCase::aRemovedMembership. Shared by the list-companies
+     * CreatesMemberships::aRemovedMembership. Shared by the list-companies
      * (UC-1-034) and default-company (UC-1-139) suites.
      */
     protected function aRemovedMembershipIn(Company $company, User $user): void

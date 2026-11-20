@@ -16,6 +16,13 @@ class EncryptStoredEmergencyContactsTest extends MembershipsTestCase
 {
     protected const DATA_MIGRATION = '2026_10_26_094231_encrypt_existing_emergency_contacts_on_company_user_table.php';
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seedRbacCatalog();
+    }
+
     #[Test]
     public function when_a_membership_has_no_contact_then_the_migration_leaves_it_empty(): void
     {

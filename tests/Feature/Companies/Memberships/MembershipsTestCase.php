@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\Memberships;
 use stdClass;
 use App\Models\User;
 use RuntimeException;
+use Carbon\CarbonInterface;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
@@ -21,7 +22,6 @@ use App\Consent\Entities\ConsentRecord;
 use App\Consent\Events\ConsentRecorded;
 use Tests\Concerns\AssertsCompanyAuditRows;
 use Tests\Concerns\InducesDatabaseFailures;
-use App\Foundation\Billing\Enums\BillingPlan;
 use Illuminate\Database\Events\QueryExecuted;
 use Tests\Concerns\AssertsMembershipAuditRows;
 use Tests\Feature\Companies\CompaniesTestCase;
@@ -34,7 +34,6 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\Events\TransactionBeginning;
 use App\Companies\Memberships\Events\UserJoinedCompany;
-use Tests\Feature\Foundation\WithRolePermissionFixtures;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;
 use App\Companies\Memberships\Events\UserInvitationResent;
 use App\Companies\Memberships\Events\UserInvitationRevoked;
@@ -47,10 +46,9 @@ use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterfa
 use App\Companies\Memberships\IO\Database\Repositories\EloquentCompanyUserRepository;
 
 /**
- * Shared fixtures for the membership (team-invite) feature tests (§2.10). Callers
- * compose a company + a member holding a SEEDED role (a factory role carries no
- * permission grants, so the RBAC catalog is seeded here), then drive the invite
- * endpoint through the actor's company context.
+ * The membership feature tests' own action helpers and grouped asserts (§2.10).
+ * A class takes the ready-made company (Tests\Concerns\FreeTierCompany); joining,
+ * removing and soft-deleting a member live in CreatesMemberships.
  */
 abstract class MembershipsTestCase extends CompaniesTestCase
 {
@@ -71,39 +69,18 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     use AssertsAuditTrail;
     use AssertsCompanyAuditRows;
     use AssertsMembershipAuditRows;
+    use CreatesMemberships;
     use InducesDatabaseFailures;
-    use WithRolePermissionFixtures;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        // The seeded roles carry the real permission grants the gate reads.
-        $this->seedRbacCatalog();
         // Error-path render parity (amendment M): APP_DEBUG=true (the local default)
         // masks the prod render path; the 422/403/429 rejections must render their
         // mapped envelopes the way CI/prod do.
         config(['app.debug' => false]);
         Mail::fake();
-    }
-
-    /**
-     * A company on $plan with $actor attached under the SEEDED $roleCode.
-     *
-     * @return array{0: Company, 1: User}
-     */
-    protected function aCompanyWithMember(string $roleCode = 'admin', BillingPlan $plan = BillingPlan::Pro): array
-    {
-        $company = Company::factory()->onPlan($plan)->create();
-        $actor = User::factory()->create();
-        $this->attachMember($company, $actor, $this->seededRole($roleCode));
-
-        return [$company, $actor];
-    }
-
-    protected function seededRole(string $code): Role
-    {
-        return Role::query()->where('code', $code)->sole();
     }
 
     /**
@@ -139,6 +116,24 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     {
         $company->users()->attach($owner, ['role_id' => $this->seededRole('owner')->getKey(), ...$this->contactColumns($contact)]);
         $this->aConsentRecordedBy($owner, $company);
+    }
+
+    /**
+     * @param  array<string, string>  $contact
+     */
+    protected function giveContactTo(Company $company, User $member, array $contact): void
+    {
+        $company->users()->updateExistingPivot($member->getKey(), $this->contactColumns($contact));
+    }
+
+    protected function clearContactOf(Company $company, User $member): void
+    {
+        $company->users()->updateExistingPivot($member->getKey(), [
+            'emergency_contact_name' => null,
+            'emergency_contact_email' => null,
+            'emergency_contact_phone' => null,
+            'emergency_contact_relationship' => null,
+        ]);
     }
 
     /**
@@ -242,15 +237,17 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
-     * A refused update left the contact as it was and recorded no contact event
-     * for the company.
+     * A refused update left the owner's contact as it was and recorded no contact
+     * event for the company beyond the $eventsBefore it already held.
      *
      * @param  array<string, string>  $expected
      */
-    protected function assertContactUnchanged(Company $company, User $owner, array $expected): void
+    protected function assertContactUnchanged(Company $company, array $expected, int $eventsBefore): void
     {
+        $owner = $company->owner();
+        $this->assertInstanceOf(User::class, $owner);
         $this->assertSame($expected, $this->storedContact($company, $owner));
-        $this->assertSame(0, LesilyStoredEvent::query()
+        $this->assertSame($eventsBefore, LesilyStoredEvent::query()
             ->whereForCompany($company->getKey())
             ->where('event_class', UserMembershipEmergencyContactSet::class)
             ->count());
@@ -780,30 +777,9 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $this->assertSame($expected, $response->json('meta.pagination'));
     }
 
-    /**
-     * A member of $company holding the SEEDED $roleCode. Returns the user and
-     * the membership pivot id (the aggregate identity, D5b).
-     *
-     * @return array{0: User, 1: string}
-     */
-    protected function aMembership(Company $company, string $roleCode): array
+    protected function backdateMembership(Company $company, User $member, CarbonInterface $joinedAt): void
     {
-        $user = User::factory()->create();
-        $this->attachMember($company, $user, $this->seededRole($roleCode));
-
-        return [$user, $this->membershipIdOf($company, $user)];
-    }
-
-    /**
-     * The membership pivot id for ($company, $user) — the aggregate identity.
-     */
-    protected function membershipIdOf(Company $company, User $user): string
-    {
-        return CompanyUser::query()
-            ->where('company_id', $company->getKey())
-            ->where('user_id', $user->getKey())
-            ->sole()
-            ->getKey();
+        CompanyUser::query()->whereKey($this->membershipIdOf($company, $member))->update(['created_at' => $joinedAt]);
     }
 
     /**
@@ -825,26 +801,6 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         $joiner = User::query()->where('email', $email)->sole();
 
         return [$joiner, $this->membershipIdOf($company, $joiner)];
-    }
-
-    /**
-     * A membership that was removed (UC-1-024 semantics): the company_user pivot
-     * exists but is soft-deleted. Returns the pivot id — the stable membership
-     * UUID a re-invite must reuse (D5b undelete-in-place).
-     */
-    protected function aRemovedMembership(Company $company, User $user): string
-    {
-        $this->attachMember($company, $user, $this->seededRole('employee'));
-
-        $membershipId = CompanyUser::query()
-            ->where('company_id', $company->getKey())
-            ->where('user_id', $user->getKey())
-            ->sole()
-            ->getKey();
-
-        CompanyUser::query()->whereKey($membershipId)->update(['deleted_at' => now()]);
-
-        return $membershipId;
     }
 
     /**
@@ -874,14 +830,14 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
-     * A refused accept changed nothing: no user account was created, no
-     * membership pivot was written, and no invitation was marked accepted —
-     * the guard rejected before any state change.
+     * A refused accept changed nothing: no user account or membership pivot was
+     * written beyond the $peopleBefore already there, and no invitation was
+     * marked accepted — the guard rejected before any state change.
      */
-    protected function assertNothingAccepted(): void
+    protected function assertNothingAccepted(int $peopleBefore): void
     {
-        $this->assertDatabaseCount('users', 0);
-        $this->assertDatabaseCount('company_user', 0);
+        $this->assertDatabaseCount('users', $peopleBefore);
+        $this->assertDatabaseCount('company_user', $peopleBefore);
         $this->assertSame(0, Invitation::query()->whereNotNull('accepted_at')->count());
     }
 

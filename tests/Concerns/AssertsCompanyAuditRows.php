@@ -60,14 +60,15 @@ trait AssertsCompanyAuditRows
     {
         $requestId = $response->headers->get('Correlation-Id');
         $this->assertIsString($requestId);
-        $entries = AuditEntry::query()
+        $rows = AuditEntry::query()
             ->where('company_id', $company->getKey())
             ->where('action', AuditAction::ConsentRecorded)
-            ->get()
-            ->keyBy(fn (AuditEntry $entry): string => $entry->metadata['policy'] ?? '');
+            ->where('request_id', $requestId)
+            ->get();
+        $this->assertCount(2, $rows);
+        $entries = $rows->keyBy(fn (AuditEntry $entry): string => $entry->metadata['policy'] ?? '');
         /** @var array<string, string> $liveVersions */
         $liveVersions = config('lesily.policies');
-        $this->assertCount(2, $entries);
 
         foreach ($liveVersions as $policy => $version) {
             $record = ConsentRecord::query()
@@ -164,7 +165,13 @@ trait AssertsCompanyAuditRows
             ->whereForCompany($membership->company_id)
             ->latest('id')
             ->firstOrFail();
-        $entry = AuditEntry::query()->where('action', AuditAction::EmergencyContactUpdated)->where('company_id', $membership->company_id)->sole();
+        $entries = AuditEntry::query()
+            ->where('action', AuditAction::EmergencyContactUpdated)
+            ->where('company_id', $membership->company_id)
+            ->where('request_id', $requestId)
+            ->get();
+        $this->assertCount(1, $entries);
+        $entry = $entries->sole();
 
         $this->assertSame([
             'stored_event_id' => $storedEvent->getKey(),

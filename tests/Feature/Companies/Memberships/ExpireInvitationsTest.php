@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\Memberships;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -21,11 +22,14 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class ExpireInvitationsTest extends MembershipsTestCase
 {
+    use FreeTierCompany;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->travelTo(CarbonImmutable::parse('2026-07-02 09:00:00'));
+        $this->makeFreeTierCompany();
     }
 
     // Sad — a pending invitation still inside its 7-day window is not due, so the
@@ -34,8 +38,7 @@ class ExpireInvitationsTest extends MembershipsTestCase
     public function when_a_pending_invitation_is_not_yet_expired_then_it_is_left_pending(): void
     {
         // Given a pending invitation still within its window
-        [$company, $actor] = $this->aCompanyWithMember('admin');
-        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
 
         // When the daily scan runs at T0 (still inside the window)
         // Then nothing is expired
@@ -48,14 +51,13 @@ class ExpireInvitationsTest extends MembershipsTestCase
     public function when_an_accepted_invitation_past_expiry_then_it_is_not_expired(): void
     {
         // Given an accepted invitation now past its original 7-day window
-        [$company, $actor] = $this->aCompanyWithMember('admin');
-        $this->anAcceptedMembership($company, $actor, 'joiner@contoso.lk');
+        $this->anAcceptedMembership($this->company, $this->admin, 'joiner@contoso.lk');
         $this->travel(8)->days();
 
         // When the daily scan runs
         // Then nothing is expired — an accepted invitation is never expirable
         $this->runExpireInvitations()->expectsOutputToContain('0 invitation(s) expired.')->assertSuccessful();
-        $this->assertInvitationStillPending($company, 'joiner@contoso.lk');
+        $this->assertInvitationStillPending($this->company, 'joiner@contoso.lk');
     }
 
     // Edge — a revoked invitation is dead already, so the scan excludes it
@@ -64,14 +66,13 @@ class ExpireInvitationsTest extends MembershipsTestCase
     public function when_a_revoked_invitation_past_expiry_then_it_is_not_expired(): void
     {
         // Given a revoked invitation now past its window
-        [$company, $actor] = $this->aCompanyWithMember('admin');
-        $this->aRevokedInvitation($company, $actor, 'revoked@contoso.lk');
+        $this->aRevokedInvitation($this->company, $this->admin, 'revoked@contoso.lk');
         $this->travel(8)->days();
 
         // When the daily scan runs
         // Then nothing is expired — a revoked invitation is never expirable
         $this->runExpireInvitations()->expectsOutputToContain('0 invitation(s) expired.')->assertSuccessful();
-        $this->assertInvitationStillPending($company, 'revoked@contoso.lk');
+        $this->assertInvitationStillPending($this->company, 'revoked@contoso.lk');
     }
 
     // Edge (boundary) — an invitation is expired only when its window elapsed
@@ -84,8 +85,7 @@ class ExpireInvitationsTest extends MembershipsTestCase
         bool $expectExpired,
     ): void {
         // Given a pending invitation whose window ends at T0 + 7d (2026-07-09 09:00:00)
-        [$company, $actor] = $this->aCompanyWithMember('admin');
-        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
 
         // When the daily scan runs at a given instant relative to that window
         $this->travelTo(CarbonImmutable::parse($runAt));
@@ -118,15 +118,14 @@ class ExpireInvitationsTest extends MembershipsTestCase
     public function when_an_already_expired_invitation_is_rescanned_then_it_is_not_re_expired(): void
     {
         // Given a pending invitation an earlier daily scan already expired
-        [$company, $actor] = $this->aCompanyWithMember('admin');
-        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
         $this->travel(8)->days();
         $this->runExpireInvitations()->assertSuccessful();
 
         // When the daily scan runs again
         // Then nothing is re-expired and the expiry event was recorded exactly once
         $this->runExpireInvitations()->expectsOutputToContain('0 invitation(s) expired.')->assertSuccessful();
-        $this->assertInvitationExpired($company, 'invitee@contoso.lk');
+        $this->assertInvitationExpired($this->company, 'invitee@contoso.lk');
     }
 
     // Edge (re-invite) — re-inviting a membership returns it to a CLEAN pending
@@ -137,15 +136,14 @@ class ExpireInvitationsTest extends MembershipsTestCase
     public function when_a_re_invited_membership_lapses_again_then_it_is_expired_again(): void
     {
         // Given a membership that was accepted, removed, re-invited, and expired
-        [$company, $actor] = $this->aCompanyWithMember('admin');
-        [, $membershipId] = $this->anAcceptedMembership($company, $actor, 'invitee@contoso.lk');
-        $this->removeMember($actor, $company, $membershipId)->assertNoContent();
-        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+        [, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'invitee@contoso.lk');
+        $this->removeMember($this->admin, $this->company, $membershipId)->assertNoContent();
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
         $this->travel(8)->days();
         $this->runExpireInvitations()->assertSuccessful();
 
         // When it is re-invited AGAIN (a fresh pending invitation) and lapses again
-        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
         $this->travel(8)->days();
 
         // Then the daily scan expires it again — the stale expired_at did not block it
@@ -159,15 +157,14 @@ class ExpireInvitationsTest extends MembershipsTestCase
     public function when_a_pending_invitation_is_past_expiry_then_it_is_expired(): void
     {
         // Given a pending invitation now past its 7-day window
-        [$company, $actor] = $this->aCompanyWithMember('admin');
-        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
         $this->travel(8)->days();
 
         // When the daily scan runs
         $this->runExpireInvitations()->expectsOutputToContain('1 invitation(s) expired.')->assertSuccessful();
 
         // Then the invitation is marked expired (event-sourced + projected)
-        $this->assertInvitationExpired($company, 'invitee@contoso.lk');
+        $this->assertInvitationExpired($this->company, 'invitee@contoso.lk');
     }
 
     // Happy — one daily run expires EVERY due invitation, not just the first,
@@ -176,19 +173,18 @@ class ExpireInvitationsTest extends MembershipsTestCase
     public function when_multiple_invitations_are_due_then_only_the_due_ones_are_expired(): void
     {
         // Given two invitations past their window and one still inside it
-        [$company, $actor] = $this->aCompanyWithMember('admin');
-        $this->aPendingInvitation($company, $actor, 'due-one@contoso.lk');
-        $this->aPendingInvitation($company, $actor, 'due-two@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'due-one@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'due-two@contoso.lk');
         $this->travel(8)->days();
-        $this->aPendingInvitation($company, $actor, 'fresh@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'fresh@contoso.lk');
 
         // When the daily scan runs
         $this->runExpireInvitations()->expectsOutputToContain('2 invitation(s) expired.')->assertSuccessful();
 
         // Then only the two due invitations are expired; the fresh one stays pending
-        $this->assertInvitationExpired($company, 'due-one@contoso.lk');
-        $this->assertInvitationExpired($company, 'due-two@contoso.lk');
-        $this->assertInvitationStillPending($company, 'fresh@contoso.lk');
+        $this->assertInvitationExpired($this->company, 'due-one@contoso.lk');
+        $this->assertInvitationExpired($this->company, 'due-two@contoso.lk');
+        $this->assertInvitationStillPending($this->company, 'fresh@contoso.lk');
     }
 
     // Happy (downstream chain) — after the scan expires an invitation, its token
@@ -198,20 +194,19 @@ class ExpireInvitationsTest extends MembershipsTestCase
     public function when_an_expired_invitation_token_is_used_to_accept_then_it_is_rejected(): void
     {
         // Given a pending invitation the daily scan has since expired
-        [$company, $actor] = $this->aCompanyWithMember('admin');
-        $token = $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
         $this->travel(8)->days();
         $this->runExpireInvitations()->assertSuccessful();
         // The scan's effect is load-bearing here: the token is dead because the
         // window elapsed AND the scan expired the row (event + expired_at stamp).
-        $this->assertInvitationExpired($company, 'invitee@contoso.lk');
+        $this->assertInvitationExpired($this->company, 'invitee@contoso.lk');
 
         // When the invitee tries to accept with the now-dead token
         $response = $this->acceptInvitation($token, $this->validNewUserBody());
 
         // Then the accept is rejected and the invitation is never consumed
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
-        $this->assertInvitationNotConsumed($company, 'invitee@contoso.lk');
+        $this->assertInvitationNotConsumed($this->company, 'invitee@contoso.lk');
     }
 
     protected function runExpireInvitations(): PendingCommand

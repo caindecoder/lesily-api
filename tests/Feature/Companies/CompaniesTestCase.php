@@ -28,17 +28,6 @@ abstract class CompaniesTestCase extends TestCase
     use AssertsAuditTrail, AssertsCompanyAuditRows, InducesProjectorFailures;
 
     /**
-     * Look up a seeded RBAC-catalog role by code — requires seedRbacCatalog() in
-     * the calling suite's setUp. Read by the classes that do not take
-     * Tests\Concerns\FreeTierCompany — AddCompanyTest, FillConsentStoreFromRecordedConsentsTest
-     * (through aCompanyMember below) and the Memberships classes' aCompanyMember calls.
-     */
-    protected function seededRole(string $code): Role
-    {
-        return Role::query()->where('code', $code)->sole();
-    }
-
-    /**
      * A fresh user made a live member of $company under a seeded role — the
      * company_user pivot row the company-scoped gates read — who accepted the
      * live policy versions there.

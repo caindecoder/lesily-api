@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use PHPUnit\Framework\Attributes\Test;
@@ -20,18 +21,26 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class InviteUserTest extends MembershipsTestCase
 {
+    use FreeTierCompany;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
+
     // --- Sad ---
 
     #[Test]
     public function when_the_email_is_already_an_active_member_then_the_invite_is_rejected(): void
     {
         // Given an admin of a company and a target who is already a member
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $target = User::factory()->withEmail('member@contoso.lk')->create();
-        $this->attachMember($company, $target, $this->seededRole('employee'));
+        $this->attachMember($this->company, $target, $this->seededRole('employee'));
 
         // When the admin invites that member's email again
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'member@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -40,21 +49,20 @@ class InviteUserTest extends MembershipsTestCase
         $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'ALREADY_MEMBER');
         $this->assertNoInvitationCreated();
-        $this->assertNothingAudited();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
     public function when_the_email_already_has_a_live_pending_invitation_then_the_invite_is_rejected(): void
     {
         // Given an admin whose earlier invite to an email is still pending
-        [$company, $admin] = $this->aCompanyWithMember('admin');
-        $this->invite($admin, $company, [
+        $this->invite($this->admin, $this->company, [
             'email' => 'pending@contoso.lk',
             'roleCode' => 'employee',
         ])->assertCreated();
 
         // When they invite the same email again
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'pending@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -63,7 +71,7 @@ class InviteUserTest extends MembershipsTestCase
         // UC-1-021) and no second invitation row or email exists
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::AlreadyMember);
         $this->assertSame(1, Invitation::query()
-            ->where('company_id', $company->getKey())
+            ->where('company_id', $this->company->getKey())
             ->where('email', 'pending@contoso.lk')
             ->count());
         Mail::assertQueued(InvitationMail::class, 1);
@@ -73,10 +81,9 @@ class InviteUserTest extends MembershipsTestCase
     public function when_the_requested_role_is_owner_then_the_invite_is_rejected(): void
     {
         // Given an admin of a company
-        [$company, $admin] = $this->aCompanyWithMember('admin');
 
         // When the admin invites a new email with the owner role
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'newuser@contoso.lk',
             'roleCode' => 'owner',
         ]);
@@ -94,10 +101,9 @@ class InviteUserTest extends MembershipsTestCase
     public function when_the_invite_input_is_invalid_then_the_invite_is_rejected(array $body, string $invalidField, string $message): void
     {
         // Given an admin of a company
-        [$company, $admin] = $this->aCompanyWithMember('admin');
 
         // When the admin submits an invite with invalid input
-        $response = $this->invite($admin, $company, $body);
+        $response = $this->invite($this->admin, $this->company, $body);
 
         // Then the input is refused as invalid and nothing is created
         $this->assertValidationRejected($response, $invalidField, $message);
@@ -123,10 +129,10 @@ class InviteUserTest extends MembershipsTestCase
     public function when_the_actor_role_lacks_the_invite_permission_then_the_invite_is_denied(string $roleCode): void
     {
         // Given a member whose role does not carry users.invite
-        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        $actor = $this->memberWithRole($roleCode);
 
         // When they attempt to invite a new email
-        $response = $this->invite($actor, $company, [
+        $response = $this->invite($actor, $this->company, [
             'email' => 'newuser@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -140,13 +146,12 @@ class InviteUserTest extends MembershipsTestCase
     public function when_invites_fail_validation_then_they_spend_no_allowance(): void
     {
         // Given an admin whose twenty invites were all refused as malformed
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         for ($i = 0; $i < InvitationAllowance::PER_HOUR; $i++) {
-            $this->invite($admin, $company, ['email' => 'not-an-email', 'roleCode' => 'employee']);
+            $this->invite($this->admin, $this->company, ['email' => 'not-an-email', 'roleCode' => 'employee']);
         }
 
         // When they send a well-formed invite within the hour
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'well-formed@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -160,11 +165,10 @@ class InviteUserTest extends MembershipsTestCase
     public function when_the_hourly_invite_allowance_is_spent_then_the_next_invite_is_throttled(): void
     {
         // Given an admin who has spent the full hourly invite allowance
-        [$company, $admin] = $this->aCompanyWithMember('admin');
-        $this->exhaustInviteLimit($admin, $company);
+        $this->exhaustInviteLimit($this->admin, $this->company);
 
         // When they attempt one more invite within the hour
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'one-too-many@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -177,13 +181,11 @@ class InviteUserTest extends MembershipsTestCase
     public function when_another_admin_has_spent_their_allowance_then_this_admin_can_still_invite(): void
     {
         // Given two admins of one company, the first of whom has spent the hourly allowance
-        [$company, $admin] = $this->aCompanyWithMember('admin');
-        $otherAdmin = User::factory()->create();
-        $this->attachMember($company, $otherAdmin, $this->seededRole('admin'));
-        $this->exhaustInviteLimit($admin, $company);
+        $otherAdmin = $this->aCompanyMember($this->company, 'admin');
+        $this->exhaustInviteLimit($this->admin, $this->company);
 
         // When the second admin sends an invite within the hour
-        $response = $this->invite($otherAdmin, $company, [
+        $response = $this->invite($otherAdmin, $this->company, [
             'email' => 'from-the-other-admin@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -196,15 +198,14 @@ class InviteUserTest extends MembershipsTestCase
     public function when_an_invite_is_refused_as_already_member_then_it_still_spends_the_allowance(): void
     {
         // Given an admin who has sent nineteen invites this hour
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $member = User::factory()->withEmail('member@contoso.lk')->create();
-        $this->attachMember($company, $member, $this->seededRole('employee'));
-        $this->exhaustInviteLimit($admin, $company, InvitationAllowance::PER_HOUR - 1);
+        $this->attachMember($this->company, $member, $this->seededRole('employee'));
+        $this->exhaustInviteLimit($this->admin, $this->company, InvitationAllowance::PER_HOUR - 1);
         // And whose twentieth invited an existing member
-        $refused = $this->invite($admin, $company, ['email' => 'member@contoso.lk', 'roleCode' => 'employee']);
+        $refused = $this->invite($this->admin, $this->company, ['email' => 'member@contoso.lk', 'roleCode' => 'employee']);
 
         // When they send one more invite within the hour
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'one-too-many@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -219,11 +220,10 @@ class InviteUserTest extends MembershipsTestCase
     public function when_the_invitation_projection_fails_then_no_invitation_is_recorded_or_mailed(): void
     {
         // Given an admin and an invitations projection that fails mid-invite
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $this->induceProjectorFailureFor(UserInvited::class);
 
         // When the admin invites a new email
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'newhire@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -237,11 +237,10 @@ class InviteUserTest extends MembershipsTestCase
     public function when_the_audit_row_cannot_be_written_then_no_invitation_is_recorded_or_mailed(): void
     {
         // Given an admin and an audit trail that refuses the row
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $this->failTheAuditTrail();
 
         // When the admin invites a new email
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'newhire@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -249,7 +248,7 @@ class InviteUserTest extends MembershipsTestCase
         // Then the invite fails whole: no invitation, no recorded event, no email, no row
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
         $this->assertNoInvitationCreated();
-        $this->assertNothingAudited();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     // --- Edge ---
@@ -258,11 +257,10 @@ class InviteUserTest extends MembershipsTestCase
     public function when_the_body_names_another_company_then_the_invite_stays_in_the_context_company(): void
     {
         // Given an admin of one company and another company's id in the request body
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $other = Company::factory()->onPlan(BillingPlan::Pro)->create();
 
         // When the admin invites a new email
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'newhire@contoso.lk',
             'roleCode' => 'employee',
             'company' => $other->getKey(),
@@ -270,22 +268,21 @@ class InviteUserTest extends MembershipsTestCase
 
         // Then the invitation and its audit row belong to the context company alone
         $response->assertCreated();
-        $this->assertDatabaseHas('invitations', ['email' => 'newhire@contoso.lk', 'company_id' => $company->getKey()]);
-        $this->assertDatabaseHas('audit_trail', ['action' => 'user_invited', 'company_id' => $company->getKey()]);
+        $this->assertDatabaseHas('invitations', ['email' => 'newhire@contoso.lk', 'company_id' => $this->company->getKey()]);
+        $this->assertDatabaseHas('audit_trail', ['action' => 'user_invited', 'company_id' => $this->company->getKey()]);
     }
 
     #[Test]
     public function when_a_removed_member_is_reinvited_then_the_audit_row_links_the_new_invitation(): void
     {
         // Given a former member whose membership stream already holds an earlier invite
-        [$company, $admin] = $this->aCompanyWithMember('admin');
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'returning@contoso.lk');
-        $this->removeMember($admin, $company, $membershipId)->assertNoContent();
+        [, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'returning@contoso.lk');
+        $this->removeMember($this->admin, $this->company, $membershipId)->assertNoContent();
         Auth::forgetGuards();
         $this->fromADevice();
 
         // When the admin re-invites that email
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'returning@contoso.lk',
             'roleCode' => 'hr_officer',
         ]);
@@ -299,12 +296,11 @@ class InviteUserTest extends MembershipsTestCase
     public function when_a_previously_removed_member_is_reinvited_then_the_same_membership_is_reengaged(): void
     {
         // Given a former member whose company_user pivot was soft-deleted on removal
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $target = User::factory()->withEmail('returning@contoso.lk')->create();
-        $membershipId = $this->aRemovedMembership($company, $target);
+        $membershipId = $this->aRemovedMembership($this->company, $target);
 
         // When the admin re-invites that email
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'returning@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -314,7 +310,7 @@ class InviteUserTest extends MembershipsTestCase
         $response->assertCreated();
         $this->assertDatabaseHas('invitations', [
             'id' => $membershipId,
-            'company_id' => $company->getKey(),
+            'company_id' => $this->company->getKey(),
             'email' => 'returning@contoso.lk',
             'accepted_at' => null,
         ]);
@@ -325,15 +321,14 @@ class InviteUserTest extends MembershipsTestCase
     public function when_a_pending_invitation_has_expired_then_the_email_can_be_reinvited(): void
     {
         // Given an invitation that expired without acceptance
-        [$company, $admin] = $this->aCompanyWithMember('admin');
-        $this->invite($admin, $company, [
+        $this->invite($this->admin, $this->company, [
             'email' => 'slow@contoso.lk',
             'roleCode' => 'employee',
         ])->assertCreated();
         $this->travel(8)->days();
 
         // When the admin re-invites the same email
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'slow@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -342,7 +337,7 @@ class InviteUserTest extends MembershipsTestCase
         // T5: re-engagement is a new stream/row) and the expired row is preserved
         $response->assertCreated();
         $rows = Invitation::query()
-            ->where('company_id', $company->getKey())
+            ->where('company_id', $this->company->getKey())
             ->where('email', 'slow@contoso.lk')
             ->orderBy('expires_at')
             ->get();
@@ -357,11 +352,10 @@ class InviteUserTest extends MembershipsTestCase
     public function when_an_invitation_was_revoked_then_the_email_can_be_reinvited(): void
     {
         // Given an invitation that was revoked without acceptance (UC-1-022)
-        [$company, $admin] = $this->aCompanyWithMember('admin');
-        $this->aRevokedInvitation($company, $admin, 'slow@contoso.lk');
+        $this->aRevokedInvitation($this->company, $this->admin, 'slow@contoso.lk');
 
         // When the admin re-invites the same email
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'slow@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -371,7 +365,7 @@ class InviteUserTest extends MembershipsTestCase
         // the revoked row is preserved with its audit-forensics stamps intact
         $response->assertCreated();
         $rows = Invitation::query()
-            ->where('company_id', $company->getKey())
+            ->where('company_id', $this->company->getKey())
             ->where('email', 'slow@contoso.lk')
             ->orderBy('created_at')
             ->get();
@@ -388,27 +382,25 @@ class InviteUserTest extends MembershipsTestCase
     {
         // Given a removed member whose re-invite was itself revoked — the reused
         // D5b row carries all three revoke stamps (the terminal-marker re-entry chain)
-        [$company, $admin] = $this->aCompanyWithMember('admin');
-        $membershipId = $this->aRevokedReinviteOfARemovedMember($company, $admin, 'returning@contoso.lk');
+        $membershipId = $this->aRevokedReinviteOfARemovedMember($this->company, $this->admin, 'returning@contoso.lk');
 
         // When the admin re-invites that email once more
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'returning@contoso.lk',
             'roleCode' => 'employee',
         ]);
 
         // Then the reused row returns to clean pending — every terminal marker reset
         $response->assertCreated();
-        $this->assertReinvitedRowCleanPending($membershipId, $admin, $company);
+        $this->assertReinvitedRowCleanPending($membershipId, $this->admin, $this->company);
     }
 
     #[Test]
     public function when_the_reinvite_after_a_revoked_reinvite_is_accepted_then_the_membership_reactivates(): void
     {
         // Given a fresh invitation re-issued on the once-revoked reused row
-        [$company, $admin] = $this->aCompanyWithMember('admin');
-        $membershipId = $this->aRevokedReinviteOfARemovedMember($company, $admin, 'returning@contoso.lk');
-        $token = $this->aPendingInvitation($company, $admin, 'returning@contoso.lk');
+        $membershipId = $this->aRevokedReinviteOfARemovedMember($this->company, $this->admin, 'returning@contoso.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'returning@contoso.lk');
         $joiner = User::query()->where('email', 'returning@contoso.lk')->sole();
 
         // When the returning member accepts with the fresh token
@@ -428,10 +420,10 @@ class InviteUserTest extends MembershipsTestCase
     public function when_an_authorized_role_invites_a_new_email_then_a_pending_invitation_is_created(string $roleCode): void
     {
         // Given a member holding a role that may invite
-        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        $actor = $this->memberWithRole($roleCode);
 
         // When they invite a brand-new email
-        $response = $this->invite($actor, $company, [
+        $response = $this->invite($actor, $this->company, [
             'email' => 'newuser@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -440,8 +432,8 @@ class InviteUserTest extends MembershipsTestCase
         // event-sourced) and the invite email is queued with the plaintext accept-link
         $response->assertCreated();
         $response->assertJsonStructure(['data' => ['id', 'email', 'role', 'expires_at']]);
-        $this->assertPendingInvitationCreated($company, 'newuser@contoso.lk', 'employee');
-        $this->assertInvitationMailQueued($company, 'newuser@contoso.lk');
+        $this->assertPendingInvitationCreated($this->company, 'newuser@contoso.lk', 'employee');
+        $this->assertInvitationMailQueued($this->company, 'newuser@contoso.lk');
     }
 
     /**
@@ -460,11 +452,10 @@ class InviteUserTest extends MembershipsTestCase
     public function when_an_existing_nonmember_user_is_invited_then_a_pending_invitation_is_created_without_a_membership(): void
     {
         // Given an existing user who is not a member of the company
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $alice = User::factory()->withEmail('alice@example.lk')->create();
 
         // When the admin invites alice's email
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'alice@example.lk',
             'roleCode' => 'employee',
         ]);
@@ -472,10 +463,10 @@ class InviteUserTest extends MembershipsTestCase
         // Then a pending invitation exists but NO membership pivot — alice joins
         // only by accepting while authenticated (D7; the pivot lands at UC-1-019)
         $response->assertCreated();
-        $this->assertPendingInvitationCreated($company, 'alice@example.lk', 'employee');
-        $this->assertInvitationMailQueued($company, 'alice@example.lk');
+        $this->assertPendingInvitationCreated($this->company, 'alice@example.lk', 'employee');
+        $this->assertInvitationMailQueued($this->company, 'alice@example.lk');
         $this->assertDatabaseMissing('company_user', [
-            'company_id' => $company->getKey(),
+            'company_id' => $this->company->getKey(),
             'user_id' => $alice->getKey(),
         ]);
     }
@@ -486,12 +477,11 @@ class InviteUserTest extends MembershipsTestCase
         // Given an admin of two companies, acting in the SECOND company's context
         // (so resolving the actor's first company instead of the request context
         // would be caught)
-        [$companyA, $admin] = $this->aCompanyWithMember('admin');
         $companyB = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $this->attachMember($companyB, $admin, $this->seededRole('admin'));
+        $this->attachMember($companyB, $this->admin, $this->seededRole('admin'));
 
         // When they invite a new email under company B's context
-        $response = $this->invite($admin, $companyB, [
+        $response = $this->invite($this->admin, $companyB, [
             'email' => 'newuser@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -499,11 +489,11 @@ class InviteUserTest extends MembershipsTestCase
         // Then the invitation belongs to company B alone and records the inviter
         $response->assertCreated();
         $this->assertPendingInvitationCreated($companyB, 'newuser@contoso.lk', 'employee');
-        $this->assertDatabaseMissing('invitations', ['company_id' => $companyA->getKey()]);
+        $this->assertDatabaseMissing('invitations', ['company_id' => $this->company->getKey()]);
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', UserInvited::class)
             ->where('event_properties->companyId', $companyB->getKey())
-            ->where('event_properties->invitedBy', $admin->getKey())
+            ->where('event_properties->invitedBy', $this->admin->getKey())
             ->count());
     }
 
@@ -511,11 +501,10 @@ class InviteUserTest extends MembershipsTestCase
     public function when_an_invite_is_sent_then_the_audit_trail_records_who_was_invited_as_what(): void
     {
         // Given an admin acting from a known device
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $this->fromADevice();
 
         // When the admin invites a new email as an HR officer
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'newhire@contoso.lk',
             'roleCode' => 'hr_officer',
         ]);
@@ -523,7 +512,7 @@ class InviteUserTest extends MembershipsTestCase
         // Then the audit trail records the invitation, who sent it and from where
         $response->assertCreated();
         $this->assertInvitationAudited($response, Invitation::query()->sole(), AuditAction::UserInvited);
-        $this->assertActedBy(AuditAction::UserInvited, $admin, 'admin');
+        $this->assertActedBy(AuditAction::UserInvited, $this->admin, 'admin');
     }
 
     /**

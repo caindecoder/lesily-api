@@ -549,6 +549,7 @@ class RegisterOwnerTest extends AuthTestCase
             'phone' => ['from' => null, 'to' => '+94771234567'],
             'relationship' => ['from' => null, 'to' => 'spouse'],
         ]);
+        $this->assertSame(5, AuditEntry::query()->where('company_id', $company->getKey())->count());
     }
 
     protected function assertRegistrationAudited(TestResponse $response, User $owner): void

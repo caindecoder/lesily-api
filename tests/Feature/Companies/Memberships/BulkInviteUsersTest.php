@@ -6,6 +6,7 @@ use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -14,17 +15,26 @@ use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 
 class BulkInviteUsersTest extends MembershipsTestCase
 {
+    use FreeTierCompany;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
+
     #[Test]
     public function when_the_request_carries_no_token_then_it_is_unauthenticated(): void
     {
         // Given a company with an admin
-        [$company] = $this->aCompanyWithMember('admin');
 
         // When a batch is posted with no token
-        $response = $this->postJson('/api/v1/invitations/bulk', ['invitations' => $this->rowsFor(['newuser@contoso.lk'])], ['X-Company-Context' => $company->getKey()]);
+        $response = $this->postJson('/api/v1/invitations/bulk', ['invitations' => $this->rowsFor(['newuser@contoso.lk'])], ['X-Company-Context' => $this->company->getKey()]);
 
         // Then the request is unauthenticated and nothing is created
         $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
@@ -35,8 +45,9 @@ class BulkInviteUsersTest extends MembershipsTestCase
     public function when_the_actor_belongs_to_another_company_then_company_access_is_denied(): void
     {
         // Given an admin of one company and a second company they never joined
-        [, $outsider] = $this->aCompanyWithMember('admin');
-        [$otherCompany] = $this->aCompanyWithMember('owner');
+        $outsider = $this->aCompanyMember(Company::factory()->create(), 'admin');
+        $otherCompany = Company::factory()->create();
+        $this->aCompanyMember($otherCompany, 'owner');
 
         // When they bulk invite into the second company
         $response = $this->bulkInvite($outsider, $otherCompany, $this->rowsFor(['newuser@contoso.lk']));
@@ -51,10 +62,10 @@ class BulkInviteUsersTest extends MembershipsTestCase
     public function when_the_actor_role_lacks_the_invite_permission_then_the_batch_is_refused(string $roleCode): void
     {
         // Given a member whose role does not carry users.invite
-        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        $actor = $this->memberWithRole($roleCode);
 
         // When they bulk invite a new email
-        $response = $this->bulkInvite($actor, $company, $this->rowsFor(['newuser@contoso.lk']));
+        $response = $this->bulkInvite($actor, $this->company, $this->rowsFor(['newuser@contoso.lk']));
 
         // Then the batch is refused for the missing permission and nothing is created
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
@@ -69,10 +80,9 @@ class BulkInviteUsersTest extends MembershipsTestCase
     public function when_the_batch_is_missing_empty_or_over_twenty_rows_then_it_is_refused(?array $rows, string $message): void
     {
         // Given an admin of a company
-        [$company, $admin] = $this->aCompanyWithMember('admin');
 
         // When the admin submits a batch with no rows, or with more than twenty
-        $response = $this->bulkInvite($admin, $company, $rows);
+        $response = $this->bulkInvite($this->admin, $this->company, $rows);
 
         // Then the batch is refused as invalid and nothing is created
         $this->assertValidationRejected($response, 'invitations', $message);
@@ -87,10 +97,9 @@ class BulkInviteUsersTest extends MembershipsTestCase
     public function when_a_row_is_malformed_then_the_batch_is_refused_naming_that_row(array|string $malformedRow, string $invalidField, string $message): void
     {
         // Given an admin of a company
-        [$company, $admin] = $this->aCompanyWithMember('admin');
 
         // When the admin submits three rows, the middle one malformed
-        $response = $this->bulkInvite($admin, $company, [
+        $response = $this->bulkInvite($this->admin, $this->company, [
             ['email' => 'first@contoso.lk', 'roleCode' => 'employee'],
             $malformedRow,
             ['email' => 'third@contoso.lk', 'roleCode' => 'employee'],
@@ -121,10 +130,9 @@ class BulkInviteUsersTest extends MembershipsTestCase
     public function when_every_row_is_malformed_then_each_row_is_named(): void
     {
         // Given an admin of a company
-        [$company, $admin] = $this->aCompanyWithMember('admin');
 
         // When the admin submits only malformed rows
-        $response = $this->bulkInvite($admin, $company, $this->rowsFor(['not-an-email', 'also-not-an-email']));
+        $response = $this->bulkInvite($this->admin, $this->company, $this->rowsFor(['not-an-email', 'also-not-an-email']));
 
         // Then every malformed row is named and nothing is created
         $this->assertValidationRejected($response, 'invitations.0.email', 'The invitations.0.email field must be a valid email address.');
@@ -136,12 +144,11 @@ class BulkInviteUsersTest extends MembershipsTestCase
     public function when_the_batch_exceeds_the_allowance_left_this_hour_then_nothing_is_sent(): void
     {
         // Given an admin who has sent 18 of the 20 invitations allowed this hour
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $this->freezeTime();
-        $this->exhaustInviteLimit($admin, $company, 18);
+        $this->exhaustInviteLimit($this->admin, $this->company, 18);
 
         // When they bulk invite five more
-        $response = $this->bulkInvite($admin, $company, $this->batchOf(5));
+        $response = $this->bulkInvite($this->admin, $this->company, $this->batchOf(5));
 
         // Then the batch is refused until the hour is up and nothing more is invited, mailed or audited
         $this->assertAllowanceRefusedFor($response, 3600);
@@ -153,29 +160,27 @@ class BulkInviteUsersTest extends MembershipsTestCase
     public function when_a_malformed_batch_is_refused_then_it_spends_no_allowance(): void
     {
         // Given an admin whose twenty-row batch was refused for one malformed row
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $refused = $this->batchOf(20);
         $refused[19]['email'] = 'not-an-email';
-        $this->bulkInvite($admin, $company, $refused);
+        $this->bulkInvite($this->admin, $this->company, $refused);
         $rows = $this->batchOf(20);
 
         // When they send the corrected batch
-        $response = $this->bulkInvite($admin, $company, $rows);
+        $response = $this->bulkInvite($this->admin, $this->company, $rows);
 
         // Then all twenty rows are sent
-        $this->assertBatchSent($response, $company, $rows);
+        $this->assertBatchSent($response, $this->company, $rows);
     }
 
     #[Test]
     public function when_the_batch_fits_exactly_the_allowance_left_then_every_row_is_sent(): void
     {
         // Given an admin who has sent 18 of the 20 invitations allowed this hour
-        [$company, $admin] = $this->aCompanyWithMember('admin');
-        $this->exhaustInviteLimit($admin, $company, 18);
+        $this->exhaustInviteLimit($this->admin, $this->company, 18);
         $rows = $this->batchOf(2);
 
         // When they bulk invite the last two
-        $response = $this->bulkInvite($admin, $company, $rows);
+        $response = $this->bulkInvite($this->admin, $this->company, $rows);
 
         // Then both rows are sent, twenty in all
         $this->assertRowsSentInOrder($response, $rows);
@@ -186,11 +191,10 @@ class BulkInviteUsersTest extends MembershipsTestCase
     public function when_a_batch_has_spent_the_allowance_then_a_single_invite_is_throttled(): void
     {
         // Given an admin who has bulk invited twenty this hour
-        [$company, $admin] = $this->aCompanyWithMember('admin');
-        $this->bulkInvite($admin, $company, $this->batchOf(20));
+        $this->bulkInvite($this->admin, $this->company, $this->batchOf(20));
 
         // When they invite one more on its own
-        $response = $this->invite($admin, $company, ['email' => 'one-more@contoso.lk', 'roleCode' => 'employee']);
+        $response = $this->invite($this->admin, $this->company, ['email' => 'one-more@contoso.lk', 'roleCode' => 'employee']);
 
         // Then the single invite is throttled and nothing more is invited or mailed
         $this->assertThrottled($response);
@@ -201,13 +205,12 @@ class BulkInviteUsersTest extends MembershipsTestCase
     public function when_the_hour_has_not_passed_then_the_allowance_stays_spent(): void
     {
         // Given an admin who bulk invited twenty one second short of an hour ago
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $this->freezeTime();
-        $this->bulkInvite($admin, $company, $this->batchOf(20));
+        $this->bulkInvite($this->admin, $this->company, $this->batchOf(20));
         $this->travel(3599)->seconds();
 
         // When they bulk invite one more
-        $response = $this->bulkInvite($admin, $company, $this->rowsFor(['too-soon@contoso.lk']));
+        $response = $this->bulkInvite($this->admin, $this->company, $this->rowsFor(['too-soon@contoso.lk']));
 
         // Then the batch is refused for the last second and nothing more is invited or mailed
         $this->assertAllowanceRefusedFor($response, 1);
@@ -218,14 +221,13 @@ class BulkInviteUsersTest extends MembershipsTestCase
     public function when_the_hour_has_passed_then_the_allowance_is_restored(): void
     {
         // Given an admin who bulk invited twenty exactly an hour ago
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $this->freezeTime();
-        $this->bulkInvite($admin, $company, $this->batchOf(20));
+        $this->bulkInvite($this->admin, $this->company, $this->batchOf(20));
         $this->travel(3600)->seconds();
         $rows = $this->rowsFor(['next-hour@contoso.lk']);
 
         // When they bulk invite one more
-        $response = $this->bulkInvite($admin, $company, $rows);
+        $response = $this->bulkInvite($this->admin, $this->company, $rows);
 
         // Then the row is sent, twenty-one in all
         $this->assertRowsSentInOrder($response, $rows);
@@ -236,27 +238,25 @@ class BulkInviteUsersTest extends MembershipsTestCase
     public function when_an_email_repeats_in_the_batch_then_the_repeat_is_skipped(): void
     {
         // Given an admin of a company
-        [$company, $admin] = $this->aCompanyWithMember('admin');
 
         // When the admin submits the same email twice in one batch
-        $response = $this->bulkInvite($admin, $company, $this->rowsFor(['nimal@contoso.lk', 'nimal@contoso.lk']));
+        $response = $this->bulkInvite($this->admin, $this->company, $this->rowsFor(['nimal@contoso.lk', 'nimal@contoso.lk']));
 
         // Then the repeat is skipped as already invited and the email is invited once
         $this->assertRowSkipped($response, 1, 'This email has already been invited to this company.');
-        $this->assertInvitedAndMailedOnce($company, ['nimal@contoso.lk']);
+        $this->assertInvitedAndMailedOnce($this->company, ['nimal@contoso.lk']);
     }
 
     #[Test]
     public function when_some_rows_are_members_or_already_invited_then_those_rows_are_skipped_and_the_rest_sent(): void
     {
         // Given an admin, a member of the company and an email already invited
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $member = User::factory()->withEmail('member@contoso.lk')->create();
-        $this->attachMember($company, $member, $this->seededRole('employee'));
-        $this->aPendingInvitation($company, $admin, 'pending@contoso.lk');
+        $this->attachMember($this->company, $member, $this->seededRole('employee'));
+        $this->aPendingInvitation($this->company, $this->admin, 'pending@contoso.lk');
 
         // When the admin bulk invites two new emails, the member and the invited email
-        $response = $this->bulkInvite($admin, $company, $this->rowsFor([
+        $response = $this->bulkInvite($this->admin, $this->company, $this->rowsFor([
             'nimal@contoso.lk', 'member@contoso.lk', 'pending@contoso.lk', 'sunil@contoso.lk',
         ]));
 
@@ -264,7 +264,7 @@ class BulkInviteUsersTest extends MembershipsTestCase
         // only the new emails gain an invitation and a mail
         $this->assertRowSkipped($response, 1, 'This user is already a member of this company.');
         $this->assertRowSkipped($response, 2, 'This email has already been invited to this company.');
-        $this->assertInvitedAndMailedOnce($company, ['nimal@contoso.lk', 'pending@contoso.lk', 'sunil@contoso.lk']);
+        $this->assertInvitedAndMailedOnce($this->company, ['nimal@contoso.lk', 'pending@contoso.lk', 'sunil@contoso.lk']);
         $this->assertDatabaseMissing('invitations', ['email' => 'member@contoso.lk']);
     }
 
@@ -272,72 +272,71 @@ class BulkInviteUsersTest extends MembershipsTestCase
     public function when_the_body_names_another_company_then_the_batch_stays_in_the_context_company(): void
     {
         // Given an admin of one company, signed in, and another company's id for the request body
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $other = Company::factory()->create();
-        Sanctum::actingAs($admin);
+        Sanctum::actingAs($this->admin);
 
         // When the admin bulk invites a new email with that id in the body
         $response = $this->postJson('/api/v1/invitations/bulk', [
             'invitations' => $this->rowsFor(['nimal@contoso.lk']),
             'company' => $other->getKey(),
-        ], ['X-Company-Context' => $company->getKey()]);
+        ], ['X-Company-Context' => $this->company->getKey()]);
 
         // Then the invitation and the batch row belong to the context company alone
         $response->assertOk();
-        $this->assertDatabaseHas('invitations', ['email' => 'nimal@contoso.lk', 'company_id' => $company->getKey()]);
-        $this->assertDatabaseHas('audit_trail', ['action' => 'bulk_invite_sent', 'company_id' => $company->getKey()]);
+        $this->assertDatabaseHas('invitations', ['email' => 'nimal@contoso.lk', 'company_id' => $this->company->getKey()]);
+        $this->assertDatabaseHas('audit_trail', ['action' => 'bulk_invite_sent', 'company_id' => $this->company->getKey()]);
     }
 
     #[Test]
     public function when_a_later_row_fails_then_the_earlier_invitations_stand_without_a_batch(): void
     {
         // Given an admin and an audit trail that refuses every row after the first
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $this->failTheAuditTrailAfter(1);
 
         // When the admin bulk invites two new emails
-        $response = $this->bulkInvite($admin, $company, $this->rowsFor(['nimal@contoso.lk', 'sunil@contoso.lk']));
+        $response = $this->bulkInvite($this->admin, $this->company, $this->rowsFor(['nimal@contoso.lk', 'sunil@contoso.lk']));
 
         // Then the request fails, the first invitation stands with its own row, and no batch is recorded
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
         $this->assertDatabaseHas('invitations', ['email' => 'nimal@contoso.lk']);
         $this->assertDatabaseCount('invitations', 1);
         $this->assertDatabaseHas('audit_trail', ['action' => 'user_invited']);
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
     public function when_every_row_is_skipped_then_no_batch_is_recorded(): void
     {
         // Given an admin and two emails that are already members of the company
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         foreach (['nimal@contoso.lk', 'sunil@contoso.lk'] as $email) {
-            $this->attachMember($company, User::factory()->withEmail($email)->create(), $this->seededRole('employee'));
+            $this->attachMember($this->company, User::factory()->withEmail($email)->create(), $this->seededRole('employee'));
         }
 
         // When the admin bulk invites both
-        $response = $this->bulkInvite($admin, $company, $this->rowsFor(['nimal@contoso.lk', 'sunil@contoso.lk']));
+        $response = $this->bulkInvite($this->admin, $this->company, $this->rowsFor(['nimal@contoso.lk', 'sunil@contoso.lk']));
 
         // Then both rows are skipped and nothing is audited
         $response->assertOk();
-        $this->assertNothingAudited();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
     public function when_some_rows_are_skipped_then_the_batch_counts_only_those_sent(): void
     {
         // Given an admin acting from a known device and one email already a member
-        [$company, $admin] = $this->aCompanyWithMember('admin');
-        $this->attachMember($company, User::factory()->withEmail('member@contoso.lk')->create(), $this->seededRole('employee'));
+        $this->attachMember($this->company, User::factory()->withEmail('member@contoso.lk')->create(), $this->seededRole('employee'));
         $this->fromADevice();
 
         // When the admin bulk invites one new email and the member
-        $response = $this->bulkInvite($admin, $company, $this->rowsFor(['nimal@contoso.lk', 'member@contoso.lk']));
+        $response = $this->bulkInvite($this->admin, $this->company, $this->rowsFor(['nimal@contoso.lk', 'member@contoso.lk']));
 
         // Then the batch records the one invitation sent, beside its own row
         $response->assertOk();
-        $this->assertBatchAudited($response, $company, 1);
-        $this->assertDatabaseCount('audit_trail', 2);
+        $this->assertBatchAudited($response, $this->company, 1);
+        $requestId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($requestId);
+        $this->assertSame(2, AuditEntry::query()->where('request_id', $requestId)->count());
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 2);
     }
 
     #[Test]
@@ -345,14 +344,14 @@ class BulkInviteUsersTest extends MembershipsTestCase
     public function when_an_owner_admin_or_hr_officer_bulk_invites_then_the_rows_are_sent(string $roleCode): void
     {
         // Given a member whose role carries users.invite
-        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        $actor = $this->memberWithRole($roleCode);
         $rows = $this->rowsFor(['nimal@contoso.lk', 'sunil@contoso.lk']);
 
         // When they bulk invite two new emails
-        $response = $this->bulkInvite($actor, $company, $rows);
+        $response = $this->bulkInvite($actor, $this->company, $rows);
 
         // Then both rows are sent
-        $this->assertBatchSent($response, $company, $rows);
+        $this->assertBatchSent($response, $this->company, $rows);
     }
 
     /**
@@ -371,7 +370,6 @@ class BulkInviteUsersTest extends MembershipsTestCase
     public function when_valid_rows_are_submitted_then_each_is_invited_with_its_own_role_and_mailed(): void
     {
         // Given an admin of a company and three new emails, each with its own role
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $rows = [
             ['email' => 'nimal@contoso.lk', 'roleCode' => 'employee'],
             ['email' => 'sunil@contoso.lk', 'roleCode' => 'hr_officer'],
@@ -379,35 +377,37 @@ class BulkInviteUsersTest extends MembershipsTestCase
         ];
 
         // When the admin bulk invites them
-        $response = $this->bulkInvite($admin, $company, $rows);
+        $response = $this->bulkInvite($this->admin, $this->company, $rows);
 
         // Then each row is sent in order, invited with its own role and mailed
-        $this->assertBatchSent($response, $company, $rows);
+        $this->assertBatchSent($response, $this->company, $rows);
     }
 
     #[Test]
     public function when_valid_rows_are_submitted_then_each_invitation_and_the_batch_are_audited(): void
     {
         // Given an admin acting from a known device
-        [$company, $admin] = $this->aCompanyWithMember('admin');
         $this->fromADevice();
 
         // When the admin bulk invites two new emails with their own roles
-        $response = $this->bulkInvite($admin, $company, [
+        $response = $this->bulkInvite($this->admin, $this->company, [
             ['email' => 'nimal@contoso.lk', 'roleCode' => 'hr_officer'],
             ['email' => 'sunil@contoso.lk', 'roleCode' => 'employee'],
         ]);
 
         // Then each invitation records its own row and the batch records the two sent, by the admin
         $response->assertOk();
-        $this->assertDatabaseCount('audit_trail', 3);
+        $requestId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($requestId);
+        $this->assertSame(3, AuditEntry::query()->where('request_id', $requestId)->count());
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 3);
         $invitations = Invitation::query()->get();
         $this->assertCount(2, $invitations);
         foreach ($invitations as $invitation) {
             $this->assertInvitationAudited($response, $invitation, AuditAction::UserInvited);
         }
-        $this->assertBatchAudited($response, $company, 2);
-        $this->assertActedBy(AuditAction::BulkInviteSent, $admin, 'admin');
+        $this->assertBatchAudited($response, $this->company, 2);
+        $this->assertActedBy(AuditAction::BulkInviteSent, $this->admin, 'admin');
     }
 
     /**

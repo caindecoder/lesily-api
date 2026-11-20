@@ -7,6 +7,7 @@ use Illuminate\Support\Arr;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -16,14 +17,22 @@ use App\Foundation\RolesPermissions\Entities\Permission;
 
 class ViewRolesTest extends MembershipsTestCase
 {
+    use FreeTierCompany;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
+
     #[Test]
     public function when_request_has_no_token_then_unauthenticated(): void
     {
         // Given a company with an owner member
-        [$company] = $this->aCompanyWithMember('owner');
 
         // When its roles are requested with no token
-        $response = $this->getJson('/api/v1/roles', ['X-Company-Context' => $company->getKey()]);
+        $response = $this->getJson('/api/v1/roles', ['X-Company-Context' => $this->company->getKey()]);
 
         // Then the request is unauthenticated
         $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
@@ -33,8 +42,9 @@ class ViewRolesTest extends MembershipsTestCase
     public function when_outsider_lists_roles_then_company_access_denied(): void
     {
         // Given an owner of one company and a second company they never joined
-        [, $outsider] = $this->aCompanyWithMember('owner');
-        [$otherCompany] = $this->aCompanyWithMember('owner');
+        $outsider = $this->aCompanyMember(Company::factory()->create(), 'owner');
+        $otherCompany = Company::factory()->create();
+        $this->aCompanyMember($otherCompany, 'owner');
 
         // When they list the second company's roles
         $response = $this->viewRoles($outsider, $otherCompany);
@@ -48,10 +58,10 @@ class ViewRolesTest extends MembershipsTestCase
     public function when_role_without_roles_view_lists_roles_then_refused(string $roleCode): void
     {
         // Given a member whose role does not carry roles.view
-        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        $actor = $this->memberWithRole($roleCode);
 
         // When they list the company's roles
-        $response = $this->viewRoles($actor, $company);
+        $response = $this->viewRoles($actor, $this->company);
 
         // Then the roles are refused for the missing permission
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
@@ -72,25 +82,25 @@ class ViewRolesTest extends MembershipsTestCase
     #[Test]
     public function when_members_are_removed_or_in_another_company_then_they_are_not_counted(): void
     {
-        // Given a company with an owner, an HR officer and a removed employee
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $this->aMembership($company, 'hr_officer');
-        $this->aRemovedMembership($company, User::factory()->create());
+        // Given a company with an owner, its admin and an employee, an HR officer and a removed employee
+        $this->aMembership($this->company, 'hr_officer');
+        $this->aRemovedMembership($this->company, User::factory()->create());
         // And another company with an employee and an HR officer
-        [$otherCompany] = $this->aCompanyWithMember('employee');
+        $otherCompany = Company::factory()->create();
+        $this->aCompanyMember($otherCompany, 'employee');
         $this->aMembership($otherCompany, 'hr_officer');
 
         // When the owner lists the company's roles
-        $response = $this->viewRoles($owner, $company);
+        $response = $this->viewRoles($this->owner, $this->company);
 
         // Then only the company's live members are counted
         $this->assertRoleSummaries($response, [
             'owner' => [18, 1],
-            'admin' => [14, 0],
+            'admin' => [14, 1],
             'hr_officer' => [5, 1],
             'payroll_officer' => [1, 0],
             'auditor' => [6, 0],
-            'employee' => [1, 0],
+            'employee' => [1, 1],
         ]);
     }
 
@@ -98,11 +108,10 @@ class ViewRolesTest extends MembershipsTestCase
     public function when_a_role_moves_in_the_display_order_then_the_list_follows_it(): void
     {
         // Given an owner, and the employee role moved to the front of the display order
-        [$company, $owner] = $this->aCompanyWithMember('owner');
         $this->seededRole('employee')->update(['sort_order' => 0]);
 
         // When the owner lists the company's roles
-        $response = $this->viewRoles($owner, $company);
+        $response = $this->viewRoles($this->owner, $this->company);
 
         // Then the employee role is listed first
         $this->assertRoleCodesInOrder($response, ['employee', 'owner', 'admin', 'hr_officer', 'payroll_officer', 'auditor']);
@@ -112,10 +121,9 @@ class ViewRolesTest extends MembershipsTestCase
     public function when_roles_are_listed_then_permissions_load_without_a_query_per_role(): void
     {
         // Given an owner
-        [$company, $owner] = $this->aCompanyWithMember('owner');
 
         // When the owner lists the company's roles with the statements recorded
-        [$response, $permissionQueries] = $this->viewRolesRecordingPermissionQueries($owner, $company);
+        [$response, $permissionQueries] = $this->viewRolesRecordingPermissionQueries($this->owner, $this->company);
 
         // Then the six roles cost fewer permission statements than there are roles
         $this->assertListedWithFewerPermissionQueriesThanRoles($response, $permissionQueries);
@@ -125,13 +133,10 @@ class ViewRolesTest extends MembershipsTestCase
     public function when_owner_lists_roles_then_the_six_assignable_roles_arrive_in_order_with_permissions_and_counts(): void
     {
         // Given an owner, an admin and two employees in one company
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $this->aMembership($company, 'admin');
-        $this->aMembership($company, 'employee');
-        $this->aMembership($company, 'employee');
+        $this->aMembership($this->company, 'employee');
 
         // When the owner lists the company's roles
-        $response = $this->viewRoles($owner, $company);
+        $response = $this->viewRoles($this->owner, $this->company);
 
         // Then each role arrives in display order with its permission and member counts
         $this->assertRoleSummaries($response, [
@@ -157,10 +162,10 @@ class ViewRolesTest extends MembershipsTestCase
     public function when_viewing_role_lists_roles_then_the_list_is_returned(string $roleCode): void
     {
         // Given a member whose role carries roles.view
-        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        $actor = $this->memberWithRole($roleCode);
 
         // When they list the company's roles
-        $response = $this->viewRoles($actor, $company);
+        $response = $this->viewRoles($actor, $this->company);
 
         // Then the six assignable roles are listed in their display order
         $this->assertRoleCodesInOrder($response, ['owner', 'admin', 'hr_officer', 'payroll_officer', 'auditor', 'employee']);
