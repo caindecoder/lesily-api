@@ -57,7 +57,7 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * Look up a seeded RBAC-catalog role by code — requires seedRbacCatalog()
-     * in the calling suite's setUp. Duplicated from BillingTestCase (module
+     * in the calling suite's setUp. Duplicated from Tests\TestCase (module
      * bases are independent — established precedent).
      */
     protected function seededRole(string $code): Role
@@ -81,7 +81,7 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * A fresh user made a live member of $company under a seeded role — the
-     * company_user pivot row role gates read. Duplicated from BillingTestCase
+     * company_user pivot row role gates read. Duplicated from FreeTierCompany
      * (module bases are independent — established precedent).
      */
     protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
@@ -95,7 +95,6 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * A company on a paid plan with one fresh member under a seeded role.
-     * Duplicated from BillingTestCase (module bases are independent).
      *
      * @return array{0: Company, 1: User}
      */
@@ -109,7 +108,7 @@ abstract class PlatformAdminTestCase extends TestCase
     /**
      * A trial subscription projected for $company through the domain seam —
      * the genesis event path production takes, never a direct row write.
-     * Duplicated from BillingTestCase (module bases are independent).
+     * Duplicated from HasSubscription (module bases are independent).
      */
     protected function aTrialSubscriptionFor(Company $company, CarbonImmutable $trialEndsAt): SubscriptionReadModel
     {
@@ -128,7 +127,7 @@ abstract class PlatformAdminTestCase extends TestCase
     /**
      * A valid issue command against $subscription's company — two line items
      * whose signed amounts sum to the invoice total. Duplicated from
-     * BillingTestCase (module bases are independent).
+     * CreatesInvoices (module bases are independent).
      */
     protected function issueInvoiceCommand(Company $company, SubscriptionReadModel $subscription, array $overrides = []): IssueInvoiceCommand
     {
@@ -166,7 +165,7 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * An issued (pending) invoice projected for $company through the domain
-     * seam. Duplicated from BillingTestCase (module bases are independent).
+     * seam. Duplicated from CreatesInvoices (module bases are independent).
      */
     protected function anIssuedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
@@ -181,7 +180,7 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * An invoice paid through the domain seam (issue → payment webhook).
-     * Duplicated from BillingTestCase (module bases are independent).
+     * Duplicated from CreatesInvoices (module bases are independent).
      */
     protected function aPaidInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
@@ -196,7 +195,7 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * A valid payment-success webhook command for $invoice. Duplicated from
-     * BillingTestCase (module bases are independent).
+     * CreatesInvoices (module bases are independent).
      */
     protected function recordPaymentSucceededCommand(InvoiceReadModel $invoice, array $overrides = []): RecordPaymentSucceededCommand
     {
@@ -210,7 +209,7 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * A pending invoice voided through the domain seam. Duplicated from
-     * BillingTestCase (module bases are independent).
+     * CreatesInvoices (module bases are independent).
      */
     protected function aVoidedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
@@ -229,7 +228,7 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * An invoice whose first payment attempt failed, through the domain seam.
-     * Duplicated from BillingTestCase (module bases are independent).
+     * Duplicated from CreatesInvoices (module bases are independent).
      */
     protected function aFailedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
@@ -249,7 +248,7 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * A pending invoice with an open dispute filed through the domain seam.
-     * Duplicated from BillingTestCase (module bases are independent).
+     * Duplicated from CreatesInvoices (module bases are independent).
      */
     protected function aDisputedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
     {
@@ -267,7 +266,7 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * Seam-fixture dispatch for DataProvider state matrices (§2.12) — the
-     * T7-scoped subset of BillingTestCase's dispatcher (module bases are
+     * T7-scoped counterpart of CreatesInvoices' dispatcher (module bases are
      * independent); every state is arranged through real aggregate commands.
      */
     protected function anInvoiceInState(string $state, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
@@ -373,7 +372,7 @@ abstract class PlatformAdminTestCase extends TestCase
 
     /**
      * The request was rejected as unauthenticated — 401 §S21 UNAUTHENTICATED.
-     * Duplicated from BillingTestCase (module bases are independent —
+     * Duplicated from Tests\TestCase (module bases are independent —
      * established precedent).
      */
     protected function assertUnauthenticated(TestResponse $response): void

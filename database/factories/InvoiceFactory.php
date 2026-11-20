@@ -16,7 +16,7 @@ use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
  * Bulk read-model seeding for invoice list/read tests (T4+). The definition
  * mirrors InvoiceProjector's genesis output exactly and each state method
  * stamps exactly the columns its projector arm writes (PAUSE-1 s133 ruling) —
- * the event seam (BillingTestCase fixtures) remains the arrangement path for
+ * the event seam (CreatesInvoices fixtures) remains the arrangement path for
  * behavioral walks; this factory exists for pure-read bulk seeding only and
  * creates no line items.
  *
