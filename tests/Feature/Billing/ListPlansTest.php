@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Billing;
 
+use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -14,15 +16,17 @@ use PHPUnit\Framework\Attributes\DataProvider;
  */
 class ListPlansTest extends BillingTestCase
 {
+    use FreeTierCompany;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->seedRbacCatalog();
-
         // Error-path tests must exercise the production render path (the
         // bootstrap catch-all behaves differently under debug — amendment M).
         config(['app.debug' => false]);
+
+        $this->makeFreeTierCompany();
     }
 
     // Sad — the catalog is billing.view-gated: a member whose seeded role lacks
@@ -33,10 +37,10 @@ class ListPlansTest extends BillingTestCase
     public function when_role_without_billing_view_requests_plans_then_role_insufficient(string $roleCode): void
     {
         // Given a company member whose role lacks billing.view
-        [$company, $member] = $this->aCompanyWithMember($roleCode);
+        $member = $this->memberWithRole($roleCode);
 
         // When they request the plan catalog
-        $response = $this->viewPlansAs($member, $company);
+        $response = $this->viewPlansAs($member, $this->company);
 
         // Then the request is refused naming the missing grant
         $this->assertRoleInsufficient($response, 'billing.view');
@@ -48,10 +52,8 @@ class ListPlansTest extends BillingTestCase
     public function when_request_has_no_token_then_unauthenticated(): void
     {
         // Given an existing company and no authenticated session
-        [$company] = $this->aCompanyWithMember('owner');
-
         // When a guest requests the plan catalog
-        $response = $this->getJson('/api/v1/plans', ['X-Company-Context' => $company->getKey()]);
+        $response = $this->getJson('/api/v1/plans', ['X-Company-Context' => $this->company->getKey()]);
 
         // Then the request is rejected as unauthenticated
         $this->assertUnauthenticated($response);
@@ -64,11 +66,10 @@ class ListPlansTest extends BillingTestCase
     public function when_actor_uses_foreign_company_context_then_company_access_denied(): void
     {
         // Given an owner of Company A and a foreign Company B
-        [, $owner] = $this->aCompanyWithMember('owner');
-        [$foreignCompany] = $this->aCompanyWithMember('owner');
+        $foreignCompany = Company::factory()->create();
 
         // When they request the plan catalog under Company B's context
-        $response = $this->viewPlansAs($owner, $foreignCompany);
+        $response = $this->viewPlansAs($this->owner, $foreignCompany);
 
         // Then company access is denied
         $this->assertCompanyAccessDenied($response);
@@ -80,12 +81,11 @@ class ListPlansTest extends BillingTestCase
     #[Test]
     public function when_member_of_trial_company_requests_plans_then_catalog_returned(): void
     {
-        // Given an owner of a trial company (no billing plan set)
-        $company = Company::factory()->withoutPlan()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
+        // Given the owner of the company, put on trial (no billing plan set)
+        $this->putOnTrial($this->company, CarbonImmutable::now()->addDays(30));
 
         // When they request the plan catalog
-        $response = $this->viewPlansAs($owner, $company);
+        $response = $this->viewPlansAs($this->owner, $this->company);
 
         // Then the SAME full-priced catalog a paid company sees is returned
         // (payload identity, not just shape — pr-test-analyzer 4a)
@@ -99,10 +99,10 @@ class ListPlansTest extends BillingTestCase
     public function when_role_with_billing_view_requests_plans_then_catalog_returned(string $roleCode): void
     {
         // Given a company member whose seeded role holds billing.view
-        [$company, $member] = $this->aCompanyWithMember($roleCode);
+        $member = $this->memberWithRole($roleCode);
 
         // When they request the plan catalog
-        $response = $this->viewPlansAs($member, $company);
+        $response = $this->viewPlansAs($member, $this->company);
 
         // Then the full four-tier catalog is returned
         $this->assertCatalogReturned($response);
@@ -117,10 +117,8 @@ class ListPlansTest extends BillingTestCase
     public function when_owner_requests_plans_then_full_catalog_with_prices_returned(): void
     {
         // Given an owner of a company
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-
         // When they request the plan catalog
-        $response = $this->viewPlansAs($owner, $company);
+        $response = $this->viewPlansAs($this->owner, $this->company);
 
         // Then the exact four-tier contract is returned
         $this->assertFullCatalogWithPrices($response);
