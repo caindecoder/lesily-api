@@ -107,11 +107,14 @@ class ViewEmergencyContactTest extends MembershipsTestCase
     #[Test]
     public function when_another_member_keeps_a_contact_then_the_owner_is_shown_only_their_own(): void
     {
-        // Given a former owner, now an admin, who keeps John, and the owner who keeps Kamala
-        $this->giveContactTo($this->company, $this->admin, self::UPDATED_CONTACT);
+        // Given a company whose former owner, now an admin, keeps John and joined before
+        // the owner, who keeps Kamala — so only the owner's own row can answer
+        $company = Company::factory()->create();
+        $this->aMemberWithContact($company, 'admin', self::UPDATED_CONTACT);
+        $owner = $this->anOwnerWithContact($company);
 
         // When the owner asks for the company's contact
-        $response = $this->viewEmergencyContact($this->owner, $this->company->getKey());
+        $response = $this->viewEmergencyContact($owner, $company->getKey());
 
         // Then the owner's own contact is returned
         $response->assertOk();

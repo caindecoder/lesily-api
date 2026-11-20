@@ -15,6 +15,7 @@ use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
+use App\Foundation\AuditTrail\Entities\AuditEntry;
 
 class BulkInviteUsersTest extends MembershipsTestCase
 {
@@ -332,6 +333,9 @@ class BulkInviteUsersTest extends MembershipsTestCase
         // Then the batch records the one invitation sent, beside its own row
         $response->assertOk();
         $this->assertBatchAudited($response, $this->company, 1);
+        $requestId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($requestId);
+        $this->assertSame(2, AuditEntry::query()->where('request_id', $requestId)->count());
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 2);
     }
 
@@ -393,6 +397,9 @@ class BulkInviteUsersTest extends MembershipsTestCase
 
         // Then each invitation records its own row and the batch records the two sent, by the admin
         $response->assertOk();
+        $requestId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($requestId);
+        $this->assertSame(3, AuditEntry::query()->where('request_id', $requestId)->count());
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 3);
         $invitations = Invitation::query()->get();
         $this->assertCount(2, $invitations);

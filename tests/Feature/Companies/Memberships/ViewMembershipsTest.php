@@ -447,9 +447,9 @@ class ViewMembershipsTest extends MembershipsTestCase
     #[Test]
     public function when_sorted_by_name_explicitly_then_members_listed_alphabetically(): void
     {
-        // Given members whose join order disagrees with name order
-        $this->backdateMembership($this->company, $this->employee, now()->subDays(2));
-        $this->backdateMembership($this->company, $this->owner, now()->subDay());
+        // Given members whose join order, either way, disagrees with name order
+        $this->backdateMembership($this->company, $this->owner, now()->subDays(2));
+        $this->backdateMembership($this->company, $this->employee, now()->subDay());
 
         // When the owner sorts the roster by name explicitly (the whitelisted token,
         // not the default fallback)

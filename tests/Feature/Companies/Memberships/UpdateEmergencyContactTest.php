@@ -198,6 +198,7 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
         $this->assertContactChangeAudited($response, $this->membershipOf($this->company, $this->owner), [
             'phone' => ['from' => self::CONTACT['phone'], 'to' => self::UPDATED_CONTACT['phone']],
         ]);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
@@ -215,6 +216,7 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
         $response->assertExactJson(['data' => self::UPDATED_CONTACT]);
         $this->assertContactRecorded($this->company, self::UPDATED_CONTACT, self::READY_MADE_CONTACT_EVENTS);
         $this->assertContactChangeAudited($response, $this->membershipOf($this->company, $this->owner), $this->changesBetween([], self::UPDATED_CONTACT));
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
@@ -275,6 +277,7 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
         $entry = AuditEntry::query()->where('action', AuditAction::EmergencyContactUpdated)->where('request_id', $requestId)->sole();
         $this->assertEncryptedChanges($entry, $this->changesBetween(self::CONTACT, self::UPDATED_CONTACT));
         $this->assertEventHoldsNoPlainText($this->company, self::UPDATED_CONTACT, self::READY_MADE_CONTACT_EVENTS);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
@@ -291,6 +294,7 @@ class UpdateEmergencyContactTest extends MembershipsTestCase
         $response->assertExactJson(['data' => self::UPDATED_CONTACT]);
         $this->assertContactRecorded($this->company, self::UPDATED_CONTACT, self::READY_MADE_CONTACT_EVENTS);
         $this->assertContactChangeAudited($response, $this->membershipOf($this->company, $this->owner), $this->changesBetween(self::CONTACT, self::UPDATED_CONTACT));
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     /**
