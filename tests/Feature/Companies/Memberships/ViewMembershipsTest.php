@@ -304,7 +304,7 @@ class ViewMembershipsTest extends MembershipsTestCase
     #[Test]
     public function when_filtered_by_role_then_only_matching_members_listed(): void
     {
-        // Given a roster with two HR officers and an employee besides the owner
+        // Given Contoso's three members plus two HR officers and another employee
         $saman = User::factory()->named('Saman Perera')->create();
         $ravi = User::factory()->named('Ravi Silva')->create();
         $employee = User::factory()->create();
@@ -336,7 +336,7 @@ class ViewMembershipsTest extends MembershipsTestCase
     #[DataProvider('provideNonLiveInvitationStates')]
     public function when_filtered_by_invited_status_then_only_live_pending_invitations_listed(string $nonLiveState): void
     {
-        // Given an active member, one non-live invitation, and one live pending one
+        // Given Contoso's active members, one non-live invitation, and one live pending one
         match ($nonLiveState) {
             'accepted' => $this->anAcceptedInvitation($this->company, $this->owner, 'stale@contoso.lk'),
             'revoked' => $this->aRevokedInvitation($this->company, $this->owner, 'stale@contoso.lk'),

@@ -16,6 +16,13 @@ use App\Companies\Memberships\Projectors\MembershipProjector;
  */
 class ReplayEmergencyContactTest extends MembershipsTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seedRbacCatalog();
+    }
+
     #[Test]
     public function when_a_removed_members_contact_is_replayed_then_it_lands_on_their_row(): void
     {

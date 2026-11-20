@@ -48,8 +48,7 @@ use App\Companies\Memberships\IO\Database\Repositories\EloquentCompanyUserReposi
 /**
  * The membership feature tests' own action helpers and grouped asserts (§2.10).
  * A class takes the ready-made company (Tests\Concerns\FreeTierCompany); joining,
- * removing and soft-deleting a member live in CreatesMemberships. The RBAC catalog
- * is seeded here for the classes that start without the ready-made company.
+ * removing and soft-deleting a member live in CreatesMemberships.
  */
 abstract class MembershipsTestCase extends CompaniesTestCase
 {
@@ -77,8 +76,6 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     {
         parent::setUp();
 
-        // The seeded roles carry the real permission grants the gate reads.
-        $this->seedRbacCatalog();
         // Error-path render parity (amendment M): APP_DEBUG=true (the local default)
         // masks the prod render path; the 422/403/429 rejections must render their
         // mapped envelopes the way CI/prod do.
