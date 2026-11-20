@@ -5,6 +5,7 @@ namespace Tests\Feature\Companies\Memberships;
 use stdClass;
 use App\Models\User;
 use RuntimeException;
+use Carbon\CarbonInterface;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
@@ -142,6 +143,24 @@ abstract class MembershipsTestCase extends CompaniesTestCase
 
     /**
      * @param  array<string, string>  $contact
+     */
+    protected function giveContactTo(Company $company, User $member, array $contact): void
+    {
+        $company->users()->updateExistingPivot($member->getKey(), $this->contactColumns($contact));
+    }
+
+    protected function clearContactOf(Company $company, User $member): void
+    {
+        $company->users()->updateExistingPivot($member->getKey(), [
+            'emergency_contact_name' => null,
+            'emergency_contact_email' => null,
+            'emergency_contact_phone' => null,
+            'emergency_contact_relationship' => null,
+        ]);
+    }
+
+    /**
+     * @param  array<string, string>  $contact
      * @return array<string, string>
      */
     protected function contactColumns(array $contact): array
@@ -241,15 +260,17 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /**
-     * A refused update left the contact as it was and recorded no contact event
-     * for the company.
+     * A refused update left the owner's contact as it was and recorded no contact
+     * event for the company beyond the $eventsBefore it already held.
      *
      * @param  array<string, string>  $expected
      */
-    protected function assertContactUnchanged(Company $company, User $owner, array $expected): void
+    protected function assertContactUnchanged(Company $company, array $expected, int $eventsBefore): void
     {
+        $owner = $company->owner();
+        $this->assertInstanceOf(User::class, $owner);
         $this->assertSame($expected, $this->storedContact($company, $owner));
-        $this->assertSame(0, LesilyStoredEvent::query()
+        $this->assertSame($eventsBefore, LesilyStoredEvent::query()
             ->whereForCompany($company->getKey())
             ->where('event_class', UserMembershipEmergencyContactSet::class)
             ->count());
@@ -777,6 +798,11 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     {
         $response->assertOk();
         $this->assertSame($expected, $response->json('meta.pagination'));
+    }
+
+    protected function backdateMembership(Company $company, User $member, CarbonInterface $joinedAt): void
+    {
+        CompanyUser::query()->whereKey($this->membershipIdOf($company, $member))->update(['created_at' => $joinedAt]);
     }
 
     /**

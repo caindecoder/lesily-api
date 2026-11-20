@@ -165,7 +165,13 @@ trait AssertsCompanyAuditRows
             ->whereForCompany($membership->company_id)
             ->latest('id')
             ->firstOrFail();
-        $entry = AuditEntry::query()->where('action', AuditAction::EmergencyContactUpdated)->where('company_id', $membership->company_id)->sole();
+        $entries = AuditEntry::query()
+            ->where('action', AuditAction::EmergencyContactUpdated)
+            ->where('company_id', $membership->company_id)
+            ->where('request_id', $requestId)
+            ->get();
+        $this->assertCount(1, $entries);
+        $entry = $entries->sole();
 
         $this->assertSame([
             'stored_event_id' => $storedEvent->getKey(),

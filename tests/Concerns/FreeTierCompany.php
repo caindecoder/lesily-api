@@ -21,6 +21,8 @@ trait FreeTierCompany
 
     protected const int READY_MADE_NON_CONSENT_EVENTS = 5;
 
+    protected const int READY_MADE_CONTACT_EVENTS = 1;
+
     protected Company $company;
 
     protected User $owner;
