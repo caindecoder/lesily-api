@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
@@ -21,14 +22,23 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class ResendInvitationTest extends MembershipsTestCase
 {
+    use FreeTierCompany;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
+
     #[Test]
     public function when_invitation_unknown_then_resend_refused(): void
     {
-        // Given
-        [$company, $admin] = $this->aCompanyWithMember();
+        // Given an id no invitation carries
+        $unknownInvitationId = (string) Str::uuid7();
 
         // When
-        $response = $this->resendInvitation($admin, $company, (string) Str::uuid7());
+        $response = $this->resendInvitation($this->admin, $this->company, $unknownInvitationId);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
@@ -39,14 +49,12 @@ class ResendInvitationTest extends MembershipsTestCase
     public function when_actor_lacks_permission_then_resend_refused(string $roleCode): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
-        $actor = User::factory()->create();
-        $this->attachMember($company, $actor, $this->seededRole($roleCode));
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
+        $actor = $this->memberWithRole($roleCode);
 
         // When
-        $response = $this->resendInvitation($actor, $company, $invitation->getKey());
+        $response = $this->resendInvitation($actor, $this->company, $invitation->getKey());
 
         // Then
         $response->assertForbidden();
@@ -73,13 +81,13 @@ class ResendInvitationTest extends MembershipsTestCase
     public function when_invitation_belongs_to_another_company_then_resend_hidden(): void
     {
         // Given
-        [$companyA, $adminA] = $this->aCompanyWithMember();
-        [$companyB, $adminB] = $this->aCompanyWithMember();
+        $companyB = Company::factory()->create();
+        $adminB = $this->aCompanyMember($companyB, 'admin');
         $this->aPendingInvitation($companyB, $adminB, 'invitee@contoso.lk');
         $invitationB = $this->theInvitation($companyB, 'invitee@contoso.lk');
 
         // When
-        $response = $this->resendInvitation($adminA, $companyA, $invitationB->getKey());
+        $response = $this->resendInvitation($this->admin, $this->company, $invitationB->getKey());
 
         // Then
         $response->assertNotFound();
@@ -90,13 +98,12 @@ class ResendInvitationTest extends MembershipsTestCase
     public function when_invitation_already_accepted_then_resend_refused(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        $token = $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
         $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
 
         // When
-        $response = $this->resendInvitation($admin, $company, $invitation->getKey());
+        $response = $this->resendInvitation($this->admin, $this->company, $invitation->getKey());
 
         // Then
         $this->assertResendRefusedAsNotPending($response, $invitation->token_hash);
@@ -107,13 +114,12 @@ class ResendInvitationTest extends MembershipsTestCase
     public function when_invitation_expired_then_resend_refused(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
         $this->travel(8)->days();
 
         // When
-        $response = $this->resendInvitation($admin, $company, $invitation->getKey());
+        $response = $this->resendInvitation($this->admin, $this->company, $invitation->getKey());
 
         // Then
         $this->assertResendRefusedAsNotPending($response, $invitation->token_hash);
@@ -123,12 +129,11 @@ class ResendInvitationTest extends MembershipsTestCase
     public function when_invitation_revoked_then_resend_refused(): void
     {
         // Given — a pending invitation the admin then revoked (UC-1-022)
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aRevokedInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->aRevokedInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
 
         // When — the admin tries to resend the dead invitation
-        $response = $this->resendInvitation($admin, $company, $invitation->getKey());
+        $response = $this->resendInvitation($this->admin, $this->company, $invitation->getKey());
 
         // Then — refused as not-pending (a revoked invite is no longer pending, R6)
         $this->assertResendRefusedAsNotPending($response, $invitation->token_hash);
@@ -138,12 +143,11 @@ class ResendInvitationTest extends MembershipsTestCase
     public function when_invitation_resent_twice_then_superseded_token_no_longer_accepts(): void
     {
         // Given a pending invitation resent twice
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
-        $this->resendInvitation($admin, $company, $invitation->getKey())->assertOk();
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
+        $this->resendInvitation($this->admin, $this->company, $invitation->getKey())->assertOk();
         $firstRotated = $this->theRotatedPlaintext('invitee@contoso.lk');
-        $this->resendInvitation($admin, $company, $invitation->getKey())->assertOk();
+        $this->resendInvitation($this->admin, $this->company, $invitation->getKey())->assertOk();
 
         // When the invitee tries the superseded first-rotation link
         $response = $this->acceptInvitation($firstRotated, $this->validNewUserBody());
@@ -151,20 +155,19 @@ class ResendInvitationTest extends MembershipsTestCase
         // Then it is dead — no two tokens are ever live at once (the UC's
         // Minimal Guarantee; each rotation kills every earlier link)
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
-        $this->assertInvitationNotConsumed($company, 'invitee@contoso.lk');
+        $this->assertInvitationNotConsumed($this->company, 'invitee@contoso.lk');
     }
 
     #[Test]
     public function when_invite_limit_exhausted_then_resend_throttled(): void
     {
         // Given — the arrange invite consumes 1 of the shared 20/hr budget (R5)
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
-        $this->exhaustInviteLimit($admin, $company, 19);
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
+        $this->exhaustInviteLimit($this->admin, $this->company, 19);
 
         // When
-        $response = $this->resendInvitation($admin, $company, $invitation->getKey());
+        $response = $this->resendInvitation($this->admin, $this->company, $invitation->getKey());
 
         // Then
         $this->assertThrottled($response);
@@ -174,15 +177,14 @@ class ResendInvitationTest extends MembershipsTestCase
     public function when_a_resend_is_refused_as_not_pending_then_it_still_spends_the_allowance(): void
     {
         // Given an admin who has sent nineteen invites this hour, one of them since revoked
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aRevokedInvitation($company, $admin, 'revoked@contoso.lk');
-        $revoked = $this->theInvitation($company, 'revoked@contoso.lk');
-        $this->exhaustInviteLimit($admin, $company, 18);
+        $this->aRevokedInvitation($this->company, $this->admin, 'revoked@contoso.lk');
+        $revoked = $this->theInvitation($this->company, 'revoked@contoso.lk');
+        $this->exhaustInviteLimit($this->admin, $this->company, 18);
         // And who resent the revoked invitation
-        $refused = $this->resendInvitation($admin, $company, $revoked->getKey());
+        $refused = $this->resendInvitation($this->admin, $this->company, $revoked->getKey());
 
         // When they send one more invite within the hour
-        $response = $this->invite($admin, $company, [
+        $response = $this->invite($this->admin, $this->company, [
             'email' => 'one-too-many@contoso.lk',
             'roleCode' => 'employee',
         ]);
@@ -197,13 +199,12 @@ class ResendInvitationTest extends MembershipsTestCase
     public function when_the_resend_projection_fails_then_the_token_is_not_rotated_or_mailed(): void
     {
         // Given a pending invitation and an invitations projection that fails mid-resend
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
         $this->induceProjectorFailureFor(UserInvitationResent::class);
 
         // When the admin resends it
-        $response = $this->resendInvitation($admin, $company, $invitation->getKey());
+        $response = $this->resendInvitation($this->admin, $this->company, $invitation->getKey());
 
         // Then the resend fails whole: the old token stands, no event, no second email
         $this->assertResendRolledBack($response, $invitation->token_hash);
@@ -213,13 +214,12 @@ class ResendInvitationTest extends MembershipsTestCase
     public function when_the_audit_row_cannot_be_written_then_the_token_is_not_rotated_or_mailed(): void
     {
         // Given a pending invitation and an audit trail that refuses the resend's row
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
         $this->failTheAuditTrail();
 
         // When the admin resends it
-        $response = $this->resendInvitation($admin, $company, $invitation->getKey());
+        $response = $this->resendInvitation($this->admin, $this->company, $invitation->getKey());
 
         // Then the resend fails whole: the old token stands, no event, no second email, no row
         $this->assertResendRolledBack($response, $invitation->token_hash);
@@ -230,17 +230,16 @@ class ResendInvitationTest extends MembershipsTestCase
     public function when_invitation_resent_then_previous_link_no_longer_accepts(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        $oldToken = $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
-        $this->resendInvitation($admin, $company, $invitation->getKey())->assertOk();
+        $oldToken = $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
+        $this->resendInvitation($this->admin, $this->company, $invitation->getKey())->assertOk();
 
         // When
         $response = $this->acceptInvitation($oldToken, $this->validNewUserBody());
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::InviteInvalid);
-        $this->assertInvitationNotConsumed($company, 'invitee@contoso.lk');
+        $this->assertInvitationNotConsumed($this->company, 'invitee@contoso.lk');
     }
 
     #[Test]
@@ -250,13 +249,13 @@ class ResendInvitationTest extends MembershipsTestCase
         // Given a pending invitation whose 7-day window started two days ago —
         // the clock must move, or the rotation reissues the same expiry to the
         // second and nothing can observe that it happened
-        [$company, $actor] = $this->aCompanyWithMember($roleCode);
-        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
-        $before = $this->theInvitation($company, 'invitee@contoso.lk');
+        $actor = $this->memberWithRole($roleCode);
+        $this->aPendingInvitation($this->company, $actor, 'invitee@contoso.lk');
+        $before = $this->theInvitation($this->company, 'invitee@contoso.lk');
         $this->travel(2)->days();
 
         // When
-        $response = $this->resendInvitation($actor, $company, $before->getKey());
+        $response = $this->resendInvitation($actor, $this->company, $before->getKey());
 
         // Then
         $this->assertInvitationResourceReturned($response, $before->getKey());
@@ -269,10 +268,9 @@ class ResendInvitationTest extends MembershipsTestCase
     public function when_resent_invitation_accepted_then_invitee_joins(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
-        $this->resendInvitation($admin, $company, $invitation->getKey())->assertOk();
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
+        $this->resendInvitation($this->admin, $this->company, $invitation->getKey())->assertOk();
         $newToken = $this->theRotatedPlaintext('invitee@contoso.lk');
 
         // When
@@ -280,26 +278,25 @@ class ResendInvitationTest extends MembershipsTestCase
 
         // Then
         $response->assertCreated();
-        $this->assertMembershipActivated($company, 'invitee@contoso.lk');
-        $this->assertNewUserProvisioned($company, 'invitee@contoso.lk', 'Nimal Perera');
+        $this->assertMembershipActivated($this->company, 'invitee@contoso.lk');
+        $this->assertNewUserProvisioned($this->company, 'invitee@contoso.lk', 'Nimal Perera');
     }
 
     #[Test]
     public function when_pending_invitation_resent_then_the_audit_trail_records_the_resend(): void
     {
         // Given an invitation pending as an HR officer and an admin acting from a known device
-        [$company, $admin] = $this->aCompanyWithMember('admin');
-        $this->invite($admin, $company, ['email' => 'invitee@contoso.lk', 'roleCode' => 'hr_officer'])->assertCreated();
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->invite($this->admin, $this->company, ['email' => 'invitee@contoso.lk', 'roleCode' => 'hr_officer'])->assertCreated();
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
         $this->fromADevice();
 
         // When the admin resends it
-        $response = $this->resendInvitation($admin, $company, $invitation->getKey());
+        $response = $this->resendInvitation($this->admin, $this->company, $invitation->getKey());
 
         // Then the audit trail records the resend, linked to its own event, by the admin
         $response->assertOk();
         $this->assertInvitationAudited($response, $invitation, AuditAction::InvitationResent);
-        $this->assertActedBy(AuditAction::InvitationResent, $admin, 'admin');
+        $this->assertActedBy(AuditAction::InvitationResent, $this->admin, 'admin');
     }
 
     /**

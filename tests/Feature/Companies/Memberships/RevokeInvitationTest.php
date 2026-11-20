@@ -2,10 +2,10 @@
 
 namespace Tests\Feature\Companies\Memberships;
 
-use App\Models\User;
 use Illuminate\Support\Str;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -17,14 +17,23 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RevokeInvitationTest extends MembershipsTestCase
 {
+    use FreeTierCompany;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
+
     #[Test]
     public function when_invitation_unknown_then_revoke_refused(): void
     {
-        // Given
-        [$company, $admin] = $this->aCompanyWithMember();
+        // Given an id no invitation carries
+        $unknownInvitationId = (string) Str::uuid7();
 
         // When
-        $response = $this->revokeInvitation($admin, $company, (string) Str::uuid7());
+        $response = $this->revokeInvitation($this->admin, $this->company, $unknownInvitationId);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
@@ -35,18 +44,16 @@ class RevokeInvitationTest extends MembershipsTestCase
     public function when_actor_lacks_permission_then_revoke_refused(string $roleCode): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
-        $actor = User::factory()->create();
-        $this->attachMember($company, $actor, $this->seededRole($roleCode));
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
+        $actor = $this->memberWithRole($roleCode);
 
         // When
-        $response = $this->revokeInvitation($actor, $company, $invitation->getKey());
+        $response = $this->revokeInvitation($actor, $this->company, $invitation->getKey());
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
-        $this->assertInvitationNotRevoked($company, 'invitee@contoso.lk');
+        $this->assertInvitationNotRevoked($this->company, 'invitee@contoso.lk');
     }
 
     /**
@@ -69,13 +76,13 @@ class RevokeInvitationTest extends MembershipsTestCase
     public function when_invitation_belongs_to_another_company_then_revoke_hidden(): void
     {
         // Given
-        [$companyA, $adminA] = $this->aCompanyWithMember();
-        [$companyB, $adminB] = $this->aCompanyWithMember();
+        $companyB = Company::factory()->create();
+        $adminB = $this->aCompanyMember($companyB, 'admin');
         $this->aPendingInvitation($companyB, $adminB, 'invitee@contoso.lk');
         $invitationB = $this->theInvitation($companyB, 'invitee@contoso.lk');
 
         // When
-        $response = $this->revokeInvitation($adminA, $companyA, $invitationB->getKey());
+        $response = $this->revokeInvitation($this->admin, $this->company, $invitationB->getKey());
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
@@ -86,51 +93,48 @@ class RevokeInvitationTest extends MembershipsTestCase
     public function when_revocation_reason_too_long_then_revoke_rejected(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
         $this->reason = str_repeat('a', 256);
 
         // When
-        $response = $this->revokeInvitationWithReason($admin, $company, $invitation->getKey());
+        $response = $this->revokeInvitationWithReason($this->admin, $this->company, $invitation->getKey());
 
         // Then
         $this->assertValidationRejected($response, 'reason', 'The reason field must not be greater than 255 characters.');
-        $this->assertInvitationNotRevoked($company, 'invitee@contoso.lk');
+        $this->assertInvitationNotRevoked($this->company, 'invitee@contoso.lk');
     }
 
     #[Test]
     public function when_invitation_already_revoked_then_revoke_refused(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aRevokedInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->aRevokedInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
         $stamps = [$invitation->revoked_at, $invitation->revoked_by_user_id, $invitation->revocation_reason];
 
         // When
-        $response = $this->revokeInvitation($admin, $company, $invitation->getKey());
+        $response = $this->revokeInvitation($this->admin, $this->company, $invitation->getKey());
 
         // Then
         $this->assertRevokeRefusedAsNotPending($response);
-        $this->assertRevocationStampsUnchanged($company, 'invitee@contoso.lk', $stamps);
+        $this->assertRevocationStampsUnchanged($this->company, 'invitee@contoso.lk', $stamps);
     }
 
     #[Test]
     public function when_invitation_already_accepted_then_revoke_refused(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        $token = $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
         $this->acceptInvitation($token, $this->validNewUserBody())->assertCreated();
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
 
         // When
-        $response = $this->revokeInvitation($admin, $company, $invitation->getKey());
+        $response = $this->revokeInvitation($this->admin, $this->company, $invitation->getKey());
 
         // Then
         $this->assertRevokeRefusedAsNotPending($response);
-        $this->assertMembershipActivated($company, 'invitee@contoso.lk');
+        $this->assertMembershipActivated($this->company, 'invitee@contoso.lk');
         $this->assertNotAudited(AuditAction::InvitationRevoked);
     }
 
@@ -138,51 +142,48 @@ class RevokeInvitationTest extends MembershipsTestCase
     public function when_invitation_expired_then_revoke_refused(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
         $this->travel(8)->days();
 
         // When
-        $response = $this->revokeInvitation($admin, $company, $invitation->getKey());
+        $response = $this->revokeInvitation($this->admin, $this->company, $invitation->getKey());
 
         // Then
         $this->assertRevokeRefusedAsNotPending($response);
-        $this->assertInvitationNotRevoked($company, 'invitee@contoso.lk');
+        $this->assertInvitationNotRevoked($this->company, 'invitee@contoso.lk');
     }
 
     #[Test]
     public function when_the_revocation_projection_fails_then_the_invitation_stays_pending(): void
     {
         // Given a pending invitation and an invitations projection that fails mid-revoke
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
         $this->induceProjectorFailureFor(UserInvitationRevoked::class);
 
         // When the admin revokes it
-        $response = $this->revokeInvitation($admin, $company, $invitation->getKey());
+        $response = $this->revokeInvitation($this->admin, $this->company, $invitation->getKey());
 
         // Then the revoke fails whole: no revocation stamps, no recorded event
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
-        $this->assertInvitationNotRevoked($company, 'invitee@contoso.lk');
+        $this->assertInvitationNotRevoked($this->company, 'invitee@contoso.lk');
     }
 
     #[Test]
     public function when_the_audit_row_cannot_be_written_then_the_invitation_stays_pending(): void
     {
         // Given a pending invitation and an audit trail that refuses the revocation's row
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
         $this->failTheAuditTrail();
 
         // When the admin revokes it
-        $response = $this->revokeInvitation($admin, $company, $invitation->getKey());
+        $response = $this->revokeInvitation($this->admin, $this->company, $invitation->getKey());
 
         // Then the revoke fails whole: no revocation stamps, no recorded event, no row
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
-        $this->assertInvitationNotRevoked($company, 'invitee@contoso.lk');
+        $this->assertInvitationNotRevoked($this->company, 'invitee@contoso.lk');
         $this->assertNotAudited(AuditAction::InvitationRevoked);
     }
 
@@ -191,33 +192,32 @@ class RevokeInvitationTest extends MembershipsTestCase
     public function when_authorized_role_revokes_pending_invitation_then_invitation_revoked(string $roleCode): void
     {
         // Given
-        [$company, $actor] = $this->aCompanyWithMember($roleCode);
-        $this->aPendingInvitation($company, $actor, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $actor = $this->memberWithRole($roleCode);
+        $this->aPendingInvitation($this->company, $actor, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
 
         // When
-        $response = $this->revokeInvitation($actor, $company, $invitation->getKey());
+        $response = $this->revokeInvitation($actor, $this->company, $invitation->getKey());
 
         // Then
         $response->assertNoContent();
-        $this->assertInvitationRevoked($company, 'invitee@contoso.lk', $actor);
+        $this->assertInvitationRevoked($this->company, 'invitee@contoso.lk', $actor);
     }
 
     #[Test]
     public function when_reason_given_then_revocation_reason_recorded(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
         $this->reason = 'Sent to the wrong address';
 
         // When
-        $response = $this->revokeInvitationWithReason($admin, $company, $invitation->getKey());
+        $response = $this->revokeInvitationWithReason($this->admin, $this->company, $invitation->getKey());
 
         // Then
         $response->assertNoContent();
-        $this->assertRevocationReasonRecorded($company, 'invitee@contoso.lk', $this->reason);
+        $this->assertRevocationReasonRecorded($this->company, 'invitee@contoso.lk', $this->reason);
     }
 
     #[Test]
@@ -225,35 +225,33 @@ class RevokeInvitationTest extends MembershipsTestCase
     {
         // Given a reason of exactly the 255-char maximum (the accepted boundary —
         // guards a max:254 off-by-one that would wrongly reject it)
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
         $this->reason = str_repeat('a', 255);
 
         // When
-        $response = $this->revokeInvitationWithReason($admin, $company, $invitation->getKey());
+        $response = $this->revokeInvitationWithReason($this->admin, $this->company, $invitation->getKey());
 
         // Then
         $response->assertNoContent();
-        $this->assertRevocationReasonRecorded($company, 'invitee@contoso.lk', $this->reason);
+        $this->assertRevocationReasonRecorded($this->company, 'invitee@contoso.lk', $this->reason);
     }
 
     #[Test]
     public function when_authorized_role_revokes_pending_invitation_then_the_audit_trail_records_the_revocation(): void
     {
         // Given an invitation pending as an HR officer and an admin acting from a known device
-        [$company, $admin] = $this->aCompanyWithMember('admin');
-        $this->invite($admin, $company, ['email' => 'invitee@contoso.lk', 'roleCode' => 'hr_officer'])->assertCreated();
-        $invitation = $this->theInvitation($company, 'invitee@contoso.lk');
+        $this->invite($this->admin, $this->company, ['email' => 'invitee@contoso.lk', 'roleCode' => 'hr_officer'])->assertCreated();
+        $invitation = $this->theInvitation($this->company, 'invitee@contoso.lk');
         $this->fromADevice();
 
         // When the admin revokes it
-        $response = $this->revokeInvitation($admin, $company, $invitation->getKey());
+        $response = $this->revokeInvitation($this->admin, $this->company, $invitation->getKey());
 
         // Then the audit trail records the revocation, by the admin
         $response->assertNoContent();
         $this->assertInvitationAudited($response, $invitation, AuditAction::InvitationRevoked);
-        $this->assertActedBy(AuditAction::InvitationRevoked, $admin, 'admin');
+        $this->assertActedBy(AuditAction::InvitationRevoked, $this->admin, 'admin');
     }
 
     /**
