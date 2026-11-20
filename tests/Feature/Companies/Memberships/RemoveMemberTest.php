@@ -5,7 +5,9 @@ namespace Tests\Feature\Companies\Memberships;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Illuminate\Http\Response;
+use App\Companies\Entities\Company;
 use Laravel\Sanctum\NewAccessToken;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -19,18 +21,25 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RemoveMemberTest extends MembershipsTestCase
 {
+    use FreeTierCompany;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
+
     #[Test]
     #[DataProvider('provideDeniedRemoveRoles')]
     public function when_actor_lacks_remove_permission_then_removal_is_denied(string $roleCode): void
     {
         // Given a member to remove and an actor whose role lacks users.remove
-        [$company] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->aMembership($company, 'employee');
-        $actor = User::factory()->create();
-        $this->attachMember($company, $actor, $this->seededRole($roleCode));
+        [, $membershipId] = $this->aMembership($this->company, 'employee');
+        $actor = $this->memberWithRole($roleCode);
 
         // When the actor attempts to remove the member
-        $response = $this->removeMember($actor, $company, $membershipId);
+        $response = $this->removeMember($actor, $this->company, $membershipId);
 
         // Then the request is refused and the member is untouched
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
@@ -40,11 +49,10 @@ class RemoveMemberTest extends MembershipsTestCase
     #[Test]
     public function when_membership_id_is_unknown_then_removal_is_not_found(): void
     {
-        // Given
-        [$company, $admin] = $this->aCompanyWithMember();
+        // Given the company's admin
 
         // When
-        $response = $this->removeMember($admin, $company, (string) Str::uuid7());
+        $response = $this->removeMember($this->admin, $this->company, (string) Str::uuid7());
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
@@ -54,12 +62,12 @@ class RemoveMemberTest extends MembershipsTestCase
     public function when_membership_belongs_to_another_company_then_removal_is_not_found(): void
     {
         // Given a member of company B and an admin acting in company A
-        [$companyA, $adminA] = $this->aCompanyWithMember();
-        [$companyB] = $this->aCompanyWithMember();
+        $companyB = Company::factory()->create();
+        $this->aCompanyMember($companyB, 'admin');
         [, $membershipIdB] = $this->aMembership($companyB, 'employee');
 
         // When the company-A admin targets company B's membership id
-        $response = $this->removeMember($adminA, $companyA, $membershipIdB);
+        $response = $this->removeMember($this->admin, $this->company, $membershipIdB);
 
         // Then the company-scoped lookup hides it as not found
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
@@ -70,11 +78,10 @@ class RemoveMemberTest extends MembershipsTestCase
     public function when_membership_is_already_removed_then_removal_is_not_found(): void
     {
         // Given a membership that was already removed (soft-deleted pivot)
-        [$company, $admin] = $this->aCompanyWithMember();
-        $removedMembershipId = $this->aRemovedMembership($company, User::factory()->create());
+        $removedMembershipId = $this->aRemovedMembership($this->company, User::factory()->create());
 
         // When it is removed again
-        $response = $this->removeMember($admin, $company, $removedMembershipId);
+        $response = $this->removeMember($this->admin, $this->company, $removedMembershipId);
 
         // Then the SoftDeletes scope hides it — a member can't be removed twice
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
@@ -85,16 +92,15 @@ class RemoveMemberTest extends MembershipsTestCase
     {
         // Given an invitation whose UUID becomes the membership id on accept (D5b),
         // but no company_user pivot exists yet
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
         $invitationId = Invitation::query()
-            ->where('company_id', $company->getKey())
+            ->where('company_id', $this->company->getKey())
             ->where('email', 'invitee@contoso.lk')
             ->sole()
             ->getKey();
 
         // When the pending invitation id is targeted
-        $response = $this->removeMember($admin, $company, $invitationId);
+        $response = $this->removeMember($this->admin, $this->company, $invitationId);
 
         // Then there is no pivot to remove — not found
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
@@ -104,11 +110,10 @@ class RemoveMemberTest extends MembershipsTestCase
     public function when_actor_removes_their_own_membership_then_removal_is_blocked(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        $ownMembershipId = $this->membershipIdOf($company, $admin);
+        $ownMembershipId = $this->membershipIdOf($this->company, $this->admin);
 
         // When the actor targets their own membership
-        $response = $this->removeMember($admin, $company, $ownMembershipId);
+        $response = $this->removeMember($this->admin, $this->company, $ownMembershipId);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::SelfRemovalBlocked);
@@ -120,11 +125,10 @@ class RemoveMemberTest extends MembershipsTestCase
     public function when_target_is_the_company_owner_then_removal_requires_ownership_transfer(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $ownerMembershipId] = $this->aMembership($company, 'owner');
+        $ownerMembershipId = $this->membershipIdOf($this->company, $this->owner);
 
         // When the admin targets the owner's membership
-        $response = $this->removeMember($admin, $company, $ownerMembershipId);
+        $response = $this->removeMember($this->admin, $this->company, $ownerMembershipId);
 
         // Then the Owner is un-removable — ownership transfer required (R-A parity)
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::OwnerTransferRequired);
@@ -137,11 +141,10 @@ class RemoveMemberTest extends MembershipsTestCase
     public function when_owner_removes_their_own_membership_then_self_block_takes_precedence(): void
     {
         // Given the company Owner — who satisfies BOTH 422 guards at once
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $ownMembershipId = $this->membershipIdOf($company, $owner);
+        $ownMembershipId = $this->membershipIdOf($this->company, $this->owner);
 
         // When
-        $response = $this->removeMember($owner, $company, $ownMembershipId);
+        $response = $this->removeMember($this->owner, $this->company, $ownMembershipId);
 
         // Then the self-guard wins over the owner-target guard — locks the
         // interactor's guard ORDER as contract (self before owner; s112 parity)
@@ -153,13 +156,12 @@ class RemoveMemberTest extends MembershipsTestCase
     public function when_the_removal_cannot_be_audited_then_the_member_and_their_sessions_remain(): void
     {
         // Given Bob with a live session and an audit trail that refuses the removal's row
-        [$company, $admin] = $this->aCompanyWithMember();
-        [$target, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        [$target, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
         $session = $this->aSessionFor($target);
         $this->failTheAuditTrail();
 
         // When the admin removes Bob
-        $response = $this->removeMember($admin, $company, $membershipId);
+        $response = $this->removeMember($this->admin, $this->company, $membershipId);
 
         // Then the removal fails whole: Bob stays a member, his session still works, no event, no row
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
@@ -173,13 +175,12 @@ class RemoveMemberTest extends MembershipsTestCase
     public function when_a_member_with_active_sessions_is_removed_then_their_sessions_are_revoked(): void
     {
         // Given a member with two active sessions
-        [$company, $admin] = $this->aCompanyWithMember();
-        [$target, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        [$target, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
         $session = $this->aSessionFor($target, 'web');
         $this->aSessionFor($target, 'mobile');
 
         // When the member is removed
-        $this->removeMember($admin, $company, $membershipId)->assertNoContent();
+        $this->removeMember($this->admin, $this->company, $membershipId)->assertNoContent();
 
         // Then every one of their sessions is revoked — none authenticates
         $this->assertMemberSessionsRevoked($target, $session);
@@ -189,12 +190,11 @@ class RemoveMemberTest extends MembershipsTestCase
     public function when_a_removed_member_is_re_invited_then_the_same_membership_row_is_restored(): void
     {
         // Given a member removed through the endpoint (event-sourced soft-delete)
-        [$company, $admin] = $this->aCompanyWithMember();
-        [$target, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
-        $this->removeMember($admin, $company, $membershipId)->assertNoContent();
+        [$target, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
+        $this->removeMember($this->admin, $this->company, $membershipId)->assertNoContent();
 
         // When they are re-invited and accept while authenticated
-        $token = $this->aPendingInvitation($company, $admin, 'bob@contoso.lk');
+        $token = $this->aPendingInvitation($this->company, $this->admin, 'bob@contoso.lk');
         $response = $this->acceptInvitation($token, [], $target);
 
         // Then the SAME pivot UUID comes back live (undelete-in-place, D5b) — the
@@ -204,7 +204,7 @@ class RemoveMemberTest extends MembershipsTestCase
         $response->assertJsonPath('data.id', $membershipId);
         $this->assertMemberStillActive($membershipId);
         $this->assertSame(1, CompanyUser::withTrashed()
-            ->where('company_id', $company->getKey())
+            ->where('company_id', $this->company->getKey())
             ->where('user_id', $target->getKey())
             ->count());
     }
@@ -213,14 +213,14 @@ class RemoveMemberTest extends MembershipsTestCase
     public function when_a_member_is_removed_then_their_other_company_membership_remains(): void
     {
         // Given Bob is a member of company A AND company B
-        [$companyA, $adminA] = $this->aCompanyWithMember();
-        [$bob, $membershipIdA] = $this->anAcceptedMembership($companyA, $adminA, 'bob@contoso.lk');
-        [$companyB] = $this->aCompanyWithMember();
+        [$bob, $membershipIdA] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
+        $companyB = Company::factory()->create();
+        $this->aCompanyMember($companyB, 'admin');
         $this->attachMember($companyB, $bob, $this->seededRole('employee'));
         $membershipIdB = $this->membershipIdOf($companyB, $bob);
 
         // When Bob is removed from company A
-        $this->removeMember($adminA, $companyA, $membershipIdA)->assertNoContent();
+        $this->removeMember($this->admin, $this->company, $membershipIdA)->assertNoContent();
 
         // Then only company A's pivot is soft-deleted — company B is untouched
         $this->assertMemberStillActive($membershipIdB);
@@ -231,33 +231,32 @@ class RemoveMemberTest extends MembershipsTestCase
     public function when_an_authorized_actor_removes_a_member_then_the_member_is_removed(string $actorRole): void
     {
         // Given a real accepted member (a genuine event stream — amendment R)
-        [$company, $actor] = $this->aCompanyWithMember($actorRole);
-        [$target, $membershipId] = $this->anAcceptedMembership($company, $actor, 'bob@contoso.lk');
+        $actor = $this->memberWithRole($actorRole);
+        [$target, $membershipId] = $this->anAcceptedMembership($this->company, $actor, 'bob@contoso.lk');
 
         // When an authorized actor removes them
-        $response = $this->removeMember($actor, $company, $membershipId);
+        $response = $this->removeMember($actor, $this->company, $membershipId);
 
         // Then the pivot is soft-deleted, the event is recorded, and they drop
         // off the roster
         $this->assertMemberRemoved($response, $actor, $membershipId);
-        $this->assertRosterExcludes($this->viewMemberships($actor, $company), $target);
+        $this->assertRosterExcludes($this->viewMemberships($actor, $this->company), $target);
     }
 
     #[Test]
     public function when_an_authorized_actor_removes_a_member_then_the_removal_is_audited_with_their_role(): void
     {
         // Given a payroll officer of Contoso and an admin on a known device
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->aMembership($company, 'payroll_officer');
+        [, $membershipId] = $this->aMembership($this->company, 'payroll_officer');
         $this->fromADevice();
 
         // When the admin removes the payroll officer
-        $response = $this->removeMember($admin, $company, $membershipId);
+        $response = $this->removeMember($this->admin, $this->company, $membershipId);
 
         // Then the removal is audited with the role they held, by the admin
         $response->assertNoContent();
         $this->assertRemovalAudited($response, CompanyUser::withTrashed()->findOrFail($membershipId), 'payroll_officer');
-        $this->assertActedBy(AuditAction::MemberRemoved, $admin, 'admin');
+        $this->assertActedBy(AuditAction::MemberRemoved, $this->admin, 'admin');
     }
 
     /**
@@ -272,12 +271,11 @@ class RemoveMemberTest extends MembershipsTestCase
     ): void {
         // Given — a member to remove and a write inside the locked
         // transaction that dies the way the driver reports it
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        [, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
         $this->induceProjectorFailureFor(UserRemovedFromCompany::class, $this->syntheticQueryException($failure));
 
         // When — the admin removes the member
-        $response = $this->removeMember($admin, $company, $membershipId);
+        $response = $this->removeMember($this->admin, $this->company, $membershipId);
 
         // Then — contention answers as a conflict; anything else passes through
         $this->assertRefusedWith($response, $expectedStatus, $expected);
@@ -287,12 +285,11 @@ class RemoveMemberTest extends MembershipsTestCase
     public function when_the_removal_reads_the_membership_it_will_write_then_it_locks_it(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        [, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
 
         // When
         $capture = $this->recordedQueriesDuring(
-            fn () => $this->removeMember($admin, $company, $membershipId)->assertNoContent()
+            fn () => $this->removeMember($this->admin, $this->company, $membershipId)->assertNoContent()
         );
 
         // Then

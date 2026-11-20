@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -24,18 +25,26 @@ use App\Companies\Memberships\Exceptions\MembershipContentionException;
 
 class ChangeMemberRoleTest extends MembershipsTestCase
 {
+    use FreeTierCompany;
+
     protected ?string $roleCode = 'hr_officer';
 
     protected string $fromRoleCode = 'employee';
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
+
     #[Test]
     public function when_membership_is_unknown_then_change_is_refused_as_not_found(): void
     {
-        // Given
-        [$company, $admin] = $this->aCompanyWithMember();
+        // Given the company's admin
 
         // When
-        $response = $this->changeRole($admin, $company, (string) Str::uuid7());
+        $response = $this->changeRole($this->admin, $this->company, (string) Str::uuid7());
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
@@ -47,13 +56,11 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     public function when_actor_role_lacks_change_permission_then_change_is_refused(string $roleCode): void
     {
         // Given
-        [$company] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->aMembership($company, 'employee');
-        $actor = User::factory()->create();
-        $this->attachMember($company, $actor, $this->seededRole($roleCode));
+        [, $membershipId] = $this->aMembership($this->company, 'employee');
+        $actor = $this->memberWithRole($roleCode);
 
         // When
-        $response = $this->changeRole($actor, $company, $membershipId);
+        $response = $this->changeRole($actor, $this->company, $membershipId);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
@@ -81,12 +88,12 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     public function when_membership_belongs_to_another_company_then_change_is_refused_as_not_found(): void
     {
         // Given
-        [$companyA, $adminA] = $this->aCompanyWithMember();
-        [$companyB] = $this->aCompanyWithMember();
+        $companyB = Company::factory()->create();
+        $this->aCompanyMember($companyB, 'admin');
         [, $membershipIdB] = $this->aMembership($companyB, 'employee');
 
         // When
-        $response = $this->changeRole($adminA, $companyA, $membershipIdB);
+        $response = $this->changeRole($this->admin, $this->company, $membershipIdB);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
@@ -98,12 +105,11 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     public function when_role_code_is_not_assignable_then_change_is_rejected(?string $roleCode, string $message): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->aMembership($company, 'employee');
+        [, $membershipId] = $this->aMembership($this->company, 'employee');
         $this->roleCode = $roleCode;
 
         // When
-        $response = $this->changeRole($admin, $company, $membershipId);
+        $response = $this->changeRole($this->admin, $this->company, $membershipId);
 
         // Then
         $this->assertValidationRejected($response, 'roleCode', $message);
@@ -134,11 +140,10 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     public function when_target_membership_is_the_owners_then_change_is_refused_as_owner_transfer_required(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $ownerMembershipId] = $this->aMembership($company, 'owner');
+        $ownerMembershipId = $this->membershipIdOf($this->company, $this->owner);
 
         // When
-        $response = $this->changeRole($admin, $company, $ownerMembershipId);
+        $response = $this->changeRole($this->admin, $this->company, $ownerMembershipId);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::OwnerTransferRequired);
@@ -151,11 +156,10 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     public function when_actor_targets_their_own_membership_then_change_is_refused(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        $ownMembershipId = $this->membershipIdOf($company, $admin);
+        $ownMembershipId = $this->membershipIdOf($this->company, $this->admin);
 
         // When
-        $response = $this->changeRole($admin, $company, $ownMembershipId);
+        $response = $this->changeRole($this->admin, $this->company, $ownMembershipId);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::SelfRoleChangeBlocked);
@@ -167,11 +171,10 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     public function when_owner_targets_their_own_membership_then_self_block_wins(): void
     {
         // Given the company Owner — who satisfies BOTH 422 guards at once
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $ownMembershipId = $this->membershipIdOf($company, $owner);
+        $ownMembershipId = $this->membershipIdOf($this->company, $this->owner);
 
         // When
-        $response = $this->changeRole($owner, $company, $ownMembershipId);
+        $response = $this->changeRole($this->owner, $this->company, $ownMembershipId);
 
         // Then the self-guard takes precedence over the owner-target guard —
         // locks the interactor's guard ORDER as contract (two distinct codes;
@@ -184,11 +187,10 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     public function when_target_membership_is_removed_then_change_is_refused_as_not_found(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        $removedMembershipId = $this->aRemovedMembership($company, User::factory()->create());
+        $removedMembershipId = $this->aRemovedMembership($this->company, User::factory()->create());
 
         // When
-        $response = $this->changeRole($admin, $company, $removedMembershipId);
+        $response = $this->changeRole($this->admin, $this->company, $removedMembershipId);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
@@ -200,16 +202,15 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     {
         // Given an invitation whose UUID will become the membership id on accept
         // (D5b shared identity) — but no company_user row exists yet
-        [$company, $admin] = $this->aCompanyWithMember();
-        $this->aPendingInvitation($company, $admin, 'invitee@contoso.lk');
+        $this->aPendingInvitation($this->company, $this->admin, 'invitee@contoso.lk');
         $invitationId = Invitation::query()
-            ->where('company_id', $company->getKey())
+            ->where('company_id', $this->company->getKey())
             ->where('email', 'invitee@contoso.lk')
             ->sole()
             ->getKey();
 
         // When
-        $response = $this->changeRole($admin, $company, $invitationId);
+        $response = $this->changeRole($this->admin, $this->company, $invitationId);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
@@ -220,12 +221,11 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     public function when_the_projector_fails_mid_role_change_then_nothing_is_persisted(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        [, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
         $this->induceProjectorFailureFor(UserMembershipRoleChanged::class);
 
         // When
-        $response = $this->changeRole($admin, $company, $membershipId);
+        $response = $this->changeRole($this->admin, $this->company, $membershipId);
 
         // Then — the transaction the lock row proves PRESENT rolls back whole:
         // zero stored events, role untouched (the T2-deferred atomicity half)
@@ -237,12 +237,11 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     public function when_the_role_change_cannot_be_audited_then_the_role_is_unchanged(): void
     {
         // Given Bob, an employee, and an audit trail that refuses the change's row
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        [, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
         $this->failTheAuditTrail();
 
         // When the admin makes Bob an HR officer
-        $response = $this->changeRole($admin, $company, $membershipId);
+        $response = $this->changeRole($this->admin, $this->company, $membershipId);
 
         // Then the change fails whole: Bob's role, the stream and the trail unchanged
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
@@ -256,14 +255,13 @@ class ChangeMemberRoleTest extends MembershipsTestCase
         // Given — a member to re-role and a lock-wait death inside the
         // locked transaction
         Exceptions::fake();
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        [, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
         $this->induceProjectorFailureFor(UserMembershipRoleChanged::class, $this->syntheticQueryException(
             ['sqlstate' => 'HY000', 'code' => 1205, 'message' => 'SQLSTATE[HY000]: General error: 1205'],
         ));
 
         // When — the admin changes the member's role
-        $response = $this->changeRole($admin, $company, $membershipId);
+        $response = $this->changeRole($this->admin, $this->company, $membershipId);
 
         // Then — the conflict speaks with the MEMBERSHIP family's voice and
         // the driver cause rides the reported exception into the log chain
@@ -286,12 +284,11 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     ): void {
         // Given — a member to re-role and a write inside the locked
         // transaction that dies the way the driver reports it
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        [, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
         $this->induceProjectorFailureFor(UserMembershipRoleChanged::class, $this->syntheticQueryException($failure));
 
         // When — the admin changes the member's role
-        $response = $this->changeRole($admin, $company, $membershipId);
+        $response = $this->changeRole($this->admin, $this->company, $membershipId);
 
         // Then — contention answers as a conflict; anything else passes through
         $this->assertRefusedWith($response, $expectedStatus, $expected);
@@ -302,12 +299,11 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     {
         // Given — a member to re-role, removed by a concurrent request between
         // the role write and the response's roster-row echo
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        [, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
         $this->removeMembershipWhenEchoed();
 
         // When — the admin changes the member's role
-        $response = $this->changeRole($admin, $company, $membershipId);
+        $response = $this->changeRole($this->admin, $this->company, $membershipId);
 
         // Then — the echo reports the membership gone; the role change itself
         // stands on the removed row
@@ -319,18 +315,17 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     public function when_new_role_equals_current_role_then_change_succeeds(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        [, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
         $this->roleCode = 'employee';
         $this->fromADevice();
 
         // When
-        $response = $this->changeRole($admin, $company, $membershipId);
+        $response = $this->changeRole($this->admin, $this->company, $membershipId);
 
         // Then a same-role change is a legitimate no-op success — the aggregate
         // is guardless (cd-users §5), so the event and its audit row record from == to
         $this->assertRoleChangeEnvelope($response, $this->seededRole('employee'), $membershipId);
-        $this->assertMembershipRoleChanged($membershipId, $admin, $this->seededRole('employee'));
+        $this->assertMembershipRoleChanged($membershipId, $this->admin, $this->seededRole('employee'));
         $this->assertRoleChangeAudited($response, CompanyUser::query()->findOrFail($membershipId), 'employee');
     }
 
@@ -339,11 +334,11 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     public function when_authorized_actor_changes_member_role_then_role_is_updated(string $actorRole): void
     {
         // Given
-        [$company, $actor] = $this->aCompanyWithMember($actorRole);
-        [, $membershipId] = $this->anAcceptedMembership($company, $actor, 'bob@contoso.lk');
+        $actor = $this->memberWithRole($actorRole);
+        [, $membershipId] = $this->anAcceptedMembership($this->company, $actor, 'bob@contoso.lk');
 
         // When
-        $response = $this->changeRole($actor, $company, $membershipId);
+        $response = $this->changeRole($actor, $this->company, $membershipId);
 
         // Then
         $this->assertRoleChangeEnvelope($response, $this->seededRole('hr_officer'), $membershipId);
@@ -354,17 +349,16 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     public function when_an_authorized_actor_changes_a_role_then_the_change_is_audited_from_and_to(): void
     {
         // Given Bob, an employee of Contoso, and an admin on a known device
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        [, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
         $this->fromADevice();
 
         // When the admin makes Bob an HR officer
-        $response = $this->changeRole($admin, $company, $membershipId);
+        $response = $this->changeRole($this->admin, $this->company, $membershipId);
 
         // Then the change is audited from employee to HR officer, by the admin
         $response->assertOk();
         $this->assertRoleChangeAudited($response, CompanyUser::query()->findOrFail($membershipId), 'employee');
-        $this->assertActedBy(AuditAction::RoleChanged, $admin, 'admin');
+        $this->assertActedBy(AuditAction::RoleChanged, $this->admin, 'admin');
     }
 
     #[Test]
@@ -372,60 +366,58 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     {
         // Given a second admin, promoted through the endpoint (arrange via the
         // real flow — aRevokedInvitation precedent)
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        [, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
         $this->roleCode = 'admin';
-        $this->changeRole($admin, $company, $membershipId)->assertOk();
+        $this->changeRole($this->admin, $this->company, $membershipId)->assertOk();
 
         // When the admin demotes the other admin (UC alt-4b — allowed; R-G s112:
         // no sole-admin guard, the immutable Owner is the escalation root)
         $this->roleCode = 'employee';
         $this->fromRoleCode = 'admin';
-        $response = $this->changeRole($admin, $company, $membershipId);
+        $response = $this->changeRole($this->admin, $this->company, $membershipId);
 
         // Then
         $this->assertRoleChangeEnvelope($response, $this->seededRole('employee'), $membershipId);
-        $this->assertMembershipRoleChanged($membershipId, $admin, $this->seededRole('employee'));
+        $this->assertMembershipRoleChanged($membershipId, $this->admin, $this->seededRole('employee'));
     }
 
     #[Test]
     public function when_role_changes_then_target_permissions_reflect_immediately_on_next_request(): void
     {
         // Given an employee who cannot view the roster (employee lacks users.view)
-        [$company, $admin] = $this->aCompanyWithMember();
-        [$bob, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
-        $this->aConsentRecordedBy($bob, $company);
+        [$bob, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
+        $this->aConsentRecordedBy($bob, $this->company);
         $this->assertRefusedWith(
-            $this->viewMemberships($bob, $company),
+            $this->viewMemberships($bob, $this->company),
             Response::HTTP_FORBIDDEN,
             ApiErrorCode::RoleInsufficient
         );
 
         // When their role changes to HR Officer (which holds users.view)
-        $this->changeRole($admin, $company, $membershipId)->assertOk();
+        $this->changeRole($this->admin, $this->company, $membershipId)->assertOk();
         Auth::forgetGuards();
 
         // Then the very next request already runs under the new role — no stale
         // permission state (UC postcondition; no permission cache, OQ-1-035)
-        $this->viewMemberships($bob, $company)->assertOk();
+        $this->viewMemberships($bob, $this->company)->assertOk();
     }
 
     #[Test]
     public function when_target_belongs_to_two_companies_then_only_current_company_role_changes(): void
     {
         // Given Bob is an employee in company A AND an admin in company B
-        [$companyA, $adminA] = $this->aCompanyWithMember();
-        [$bob, $membershipIdA] = $this->anAcceptedMembership($companyA, $adminA, 'bob@contoso.lk');
-        [$companyB] = $this->aCompanyWithMember();
+        [$bob, $membershipIdA] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
+        $companyB = Company::factory()->create();
+        $this->aCompanyMember($companyB, 'admin');
         $this->attachMember($companyB, $bob, $this->seededRole('admin'));
         $membershipIdB = $this->membershipIdOf($companyB, $bob);
 
         // When Bob's role changes in company A's context
-        $response = $this->changeRole($adminA, $companyA, $membershipIdA);
+        $response = $this->changeRole($this->admin, $this->company, $membershipIdA);
 
         // Then company A holds the new role and company B is untouched
         $this->assertRoleChangeEnvelope($response, $this->seededRole('hr_officer'), $membershipIdA);
-        $this->assertMembershipRoleChanged($membershipIdA, $adminA, $this->seededRole('hr_officer'));
+        $this->assertMembershipRoleChanged($membershipIdA, $this->admin, $this->seededRole('hr_officer'));
         $this->assertMembershipRoleUnchanged($membershipIdB, $this->seededRole('admin'));
     }
 
@@ -433,12 +425,11 @@ class ChangeMemberRoleTest extends MembershipsTestCase
     public function when_the_role_change_reads_the_membership_it_will_write_then_it_locks_it(): void
     {
         // Given
-        [$company, $admin] = $this->aCompanyWithMember();
-        [, $membershipId] = $this->anAcceptedMembership($company, $admin, 'bob@contoso.lk');
+        [, $membershipId] = $this->anAcceptedMembership($this->company, $this->admin, 'bob@contoso.lk');
 
         // When
         $capture = $this->recordedQueriesDuring(
-            fn () => $this->changeRole($admin, $company, $membershipId)->assertOk()
+            fn () => $this->changeRole($this->admin, $this->company, $membershipId)->assertOk()
         );
 
         // Then
