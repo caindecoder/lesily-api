@@ -23,7 +23,6 @@ use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
 use App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand;
 use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
 use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
-use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Billing\Invoices\Exceptions\CorruptReceiptSnapshotException;
 use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -36,6 +35,7 @@ use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 abstract class BillingTestCase extends TestCase
 {
     use AssertsAuditTrail;
+    use HasSubscription;
 
     /**
      * Look up a seeded RBAC-catalog role by code — requires seedRbacCatalog() in
@@ -275,41 +275,6 @@ abstract class BillingTestCase extends TestCase
         $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
         $response->assertJsonPath('required_permission', $permission);
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
-    }
-
-    /**
-     * A trial subscription projected for $company through the domain seam —
-     * the genesis event path production takes (StartTrialTest precedent),
-     * never a direct row write.
-     */
-    protected function aTrialSubscriptionFor(Company $company, CarbonImmutable $trialEndsAt): SubscriptionReadModel
-    {
-        $subscriptionId = (string) Str::uuid();
-
-        Subscription::retrieve($subscriptionId)
-            ->startTrial(StartTrialCommand::from([
-                'company' => $company,
-                'trialEndsAt' => $trialEndsAt,
-            ]))
-            ->persist();
-
-        return SubscriptionReadModel::findOrFail($subscriptionId);
-    }
-
-    /**
-     * A subscription whose trial ran out — started and ended through the domain
-     * seam, exactly as the trials:expire scan does (ended_source 'trial-expired',
-     * cancelled_at stamped from the travelled clock).
-     */
-    protected function anEndedTrialSubscriptionFor(Company $company, CarbonImmutable $trialEndsAt): SubscriptionReadModel
-    {
-        $subscription = $this->aTrialSubscriptionFor($company, $trialEndsAt);
-
-        Subscription::retrieve($subscription->getKey())
-            ->endTrial('trial-expired')
-            ->persist();
-
-        return $subscription->refresh();
     }
 
     /**
