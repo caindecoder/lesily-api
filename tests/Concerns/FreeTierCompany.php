@@ -6,7 +6,6 @@ use App\Models\User;
 use App\Companies\Entities\Company;
 use Tests\Feature\Billing\HasSubscription;
 use App\Foundation\Billing\Enums\BillingPlan;
-use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
@@ -72,11 +71,6 @@ trait FreeTierCompany
             'employee' => $this->employee,
             default => $this->aCompanyMember($this->company, $roleCode),
         };
-    }
-
-    protected function seededRole(string $code): Role
-    {
-        return Role::query()->where('code', $code)->sole();
     }
 
     protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
