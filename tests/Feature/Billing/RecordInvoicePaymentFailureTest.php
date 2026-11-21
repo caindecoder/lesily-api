@@ -2,11 +2,9 @@
 
 namespace Tests\Feature\Billing;
 
-use Carbon\CarbonImmutable;
-use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
-use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Billing\Invoices\Events\InvoicePaymentFailed;
 use App\Billing\Invoices\Exceptions\InvoiceNotPayableException;
@@ -23,14 +21,22 @@ use App\Billing\Invoices\Exceptions\InvoiceNotPayableException;
  */
 class RecordInvoicePaymentFailureTest extends BillingTestCase
 {
+    use FreeTierCompany;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
+
     #[Test, DataProvider('provideNonFailableStates')]
     public function when_a_payment_failure_is_recorded_on_a_paid_or_terminal_invoice_then_the_failure_is_rejected(
         string $state,
         int $storedEventCount,
     ): void {
         // Given an invoice in a state that cannot accept a payment failure
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $subscription = $this->subscriptionOf($this->company);
         $invoice = $this->anInvoiceInState($state, $subscription);
 
         // When a failure webhook with a fresh event id is recorded against it
@@ -53,9 +59,8 @@ class RecordInvoicePaymentFailureTest extends BillingTestCase
     public function when_a_replayed_failure_webhook_event_is_recorded_again_then_no_duplicate_event_is_stored(): void
     {
         // Given an invoice whose first payment attempt failed via a specific webhook event
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->aFailedInvoiceFor($company, $subscription);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->aFailedInvoiceFor($this->company, $subscription);
         $rowBeforeReplay = $invoice->fresh()?->getAttributes();
 
         // When PayHere redelivers the same failure webhook event
@@ -72,9 +77,8 @@ class RecordInvoicePaymentFailureTest extends BillingTestCase
     public function when_the_original_failure_webhook_replays_after_recovery_then_no_duplicate_event_is_stored(): void
     {
         // Given an invoice that failed via a specific webhook event and then recovered to paid
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->aFailedInvoiceFor($company, $subscription);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->aFailedInvoiceFor($this->company, $subscription);
         Invoice::retrieve($invoice->getKey())
             ->recordPaymentSucceeded($this->recordPaymentSucceededCommand($invoice, [
                 'payHereEventId' => 'evt_recovery',
@@ -96,9 +100,8 @@ class RecordInvoicePaymentFailureTest extends BillingTestCase
     public function when_a_retry_failure_occurs_on_a_failed_invoice_then_the_failure_is_recorded_without_a_transition(): void
     {
         // Given an invoice whose first payment attempt failed
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->aFailedInvoiceFor($company, $subscription);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->aFailedInvoiceFor($this->company, $subscription);
 
         // When a Day-1 retry fails with a new webhook event and a different code
         Invoice::retrieve($invoice->getKey())
@@ -126,9 +129,8 @@ class RecordInvoicePaymentFailureTest extends BillingTestCase
     public function when_a_pending_invoice_first_payment_fails_then_the_invoice_is_failed(): void
     {
         // Given a pending invoice
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->anIssuedInvoiceFor($this->company, $subscription);
 
         // When the first payment attempt fails
         Invoice::retrieve($invoice->getKey())

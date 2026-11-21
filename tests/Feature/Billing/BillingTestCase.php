@@ -5,74 +5,23 @@ namespace Tests\Feature\Billing;
 use Tests\TestCase;
 use App\Models\User;
 use RuntimeException;
-use Carbon\CarbonImmutable;
-use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
-use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Tests\Concerns\AssertsAuditTrail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Exceptions;
-use App\Billing\Invoices\Aggregates\Invoice;
-use App\Foundation\Billing\Enums\BillingPlan;
 use App\Billing\Invoices\Entities\InvoiceLineItem;
-use App\Foundation\RolesPermissions\Entities\Role;
-use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
-use App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand;
-use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
-use App\Billing\Invoices\UseCases\Commands\RefundInvoiceCommand;
-use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Billing\Invoices\Exceptions\CorruptReceiptSnapshotException;
 use App\Billing\Invoices\Exceptions\ReceiptRenderingFailedException;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
-use App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand;
-use App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand;
 use App\Billing\Invoices\UseCases\Renderers\ReceiptPdfRendererInterface;
-use App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand;
-use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 abstract class BillingTestCase extends TestCase
 {
     use AssertsAuditTrail;
-
-    /**
-     * Look up a seeded RBAC-catalog role by code — requires seedRbacCatalog() in
-     * the calling suite's setUp. Duplicated from CompaniesTestCase/AuthTestCase
-     * (module bases are independent — established precedent).
-     */
-    protected function seededRole(string $code): Role
-    {
-        return Role::query()->where('code', $code)->sole();
-    }
-
-    /**
-     * A fresh user made a live member of $company under a seeded role — the
-     * company_user pivot row the billing.view gate reads. Duplicated from
-     * CompaniesTestCase (module bases are independent — established precedent).
-     */
-    protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
-    {
-        $user = User::factory()->create();
-
-        $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
-        $this->aConsentRecordedBy($user, $company);
-
-        return $user;
-    }
-
-    /**
-     * A company on a paid plan with one fresh member under a seeded role.
-     *
-     * @return array{0: Company, 1: User}
-     */
-    protected function aCompanyWithMember(string $roleCode): array
-    {
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-
-        return [$company, $this->aCompanyMember($company, $roleCode)];
-    }
+    use CreatesInvoices;
 
     /**
      * The plan catalog came back — 200 with all four standard tiers in the
@@ -184,19 +133,6 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
-     * The input was refused as invalid on $invalidField — 422 VALIDATION_FAILED
-     * whose field-level errors contain $expectedMessage (§S21; conv-plan §2.2
-     * Rule 10 — assertJsonValidationErrors matches by containment, so the pin
-     * fails when the rule behind the message is dropped).
-     */
-    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
-    {
-        $response->assertUnprocessable();
-        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
-        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
-    }
-
-    /**
      * The invoice list came back empty — 200 with `data: []` under the exact
      * default §8.3 pagination meta (never a 404; UC-1-120 alt 6a / alt 4a).
      */
@@ -252,19 +188,6 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
-     * The request was rejected as unauthenticated — 401 with the §S21
-     * UNAUTHENTICATED envelope. Duplicated from CompaniesTestCase/AuthTestCase
-     * (module bases are independent — established precedent; base-level
-     * consolidation stays a flagged future refactor).
-     */
-    protected function assertUnauthenticated(TestResponse $response): void
-    {
-        $response->assertUnauthorized();
-        $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
-    }
-
-    /**
      * The member's role lacks the required permission — 403 ROLE_INSUFFICIENT
      * naming the missing grant. Duplicated from CompaniesTestCase (module bases
      * are independent — established precedent).
@@ -275,224 +198,6 @@ abstract class BillingTestCase extends TestCase
         $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
         $response->assertJsonPath('required_permission', $permission);
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
-    }
-
-    /**
-     * A trial subscription projected for $company through the domain seam —
-     * the genesis event path production takes (StartTrialTest precedent),
-     * never a direct row write.
-     */
-    protected function aTrialSubscriptionFor(Company $company, CarbonImmutable $trialEndsAt): SubscriptionReadModel
-    {
-        $subscriptionId = (string) Str::uuid();
-
-        Subscription::retrieve($subscriptionId)
-            ->startTrial(StartTrialCommand::from([
-                'company' => $company,
-                'trialEndsAt' => $trialEndsAt,
-            ]))
-            ->persist();
-
-        return SubscriptionReadModel::findOrFail($subscriptionId);
-    }
-
-    /**
-     * A subscription whose trial ran out — started and ended through the domain
-     * seam, exactly as the trials:expire scan does (ended_source 'trial-expired',
-     * cancelled_at stamped from the travelled clock).
-     */
-    protected function anEndedTrialSubscriptionFor(Company $company, CarbonImmutable $trialEndsAt): SubscriptionReadModel
-    {
-        $subscription = $this->aTrialSubscriptionFor($company, $trialEndsAt);
-
-        Subscription::retrieve($subscription->getKey())
-            ->endTrial('trial-expired')
-            ->persist();
-
-        return $subscription->refresh();
-    }
-
-    /**
-     * A valid issue command against $subscription's company — two line items
-     * whose signed amounts sum to the invoice total (the proration-credit row
-     * exercises ERD-1-04's signed line-item amount). Override any top-level
-     * field per test; the fixed invoice number is safe per-test (RefreshDatabase
-     * isolates rows) — pass an override where a test needs several invoices.
-     */
-    protected function issueInvoiceCommand(Company $company, SubscriptionReadModel $subscription, array $overrides = []): IssueInvoiceCommand
-    {
-        return IssueInvoiceCommand::from([
-            'invoiceNumber' => 'INV-2026-000001',
-            'subscription' => $subscription,
-            'company' => $company,
-            'amountCents' => 60000,
-            'currency' => 'LKR',
-            'lineItems' => [
-                [
-                    'description' => 'Pro Plan — Monthly',
-                    'quantity' => 1,
-                    'unitPriceCents' => 75000,
-                    'amountCents' => 75000,
-                    'lineType' => 'plan_subscription',
-                    'sortOrder' => 0,
-                ],
-                [
-                    'description' => 'Proration credit — unused Starter days',
-                    'quantity' => -1,
-                    'unitPriceCents' => 15000,
-                    'amountCents' => -15000,
-                    'lineType' => 'proration_credit',
-                    'sortOrder' => 1,
-                ],
-            ],
-            'dueDate' => CarbonImmutable::now()->addDays(14),
-            'source' => 'subscribe',
-            'recipientName' => 'ACME (Pvt) Ltd',
-            'recipientEmail' => 'billing@acme.example',
-            ...$overrides,
-        ]);
-    }
-
-    /**
-     * An issued (pending) invoice projected for $company through the domain
-     * seam — the genesis path production takes, never a direct row write.
-     */
-    protected function anIssuedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $invoiceId = (string) Str::uuid();
-
-        Invoice::retrieve($invoiceId)
-            ->issue($this->issueInvoiceCommand($company, $subscription, $overrides))
-            ->persist();
-
-        return InvoiceReadModel::findOrFail($invoiceId);
-    }
-
-    /**
-     * An invoice paid through the domain seam (issue → payment webhook).
-     */
-    protected function aPaidInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
-
-        Invoice::retrieve($invoice->getKey())
-            ->recordPaymentSucceeded($this->recordPaymentSucceededCommand($invoice))
-            ->persist();
-
-        return $invoice->refresh();
-    }
-
-    /**
-     * An invoice whose first payment attempt failed, through the domain seam (T3).
-     */
-    protected function aFailedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
-
-        Invoice::retrieve($invoice->getKey())
-            ->recordPaymentFailed($this->recordPaymentFailedCommand($invoice))
-            ->persist();
-
-        return $invoice->refresh();
-    }
-
-    /**
-     * A valid payment-failure webhook command for $invoice — first attempt,
-     * fresh PayHere event id. Override per test (attempt numbers, replays).
-     */
-    protected function recordPaymentFailedCommand(InvoiceReadModel $invoice, array $overrides = []): RecordPaymentFailedCommand
-    {
-        return RecordPaymentFailedCommand::from([
-            'payHereEventId' => 'evt_fail_'.$invoice->getKey(),
-            'failureCode' => 'insufficient_funds',
-            'failureMessage' => 'Card has insufficient funds.',
-            'attemptNumber' => 1,
-            ...$overrides,
-        ]);
-    }
-
-    /**
-     * A paid invoice subsequently refunded through the domain seam (T6).
-     */
-    protected function aRefundedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $invoice = $this->aPaidInvoiceFor($company, $subscription, $overrides);
-
-        Invoice::retrieve($invoice->getKey())
-            ->refund($this->refundInvoiceCommand($invoice))
-            ->persist();
-
-        return $invoice->refresh();
-    }
-
-    /**
-     * A valid full-refund command for $invoice (admin-refund, PayHere ref).
-     * Override per test (T5 credit memos, amount mismatches).
-     */
-    protected function refundInvoiceCommand(InvoiceReadModel $invoice, array $overrides = []): RefundInvoiceCommand
-    {
-        return RefundInvoiceCommand::from([
-            'refundAmountCents' => $invoice->amount_cents,
-            'payHereRefundTransactionId' => 'refund_txn_'.$invoice->getKey(),
-            'source' => 'admin-refund',
-            'reason' => 'Goodwill refund issued by platform support.',
-            ...$overrides,
-        ]);
-    }
-
-    /**
-     * A pending invoice voided through the domain seam (T7).
-     */
-    protected function aVoidedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
-
-        Invoice::retrieve($invoice->getKey())
-            ->void($this->voidInvoiceCommand($invoice))
-            ->persist();
-
-        return $invoice->refresh();
-    }
-
-    /**
-     * A valid admin-correction void command for $invoice, actor freshly minted.
-     * Override per test (dispute-pre-payment source, specific actors).
-     */
-    protected function voidInvoiceCommand(InvoiceReadModel $invoice, array $overrides = []): VoidInvoiceCommand
-    {
-        return VoidInvoiceCommand::from([
-            'voidedBy' => User::factory()->create(),
-            'reason' => 'Issued in error - admin correction.',
-            'source' => 'admin-correction',
-            ...$overrides,
-        ]);
-    }
-
-    /**
-     * A pending invoice with an open dispute filed through the domain seam.
-     */
-    protected function aDisputedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
-
-        Invoice::retrieve($invoice->getKey())
-            ->fileDispute($this->fileInvoiceDisputeCommand($invoice))
-            ->persist();
-
-        return $invoice->refresh();
-    }
-
-    /**
-     * A valid dispute-filing command for $invoice, filed by a fresh owner-class
-     * actor. Override per test.
-     */
-    protected function fileInvoiceDisputeCommand(InvoiceReadModel $invoice, array $overrides = []): FileInvoiceDisputeCommand
-    {
-        return FileInvoiceDisputeCommand::from([
-            'reason' => 'This charge does not match our agreed plan.',
-            'filedBy' => User::factory()->create(),
-            ...$overrides,
-        ]);
     }
 
     /**
@@ -585,69 +290,6 @@ abstract class BillingTestCase extends TestCase
         $response->assertHeader('Content-Type', 'application/json');
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
         $this->assertStringStartsNotWith('%PDF', (string) $response->getContent());
-    }
-
-    /**
-     * A PAID invoice with an open dispute filed through the domain seam — the
-     * F7 receipt-block state (the aggregate permits disputes on Paid, T3).
-     */
-    protected function aPaidDisputedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $invoice = $this->aPaidInvoiceFor($company, $subscription, $overrides);
-
-        Invoice::retrieve($invoice->getKey())
-            ->fileDispute($this->fileInvoiceDisputeCommand($invoice))
-            ->persist();
-
-        return $invoice->refresh();
-    }
-
-    /**
-     * A disputed invoice subsequently REFUNDED through the domain seam — the
-     * aggregate permits refund() from Paid regardless of the open dispute, so
-     * refunded + has_dispute is a reachable state (test-analyzer MINOR-5).
-     */
-    protected function aRefundedDisputedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $invoice = $this->aPaidDisputedInvoiceFor($company, $subscription, $overrides);
-
-        Invoice::retrieve($invoice->getKey())
-            ->refund($this->refundInvoiceCommand($invoice))
-            ->persist();
-
-        return $invoice->refresh();
-    }
-
-    /**
-     * Seam-fixture dispatch for DataProvider state matrices (§2.12) — every
-     * state is arranged through real aggregate commands, never row writes.
-     */
-    protected function anInvoiceInState(string $state, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $company = Company::findOrFail($subscription->company_id);
-
-        return match ($state) {
-            'pending' => $this->anIssuedInvoiceFor($company, $subscription, $overrides),
-            'paid' => $this->aPaidInvoiceFor($company, $subscription, $overrides),
-            'failed' => $this->aFailedInvoiceFor($company, $subscription, $overrides),
-            'refunded' => $this->aRefundedInvoiceFor($company, $subscription, $overrides),
-            'voided' => $this->aVoidedInvoiceFor($company, $subscription, $overrides),
-            default => throw new InvalidArgumentException("Unknown invoice state fixture [{$state}]."),
-        };
-    }
-
-    /**
-     * A valid payment-succeeded webhook command for $invoice — full amount,
-     * fresh PayHere identifiers. Override per test (e.g. replayed event ids).
-     */
-    protected function recordPaymentSucceededCommand(InvoiceReadModel $invoice, array $overrides = []): RecordPaymentSucceededCommand
-    {
-        return RecordPaymentSucceededCommand::from([
-            'payHereEventId' => 'evt_'.$invoice->getKey(),
-            'payHereTransactionId' => 'txn_'.$invoice->getKey(),
-            'amountCents' => $invoice->amount_cents,
-            ...$overrides,
-        ]);
     }
 
     /**

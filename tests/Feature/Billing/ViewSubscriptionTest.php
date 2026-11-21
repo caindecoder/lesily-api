@@ -4,6 +4,7 @@ namespace Tests\Feature\Billing;
 
 use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\Addon;
 use App\Foundation\Billing\Enums\BillingPlan;
@@ -11,13 +12,15 @@ use PHPUnit\Framework\Attributes\DataProvider;
 
 class ViewSubscriptionTest extends BillingTestCase
 {
+    use FreeTierCompany;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->seedRbacCatalog();
-
         config(['app.debug' => false]);
+
+        $this->makeFreeTierCompany();
     }
 
     // Sad — the read is token-gated: a guest gets the §S21 UNAUTHENTICATED envelope.
@@ -41,10 +44,10 @@ class ViewSubscriptionTest extends BillingTestCase
     public function when_role_lacks_billing_view_then_subscription_is_refused(string $roleCode): void
     {
         // Given a company member whose role lacks billing.view
-        [$company, $member] = $this->aCompanyWithMember($roleCode);
+        $member = $this->memberWithRole($roleCode);
 
         // When they request the subscription state
-        $response = $this->viewSubscriptionAs($member, $company);
+        $response = $this->viewSubscriptionAs($member, $this->company);
 
         // Then the request is refused naming the missing grant
         $this->assertRoleInsufficient($response, 'billing.view');
@@ -57,11 +60,10 @@ class ViewSubscriptionTest extends BillingTestCase
     public function when_company_context_is_foreign_then_access_is_denied(): void
     {
         // Given an owner of Company A and a foreign Company B
-        [, $owner] = $this->aCompanyWithMember('owner');
-        [$foreignCompany] = $this->aCompanyWithMember('owner');
+        $foreignCompany = Company::factory()->create();
 
         // When they request the subscription state under Company B's context
-        $response = $this->viewSubscriptionAs($owner, $foreignCompany);
+        $response = $this->viewSubscriptionAs($this->owner, $foreignCompany);
 
         // Then company access is denied
         $this->assertCompanyAccessDenied($response);
@@ -141,11 +143,10 @@ class ViewSubscriptionTest extends BillingTestCase
     public function when_viewing_role_requests_subscription_then_billing_state_is_returned(string $roleCode): void
     {
         // Given a company member whose seeded role holds billing.view
-        [$company, $member] = $this->aCompanyWithMember($roleCode);
-        $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $member = $this->memberWithRole($roleCode);
 
         // When they request the subscription state
-        $response = $this->viewSubscriptionAs($member, $company);
+        $response = $this->viewSubscriptionAs($member, $this->company);
 
         // Then the full 13-key contract shape is returned
         $this->assertSubscriptionShapeReturned($response);
@@ -192,17 +193,15 @@ class ViewSubscriptionTest extends BillingTestCase
     #[Test]
     public function when_user_belongs_to_multiple_companies_then_only_context_company_is_reported(): void
     {
-        // Given a user owning trial Company A and Pro Company B (B's subscription projected first)
+        // Given a user owning trial Company A and the ready-made Company B (B's subscription projected first)
         $this->travelTo('2026-06-01 00:00:00');
-        $companyB = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $this->aTrialSubscriptionFor($companyB, CarbonImmutable::now()->addDays(30));
         $companyA = Company::factory()->withoutPlan()->create();
-        $owner = $this->aCompanyMember($companyA, 'owner');
-        $companyB->users()->attach($owner, ['role_id' => $this->seededRole('owner')->getKey()]);
+        $companyA->users()->attach($this->owner, ['role_id' => $this->seededRole('owner')->getKey()]);
+        $this->aConsentRecordedBy($this->owner, $companyA);
         $subscriptionA = $this->aTrialSubscriptionFor($companyA, CarbonImmutable::now()->addDays(10));
 
         // When they request the subscription state under Company A's context
-        $response = $this->viewSubscriptionAs($owner, $companyA);
+        $response = $this->viewSubscriptionAs($this->owner, $companyA);
 
         // Then only Company A's subscription state is reported
         $this->assertExactSubscriptionContract($response, [

@@ -2,11 +2,9 @@
 
 namespace Tests\Feature\Billing;
 
-use Carbon\CarbonImmutable;
-use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
-use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Billing\Invoices\Events\InvoiceRefunded;
 use App\Billing\Invoices\Exceptions\InvoiceNotRefundableException;
@@ -24,14 +22,22 @@ use App\Billing\Invoices\Exceptions\InvoiceRefundAmountMismatchException;
  */
 class RefundInvoiceTest extends BillingTestCase
 {
+    use FreeTierCompany;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
+
     #[Test, DataProvider('provideNonRefundableStates')]
     public function when_a_pending_or_voided_or_refunded_invoice_is_refunded_then_the_refund_is_rejected(
         string $state,
         int $storedEventCount,
     ): void {
         // Given an invoice in a state that cannot be refunded
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $subscription = $this->subscriptionOf($this->company);
         $invoice = $this->anInvoiceInState($state, $subscription);
 
         // When a full refund is issued against it
@@ -52,9 +58,8 @@ class RefundInvoiceTest extends BillingTestCase
     public function when_the_refund_amount_differs_from_the_invoice_amount_then_the_refund_is_rejected(): void
     {
         // Given a paid invoice
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->aPaidInvoiceFor($this->company, $subscription);
 
         // When a partial refund is attempted (chunk-1 is full-refund-only)
         try {
@@ -73,9 +78,8 @@ class RefundInvoiceTest extends BillingTestCase
     public function when_a_paid_invoice_is_refunded_then_the_invoice_is_refunded(): void
     {
         // Given a paid invoice
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->aPaidInvoiceFor($this->company, $subscription);
 
         // When platform support issues a full refund through PayHere
         Invoice::retrieve($invoice->getKey())
@@ -104,9 +108,8 @@ class RefundInvoiceTest extends BillingTestCase
     public function when_a_failed_invoice_is_credited_then_the_invoice_is_refunded_without_a_payment_reference(): void
     {
         // Given an invoice whose payment failed and whose dispute was resolved in the owner's favor
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->aFailedInvoiceFor($company, $subscription);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->aFailedInvoiceFor($this->company, $subscription);
 
         // When the full credit memo is recorded (no money ever moved — no PayHere refund)
         Invoice::retrieve($invoice->getKey())

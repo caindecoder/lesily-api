@@ -10,7 +10,6 @@ use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use App\Companies\UseCases\Interactors\CreateCompanyInteractor;
-use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 trait FreeTierCompany
 {
@@ -55,7 +54,7 @@ trait FreeTierCompany
             'emergencyContactRelationship' => 'spouse',
         ]), new RequestOrigin('198.51.100.4', null, null));
 
-        Subscription::retrieve(SubscriptionReadModel::query()->where('company_id', $company->getKey())->sole()->getKey())
+        Subscription::retrieve($this->subscriptionOf($company)->getKey())
             ->endTrial('trial-expired')
             ->persist();
         $company->update(['current_billing_plan' => BillingPlan::Free, 'trial_ends_at' => null]);

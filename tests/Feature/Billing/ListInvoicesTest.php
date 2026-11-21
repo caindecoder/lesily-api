@@ -6,8 +6,8 @@ use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use InvalidArgumentException;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use PHPUnit\Framework\Attributes\Test;
-use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\AssertsFilterEmptyValueRejection;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
@@ -24,6 +24,7 @@ use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 class ListInvoicesTest extends BillingTestCase
 {
     use AssertsFilterEmptyValueRejection;
+    use FreeTierCompany;
 
     protected function setUp(): void
     {
@@ -32,7 +33,7 @@ class ListInvoicesTest extends BillingTestCase
         // Error-path fidelity: prod/CI render with debug off (amendment M).
         config(['app.debug' => false]);
 
-        $this->seedRbacCatalog();
+        $this->makeFreeTierCompany();
     }
 
     // --- Sad ---
@@ -45,10 +46,9 @@ class ListInvoicesTest extends BillingTestCase
     public function when_invalid_filter_given_then_validation_error_occurs(array $query, string $invalidField, string $expectedMessage): void
     {
         // Given an owner of a company
-        [$company, $owner] = $this->aCompanyWithMember('owner');
 
         // When they request the invoice list with invalid query input
-        $response = $this->listInvoicesAs($owner, $company, $query);
+        $response = $this->listInvoicesAs($this->owner, $this->company, $query);
 
         // Then the input is refused as invalid on that field with the verbatim
         // message (api-conventions §10.1 per-endpoint whitelist; unknown params
@@ -71,10 +71,9 @@ class ListInvoicesTest extends BillingTestCase
     public function when_no_token_presented_then_authentication_required(): void
     {
         // Given a company with an owner member
-        [$company] = $this->aCompanyWithMember('owner');
 
         // When the invoice list is requested with no auth token
-        $response = $this->getJson('/api/v1/invoices', ['X-Company-Context' => $company->getKey()]);
+        $response = $this->getJson('/api/v1/invoices', ['X-Company-Context' => $this->company->getKey()]);
 
         // Then it is refused as unauthenticated (upstream Sanctum — UC-1-120 flow 1a)
         $this->assertUnauthenticated($response);
@@ -85,10 +84,10 @@ class ListInvoicesTest extends BillingTestCase
     public function when_role_lacks_billing_view_then_role_insufficient_response(string $roleCode): void
     {
         // Given a member whose role does not carry billing.view (2026-05-24 matrix)
-        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        $actor = $this->memberWithRole($roleCode);
 
         // When they request the invoice list
-        $response = $this->listInvoicesAs($actor, $company);
+        $response = $this->listInvoicesAs($actor, $this->company);
 
         // Then the list is denied for the missing permission — no invoice fields
         // in the body (UC-1-120 error flow 3a)
@@ -99,11 +98,10 @@ class ListInvoicesTest extends BillingTestCase
     public function when_company_context_is_foreign_then_company_access_denied(): void
     {
         // Given a member of one company and a second company they never joined
-        [, $outsider] = $this->aCompanyWithMember('owner');
-        [$companyB] = $this->aCompanyWithMember('owner');
+        $companyB = Company::factory()->create();
 
         // When they request the second company's invoice list
-        $response = $this->listInvoicesAs($outsider, $companyB);
+        $response = $this->listInvoicesAs($this->owner, $companyB);
 
         // Then the company context is denied (AuthorizeCompany membership check —
         // cross-tenant invoice ids are unreachable, UC-1-120 tenant isolation)
@@ -118,18 +116,14 @@ class ListInvoicesTest extends BillingTestCase
     {
         // Given a company that has never been invoiced — Free, or Trial before
         // conversion (plan NULL during trial, s066)
-        $company = match ($companyKind) {
-            'free' => Company::factory()->onPlan(BillingPlan::Free)->create(),
-            'trial' => tap(
-                Company::factory()->withoutPlan()->create(),
-                fn (Company $trialCompany) => $this->aTrialSubscriptionFor($trialCompany, CarbonImmutable::now()->addDays(20)),
-            ),
+        match ($companyKind) {
+            'free' => null,
+            'trial' => $this->putOnTrial($this->company, CarbonImmutable::now()->addDays(20)),
             default => throw new InvalidArgumentException("Unknown invoiceless company kind [{$companyKind}]."),
         };
-        $owner = $this->aCompanyMember($company, 'owner');
 
         // When the owner requests the invoice list
-        $response = $this->listInvoicesAs($owner, $company);
+        $response = $this->listInvoicesAs($this->owner, $this->company);
 
         // Then an empty collection comes back — never an error (UC-1-120 alt 6a)
         $this->assertEmptyInvoiceCollection($response);
@@ -154,12 +148,11 @@ class ListInvoicesTest extends BillingTestCase
     public function when_filters_match_no_invoices_then_empty_collection_returned(array $query): void
     {
         // Given a company whose only invoice is pending at LKR 600.00
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $this->anIssuedInvoiceFor($company, $subscription);
+        $subscription = $this->subscriptionOf($this->company);
+        $this->anIssuedInvoiceFor($this->company, $subscription);
 
         // When they request the list with filters no invoice satisfies
-        $response = $this->listInvoicesAs($owner, $company, $query);
+        $response = $this->listInvoicesAs($this->owner, $this->company, $query);
 
         // Then the empty collection comes back — a semantically-tight range is a
         // zero-result query, not a validation error (UC-1-120 alt 4a; declared
@@ -182,15 +175,14 @@ class ListInvoicesTest extends BillingTestCase
     public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
     {
         // Given twenty invoices — one through the event seam, nineteen bulk
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $this->anIssuedInvoiceFor($company, $subscription);
-        InvoiceReadModel::factory()->count(19)->forCompany($company)->create();
-        Sanctum::actingAs($owner);
+        $subscription = $this->subscriptionOf($this->company);
+        $this->anIssuedInvoiceFor($this->company, $subscription);
+        InvoiceReadModel::factory()->count(19)->forCompany($this->company)->create();
+        Sanctum::actingAs($this->owner);
 
         // When a second page is asked for in the BODY rather than the query string
         $response = $this->json('GET', '/api/v1/invoices', ['page' => 2], [
-            'X-Company-Context' => $company->getKey(),
+            'X-Company-Context' => $this->company->getKey(),
         ]);
 
         // Then it is ignored: paging is driven only by the whitelisted, validated
@@ -223,19 +215,18 @@ class ListInvoicesTest extends BillingTestCase
     public function when_issue_dates_tie_then_rows_return_in_stable_order(): void
     {
         // Given three invoices issued at the same instant
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $subscription = $this->subscriptionOf($this->company);
         $this->travelTo(CarbonImmutable::parse('2026-04-04 12:00:00'));
         $invoiceIds = [];
         foreach ([1, 2, 3] as $sequence) {
-            $invoiceIds[] = $this->anIssuedInvoiceFor($company, $subscription, [
+            $invoiceIds[] = $this->anIssuedInvoiceFor($this->company, $subscription, [
                 'invoiceNumber' => sprintf('INV-2026-%06d', $sequence),
             ])->getKey();
         }
         $this->travelBack();
 
         // When the list is requested at the default sort
-        $response = $this->listInvoicesAs($owner, $company);
+        $response = $this->listInvoicesAs($this->owner, $this->company);
 
         // Then equal sort keys fall back to ascending id — page order can never
         // shuffle between requests of a paginated list (stable tie-break)
@@ -247,13 +238,12 @@ class ListInvoicesTest extends BillingTestCase
     public function when_page_size_raised_to_maximum_then_single_page_serves_all(): void
     {
         // Given twenty invoices — one through the event seam, nineteen bulk
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $this->anIssuedInvoiceFor($company, $subscription);
-        InvoiceReadModel::factory()->count(19)->forCompany($company)->create();
+        $subscription = $this->subscriptionOf($this->company);
+        $this->anIssuedInvoiceFor($this->company, $subscription);
+        InvoiceReadModel::factory()->count(19)->forCompany($this->company)->create();
 
         // When they request per_page=100 — the whitelist ceiling
-        $response = $this->listInvoicesAs($owner, $company, ['per_page' => 100]);
+        $response = $this->listInvoicesAs($this->owner, $this->company, ['per_page' => 100]);
 
         // Then one page serves all twenty rows under the raised size
         $this->assertInvoicePage($response, 20, ['page' => 1, 'per_page' => 100, 'total' => 20, 'last_page' => 1]);
@@ -264,19 +254,18 @@ class ListInvoicesTest extends BillingTestCase
     {
         // Given one owner of companies A and B — B's invoice seeded FIRST so an
         // unscoped fetch would surface it (s131 isolation idiom)
-        [$companyB, $owner] = $this->aCompanyWithMember('owner');
+        $companyB = Company::factory()->create();
+        $companyB->users()->attach($this->owner, ['role_id' => $this->seededRole('owner')->getKey()]);
+        $this->aConsentRecordedBy($this->owner, $companyB);
         $subscriptionB = $this->aTrialSubscriptionFor($companyB, CarbonImmutable::now()->addDays(30));
         $this->anIssuedInvoiceFor($companyB, $subscriptionB, ['invoiceNumber' => 'INV-2026-000201']);
 
-        $companyA = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $companyA->users()->attach($owner, ['role_id' => $this->seededRole('owner')->getKey()]);
-        $this->aConsentRecordedBy($owner, $companyA);
-        $subscriptionA = $this->aTrialSubscriptionFor($companyA, CarbonImmutable::now()->addDays(30));
-        $first = $this->anIssuedInvoiceFor($companyA, $subscriptionA, ['invoiceNumber' => 'INV-2026-000202']);
-        $second = $this->aPaidInvoiceFor($companyA, $subscriptionA, ['invoiceNumber' => 'INV-2026-000203']);
+        $subscriptionA = $this->subscriptionOf($this->company);
+        $first = $this->anIssuedInvoiceFor($this->company, $subscriptionA, ['invoiceNumber' => 'INV-2026-000202']);
+        $second = $this->aPaidInvoiceFor($this->company, $subscriptionA, ['invoiceNumber' => 'INV-2026-000203']);
 
         // When they request company A's invoice list
-        $response = $this->listInvoicesAs($owner, $companyA);
+        $response = $this->listInvoicesAs($this->owner, $this->company);
 
         // Then exactly A's two invoices come back — row identity proves B's
         // invoice is never enumerated (UC-1-120 minimal guarantee)
@@ -288,10 +277,9 @@ class ListInvoicesTest extends BillingTestCase
     {
         // Given the same paid state arranged both ways — through the event seam
         // (the production path) and through the bulk factory
-        [$company] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $seamPaid = $this->aPaidInvoiceFor($company, $subscription);
-        $factoryPaid = InvoiceReadModel::factory()->paid()->forCompany($company)->create();
+        $subscription = $this->subscriptionOf($this->company);
+        $seamPaid = $this->aPaidInvoiceFor($this->company, $subscription);
+        $factoryPaid = InvoiceReadModel::factory()->paid()->forCompany($this->company)->create();
 
         // When the drift-sensitive shape of each row is read back
         // Then the factory's shape matches the projector's output for the
@@ -311,12 +299,11 @@ class ListInvoicesTest extends BillingTestCase
     public function when_filtering_by_stored_status_then_only_matching_invoices_returned(string $status): void
     {
         // Given a company holding one invoice in every stored SM-1-04 state
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoicesByState = $this->oneInvoicePerStoredState($company, $subscription);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoicesByState = $this->oneInvoicePerStoredState($this->company, $subscription);
 
         // When they filter the list by that stored status
-        $response = $this->listInvoicesAs($owner, $company, ['status' => $status]);
+        $response = $this->listInvoicesAs($this->owner, $this->company, ['status' => $status]);
 
         // Then exactly the matching invoice comes back (E28 — the full
         // filter-value × invoice-state table, one row per provider case)
@@ -342,28 +329,27 @@ class ListInvoicesTest extends BillingTestCase
     {
         // Given a pending invoice past its due date, a pending one not yet due,
         // and a paid one past its due date
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $overdue = $this->anIssuedInvoiceFor($company, $subscription, [
+        $subscription = $this->subscriptionOf($this->company);
+        $overdue = $this->anIssuedInvoiceFor($this->company, $subscription, [
             'invoiceNumber' => 'INV-2026-000001',
             'dueDate' => CarbonImmutable::now()->subDays(5),
         ]);
-        $this->anIssuedInvoiceFor($company, $subscription, [
+        $this->anIssuedInvoiceFor($this->company, $subscription, [
             'invoiceNumber' => 'INV-2026-000002',
             'dueDate' => CarbonImmutable::now()->addDays(9),
         ]);
-        $this->aPaidInvoiceFor($company, $subscription, [
+        $this->aPaidInvoiceFor($this->company, $subscription, [
             'invoiceNumber' => 'INV-2026-000003',
             'dueDate' => CarbonImmutable::now()->subDays(5),
         ]);
         // Day-boundary pin: due TODAY is not yet overdue (strictly past due date).
-        $this->anIssuedInvoiceFor($company, $subscription, [
+        $this->anIssuedInvoiceFor($this->company, $subscription, [
             'invoiceNumber' => 'INV-2026-000004',
             'dueDate' => CarbonImmutable::today(),
         ]);
 
         // When they filter by the derived overdue view
-        $response = $this->listInvoicesAs($owner, $company, ['status' => 'overdue']);
+        $response = $this->listInvoicesAs($this->owner, $this->company, ['status' => 'overdue']);
 
         // Then only the pending-past-due invoice comes back — overdue is derived
         // (pending past due date), never a stored status (s129 R4)
@@ -375,14 +361,13 @@ class ListInvoicesTest extends BillingTestCase
     {
         // Given a pending invoice under an open dispute beside an undisputed
         // pending one and an undisputed paid one
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $disputed = $this->aDisputedInvoiceFor($company, $subscription, ['invoiceNumber' => 'INV-2026-000001']);
-        $this->anIssuedInvoiceFor($company, $subscription, ['invoiceNumber' => 'INV-2026-000002']);
-        $this->aPaidInvoiceFor($company, $subscription, ['invoiceNumber' => 'INV-2026-000003']);
+        $subscription = $this->subscriptionOf($this->company);
+        $disputed = $this->aDisputedInvoiceFor($this->company, $subscription, ['invoiceNumber' => 'INV-2026-000001']);
+        $this->anIssuedInvoiceFor($this->company, $subscription, ['invoiceNumber' => 'INV-2026-000002']);
+        $this->aPaidInvoiceFor($this->company, $subscription, ['invoiceNumber' => 'INV-2026-000003']);
 
         // When they filter by the derived disputed view
-        $response = $this->listInvoicesAs($owner, $company, ['status' => 'disputed']);
+        $response = $this->listInvoicesAs($this->owner, $this->company, ['status' => 'disputed']);
 
         // Then only the open-dispute invoice comes back — disputed is the
         // has_dispute modifier, not a stored status (SM-1-04 §4; s129 R4 / F8)
@@ -393,31 +378,30 @@ class ListInvoicesTest extends BillingTestCase
     public function when_filtering_by_amount_range_then_only_invoices_within_bounds_returned(): void
     {
         // Given invoices at LKR 400.00, 500.00, 600.00 and 700.00
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $this->anIssuedInvoiceFor($company, $subscription, [
+        $subscription = $this->subscriptionOf($this->company);
+        $this->anIssuedInvoiceFor($this->company, $subscription, [
             'invoiceNumber' => 'INV-2026-000004',
             'amountCents' => 40000,
             'lineItems' => [self::planLineItem(40000)],
         ]);
-        $atFloor = $this->anIssuedInvoiceFor($company, $subscription, [
+        $atFloor = $this->anIssuedInvoiceFor($this->company, $subscription, [
             'invoiceNumber' => 'INV-2026-000001',
             'amountCents' => 50000,
             'lineItems' => [self::planLineItem(50000)],
         ]);
-        $atCeiling = $this->anIssuedInvoiceFor($company, $subscription, [
+        $atCeiling = $this->anIssuedInvoiceFor($this->company, $subscription, [
             'invoiceNumber' => 'INV-2026-000002',
             'amountCents' => 60000,
             'lineItems' => [self::planLineItem(60000)],
         ]);
-        $this->anIssuedInvoiceFor($company, $subscription, [
+        $this->anIssuedInvoiceFor($this->company, $subscription, [
             'invoiceNumber' => 'INV-2026-000003',
             'amountCents' => 70000,
             'lineItems' => [self::planLineItem(70000)],
         ]);
 
         // When they filter by the 50000–60000 cents range
-        $response = $this->listInvoicesAs($owner, $company, ['min_amount' => 50000, 'max_amount' => 60000]);
+        $response = $this->listInvoicesAs($this->owner, $this->company, ['min_amount' => 50000, 'max_amount' => 60000]);
 
         // Then both boundary invoices come back — the bounds are inclusive
         $this->assertInvoiceIdsExactly($response, [$atFloor->getKey(), $atCeiling->getKey()]);
@@ -428,39 +412,38 @@ class ListInvoicesTest extends BillingTestCase
     {
         // Given paid invoices issued exactly on both period edges, paid ones
         // issued the day before and the day after the period, and a pending one inside it
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $subscription = $this->subscriptionOf($this->company);
 
         $this->travelTo(CarbonImmutable::parse('2026-01-01 10:00:00'));
-        $fromEdge = $this->aPaidInvoiceFor($company, $subscription, [
+        $fromEdge = $this->aPaidInvoiceFor($this->company, $subscription, [
             'invoiceNumber' => 'INV-2026-000001',
             'amountCents' => 50000,
             'lineItems' => [self::planLineItem(50000)],
         ]);
         $this->travelTo(CarbonImmutable::parse('2026-06-30 10:00:00'));
-        $toEdge = $this->aPaidInvoiceFor($company, $subscription, [
+        $toEdge = $this->aPaidInvoiceFor($this->company, $subscription, [
             'invoiceNumber' => 'INV-2026-000002',
             'amountCents' => 70000,
             'lineItems' => [self::planLineItem(70000)],
         ]);
         $this->travelTo(CarbonImmutable::parse('2025-12-31 10:00:00'));
-        $this->aPaidInvoiceFor($company, $subscription, [
+        $this->aPaidInvoiceFor($this->company, $subscription, [
             'invoiceNumber' => 'INV-2026-000003',
             'amountCents' => 60000,
             'lineItems' => [self::planLineItem(60000)],
         ]);
         $this->travelTo(CarbonImmutable::parse('2026-07-01 10:00:00'));
-        $this->aPaidInvoiceFor($company, $subscription, [
+        $this->aPaidInvoiceFor($this->company, $subscription, [
             'invoiceNumber' => 'INV-2026-000005',
             'amountCents' => 65000,
             'lineItems' => [self::planLineItem(65000)],
         ]);
         $this->travelTo(CarbonImmutable::parse('2026-02-01 10:00:00'));
-        $this->anIssuedInvoiceFor($company, $subscription, ['invoiceNumber' => 'INV-2026-000004']);
+        $this->anIssuedInvoiceFor($this->company, $subscription, ['invoiceNumber' => 'INV-2026-000004']);
         $this->travelBack();
 
         // When they combine the paid status, the period, and ascending amount sort
-        $response = $this->listInvoicesAs($owner, $company, [
+        $response = $this->listInvoicesAs($this->owner, $this->company, [
             'status' => 'paid',
             'within' => '2026-01-01,2026-06-30',
             'sort' => 'amount',
@@ -479,12 +462,11 @@ class ListInvoicesTest extends BillingTestCase
     public function when_sort_parameter_given_then_rows_ordered_accordingly(?string $sort, array $expectedSeedOrder): void
     {
         // Given three invoices with distinct issue dates and amounts
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $seeds = $this->threeInvoicesVaryingDateAndAmount($company, $subscription);
+        $subscription = $this->subscriptionOf($this->company);
+        $seeds = $this->threeInvoicesVaryingDateAndAmount($this->company, $subscription);
 
         // When they request the list under that sort token
-        $response = $this->listInvoicesAs($owner, $company, $sort === null ? [] : ['sort' => $sort]);
+        $response = $this->listInvoicesAs($this->owner, $this->company, $sort === null ? [] : ['sort' => $sort]);
 
         // Then the rows come back in the token's order — newest issued first
         // when no sort is given (the api-1-invoices §2 default)
@@ -540,13 +522,12 @@ class ListInvoicesTest extends BillingTestCase
     {
         // Given twenty invoices — one through the event seam, nineteen bulk
         // factory rows (the factory exists for pure-read bulk seeding only; B4)
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $this->anIssuedInvoiceFor($company, $subscription);
-        InvoiceReadModel::factory()->count(19)->forCompany($company)->create();
+        $subscription = $this->subscriptionOf($this->company);
+        $this->anIssuedInvoiceFor($this->company, $subscription);
+        InvoiceReadModel::factory()->count(19)->forCompany($this->company)->create();
 
         // When they request the second page at the default page size
-        $response = $this->listInvoicesAs($owner, $company, ['page' => 2]);
+        $response = $this->listInvoicesAs($this->owner, $this->company, ['page' => 2]);
 
         // Then the remaining five rows ride the exact §8.3 meta
         $this->assertInvoicePage($response, 5, ['page' => 2, 'per_page' => 15, 'total' => 20, 'last_page' => 2]);
@@ -557,12 +538,12 @@ class ListInvoicesTest extends BillingTestCase
     public function when_role_may_view_billing_then_invoice_list_returned(string $roleCode): void
     {
         // Given a member whose role carries billing.view and one company invoice
-        [$company, $actor] = $this->aCompanyWithMember($roleCode);
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription);
+        $actor = $this->memberWithRole($roleCode);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->anIssuedInvoiceFor($this->company, $subscription);
 
         // When they request the invoice list
-        $response = $this->listInvoicesAs($actor, $company);
+        $response = $this->listInvoicesAs($actor, $this->company);
 
         // Then the company's invoice comes back — owner full, admin view-only
         // (s129 F3), auditor read-only (2026-05-24 matrix `billing.view` row)
@@ -573,17 +554,16 @@ class ListInvoicesTest extends BillingTestCase
     public function when_owner_lists_invoices_then_exact_contract_returned(): void
     {
         // Given a paid May invoice and a disputed pending June invoice
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $subscription = $this->subscriptionOf($this->company);
 
         $this->travelTo(CarbonImmutable::parse('2026-05-05 09:30:00'));
-        $paid = $this->aPaidInvoiceFor($company, $subscription, ['invoiceNumber' => 'INV-2026-000101']);
+        $paid = $this->aPaidInvoiceFor($this->company, $subscription, ['invoiceNumber' => 'INV-2026-000101']);
         $this->travelTo(CarbonImmutable::parse('2026-06-06 10:15:00'));
-        $disputed = $this->aDisputedInvoiceFor($company, $subscription, ['invoiceNumber' => 'INV-2026-000102']);
+        $disputed = $this->aDisputedInvoiceFor($this->company, $subscription, ['invoiceNumber' => 'INV-2026-000102']);
         $this->travelBack();
 
         // When the owner requests the invoice list
-        $response = $this->listInvoicesAs($owner, $company);
+        $response = $this->listInvoicesAs($this->owner, $this->company);
 
         // Then exactly the eight contract keys per row come back, newest issued
         // first — literal payload identity, so nothing beyond the contract leaks

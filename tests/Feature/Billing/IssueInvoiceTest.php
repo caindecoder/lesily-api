@@ -2,13 +2,10 @@
 
 namespace Tests\Feature\Billing;
 
-use App\Models\User;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
-use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use PHPUnit\Framework\Attributes\Test;
 use App\Billing\Invoices\Aggregates\Invoice;
-use App\Foundation\Billing\Enums\BillingPlan;
 use App\Billing\Invoices\Events\InvoiceCreated;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
 use App\Billing\Invoices\Exceptions\InvoiceAlreadyIssuedException;
@@ -26,21 +23,29 @@ use App\Billing\Invoices\Exceptions\InvoiceLineItemsMismatchException;
  */
 class IssueInvoiceTest extends BillingTestCase
 {
+    use FreeTierCompany;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
+
     #[Test]
     public function when_an_issued_invoice_is_issued_again_then_the_reissue_is_rejected(): void
     {
         // Given an issued invoice
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        $subscription = $this->subscriptionOf($this->company);
         $invoiceId = (string) Str::uuid();
         Invoice::retrieve($invoiceId)
-            ->issue($this->issueInvoiceCommand($company, $subscription))
+            ->issue($this->issueInvoiceCommand($this->company, $subscription))
             ->persist();
 
         // When the same invoice aggregate is issued again
         try {
             Invoice::retrieve($invoiceId)
-                ->issue($this->issueInvoiceCommand($company, $subscription))
+                ->issue($this->issueInvoiceCommand($this->company, $subscription))
                 ->persist();
 
             $this->fail('Expected InvoiceAlreadyIssuedException was not thrown.');
@@ -53,15 +58,14 @@ class IssueInvoiceTest extends BillingTestCase
     #[Test]
     public function when_line_item_amounts_do_not_sum_to_the_invoice_amount_then_the_issue_is_rejected(): void
     {
-        // Given a company with a trial subscription
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        // Given the company and its subscription
+        $subscription = $this->subscriptionOf($this->company);
         $invoiceId = (string) Str::uuid();
 
         // When an invoice is issued whose line items do not sum to its amount
         try {
             Invoice::retrieve($invoiceId)
-                ->issue($this->issueInvoiceCommand($company, $subscription, ['amountCents' => 99999]))
+                ->issue($this->issueInvoiceCommand($this->company, $subscription, ['amountCents' => 99999]))
                 ->persist();
 
             $this->fail('Expected InvoiceLineItemsMismatchException was not thrown.');
@@ -74,15 +78,14 @@ class IssueInvoiceTest extends BillingTestCase
     #[Test]
     public function when_an_invoice_is_issued_with_a_zero_amount_then_the_issue_is_rejected(): void
     {
-        // Given a company with a trial subscription
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        // Given the company and its subscription
+        $subscription = $this->subscriptionOf($this->company);
         $invoiceId = (string) Str::uuid();
 
         // When a zero-amount invoice with zero-sum line items is issued (SM-1-04 T1: amount > 0)
         try {
             Invoice::retrieve($invoiceId)
-                ->issue($this->issueInvoiceCommand($company, $subscription, [
+                ->issue($this->issueInvoiceCommand($this->company, $subscription, [
                     'amountCents' => 0,
                     'lineItems' => [
                         [
@@ -116,15 +119,14 @@ class IssueInvoiceTest extends BillingTestCase
     #[Test]
     public function when_a_line_item_amount_is_not_an_integer_then_issuing_is_refused(): void
     {
-        // Given a company with a trial subscription
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        // Given the company and its subscription
+        $subscription = $this->subscriptionOf($this->company);
         $invoiceId = (string) Str::uuid();
 
         // When an invoice is issued whose line items carry a fractional-cents amount that sums to the invoice amount
         try {
             Invoice::retrieve($invoiceId)
-                ->issue($this->issueInvoiceCommand($company, $subscription, [
+                ->issue($this->issueInvoiceCommand($this->company, $subscription, [
                     'lineItems' => [
                         [
                             'description' => 'Pro Plan — Monthly',
@@ -157,14 +159,13 @@ class IssueInvoiceTest extends BillingTestCase
     #[Test]
     public function when_an_invoice_is_issued_for_the_minimum_one_cent_then_it_is_accepted(): void
     {
-        // Given a company with a trial subscription
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        // Given the company and its subscription
+        $subscription = $this->subscriptionOf($this->company);
         $invoiceId = (string) Str::uuid();
 
         // When a one-cent invoice is issued at the domain seam (SM-1-04 T1: amount > 0, boundary)
         Invoice::retrieve($invoiceId)
-            ->issue($this->issueInvoiceCommand($company, $subscription, [
+            ->issue($this->issueInvoiceCommand($this->company, $subscription, [
                 'amountCents' => 1,
                 'lineItems' => [
                     [
@@ -186,14 +187,13 @@ class IssueInvoiceTest extends BillingTestCase
     #[Test]
     public function when_an_invoice_is_issued_in_a_non_default_currency_then_both_projections_carry_it(): void
     {
-        // Given a company with a trial subscription
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        // Given the company and its subscription
+        $subscription = $this->subscriptionOf($this->company);
         $invoiceId = (string) Str::uuid();
 
         // When an invoice is issued in USD at the domain seam
         Invoice::retrieve($invoiceId)
-            ->issue($this->issueInvoiceCommand($company, $subscription, ['currency' => 'USD']))
+            ->issue($this->issueInvoiceCommand($this->company, $subscription, ['currency' => 'USD']))
             ->persist();
 
         // Then the invoice row and every line item carry USD rather than the column default
@@ -207,18 +207,16 @@ class IssueInvoiceTest extends BillingTestCase
     #[Test]
     public function when_an_invoice_is_issued_then_the_pending_invoice_and_its_line_items_are_projected(): void
     {
-        // Given a company with a trial subscription and an acting owner with a billing address
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $owner = User::factory()->create();
+        // Given the company, its subscription and an acting owner with a billing address
+        $subscription = $this->subscriptionOf($this->company);
         $billingAddress = ['line1' => '12 Galle Road', 'city' => 'Colombo', 'country' => 'LK'];
         $invoiceId = (string) Str::uuid();
 
         // When an invoice is issued at the domain seam
         Invoice::retrieve($invoiceId)
-            ->issue($this->issueInvoiceCommand($company, $subscription, [
+            ->issue($this->issueInvoiceCommand($this->company, $subscription, [
                 'recipientBillingAddress' => $billingAddress,
-                'createdBy' => $owner,
+                'createdBy' => $this->owner,
             ]))
             ->persist();
 
@@ -226,13 +224,13 @@ class IssueInvoiceTest extends BillingTestCase
         $this->assertInvoiceEventRecorded(InvoiceCreated::class, $invoiceId, [
             'invoiceNumber' => 'INV-2026-000001',
             'subscriptionId' => $subscription->getKey(),
-            'companyId' => $company->getKey(),
+            'companyId' => $this->company->getKey(),
             'amountCents' => 60000,
             'source' => 'subscribe',
-            'createdBy' => $owner->getKey(),
+            'createdBy' => $this->owner->getKey(),
         ]);
         $this->assertInvoiceRowState($invoiceId, [
-            'company_id' => $company->getKey(),
+            'company_id' => $this->company->getKey(),
             'subscription_id' => $subscription->getKey(),
             'invoice_number' => 'INV-2026-000001',
             'status' => 'pending',
@@ -242,7 +240,7 @@ class IssueInvoiceTest extends BillingTestCase
             'currency' => 'LKR',
             'recipient_name' => 'ACME (Pvt) Ltd',
             'recipient_email' => 'billing@acme.example',
-            'created_by' => $owner->getKey(),
+            'created_by' => $this->owner->getKey(),
         ]);
         $this->assertEquals($billingAddress, InvoiceReadModel::query()->findOrFail($invoiceId)->recipient_billing_address);
         $this->assertLineItemsProjected($invoiceId, [
