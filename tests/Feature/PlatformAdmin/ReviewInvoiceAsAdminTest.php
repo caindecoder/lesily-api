@@ -82,11 +82,11 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     public function when_the_invoice_id_is_unknown_then_not_found_is_returned_and_no_read_is_recorded(): void
     {
         // Given an allowlisted platform admin and no invoice anywhere
-        $admin = User::factory()->create();
-        $this->allowlist([$admin->getKey()]);
+        $platformAdmin = User::factory()->create();
+        $this->allowlist([$platformAdmin->getKey()]);
 
         // When the admin asks for a random unknown invoice id
-        $response = $this->reviewInvoiceAsAdmin($admin, (string) Str::uuid());
+        $response = $this->reviewInvoiceAsAdmin($platformAdmin, (string) Str::uuid());
 
         // Then the response is the generic not-found and no read is recorded
         $this->assertResourceNotFoundNoLeak($response);
@@ -101,14 +101,14 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     public function when_the_admin_also_belongs_to_a_tenant_then_another_companys_invoice_is_still_readable(): void
     {
         // Given an allowlisted admin who is an Owner of company X, and a paid invoice belonging to company Y
-        [, $admin] = $this->aCompanyWithMember('owner');
-        $this->allowlist([$admin->getKey()]);
+        [, $platformAdmin] = $this->aCompanyWithMember('owner');
+        $this->allowlist([$platformAdmin->getKey()]);
         [$companyY] = $this->aCompanyWithMember('owner');
         $subscription = $this->aTrialSubscriptionFor($companyY, CarbonImmutable::now()->addDays(30));
         $invoice = $this->aPaidInvoiceFor($companyY, $subscription);
 
         // When the admin reads company Y's invoice via the admin endpoint
-        $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey());
+        $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey());
 
         // Then the cross-tenant invoice is returned
         $response->assertOk();
@@ -123,14 +123,14 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     public function when_the_invoice_is_not_paid_then_the_admin_can_still_review_it(string $state, string $expectedStatus): void
     {
         // Given an allowlisted admin and a tenant invoice in a non-paid state
-        $admin = User::factory()->create();
-        $this->allowlist([$admin->getKey()]);
+        $platformAdmin = User::factory()->create();
+        $this->allowlist([$platformAdmin->getKey()]);
         [$company] = $this->aCompanyWithMember('owner');
         $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
         $invoice = $this->anInvoiceInState($state, $subscription);
 
         // When the admin reviews that invoice
-        $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey());
+        $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey());
 
         // Then the invoice is returned with its stored status and that state's fields on the wire
         $response->assertOk();
@@ -176,14 +176,14 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     public function when_the_tenant_has_no_plan_then_the_company_summary_renders_it_as_null(): void
     {
         // Given an allowlisted admin and a paid invoice belonging to a company with no plan
-        $admin = User::factory()->create();
-        $this->allowlist([$admin->getKey()]);
+        $platformAdmin = User::factory()->create();
+        $this->allowlist([$platformAdmin->getKey()]);
         $company = Company::factory()->withoutPlan()->create();
         $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
         $invoice = $this->aPaidInvoiceFor($company, $subscription);
 
         // When the admin reviews that invoice
-        $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey());
+        $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey());
 
         // Then the company summary carries a null plan (not a 500, not a missing key)
         $response->assertOk();
@@ -216,14 +216,14 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     public function when_the_request_context_values_are_oversized_then_the_read_still_succeeds(): void
     {
         // Given an allowlisted admin whose client sends oversized UA and correlation headers
-        $admin = User::factory()->create();
-        $this->allowlist([$admin->getKey()]);
+        $platformAdmin = User::factory()->create();
+        $this->allowlist([$platformAdmin->getKey()]);
         [$company] = $this->aCompanyWithMember('owner');
         $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
         $invoice = $this->aPaidInvoiceFor($company, $subscription);
 
         // When the admin reviews the invoice with 300-char header values
-        $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey(), [
+        $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey(), [
             'User-Agent' => str_repeat('a', 300),
             'Correlation-Id' => str_repeat('b', 300),
         ]);
@@ -245,8 +245,8 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     public function when_a_platform_admin_reviews_a_tenant_invoice_then_the_full_admin_contract_is_returned(): void
     {
         // Given an allowlisted admin and a Pro tenant's paid invoice with two line items
-        $admin = User::factory()->create();
-        $this->allowlist([$admin->getKey()]);
+        $platformAdmin = User::factory()->create();
+        $this->allowlist([$platformAdmin->getKey()]);
         [$company] = $this->aCompanyWithMember('owner');
         $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
         $invoice = $this->aPaidInvoiceFor($company, $subscription);
@@ -255,7 +255,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $this->assertNotNull($paidAt);
 
         // When the admin reviews the invoice
-        $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey());
+        $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey());
 
         // Then the full admin envelope is returned exactly
         $response->assertOk();
@@ -340,18 +340,18 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     public function when_a_platform_admin_reviews_a_tenant_invoice_then_the_read_is_recorded_in_the_audit_trail(): void
     {
         // Given an allowlisted admin and a tenant's paid invoice
-        $admin = User::factory()->create();
-        $this->allowlist([$admin->getKey()]);
+        $platformAdmin = User::factory()->create();
+        $this->allowlist([$platformAdmin->getKey()]);
         [$company] = $this->aCompanyWithMember('owner');
         $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
         $invoice = $this->aPaidInvoiceFor($company, $subscription);
 
         // When the admin reviews the invoice
-        $response = $this->reviewInvoiceAsAdmin($admin, $invoice->getKey());
+        $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey());
 
         // Then exactly one audit row records who read what, and when
         $response->assertOk();
-        $this->assertAdminReviewAuditRecorded($invoice, $admin, $response);
+        $this->assertAdminReviewAuditRecorded($invoice, $platformAdmin, $response);
     }
 
     /**

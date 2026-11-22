@@ -32,7 +32,7 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     protected User $member;
 
     /** @var list<User> */
-    protected array $admins;
+    protected array $platformAdmins;
 
     protected function setUp(): void
     {
@@ -40,8 +40,8 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
 
         $this->company = Company::factory()->create();
         $this->member = $this->aCompanyMember($this->company);
-        $this->admins = [User::factory()->create(), User::factory()->create()];
-        $this->allowlist(array_map(fn (User $admin): string => $admin->getKey(), $this->admins));
+        $this->platformAdmins = [User::factory()->create(), User::factory()->create()];
+        $this->allowlist(array_map(fn (User $platformAdmin): string => $platformAdmin->getKey(), $this->platformAdmins));
         Notification::fake();
     }
 
@@ -307,8 +307,8 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     public function when_the_admin_list_is_padded_then_the_listed_admin_is_still_alerted(): void
     {
         // Given an allowlist whose one entry is padded and followed by a blank segment
-        $admin = $this->admins[0];
-        $this->allowlist([" {$admin->getKey()} ", '']);
+        $platformAdmin = $this->platformAdmins[0];
+        $this->allowlist([" {$platformAdmin->getKey()} ", '']);
         $this->aMissedDeadlineRequest();
         $this->runFlagMissedDeadlines()->assertSuccessful();
 
@@ -316,7 +316,7 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
         $this->deliverTheNoticesOf(DsarSlaBreached::class);
 
         // Then that admin is alerted, and no one else
-        Notification::assertSentToTimes($admin, SystemNotification::class, 1);
+        Notification::assertSentToTimes($platformAdmin, SystemNotification::class, 1);
         Notification::assertCount(1);
     }
 
@@ -414,15 +414,15 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
      */
     protected function assertAdminsAlertedOnce(DsarRequestRecord $request): void
     {
-        $this->assertCount(2, $this->admins);
-        foreach ($this->admins as $admin) {
-            Notification::assertSentToTimes($admin, SystemNotification::class, 1);
-            Notification::assertSentTo($admin, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->type === NotificationType::DsarDeadlineMissed
+        $this->assertCount(2, $this->platformAdmins);
+        foreach ($this->platformAdmins as $platformAdmin) {
+            Notification::assertSentToTimes($platformAdmin, SystemNotification::class, 1);
+            Notification::assertSentTo($platformAdmin, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->type === NotificationType::DsarDeadlineMissed
                 && $notice->companyName === $this->company->name
                 && $notice->companyId === null
                 && $notice->details === ['request' => $request->getKey(), 'deadline' => '31 Oct 2026, 09:00 UTC']);
         }
-        Notification::assertCount(count($this->admins));
+        Notification::assertCount(count($this->platformAdmins));
     }
 
     /**

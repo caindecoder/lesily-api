@@ -70,7 +70,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // When they verify an id that names no case
         $response = $this->verifyCase(
-            $this->admin,
+            $this->platformAdmin,
             (string) Str::uuid7(),
             $this->aValidVerificationPayload($stranger),
         );
@@ -87,7 +87,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $stranger = User::factory()->create();
 
         // When they verify it
-        $response = $this->verifyCase($this->admin, 'not-a-uuid', $this->aValidVerificationPayload($stranger));
+        $response = $this->verifyCase($this->platformAdmin, 'not-a-uuid', $this->aValidVerificationPayload($stranger));
 
         // Then the reference is refused as invalid and nothing is audited
         $this->assertValidationRejected($response, 'caseId', 'The case id field must be a valid UUID.');
@@ -105,7 +105,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // When the admin submits the verification
         $response = $this->verifyCase(
-            $this->admin,
+            $this->platformAdmin,
             $case->getKey(),
             $this->aValidVerificationPayload($stranger, $overrides),
         );
@@ -131,7 +131,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // When the admin attempts to verify it
         $response = $this->verifyCase(
-            $this->admin,
+            $this->platformAdmin,
             $case->getKey(),
             $this->aValidVerificationPayload($member),
         );
@@ -166,7 +166,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // When the admin attempts to verify it naming the non-member
         $response = $this->verifyCase(
-            $this->admin,
+            $this->platformAdmin,
             $case->getKey(),
             $this->aValidVerificationPayload($foreignMember),
         );
@@ -189,7 +189,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // When the admin verifies naming them as the incoming owner
         $response = $this->verifyCase(
-            $this->admin,
+            $this->platformAdmin,
             $case->getKey(),
             $this->aValidVerificationPayload($removed),
         );
@@ -211,7 +211,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // When the admin verifies naming them as the incoming owner
         $response = $this->verifyCase(
-            $this->admin,
+            $this->platformAdmin,
             $case->getKey(),
             $this->aValidVerificationPayload($foreignMember),
         );
@@ -240,7 +240,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         AuditEntry::created(fn () => throw $this->syntheticQueryException($failure));
 
         // When the admin verifies the case
-        $response = $this->verifyCase($this->admin, $case->getKey(), $this->aValidVerificationPayload($member));
+        $response = $this->verifyCase($this->platformAdmin, $case->getKey(), $this->aValidVerificationPayload($member));
 
         // Then contention answers as a conflict; anything else passes
         // through (render only — a synthetic deadlock cannot model MySQL's
@@ -262,7 +262,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         ));
 
         // When the admin verifies the case
-        $response = $this->verifyCase($this->admin, $case->getKey(), $this->aValidVerificationPayload($member));
+        $response = $this->verifyCase($this->platformAdmin, $case->getKey(), $this->aValidVerificationPayload($member));
 
         // Then the conflict speaks with THIS family's voice and the driver
         // cause rides the reported exception into the log chain
@@ -285,7 +285,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // When the admin verifies the case
         $response = $this->verifyCase(
-            $this->admin,
+            $this->platformAdmin,
             $case->getKey(),
             $this->aValidVerificationPayload($member),
         );
@@ -306,7 +306,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // When the admin verifies with notes and the smuggling entry
         $response = $this->verifyCase(
-            $this->admin,
+            $this->platformAdmin,
             $case->getKey(),
             $this->aValidVerificationPayload($member, [
                 'artefacts' => [[...$this->artefact, 'note' => 'smuggled prose that must not survive']],
@@ -327,11 +327,11 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $member = $this->aCompanyMember($company, 'employee');
         $caseA = $this->anOpenCaseFor($company);
         $caseB = $this->anOpenCaseFor($company);
-        $this->verifyCase($this->admin, $caseA->getKey(), $this->aValidVerificationPayload($member))->assertOk();
+        $this->verifyCase($this->platformAdmin, $caseA->getKey(), $this->aValidVerificationPayload($member))->assertOk();
 
         // When the admin verifies case B
         $response = $this->verifyCase(
-            $this->admin,
+            $this->platformAdmin,
             $caseB->getKey(),
             $this->aValidVerificationPayload($member),
         );
@@ -361,7 +361,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // When the admin verifies the case naming Alex
         $response = $this->verifyCase(
-            $this->admin,
+            $this->platformAdmin,
             $case->getKey(),
             $this->aValidVerificationPayload($alex),
         );
@@ -479,7 +479,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         $properties = $event->event_properties;
         $this->assertSame($case->getKey(), $properties['caseId']);
-        $this->assertSame($this->admin->getKey(), $properties['verifiedBy']);
+        $this->assertSame($this->platformAdmin->getKey(), $properties['verifiedBy']);
         $this->assertSame([$this->artefact], $properties['artefacts']);
         $this->assertTrue(CarbonImmutable::parse($properties['verifiedAt'])->equalTo(now()));
 
@@ -500,7 +500,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $verifiedAt = $fresh->verified_at;
         $this->assertNotNull($verifiedAt);
         $this->assertTrue($verifiedAt->equalTo(now()));
-        $this->assertSame($this->admin->getKey(), $fresh->verified_by);
+        $this->assertSame($this->platformAdmin->getKey(), $fresh->verified_by);
         $this->assertSame($newOwner->getKey(), $fresh->new_owner_user_id);
         $this->assertSame($this->notes, $fresh->verification_notes);
         $this->assertSame([$this->artefact], $fresh->verification_artefacts);
@@ -525,9 +525,9 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             'action' => 'case_verified',
             'description' => 'Platform admin recorded identity verification on an ownership-transfer case.',
             'company_id' => $case->company_id,
-            'actor_user_id' => $this->admin->getKey(),
+            'actor_user_id' => $this->platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $this->admin->name,
+            'actor_label' => $this->platformAdmin->name,
             'stored_event_id' => $storedEventId,
             'metadata' => null,
             'severity' => 'info',
@@ -551,7 +551,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response->assertOk();
         $response->assertJsonPath('data.status', 'verified');
         $response->assertJsonPath('data.new_owner_user_id', $newOwner->getKey());
-        $response->assertJsonPath('data.verified_by', $this->admin->getKey());
+        $response->assertJsonPath('data.verified_by', $this->platformAdmin->getKey());
         $this->assertNotNull($response->json('data.verified_at'));
         $response->assertJsonMissingPath('data.verification_notes');
         $response->assertJsonMissingPath('data.verification_artefacts');

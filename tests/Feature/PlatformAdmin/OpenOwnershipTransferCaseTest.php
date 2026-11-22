@@ -57,7 +57,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given an allowlisted platform admin
         // When they submit a payload carrying this row's defect
-        $response = $this->openCase($this->admin, $this->validPayload($overrides));
+        $response = $this->openCase($this->platformAdmin, $this->validPayload($overrides));
 
         // Then the case is refused naming the offending field and nothing is written
         $this->assertValidationRejected($response, $field, $message);
@@ -73,7 +73,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $foreignMember = $this->aCompanyMember(Company::factory()->create(), 'employee');
 
         // When the admin proposes them as the incoming owner
-        $response = $this->openCase($this->admin, $this->validPayload([
+        $response = $this->openCase($this->platformAdmin, $this->validPayload([
             'newOwnerUserId' => $foreignMember->getKey(),
         ]));
 
@@ -90,7 +90,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->company->users()->updateExistingPivot($removed->getKey(), ['deleted_at' => now()]);
 
         // When the admin proposes them as the incoming owner
-        $response = $this->openCase($this->admin, $this->validPayload([
+        $response = $this->openCase($this->platformAdmin, $this->validPayload([
             'newOwnerUserId' => $removed->getKey(),
         ]));
 
@@ -106,7 +106,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the admin opens a case
-        $response = $this->openCase($this->admin, $this->validPayload());
+        $response = $this->openCase($this->platformAdmin, $this->validPayload());
 
         // Then the whole transaction rolls back — a case exists only alongside its audit row
         $this->assertOpenFailedSafely($response);
@@ -118,7 +118,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given company Contoso owned by its live owner
         // When the platform admin opens a case for it
-        $response = $this->openCase($this->admin, $this->validPayload());
+        $response = $this->openCase($this->platformAdmin, $this->validPayload());
 
         // Then the case records that owner as the expected owner of the handover
         $this->assertExpectedOwnerRecorded($response, $this->company);
@@ -129,11 +129,11 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given the incoming owner is not yet known
         // When the admin opens a case with only the company and the context
-        $response = $this->openCase($this->admin, $this->validPayload());
+        $response = $this->openCase($this->platformAdmin, $this->validPayload());
 
         // Then the case is open with no incoming owner and the audit row is present
         $this->assertCaseOpened($response, ['new_owner_user_id' => null]);
-        $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'), $response);
+        $this->assertCaseOpenAudited($this->platformAdmin, (string) $response->json('data.id'), $response);
     }
 
     #[Test]
@@ -141,11 +141,11 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given the incoming owner is sent as a blank value rather than omitted
         // When the admin opens the case
-        $response = $this->openCase($this->admin, $this->validPayload(['newOwnerUserId' => '']));
+        $response = $this->openCase($this->platformAdmin, $this->validPayload(['newOwnerUserId' => '']));
 
         // Then the case is open with no incoming owner and the audit row is present
         $this->assertCaseOpened($response, ['new_owner_user_id' => null]);
-        $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'), $response);
+        $this->assertCaseOpenAudited($this->platformAdmin, (string) $response->json('data.id'), $response);
     }
 
     #[Test]
@@ -155,14 +155,14 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $alex = $this->aCompanyMember($this->company, 'employee');
 
         // When the platform admin opens the case naming Alex
-        $response = $this->openCase($this->admin, $this->validPayload([
+        $response = $this->openCase($this->platformAdmin, $this->validPayload([
             'newOwnerUserId' => $alex->getKey(),
         ]));
 
         // Then the case is on the record, exactly one audit row names the
         // admin, and nothing about the company changed
         $this->assertCaseOpened($response, ['new_owner_user_id' => $alex->getKey()]);
-        $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'), $response);
+        $this->assertCaseOpenAudited($this->platformAdmin, (string) $response->json('data.id'), $response);
         $this->assertCompanyUntouched($this->company, $alex);
     }
 

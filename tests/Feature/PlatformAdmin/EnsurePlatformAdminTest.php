@@ -102,11 +102,11 @@ class EnsurePlatformAdminTest extends PlatformAdminTestCase
     public function when_allowlist_entries_carry_whitespace_or_trailing_commas_then_member_still_passes(callable $shape): void
     {
         // Given an allowlisted user whose env entry is padded or comma-mangled
-        $user = User::factory()->create();
-        $this->allowlist($shape($user->getKey()));
+        $platformAdmin = User::factory()->create();
+        $this->allowlist($shape($platformAdmin->getKey()));
 
         // When they probe the platform-admin surface
-        $response = $this->probeAdminSurfaceAs($user);
+        $response = $this->probeAdminSurfaceAs($platformAdmin);
 
         // Then the gate passes them through
         $this->assertProbePassed($response);
@@ -154,11 +154,11 @@ class EnsurePlatformAdminTest extends PlatformAdminTestCase
     public function when_allowlisted_user_probes_admin_surface_then_request_passes(callable $shape): void
     {
         // Given a user whose id is on the allowlist
-        $user = User::factory()->create();
-        $this->allowlist($shape($user->getKey()));
+        $platformAdmin = User::factory()->create();
+        $this->allowlist($shape($platformAdmin->getKey()));
 
         // When they probe the platform-admin surface
-        $response = $this->probeAdminSurfaceAs($user);
+        $response = $this->probeAdminSurfaceAs($platformAdmin);
 
         // Then the gate passes them through
         $this->assertProbePassed($response);

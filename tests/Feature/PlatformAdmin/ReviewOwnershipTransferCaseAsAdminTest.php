@@ -44,7 +44,7 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
     {
         // Given an allowlisted admin and no such case
         // When an unknown case id is requested
-        $response = $this->showCase($this->admin, (string) Str::uuid());
+        $response = $this->showCase($this->platformAdmin, (string) Str::uuid());
 
         // Then nothing is found and no evidence is written —
         // no audit row for a read that didn't happen
@@ -61,7 +61,7 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the case detail is requested
-        $response = $this->showCase($this->admin, $case->getKey());
+        $response = $this->showCase($this->platformAdmin, $case->getKey());
 
         // Then the read fails closed — no case data, and the inserted
         // evidence row was rolled back with the read
@@ -79,7 +79,7 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
         $case = $this->aVerifiedCaseFor($company, $alex);
 
         // When the admin opens the case by id
-        $response = $this->showCase($this->admin, $case->getKey());
+        $response = $this->showCase($this->platformAdmin, $case->getKey());
 
         // Then EXACTLY the admin contract returns (11-key as of T7) — the
         // verification prose stays off the wire — the read is recorded
@@ -98,7 +98,7 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
             'executed_by' => null,
             'created_at' => $case->created_at->toISOString(),
         ]]);
-        $this->assertCaseReadAudited($case, $this->admin, $response);
+        $this->assertCaseReadAudited($case, $this->platformAdmin, $response);
         $this->assertCaseUnchanged($case);
     }
 
@@ -109,7 +109,7 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
         $case = $this->aClosedCaseFor(Company::factory()->create(), OwnershipTransferCaseOutcome::Rejected);
 
         // When the admin opens it
-        $response = $this->showCase($this->admin, $case->getKey());
+        $response = $this->showCase($this->platformAdmin, $case->getKey());
 
         // Then the closed state carries its outcome
         $response->assertOk();

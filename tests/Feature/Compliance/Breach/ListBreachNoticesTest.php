@@ -215,7 +215,7 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     {
         // Given company A was notified of about 120 people, then the count was corrected to 145, and A's owner
         $breachId = $this->aRecordedIncident(['companies' => [['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 120]]]);
-        $this->notifyCompanies($this->admin, $breachId);
+        $this->notifyCompanies($this->platformAdmin, $breachId);
         BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->update(['estimated_count' => 145]);
         $owner = $this->aConsentingMember($this->companyA, 'owner');
 
@@ -390,7 +390,7 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         return match ($state) {
             BreachFilingStatus::NotRequested => $part->notified(),
             BreachFilingStatus::Requested => $part->filingRequested($owner->getKey()),
-            BreachFilingStatus::Filed => $part->filed($owner->getKey(), $this->admin->getKey()),
+            BreachFilingStatus::Filed => $part->filed($owner->getKey(), $this->platformAdmin->getKey()),
         };
     }
 

@@ -67,7 +67,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given an allowlisted admin and no case at all
         // When they execute an unknown case id
-        $response = $this->executeCase($this->admin, (string) Str::uuid7());
+        $response = $this->executeCase($this->platformAdmin, (string) Str::uuid7());
 
         // Then nothing is found and nothing is audited (find-before-audit)
         $this->assertResourceNotFoundNoLeak($response);
@@ -79,7 +79,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given an allowlisted admin and a case reference that is not a UUID
         // When they execute it
-        $response = $this->executeCase($this->admin, 'not-a-uuid');
+        $response = $this->executeCase($this->platformAdmin, 'not-a-uuid');
 
         // Then the reference is refused as invalid and nothing is audited
         $this->assertValidationRejected($response, 'caseId', 'The case id field must be a valid UUID.');
@@ -94,7 +94,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->aVerifiedCaseFor($company);
 
         // When the execute is submitted without an Idempotency-Key
-        $response = $this->executeCaseWithoutIdempotencyKey($this->admin, $case->getKey());
+        $response = $this->executeCaseWithoutIdempotencyKey($this->platformAdmin, $case->getKey());
 
         // Then the execution is refused as missing its key and nothing moved
         $this->assertRefusedAsMissingIdempotencyKey($response);
@@ -115,7 +115,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         };
 
         // When the admin attempts to execute it
-        $response = $this->executeCase($this->admin, $case->getKey());
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the refusal names the case's current state and nothing moved
         $response->assertConflict();
@@ -146,7 +146,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $company->users()->updateExistingPivot($gone->getKey(), ['deleted_at' => now()]);
 
         // When the admin attempts to execute it
-        $response = $this->executeCase($this->admin, $case->getKey());
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the refusal is the STATE guard's, asked before any cross-entity
         // work — never the member guard's (the 422-where-409 leak, P14)
@@ -165,7 +165,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $company->users()->updateExistingPivot($alex->getKey(), ['deleted_at' => now()]);
 
         // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the execution is refused on the vanished member and the case stays verified
         $response->assertUnprocessable();
@@ -184,7 +184,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $company->update(['owner_id' => $bob->getKey()]);
 
         // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the world has moved — the execution is refused and the case stays verified
         $response->assertConflict();
@@ -205,7 +205,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $company->users()->updateExistingPivot($alex->getKey(), ['deleted_at' => now()]);
 
         // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the STALE refusal wins — 409 answers the world moving before
         // any cross-entity complaint (the owner seat is the deeper premise)
@@ -225,7 +225,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->onTheCaseExecutedRow(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the ONE transaction takes back the swap, the event, the close
         // and the already-inserted audit row together
@@ -252,7 +252,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->onTheCaseExecutedRow(fn () => throw $this->syntheticQueryException($failure));
 
         // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then contention answers as a conflict; anything else passes through
         // (render only — the audit-veto row is the atomicity net)
@@ -269,7 +269,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->aVerifiedCaseFor($company, $owner);
 
         // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the generalized self-guard refuses — an owner cannot succeed themselves
         $response->assertUnprocessable();
@@ -287,7 +287,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->aVerifiedCaseFor($company, $alex);
 
         // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the execution completes — the missing contact never blocks it
         $response->assertOk();
@@ -305,10 +305,10 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $alex = $this->aCompanyMember($company, 'employee');
         $case = $this->aVerifiedCaseFor($company, $alex);
         $key = (string) Str::uuid7();
-        $this->executeCase($this->admin, $case->getKey(), $key)->assertOk();
+        $this->executeCase($this->platformAdmin, $case->getKey(), $key)->assertOk();
 
         // When the identical request is replayed under the SAME key
-        $replay = $this->executeCase($this->admin, $case->getKey(), $key);
+        $replay = $this->executeCase($this->platformAdmin, $case->getKey(), $key);
 
         // Then the remembered response returns and nothing runs twice
         $this->assertExecutedExactlyOnce($case, $replay);
@@ -338,7 +338,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->aVerifiedCaseFor($company, $carol);
 
         // When the admin executes the case (event 2, caseId set)
-        $this->executeCase($this->admin, $case->getKey())->assertOk();
+        $this->executeCase($this->platformAdmin, $case->getKey())->assertOk();
 
         // Then the closed case cites ITS OWN event by identity, never the older routine one
         $this->assertClosedCaseCitesItsOwnTransferEvent($case);
@@ -356,14 +356,14 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->fromADevice();
 
         // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then both role moves are audited — Olive owner to admin, Alex HR officer to owner — as Lesily support
         $response->assertOk();
         $this->assertRoleChangeAudited($response, $this->pivotOf($case, $olive), 'owner');
         $this->assertRoleChangeAudited($response, $this->pivotOf($case, $alex), 'hr_officer');
         $this->assertSame(2, AuditEntry::query()->where('action', AuditAction::RoleChanged)->count());
-        $this->assertEveryRowActedBy(AuditAction::RoleChanged, $this->admin, 'platform_super_admin');
+        $this->assertEveryRowActedBy(AuditAction::RoleChanged, $this->platformAdmin, 'platform_super_admin');
     }
 
     #[Test]
@@ -385,7 +385,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         Queue::fake();
 
         // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the swap, the recorded fact, the closed case, the audit row
         // and the wire contract land whole — and only Alex is told
@@ -472,7 +472,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         $this->assertSame($from->getKey(), $event->event_properties['previousOwnerUserId']);
         $this->assertSame($to->getKey(), $event->event_properties['newOwnerUserId']);
-        $this->assertSame($this->admin->getKey(), $event->event_properties['transferredBy']);
+        $this->assertSame($this->platformAdmin->getKey(), $event->event_properties['transferredBy']);
         $this->assertSame('admin', $event->event_properties['source']);
 
         return (int) $event->getKey();
@@ -507,7 +507,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertSame('closed', $fresh->status->value);
         $this->assertSame('executed', $fresh->closed_outcome?->value);
         $this->assertSame(now()->toDateTimeString(), $fresh->executed_at?->toDateTimeString());
-        $this->assertSame($this->admin->getKey(), $fresh->executed_by);
+        $this->assertSame($this->platformAdmin->getKey(), $fresh->executed_by);
         $this->assertSame($transferEventId, $fresh->transfer_event_id);
         $this->assertSame($case->verified_at?->toDateTimeString(), $fresh->verified_at?->toDateTimeString());
     }
@@ -531,9 +531,9 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             'action' => 'case_executed',
             'description' => 'Platform admin executed a verified ownership-transfer case.',
             'company_id' => $case->company_id,
-            'actor_user_id' => $this->admin->getKey(),
+            'actor_user_id' => $this->platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $this->admin->name,
+            'actor_label' => $this->platformAdmin->name,
             'stored_event_id' => $transferEventId,
             'metadata' => null,
             'severity' => 'info',

@@ -57,7 +57,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given an allowlisted admin and no case at all
         // When they reject an unknown case id
-        $response = $this->rejectCase($this->admin, (string) Str::uuid7());
+        $response = $this->rejectCase($this->platformAdmin, (string) Str::uuid7());
 
         // Then nothing is found and nothing is audited (find-before-audit)
         $this->assertResourceNotFoundNoLeak($response);
@@ -69,7 +69,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given an allowlisted admin and a case reference that is not a UUID
         // When they reject it
-        $response = $this->rejectCase($this->admin, 'not-a-uuid');
+        $response = $this->rejectCase($this->platformAdmin, 'not-a-uuid');
 
         // Then the reference is refused as invalid and nothing is audited
         $this->assertValidationRejected($response, 'caseId', 'The case id field must be a valid UUID.');
@@ -85,7 +85,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($company);
 
         // When the admin submits the invalid rejection
-        $response = $this->rejectCase($this->admin, $case->getKey(), $payload);
+        $response = $this->rejectCase($this->platformAdmin, $case->getKey(), $payload);
 
         // Then the rejection is refused on the offending field and nothing was written
         $this->assertValidationRejected($response, $field, $message);
@@ -116,7 +116,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->aClosedCaseFor($company, $outcome);
 
         // When the admin attempts to reject it
-        $response = $this->rejectCase($this->admin, $case->getKey());
+        $response = $this->rejectCase($this->platformAdmin, $case->getKey());
 
         // Then the refusal names the closed state and nothing was written
         $response->assertConflict();
@@ -148,7 +148,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the admin rejects the case
-        $response = $this->rejectCase($this->admin, $case->getKey());
+        $response = $this->rejectCase($this->platformAdmin, $case->getKey());
 
         // Then the ONE transaction takes back the close, the reason stamp and
         // the already-inserted audit row together
@@ -173,7 +173,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         AuditEntry::created(fn () => throw $this->syntheticQueryException($failure));
 
         // When the admin rejects the case
-        $response = $this->rejectCase($this->admin, $case->getKey());
+        $response = $this->rejectCase($this->platformAdmin, $case->getKey());
 
         // Then contention answers as a conflict; anything else passes through
         // (render only — the audit-veto row is the atomicity net)
@@ -189,7 +189,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $reason = str_repeat('a', 1000);
 
         // When the admin rejects with the at-limit reason
-        $response = $this->rejectCase($this->admin, $case->getKey(), [
+        $response = $this->rejectCase($this->platformAdmin, $case->getKey(), [
             'reason' => $reason,
             'reasonCode' => 'other',
         ]);
@@ -208,7 +208,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($company);
 
         // When the admin rejects citing this row's code
-        $response = $this->rejectCase($this->admin, $case->getKey(), [
+        $response = $this->rejectCase($this->platformAdmin, $case->getKey(), [
             'reason' => 'Recorded under the cited reason code',
             'reasonCode' => $code->value,
         ]);
@@ -243,7 +243,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // When the rejection runs with every statement's depth recorded
         $capture = $this->recordedQueriesDuring(function () use ($case): void {
-            $this->rejectCase($this->admin, $case->getKey())->assertOk();
+            $this->rejectCase($this->platformAdmin, $case->getKey())->assertOk();
         });
 
         // Then the close decision is made against the locked case row
@@ -260,7 +260,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->aVerifiedCaseFor($company, $alex);
 
         // When the admin rejects it citing target ineligibility
-        $response = $this->rejectCase($this->admin, $case->getKey(), [
+        $response = $this->rejectCase($this->platformAdmin, $case->getKey(), [
             'reason' => 'Target is not eligible to assume ownership',
             'reasonCode' => 'target_ineligible',
         ]);
@@ -283,7 +283,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($company);
 
         // When the admin rejects it for failed identity evidence
-        $response = $this->rejectCase($this->admin, $case->getKey());
+        $response = $this->rejectCase($this->platformAdmin, $case->getKey());
 
         // Then the case closes rejected with the reason verbatim on the
         // record, exactly one audit row names the admin, no domain event
@@ -424,9 +424,9 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             'action' => 'case_rejected',
             'description' => 'Platform admin rejected an ownership-transfer case.',
             'company_id' => $case->company_id,
-            'actor_user_id' => $this->admin->getKey(),
+            'actor_user_id' => $this->platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $this->admin->name,
+            'actor_label' => $this->platformAdmin->name,
             'stored_event_id' => null,
             'metadata' => null,
             'severity' => 'info',

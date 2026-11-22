@@ -21,7 +21,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
 
     protected User $member;
 
-    protected User $admin;
+    protected User $platformAdmin;
 
     protected function setUp(): void
     {
@@ -29,7 +29,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
 
         $this->company = Company::factory()->create();
         $this->member = $this->aCompanyMember($this->company);
-        $this->admin = $this->aPlatformAdmin();
+        $this->platformAdmin = $this->aPlatformAdmin();
     }
 
     #[Test]
@@ -70,7 +70,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         $this->aSubmittedRequest($this->company, $this->member);
 
         // When the admin asks for an id no request has
-        $response = $this->viewAsAdmin($this->admin, $unknownId);
+        $response = $this->viewAsAdmin($this->platformAdmin, $unknownId);
 
         // Then nothing is found and no read is recorded
         $this->assertHiddenAsNotFound($response, $unknownId);
@@ -85,7 +85,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the admin opens it
-        $response = $this->viewAsAdmin($this->admin, $request->getKey());
+        $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
 
         // Then the read fails closed and the inserted row is rolled back with it
         $this->assertFailedClosed($response);
@@ -101,7 +101,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         $this->travelTo($viewedAt);
 
         // When the admin opens it
-        $response = $this->viewAsAdmin($this->admin, $request->getKey());
+        $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
 
         // Then the days remaining count calendar days on UTC dates
         $response->assertOk();
@@ -119,7 +119,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
 
         // When the admin opens it on 3 Nov, while its download window is open
         $this->travelTo('2026-11-03 09:00:00');
-        $response = $this->viewAsAdmin($this->admin, $request->getKey());
+        $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
 
         // Then the breach precedes the fulfilment on its timeline and the download shows as available
         $this->assertShown($response, [
@@ -142,7 +142,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         $this->expireTheDownloadAt($request, '2026-10-15 09:00:00');
 
         // When the admin opens it on 15 Oct
-        $response = $this->viewAsAdmin($this->admin, $request->getKey());
+        $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
 
         // Then the whole admin view is shown, the read is recorded and the request is unchanged
         $response->assertOk();
@@ -183,7 +183,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         $this->travelTo('2026-11-15 09:00:00');
 
         // When the admin opens it on 15 Nov
-        $response = $this->viewAsAdmin($this->admin, $request->getKey());
+        $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
 
         // Then it shows who it is about and who asked, fifteen days past the deadline, and the breach on its timeline
         $this->assertShown($response, [
@@ -206,7 +206,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         $request = $this->aClosedRequest($this->company, $this->member, 'rejected');
 
         // When the admin opens it
-        $response = $this->viewAsAdmin($this->admin, $request->getKey());
+        $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
 
         // Then it shows the rejection and its reason
         $this->assertShown($response, [
@@ -226,7 +226,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
         $request = $this->aClosedRequest($this->company, $this->member, 'withdrawn');
 
         // When the admin opens it
-        $response = $this->viewAsAdmin($this->admin, $request->getKey());
+        $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
 
         // Then it shows the withdrawal
         $this->assertShown($response, [
@@ -317,9 +317,9 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
             'subject_label' => null,
             'action' => 'dsar_admin_viewed',
             'description' => 'DSAR request viewed by a platform admin.',
-            'actor_user_id' => $this->admin->getKey(),
+            'actor_user_id' => $this->platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $this->admin->name,
+            'actor_label' => $this->platformAdmin->name,
             'ip_address' => '127.0.0.1',
             'metadata' => null,
         ]);

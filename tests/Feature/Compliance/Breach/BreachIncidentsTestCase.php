@@ -27,7 +27,7 @@ use App\Compliance\Breach\UseCases\Commands\FileBreachWithRegulatorCommand;
 
 abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
 {
-    protected User $admin;
+    protected User $platformAdmin;
 
     protected Company $companyA;
 
@@ -44,7 +44,7 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         $this->seedRbacCatalog();
         Notification::fake();
 
-        $this->admin = $this->aPlatformAdmin();
+        $this->platformAdmin = $this->aPlatformAdmin();
         $this->companyA = Company::factory()->create();
         $this->companyB = Company::factory()->create();
         $this->idempotencyKey = (string) Str::uuid();
@@ -52,7 +52,7 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
 
     protected function anIncident(): BreachIncidentRecordFactory
     {
-        return BreachIncidentRecord::factory()->recordedBy($this->admin);
+        return BreachIncidentRecord::factory()->recordedBy($this->platformAdmin);
     }
 
     protected function aRecordedIncident(array $overrides = []): string
@@ -60,7 +60,7 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         $breachId = Str::uuid7()->toString();
 
         BreachIncident::retrieve($breachId)
-            ->record(RecordBreachCommand::from($this->validPayload($overrides)), $this->admin)
+            ->record(RecordBreachCommand::from($this->validPayload($overrides)), $this->platformAdmin)
             ->persist();
 
         return $breachId;
@@ -75,7 +75,7 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         $parts = collect($companies)->mapWithKeys(fn (Company $company): array => [
             $company->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.'],
         ])->all();
-        BreachIncident::retrieve($breachId)->notifyCompanies($this->admin, $parts)->persist();
+        BreachIncident::retrieve($breachId)->notifyCompanies($this->platformAdmin, $parts)->persist();
 
         return $breachId;
     }
@@ -97,7 +97,7 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         $this->aFilingRequestBy($company, $breachId);
 
         BreachIncident::retrieve($breachId)
-            ->fileWithRegulator($this->aFilingCommandFor($breachId, $company), $this->admin, $this->aRegulatorFiling())
+            ->fileWithRegulator($this->aFilingCommandFor($breachId, $company), $this->platformAdmin, $this->aRegulatorFiling())
             ->persist();
 
         return $breachId;
@@ -258,7 +258,7 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
                 ->where('breach_incident_id', $breachId)
                 ->where('company_id', $companyId)
                 ->sole();
-            $this->assertSame([$dataTypes, $estimatedCount, $this->admin->getKey()], [$row->data_types, $row->estimated_count, $row->added_by]);
+            $this->assertSame([$dataTypes, $estimatedCount, $this->platformAdmin->getKey()], [$row->data_types, $row->estimated_count, $row->added_by]);
             $this->assertTrue($row->added_at->equalTo(BreachIncidentRecord::query()->findOrFail($breachId)->recorded_at));
         }
     }

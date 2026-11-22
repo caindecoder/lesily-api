@@ -259,14 +259,14 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
     {
         // Given an incident still recorded past its deadline, and the admin listed with spaces and a trailing comma
         $this->aRecordedIncident();
-        $this->allowlist([" {$this->admin->getKey()} ", '']);
+        $this->allowlist([" {$this->platformAdmin->getKey()} ", '']);
 
         // When the daily scan runs and the alerts leave the queue
         $this->runFlagMissedDeadlines()->assertSuccessful();
         $this->runQueuedHandlersFor(BreachDeadlineMissed::class);
 
         // Then the listed admin is alerted once
-        Notification::assertSentToTimes($this->admin, SystemNotification::class, 1);
+        Notification::assertSentToTimes($this->platformAdmin, SystemNotification::class, 1);
     }
 
     #[Test]
@@ -294,7 +294,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
             ['companyId' => $zenith->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 12],
             ['companyId' => $acme->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 30],
         ]]);
-        $this->allowlist([$this->admin->getKey(), User::factory()->create()->getKey()]);
+        $this->allowlist([$this->platformAdmin->getKey(), User::factory()->create()->getKey()]);
         $this->anOwnerOf($zenith);
         $this->anOwnerOf($acme);
 
@@ -428,11 +428,11 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
 
     protected function assertAdminsAlertedOnce(string $breachId, string $companies): void
     {
-        $admins = User::query()->whereKey(config('platform.admin_user_ids'))->get();
-        $this->assertCount(2, $admins);
-        foreach ($admins as $admin) {
-            Notification::assertSentToTimes($admin, SystemNotification::class, 1);
-            Notification::assertSentTo($admin, SystemNotification::class, fn (SystemNotification $alert): bool => $alert->type === NotificationType::BreachDeadlineMissed
+        $platformAdmins = User::query()->whereKey(config('platform.admin_user_ids'))->get();
+        $this->assertCount(2, $platformAdmins);
+        foreach ($platformAdmins as $platformAdmin) {
+            Notification::assertSentToTimes($platformAdmin, SystemNotification::class, 1);
+            Notification::assertSentTo($platformAdmin, SystemNotification::class, fn (SystemNotification $alert): bool => $alert->type === NotificationType::BreachDeadlineMissed
                 && $alert->companyName === $companies
                 && $alert->companyId === null
                 && $alert->details === ['incident' => $breachId, 'deadline' => '7 May 2026, 14:00 UTC']);
@@ -443,7 +443,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
     protected function correctTheDiscovery(string $breachId, string $discovered): void
     {
         BreachIncident::retrieve($breachId)
-            ->amend(AmendBreachCommand::from(['breachId' => $breachId, 'reason' => 'An earlier log entry was found.', 'dateDiscovered' => $discovered]), $this->admin)
+            ->amend(AmendBreachCommand::from(['breachId' => $breachId, 'reason' => 'An earlier log entry was found.', 'dateDiscovered' => $discovered]), $this->platformAdmin)
             ->persist();
     }
 

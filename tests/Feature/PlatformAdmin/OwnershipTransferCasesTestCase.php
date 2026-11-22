@@ -17,7 +17,7 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
     use AssertsAuditTrail;
     use AssertsMembershipAuditRows;
 
-    protected User $admin;
+    protected User $platformAdmin;
 
     protected function setUp(): void
     {
@@ -27,7 +27,7 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
 
         $this->seedRbacCatalog();
 
-        $this->admin = $this->aPlatformAdmin();
+        $this->platformAdmin = $this->aPlatformAdmin();
     }
 
     protected function listCases(?User $caller, array $query = []): TestResponse

@@ -173,7 +173,7 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
     {
         // Given company A was told of an incident whose filing is no longer open to a request, and A's owner
         $owner = $this->anOwnerOf($this->companyA);
-        $notice = $this->aFactoryNotice($atStage($this->anIncident()), fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $rowState($row, $owner->getKey(), $this->admin->getKey()));
+        $notice = $this->aFactoryNotice($atStage($this->anIncident()), fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $rowState($row, $owner->getKey(), $this->platformAdmin->getKey()));
         $before = $this->snapshotOf($notice->breach_incident_id);
 
         // When the owner asks Lesily to file it for company A
@@ -197,7 +197,7 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
             ],
             'already filed for' => [
                 fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->companiesNotified(),
-                fn (BreachIncidentCompanyFactory $row, string $ownerId, string $adminId): BreachIncidentCompanyFactory => $row->filed($ownerId, $adminId),
+                fn (BreachIncidentCompanyFactory $row, string $ownerId, string $platformAdminId): BreachIncidentCompanyFactory => $row->filed($ownerId, $platformAdminId),
                 'Lesily has already filed this breach with the regulator for the company.',
             ],
             'resolved' => [
@@ -345,7 +345,7 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
     {
         // Given an incident that notified companies A and B, two allowlisted Lesily admins, and A's and B's owners
         $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
-        $this->allowlist([$this->admin->getKey(), User::factory()->create()->getKey()]);
+        $this->allowlist([$this->platformAdmin->getKey(), User::factory()->create()->getKey()]);
         $owner = $this->anOwnerOf($this->companyA);
         $otherOwner = $this->anOwnerOf($this->companyB);
         $this->travelTo(self::REQUESTED_AT);
@@ -425,11 +425,11 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
 
     protected function assertAdminsAlertedAbout(Company $company, string $breachId): void
     {
-        $admins = User::query()->whereKey(config('platform.admin_user_ids'))->get();
-        $this->assertCount(2, $admins);
-        foreach ($admins as $admin) {
-            Notification::assertSentToTimes($admin, SystemNotification::class, 1);
-            Notification::assertSentTo($admin, SystemNotification::class, fn (SystemNotification $alert): bool => $alert->type === NotificationType::BreachFilingRequested
+        $platformAdmins = User::query()->whereKey(config('platform.admin_user_ids'))->get();
+        $this->assertCount(2, $platformAdmins);
+        foreach ($platformAdmins as $platformAdmin) {
+            Notification::assertSentToTimes($platformAdmin, SystemNotification::class, 1);
+            Notification::assertSentTo($platformAdmin, SystemNotification::class, fn (SystemNotification $alert): bool => $alert->type === NotificationType::BreachFilingRequested
                 && $alert->companyName === $company->name
                 && $alert->companyId === null
                 && $alert->details === ['incident' => $breachId]);

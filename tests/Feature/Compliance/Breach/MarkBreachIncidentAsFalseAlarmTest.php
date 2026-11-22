@@ -77,7 +77,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         // Given an admin and no incident with this id
 
         // When the admin marks it a false alarm
-        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+        $response = $this->markFalseAlarm($this->platformAdmin, $breachId, $this->aFalseAlarm());
 
         // Then it is not found and nothing is recorded
         $this->assertResourceNotFoundNoLeak($response);
@@ -93,7 +93,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         $before = $this->snapshotOf($breachId);
 
         // When the admin marks it a false alarm with one text wrong
-        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm($override));
+        $response = $this->markFalseAlarm($this->platformAdmin, $breachId, $this->aFalseAlarm($override));
 
         // Then the false alarm is refused on that text and nothing is marked
         $this->assertValidationRejected($response, $field, $message);
@@ -125,7 +125,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         Mail::fake();
 
         // When the admin marks it a false alarm
-        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+        $response = $this->markFalseAlarm($this->platformAdmin, $breachId, $this->aFalseAlarm());
 
         // Then it is refused because the notices are out, nothing is marked and nobody is told
         $this->assertRefusedAsNotOpen($response, 'A breach incident is marked a false alarm only before its companies are notified.');
@@ -141,7 +141,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         $before = $this->snapshotOf($breachId);
 
         // When the admin marks it a false alarm
-        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+        $response = $this->markFalseAlarm($this->platformAdmin, $breachId, $this->aFalseAlarm());
 
         // Then it is refused with the stage named, and nothing is marked
         $this->assertRefusedAsNotOpen($response, $message);
@@ -170,11 +170,11 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
     {
         // Given a recorded incident affecting company A, already marked a false alarm by the admin
         $breachId = $this->aRecordedIncident();
-        $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+        $this->markFalseAlarm($this->platformAdmin, $breachId, $this->aFalseAlarm());
         $before = $this->snapshotOf($breachId);
 
         // When the admin marks it a false alarm again
-        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm(['findings' => 'A second look found the same.']));
+        $response = $this->markFalseAlarm($this->platformAdmin, $breachId, $this->aFalseAlarm(['findings' => 'A second look found the same.']));
 
         // Then it is refused, the incident is unchanged, and the close is recorded and audited once
         $this->assertRefusedAsNotOpen($response, 'A breach incident already marked as a false alarm cannot be marked again.');
@@ -192,7 +192,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the admin marks it a false alarm
-        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+        $response = $this->markFalseAlarm($this->platformAdmin, $breachId, $this->aFalseAlarm());
 
         // Then the request fails closed: no BreachMarkedFalseAlarm is recorded and the incident is unchanged
         $this->assertFailedClosed($response);
@@ -208,7 +208,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         $findings = str_repeat('f', 1000);
 
         // When the admin marks it a false alarm
-        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm(['reason' => $reason, 'findings' => $findings]));
+        $response = $this->markFalseAlarm($this->platformAdmin, $breachId, $this->aFalseAlarm(['reason' => $reason, 'findings' => $findings]));
 
         // Then it is marked with both texts whole
         $response->assertOk();
@@ -225,7 +225,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         BreachIncident::retrieve($breachId)->flagMissedDeadline(CarbonImmutable::now())->persist();
 
         // When the admin marks it a false alarm
-        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+        $response = $this->markFalseAlarm($this->platformAdmin, $breachId, $this->aFalseAlarm());
 
         // Then it is marked, and the missed deadline stays on the record
         $response->assertOk();
@@ -238,7 +238,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
     {
         // Given a recorded incident affecting company A, marked a false alarm by the admin
         $breachId = $this->aRecordedIncident();
-        $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+        $this->markFalseAlarm($this->platformAdmin, $breachId, $this->aFalseAlarm());
 
         // When the admin opens the queue at the false-alarm stage
         $response = $this->aQueueAtFalseAlarm();
@@ -260,7 +260,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         $otherBefore = $this->snapshotOf($other);
 
         // When the admin marks the first a false alarm, with the second's id in the body
-        $response = $this->markFalseAlarm($this->admin, $addressed, $this->aFalseAlarm(['breachId' => $other]));
+        $response = $this->markFalseAlarm($this->platformAdmin, $addressed, $this->aFalseAlarm(['breachId' => $other]));
 
         // Then the incident in the address is marked and the other is untouched
         $response->assertOk();
@@ -281,7 +281,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         $this->travelTo(CarbonImmutable::parse(self::MARKED_AT));
 
         // When the admin marks it a false alarm with the reason and the findings
-        $response = $this->markFalseAlarm($this->admin, $breachId, $this->aFalseAlarm());
+        $response = $this->markFalseAlarm($this->platformAdmin, $breachId, $this->aFalseAlarm());
 
         // Then the incident is a false alarm in the event store and the read model, the close is audited,
         // and nobody - neither company nor the regulator - is told, nor any notice recorded
@@ -312,7 +312,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
 
     protected function aQueueAtFalseAlarm(): TestResponse
     {
-        Sanctum::actingAs($this->admin);
+        Sanctum::actingAs($this->platformAdmin);
 
         return $this->getJson('/api/v1/admin/breach-incidents?stage=false_alarm');
     }
@@ -321,7 +321,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
     {
         $response->assertOk();
         $this->assertSame(
-            ['false_alarm', self::REASON, self::FINDINGS, $this->admin->getKey(), self::MARKED_AT_JSON],
+            ['false_alarm', self::REASON, self::FINDINGS, $this->platformAdmin->getKey(), self::MARKED_AT_JSON],
             [
                 $response->json('data.stage'),
                 $response->json('data.false_alarm_reason'),
@@ -340,7 +340,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         );
 
         $marked = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->latest('id')->firstOrFail();
-        $this->assertSame([$breachId, self::REASON, self::FINDINGS, $this->admin->getKey(), self::MARKED_AT_ISO], [
+        $this->assertSame([$breachId, self::REASON, self::FINDINGS, $this->platformAdmin->getKey(), self::MARKED_AT_ISO], [
             $marked->event_properties['breachId'],
             $marked->event_properties['reason'],
             $marked->event_properties['findings'],
@@ -355,7 +355,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
     {
         $row = BreachIncidentRecord::query()->findOrFail($breachId);
         $this->assertSame(
-            [BreachStage::FalseAlarm, self::REASON, self::FINDINGS, $this->admin->getKey(), self::MARKED_AT_ISO],
+            [BreachStage::FalseAlarm, self::REASON, self::FINDINGS, $this->platformAdmin->getKey(), self::MARKED_AT_ISO],
             [$row->stage, $row->false_alarm_reason, $row->false_alarm_findings, $row->false_alarm_by, $row->false_alarm_at?->toIso8601String()],
         );
     }
@@ -374,9 +374,9 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
             'description' => 'Platform admin marked a data breach incident a false alarm.',
             'metadata' => null,
             'recorded_at' => self::MARKED_AT,
-            'actor_user_id' => $this->admin->getKey(),
+            'actor_user_id' => $this->platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $this->admin->name,
+            'actor_label' => $this->platformAdmin->name,
             'ip_address' => '127.0.0.1',
             'severity' => 'critical',
         ]);

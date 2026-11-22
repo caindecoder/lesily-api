@@ -37,7 +37,7 @@ class MarkBreachIncidentAsFalseAlarmOnceTest extends BreachIncidentsTestCase
 
         // When the aggregate is asked to mark it a false alarm
         try {
-            BreachIncident::retrieve($breachId)->markFalseAlarm($this->aFalseAlarmFor($breachId), $this->admin)->persist();
+            BreachIncident::retrieve($breachId)->markFalseAlarm($this->aFalseAlarmFor($breachId), $this->platformAdmin)->persist();
             $this->fail('A breach incident never recorded must not be marked a false alarm.');
         } catch (BreachFalseAlarmRefusedException $refused) {
             // Then it is refused with the reason named, and nothing is recorded
@@ -76,12 +76,12 @@ class MarkBreachIncidentAsFalseAlarmOnceTest extends BreachIncidentsTestCase
     {
         return [
             'mark it again' => [
-                fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)->markFalseAlarm($test->aFalseAlarmFor($breachId), $test->admin)->persist(),
+                fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)->markFalseAlarm($test->aFalseAlarmFor($breachId), $test->platformAdmin)->persist(),
                 BreachFalseAlarmRefusedException::class,
                 'A breach incident already marked as a false alarm cannot be marked again.',
             ],
             'notify its companies' => [
-                fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)->notifyCompanies($test->admin, [
+                fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)->notifyCompanies($test->platformAdmin, [
                     $test->companyA->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.'],
                 ])->persist(),
                 BreachIncidentNotRecordedException::class,
@@ -92,7 +92,7 @@ class MarkBreachIncidentAsFalseAlarmOnceTest extends BreachIncidentsTestCase
                     'breachId' => $breachId,
                     'reason' => 'The description named the wrong export.',
                     'description' => 'A payroll export was emailed to two wrong recipients.',
-                ]), $test->admin)->persist(),
+                ]), $test->platformAdmin)->persist(),
                 BreachAmendmentRefusedException::class,
                 'A breach incident marked as a false alarm cannot be amended.',
             ],
@@ -103,7 +103,7 @@ class MarkBreachIncidentAsFalseAlarmOnceTest extends BreachIncidentsTestCase
                     'dataTypes' => ['payroll'],
                     'estimatedCount' => 12,
                     'reason' => 'The export also reached this company.',
-                ]), $test->admin, ['description' => 'A payroll export was emailed to the wrong recipient.'])->persist(),
+                ]), $test->platformAdmin, ['description' => 'A payroll export was emailed to the wrong recipient.'])->persist(),
                 LateBreachCompanyRefusedException::class,
                 'A company cannot be added to a breach incident marked as a false alarm.',
             ],
@@ -117,7 +117,7 @@ class MarkBreachIncidentAsFalseAlarmOnceTest extends BreachIncidentsTestCase
             ],
             'file it with the regulator' => [
                 fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)
-                    ->fileWithRegulator($test->aFilingCommandFor($breachId, $test->companyA), $test->admin, $test->aRegulatorFiling())
+                    ->fileWithRegulator($test->aFilingCommandFor($breachId, $test->companyA), $test->platformAdmin, $test->aRegulatorFiling())
                     ->persist(),
                 BreachFilingNotOpenException::class,
                 'A false alarm is not filed with the regulator.',
@@ -128,7 +128,7 @@ class MarkBreachIncidentAsFalseAlarmOnceTest extends BreachIncidentsTestCase
                     'rootCause' => 'A monitor flagged the company\'s own test export.',
                     'remediationSteps' => 'The monitor now ignores the test export.',
                     'summary' => 'No personal data left Lesily.',
-                ]), $test->admin)->persist(),
+                ]), $test->platformAdmin)->persist(),
                 BreachResolutionRefusedException::class,
                 'A breach incident marked as a false alarm cannot be resolved.',
             ],
@@ -138,7 +138,7 @@ class MarkBreachIncidentAsFalseAlarmOnceTest extends BreachIncidentsTestCase
     protected function aFalseAlarmedIncident(): string
     {
         $breachId = $this->aRecordedIncident();
-        BreachIncident::retrieve($breachId)->markFalseAlarm($this->aFalseAlarmFor($breachId), $this->admin)->persist();
+        BreachIncident::retrieve($breachId)->markFalseAlarm($this->aFalseAlarmFor($breachId), $this->platformAdmin)->persist();
 
         return $breachId;
     }

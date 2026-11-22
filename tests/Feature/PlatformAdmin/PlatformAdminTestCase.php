@@ -302,7 +302,7 @@ abstract class PlatformAdminTestCase extends TestCase
      * couldn't catch an ip↔user_agent swap): ip = the test client's loopback,
      * request_id = the very Correlation-Id the response carries.
      */
-    protected function assertAdminReviewAuditRecorded(InvoiceReadModel $invoice, User $admin, TestResponse $response): void
+    protected function assertAdminReviewAuditRecorded(InvoiceReadModel $invoice, User $platformAdmin, TestResponse $response): void
     {
         $this->assertDatabaseCount('audit_trail', 1);
         $this->assertDatabaseHas('audit_trail', [
@@ -313,9 +313,9 @@ abstract class PlatformAdminTestCase extends TestCase
             'action' => 'admin_reviewed',
             'description' => "Platform admin reviewed invoice {$invoice->invoice_number}.",
             'company_id' => $invoice->company_id,
-            'actor_user_id' => $admin->getKey(),
+            'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_label' => $platformAdmin->name,
             'stored_event_id' => null,
             'metadata' => null,
             'severity' => 'info',
