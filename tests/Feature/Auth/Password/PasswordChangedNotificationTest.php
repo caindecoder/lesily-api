@@ -209,10 +209,7 @@ class PasswordChangedNotificationTest extends AuthTestCase
         // leaving an older live one
         $oldestLive = $this->attachCompany($this->employee, now()->subDays(2));
         $this->employee->forceFill(['default_company_id' => $this->company->getKey()])->save();
-        CompanyUser::query()
-            ->where('company_id', $this->company->getKey())
-            ->where('user_id', $this->employee->getKey())
-            ->update(['deleted_at' => now()]);
+        $this->softDeleteMembership($this->company, $this->employee);
         $session = $this->aSessionFor($this->employee);
         Notification::fake();
 
@@ -229,10 +226,11 @@ class PasswordChangedNotificationTest extends AuthTestCase
     #[Test]
     public function when_the_user_has_a_default_company_then_it_names_the_confirmation(): void
     {
-        // Given the employee, a two-company user whose default is the NEWER membership (Contoso) —
-        // the one neither an arbitrary-first nor an oldest-first read would pick
+        // Given the employee — first a member of Contoso — whose default is the NEWER, last-inserted
+        // membership: the one neither an arbitrary-first nor an oldest-first read would pick
         $this->attachCompany($this->employee, now()->subDays(2));
-        $this->employee->forceFill(['default_company_id' => $this->company->getKey()])->save();
+        $default = $this->attachCompany($this->employee, now());
+        $this->employee->forceFill(['default_company_id' => $default->getKey()])->save();
         $session = $this->aSessionFor($this->employee);
         Notification::fake();
 
@@ -243,7 +241,7 @@ class PasswordChangedNotificationTest extends AuthTestCase
         ]);
 
         // Then the confirmation is labeled with the default company — the user's own choice wins
-        $this->assertConfirmationNames($response, $this->employee, $this->company->name);
+        $this->assertConfirmationNames($response, $this->employee, $default->name);
     }
 
     #[Test]

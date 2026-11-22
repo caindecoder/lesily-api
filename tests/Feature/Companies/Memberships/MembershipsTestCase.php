@@ -30,7 +30,6 @@ use App\Companies\Memberships\Events\UserInvited;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Companies\Memberships\Mail\InvitationMail;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use App\Foundation\RolesPermissions\Entities\Role;
 use Illuminate\Database\Events\TransactionBeginning;
 use App\Companies\Memberships\Events\UserJoinedCompany;
 use App\Foundation\Auth\Events\UserCreatedFromInvitation;

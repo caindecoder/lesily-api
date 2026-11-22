@@ -180,10 +180,7 @@ class ListMyCompaniesTest extends AuthTestCase
         $beta = Company::factory()->named('Beta')->create();
         $this->aMembershipFor($this->employee, $beta);
         $this->setDefaultCompany($this->employee, ['companyId' => $beta->getKey()]);
-        CompanyUser::query()
-            ->where('company_id', $beta->getKey())
-            ->where('user_id', $this->employee->getKey())
-            ->update(['deleted_at' => now()]);
+        $this->softDeleteMembership($beta, $this->employee);
 
         // When they list their companies
         $response = $this->listCompanies($this->employee);

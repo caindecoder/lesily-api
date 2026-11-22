@@ -8,7 +8,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
-use App\Companies\Entities\Company;
 use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
@@ -280,7 +279,8 @@ class LinkGoogleAccountTest extends AuthTestCase
     #[Test]
     public function when_one_of_several_companies_can_use_google_sign_in_then_the_account_is_linked(): void
     {
-        // Given Alice, the employee of Contoso (Free), also on a Starter company
+        // Given Alice, the employee of Contoso on Free, also on a Starter company
+        $this->putOnPlan($this->company, BillingPlan::Free);
         $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
         $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->alice->email));
 

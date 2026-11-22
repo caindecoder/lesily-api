@@ -178,20 +178,21 @@ class DefaultCompanyTest extends AuthTestCase
     #[Test]
     public function when_a_member_clears_their_default_then_other_users_defaults_are_untouched(): void
     {
-        // Given the admin and the employee, both with Contoso set as default (the admin's
-        // default survives the employee's clear — a bulk write on either path would clobber it)
-        $this->setDefaultCompany($this->admin, ['companyId' => $this->company->getKey()]);
+        // Given the admin with Beta as default, then the owner and the employee with Contoso (a bulk
+        // write on the set path would move the admin's; one on the clear path would clear the owner's)
+        $beta = Company::factory()->named('Beta')->create();
+        $this->aMembershipFor($this->admin, $beta);
+        $this->setDefaultCompany($this->admin, ['companyId' => $beta->getKey()]);
+        $this->setDefaultCompany($this->owner, ['companyId' => $this->company->getKey()]);
         $this->setDefaultCompany($this->employee, ['companyId' => $this->company->getKey()]);
 
         // When the employee clears their default
         $response = $this->clearDefaultCompany($this->employee);
 
-        // Then — the employee's is null and the admin's is untouched (user-scoped writes)
+        // Then — the employee's is null; the admin's and the owner's are untouched (user-scoped writes)
         $this->assertDefaultStored($response, $this->employee, null);
-        $this->assertDatabaseHas('users', [
-            'id' => $this->admin->getKey(),
-            'default_company_id' => $this->company->getKey(),
-        ]);
+        $this->assertDatabaseHas('users', ['id' => $this->admin->getKey(), 'default_company_id' => $beta->getKey()]);
+        $this->assertDatabaseHas('users', ['id' => $this->owner->getKey(), 'default_company_id' => $this->company->getKey()]);
     }
 
     #[Test]
