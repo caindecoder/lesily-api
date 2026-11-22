@@ -66,12 +66,11 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     {
         // Given an incident whose companies A and B have been notified, its deadline passed, and company A's owner
         $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
-        $owner = $this->anOwnerOf($this->companyA);
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
 
         // When the owner resolves it on the admin surface
-        $response = $this->resolve($owner, $breachId, $this->aResolution());
+        $response = $this->resolve($this->owner, $breachId, $this->aResolution());
 
         // Then the admin surface is not acknowledged and nothing is resolved
         $this->assertResourceNotFoundNoLeak($response);
@@ -88,8 +87,8 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
 
         // Then it is not found and nothing is recorded
         $this->assertResourceNotFoundNoLeak($response);
-        $this->assertSame(0, LesilyStoredEvent::query()->count());
-        $this->assertDatabaseCount('audit_trail', 0);
+        $this->assertSame(self::READY_MADE_EVENTS, LesilyStoredEvent::query()->count());
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test, DataProvider('provideInvalidResolutions')]
@@ -209,7 +208,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertRefusedAsNotOpen($response, 'A resolved breach incident cannot be resolved again.');
         $this->assertSame($before, $this->snapshotOf($breachId));
         $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachResolved::class)->count());
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
@@ -286,12 +285,11 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     {
         // Given an incident company A was notified of, resolved by the admin after its deadline, and company A's owner
         $breachId = $this->aNotifiedIncident($this->companyA);
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
         $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
 
         // When company A's owner lists its breach notices
-        $response = $this->listNotices($owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->companyA);
 
         // Then the list shows the incident resolved
         $response->assertOk();
@@ -450,7 +448,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
 
     protected function assertResolveAudited(TestResponse $response, string $breachId, int $storedEventId): void
     {
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertDatabaseHas('audit_trail', [
             'company_id' => null,
             'stored_event_id' => $storedEventId,
@@ -471,8 +469,8 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->sole();
-        $this->assertSame([$correlationId, 'Symfony'], [$entry->request_id, $entry->user_agent]);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $this->assertSame('Symfony', $entry->user_agent);
     }
 
     protected function assertNobodyTold(): void
@@ -485,6 +483,6 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     {
         $this->assertSame($before, $this->snapshotOf($breachId));
         $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachResolved::class)->count());
-        $this->assertDatabaseCount('audit_trail', 0);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 }

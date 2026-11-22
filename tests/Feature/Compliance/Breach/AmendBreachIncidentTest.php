@@ -59,11 +59,10 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     {
         // Given a recorded incident affecting company A, and company A's owner
         $breachId = $this->aRecordedIncident();
-        $owner = $this->anOwnerOf($this->companyA);
         $before = $this->snapshotOf($breachId);
 
         // When the owner corrects its description on the admin surface
-        $response = $this->amendIncident($owner, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive']));
+        $response = $this->amendIncident($this->owner, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive']));
 
         // Then the admin surface is not acknowledged and nothing is amended
         $this->assertResourceNotFoundNoLeak($response);
@@ -479,6 +478,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     {
         // Given an incident whose companies A and B were notified
         $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        Notification::fake();
 
         // When the admin corrects a fact the notices leave open
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection($correction($this)));
@@ -499,8 +499,8 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
             ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 120],
             ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 30],
         ]);
-        $ownerA = $this->anOwnerOf($this->companyA);
         $ownerB = $this->anOwnerOf($this->companyB);
+        Notification::fake();
 
         // When the admin corrects company A's count to 145
         $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['companies' => [
@@ -509,7 +509,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         ]]));
 
         // Then company A's notices list shows 145, company B's still shows 30, and nobody is told
-        $this->assertSame([145], $this->listNotices($ownerA, $this->companyA)->json('data.*.estimated_count'));
+        $this->assertSame([145], $this->listNotices($this->owner, $this->companyA)->json('data.*.estimated_count'));
         $this->assertSame([30], $this->listNotices($ownerB, $this->companyB)->json('data.*.estimated_count'));
         Notification::assertNothingSent();
     }
@@ -846,7 +846,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
 
     protected function assertAmendAudited(TestResponse $response, string $breachId, int $storedEventId): void
     {
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertDatabaseHas('audit_trail', [
             'company_id' => null,
             'stored_event_id' => $storedEventId,
@@ -866,8 +866,8 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->sole();
-        $this->assertSame([$correlationId, 'Symfony'], [$entry->request_id, $entry->user_agent]);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $this->assertSame('Symfony', $entry->user_agent);
     }
 
     protected function assertNothingAmended(string $breachId, array $before): void

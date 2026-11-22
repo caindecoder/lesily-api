@@ -36,10 +36,9 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     {
         // Given an incident naming company A, and company A's owner, who is not a platform admin
         $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
-        $owner = $this->aCompanyMember($this->companyA, 'owner');
 
         // When the owner opens the queue
-        $response = $this->listQueue($owner);
+        $response = $this->listQueue($this->owner);
 
         // Then the admin surface is not acknowledged — not even their own company's incident — and no read is recorded
         $this->assertResourceNotFoundNoLeak($response);

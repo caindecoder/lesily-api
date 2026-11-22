@@ -38,20 +38,21 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Then the caller is refused as unauthenticated and nothing is recorded
         $this->assertUnauthenticated($response);
         $this->assertNothingRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
     public function when_a_company_owner_records_a_breach_then_the_admin_surface_is_not_acknowledged(): void
     {
         // Given the owner of an affected company, who is not a platform admin
-        $owner = $this->aCompanyMember($this->companyA, 'owner');
 
         // When the owner records a breach
-        $response = $this->recordBreach($owner, $this->validPayload());
+        $response = $this->recordBreach($this->owner, $this->validPayload());
 
         // Then the admin surface answers as if it did not exist and nothing is recorded
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertNothingRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -66,6 +67,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Then the request is refused for the missing key and nothing is recorded
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::IdempotencyKeyRequired);
         $this->assertNothingRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test, DataProvider('invalidBreachProvider')]
@@ -80,6 +82,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Then the breach is refused on that detail and nothing is recorded
         $this->assertValidationRejected($response, $field, $message);
         $this->assertNothingRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -94,6 +97,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Then the request fails safely and the event, the rows and the audit row are all absent
         $this->assertRecordFailedSafely($response);
         $this->assertNothingRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -352,7 +356,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
 
     protected function assertRecordAudited(TestResponse $response, string $breachId, int $storedEventId): void
     {
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertDatabaseHas('audit_trail', [
             'company_id' => null,
             'stored_event_id' => $storedEventId,
@@ -373,8 +377,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->sole();
-        $this->assertSame($correlationId, $entry->request_id);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
         $this->assertSame('Symfony', $entry->user_agent);
     }
 }

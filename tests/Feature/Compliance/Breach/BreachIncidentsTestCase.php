@@ -9,6 +9,7 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Facades\Notification;
 use App\Foundation\Http\Responses\ApiErrorCode;
@@ -27,6 +28,8 @@ use App\Compliance\Breach\UseCases\Commands\FileBreachWithRegulatorCommand;
 
 abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
 {
+    use FreeTierCompany;
+
     protected User $platformAdmin;
 
     protected Company $companyA;
@@ -41,11 +44,11 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
 
         config(['app.debug' => false]);
 
-        $this->seedRbacCatalog();
+        $this->makeFreeTierCompany();
         Notification::fake();
 
         $this->platformAdmin = $this->aPlatformAdmin();
-        $this->companyA = Company::factory()->create();
+        $this->companyA = $this->company;
         $this->companyB = Company::factory()->create();
         $this->idempotencyKey = (string) Str::uuid();
     }
@@ -82,7 +85,7 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
 
     protected function aFilingRequestBy(Company $company, string $breachId): User
     {
-        $owner = $this->anOwnerOf($company);
+        $owner = $company->is($this->company) ? $this->owner : $this->anOwnerOf($company);
 
         BreachIncident::retrieve($breachId)
             ->requestFiling(RequestBreachFilingCommand::from(['breachId' => $breachId, 'company' => $company]), $owner)
@@ -145,14 +148,6 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
     protected function aPartFor(BreachIncidentRecord $incident, Company $company): BreachIncidentCompanyFactory
     {
         return BreachIncidentCompany::factory()->forIncident($incident, $company);
-    }
-
-    protected function aConsentingMember(Company $company, string $roleCode): User
-    {
-        $member = $this->aCompanyMember($company, $roleCode);
-        $this->aConsentRecordedBy($member, $company);
-
-        return $member;
     }
 
     protected function assertRoleInsufficient(TestResponse $response, string $permission): void
@@ -241,7 +236,6 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         $this->assertDatabaseCount('breach_incidents', 0);
         $this->assertDatabaseCount('breach_incident_companies', 0);
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', BreachRecorded::class)->count());
-        $this->assertNoAuditRecorded();
     }
 
     /**
@@ -276,7 +270,7 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
 
     protected function anOwnerOf(Company $company): User
     {
-        return $this->aConsentingMember($company, 'owner');
+        return $this->aCompanyMember($company, 'owner');
     }
 
     protected function aFactoryNotice(BreachIncidentRecordFactory $incident, Closure $state): BreachIncidentCompany

@@ -36,10 +36,9 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     {
         // Given an incident naming company A, and company A's owner, who is not a platform admin
         $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
-        $owner = $this->aCompanyMember($this->companyA, 'owner');
 
         // When the owner opens the incident
-        $response = $this->showIncident($owner, $incident->getKey());
+        $response = $this->showIncident($this->owner, $incident->getKey());
 
         // Then the admin surface is not acknowledged — not even their own company's incident — and no read is recorded
         $this->assertResourceNotFoundNoLeak($response);
@@ -118,8 +117,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     {
         // Given an incident whose companies were notified — company A's owner has asked Lesily to file
         $incident = $this->anIncident()->companiesNotified()->createOne();
-        $owner = $this->aCompanyMember($this->companyA, 'owner');
-        BreachIncidentCompany::factory()->forIncident($incident, $this->companyA)->withFigures(['pii'], 40)->filingRequested($owner->getKey())->createOne();
+        BreachIncidentCompany::factory()->forIncident($incident, $this->companyA)->withFigures(['pii'], 40)->filingRequested($this->owner->getKey())->createOne();
         BreachIncidentCompany::factory()->forIncident($incident, $this->companyB)->withFigures(['payroll', 'banking'], 7)->notified()->createOne();
 
         // When the admin opens the incident
@@ -135,8 +133,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     {
         // Given an incident that missed its deadline, was filed with the regulator for company A, then was resolved
         $incident = $this->anIncident()->deadlineMissed()->resolved()->createOne();
-        $owner = $this->aCompanyMember($this->companyA, 'owner');
-        BreachIncidentCompany::factory()->forIncident($incident, $this->companyA)->filed($owner->getKey(), $this->platformAdmin->getKey())->createOne();
+        BreachIncidentCompany::factory()->forIncident($incident, $this->companyA)->filed($this->owner->getKey(), $this->platformAdmin->getKey())->createOne();
 
         // When the admin opens the incident
         $response = $this->showIncident($this->platformAdmin, $incident->getKey());

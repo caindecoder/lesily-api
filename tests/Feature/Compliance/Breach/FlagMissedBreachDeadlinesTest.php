@@ -94,7 +94,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
 
         // Then the incident keeps its one flag, its one audit row and its one alert
         $this->assertFlagged($breachId, CarbonImmutable::parse(self::THE_NIGHT_AFTER));
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertSame(1, $this->queuedHandlerCountFor(BreachDeadlineMissed::class));
     }
 
@@ -111,7 +111,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
 
         // Then no second flag is recorded and none is audited
         $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachDeadlineMissed::class)->count());
-        $this->assertDatabaseCount('audit_trail', 0);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -462,7 +462,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
         $storedEventId = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachDeadlineMissed::class)->sole()->getKey();
         $this->assertIsInt($storedEventId);
 
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertDatabaseHas('audit_trail', [
             'company_id' => null,
             'stored_event_id' => $storedEventId,

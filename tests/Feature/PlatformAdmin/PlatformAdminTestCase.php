@@ -5,7 +5,6 @@ namespace Tests\Feature\PlatformAdmin;
 use Tests\TestCase;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
-use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Database\QueryException;
 use Tests\Feature\Billing\CreatesInvoices;
@@ -35,19 +34,6 @@ abstract class PlatformAdminTestCase extends TestCase
     }
 
     /**
-     * A fresh user made a live member of $company under a seeded role — the
-     * company_user pivot row role gates read.
-     */
-    protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
-    {
-        $user = User::factory()->create();
-
-        $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
-
-        return $user;
-    }
-
-    /**
      * Call the REAL admin invoice-review endpoint (UC-1-122) as $caller, or as
      * a guest when null. Deliberately NO X-Company-Context header — the
      * /api/v1/admin/* family is cross-tenant by design, with no auth.company
@@ -60,15 +46,6 @@ abstract class PlatformAdminTestCase extends TestCase
         }
 
         return $this->getJson("/api/v1/admin/invoices/{$invoiceId}", $headers);
-    }
-
-    /**
-     * No read was recorded — the audit trail holds zero rows (the UC-1-122
-     * "no row on 404 / denied caller" invariant; the read did not happen).
-     */
-    protected function assertNoAuditRecorded(): void
-    {
-        $this->assertDatabaseCount('audit_trail', 0);
     }
 
     /**

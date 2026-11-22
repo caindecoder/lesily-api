@@ -60,11 +60,10 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
     {
         // Given a recorded incident affecting company A, and company A's owner
         $breachId = $this->aRecordedIncident();
-        $owner = $this->anOwnerOf($this->companyA);
         $before = $this->snapshotOf($breachId);
 
         // When the owner marks it a false alarm on the admin surface
-        $response = $this->markFalseAlarm($owner, $breachId, $this->aFalseAlarm());
+        $response = $this->markFalseAlarm($this->owner, $breachId, $this->aFalseAlarm());
 
         // Then the admin surface is not acknowledged and nothing is marked
         $this->assertResourceNotFoundNoLeak($response);
@@ -81,8 +80,8 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
 
         // Then it is not found and nothing is recorded
         $this->assertResourceNotFoundNoLeak($response);
-        $this->assertSame(0, LesilyStoredEvent::query()->count());
-        $this->assertDatabaseCount('audit_trail', 0);
+        $this->assertSame(self::READY_MADE_EVENTS, LesilyStoredEvent::query()->count());
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test, DataProvider('provideInvalidFalseAlarms')]
@@ -180,7 +179,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         $this->assertRefusedAsNotOpen($response, 'A breach incident already marked as a false alarm cannot be marked again.');
         $this->assertSame($before, $this->snapshotOf($breachId));
         $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachMarkedFalseAlarm::class)->count());
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
@@ -362,7 +361,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
 
     protected function assertMarkAudited(TestResponse $response, string $breachId, int $storedEventId): void
     {
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertDatabaseHas('audit_trail', [
             'company_id' => null,
             'stored_event_id' => $storedEventId,
@@ -383,8 +382,8 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->sole();
-        $this->assertSame([$correlationId, 'Symfony'], [$entry->request_id, $entry->user_agent]);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $this->assertSame('Symfony', $entry->user_agent);
     }
 
     protected function assertNobodyTold(): void
@@ -397,6 +396,6 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
     {
         $this->assertSame($before, $this->snapshotOf($breachId));
         $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachMarkedFalseAlarm::class)->count());
-        $this->assertDatabaseCount('audit_trail', 0);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 }

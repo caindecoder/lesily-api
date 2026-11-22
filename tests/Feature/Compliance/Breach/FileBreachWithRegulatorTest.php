@@ -55,8 +55,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
     public function when_an_unauthenticated_caller_files_then_they_are_refused(): void
     {
         // Given company A asked Lesily to file an incident it was told of
-        $owner = $this->anOwnerOf($this->companyA);
-        $notice = $this->aFactoryNotice($this->anIncident()->companiesNotified(), fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $row->filingRequested($owner->getKey()));
+        $notice = $this->aFactoryNotice($this->anIncident()->companiesNotified(), fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $row->filingRequested($this->owner->getKey()));
         $before = $this->snapshotOf($notice->breach_incident_id);
 
         // When a caller with no token files it for company A
@@ -71,12 +70,11 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
     public function when_a_company_owner_files_then_it_is_not_found_and_nothing_is_sent(): void
     {
         // Given company A's owner asked Lesily to file an incident A was told of
-        $owner = $this->anOwnerOf($this->companyA);
-        $notice = $this->aFactoryNotice($this->anIncident()->companiesNotified(), fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $row->filingRequested($owner->getKey()));
+        $notice = $this->aFactoryNotice($this->anIncident()->companiesNotified(), fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $row->filingRequested($this->owner->getKey()));
         $before = $this->snapshotOf($notice->breach_incident_id);
 
         // When the owner files it for company A on the admin surface
-        $response = $this->fileFor($owner, $notice->breach_incident_id, $this->companyA->getKey());
+        $response = $this->fileFor($this->owner, $notice->breach_incident_id, $this->companyA->getKey());
 
         // Then the admin surface is not acknowledged and nothing is filed
         $this->assertResourceNotFoundNoLeak($response);
@@ -151,8 +149,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
     public function when_the_filing_is_not_open_then_it_is_refused_with_the_reason(Closure $atStage, Closure $rowState, string $message): void
     {
         // Given company A is on an incident whose filing is not open to the admin
-        $owner = $this->anOwnerOf($this->companyA);
-        $notice = $this->aFactoryNotice($atStage($this->anIncident()), fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $rowState($row, $owner->getKey(), $this->platformAdmin->getKey()));
+        $notice = $this->aFactoryNotice($atStage($this->anIncident()), fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $rowState($row, $this->owner->getKey(), $this->platformAdmin->getKey()));
         $before = $this->snapshotOf($notice->breach_incident_id);
 
         // When an admin files it for company A
@@ -423,8 +420,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         // Given company A asked Lesily to file, and A has an admin, an HR officer and an employee besides its owner
         $breachId = $this->aNotifiedIncident($this->companyA);
         $this->aFilingRequestBy($this->companyA, $breachId);
-        $this->aCompanyMember($this->companyA, 'admin');
-        $others = [$this->aCompanyMember($this->companyA, 'hr_officer'), $this->aCompanyMember($this->companyA, 'employee')];
+        $others = [$this->aCompanyMember($this->company, 'hr_officer'), $this->employee];
         $this->travelTo(CarbonImmutable::parse(self::FILED_AT));
 
         // When an admin files it for company A and the queued reactors run
@@ -479,7 +475,6 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         // Given an incident told to companies A and B, each with an owner and an admin, where only A asked Lesily to file
         $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
         $this->aFilingRequestBy($this->companyA, $breachId);
-        $this->aCompanyMember($this->companyA, 'admin');
         $others = [$this->aCompanyMember($this->companyB, 'owner'), $this->aCompanyMember($this->companyB, 'admin')];
         $this->travelTo(CarbonImmutable::parse(self::FILED_AT));
 
@@ -601,7 +596,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
 
     protected function assertFilingAudited(TestResponse $response, string $breachId, int $storedEventId): void
     {
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertDatabaseHas('audit_trail', [
             'company_id' => null,
             'stored_event_id' => $storedEventId,
@@ -622,8 +617,8 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->sole();
-        $this->assertSame([$correlationId, 'Symfony'], [$entry->request_id, $entry->user_agent]);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $this->assertSame('Symfony', $entry->user_agent);
     }
 
     protected function assertAuditCitesTheFilingOf(string $breachId, Company $company): void
@@ -644,7 +639,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
     {
         $this->assertSame($before, $this->snapshotOf($breachId));
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', BreachFiledWithRegulator::class)->count());
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     /**
@@ -654,7 +649,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
     {
         $this->assertSame($before, $this->snapshotOf($breachId));
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', BreachFiledWithRegulator::class)->count());
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
         $this->assertNoHandlersQueuedFor(BreachFiledWithRegulator::class);
     }
 }

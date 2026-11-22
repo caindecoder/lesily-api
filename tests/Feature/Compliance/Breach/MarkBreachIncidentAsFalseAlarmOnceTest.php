@@ -110,7 +110,7 @@ class MarkBreachIncidentAsFalseAlarmOnceTest extends BreachIncidentsTestCase
             'ask Lesily to file it' => [
                 fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)->requestFiling(
                     RequestBreachFilingCommand::from(['breachId' => $breachId, 'company' => $test->companyA]),
-                    $test->anOwnerOf($test->companyA),
+                    $test->owner,
                 )->persist(),
                 BreachFilingNotOpenException::class,
                 'Only a company notified of this breach can ask Lesily to file it.',

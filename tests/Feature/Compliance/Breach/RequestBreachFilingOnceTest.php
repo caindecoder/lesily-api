@@ -28,7 +28,7 @@ class RequestBreachFilingOnceTest extends BreachIncidentsTestCase
 
         // When company A's owner asks Lesily to file it
         try {
-            BreachIncident::retrieve($breachId)->requestFiling($this->aRequestFor($breachId), $this->aCompanyMember($this->companyA, 'owner'));
+            BreachIncident::retrieve($breachId)->requestFiling($this->aRequestFor($breachId), $this->owner);
             $this->fail('A request from a company not told, or one already asking, must be refused.');
         } catch (BreachFilingNotOpenException $refusal) {
             // Then it is refused with the reason and no further request is recorded
@@ -65,7 +65,7 @@ class RequestBreachFilingOnceTest extends BreachIncidentsTestCase
     {
         $breachId = $this->aNotifiedIncident($this->companyA);
         BreachIncident::retrieve($breachId)
-            ->requestFiling($this->aRequestFor($breachId), $this->aCompanyMember($this->companyA, 'owner'))
+            ->requestFiling($this->aRequestFor($breachId), $this->owner)
             ->persist();
 
         return $breachId;

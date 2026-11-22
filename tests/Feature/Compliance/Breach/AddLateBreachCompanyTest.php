@@ -74,11 +74,10 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     {
         // Given an incident whose companies A and B have been notified, and company A's owner
         $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
-        $owner = $this->anOwnerOf($this->companyA);
         $before = $this->stateOf($breachId);
 
         // When the owner adds Initech on the admin surface
-        $response = $this->addCompany($owner, $breachId, $this->aLateCompany());
+        $response = $this->addCompany($this->owner, $breachId, $this->aLateCompany());
 
         // Then the admin surface is not acknowledged and nothing is added
         $this->assertResourceNotFoundNoLeak($response);
@@ -95,7 +94,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
 
         // Then it is not found and nothing is recorded or queued
         $this->assertResourceNotFoundNoLeak($response);
-        $this->assertSame(0, LesilyStoredEvent::query()->count());
+        $this->assertSame(self::READY_MADE_EVENTS + count($this->initechMembers) * count(config('lesily.policies')), LesilyStoredEvent::query()->count());
         $this->assertNoHandlersQueuedFor(BreachCompanyNotified::class);
     }
 
@@ -289,7 +288,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     {
         // Given an incident at companies_notified affecting companies A and B, and Initech's owner
         $breachId = $this->anIncidentNotifiedEarlier();
-        $owner = $this->aConsentingMember($this->initech, 'owner');
+        $owner = $this->aCompanyMember($this->initech, 'owner');
 
         // When the admin adds Initech as a late company and Initech's owner lists its breach notices
         $this->addCompany($this->platformAdmin, $breachId, $this->aLateCompany());
@@ -308,7 +307,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     {
         // Given an incident at companies_notified affecting companies A and B, Initech added late, and Initech's owner
         $breachId = $this->anIncidentNotifiedEarlier();
-        $owner = $this->aConsentingMember($this->initech, 'owner');
+        $owner = $this->aCompanyMember($this->initech, 'owner');
         $this->addCompany($this->platformAdmin, $breachId, $this->aLateCompany());
 
         // When Initech's owner asks Lesily to file with the regulator
@@ -342,7 +341,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
 
     protected function anIncidentNotifiedEarlier(): string
     {
-        $this->anOwnerAndAdmins($this->companyA);
+        $this->aCompanyMember($this->company, 'admin');
         $this->anOwnerAndAdmins($this->companyB);
         $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
         Queue::fake();
@@ -411,7 +410,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
 
     protected function assertAddAudited(TestResponse $response, string $breachId, int $storedEventId): void
     {
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertDatabaseHas('audit_trail', [
             'company_id' => null,
             'stored_event_id' => $storedEventId,
@@ -432,8 +431,8 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->sole();
-        $this->assertSame([$correlationId, 'Symfony'], [$entry->request_id, $entry->user_agent]);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $this->assertSame('Symfony', $entry->user_agent);
     }
 
     protected function assertOnlyInitechTold(): void
@@ -507,6 +506,6 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     {
         $this->assertSame(array_slice($before, 0, 2), array_slice($this->stateOf($breachId), 0, 2));
         $this->assertDatabaseCount('breach_amendments', 0);
-        $this->assertDatabaseCount('audit_trail', 0);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 }
