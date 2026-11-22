@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Illuminate\Support\Str;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
@@ -19,11 +20,13 @@ use PHPUnit\Framework\Attributes\DataProvider;
  */
 class DefaultCompanyTest extends AuthTestCase
 {
+    use FreeTierCompany;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->seedRbacCatalog();
+        $this->makeFreeTierCompany();
     }
 
     #[Test]
@@ -55,15 +58,13 @@ class DefaultCompanyTest extends AuthTestCase
     #[Test, DataProvider('malformedCompanyIdProvider')]
     public function when_company_id_is_missing_or_malformed_then_set_refused(array $payload, string $expectedMessage): void
     {
-        // Given a member with a live membership (the membership rule must never be reached)
-        $user = $this->aRegisteredUser();
-        $this->aMembershipFor($user, Company::factory()->named('Home')->create());
+        // Given the employee, a live member of Contoso (the membership rule must never be reached)
 
         // When
-        $response = $this->setDefaultCompany($user, $payload);
+        $response = $this->setDefaultCompany($this->employee, $payload);
 
         // Then
-        $this->assertSetRefusedAsInvalid($response, $user, $expectedMessage);
+        $this->assertSetRefusedAsInvalid($response, $this->employee, $expectedMessage);
     }
 
     /**
@@ -81,9 +82,7 @@ class DefaultCompanyTest extends AuthTestCase
     #[Test, DataProvider('nonLiveMembershipProvider')]
     public function when_target_company_is_not_a_live_membership_then_set_refused(string $case): void
     {
-        // Given a member of Home whose target company is not a live membership
-        $user = $this->aRegisteredUser();
-        $this->aMembershipFor($user, Company::factory()->named('Home')->create());
+        // Given the employee of Contoso, whose target company is not a live membership
         $targetId = match ($case) {
             'not a member' => Company::factory()->named('Other')->create()->getKey(),
             'another user\'s company' => tap(
@@ -93,16 +92,16 @@ class DefaultCompanyTest extends AuthTestCase
             'unknown company id' => Str::uuid7()->toString(),
             'removed membership' => tap(
                 Company::factory()->named('Other')->create(),
-                fn (Company $other) => $this->aRemovedMembershipIn($other, $user),
+                fn (Company $other) => $this->aRemovedMembershipIn($other, $this->employee),
             )->getKey(),
             default => self::fail("Unknown provider case: {$case}"),
         };
 
         // When
-        $response = $this->setDefaultCompany($user, ['companyId' => $targetId]);
+        $response = $this->setDefaultCompany($this->employee, ['companyId' => $targetId]);
 
         // Then — the same collapsed envelope for every variant (no existence leak)
-        $this->assertSetRefusedLeavingDefault($response, $user, null);
+        $this->assertSetRefusedLeavingDefault($response, $this->employee, null);
     }
 
     /**
@@ -121,105 +120,87 @@ class DefaultCompanyTest extends AuthTestCase
     #[Test]
     public function when_clearing_with_no_default_set_then_clear_still_succeeds(): void
     {
-        // Given a user with no default company set
-        $user = $this->aRegisteredUser();
+        // Given the employee, with no default company set
 
         // When
-        $response = $this->clearDefaultCompany($user);
+        $response = $this->clearDefaultCompany($this->employee);
 
         // Then — idempotent: 204 even though nothing was set (UC-1-139 alt-1a)
-        $this->assertDefaultStored($response, $user, null);
+        $this->assertDefaultStored($response, $this->employee, null);
     }
 
     #[Test]
     public function when_setting_the_same_default_again_then_replace_is_idempotent(): void
     {
-        // Given a member whose default is already Home (set through the endpoint)
-        $user = $this->aRegisteredUser();
-        $home = Company::factory()->named('Home')->create();
-        $this->aMembershipFor($user, $home);
-        $this->setDefaultCompany($user, ['companyId' => $home->getKey()]);
+        // Given the employee whose default is already Contoso (set through the endpoint)
+        $this->setDefaultCompany($this->employee, ['companyId' => $this->company->getKey()]);
 
         // When the same default is set again
-        $response = $this->setDefaultCompany($user, ['companyId' => $home->getKey()]);
+        $response = $this->setDefaultCompany($this->employee, ['companyId' => $this->company->getKey()]);
 
         // Then — the idempotent replace: same 204, same stored value
-        $this->assertDefaultStored($response, $user, $home->getKey());
+        $this->assertDefaultStored($response, $this->employee, $this->company->getKey());
     }
 
     #[Test]
     public function when_setting_a_new_default_then_it_replaces_the_previous_one(): void
     {
-        // Given a member of Acme and Beta whose default is Acme
-        $user = $this->aRegisteredUser();
-        $acme = Company::factory()->named('Acme')->create();
+        // Given the employee, a member of Contoso and Beta, whose default is Contoso
         $beta = Company::factory()->named('Beta')->create();
-        $this->aMembershipFor($user, $acme);
-        $this->aMembershipFor($user, $beta);
-        $this->setDefaultCompany($user, ['companyId' => $acme->getKey()]);
+        $this->aMembershipFor($this->employee, $beta);
+        $this->setDefaultCompany($this->employee, ['companyId' => $this->company->getKey()]);
 
         // When Beta is set as the default
-        $response = $this->setDefaultCompany($user, ['companyId' => $beta->getKey()]);
+        $response = $this->setDefaultCompany($this->employee, ['companyId' => $beta->getKey()]);
 
-        // Then — one default per user by construction: Beta replaced Acme,
-        // and the list re-flags exactly Beta (Acme is not flagged)
-        $this->assertDefaultStored($response, $user, $beta->getKey());
-        $this->assertListFlagsDefault($user, $beta->getKey());
+        // Then — one default per user by construction: Beta replaced Contoso,
+        // and the list re-flags exactly Beta (Contoso is not flagged)
+        $this->assertDefaultStored($response, $this->employee, $beta->getKey());
+        $this->assertListFlagsDefault($this->employee, $beta->getKey());
     }
 
     #[Test]
     public function when_set_is_refused_then_the_existing_default_is_retained(): void
     {
-        // Given a member whose default is Acme (set through the endpoint)
-        $user = $this->aRegisteredUser();
-        $acme = Company::factory()->named('Acme')->create();
-        $this->aMembershipFor($user, $acme);
-        $this->setDefaultCompany($user, ['companyId' => $acme->getKey()]);
+        // Given the employee whose default is Contoso (set through the endpoint)
+        $this->setDefaultCompany($this->employee, ['companyId' => $this->company->getKey()]);
 
         // When they attempt to set a company they are not a member of
-        $response = $this->setDefaultCompany($user, [
+        $response = $this->setDefaultCompany($this->employee, [
             'companyId' => Company::factory()->named('Other')->create()->getKey(),
         ]);
 
         // Then — the refusal leaves the existing non-null default intact
         // (UC-1-139 Minimal Guarantee against a write-before-guard reorder)
-        $this->assertSetRefusedLeavingDefault($response, $user, $acme->getKey());
+        $this->assertSetRefusedLeavingDefault($response, $this->employee, $this->company->getKey());
     }
 
     #[Test]
     public function when_a_member_clears_their_default_then_other_users_defaults_are_untouched(): void
     {
-        // Given two users, each with their own company set as default (Bob's
-        // default survives Alice's set in this arrangement — a bulk write on
-        // either path would clobber it)
-        $alice = $this->aRegisteredUser();
-        $bob = $this->aRegisteredUser('bob@contoso.lk');
-        $acme = Company::factory()->named('Acme')->create();
-        $beta = Company::factory()->named('Beta')->create();
-        $this->aMembershipFor($bob, $beta);
-        $this->setDefaultCompany($bob, ['companyId' => $beta->getKey()]);
-        $this->aMembershipFor($alice, $acme);
-        $this->setDefaultCompany($alice, ['companyId' => $acme->getKey()]);
+        // Given the admin and the employee, both with Contoso set as default (the admin's
+        // default survives the employee's clear — a bulk write on either path would clobber it)
+        $this->setDefaultCompany($this->admin, ['companyId' => $this->company->getKey()]);
+        $this->setDefaultCompany($this->employee, ['companyId' => $this->company->getKey()]);
 
-        // When Alice clears her default
-        $response = $this->clearDefaultCompany($alice);
+        // When the employee clears their default
+        $response = $this->clearDefaultCompany($this->employee);
 
-        // Then — Alice's is null and Bob's is untouched (user-scoped writes)
-        $this->assertDefaultStored($response, $alice, null);
+        // Then — the employee's is null and the admin's is untouched (user-scoped writes)
+        $this->assertDefaultStored($response, $this->employee, null);
         $this->assertDatabaseHas('users', [
-            'id' => $bob->getKey(),
-            'default_company_id' => $beta->getKey(),
+            'id' => $this->admin->getKey(),
+            'default_company_id' => $this->company->getKey(),
         ]);
     }
 
     #[Test]
     public function when_the_default_company_is_hard_deleted_then_the_default_clears(): void
     {
-        // Given a member whose default is Home (set through the endpoint)
-        $user = $this->aRegisteredUser();
+        // Given the employee whose default is Home (set through the endpoint)
         $home = Company::factory()->named('Home')->create();
-        $this->aMembershipFor($user, $home);
-        $this->setDefaultCompany($user, ['companyId' => $home->getKey()]);
+        $this->aMembershipFor($this->employee, $home);
+        $this->setDefaultCompany($this->employee, ['companyId' => $home->getKey()]);
 
         // When the company row is hard-deleted (schema-level pin — no product
         // delete path exists until UC-1-037; the pivot goes first, its FK is
@@ -229,7 +210,7 @@ class DefaultCompanyTest extends AuthTestCase
 
         // Then — the nullOnDelete FK clears the preference instead of stranding it
         $this->assertDatabaseHas('users', [
-            'id' => $user->getKey(),
+            'id' => $this->employee->getKey(),
             'default_company_id' => null,
         ]);
     }
@@ -237,38 +218,32 @@ class DefaultCompanyTest extends AuthTestCase
     #[Test]
     public function when_member_sets_a_default_company_then_stored_and_flagged_in_list(): void
     {
-        // Given a member of Acme and Beta with no default
-        $user = $this->aRegisteredUser();
-        $acme = Company::factory()->named('Acme')->create();
+        // Given the employee, a member of Contoso and Beta with no default
         $beta = Company::factory()->named('Beta')->create();
-        $this->aMembershipFor($user, $acme);
-        $this->aMembershipFor($user, $beta);
+        $this->aMembershipFor($this->employee, $beta);
 
         // When Beta is set as the default
-        $response = $this->setDefaultCompany($user, ['companyId' => $beta->getKey()]);
+        $response = $this->setDefaultCompany($this->employee, ['companyId' => $beta->getKey()]);
 
         // Then — stored AND the switcher list flags exactly that row (Gherkin 1)
-        $this->assertDefaultStored($response, $user, $beta->getKey());
-        $this->assertListFlagsDefault($user, $beta->getKey());
+        $this->assertDefaultStored($response, $this->employee, $beta->getKey());
+        $this->assertListFlagsDefault($this->employee, $beta->getKey());
     }
 
     #[Test]
     public function when_member_clears_the_default_then_no_row_flagged_in_list(): void
     {
-        // Given a member of Acme and Beta whose default is Beta
-        $user = $this->aRegisteredUser();
-        $acme = Company::factory()->named('Acme')->create();
+        // Given the employee, a member of Contoso and Beta, whose default is Beta
         $beta = Company::factory()->named('Beta')->create();
-        $this->aMembershipFor($user, $acme);
-        $this->aMembershipFor($user, $beta);
-        $this->setDefaultCompany($user, ['companyId' => $beta->getKey()]);
+        $this->aMembershipFor($this->employee, $beta);
+        $this->setDefaultCompany($this->employee, ['companyId' => $beta->getKey()]);
 
         // When the default is cleared
-        $response = $this->clearDefaultCompany($user);
+        $response = $this->clearDefaultCompany($this->employee);
 
         // Then — stored null and the list flags nothing (Gherkin 3 + alt-1a)
-        $this->assertDefaultStored($response, $user, null);
-        $this->assertListFlagsDefault($user, null);
+        $this->assertDefaultStored($response, $this->employee, null);
+        $this->assertListFlagsDefault($this->employee, null);
     }
 
     /**
