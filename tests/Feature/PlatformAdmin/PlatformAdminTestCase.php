@@ -7,10 +7,10 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
-use InvalidArgumentException;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Database\QueryException;
+use Tests\Feature\Billing\CreatesInvoices;
 use Tests\Concerns\InducesDatabaseFailures;
 use App\Billing\Invoices\Aggregates\Invoice;
 use App\Foundation\Billing\Enums\BillingPlan;
@@ -18,16 +18,12 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
-use App\Billing\Invoices\UseCases\Commands\VoidInvoiceCommand;
-use App\Billing\Invoices\UseCases\Commands\IssueInvoiceCommand;
 use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
-use App\Billing\Invoices\UseCases\Commands\FileInvoiceDisputeCommand;
-use App\Billing\Invoices\UseCases\Commands\RecordPaymentFailedCommand;
-use App\Billing\Invoices\UseCases\Commands\RecordPaymentSucceededCommand;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 abstract class PlatformAdminTestCase extends TestCase
 {
+    use CreatesInvoices;
     use HasPlatformAdmin;
     use InducesDatabaseFailures;
 
@@ -44,15 +40,6 @@ abstract class PlatformAdminTestCase extends TestCase
         }
 
         return $this->getJson('/api/_test/platform-admin-probe');
-    }
-
-    /**
-     * Look up a seeded RBAC-catalog role by code — requires seedRbacCatalog()
-     * in the calling suite's setUp.
-     */
-    protected function seededRole(string $code): Role
-    {
-        return Role::query()->where('code', $code)->sole();
     }
 
     /**
@@ -111,163 +98,6 @@ abstract class PlatformAdminTestCase extends TestCase
             ->persist();
 
         return SubscriptionReadModel::findOrFail($subscriptionId);
-    }
-
-    /**
-     * A valid issue command against $subscription's company — two line items
-     * whose signed amounts sum to the invoice total. Duplicated from
-     * CreatesInvoices (module bases are independent).
-     */
-    protected function issueInvoiceCommand(Company $company, SubscriptionReadModel $subscription, array $overrides = []): IssueInvoiceCommand
-    {
-        return IssueInvoiceCommand::from([
-            'invoiceNumber' => 'INV-2026-000001',
-            'subscription' => $subscription,
-            'company' => $company,
-            'amountCents' => 60000,
-            'currency' => 'LKR',
-            'lineItems' => [
-                [
-                    'description' => 'Pro Plan — Monthly',
-                    'quantity' => 1,
-                    'unitPriceCents' => 75000,
-                    'amountCents' => 75000,
-                    'lineType' => 'plan_subscription',
-                    'sortOrder' => 0,
-                ],
-                [
-                    'description' => 'Proration credit — unused Starter days',
-                    'quantity' => -1,
-                    'unitPriceCents' => 15000,
-                    'amountCents' => -15000,
-                    'lineType' => 'proration_credit',
-                    'sortOrder' => 1,
-                ],
-            ],
-            'dueDate' => CarbonImmutable::now()->addDays(14),
-            'source' => 'subscribe',
-            'recipientName' => 'ACME (Pvt) Ltd',
-            'recipientEmail' => 'billing@acme.example',
-            ...$overrides,
-        ]);
-    }
-
-    /**
-     * An issued (pending) invoice projected for $company through the domain
-     * seam. Duplicated from CreatesInvoices (module bases are independent).
-     */
-    protected function anIssuedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $invoiceId = (string) Str::uuid();
-
-        Invoice::retrieve($invoiceId)
-            ->issue($this->issueInvoiceCommand($company, $subscription, $overrides))
-            ->persist();
-
-        return InvoiceReadModel::findOrFail($invoiceId);
-    }
-
-    /**
-     * An invoice paid through the domain seam (issue → payment webhook).
-     * Duplicated from CreatesInvoices (module bases are independent).
-     */
-    protected function aPaidInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
-
-        Invoice::retrieve($invoice->getKey())
-            ->recordPaymentSucceeded($this->recordPaymentSucceededCommand($invoice))
-            ->persist();
-
-        return $invoice->refresh();
-    }
-
-    /**
-     * A valid payment-success webhook command for $invoice. Duplicated from
-     * CreatesInvoices (module bases are independent).
-     */
-    protected function recordPaymentSucceededCommand(InvoiceReadModel $invoice, array $overrides = []): RecordPaymentSucceededCommand
-    {
-        return RecordPaymentSucceededCommand::from([
-            'payHereEventId' => 'evt_'.$invoice->getKey(),
-            'payHereTransactionId' => 'txn_'.$invoice->getKey(),
-            'amountCents' => $invoice->amount_cents,
-            ...$overrides,
-        ]);
-    }
-
-    /**
-     * A pending invoice voided through the domain seam. Duplicated from
-     * CreatesInvoices (module bases are independent).
-     */
-    protected function aVoidedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
-
-        Invoice::retrieve($invoice->getKey())
-            ->void(VoidInvoiceCommand::from([
-                'voidedBy' => User::factory()->create(),
-                'reason' => 'Issued in error - admin correction.',
-                'source' => 'admin-correction',
-            ]))
-            ->persist();
-
-        return $invoice->refresh();
-    }
-
-    /**
-     * An invoice whose first payment attempt failed, through the domain seam.
-     * Duplicated from CreatesInvoices (module bases are independent).
-     */
-    protected function aFailedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
-
-        Invoice::retrieve($invoice->getKey())
-            ->recordPaymentFailed(RecordPaymentFailedCommand::from([
-                'payHereEventId' => 'evt_fail_'.$invoice->getKey(),
-                'failureCode' => 'insufficient_funds',
-                'failureMessage' => 'Card has insufficient funds.',
-                'attemptNumber' => 1,
-            ]))
-            ->persist();
-
-        return $invoice->refresh();
-    }
-
-    /**
-     * A pending invoice with an open dispute filed through the domain seam.
-     * Duplicated from CreatesInvoices (module bases are independent).
-     */
-    protected function aDisputedInvoiceFor(Company $company, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $invoice = $this->anIssuedInvoiceFor($company, $subscription, $overrides);
-
-        Invoice::retrieve($invoice->getKey())
-            ->fileDispute(FileInvoiceDisputeCommand::from([
-                'reason' => 'This charge does not match our agreed plan.',
-                'filedBy' => User::factory()->create(),
-            ]))
-            ->persist();
-
-        return $invoice->refresh();
-    }
-
-    /**
-     * Seam-fixture dispatch for DataProvider state matrices (§2.12) — the
-     * T7-scoped counterpart of CreatesInvoices' dispatcher (module bases are
-     * independent); every state is arranged through real aggregate commands.
-     */
-    protected function anInvoiceInState(string $state, SubscriptionReadModel $subscription, array $overrides = []): InvoiceReadModel
-    {
-        $company = Company::findOrFail($subscription->company_id);
-
-        return match ($state) {
-            'voided' => $this->aVoidedInvoiceFor($company, $subscription, $overrides),
-            'failed' => $this->aFailedInvoiceFor($company, $subscription, $overrides),
-            'disputed' => $this->aDisputedInvoiceFor($company, $subscription, $overrides),
-            default => throw new InvalidArgumentException("Unknown invoice state fixture [{$state}]."),
-        };
     }
 
     /**
@@ -342,30 +172,6 @@ abstract class PlatformAdminTestCase extends TestCase
         $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
         $response->assertJsonPath('message', 'The requested resource was not found.');
         $response->assertJsonPath('errors', []);
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
-    }
-
-    /**
-     * The input was refused as invalid on $invalidField — 422 VALIDATION_FAILED
-     * whose field-level errors contain $expectedMessage (§S21; conv-plan §2.2
-     * Rule 10 — assertJsonValidationErrors matches by containment, so the pin
-     * fails when the rule behind the message is dropped). Duplicated from
-     * CompaniesTestCase (module bases are independent — established precedent).
-     */
-    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
-    {
-        $response->assertUnprocessable();
-        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
-        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
-    }
-
-    /**
-     * The request was rejected as unauthenticated — 401 §S21 UNAUTHENTICATED.
-     */
-    protected function assertUnauthenticated(TestResponse $response): void
-    {
-        $response->assertUnauthorized();
-        $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
