@@ -27,15 +27,7 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
 
         $this->seedRbacCatalog();
 
-        $this->admin = $this->anAllowlistedAdmin();
-    }
-
-    protected function anAllowlistedAdmin(): User
-    {
-        $admin = User::factory()->create();
-        $this->allowlist([$admin->getKey()]);
-
-        return $admin;
+        $this->admin = $this->aPlatformAdmin();
     }
 
     protected function listCases(?User $caller, array $query = []): TestResponse

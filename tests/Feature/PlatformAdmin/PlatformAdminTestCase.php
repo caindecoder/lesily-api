@@ -28,17 +28,8 @@ use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 abstract class PlatformAdminTestCase extends TestCase
 {
+    use HasPlatformAdmin;
     use InducesDatabaseFailures;
-
-    /**
-     * Set the platform-admin allowlist exactly as the middleware will see it —
-     * raw post-explode shapes (config/platform.php does the bare env split;
-     * normalization is the middleware's job, so tests feed it raw arrays).
-     */
-    protected function allowlist(array $ids): void
-    {
-        config(['platform.admin_user_ids' => $ids]);
-    }
 
     /**
      * Probe the platform.admin-gated surface (routes/testing.php) as $user, or

@@ -34,6 +34,7 @@ use App\Foundation\Http\Responses\ApiErrorCode;
 use Illuminate\Support\Testing\Fakes\QueueFake;
 use App\Compliance\Dsar\Enums\DsarRequestStatus;
 use App\Foundation\AuditTrail\Enums\AuditAction;
+use Tests\Feature\PlatformAdmin\HasPlatformAdmin;
 use App\Companies\Memberships\Entities\Invitation;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\RolesPermissions\Entities\Role;
@@ -73,6 +74,7 @@ use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
 
 abstract class DsarTestCase extends TestCase
 {
+    use HasPlatformAdmin;
     use InteractsWithQueuedReactors;
 
     public const STAND_IN_REPORT = '%PDF stand-in';
@@ -248,17 +250,6 @@ abstract class DsarTestCase extends TestCase
             'employee' => ['employee'],
             'auditor' => ['auditor'],
         ];
-    }
-
-    /**
-     * A fresh user on the platform-admin allowlist.
-     */
-    protected function aPlatformAdmin(): User
-    {
-        $admin = User::factory()->create();
-        config(['platform.admin_user_ids' => [$admin->getKey()]]);
-
-        return $admin;
     }
 
     /**

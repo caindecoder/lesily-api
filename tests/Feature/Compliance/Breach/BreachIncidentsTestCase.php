@@ -44,18 +44,10 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         $this->seedRbacCatalog();
         Notification::fake();
 
-        $this->admin = $this->anAllowlistedAdmin();
+        $this->admin = $this->aPlatformAdmin();
         $this->companyA = Company::factory()->create();
         $this->companyB = Company::factory()->create();
         $this->idempotencyKey = (string) Str::uuid();
-    }
-
-    protected function anAllowlistedAdmin(): User
-    {
-        $admin = User::factory()->create();
-        $this->allowlist([$admin->getKey()]);
-
-        return $admin;
     }
 
     protected function anIncident(): BreachIncidentRecordFactory

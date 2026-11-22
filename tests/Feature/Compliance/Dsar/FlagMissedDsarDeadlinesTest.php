@@ -408,16 +408,6 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     }
 
     /**
-     * The platform admin allowlist, as config/platform.php hands it over.
-     *
-     * @param  array<int, string>  $ids
-     */
-    protected function allowlist(array $ids): void
-    {
-        config(['platform.admin_user_ids' => $ids]);
-    }
-
-    /**
      * Each platform admin got one missed-deadline alert naming $request's
      * company, the request and its deadline, filed under no company — and no
      * one else was sent anything.
