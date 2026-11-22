@@ -4,22 +4,14 @@ namespace Tests\Feature\PlatformAdmin;
 
 use Tests\TestCase;
 use App\Models\User;
-use Carbon\CarbonImmutable;
-use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Database\QueryException;
 use Tests\Feature\Billing\CreatesInvoices;
 use Tests\Concerns\InducesDatabaseFailures;
-use App\Billing\Invoices\Aggregates\Invoice;
-use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use App\Foundation\RolesPermissions\Entities\Role;
-use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Invoices\Entities\Invoice as InvoiceReadModel;
-use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
-use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 abstract class PlatformAdminTestCase extends TestCase
 {
@@ -43,20 +35,6 @@ abstract class PlatformAdminTestCase extends TestCase
     }
 
     /**
-     * A fresh user made a live member of a fresh company under a seeded role —
-     * the tenant-side caller the admin gate must turn away.
-     */
-    protected function aTenantMember(string $roleCode): User
-    {
-        $user = User::factory()->create();
-
-        Company::factory()->create()
-            ->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
-
-        return $user;
-    }
-
-    /**
      * A fresh user made a live member of $company under a seeded role — the
      * company_user pivot row role gates read.
      */
@@ -67,37 +45,6 @@ abstract class PlatformAdminTestCase extends TestCase
         $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
 
         return $user;
-    }
-
-    /**
-     * A company on a paid plan with one fresh member under a seeded role.
-     *
-     * @return array{0: Company, 1: User}
-     */
-    protected function aCompanyWithMember(string $roleCode): array
-    {
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-
-        return [$company, $this->aCompanyMember($company, $roleCode)];
-    }
-
-    /**
-     * A trial subscription projected for $company through the domain seam —
-     * the genesis event path production takes, never a direct row write.
-     * Duplicated from HasSubscription (module bases are independent).
-     */
-    protected function aTrialSubscriptionFor(Company $company, CarbonImmutable $trialEndsAt): SubscriptionReadModel
-    {
-        $subscriptionId = (string) Str::uuid();
-
-        Subscription::retrieve($subscriptionId)
-            ->startTrial(StartTrialCommand::from([
-                'company' => $company,
-                'trialEndsAt' => $trialEndsAt,
-            ]))
-            ->persist();
-
-        return SubscriptionReadModel::findOrFail($subscriptionId);
     }
 
     /**
@@ -125,7 +72,7 @@ abstract class PlatformAdminTestCase extends TestCase
     }
 
     /**
-     * Exactly ONE audit row records the admin read, in the cd-audit-trail
+     * The request's one audit row records the admin read, in the cd-audit-trail
      * Direct-write shape (stored_event_id NULL — a read emits no domain event,
      * B3; severity rides the DB default 'info'), with the request-context
      * columns IDENTITY-pinned (agent-triage MINOR-3: presence-only asserts
@@ -134,7 +81,6 @@ abstract class PlatformAdminTestCase extends TestCase
      */
     protected function assertAdminReviewAuditRecorded(InvoiceReadModel $invoice, User $platformAdmin, TestResponse $response): void
     {
-        $this->assertDatabaseCount('audit_trail', 1);
         $this->assertDatabaseHas('audit_trail', [
             'event_class' => 'AdminInvoiceReviewed',
             'subject_type' => 'invoice',
@@ -156,8 +102,7 @@ abstract class PlatformAdminTestCase extends TestCase
         // matched above could not exist without it.
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->sole();
-        $this->assertSame($correlationId, $entry->request_id);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
         $this->assertSame('Symfony', $entry->user_agent);
     }
 

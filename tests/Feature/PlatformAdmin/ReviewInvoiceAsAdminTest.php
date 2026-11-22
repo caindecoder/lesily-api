@@ -2,13 +2,13 @@
 
 namespace Tests\Feature\PlatformAdmin;
 
-use App\Models\User;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 
@@ -22,11 +22,13 @@ use App\Foundation\AuditTrail\Entities\AuditEntry;
  */
 class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
 {
+    use FreeTierCompany;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->seedRbacCatalog();
+        $this->makeFreeTierCompany();
 
         // Error-path tests must exercise the production render path (the
         // bootstrap catch-all behaves differently under debug — amendment M).
@@ -41,10 +43,10 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     #[DataProvider('provideTenantRoles')]
     public function when_a_tenant_role_calls_the_admin_invoice_endpoint_then_an_indistinguishable_not_found_is_returned(string $roleCode): void
     {
-        // Given a tenant member whose own company holds a paid invoice, while the allowlist names only a different user
-        [$company, $member] = $this->aCompanyWithMember($roleCode);
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        // Given Contoso's member under that role, Contoso holding a paid invoice, while the allowlist names only a different user
+        $member = $this->memberWithRole($roleCode);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->aPaidInvoiceFor($this->company, $subscription);
         $this->allowlist([(string) Str::uuid()]);
 
         // When the member calls the admin invoice endpoint for that invoice
@@ -52,7 +54,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
 
         // Then the response is the indistinguishable generic not-found and no read is recorded
         $this->assertResourceNotFoundNoLeak($response);
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     // Sad — no Sanctum token: rejected upstream by auth:sanctum as 401
@@ -61,17 +63,16 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     #[Test]
     public function when_no_token_is_presented_then_the_request_is_rejected_as_unauthenticated(): void
     {
-        // Given a paid invoice exists and nobody is authenticated
-        [$company] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        // Given Contoso holds a paid invoice and nobody is authenticated
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->aPaidInvoiceFor($this->company, $subscription);
 
         // When the admin invoice endpoint is called as a guest
         $response = $this->reviewInvoiceAsAdmin(null, $invoice->getKey());
 
         // Then the request is rejected as unauthenticated and no read is recorded
         $this->assertUnauthenticated($response);
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     // Sad — an allowlisted admin asks for an id that exists nowhere: the
@@ -82,15 +83,14 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     public function when_the_invoice_id_is_unknown_then_not_found_is_returned_and_no_read_is_recorded(): void
     {
         // Given an allowlisted platform admin and no invoice anywhere
-        $platformAdmin = User::factory()->create();
-        $this->allowlist([$platformAdmin->getKey()]);
+        $platformAdmin = $this->aPlatformAdmin();
 
         // When the admin asks for a random unknown invoice id
         $response = $this->reviewInvoiceAsAdmin($platformAdmin, (string) Str::uuid());
 
         // Then the response is the generic not-found and no read is recorded
         $this->assertResourceNotFoundNoLeak($response);
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     // Edge — cross-tenant is the point: an allowlisted admin who is ALSO a
@@ -100,14 +100,13 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     #[Test]
     public function when_the_admin_also_belongs_to_a_tenant_then_another_companys_invoice_is_still_readable(): void
     {
-        // Given an allowlisted admin who is an Owner of company X, and a paid invoice belonging to company Y
-        [, $platformAdmin] = $this->aCompanyWithMember('owner');
-        $this->allowlist([$platformAdmin->getKey()]);
-        [$companyY] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($companyY, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->aPaidInvoiceFor($companyY, $subscription);
+        // Given an allowlisted platform admin who is the owner of another company, and a paid invoice belonging to Contoso
+        $platformAdmin = $this->aPlatformAdmin();
+        Company::factory()->create()->users()->attach($platformAdmin, ['role_id' => $this->seededRole('owner')->getKey()]);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->aPaidInvoiceFor($this->company, $subscription);
 
-        // When the admin reads company Y's invoice via the admin endpoint
+        // When the admin reads Contoso's invoice via the admin endpoint
         $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey());
 
         // Then the cross-tenant invoice is returned
@@ -122,11 +121,9 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     #[DataProvider('provideNonPaidStates')]
     public function when_the_invoice_is_not_paid_then_the_admin_can_still_review_it(string $state, string $expectedStatus): void
     {
-        // Given an allowlisted admin and a tenant invoice in a non-paid state
-        $platformAdmin = User::factory()->create();
-        $this->allowlist([$platformAdmin->getKey()]);
-        [$company] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
+        // Given an allowlisted platform admin and a Contoso invoice in a non-paid state
+        $platformAdmin = $this->aPlatformAdmin();
+        $subscription = $this->subscriptionOf($this->company);
         $invoice = $this->anInvoiceInState($state, $subscription);
 
         // When the admin reviews that invoice
@@ -175,12 +172,11 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     #[Test]
     public function when_the_tenant_has_no_plan_then_the_company_summary_renders_it_as_null(): void
     {
-        // Given an allowlisted admin and a paid invoice belonging to a company with no plan
-        $platformAdmin = User::factory()->create();
-        $this->allowlist([$platformAdmin->getKey()]);
-        $company = Company::factory()->withoutPlan()->create();
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        // Given an allowlisted platform admin and a paid invoice belonging to Contoso, which has no plan
+        $platformAdmin = $this->aPlatformAdmin();
+        $this->company->update(['current_billing_plan' => null]);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->aPaidInvoiceFor($this->company, $subscription);
 
         // When the admin reviews that invoice
         $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey());
@@ -215,12 +211,10 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     #[Test]
     public function when_the_request_context_values_are_oversized_then_the_read_still_succeeds(): void
     {
-        // Given an allowlisted admin whose client sends oversized UA and correlation headers
-        $platformAdmin = User::factory()->create();
-        $this->allowlist([$platformAdmin->getKey()]);
-        [$company] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        // Given an allowlisted platform admin whose client sends oversized UA and correlation headers, and a Contoso paid invoice
+        $platformAdmin = $this->aPlatformAdmin();
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->aPaidInvoiceFor($this->company, $subscription);
 
         // When the admin reviews the invoice with 300-char header values
         $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey(), [
@@ -230,8 +224,8 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
 
         // Then the read succeeds and the audit row stores bounded values
         $response->assertOk();
-        $this->assertDatabaseCount('audit_trail', 1);
-        $entry = AuditEntry::query()->sole();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
+        $entry = AuditEntry::query()->where('subject_id', $invoice->getKey())->sole();
         $this->assertSame(str_repeat('a', 255), $entry->user_agent);
         $this->assertSame(str_repeat('b', 255), $entry->request_id);
     }
@@ -244,12 +238,11 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     #[Test]
     public function when_a_platform_admin_reviews_a_tenant_invoice_then_the_full_admin_contract_is_returned(): void
     {
-        // Given an allowlisted admin and a Pro tenant's paid invoice with two line items
-        $platformAdmin = User::factory()->create();
-        $this->allowlist([$platformAdmin->getKey()]);
-        [$company] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        // Given an allowlisted platform admin and, with Contoso on Pro, Contoso's paid invoice with two line items
+        $platformAdmin = $this->aPlatformAdmin();
+        $this->putOnPlan($this->company, BillingPlan::Pro);
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->aPaidInvoiceFor($this->company, $subscription);
         [$planLine, $creditLine] = $invoice->lineItems()->get()->all();
         $paidAt = $invoice->paid_at;
         $this->assertNotNull($paidAt);
@@ -323,9 +316,9 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
             'tenant_soft_deleted' => false,
             'legal_hold' => null,
             'company' => [
-                'name' => $company->name,
-                'br_number' => $company->br_number,
-                'epf_number' => $company->epf_number,
+                'name' => $this->company->name,
+                'br_number' => $this->company->br_number,
+                'epf_number' => $this->company->epf_number,
                 'plan' => 'pro',
                 'status' => 'trial',
             ],
@@ -339,12 +332,10 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     #[Test]
     public function when_a_platform_admin_reviews_a_tenant_invoice_then_the_read_is_recorded_in_the_audit_trail(): void
     {
-        // Given an allowlisted admin and a tenant's paid invoice
-        $platformAdmin = User::factory()->create();
-        $this->allowlist([$platformAdmin->getKey()]);
-        [$company] = $this->aCompanyWithMember('owner');
-        $subscription = $this->aTrialSubscriptionFor($company, CarbonImmutable::now()->addDays(30));
-        $invoice = $this->aPaidInvoiceFor($company, $subscription);
+        // Given an allowlisted platform admin and Contoso's paid invoice
+        $platformAdmin = $this->aPlatformAdmin();
+        $subscription = $this->subscriptionOf($this->company);
+        $invoice = $this->aPaidInvoiceFor($this->company, $subscription);
 
         // When the admin reviews the invoice
         $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey());
@@ -352,6 +343,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         // Then exactly one audit row records who read what, and when
         $response->assertOk();
         $this->assertAdminReviewAuditRecorded($invoice, $platformAdmin, $response);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     /**

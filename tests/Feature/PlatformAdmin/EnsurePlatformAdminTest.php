@@ -3,6 +3,7 @@
 namespace Tests\Feature\PlatformAdmin;
 
 use App\Models\User;
+use Tests\Concerns\FreeTierCompany;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 
@@ -15,11 +16,13 @@ use PHPUnit\Framework\Attributes\DataProvider;
  */
 class EnsurePlatformAdminTest extends PlatformAdminTestCase
 {
+    use FreeTierCompany;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->seedRbacCatalog();
+        $this->makeFreeTierCompany();
 
         // Error-path tests must exercise the production render path (the
         // bootstrap catch-all behaves differently under debug — amendment M).
@@ -34,9 +37,9 @@ class EnsurePlatformAdminTest extends PlatformAdminTestCase
     #[DataProvider('provideNonAllowlistedRoles')]
     public function when_tenant_member_probes_admin_surface_then_resource_not_found(string $roleCode): void
     {
-        // Given a member under a seeded role, while the allowlist names only a different user
-        $member = $this->aTenantMember($roleCode);
-        $this->allowlist([User::factory()->create()->getKey()]);
+        // Given Contoso's member under a seeded role, while the allowlist names only a platform admin
+        $member = $this->memberWithRole($roleCode);
+        $this->aPlatformAdmin();
 
         // When they probe the platform-admin surface
         $response = $this->probeAdminSurfaceAs($member);
