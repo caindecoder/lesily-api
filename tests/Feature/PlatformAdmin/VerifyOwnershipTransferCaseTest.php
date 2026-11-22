@@ -10,6 +10,7 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use App\Consent\Events\ConsentRecorded;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Exceptions;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -18,6 +19,7 @@ use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\Enums\OwnershipTransferCaseStatus;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
+use App\Companies\Events\CompanyOwnershipVerificationRecorded;
 use App\Companies\Exceptions\OwnershipTransferContentionException;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
@@ -43,19 +45,17 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the request is rejected as unauthenticated and nothing is audited
         $this->assertUnauthenticated($response);
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
     public function when_a_non_allowlisted_caller_attempts_to_verify_a_case_then_the_admin_surface_is_not_acknowledged(): void
     {
-        // Given Owner Olive of Contoso and an open case for HER OWN company
-        $company = Company::factory()->create();
-        $olive = $this->aCompanyMember($company, 'owner');
-        $case = $this->anOpenCaseFor($company);
+        // Given Contoso's owner and an open case for HER OWN company
+        $case = $this->anOpenCaseFor($this->company);
 
-        // When Olive calls the verify endpoint for her company's case
-        $response = $this->verifyCase($olive, $case->getKey());
+        // When she calls the verify endpoint for her company's case
+        $response = $this->verifyCase($this->owner, $case->getKey());
 
         // Then the admin surface is never acknowledged and nothing is written
         $this->assertResourceNotFoundNoLeak($response);
@@ -77,7 +77,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then nothing is found and no verification evidence is written
         $this->assertResourceNotFoundNoLeak($response);
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -91,7 +91,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the reference is refused as invalid and nothing is audited
         $this->assertValidationRejected($response, 'caseId', 'The case id field must be a valid UUID.');
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -99,8 +99,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_the_verification_payload_is_invalid_then_the_verification_is_refused(array $overrides, string $field, string $message): void
     {
         // Given an open case and a payload carrying this row's defect
-        $company = Company::factory()->create();
-        $case = $this->anOpenCaseFor($company);
+        $case = $this->anOpenCaseFor($this->company);
         $stranger = User::factory()->create();
 
         // When the admin submits the verification
@@ -120,12 +119,10 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_the_case_is_not_open_then_the_verification_is_refused_with_the_current_state_named(string $fixture, string $stateName): void
     {
         // Given a case that is no longer open and a live member of its company
-        $company = Company::factory()->create();
-        $member = $this->aCompanyMember($company, 'employee');
         $case = match ($fixture) {
-            'verified' => $this->aVerifiedCaseFor($company),
-            'closedExecuted' => $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Executed),
-            'closedRejected' => $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Rejected),
+            'verified' => $this->aVerifiedCaseFor($this->company),
+            'closedExecuted' => $this->aClosedCaseFor($this->company, OwnershipTransferCaseOutcome::Executed),
+            'closedRejected' => $this->aClosedCaseFor($this->company, OwnershipTransferCaseOutcome::Rejected),
             default => $this->fail('Unknown case fixture token: '.$fixture),
         };
 
@@ -133,7 +130,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
-            $this->aValidVerificationPayload($member),
+            $this->aValidVerificationPayload($this->employee),
         );
 
         // Then the refusal names the case's current state and nothing new is recorded
@@ -160,8 +157,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given a VERIFIED case and a target who is no member of its company
         // — both guards would fire; the case state is the real reason
-        $company = Company::factory()->create();
-        $case = $this->aVerifiedCaseFor($company);
+        $case = $this->aVerifiedCaseFor($this->company);
         $foreignMember = $this->aCompanyMember(Company::factory()->create(), 'employee');
 
         // When the admin attempts to verify it naming the non-member
@@ -182,16 +178,14 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given an open case and a user whose membership in the case's
         // company was removed — an active member means a live pivot
-        $company = Company::factory()->create();
-        $case = $this->anOpenCaseFor($company);
-        $removed = $this->aCompanyMember($company, 'employee');
-        $company->users()->updateExistingPivot($removed->getKey(), ['deleted_at' => now()]);
+        $case = $this->anOpenCaseFor($this->company);
+        $this->softDeleteMembership($this->company, $this->employee);
 
         // When the admin verifies naming them as the incoming owner
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
-            $this->aValidVerificationPayload($removed),
+            $this->aValidVerificationPayload($this->employee),
         );
 
         // Then the verification is refused on the target and nothing is written
@@ -205,8 +199,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given an open case for Contoso and a live member of a DIFFERENT
         // company — membership elsewhere must not satisfy the case's company
-        $company = Company::factory()->create();
-        $case = $this->anOpenCaseFor($company);
+        $case = $this->anOpenCaseFor($this->company);
         $foreignMember = $this->aCompanyMember(Company::factory()->create(), 'employee');
 
         // When the admin verifies naming them as the incoming owner
@@ -234,13 +227,11 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     ): void {
         // Given an open case, a live member, and a write inside the locked
         // transaction that dies the way the driver reports it
-        $company = Company::factory()->create();
-        $member = $this->aCompanyMember($company, 'employee');
-        $case = $this->anOpenCaseFor($company);
+        $case = $this->anOpenCaseFor($this->company);
         AuditEntry::created(fn () => throw $this->syntheticQueryException($failure));
 
         // When the admin verifies the case
-        $response = $this->verifyCase($this->platformAdmin, $case->getKey(), $this->aValidVerificationPayload($member));
+        $response = $this->verifyCase($this->platformAdmin, $case->getKey(), $this->aValidVerificationPayload($this->employee));
 
         // Then contention answers as a conflict; anything else passes
         // through (render only — a synthetic deadlock cannot model MySQL's
@@ -254,15 +245,13 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given an open case, a live member, and a lock-wait death inside
         // the locked transaction
         Exceptions::fake();
-        $company = Company::factory()->create();
-        $member = $this->aCompanyMember($company, 'employee');
-        $case = $this->anOpenCaseFor($company);
+        $case = $this->anOpenCaseFor($this->company);
         AuditEntry::created(fn () => throw $this->syntheticQueryException(
             ['sqlstate' => 'HY000', 'code' => 1205, 'message' => 'SQLSTATE[HY000]: General error: 1205'],
         ));
 
         // When the admin verifies the case
-        $response = $this->verifyCase($this->platformAdmin, $case->getKey(), $this->aValidVerificationPayload($member));
+        $response = $this->verifyCase($this->platformAdmin, $case->getKey(), $this->aValidVerificationPayload($this->employee));
 
         // Then the conflict speaks with THIS family's voice and the driver
         // cause rides the reported exception into the log chain
@@ -278,16 +267,14 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given an open case, a live member, and an audit write that fails
         // AFTER its row is inserted — only the transaction can take it back
-        $company = Company::factory()->create();
-        $member = $this->aCompanyMember($company, 'employee');
-        $case = $this->anOpenCaseFor($company);
+        $case = $this->anOpenCaseFor($this->company);
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the admin verifies the case
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
-            $this->aValidVerificationPayload($member),
+            $this->aValidVerificationPayload($this->employee),
         );
 
         // Then the whole verification rolls back — no event, no stamp, no evidence
@@ -300,22 +287,20 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given an open case, a live member, and an artefact entry smuggling
         // an extra prose key alongside the closed metadata shape
-        $company = Company::factory()->create();
-        $member = $this->aCompanyMember($company, 'employee');
-        $case = $this->anOpenCaseFor($company);
+        $case = $this->anOpenCaseFor($this->company);
 
         // When the admin verifies with notes and the smuggling entry
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
-            $this->aValidVerificationPayload($member, [
+            $this->aValidVerificationPayload($this->employee, [
                 'artefacts' => [[...$this->artefact, 'note' => 'smuggled prose that must not survive']],
             ]),
         );
 
         // Then the notes are readable only on the case row
         $response->assertOk();
-        $this->assertNotesStayOnTheRowOnly($case);
+        $this->assertNotesStayOnTheRowOnly($case, $response);
     }
 
     #[Test]
@@ -323,23 +308,21 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given Contoso with case A already verified through this very
         // endpoint, and a second open case B for the same company
-        $company = Company::factory()->create();
-        $member = $this->aCompanyMember($company, 'employee');
-        $caseA = $this->anOpenCaseFor($company);
-        $caseB = $this->anOpenCaseFor($company);
-        $this->verifyCase($this->platformAdmin, $caseA->getKey(), $this->aValidVerificationPayload($member))->assertOk();
+        $caseA = $this->anOpenCaseFor($this->company);
+        $caseB = $this->anOpenCaseFor($this->company);
+        $this->verifyCase($this->platformAdmin, $caseA->getKey(), $this->aValidVerificationPayload($this->employee))->assertOk();
 
         // When the admin verifies case B
         $response = $this->verifyCase(
             $this->platformAdmin,
             $caseB->getKey(),
-            $this->aValidVerificationPayload($member),
+            $this->aValidVerificationPayload($this->employee),
         );
 
         // Then B's stamp and B's audit row cite B's OWN event, never A's
         $response->assertOk();
         $ownEvent = LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $company->getKey())
+            ->where('aggregate_uuid', $this->company->getKey())
             ->where('event_properties->caseId', $caseB->getKey())
             ->sole();
         $this->assertSame((int) $ownEvent->getKey(), $caseB->fresh()?->verification_event_id);
@@ -353,25 +336,23 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_the_admin_verifies_an_open_case_then_the_verification_is_recorded_whole(): void
     {
         // Given an open case with no incoming owner yet (UC-1-140 alt-2a) and
-        // Alex, a live member of the case's company, on a frozen clock
+        // Contoso's employee, a live member of the case's company, on a frozen clock
         $this->travelTo(CarbonImmutable::parse('2026-08-10 09:00:00'));
-        $company = Company::factory()->create();
-        $alex = $this->aCompanyMember($company, 'employee');
-        $case = $this->anOpenCaseFor($company);
+        $case = $this->anOpenCaseFor($this->company);
 
-        // When the admin verifies the case naming Alex
+        // When the admin verifies the case naming the employee
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
-            $this->aValidVerificationPayload($alex),
+            $this->aValidVerificationPayload($this->employee),
         );
 
         // Then the event, the stamp and the audit row landed together, and the
         // wire carries the verification facts without the prose
         $eventId = $this->assertVerificationEventRecorded($case);
-        $this->assertCaseRowStampedVerified($case, $alex, $eventId);
+        $this->assertCaseRowStampedVerified($case, $this->employee, $eventId);
         $this->assertVerificationAudited($case, $eventId, $response);
-        $this->assertVerifiedCaseOnTheWire($response, $alex);
+        $this->assertVerifiedCaseOnTheWire($response, $this->employee);
     }
 
     /**
@@ -474,7 +455,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $event = LesilyStoredEvent::query()
             ->where('aggregate_uuid', $case->company_id)
             ->where('meta_data->company_id', $case->company_id)
-            ->where('event_class', 'App\Companies\Events\CompanyOwnershipVerificationRecorded')
+            ->where('event_class', CompanyOwnershipVerificationRecorded::class)
             ->sole();
 
         $properties = $event->event_properties;
@@ -516,7 +497,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
      */
     protected function assertVerificationAudited(OwnershipTransferCase $case, int $storedEventId, TestResponse $response): void
     {
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertDatabaseHas('audit_trail', [
             'event_class' => 'CompanyOwnershipVerificationRecorded',
             'subject_type' => 'ownership_transfer_case',
@@ -536,8 +517,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->sole();
-        $this->assertSame($correlationId, $entry->request_id);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
         $this->assertSame('Symfony', $entry->user_agent);
     }
 
@@ -563,10 +543,11 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
      * artefact entry projected to {type, reference, capturedAt}, the audit
      * row carries the notes text nowhere, and the row holds them verbatim.
      */
-    protected function assertNotesStayOnTheRowOnly(OwnershipTransferCase $case): void
+    protected function assertNotesStayOnTheRowOnly(OwnershipTransferCase $case, TestResponse $response): void
     {
         $event = LesilyStoredEvent::query()
             ->where('aggregate_uuid', $case->company_id)
+            ->where('event_class', CompanyOwnershipVerificationRecorded::class)
             ->sole();
         $properties = $event->event_properties;
         $this->assertEqualsCanonicalizing(['caseId', 'verifiedBy', 'artefacts', 'verifiedAt'], array_keys($properties));
@@ -574,7 +555,9 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             $this->assertEqualsCanonicalizing(['type', 'reference', 'capturedAt'], array_keys($entry));
         }
 
-        $auditRow = AuditEntry::query()->sole();
+        $correlationId = $response->headers->get('Correlation-Id');
+        $this->assertIsString($correlationId);
+        $auditRow = AuditEntry::query()->where('request_id', $correlationId)->sole();
         $this->assertStringNotContainsString($this->notes, (string) json_encode($auditRow->getAttributes()));
 
         $fresh = $case->fresh();
@@ -596,10 +579,11 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertEquals($case->verified_at, $fresh->verified_at);
         $this->assertSame($case->verification_event_id, $fresh->verification_event_id);
 
-        $this->assertSame(0, LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $case->company_id)
+        $this->assertSame(self::READY_MADE_NON_CONSENT_EVENTS, LesilyStoredEvent::query()
+            ->whereForCompany($case->company_id)
+            ->where('event_class', '!=', ConsentRecorded::class)
             ->count());
 
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 }

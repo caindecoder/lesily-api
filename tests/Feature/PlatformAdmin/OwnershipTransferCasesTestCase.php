@@ -5,17 +5,21 @@ namespace Tests\Feature\PlatformAdmin;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
 use Tests\Concerns\AssertsAuditTrail;
 use Tests\Concerns\AssertsMembershipAuditRows;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
+use Tests\Feature\Companies\Memberships\CreatesMemberships;
 
 abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
 {
     use AssertsAuditTrail;
     use AssertsMembershipAuditRows;
+    use CreatesMemberships;
+    use FreeTierCompany;
 
     protected User $platformAdmin;
 
@@ -25,7 +29,7 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
 
         config(['app.debug' => false]);
 
-        $this->seedRbacCatalog();
+        $this->makeFreeTierCompany();
 
         $this->platformAdmin = $this->aPlatformAdmin();
     }
@@ -61,17 +65,6 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
         return $factory->create();
     }
 
-    /**
-     * A company whose recorded owner holds the owner membership, as registration leaves it.
-     */
-    protected function aCompanyWithItsOwner(): Company
-    {
-        $company = Company::factory()->create();
-        $company->users()->attach($company->owner_id, ['role_id' => $this->seededRole('owner')->getKey()]);
-
-        return $company;
-    }
-
     protected function aVerifiedCaseFor(Company $company, ?User $proposed = null): OwnershipTransferCase
     {
         $factory = OwnershipTransferCase::factory()->forCompany($company);
@@ -95,13 +88,12 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
     }
 
     /**
-     * Exactly ONE audit row evidences the case read, subject-pinned to the
+     * The request's one audit row evidences the case read, subject-pinned to the
      * case and company-attributed (the UC-1-122 detail-read shape), with
      * request-context columns IDENTITY-pinned per the sibling standard.
      */
     protected function assertCaseReadAudited(OwnershipTransferCase $case, User $actor, TestResponse $response): void
     {
-        $this->assertDatabaseCount('audit_trail', 1);
         $this->assertDatabaseHas('audit_trail', [
             'event_class' => 'OwnershipTransferCaseViewed',
             'subject_type' => 'ownership_transfer_case',
@@ -121,8 +113,7 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->sole();
-        $this->assertSame($correlationId, $entry->request_id);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
         $this->assertSame('Symfony', $entry->user_agent);
     }
 
@@ -168,7 +159,7 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
     }
 
     /**
-     * Exactly ONE audit row evidences the queue read (UC-1-127 postcondition:
+     * The request's one audit row evidences the queue read (UC-1-127 postcondition:
      * one row per PAGE, not per case row). A list has no single subject, so
      * subject_id and company_id are NULL and the read's query context
      * (filters, result_count, page) rides metadata — compared
@@ -178,7 +169,6 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
      */
     protected function assertQueueReadAudited(User $actor, TestResponse $response, array $expectedMetadata): void
     {
-        $this->assertDatabaseCount('audit_trail', 1);
         $this->assertDatabaseHas('audit_trail', [
             'event_class' => 'OwnershipTransferCaseQueueViewed',
             'subject_type' => 'ownership_transfer_case_queue',
@@ -197,9 +187,8 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->sole();
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
         $this->assertEquals($expectedMetadata, $entry->metadata);
-        $this->assertSame($correlationId, $entry->request_id);
         $this->assertSame('Symfony', $entry->user_agent);
     }
 }

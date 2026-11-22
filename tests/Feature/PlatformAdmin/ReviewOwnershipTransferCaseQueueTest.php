@@ -27,23 +27,22 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
 
         // Then the request is rejected as unauthenticated and nothing is audited
         $this->assertUnauthenticated($response);
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
     public function when_a_non_allowlisted_caller_requests_the_case_queue_then_the_admin_surface_is_not_acknowledged(): void
     {
-        // Given a tenant Owner outside the allowlist whose company has an open case
-        [$company, $owner] = $this->aCompanyWithMember('owner');
-        $this->anOpenCaseFor($company);
+        // Given Contoso's owner outside the allowlist, Contoso having an open case
+        $this->anOpenCaseFor($this->company);
 
         // When she requests the case queue
-        $response = $this->listCases($owner);
+        $response = $this->listCases($this->owner);
 
         // Then the admin surface is never acknowledged — not even her own
         // company's case — and nothing is audited
         $this->assertResourceNotFoundNoLeak($response);
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -58,7 +57,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
 
         // Then the read is refused naming the offending key and nothing is audited
         $this->assertValidationRejected($response, $field, $message);
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -77,7 +76,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     {
         // Given an existing case and an audit write that fails AFTER its row
         // is inserted — only the read's transaction can take the row back out
-        $this->anOpenCaseFor(Company::factory()->create());
+        $this->anOpenCaseFor($this->company);
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the queue is requested
@@ -86,7 +85,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
         // Then the read fails closed — no case data, and the inserted
         // evidence row was rolled back with the read
         $this->assertFailedClosed($response);
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -104,6 +103,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
             'result_count' => 0,
             'page' => 1,
         ]);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
@@ -111,12 +111,11 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     {
         // Given three cases opened inside one frozen second — the tie the
         // timestamp column cannot break
-        $company = Company::factory()->create();
         $this->travelTo(CarbonImmutable::parse('2026-08-09 09:00:00'));
         $caseIds = [
-            $this->anOpenCaseFor($company)->getKey(),
-            $this->anOpenCaseFor($company)->getKey(),
-            $this->anOpenCaseFor($company)->getKey(),
+            $this->anOpenCaseFor($this->company)->getKey(),
+            $this->anOpenCaseFor($this->company)->getKey(),
+            $this->anOpenCaseFor($this->company)->getKey(),
         ];
         $this->travelBack();
 
@@ -133,7 +132,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     public function when_a_page_is_supplied_outside_the_query_string_then_it_is_ignored(): void
     {
         // Given sixteen cases — one more than a default page
-        OwnershipTransferCase::factory()->count(16)->forCompany(Company::factory()->create())->create();
+        OwnershipTransferCase::factory()->count(16)->forCompany($this->company)->create();
         Sanctum::actingAs($this->platformAdmin);
 
         // When a second page is asked for in the BODY rather than the query string
@@ -169,14 +168,13 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     {
         // Given three cases across two tenants, minted at distinct instants
         // interleaved across companies — newest is NOT the last-minted-per-company
-        $contoso = Company::factory()->create();
         $acme = Company::factory()->create();
         $this->travelTo(CarbonImmutable::parse('2026-08-09 09:00:00'));
-        $oldest = $this->anOpenCaseFor($contoso);
+        $oldest = $this->anOpenCaseFor($this->company);
         $this->travelTo(CarbonImmutable::parse('2026-08-09 10:00:00'));
         $middle = $this->anOpenCaseFor($acme);
         $this->travelTo(CarbonImmutable::parse('2026-08-09 11:00:00'));
-        $newest = $this->anOpenCaseFor($contoso);
+        $newest = $this->anOpenCaseFor($this->company);
         $this->travelBack();
 
         // When the queue is requested with no filter
@@ -189,6 +187,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
             'result_count' => 3,
             'page' => 1,
         ]);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
@@ -196,11 +195,10 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     public function when_the_queue_is_filtered_by_status_then_only_matching_cases_are_returned(string $token): void
     {
         // Given one case in each lifecycle state
-        $company = Company::factory()->create();
         $cases = [
-            'open' => $this->anOpenCaseFor($company),
-            'verified' => $this->aVerifiedCaseFor($company),
-            'closed' => $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Rejected),
+            'open' => $this->anOpenCaseFor($this->company),
+            'verified' => $this->aVerifiedCaseFor($this->company),
+            'closed' => $this->aClosedCaseFor($this->company, OwnershipTransferCaseOutcome::Rejected),
         ];
 
         // When the queue is filtered to this row's status
@@ -213,27 +211,28 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
             'result_count' => 1,
             'page' => 1,
         ]);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
     public function when_the_queue_is_filtered_by_company_then_only_that_companys_cases_are_returned(): void
     {
         // Given one case in each of two tenants
-        $contoso = Company::factory()->create();
         $acme = Company::factory()->create();
-        $contosoCase = $this->anOpenCaseFor($contoso);
+        $contosoCase = $this->anOpenCaseFor($this->company);
         $this->anOpenCaseFor($acme);
 
         // When the queue is filtered to Contoso
-        $response = $this->listCases($this->platformAdmin, ['company_id' => $contoso->getKey()]);
+        $response = $this->listCases($this->platformAdmin, ['company_id' => $this->company->getKey()]);
 
         // Then only Contoso's case is listed — company_id is a filter, not a scope
         $this->assertCasesListedInOrder($response, [$contosoCase->getKey()]);
         $this->assertQueueReadAudited($this->platformAdmin, $response, [
-            'filters' => ['company_id' => $contoso->getKey()],
+            'filters' => ['company_id' => $this->company->getKey()],
             'result_count' => 1,
             'page' => 1,
         ]);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
@@ -241,32 +240,32 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     {
         // Given cases that each match only ONE of the two filters, and one
         // matching both
-        $contoso = Company::factory()->create();
         $acme = Company::factory()->create();
-        $match = $this->aVerifiedCaseFor($contoso);
-        $this->anOpenCaseFor($contoso);
+        $match = $this->aVerifiedCaseFor($this->company);
+        $this->anOpenCaseFor($this->company);
         $this->aVerifiedCaseFor($acme);
 
         // When the queue is filtered by status AND company together
         $response = $this->listCases($this->platformAdmin, [
             'status' => 'verified',
-            'company_id' => $contoso->getKey(),
+            'company_id' => $this->company->getKey(),
         ]);
 
         // Then only the intersection is listed and both filters ride the audit row
         $this->assertCasesListedInOrder($response, [$match->getKey()]);
         $this->assertQueueReadAudited($this->platformAdmin, $response, [
-            'filters' => ['status' => 'verified', 'company_id' => $contoso->getKey()],
+            'filters' => ['status' => 'verified', 'company_id' => $this->company->getKey()],
             'result_count' => 1,
             'page' => 1,
         ]);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
     public function when_the_queue_spans_multiple_pages_then_the_requested_page_is_returned_with_its_own_audit_row(): void
     {
         // Given sixteen cases — one more than a default page
-        OwnershipTransferCase::factory()->count(16)->forCompany(Company::factory()->create())->create();
+        OwnershipTransferCase::factory()->count(16)->forCompany($this->company)->create();
 
         // When the second page is requested
         $response = $this->listCases($this->platformAdmin, ['page' => 2]);
@@ -281,13 +280,14 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
             'result_count' => 1,
             'page' => 2,
         ]);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
     public function when_a_page_size_is_requested_then_the_page_honours_it(): void
     {
         // Given five cases and a request for pages of two
-        OwnershipTransferCase::factory()->count(5)->forCompany(Company::factory()->create())->create();
+        OwnershipTransferCase::factory()->count(5)->forCompany($this->company)->create();
 
         // When the queue is requested with per_page=2
         $response = $this->listCases($this->platformAdmin, ['per_page' => 2]);
@@ -300,14 +300,14 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
             'result_count' => 2,
             'page' => 1,
         ]);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
     public function when_the_admin_lists_the_queue_then_the_page_carries_exactly_the_admin_contract(): void
     {
         // Given one closed-executed case — every contract key meaningful
-        $company = Company::factory()->create();
-        $case = $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Executed);
+        $case = $this->aClosedCaseFor($this->company, OwnershipTransferCaseOutcome::Executed);
 
         // When the queue is requested
         $response = $this->listCases($this->platformAdmin);
@@ -317,7 +317,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
             'data' => [
                 [
                     'id' => $case->getKey(),
-                    'company_id' => $company->getKey(),
+                    'company_id' => $this->company->getKey(),
                     'status' => 'closed',
                     'closed_outcome' => 'executed',
                     'rejection_reason_code' => null,

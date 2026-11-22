@@ -32,24 +32,21 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the request is rejected as unauthenticated and nothing is audited
         $this->assertUnauthenticated($response);
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
     public function when_a_non_allowlisted_caller_attempts_to_reject_a_case_then_the_admin_surface_is_not_acknowledged(): void
     {
-        // Given tenant Owner Olive and HER OWN company's open case
-        $company = Company::factory()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
-        $company->update(['owner_id' => $owner->getKey()]);
-        $case = $this->anOpenCaseFor($company);
+        // Given Contoso's owner and HER OWN company's open case
+        $case = $this->anOpenCaseFor($this->company);
 
         // When she calls the reject endpoint for that case
-        $response = $this->rejectCase($owner, $case->getKey());
+        $response = $this->rejectCase($this->owner, $case->getKey());
 
         // Then the admin surface is never acknowledged and nothing was rejected
         $this->assertResourceNotFoundNoLeak($response);
-        $this->assertNothingRejected($case, $owner->getKey());
+        $this->assertNothingRejected($case, $this->owner->getKey());
     }
 
     #[Test]
@@ -61,7 +58,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then nothing is found and nothing is audited (find-before-audit)
         $this->assertResourceNotFoundNoLeak($response);
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -73,7 +70,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         // Then the reference is refused as invalid and nothing is audited
         $this->assertValidationRejected($response, 'caseId', 'The case id field must be a valid UUID.');
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -81,15 +78,14 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_the_rejection_reason_or_code_is_invalid_then_the_rejection_is_refused(array $payload, string $field, string $message): void
     {
         // Given an open case an allowlisted admin could otherwise reject
-        $company = Company::factory()->create();
-        $case = $this->anOpenCaseFor($company);
+        $case = $this->anOpenCaseFor($this->company);
 
         // When the admin submits the invalid rejection
         $response = $this->rejectCase($this->platformAdmin, $case->getKey(), $payload);
 
         // Then the rejection is refused on the offending field and nothing was written
         $this->assertValidationRejected($response, $field, $message);
-        $this->assertNothingRejected($case, $company->owner_id);
+        $this->assertNothingRejected($case, $this->company->owner_id);
     }
 
     /**
@@ -112,8 +108,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_the_case_is_already_closed_then_the_rejection_is_refused_with_the_current_state_named(OwnershipTransferCaseOutcome $outcome): void
     {
         // Given a case already closed, whichever way it ended
-        $company = Company::factory()->create();
-        $case = $this->aClosedCaseFor($company, $outcome);
+        $case = $this->aClosedCaseFor($this->company, $outcome);
 
         // When the admin attempts to reject it
         $response = $this->rejectCase($this->platformAdmin, $case->getKey());
@@ -123,8 +118,8 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
         $response->assertJsonPath('message', 'Only an open or verified ownership-transfer case can be rejected; this case is closed.');
         $this->assertCaseUnchanged($case);
-        $this->assertNoAuditRecorded();
-        $this->assertNoOwnershipMoved($case, $company->owner_id);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
+        $this->assertNoOwnershipMoved($case, $this->company->owner_id);
     }
 
     /**
@@ -143,8 +138,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given an open case and an audit write that will fail AFTER its row
         // is inserted (the post-insert oracle)
-        $company = Company::factory()->create();
-        $case = $this->anOpenCaseFor($company);
+        $case = $this->anOpenCaseFor($this->company);
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the admin rejects the case
@@ -153,7 +147,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Then the ONE transaction takes back the close, the reason stamp and
         // the already-inserted audit row together
         $this->assertFailedClosed($response);
-        $this->assertNothingRejected($case, $company->owner_id);
+        $this->assertNothingRejected($case, $this->company->owner_id);
     }
 
     /**
@@ -168,8 +162,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     ): void {
         // Given an open case and a write inside the locked transaction that
         // dies the way the driver reports it
-        $company = Company::factory()->create();
-        $case = $this->anOpenCaseFor($company);
+        $case = $this->anOpenCaseFor($this->company);
         AuditEntry::created(fn () => throw $this->syntheticQueryException($failure));
 
         // When the admin rejects the case
@@ -184,8 +177,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_the_reason_is_exactly_at_the_limit_then_the_rejection_succeeds(): void
     {
         // Given an open case and a reason at exactly the 1000-character bound
-        $company = Company::factory()->create();
-        $case = $this->anOpenCaseFor($company);
+        $case = $this->anOpenCaseFor($this->company);
         $reason = str_repeat('a', 1000);
 
         // When the admin rejects with the at-limit reason
@@ -204,8 +196,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_any_accepted_reason_code_is_cited_then_the_rejection_records_it(RejectionReasonCode $code): void
     {
         // Given an open case
-        $company = Company::factory()->create();
-        $case = $this->anOpenCaseFor($company);
+        $case = $this->anOpenCaseFor($this->company);
 
         // When the admin rejects citing this row's code
         $response = $this->rejectCase($this->platformAdmin, $case->getKey(), [
@@ -238,8 +229,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_a_case_is_rejected_then_the_close_decides_under_the_case_row_lock(): void
     {
         // Given an open case
-        $company = Company::factory()->create();
-        $case = $this->anOpenCaseFor($company);
+        $case = $this->anOpenCaseFor($this->company);
 
         // When the rejection runs with every statement's depth recorded
         $capture = $this->recordedQueriesDuring(function () use ($case): void {
@@ -253,11 +243,9 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     #[Test]
     public function when_a_verified_case_is_rejected_then_no_ownership_change_is_persisted(): void
     {
-        // Given a VERIFIED case naming live member Alex — everything an
+        // Given a VERIFIED case naming Contoso's employee, a live member — everything an
         // execute would need is present, yet reject must move nothing
-        $company = Company::factory()->create();
-        $alex = $this->aCompanyMember($company, 'employee');
-        $case = $this->aVerifiedCaseFor($company, $alex);
+        $case = $this->aVerifiedCaseFor($this->company, $this->employee);
 
         // When the admin rejects it citing target ineligibility
         $response = $this->rejectCase($this->platformAdmin, $case->getKey(), [
@@ -270,32 +258,29 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response->assertOk();
         $this->assertCaseClosedRejected($case, 'Target is not eligible to assume ownership', RejectionReasonCode::TargetIneligible);
         $this->assertRejectionAudited($case, $response);
-        $this->assertNoOwnershipMoved($case, $company->owner_id);
+        $this->assertNoOwnershipMoved($case, $this->company->owner_id);
     }
 
     #[Test]
     public function when_an_open_case_is_rejected_then_it_closes_with_the_reason_on_the_record(): void
     {
-        // Given Contoso's open case, Owner Olive holding her owner pivot
-        $company = Company::factory()->create();
-        $olive = User::query()->findOrFail($company->owner_id);
-        $company->users()->attach($olive->getKey(), ['role_id' => $this->seededRole('owner')->getKey()]);
-        $case = $this->anOpenCaseFor($company);
+        // Given Contoso's open case, its owner holding her owner pivot
+        $case = $this->anOpenCaseFor($this->company);
 
         // When the admin rejects it for failed identity evidence
         $response = $this->rejectCase($this->platformAdmin, $case->getKey());
 
         // Then the case closes rejected with the reason verbatim on the
         // record, exactly one audit row names the admin, no domain event
-        // exists, Olive keeps her seat AND her pivot, and the wire carries the code
+        // exists, the owner keeps her seat AND her pivot, and the wire carries the code
         $this->assertCaseClosedRejected($case, 'Requester could not evidence the claimed relationship', RejectionReasonCode::IdentityFailed);
         $this->assertRejectionAudited($case, $response);
-        $this->assertNoOwnershipMoved($case, $olive->getKey());
-        $olivePivot = CompanyUser::query()
+        $this->assertNoOwnershipMoved($case, $this->owner->getKey());
+        $ownerPivot = CompanyUser::query()
             ->where('company_id', $case->company_id)
-            ->where('user_id', $olive->getKey())
+            ->where('user_id', $this->owner->getKey())
             ->sole();
-        $this->assertSame($this->seededRole('owner')->getKey(), $olivePivot->role_id);
+        $this->assertSame($this->seededRole('owner')->getKey(), $ownerPivot->role_id);
         $this->assertRejectedCaseOnTheWire($response, $case);
     }
 
@@ -415,7 +400,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
      */
     protected function assertRejectionAudited(OwnershipTransferCase $case, TestResponse $response): void
     {
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertDatabaseHas('audit_trail', [
             'event_class' => 'OwnershipTransferCaseRejected',
             'subject_type' => 'ownership_transfer_case',
@@ -435,8 +420,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->sole();
-        $this->assertSame($correlationId, $entry->request_id);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
         $this->assertSame('Symfony', $entry->user_agent);
     }
 
@@ -468,15 +452,15 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     /**
-     * No ownership change was persisted: NO domain event of ANY class exists
-     * on ANY stream (the plain-write invariant — fixtures never record
-     * events, so zero is exact), the owner column still names $ownerUserId,
+     * No ownership change was persisted: the event store holds only the
+     * ready-made company's events on ANY stream (the plain-write invariant —
+     * the case fixtures record none), the owner column still names $ownerUserId,
      * nobody else holds an owner-role pivot, and no membership pivot of the
      * company was soft-deleted by the rejection.
      */
     protected function assertNoOwnershipMoved(OwnershipTransferCase $case, string $ownerUserId): void
     {
-        $this->assertSame(0, LesilyStoredEvent::query()->count());
+        $this->assertSame(self::READY_MADE_EVENTS, LesilyStoredEvent::query()->count());
 
         $this->assertSame($ownerUserId, Company::query()->whereKey($case->company_id)->sole()->owner_id);
 
@@ -509,7 +493,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertNull($fresh->rejection_reason);
         $this->assertNull($fresh->rejection_reason_code);
 
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
 
         $this->assertNoOwnershipMoved($case, $ownerUserId);
     }
