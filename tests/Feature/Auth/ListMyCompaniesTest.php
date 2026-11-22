@@ -5,18 +5,22 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
+use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
 use App\Foundation\Billing\Enums\BillingPlan;
 
 class ListMyCompaniesTest extends AuthTestCase
 {
+    use FreeTierCompany;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->seedRbacCatalog();
+        $this->makeFreeTierCompany();
     }
 
     // Sad — the switcher list is guarded: a request with no token is rejected by
@@ -39,16 +43,14 @@ class ListMyCompaniesTest extends AuthTestCase
     #[Test]
     public function when_membership_was_removed_then_that_company_absent_from_list(): void
     {
-        // Given a user with a live membership in Acme and a removed one in Beta
-        $user = $this->aRegisteredUser();
-        $this->aMembershipFor($user, Company::factory()->named('Acme')->create());
-        $this->aRemovedMembershipIn(Company::factory()->named('Beta')->create(), $user);
+        // Given the employee, live in Contoso, with a removed membership in Beta
+        $this->aRemovedMembershipIn(Company::factory()->named('Beta')->create(), $this->employee);
 
         // When they list their companies
-        $response = $this->listCompanies($user);
+        $response = $this->listCompanies($this->employee);
 
-        // Then only Acme is listed — the removed Beta membership is absent
-        $this->assertCompaniesListed($response, ['Acme']);
+        // Then only Contoso is listed — the removed Beta membership is absent
+        $this->assertCompaniesListed($response, ['Contoso']);
     }
 
     // Sad — the list is scoped to the requester: another user's memberships are
@@ -57,17 +59,14 @@ class ListMyCompaniesTest extends AuthTestCase
     #[Test]
     public function when_other_users_have_companies_then_only_my_memberships_listed(): void
     {
-        // Given two users, each a member of their own company
-        $me = $this->aRegisteredUser();
-        $other = $this->aRegisteredUser('bob@contoso.lk');
-        $this->aMembershipFor($me, Company::factory()->named('Mine')->create());
-        $this->aMembershipFor($other, Company::factory()->named('Theirs')->create());
+        // Given the employee of Contoso, and the admin, who is also a member of Theirs
+        $this->aMembershipFor($this->admin, Company::factory()->named('Theirs')->create());
 
-        // When I list my companies
-        $response = $this->listCompanies($me);
+        // When the employee lists their companies
+        $response = $this->listCompanies($this->employee);
 
-        // Then only my membership is listed — the other user's company is absent
-        $this->assertCompaniesListed($response, ['Mine']);
+        // Then only the employee's membership is listed — the admin's other company is absent
+        $this->assertCompaniesListed($response, ['Contoso']);
     }
 
     // Edge — an invitation alone is not a membership: a company that has only
@@ -77,16 +76,14 @@ class ListMyCompaniesTest extends AuthTestCase
     #[Test]
     public function when_only_a_pending_invitation_exists_then_that_company_absent_from_list(): void
     {
-        // Given a member of Acme who is merely invited to Beta
-        $user = $this->aRegisteredUser();
-        $this->aMembershipFor($user, Company::factory()->named('Acme')->create());
-        $this->anInvitationRowFor(Company::factory()->named('Beta')->create(), $user->email);
+        // Given the employee of Contoso, who is merely invited to Beta
+        $this->anInvitationRowFor(Company::factory()->named('Beta')->create(), $this->employee->email);
 
         // When they list their companies
-        $response = $this->listCompanies($user);
+        $response = $this->listCompanies($this->employee);
 
-        // Then only Acme is listed — the invited-only Beta is absent
-        $this->assertCompaniesListed($response, ['Acme']);
+        // Then only Contoso is listed — the invited-only Beta is absent
+        $this->assertCompaniesListed($response, ['Contoso']);
     }
 
     // Edge — every live membership is listed regardless of the company's status:
@@ -95,15 +92,14 @@ class ListMyCompaniesTest extends AuthTestCase
     #[Test]
     public function when_a_company_is_trial_expired_then_listed_with_its_status(): void
     {
-        // Given a member of a trial-expired company
-        $user = $this->aRegisteredUser();
-        $this->aMembershipFor($user, Company::factory()->named('Acme')->trialExpired()->create());
+        // Given the employee of Contoso, whose trial has expired
+        $this->company->update(['status' => CompanyStatus::TrialExpired, 'current_billing_plan' => null]);
 
         // When they list their companies
-        $response = $this->listCompanies($user);
+        $response = $this->listCompanies($this->employee);
 
         // Then the company is listed carrying its status
-        $this->assertCompaniesListed($response, ['Acme']);
+        $this->assertCompaniesListed($response, ['Contoso']);
         $response->assertJsonPath('data.0.status', 'trial_expired');
     }
 
@@ -112,15 +108,13 @@ class ListMyCompaniesTest extends AuthTestCase
     #[Test]
     public function when_user_belongs_to_one_company_then_single_row_returned(): void
     {
-        // Given a user with exactly one live membership
-        $user = $this->aRegisteredUser();
-        $this->aMembershipFor($user, Company::factory()->named('Acme')->create());
+        // Given the employee, whose one live membership is Contoso
 
         // When they list their companies
-        $response = $this->listCompanies($user);
+        $response = $this->listCompanies($this->employee);
 
         // Then the single membership is returned
-        $this->assertCompaniesListed($response, ['Acme']);
+        $this->assertCompaniesListed($response, ['Contoso']);
     }
 
     // Edge — a user whose only membership was removed has an EMPTY list: 200 with
@@ -129,12 +123,11 @@ class ListMyCompaniesTest extends AuthTestCase
     #[Test]
     public function when_user_has_no_live_memberships_then_empty_list_returned(): void
     {
-        // Given a user whose only membership was removed
-        $user = $this->aRegisteredUser();
-        $this->aRemovedMembershipIn(Company::factory()->named('Acme')->create(), $user);
+        // Given the employee, whose only membership — Contoso — was removed
+        $this->softDeleteMembership($this->company, $this->employee);
 
         // When they list their companies
-        $response = $this->listCompanies($user);
+        $response = $this->listCompanies($this->employee);
 
         // Then the list is empty
         $response->assertOk();
@@ -147,19 +140,16 @@ class ListMyCompaniesTest extends AuthTestCase
     #[Test]
     public function when_two_companies_share_a_name_then_join_order_breaks_the_tie(): void
     {
-        // Given memberships in two companies both named Acme, joined in a known order
-        $user = $this->aRegisteredUser();
-        $first = Company::factory()->named('Acme')->create();
-        $second = Company::factory()->named('Acme')->create();
-        $this->aMembershipFor($user, $first);
-        $this->aMembershipFor($user, $second);
+        // Given the employee of Contoso, who then joined a second company also named Contoso
+        $second = Company::factory()->named('Contoso')->create();
+        $this->aMembershipFor($this->employee, $second);
 
         // When they list their companies
-        $response = $this->listCompanies($user);
+        $response = $this->listCompanies($this->employee);
 
         // Then the earlier-joined membership leads
-        $this->assertCompaniesListed($response, ['Acme', 'Acme']);
-        $this->assertSame([$first->getKey(), $second->getKey()], $response->json('data.*.id'));
+        $this->assertCompaniesListed($response, ['Contoso', 'Contoso']);
+        $this->assertSame([$this->company->getKey(), $second->getKey()], $response->json('data.*.id'));
     }
 
     // Edge — edge row values serialize faithfully: a planless (trial) company and
@@ -167,14 +157,12 @@ class ListMyCompaniesTest extends AuthTestCase
     #[Test]
     public function when_onboarding_was_skipped_in_a_planless_company_then_row_reflects_both(): void
     {
-        // Given a member of a planless company who skipped the onboarding wizard
-        $user = $this->aRegisteredUser();
-        $company = Company::factory()->named('Acme')->withoutPlan()->create();
-        $this->aMembershipFor($user, $company);
-        $this->skippedOnboardingIn($company, $user);
+        // Given the employee of Contoso, now planless on its trial, who skipped the onboarding wizard
+        $this->putOnTrial($this->company, CarbonImmutable::now()->addDays(30));
+        $this->skippedOnboardingIn($this->company, $this->employee);
 
         // When they list their companies
-        $response = $this->listCompanies($user);
+        $response = $this->listCompanies($this->employee);
 
         // Then the row carries the null plan and the skipped flag
         $response->assertJsonPath('data.0.plan', null);
@@ -188,24 +176,18 @@ class ListMyCompaniesTest extends AuthTestCase
     #[Test]
     public function when_the_default_membership_was_removed_then_no_row_flagged_default(): void
     {
-        // Given a member of Acme and Beta whose default Beta membership was then removed
-        $user = $this->aRegisteredUser();
-        $acme = Company::factory()->named('Acme')->create();
+        // Given the employee, a member of Contoso and Beta, whose default Beta membership was then removed
         $beta = Company::factory()->named('Beta')->create();
-        $this->aMembershipFor($user, $acme);
-        $this->aMembershipFor($user, $beta);
-        $this->setDefaultCompany($user, ['companyId' => $beta->getKey()]);
-        CompanyUser::query()
-            ->where('company_id', $beta->getKey())
-            ->where('user_id', $user->getKey())
-            ->update(['deleted_at' => now()]);
+        $this->aMembershipFor($this->employee, $beta);
+        $this->setDefaultCompany($this->employee, ['companyId' => $beta->getKey()]);
+        $this->softDeleteMembership($beta, $this->employee);
 
         // When they list their companies
-        $response = $this->listCompanies($user);
+        $response = $this->listCompanies($this->employee);
 
         // Then the removed row is absent and no remaining row is flagged default
-        $this->assertCompaniesListed($response, ['Acme']);
-        $this->assertListFlagsDefault($user, null);
+        $this->assertCompaniesListed($response, ['Contoso']);
+        $this->assertListFlagsDefault($this->employee, null);
     }
 
     // Happy — the full switcher contract (slice-companies B4): every live

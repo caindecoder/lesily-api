@@ -8,6 +8,7 @@ use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
@@ -25,19 +26,25 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class EnableTwoFactorTest extends AuthTestCase
 {
-    use WithRolePermissionFixtures;
+    use FreeTierCompany, WithRolePermissionFixtures;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
 
     #[Test]
     public function when_enrollment_is_confirmed_without_a_code_then_the_request_is_rejected_as_invalid(): void
     {
         // Given (a Pro member mid-enrollment)
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $user = $this->aMemberOf($company);
+        $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: true);
-        $this->enable($user, $company);
+        $this->enable($this->employee, $this->company);
 
         // When they confirm with no code at all
-        $response = $this->confirmWith($user, $company, []);
+        $response = $this->confirmWith($this->employee, $this->company, []);
 
         // Then the request is rejected as a validation error naming the code
         $this->assertValidationRejected($response, 'code', 'The code field is required.');
@@ -48,66 +55,62 @@ class EnableTwoFactorTest extends AuthTestCase
     public function when_a_sub_pro_user_starts_enrollment_then_two_factor_is_unavailable(BillingPlan $plan): void
     {
         // Given (a member of a company whose plan does not grant 2FA)
-        $company = Company::factory()->onPlan($plan)->create();
-        $user = $this->aMemberOf($company);
+        $this->putOnPlan($this->company, $plan);
 
         // When the member starts 2FA enrollment
-        $response = $this->enable($user, $company);
+        $response = $this->enable($this->employee, $this->company);
 
         // Then enrollment is refused and no secret is staged
-        $this->assertFeatureUnavailable($response, $user);
+        $this->assertFeatureUnavailable($response, $this->employee);
     }
 
     #[Test]
     public function when_enrollment_is_confirmed_without_being_started_then_it_is_rejected(): void
     {
         // Given (a Pro member who never started enrollment — no staged secret)
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $user = $this->aMemberOf($company);
+        $this->putOnPlan($this->company, BillingPlan::Pro);
 
         // When they submit a confirmation code
-        $response = $this->confirm($user, $company, '123456');
+        $response = $this->confirm($this->employee, $this->company, '123456');
 
         // Then it is rejected and nothing is enabled
         $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'TWO_FACTOR_SETUP_NOT_STARTED');
-        $this->assertNoTwoFactorPersisted($user);
+        $this->assertNoTwoFactorPersisted($this->employee);
     }
 
     #[Test]
     public function when_the_staged_secret_is_confirmed_just_outside_the_ten_minute_window_then_it_is_rejected(): void
     {
         // Given (a Pro member who started enrollment and let the staged secret age past its window)
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $user = $this->aMemberOf($company);
+        $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: true);
-        $this->enable($user, $company);
+        $this->enable($this->employee, $this->company);
         $this->travel(10 * 60 + 30)->seconds();
 
         // When they confirm with a valid code
-        $response = $this->confirm($user, $company, '123456');
+        $response = $this->confirm($this->employee, $this->company, '123456');
 
         // Then the setup has expired and nothing is enabled
-        $this->assertSetupExpired($response, $user);
+        $this->assertSetupExpired($response, $this->employee);
     }
 
     #[Test]
     public function when_enrollment_is_confirmed_with_an_invalid_code_then_nothing_is_persisted(): void
     {
         // Given (a Pro member mid-enrollment whose authenticator code will not verify)
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $user = $this->aMemberOf($company);
+        $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: false);
-        $this->enable($user, $company);
+        $this->enable($this->employee, $this->company);
 
         // When they submit a code the authenticator does not accept
-        $response = $this->confirm($user, $company, '000000');
+        $response = $this->confirm($this->employee, $this->company, '000000');
 
-        // Then it is rejected, 2FA stays disabled and nothing is audited
+        // Then it is rejected, 2FA stays disabled and nothing is audited beyond the ready-made company's rows
         $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'INVALID_TWO_FACTOR_CODE');
-        $this->assertNoTwoFactorPersisted($user);
-        $this->assertNothingAudited();
+        $this->assertNoTwoFactorPersisted($this->employee);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -132,12 +135,12 @@ class EnableTwoFactorTest extends AuthTestCase
     public function when_an_enrolled_user_starts_enrollment_again_then_it_is_rejected(): void
     {
         // Given (a Pro member who already has 2FA enabled)
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        $this->putOnPlan($this->company, BillingPlan::Pro);
         $user = User::factory()->withTwoFactor()->create();
-        $this->joinCompany($company, $user);
+        $this->joinCompany($this->company, $user);
 
         // When they start enrollment a second time
-        $response = $this->enable($user, $company);
+        $response = $this->enable($user, $this->company);
 
         // Then it is refused as a conflict and no new secret is staged
         $response->assertConflict();
@@ -164,14 +167,13 @@ class EnableTwoFactorTest extends AuthTestCase
     public function when_confirmation_attempts_exceed_the_limit_then_they_are_throttled(): void
     {
         // Given (an authenticated Pro member)
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $user = $this->aMemberOf($company);
+        $this->putOnPlan($this->company, BillingPlan::Pro);
 
         // When confirm is called past the per-IP auth-tier allowance (the TOTP brute-force surface)
         for ($attempt = 0; $attempt < 10; $attempt++) {
-            $this->confirm($user, $company, '123456');
+            $this->confirm($this->employee, $this->company, '123456');
         }
-        $response = $this->confirm($user, $company, '123456');
+        $response = $this->confirm($this->employee, $this->company, '123456');
 
         // Then the over-limit attempt is throttled
         $this->assertThrottled($response);
@@ -181,31 +183,29 @@ class EnableTwoFactorTest extends AuthTestCase
     public function when_the_staged_secret_is_confirmed_just_inside_the_ten_minute_window_then_it_is_accepted(): void
     {
         // Given (a Pro member who started enrollment and returns just inside the window)
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $user = $this->aMemberOf($company);
+        $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: true);
-        $stagedSecret = (string) $this->enable($user, $company)->json('data.secret');
+        $stagedSecret = (string) $this->enable($this->employee, $this->company)->json('data.secret');
         $this->travel(9 * 60 + 30)->seconds();
 
         // When they confirm with a valid code
-        $response = $this->confirm($user, $company, '123456');
+        $response = $this->confirm($this->employee, $this->company, '123456');
 
         // Then 2FA is enabled from the still-staged secret
-        $this->assertTwoFactorEnabled($response, $user, $stagedSecret);
+        $this->assertTwoFactorEnabled($response, $this->employee, $stagedSecret);
     }
 
     #[Test]
     public function when_a_recovery_code_draw_repeats_then_the_repeat_is_replaced(): void
     {
         // Given (a Pro member completing enrollment, whose second recovery-code draw repeats the first)
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $user = $this->aMemberOf($company);
+        $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: true);
-        $this->enable($user, $company);
+        $this->enable($this->employee, $this->company);
         $expectedCodes = $this->recoveryCodeDrawsRepeatingTheFirst();
 
         // When they confirm with a valid code
-        $codes = $this->confirm($user, $company, '123456')->json('data.recovery_codes');
+        $codes = $this->confirm($this->employee, $this->company, '123456')->json('data.recovery_codes');
 
         // Then the repeat is replaced by the next draw and ten distinct codes come back, in the order drawn
         $this->assertSame($expectedCodes, $codes);
@@ -215,45 +215,42 @@ class EnableTwoFactorTest extends AuthTestCase
     public function when_enrollment_starts_then_a_provisioning_uri_and_secret_are_returned_without_persisting(): void
     {
         // Given (a Pro member who has not yet enabled 2FA)
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $user = $this->aMemberOf($company);
+        $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier();
 
         // When they start enrollment
-        $response = $this->enable($user, $company);
+        $response = $this->enable($this->employee, $this->company);
 
         // Then a TOTP secret + provisioning URI are returned, but nothing is persisted yet
-        $this->assertProvisioningReturnedWithoutPersisting($response, $user);
+        $this->assertProvisioningReturnedWithoutPersisting($response, $this->employee);
     }
 
     #[Test]
     public function when_enrollment_is_confirmed_then_ten_unique_recovery_codes_are_returned_hashed(): void
     {
         // Given (a Pro member completing enrollment)
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $user = $this->aMemberOf($company);
+        $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: true);
-        $this->enable($user, $company);
+        $this->enable($this->employee, $this->company);
 
         // When they confirm with a valid code
         /** @var list<string> $codes */
-        $codes = $this->confirm($user, $company, '123456')->json('data.recovery_codes');
+        $codes = $this->confirm($this->employee, $this->company, '123456')->json('data.recovery_codes');
 
         // Then exactly 10 distinct codes are returned, stored hashed (never plaintext)
-        $this->assertRecoveryCodesHashed($user, $codes);
+        $this->assertRecoveryCodesHashed($this->employee, $codes);
     }
 
     #[Test]
     public function when_enrollment_is_confirmed_then_the_recorded_event_carries_no_secret(): void
     {
         // Given (a Pro member completing enrollment)
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $user = $this->aMemberOf($company);
+        $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: true);
-        $stagedSecret = (string) $this->enable($user, $company)->json('data.secret');
+        $stagedSecret = (string) $this->enable($this->employee, $this->company)->json('data.secret');
 
         // When they confirm
-        $this->confirm($user, $company, '123456');
+        $this->confirm($this->employee, $this->company, '123456');
 
         // Then the recorded User2FAEnabled marker holds only non-secret metadata (Design-Y)
         $this->assertEnableMarkerCarriesNoSecret($stagedSecret);
@@ -263,16 +260,15 @@ class EnableTwoFactorTest extends AuthTestCase
     public function when_a_pro_user_completes_enrollment_then_two_factor_is_enabled(): void
     {
         // Given (a Pro member mid-enrollment whose authenticator code verifies)
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $user = $this->aMemberOf($company);
+        $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: true);
-        $stagedSecret = (string) $this->enable($user, $company)->json('data.secret');
+        $stagedSecret = (string) $this->enable($this->employee, $this->company)->json('data.secret');
 
         // When they confirm with a valid code
-        $response = $this->confirm($user, $company, '123456');
+        $response = $this->confirm($this->employee, $this->company, '123456');
 
         // Then 2FA is enabled and the secret is stored encrypted
-        $this->assertTwoFactorEnabled($response, $user, $stagedSecret);
+        $this->assertTwoFactorEnabled($response, $this->employee, $stagedSecret);
     }
 
     #[Test]
@@ -290,6 +286,7 @@ class EnableTwoFactorTest extends AuthTestCase
 
         // Then each company's audit trail records that 2FA was turned on, with the role the user holds there
         $this->assertAuditedInEachCompany($response, $user, AuditAction::TwoFactorEnabled);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 2);
     }
 
     /**
@@ -301,14 +298,6 @@ class EnableTwoFactorTest extends AuthTestCase
             'free' => [BillingPlan::Free],
             'starter' => [BillingPlan::Starter],
         ];
-    }
-
-    protected function aMemberOf(Company $company): User
-    {
-        $user = User::factory()->create();
-        $this->joinCompany($company, $user);
-
-        return $user;
     }
 
     protected function enable(User $user, Company $company): TestResponse
@@ -435,7 +424,7 @@ class EnableTwoFactorTest extends AuthTestCase
         $this->assertNoTwoFactorPersisted($user);
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', User2FAEnabled::class)->count());
         $this->assertIsString(Cache::get("2fa-setup:{$user->getKey()}"), 'A rolled-back confirm must keep the staged secret.');
-        $this->assertNothingAudited();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     protected function assertNoTwoFactorPersisted(User $user): void

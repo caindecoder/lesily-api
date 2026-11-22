@@ -182,6 +182,7 @@ class DisableTwoFactorTest extends AuthTestCase
 
         // Then each company's audit trail records that 2FA was turned off, with the role the user holds there
         $this->assertAuditedInEachCompany($response, $user, AuditAction::TwoFactorDisabled);
+        $this->assertDatabaseCount('audit_trail', 2);
     }
 
     #[Test]

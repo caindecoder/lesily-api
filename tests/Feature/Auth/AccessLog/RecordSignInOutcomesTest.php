@@ -272,7 +272,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
         // Given a user in two companies, removed from one
         $user = $this->aRegisteredUser();
         $this->inTwoCompanies($user);
-        $this->removeMembership($this->employingCompany, $user);
+        $this->softDeleteMembership($this->employingCompany, $user);
 
         // When they sign in
         $response = $this->signIn(self::LOGIN_PASSWORD);

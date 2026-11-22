@@ -6,6 +6,7 @@ use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
@@ -31,7 +32,7 @@ use App\Foundation\Notifications\Notifications\SystemNotification;
  */
 class PasswordChangedNotificationTest extends AuthTestCase
 {
-    use InteractsWithQueuedReactors;
+    use FreeTierCompany, InteractsWithQueuedReactors;
 
     protected function setUp(): void
     {
@@ -40,6 +41,8 @@ class PasswordChangedNotificationTest extends AuthTestCase
         // Error-path render parity (amendment M): APP_DEBUG=true (the local default) masks the
         // prod render path, so the Sad 401 rejection renders its mapped envelope the way CI/prod do.
         config(['app.debug' => false]);
+        $this->makeFreeTierCompany();
+        $this->employee->update(['password' => self::LOGIN_PASSWORD]);
     }
 
     #[Test]
@@ -88,10 +91,8 @@ class PasswordChangedNotificationTest extends AuthTestCase
     #[Test]
     public function when_the_password_is_changed_then_a_confirmation_is_sent(): void
     {
-        // Given a company-attached user with an active session
-        $user = $this->aRegisteredUser();
-        $company = $this->attachCompany($user);
-        $session = $this->aSessionFor($user);
+        // Given the employee of Contoso with an active session
+        $session = $this->aSessionFor($this->employee);
         Notification::fake();
 
         // When they change their password with the correct current password
@@ -101,7 +102,7 @@ class PasswordChangedNotificationTest extends AuthTestCase
         ]);
 
         // Then a password-changed confirmation naming their company is sent to them
-        $this->assertConfirmationNames($response, $user, $company->name);
+        $this->assertConfirmationNames($response, $this->employee, $this->company->name);
     }
 
     #[Test]
@@ -126,22 +127,20 @@ class PasswordChangedNotificationTest extends AuthTestCase
     #[Test]
     public function when_the_password_is_reset_then_a_confirmation_is_sent(): void
     {
-        // Given a company-attached user with a valid reset token
-        $user = $this->aRegisteredUser();
-        $company = $this->attachCompany($user);
-        $token = $this->aResetTokenFor($user);
+        // Given the employee of Contoso with a valid reset token
+        $token = $this->aResetTokenFor($this->employee);
         Notification::fake();
 
         // When they reset their password with a valid new one
         $response = $this->resetPassword([
             'token' => $token,
-            'email' => $user->email,
+            'email' => $this->employee->email,
             'password' => self::NEW_PASSWORD,
         ]);
 
         // Then the same password-changed confirmation is sent — the reset event is wired into the
         // same reactor as the change event
-        $this->assertConfirmationNames($response, $user, $company->name);
+        $this->assertConfirmationNames($response, $this->employee, $this->company->name);
     }
 
     #[Test]
@@ -165,12 +164,10 @@ class PasswordChangedNotificationTest extends AuthTestCase
     #[Test]
     public function when_the_user_has_no_default_company_then_the_oldest_membership_names_the_confirmation(): void
     {
-        // Given a defaultless two-company user whose OLDEST membership was inserted second —
-        // insertion order deliberately inverted vs joined time, so an unordered read picks wrong
-        $user = $this->aRegisteredUser();
-        $this->attachCompany($user, now());
-        $oldest = $this->attachCompany($user, now()->subDay());
-        $session = $this->aSessionFor($user);
+        // Given the employee — defaultless, joined Contoso first — whose OLDEST membership was
+        // inserted second: insertion order deliberately inverted vs joined time, so an unordered read picks wrong
+        $oldest = $this->attachCompany($this->employee, now()->subDay());
+        $session = $this->aSessionFor($this->employee);
         Notification::fake();
 
         // When they change their password with the correct current password
@@ -180,7 +177,7 @@ class PasswordChangedNotificationTest extends AuthTestCase
         ]);
 
         // Then the confirmation is labeled with the oldest membership's company
-        $this->assertConfirmationNames($response, $user, $oldest->name);
+        $this->assertConfirmationNames($response, $this->employee, $oldest->name);
     }
 
     #[Test]
@@ -208,16 +205,12 @@ class PasswordChangedNotificationTest extends AuthTestCase
     #[Test]
     public function when_the_default_membership_was_removed_then_the_oldest_live_membership_names_the_confirmation(): void
     {
-        // Given a user whose default company's membership was removed, leaving an older live one
-        $user = $this->aRegisteredUser();
-        $oldestLive = $this->attachCompany($user, now()->subDays(2));
-        $removedDefault = $this->attachCompany($user, now());
-        $user->forceFill(['default_company_id' => $removedDefault->getKey()])->save();
-        CompanyUser::query()
-            ->where('company_id', $removedDefault->getKey())
-            ->where('user_id', $user->getKey())
-            ->update(['deleted_at' => now()]);
-        $session = $this->aSessionFor($user);
+        // Given the employee whose default company — Contoso — had its membership removed,
+        // leaving an older live one
+        $oldestLive = $this->attachCompany($this->employee, now()->subDays(2));
+        $this->employee->forceFill(['default_company_id' => $this->company->getKey()])->save();
+        $this->softDeleteMembership($this->company, $this->employee);
+        $session = $this->aSessionFor($this->employee);
         Notification::fake();
 
         // When they change their password with the correct current password
@@ -227,19 +220,18 @@ class PasswordChangedNotificationTest extends AuthTestCase
         ]);
 
         // Then the label falls back to the oldest LIVE membership — a dead default never leaks
-        $this->assertConfirmationNames($response, $user, $oldestLive->name);
+        $this->assertConfirmationNames($response, $this->employee, $oldestLive->name);
     }
 
     #[Test]
     public function when_the_user_has_a_default_company_then_it_names_the_confirmation(): void
     {
-        // Given a two-company user whose default is the NEWER membership — the one neither
-        // an arbitrary-first nor an oldest-first read would pick
-        $user = $this->aRegisteredUser();
-        $this->attachCompany($user, now()->subDays(2));
-        $default = $this->attachCompany($user, now());
-        $user->forceFill(['default_company_id' => $default->getKey()])->save();
-        $session = $this->aSessionFor($user);
+        // Given the employee — first a member of Contoso — whose default is the NEWER, last-inserted
+        // membership: the one neither an arbitrary-first nor an oldest-first read would pick
+        $this->attachCompany($this->employee, now()->subDays(2));
+        $default = $this->attachCompany($this->employee, now());
+        $this->employee->forceFill(['default_company_id' => $default->getKey()])->save();
+        $session = $this->aSessionFor($this->employee);
         Notification::fake();
 
         // When they change their password with the correct current password
@@ -249,16 +241,14 @@ class PasswordChangedNotificationTest extends AuthTestCase
         ]);
 
         // Then the confirmation is labeled with the default company — the user's own choice wins
-        $this->assertConfirmationNames($response, $user, $default->name);
+        $this->assertConfirmationNames($response, $this->employee, $default->name);
     }
 
     #[Test]
     public function when_the_password_is_changed_then_the_confirmation_is_queued_not_sent_inline(): void
     {
-        // Given a company-attached user with an active session, and the fakes armed
-        $user = $this->aRegisteredUser();
-        $company = $this->attachCompany($user);
-        $session = $this->aSessionFor($user);
+        // Given the employee of Contoso with an active session, and the fakes armed
+        $session = $this->aSessionFor($this->employee);
         Notification::fake();
         Queue::fake();
 
@@ -271,7 +261,7 @@ class PasswordChangedNotificationTest extends AuthTestCase
         // Then the confirmation is deferred — not sent inline — and delivers to them at the drain
         $this->assertReactorDeferred(UserPasswordChanged::class, SystemNotification::class);
         $this->runQueuedHandlersFor(UserPasswordChanged::class);
-        $this->assertConfirmationNames($response, $user, $company->name);
+        $this->assertConfirmationNames($response, $this->employee, $this->company->name);
     }
 
     /**

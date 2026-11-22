@@ -273,7 +273,7 @@ class ChangePasswordTest extends AuthTestCase
         // Given a user who owns one company and was removed from the other
         $user = $this->aRegisteredUser();
         $this->inTwoCompanies($user);
-        $this->removeMembership($this->employingCompany, $user);
+        $this->softDeleteMembership($this->employingCompany, $user);
         $current = $this->aSessionFor($user);
 
         // When they change their password
@@ -365,6 +365,7 @@ class ChangePasswordTest extends AuthTestCase
 
         // Then each company's audit trail records the change, with the role the user holds there
         $this->assertAuditedInEachCompany($response, $user, AuditAction::PasswordChanged);
+        $this->assertDatabaseCount('audit_trail', 2);
     }
 
     /**
