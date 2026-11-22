@@ -5,7 +5,6 @@ namespace Tests\Feature\PlatformAdmin;
 use App\Models\User;
 use RuntimeException;
 use Illuminate\Support\Str;
-use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;

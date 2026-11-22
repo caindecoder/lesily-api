@@ -88,7 +88,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     public function when_the_incident_does_not_exist_then_it_is_not_found(string $breachId): void
     {
         // Given no incident under that id
-        // When the platform adminpresses notify for it
+        // When the platform admin presses notify for it
         $response = $this->notifyCompanies($this->platformAdmin, $breachId);
 
         // Then it is not found and no notice is queued
@@ -110,7 +110,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $incident = $incident->withCompany($this->companyA, ['pii'], 40)->createOne();
         $before = $this->snapshotOf($incident->getKey());
 
-        // When the platform adminpresses notify
+        // When the platform admin presses notify
         $response = $this->notifyCompanies($this->platformAdmin, $incident->getKey());
 
         // Then it is refused with its stage named, and the incident is left as it was
@@ -140,7 +140,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         ]]);
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the platform adminpresses notify
+        // When the platform admin presses notify
         $response = $this->notifyCompanies($this->platformAdmin, $breachId);
 
         // Then the request fails closed: nothing recorded and the incident still Recorded
@@ -155,7 +155,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $breachId = $this->aRecordedIncident();
         $this->aCompanyMember($this->company, 'admin');
 
-        // When the platform adminpresses notify
+        // When the platform admin presses notify
         $response = $this->notifyCompanies($this->platformAdmin, $breachId);
 
         // Then no notice has gone out yet: each company's notice waits on the queue
@@ -171,7 +171,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->aCompanyMember($this->company, 'admin');
         $this->travelTo(self::NOTIFIED_AT);
 
-        // When the platform adminpresses notify and the notices leave the queue
+        // When the platform admin presses notify and the notices leave the queue
         $response = $this->notifyCompanies($this->platformAdmin, $breachId);
         $this->runTheNotices();
 
@@ -188,7 +188,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
             ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => null],
         ]]);
 
-        // When the platform adminpresses notify and the notice leaves the queue
+        // When the platform admin presses notify and the notice leaves the queue
         $this->notifyCompanies($this->platformAdmin, $breachId);
         $this->runTheNotices();
 
@@ -209,7 +209,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $removedAdmin = $this->aCompanyMember($this->company, 'admin');
         $this->softDeleteMembership($this->company, $removedAdmin);
 
-        // When the platform adminpresses notify and the notices leave the queue
+        // When the platform admin presses notify and the notices leave the queue
         $this->notifyCompanies($this->platformAdmin, $breachId);
         $this->runTheNotices();
 
@@ -224,7 +224,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         // and Globex Traders (payroll records, 30 people), each with an owner and an admin
         $breachId = $this->anIncidentNamingAcmeAndGlobex();
 
-        // When the platform adminpresses notify and the notices leave the queue
+        // When the platform admin presses notify and the notices leave the queue
         $this->notifyCompanies($this->platformAdmin, $breachId);
         $this->runTheNotices();
 
@@ -260,7 +260,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $second = $this->aRecordedIncident();
         $this->notifyCompanies($this->platformAdmin, $first);
 
-        // When the platform adminnotifies the second
+        // When the platform admin notifies the second
         $this->notifyCompanies($this->platformAdmin, $second);
 
         // Then the second's audit row cites the second's own notified event
@@ -278,7 +278,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $notified = $this->aRecordedIncident();
         $untouched = $this->aRecordedIncident();
 
-        // When the platform adminnotifies the first
+        // When the platform admin notifies the first
         $this->notifyCompanies($this->platformAdmin, $notified);
 
         // Then the second incident is still Recorded and company A's row on it carries no notice stamp
@@ -305,7 +305,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $toldMembers = [$this->owner, $this->admin];
         Exceptions::fake();
 
-        // When the platform adminpresses notify and the notices leave the queue
+        // When the platform admin presses notify and the notices leave the queue
         $this->notifyCompanies($this->platformAdmin, $breachId);
         $this->runTheNotices();
 
@@ -323,7 +323,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
             ['companyId' => $this->companyA->getKey(), 'dataTypes' => [$dataType], 'estimatedCount' => 40],
         ]]);
 
-        // When the platform adminpresses notify and the notice leaves the queue
+        // When the platform admin presses notify and the notice leaves the queue
         $this->notifyCompanies($this->platformAdmin, $breachId);
         $this->runTheNotices();
 
@@ -358,7 +358,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $breachId = $this->anIncidentNamingAcmeAndGlobex();
         $this->travelTo(self::NOTIFIED_AT);
 
-        // When the platform adminpresses notify and the notices leave the queue
+        // When the platform admin presses notify and the notices leave the queue
         $response = $this->notifyCompanies($this->platformAdmin, $breachId);
         $this->runTheNotices();
 

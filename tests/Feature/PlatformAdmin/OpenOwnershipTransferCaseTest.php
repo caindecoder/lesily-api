@@ -62,7 +62,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // arrange: only the company_id scoping can reject this user)
         $foreignMember = $this->aCompanyMember(Company::factory()->create(), 'employee');
 
-        // When the platform adminproposes them as the incoming owner
+        // When the platform admin proposes them as the incoming owner
         $response = $this->openCase($this->platformAdmin, $this->validPayload([
             'newOwnerUserId' => $foreignMember->getKey(),
         ]));
@@ -78,7 +78,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given Contoso's employee, whose membership in the company was removed
         $this->softDeleteMembership($this->company, $this->employee);
 
-        // When the platform adminproposes them as the incoming owner
+        // When the platform admin proposes them as the incoming owner
         $response = $this->openCase($this->platformAdmin, $this->validPayload([
             'newOwnerUserId' => $this->employee->getKey(),
         ]));
@@ -94,7 +94,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given the audit write will fail
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the platform adminopens a case
+        // When the platform admin opens a case
         $response = $this->openCase($this->platformAdmin, $this->validPayload());
 
         // Then the whole transaction rolls back — a case exists only alongside its audit row
@@ -117,7 +117,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_the_incoming_owner_is_not_yet_known_then_the_case_opens_without_one(): void
     {
         // Given the incoming owner is not yet known
-        // When the platform adminopens a case with only the company and the context
+        // When the platform admin opens a case with only the company and the context
         $response = $this->openCase($this->platformAdmin, $this->validPayload());
 
         // Then the case is open with no incoming owner and the audit row is present
@@ -129,7 +129,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_a_case_is_opened_with_a_blank_new_owner_then_it_opens_without_a_designated_successor(): void
     {
         // Given the incoming owner is sent as a blank value rather than omitted
-        // When the platform adminopens the case
+        // When the platform admin opens the case
         $response = $this->openCase($this->platformAdmin, $this->validPayload(['newOwnerUserId' => '']));
 
         // Then the case is open with no incoming owner and the audit row is present

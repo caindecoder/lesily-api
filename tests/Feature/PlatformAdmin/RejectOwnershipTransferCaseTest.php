@@ -80,7 +80,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given an open case an allowlisted platform admin could otherwise reject
         $case = $this->anOpenCaseFor($this->company);
 
-        // When the platform adminsubmits the invalid rejection
+        // When the platform admin submits the invalid rejection
         $response = $this->rejectCase($this->platformAdmin, $case->getKey(), $payload);
 
         // Then the rejection is refused on the offending field and nothing was written
@@ -110,7 +110,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given a case already closed, whichever way it ended
         $case = $this->aClosedCaseFor($this->company, $outcome);
 
-        // When the platform adminattempts to reject it
+        // When the platform admin attempts to reject it
         $response = $this->rejectCase($this->platformAdmin, $case->getKey());
 
         // Then the refusal names the closed state and nothing was written
@@ -141,7 +141,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($this->company);
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the platform adminrejects the case
+        // When the platform admin rejects the case
         $response = $this->rejectCase($this->platformAdmin, $case->getKey());
 
         // Then the ONE transaction takes back the close, the reason stamp and
@@ -165,7 +165,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($this->company);
         AuditEntry::created(fn () => throw $this->syntheticQueryException($failure));
 
-        // When the platform adminrejects the case
+        // When the platform admin rejects the case
         $response = $this->rejectCase($this->platformAdmin, $case->getKey());
 
         // Then contention answers as a conflict; anything else passes through
@@ -180,7 +180,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($this->company);
         $reason = str_repeat('a', 1000);
 
-        // When the platform adminrejects with the at-limit reason
+        // When the platform admin rejects with the at-limit reason
         $response = $this->rejectCase($this->platformAdmin, $case->getKey(), [
             'reason' => $reason,
             'reasonCode' => 'other',
@@ -198,7 +198,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given an open case
         $case = $this->anOpenCaseFor($this->company);
 
-        // When the platform adminrejects citing this row's code
+        // When the platform admin rejects citing this row's code
         $response = $this->rejectCase($this->platformAdmin, $case->getKey(), [
             'reason' => 'Recorded under the cited reason code',
             'reasonCode' => $code->value,
@@ -247,7 +247,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // execute would need is present, yet reject must move nothing
         $case = $this->aVerifiedCaseFor($this->company, $this->employee);
 
-        // When the platform adminrejects it citing target ineligibility
+        // When the platform admin rejects it citing target ineligibility
         $response = $this->rejectCase($this->platformAdmin, $case->getKey(), [
             'reason' => 'Target is not eligible to assume ownership',
             'reasonCode' => 'target_ineligible',
@@ -267,7 +267,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given Contoso's open case, its owner holding her owner pivot
         $case = $this->anOpenCaseFor($this->company);
 
-        // When the platform adminrejects it for failed identity evidence
+        // When the platform admin rejects it for failed identity evidence
         $response = $this->rejectCase($this->platformAdmin, $case->getKey());
 
         // Then the case closes rejected with the reason verbatim on the

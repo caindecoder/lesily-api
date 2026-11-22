@@ -109,7 +109,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             default => $this->fail('Unknown case fixture token: '.$fixture),
         };
 
-        // When the platform adminattempts to execute it
+        // When the platform admin attempts to execute it
         $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the refusal names the case's current state and nothing moved
@@ -138,7 +138,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($this->company, $this->employee);
         $this->softDeleteMembership($this->company, $this->employee);
 
-        // When the platform adminattempts to execute it
+        // When the platform admin attempts to execute it
         $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the refusal is the STATE guard's, asked before any cross-entity
@@ -155,7 +155,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->aVerifiedCaseFor($this->company, $this->employee);
         $this->softDeleteMembership($this->company, $this->employee);
 
-        // When the platform adminexecutes the case
+        // When the platform admin executes the case
         $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the execution is refused on the vanished member and the case stays verified
@@ -174,7 +174,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $bob = $this->aCompanyMember($company, 'admin');
         $company->update(['owner_id' => $bob->getKey()]);
 
-        // When the platform adminexecutes the case
+        // When the platform admin executes the case
         $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the world has moved — the execution is refused and the case stays verified
@@ -193,9 +193,9 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->aVerifiedCaseFor($company, $alex);
         $bob = $this->aCompanyMember($company, 'admin');
         $company->update(['owner_id' => $bob->getKey()]);
-        $company->users()->updateExistingPivot($alex->getKey(), ['deleted_at' => now()]);
+        $this->softDeleteMembership($company, $alex);
 
-        // When the platform adminexecutes the case
+        // When the platform admin executes the case
         $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the STALE refusal wins — 409 answers the world moving before
@@ -213,7 +213,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->aVerifiedCaseFor($this->company, $this->employee);
         $this->onTheCaseExecutedRow(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the platform adminexecutes the case
+        // When the platform admin executes the case
         $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the ONE transaction takes back the swap, the event, the close
@@ -238,7 +238,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->aVerifiedCaseFor($this->company, $this->employee);
         $this->onTheCaseExecutedRow(fn () => throw $this->syntheticQueryException($failure));
 
-        // When the platform adminexecutes the case
+        // When the platform admin executes the case
         $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then contention answers as a conflict; anything else passes through
@@ -253,7 +253,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // (verification legally permits it — the owner is a live member)
         $case = $this->aVerifiedCaseFor($this->company, $this->owner);
 
-        // When the platform adminexecutes the case
+        // When the platform admin executes the case
         $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the generalized self-guard refuses — an owner cannot succeed themselves
@@ -269,7 +269,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // on their membership (the §10b mandate flags-and-prompts, never blocks)
         $case = $this->aVerifiedCaseFor($this->company, $this->employee);
 
-        // When the platform adminexecutes the case
+        // When the platform admin executes the case
         $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the execution completes — the missing contact never blocks it
@@ -314,7 +314,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // … and a case opened AFTERWARDS, verified for a third member
         $case = $this->aVerifiedCaseFor($this->company->refresh(), $this->employee);
 
-        // When the platform adminexecutes the case (event 2, caseId set)
+        // When the platform admin executes the case (event 2, caseId set)
         $this->executeCase($this->platformAdmin, $case->getKey())->assertOk();
 
         // Then the closed case cites ITS OWN event by identity, never the older routine one
@@ -330,7 +330,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         Queue::fake();
         $this->fromADevice();
 
-        // When the platform adminexecutes the case
+        // When the platform admin executes the case
         $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then both role moves are audited — Contoso's owner to admin, Alex HR officer to owner — as Lesily support
@@ -355,7 +355,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->aVerifiedCaseFor($this->company, $this->employee);
         Queue::fake();
 
-        // When the platform adminexecutes the case
+        // When the platform admin executes the case
         $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the swap, the recorded fact, the closed case, the audit row

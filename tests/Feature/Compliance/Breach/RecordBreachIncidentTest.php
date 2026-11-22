@@ -61,7 +61,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Given the platform admin sends no Idempotency-Key
         $this->idempotencyKey = null;
 
-        // When the platform adminrecords a breach
+        // When the platform admin records a breach
         $response = $this->recordBreach($this->platformAdmin, $this->validPayload());
 
         // Then the request is refused for the missing key and nothing is recorded
@@ -76,7 +76,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Given the clock reads 2026-05-10 09:00 UTC and one detail of the breach is invalid
         $this->travelTo(CarbonImmutable::parse('2026-05-10T09:00:00Z'));
 
-        // When the platform adminrecords the breach
+        // When the platform admin records the breach
         $response = $this->recordBreach($this->platformAdmin, $this->payloadWith($changes));
 
         // Then the breach is refused on that detail and nothing is recorded
@@ -91,7 +91,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Given the audit write will fail
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the platform adminrecords a breach
+        // When the platform admin records a breach
         $response = $this->recordBreach($this->platformAdmin, $this->validPayload());
 
         // Then the request fails safely and the event, the rows and the audit row are all absent
@@ -106,7 +106,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Given the clock reads 2026-05-10 09:00 UTC, the moment the breach was discovered
         $this->travelTo(CarbonImmutable::parse('2026-05-10T09:00:00Z'));
 
-        // When the platform adminrecords it
+        // When the platform admin records it
         $response = $this->recordBreach($this->platformAdmin, $this->validPayload(['dateDiscovered' => '2026-05-10T09:00:00Z']));
 
         // Then it is recorded
@@ -119,7 +119,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Given a breach discovered at 19:30 in Colombo (+05:30), which is 14:00 UTC
         $payload = $this->validPayload(['dateDiscovered' => '2026-05-04T19:30:00+05:30']);
 
-        // When the platform adminrecords it
+        // When the platform admin records it
         $response = $this->recordBreach($this->platformAdmin, $payload);
 
         // Then the discovery moment and the deadline are kept in UTC
@@ -134,7 +134,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Given a breach the platform admin judges low severity
         $payload = $this->validPayload(['severity' => 'low']);
 
-        // When the platform adminrecords it
+        // When the platform admin records it
         $response = $this->recordBreach($this->platformAdmin, $payload);
 
         // Then it is recorded at stage recorded with its severity
@@ -147,7 +147,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Given company A's number of affected people is not yet known
         $payload = $this->validPayload(['companies' => [['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => null]]]);
 
-        // When the platform adminrecords the breach
+        // When the platform admin records the breach
         $response = $this->recordBreach($this->platformAdmin, $payload);
 
         // Then company A's count is left empty
@@ -160,7 +160,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Given a breach discovered on 2026-05-04 at 14:00 UTC
         $payload = $this->validPayload(['dateDiscovered' => '2026-05-04T14:00:00Z']);
 
-        // When the platform adminrecords it
+        // When the platform admin records it
         $response = $this->recordBreach($this->platformAdmin, $payload);
 
         // Then its deadline is 2026-05-07 at 14:00 UTC
@@ -178,7 +178,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
             ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll', 'banking'], 'estimatedCount' => 7],
         ]]);
 
-        // When the platform adminrecords the breach
+        // When the platform admin records the breach
         $response = $this->recordBreach($this->platformAdmin, $payload);
 
         // Then each company keeps its own figures, stored per company and never as one incident-wide figure

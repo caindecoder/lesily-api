@@ -50,7 +50,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
     public function when_the_queue_query_is_invalid_then_the_read_is_refused(array $query, string $field, string $message): void
     {
         // Given an allowlisted platform admin and an existing case
-        $this->anOpenCaseFor(Company::factory()->create());
+        $this->anOpenCaseFor($this->company);
 
         // When the queue is requested with this row's defective query
         $response = $this->listCases($this->platformAdmin, $query);
