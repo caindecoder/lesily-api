@@ -2,9 +2,8 @@
 
 namespace Tests\Feature\Auth\Google;
 
-use App\Models\User;
 use Illuminate\Http\Response;
-use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Auth\AuthTestCase;
 use Illuminate\Support\Facades\Queue;
@@ -12,7 +11,6 @@ use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\Http\Responses\ApiErrorCode;
-use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
 use App\Foundation\Notifications\Enums\NotificationType;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
@@ -20,49 +18,45 @@ use App\Foundation\Notifications\Notifications\SystemNotification;
 
 class GoogleAccountLinkedNotificationTest extends AuthTestCase
 {
-    use InteractsWithQueuedReactors;
-
-    protected User $alice;
-
-    protected Company $company;
+    use FreeTierCompany, InteractsWithQueuedReactors;
 
     protected function setUp(): void
     {
         parent::setUp();
 
         config(['app.debug' => false]);
-        $this->alice = User::factory()->withEmail(self::LOGIN_EMAIL)->create();
-        $this->company = Company::factory()->onPlan(BillingPlan::Starter)->create();
-        $this->company->users()->attach($this->alice, ['role_id' => Role::factory()->create()->getKey()]);
+        $this->makeFreeTierCompany();
     }
 
     #[Test]
     public function when_the_link_is_refused_then_no_notice_is_sent(): void
     {
-        // Given Alice holding a Google account for another email
+        // Given the employee of Contoso on Starter, holding a Google account for another email
+        $this->putOnPlan($this->company, BillingPlan::Starter);
         Notification::fake();
         $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor('alice@gmail.com'));
 
-        // When Alice links that Google account
-        $response = $this->linkGoogle($this->alice);
+        // When the employee links that Google account
+        $response = $this->linkGoogle($this->employee);
 
-        // Then the refusal sends her nothing
+        // Then the refusal sends them nothing
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::GoogleEmailMismatch);
-        Notification::assertNothingSentTo($this->alice);
+        Notification::assertNothingSentTo($this->employee);
     }
 
     #[Test]
     public function when_the_notice_is_queued_then_it_waits_for_the_queue(): void
     {
-        // Given Alice holding her own verified Google account, and the queue faked
+        // Given the employee of Contoso on Starter, holding their own verified Google account, and the queue faked
+        $this->putOnPlan($this->company, BillingPlan::Starter);
         Notification::fake();
         Queue::fake();
-        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->employee->email));
 
-        // When Alice links that Google account
-        $response = $this->linkGoogle($this->alice);
+        // When the employee links that Google account
+        $response = $this->linkGoogle($this->employee);
 
-        // Then the notice is deferred, and reaches her when the queue runs
+        // Then the notice is deferred, and reaches them when the queue runs
         $this->assertReactorDeferred(UserGoogleOAuthLinked::class, SystemNotification::class);
         $this->runQueuedHandlersFor(UserGoogleOAuthLinked::class);
         $this->assertLinkedNoticeSent($response);
@@ -71,14 +65,15 @@ class GoogleAccountLinkedNotificationTest extends AuthTestCase
     #[Test]
     public function when_google_is_linked_then_the_user_gets_the_google_account_linked_security_notice(): void
     {
-        // Given Alice holding her own verified Google account
+        // Given the employee of Contoso on Starter, holding their own verified Google account
+        $this->putOnPlan($this->company, BillingPlan::Starter);
         Notification::fake();
-        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->employee->email));
 
-        // When Alice links that Google account
-        $response = $this->linkGoogle($this->alice);
+        // When the employee links that Google account
+        $response = $this->linkGoogle($this->employee);
 
-        // Then she gets the Google-account-linked security notice
+        // Then they get the Google-account-linked security notice
         $this->assertLinkedNoticeSent($response);
     }
 
@@ -87,7 +82,7 @@ class GoogleAccountLinkedNotificationTest extends AuthTestCase
         $response->assertNoContent();
 
         Notification::assertSentTo(
-            $this->alice,
+            $this->employee,
             SystemNotification::class,
             fn (SystemNotification $notification): bool => $notification->type === NotificationType::GoogleAccountLinked
                 && $notification->companyName === $this->company->name
