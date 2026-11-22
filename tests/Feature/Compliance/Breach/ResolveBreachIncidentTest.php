@@ -80,9 +80,9 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     #[Test, DataProvider('provideUnknownBreachIds')]
     public function when_the_incident_does_not_exist_then_it_is_not_found(string $breachId): void
     {
-        // Given an admin and no incident with this id
+        // Given a platform admin and no incident with this id
 
-        // When the admin resolves it
+        // When the platform adminresolves it
         $response = $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
 
         // Then it is not found and nothing is recorded
@@ -99,7 +99,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
 
-        // When the admin resolves it with one fact wrong
+        // When the platform adminresolves it with one fact wrong
         $response = $this->resolve($this->platformAdmin, $breachId, $this->aResolution($override));
 
         // Then the close is refused on that fact and nothing is resolved
@@ -115,7 +115,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
 
-        // When the admin resolves it with a root cause, remediation steps and a summary
+        // When the platform adminresolves it with a root cause, remediation steps and a summary
         $response = $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
 
         // Then the close is refused and nothing is resolved
@@ -131,7 +131,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse('2026-05-07T13:59:59Z'));
 
-        // When the admin resolves it a second before its deadline
+        // When the platform adminresolves it a second before its deadline
         $response = $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
 
         // Then the close is refused and the stage is still companies_notified
@@ -149,7 +149,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
 
-        // When the admin resolves it
+        // When the platform adminresolves it
         $response = $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
 
         // Then the close is refused and nothing is resolved
@@ -168,7 +168,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
 
-        // When the admin resolves it
+        // When the platform adminresolves it
         $response = $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
 
         // Then the close is refused and nothing is resolved
@@ -184,7 +184,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
 
-        // When the admin resolves it
+        // When the platform adminresolves it
         $response = $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
 
         // Then it is refused with the stage named, and nothing is resolved
@@ -195,13 +195,13 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     #[Test]
     public function when_an_incident_already_resolved_is_resolved_again_then_it_is_refused_and_recorded_once(): void
     {
-        // Given an incident company A was notified of, already resolved by the admin after its deadline
+        // Given an incident company A was notified of, already resolved by the platform admin after its deadline
         $breachId = $this->aNotifiedIncident($this->companyA);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
         $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
         $before = $this->snapshotOf($breachId);
 
-        // When the admin resolves it again
+        // When the platform adminresolves it again
         $response = $this->resolve($this->platformAdmin, $breachId, $this->aResolution(['summary' => 'A second close.']));
 
         // Then it is refused, the incident is unchanged, and the close is recorded and audited once
@@ -220,7 +220,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the admin resolves it
+        // When the platform adminresolves it
         $response = $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
 
         // Then the request fails closed: no BreachResolved is recorded and the incident is unchanged
@@ -235,7 +235,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $breachId = $this->aNotifiedIncident($this->companyA);
         $this->travelTo(CarbonImmutable::parse('2026-05-07T14:00:00Z'));
 
-        // When the admin resolves it at the moment its deadline is reached
+        // When the platform adminresolves it at the moment its deadline is reached
         $response = $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
 
         // Then the incident is resolved
@@ -251,7 +251,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
         $longest = [str_repeat('r', 1000), str_repeat('s', 1000), str_repeat('t', 1000)];
 
-        // When the admin resolves it with each fact at 1,000 characters
+        // When the platform adminresolves it with each fact at 1,000 characters
         $response = $this->resolve($this->platformAdmin, $breachId, array_combine(['rootCause', 'remediationSteps', 'summary'], $longest));
 
         // Then the incident is resolved with every fact kept whole
@@ -272,7 +272,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $this->fileFor($this->companyA, $breachId);
         $this->travelTo(CarbonImmutable::parse('2026-05-07T15:00:00Z'));
 
-        // When the admin resolves it
+        // When the platform adminresolves it
         $response = $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
 
         // Then it is resolved under the same rule as any other severity
@@ -283,7 +283,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     #[Test]
     public function when_an_incident_is_resolved_then_its_companies_see_it_resolved_in_their_list(): void
     {
-        // Given an incident company A was notified of, resolved by the admin after its deadline, and company A's owner
+        // Given an incident company A was notified of, resolved by the platform admin after its deadline, and company A's owner
         $breachId = $this->aNotifiedIncident($this->companyA);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
         $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
@@ -308,7 +308,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         $otherBefore = $this->snapshotOf($other);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
 
-        // When the admin resolves the first, with the second's id in the body
+        // When the platform adminresolves the first, with the second's id in the body
         $response = $this->resolve($this->platformAdmin, $addressed, $this->aResolution(['breachId' => $other]));
 
         // Then the incident in the address is resolved and the other is untouched
@@ -329,7 +329,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         Mail::fake();
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
 
-        // When the admin resolves it with a root cause, remediation steps and a summary
+        // When the platform adminresolves it with a root cause, remediation steps and a summary
         $response = $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
 
         // Then the incident is resolved in the event store and the read model, the close is audited,

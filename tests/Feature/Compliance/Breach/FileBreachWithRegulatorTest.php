@@ -87,7 +87,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
     {
         // Given no incident carries the id
 
-        // When an admin files it for company A
+        // When a platform admin files it for company A
         $response = $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
 
         // Then it is not found and nothing is filed
@@ -104,7 +104,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->aFilingRequestBy($this->companyB, $breachId);
         $before = $this->snapshotOf($breachId);
 
-        // When an admin files it for a company that is not on it
+        // When a platform admin files it for a company that is not on it
         $response = $this->fileFor($this->platformAdmin, $breachId, $companyId($this));
 
         // Then it is not found and nothing is filed
@@ -134,7 +134,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         config(['platform.regulator_address' => '']);
         Exceptions::fake();
 
-        // When an admin files it for company A
+        // When a platform admin files it for company A
         $response = $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
 
         // Then the filing is unavailable, the gap is reported and nothing is filed
@@ -148,11 +148,11 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
     #[DataProvider('provideFilingsNotOpen')]
     public function when_the_filing_is_not_open_then_it_is_refused_with_the_reason(Closure $atStage, Closure $rowState, string $message): void
     {
-        // Given company A is on an incident whose filing is not open to the admin
+        // Given company A is on an incident whose filing is not open to the platform admin
         $notice = $this->aFactoryNotice($atStage($this->anIncident()), fn (BreachIncidentCompanyFactory $row): BreachIncidentCompanyFactory => $rowState($row, $this->owner->getKey(), $this->platformAdmin->getKey()));
         $before = $this->snapshotOf($notice->breach_incident_id);
 
-        // When an admin files it for company A
+        // When a platform admin files it for company A
         $response = $this->fileFor($this->platformAdmin, $notice->breach_incident_id, $this->companyA->getKey());
 
         // Then the filing is refused with the reason and nothing is filed
@@ -203,7 +203,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $before = $this->snapshotOf($breachId);
         AuditEntry::creating(fn () => throw new RuntimeException('audit store down'));
 
-        // When an admin files it for company A
+        // When a platform admin files it for company A
         $response = $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
 
         // Then the request fails closed and the filing is rolled back
@@ -219,7 +219,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->aFilingRequestBy($this->companyA, $breachId);
         $this->aFilingRequestBy($this->companyB, $breachId);
 
-        // When an admin files it for company A
+        // When a platform admin files it for company A
         $response = $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
 
         // Then only A's row is filed and B's request still waits
@@ -240,7 +240,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $second = $this->aNotifiedIncident($this->companyA);
         $this->aFilingRequestBy($this->companyA, $second);
 
-        // When an admin files the second for company A
+        // When a platform admin files the second for company A
         $response = $this->fileFor($this->platformAdmin, $second, $this->companyA->getKey());
 
         // Then only the second incident's row is filed
@@ -261,7 +261,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->aFilingRequestBy($this->companyA, $second);
         $this->fileFor($this->platformAdmin, $first, $this->companyA->getKey());
 
-        // When an admin files the second for company A
+        // When a platform admin files the second for company A
         $response = $this->fileFor($this->platformAdmin, $second, $this->companyA->getKey());
 
         // Then each incident's audit row cites that incident's filing
@@ -279,7 +279,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->aFilingRequestBy($this->companyB, $breachId);
         $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
 
-        // When an admin files it for company B
+        // When a platform admin files it for company B
         $response = $this->fileFor($this->platformAdmin, $breachId, $this->companyB->getKey());
 
         // Then each company's filing has its own audit row
@@ -295,7 +295,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $breachId = $this->aNotifiedIncident($this->companyA);
         $this->aFilingRequestBy($this->companyA, $breachId);
 
-        // When an admin files it for company A
+        // When a platform admin files it for company A
         $response = $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
 
         // Then nothing is sent yet: the mail and the notice wait for the queued reactors
@@ -315,7 +315,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         ]);
         $this->aFilingRequestBy($this->companyA, $breachId);
 
-        // When an admin files it for company A and the queued reactors run
+        // When a platform admin files it for company A and the queued reactors run
         $response = $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
         $this->runTheFilingReactors();
 
@@ -337,7 +337,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->aFilingRequestBy($this->companyA, $breachId);
         $this->correctTheCount($breachId, $this->companyA, 145);
 
-        // When an admin files it for company A and the queued reactors run
+        // When a platform admin files it for company A and the queued reactors run
         $response = $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
         $this->runTheFilingReactors();
 
@@ -354,7 +354,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $breachId = $this->aNotifiedIncidentOf([['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => null]]);
         $this->aFilingRequestBy($this->companyA, $breachId);
 
-        // When an admin files it for company A and the queued reactors run
+        // When a platform admin files it for company A and the queued reactors run
         $response = $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
         $this->runTheFilingReactors();
 
@@ -405,7 +405,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->aFilingRequestBy($this->companyA, $breachId);
         $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
 
-        // When an admin files it for company A again
+        // When a platform admin files it for company A again
         $response = $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
 
         // Then the second filing is refused, and one filing and one send wait in the queue
@@ -423,7 +423,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $others = [$this->aCompanyMember($this->company, 'hr_officer'), $this->employee];
         $this->travelTo(CarbonImmutable::parse(self::FILED_AT));
 
-        // When an admin files it for company A and the queued reactors run
+        // When a platform admin files it for company A and the queued reactors run
         $response = $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
         $this->runTheFilingReactors();
 
@@ -443,7 +443,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $this->aFilingRequestBy($this->companyA, $breachId);
         $this->travelTo(CarbonImmutable::parse(self::FILED_AT));
 
-        // When an admin files it for company A
+        // When a platform admin files it for company A
         $response = $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
 
         // Then A's filing is recorded, stamped on A's row and audited, and B is untouched
@@ -460,7 +460,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
         $this->aFilingRequestBy($this->companyA, $breachId);
 
-        // When an admin files it for company A and the queued reactors run
+        // When a platform admin files it for company A and the queued reactors run
         $response = $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
         $this->runTheFilingReactors();
 
@@ -478,7 +478,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         $others = [$this->aCompanyMember($this->companyB, 'owner'), $this->aCompanyMember($this->companyB, 'admin')];
         $this->travelTo(CarbonImmutable::parse(self::FILED_AT));
 
-        // When an admin files it for company A and the queued reactors run
+        // When a platform admin files it for company A and the queued reactors run
         $response = $this->fileFor($this->platformAdmin, $breachId, $this->companyA->getKey());
         $this->runTheFilingReactors();
 

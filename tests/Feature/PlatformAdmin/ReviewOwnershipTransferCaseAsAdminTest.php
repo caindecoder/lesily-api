@@ -19,7 +19,7 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
         // When a case detail is requested as a guest
         $response = $this->showCase(null, (string) Str::uuid());
 
-        // Then the request is rejected as unauthenticated and nothing is audited
+        // Then the request is rejected as unauthenticated and nothing is audited beyond the ready-made company's rows
         $this->assertUnauthenticated($response);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
@@ -33,7 +33,7 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
         // When she requests that case by id
         $response = $this->showCase($this->owner, $case->getKey());
 
-        // Then even her own company's case is not acknowledged and nothing is audited
+        // Then even her own company's case is not acknowledged and nothing is audited beyond the ready-made company's rows
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
@@ -41,12 +41,12 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
     #[Test]
     public function when_the_case_id_is_unknown_then_nothing_is_found_and_no_read_is_recorded(): void
     {
-        // Given an allowlisted admin and no such case
+        // Given an allowlisted platform admin and no such case
         // When an unknown case id is requested
         $response = $this->showCase($this->platformAdmin, (string) Str::uuid());
 
         // Then nothing is found and no evidence is written —
-        // no audit row for a read that didn't happen
+        // no audit row beyond the ready-made company's, for a read that didn't happen
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
@@ -76,7 +76,7 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
         $alex = User::factory()->create();
         $case = $this->aVerifiedCaseFor($this->company, $alex);
 
-        // When the admin opens the case by id
+        // When the platform admin opens the case by id
         $response = $this->showCase($this->platformAdmin, $case->getKey());
 
         // Then EXACTLY the admin contract returns (11-key as of T7) — the
@@ -107,7 +107,7 @@ class ReviewOwnershipTransferCaseAsAdminTest extends OwnershipTransferCasesTestC
         // Given a case closed rejected
         $case = $this->aClosedCaseFor($this->company, OwnershipTransferCaseOutcome::Rejected);
 
-        // When the admin opens it
+        // When the platform admin opens it
         $response = $this->showCase($this->platformAdmin, $case->getKey());
 
         // Then the closed state carries its outcome

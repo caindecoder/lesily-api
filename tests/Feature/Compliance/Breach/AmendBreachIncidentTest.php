@@ -72,10 +72,10 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     #[Test, DataProvider('provideUnknownBreachIds')]
     public function when_the_incident_does_not_exist_then_it_is_not_found(string $breachId): void
     {
-        // Given an admin and no incident with this id
+        // Given a platform admin and no incident with this id
         $correction = $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive']);
 
-        // When the admin corrects it
+        // When the platform admincorrects it
         $response = $this->amendIncident($this->platformAdmin, $breachId, $correction);
 
         // Then it is not found and nothing is amended
@@ -90,7 +90,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $breachId = $this->aRecordedIncident();
         $before = $this->snapshotOf($breachId);
 
-        // When the admin sends the correction
+        // When the platform adminsends the correction
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->correctionWith($changes));
 
         // Then it is refused on that value and nothing is amended
@@ -105,7 +105,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $breachId = $this->aRecordedIncident();
         $before = $this->snapshotOf($breachId);
 
-        // When the admin sends a correction that also sets a field no correction may set
+        // When the platform adminsends a correction that also sets a field no correction may set
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive', $field => $value]));
 
         // Then it is refused on that field and nothing is amended
@@ -121,7 +121,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse('2026-05-06T09:00:00Z'));
 
-        // When the admin corrects the discovery moment to 2026-05-05 12:00 UTC, after the recording
+        // When the platform admincorrects the discovery moment to 2026-05-05 12:00 UTC, after the recording
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['dateDiscovered' => '2026-05-05T12:00:00Z']));
 
         // Then it is refused on the discovery moment and nothing is amended
@@ -136,7 +136,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $breachId = $this->aRecordedIncident();
         $before = $this->snapshotOf($breachId);
 
-        // When the admin sends a correction whose every value is the current one
+        // When the platform adminsends a correction whose every value is the current one
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection($changes));
 
         // Then it is refused as nothing to amend, and no event, history or audit row is written
@@ -151,7 +151,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $breachId = $this->aRecordedIncident();
         $before = $this->snapshotOf($breachId);
 
-        // When the admin sends company A with the same data types and count
+        // When the platform adminsends company A with the same data types and count
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->correctionWith([]));
 
         // Then it is refused as nothing to amend and nothing is amended
@@ -166,7 +166,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $breachId = $closed($this->anIncident())->createOne()->getKey();
         $before = $this->snapshotOf($breachId);
 
-        // When the admin corrects its description
+        // When the platform admincorrects its description
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive']));
 
         // Then the correction is refused with the stage named, and nothing is amended
@@ -181,7 +181,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
         $before = $this->snapshotOf($breachId);
 
-        // When the admin changes a fact the notices locked
+        // When the platform adminchanges a fact the notices locked
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection($change));
 
         // Then the correction is refused with the fact named, the deadline stays 2026-05-07 14:00 UTC, and nothing is amended
@@ -196,7 +196,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
         $before = $this->snapshotOf($breachId);
 
-        // When the admin sends the company list with company A only
+        // When the platform adminsends the company list with company A only
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['companies' => [$this->aNotifiedPartOf($this->companyA)]]));
 
         // Then the correction is refused as the list is locked, and company B is still on the incident
@@ -211,7 +211,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $breachId = $this->aNotifiedIncident($this->companyA);
         $before = $this->snapshotOf($breachId);
 
-        // When the admin sends the company list with companies A and B
+        // When the platform adminsends the company list with companies A and B
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['companies' => [$this->aNotifiedPartOf($this->companyA), $this->aNotifiedPartOf($this->companyB)]]));
 
         // Then the correction is refused as the list is locked, and only company A is on the incident
@@ -227,7 +227,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $before = $this->snapshotOf($breachId);
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the admin corrects its description
+        // When the platform admincorrects its description
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive']));
 
         // Then the request fails closed and the event, the rows and the history are rolled back
@@ -241,7 +241,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         // Given an incident discovered 2026-05-04 14:00 UTC with severity high, whose company A was notified
         $breachId = $this->aNotifiedIncident($this->companyA);
 
-        // When the admin sends the same discovery moment and severity beside a new description
+        // When the platform adminsends the same discovery moment and severity beside a new description
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection([
             'dateDiscovered' => '2026-05-04T14:00:00Z',
             'severity' => 'high',
@@ -261,7 +261,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         // Given a recorded incident with severity high
         $breachId = $this->aRecordedIncident();
 
-        // When the admin sends the same severity beside new measures
+        // When the platform adminsends the same severity beside new measures
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection([
             'severity' => 'high',
             'measures' => 'The shared drive was locked and its access log is being reviewed.',
@@ -281,7 +281,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $breachId = $this->aRecordedIncident();
         $before = $this->snapshotOf($breachId);
 
-        // When the admin sends the same instant written at +05:30
+        // When the platform adminsends the same instant written at +05:30
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['dateDiscovered' => '2026-05-04T19:30:00+05:30']));
 
         // Then it is refused as nothing to amend
@@ -299,7 +299,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         ]]);
         $before = $this->snapshotOf($breachId);
 
-        // When the admin sends company B first and company A's data types the other way round
+        // When the platform adminsends company B first and company A's data types the other way round
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['companies' => [
             ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
             ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['banking', 'pii'], 'estimatedCount' => 40],
@@ -316,7 +316,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         // Given a recorded incident affecting company A, about 40 people
         $breachId = $this->aRecordedIncident();
 
-        // When the admin clears company A's count
+        // When the platform adminclears company A's count
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['companies' => [
             ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => null],
         ]]));
@@ -333,7 +333,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         // Given a recorded incident discovered 2026-05-04 14:00 UTC, due 2026-05-07 14:00 UTC
         $breachId = $this->aRecordedIncident();
 
-        // When the admin corrects the discovery moment to 2026-05-03 20:00 UTC
+        // When the platform admincorrects the discovery moment to 2026-05-03 20:00 UTC
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['dateDiscovered' => '2026-05-03T20:00:00Z']));
 
         // Then the deadline is 2026-05-06 20:00 UTC on the record and in the event, and the change is in the history
@@ -351,7 +351,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $this->travelTo(CarbonImmutable::parse('2026-05-08T00:00:00Z'));
         BreachIncident::retrieve($breachId)->flagMissedDeadline(CarbonImmutable::now())->persist();
 
-        // When the admin corrects the discovery moment so the new deadline falls at or just after now
+        // When the platform admincorrects the discovery moment so the new deadline falls at or just after now
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['dateDiscovered' => $correctedDiscovery]));
 
         // Then the flag is cleared only when the new deadline is still ahead
@@ -370,7 +370,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         BreachIncident::retrieve($breachId)->flagMissedDeadline(CarbonImmutable::now())->persist();
         $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['dateDiscovered' => '2026-05-04T20:00:00Z']));
 
-        // When the admin corrects the discovery moment again, to the recording moment 2026-05-05 09:00 UTC - due 2026-05-08 09:00, ahead
+        // When the platform admincorrects the discovery moment again, to the recording moment 2026-05-05 09:00 UTC - due 2026-05-08 09:00, ahead
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['dateDiscovered' => '2026-05-05T09:00:00Z']));
 
         // Then the flag the first correction kept is cleared
@@ -386,7 +386,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive']));
         $before = $this->snapshotOf($breachId);
 
-        // When the admin sends the corrected description again
+        // When the platform adminsends the corrected description again
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive']));
 
         // Then it is refused as nothing to amend, and the history keeps the one change
@@ -403,7 +403,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['companies' => [$this->aNotifiedPartOf($this->companyA)]]));
         $before = $this->snapshotOf($breachId);
 
-        // When the admin sends company A only again
+        // When the platform adminsends company A only again
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['companies' => [$this->aNotifiedPartOf($this->companyA)]]));
 
         // Then it is refused as nothing to amend, and the history keeps the one removal
@@ -420,7 +420,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection($correction($this)));
         $before = $this->snapshotOf($breachId);
 
-        // When the admin sends the same correction again
+        // When the platform adminsends the same correction again
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection($correction($this)));
 
         // Then it is refused as nothing to amend, and the history keeps the first correction only
@@ -436,7 +436,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $breachId = $this->aRecordedIncident();
         $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['description' => 'Payroll and bank export left on a shared drive']));
 
-        // When the admin corrects its measures
+        // When the platform admincorrects its measures
         $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['measures' => 'The shared drive was locked and its access log is being reviewed.']));
 
         // Then each correction's audit row cites that correction's event, in order
@@ -452,7 +452,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         // Given a recorded incident affecting company A (pii)
         $breachId = $this->aRecordedIncident();
 
-        // When the admin sends company A's data types before the severity and the description in one correction
+        // When the platform adminsends company A's data types before the severity and the description in one correction
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection([
             'companies' => [['companyId' => $this->companyA->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 40]],
             'severity' => 'medium',
@@ -480,7 +480,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
         Notification::fake();
 
-        // When the admin corrects a fact the notices leave open
+        // When the platform admincorrects a fact the notices leave open
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection($correction($this)));
 
         // Then the change is recorded and shown at the companies-notified stage, and nobody is told
@@ -502,7 +502,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         $ownerB = $this->anOwnerOf($this->companyB);
         Notification::fake();
 
-        // When the admin corrects company A's count to 145
+        // When the platform admincorrects company A's count to 145
         $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['companies' => [
             ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 145],
             ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 30],
@@ -524,7 +524,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
             'breachId' => $breachId, 'company' => $initech, 'dataTypes' => [BreachDataType::Payroll], 'estimatedCount' => 15, 'reason' => self::REASON,
         ]), $this->platformAdmin, ['description' => 'A payroll export was emailed to the wrong recipient.'])->persist();
 
-        // When the admin corrects Initech's count to 20, sending the whole list with Initech on it
+        // When the platform admincorrects Initech's count to 20, sending the whole list with Initech on it
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['companies' => [
             ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
             ['companyId' => $initech->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 20],
@@ -543,13 +543,13 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         // Given a recorded incident affecting company A
         $breachId = $this->aRecordedIncident();
 
-        // When the admin sends company A and company B (payroll, about 7 people)
+        // When the platform adminsends company A and company B (payroll, about 7 people)
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['companies' => [
             $this->aNotifiedPartOf($this->companyA),
             ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
         ]]));
 
-        // Then company B joins the incident, added by the admin now, and the addition is in the history
+        // Then company B joins the incident, added by the platform admin now, and the addition is in the history
         $response->assertOk();
         $row = BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->where('company_id', $this->companyB->getKey())->sole();
         $this->assertSame([['payroll'], 7, $this->platformAdmin->getKey(), '2026-05-05 09:00:00'], [$row->data_types, $row->estimated_count, $row->added_by, $row->added_at->toDateTimeString()]);
@@ -562,7 +562,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         // Given a recorded incident affecting companies A and B (each pii, about 40 people)
         $breachId = $this->aRecordedIncident(['companies' => [$this->aNotifiedPartOf($this->companyA), $this->aNotifiedPartOf($this->companyB)]]);
 
-        // When the admin sends company A only
+        // When the platform adminsends company A only
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['companies' => [$this->aNotifiedPartOf($this->companyA)]]));
 
         // Then company B leaves the incident and its removal, with its figures, is in the history
@@ -580,7 +580,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
             ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['banking', 'pii'], 'estimatedCount' => 40],
         ]]);
 
-        // When the admin sends company B only, its data types now banking and payroll, about 12 people
+        // When the platform adminsends company B only, its data types now banking and payroll, about 12 people
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['companies' => [
             ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['banking', 'payroll'], 'estimatedCount' => 12],
         ]]));
@@ -600,7 +600,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         // Given a recorded incident affecting company A (pii)
         $breachId = $this->aRecordedIncident();
 
-        // When the admin corrects the description, the severity, the measures and company A's data types with one reason
+        // When the platform admincorrects the description, the severity, the measures and company A's data types with one reason
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection([
             'description' => 'Payroll and bank export left on a shared drive',
             'severity' => 'critical',

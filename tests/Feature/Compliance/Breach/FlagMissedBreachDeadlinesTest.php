@@ -257,7 +257,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
     #[Test]
     public function when_the_admin_list_is_padded_then_the_listed_admin_is_still_alerted(): void
     {
-        // Given an incident still recorded past its deadline, and the admin listed with spaces and a trailing comma
+        // Given an incident still recorded past its deadline, and the platform admin listed with spaces and a trailing comma
         $this->aRecordedIncident();
         $this->allowlist([" {$this->platformAdmin->getKey()} ", '']);
 
@@ -265,7 +265,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
         $this->runFlagMissedDeadlines()->assertSuccessful();
         $this->runQueuedHandlersFor(BreachDeadlineMissed::class);
 
-        // Then the listed admin is alerted once
+        // Then the listed platform admin is alerted once
         Notification::assertSentToTimes($this->platformAdmin, SystemNotification::class, 1);
     }
 
@@ -287,7 +287,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
     public function when_a_flag_is_recorded_then_each_platform_admin_is_alerted_once_naming_its_companies(): void
     {
         // Given an incident affecting Zenith Retail and Acme Payroll, named in that order, two allowlisted
-        // Lesily admins, and both companies' owners
+        // platform admins, and both companies' owners
         $zenith = Company::factory()->named('Zenith Retail')->create();
         $acme = Company::factory()->named('Acme Payroll')->create();
         $breachId = $this->aRecordedIncident(['companies' => [
@@ -302,7 +302,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
         $this->runFlagMissedDeadlines()->assertSuccessful();
         $this->runQueuedHandlersFor(BreachDeadlineMissed::class);
 
-        // Then each admin is alerted once, naming the companies by name, the incident and its deadline;
+        // Then each platform admin is alerted once, naming the companies by name, the incident and its deadline;
         // no owner is told
         $this->assertAdminsAlertedOnce($breachId, 'Acme Payroll, Zenith Retail');
     }

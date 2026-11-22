@@ -228,7 +228,7 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
         // When the owner asks Lesily to file it for company A
         $response = $this->requestFiling($this->owner, $this->companyA, $breachId);
 
-        // Then no admin is alerted yet: the alert waits on the queue
+        // Then no platform admin is alerted yet: the alert waits on the queue
         $response->assertOk();
         $this->assertReactorDeferred(BreachFilingRequested::class, SystemNotification::class);
     }
@@ -336,7 +336,7 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
     #[Test]
     public function when_the_owner_asks_lesily_to_file_then_it_is_recorded_projected_audited_and_the_admins_alerted(): void
     {
-        // Given an incident that notified companies A and B, two allowlisted Lesily admins, and A's and B's owners
+        // Given an incident that notified companies A and B, two allowlisted platform admins, and A's and B's owners
         $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
         $this->allowlist([$this->platformAdmin->getKey(), User::factory()->create()->getKey()]);
         $otherOwner = $this->anOwnerOf($this->companyB);
@@ -346,7 +346,7 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
         $response = $this->requestFiling($this->owner, $this->companyA, $breachId);
         $this->runTheAlerts();
 
-        // Then the request is recorded, projected and audited for A, each admin is alerted once,
+        // Then the request is recorded, projected and audited for A, each platform admin is alerted once,
         // and company B's filing and owner are left as they were
         $this->assertFilingRequestedFor($response, $this->companyA, $this->owner);
         $storedEventId = $this->assertRequestStored($breachId, $this->companyA, $this->owner);

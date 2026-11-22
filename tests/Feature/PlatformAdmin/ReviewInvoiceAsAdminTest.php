@@ -75,8 +75,8 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
-    // Sad — an allowlisted admin asks for an id that exists nowhere: the
-    // generic 404, and NO audit row — the read did not happen (Gherkin sc.7,
+    // Sad — an allowlisted platform admin asks for an id that exists nowhere: the
+    // generic 404, and NO audit row beyond the ready-made company's — the read did not happen (Gherkin sc.7,
     // error-flow 3a; the insert-throws-AFTER-find ordering gets its revert-
     // check at the audit lap).
     #[Test]
@@ -85,7 +85,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         // Given an allowlisted platform admin and no invoice anywhere
         $platformAdmin = $this->aPlatformAdmin();
 
-        // When the admin asks for a random unknown invoice id
+        // When the platform admin asks for a random unknown invoice id
         $response = $this->reviewInvoiceAsAdmin($platformAdmin, (string) Str::uuid());
 
         // Then the response is the generic not-found and no read is recorded
@@ -93,7 +93,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
-    // Edge — cross-tenant is the point: an allowlisted admin who is ALSO a
+    // Edge — cross-tenant is the point: an allowlisted platform admin who is ALSO a
     // member of some tenant reads ANOTHER company's invoice; no auth.company
     // in the chain, no company scope on the lookup (UC-1-122 Tenant Isolation
     // — "intentionally cross-tenant").
@@ -106,7 +106,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $subscription = $this->subscriptionOf($this->company);
         $invoice = $this->aPaidInvoiceFor($this->company, $subscription);
 
-        // When the admin reads Contoso's invoice via the admin endpoint
+        // When the platform admin reads Contoso's invoice via the admin endpoint
         $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey());
 
         // Then the cross-tenant invoice is returned
@@ -114,7 +114,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $response->assertJsonPath('data.id', $invoice->getKey());
     }
 
-    // Edge — the admin read is status-agnostic (UC-1-122 precondition: "any
+    // Edge — the platform admin's read is status-agnostic (UC-1-122 precondition: "any
     // company, any status"): non-paid invoices the tenant receipt endpoint
     // would 409 stay fully readable on the admin surface.
     #[Test]
@@ -126,7 +126,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $subscription = $this->subscriptionOf($this->company);
         $invoice = $this->anInvoiceInState($state, $subscription);
 
-        // When the admin reviews that invoice
+        // When the platform admin reviews that invoice
         $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey());
 
         // Then the invoice is returned with its stored status and that state's fields on the wire
@@ -178,7 +178,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $subscription = $this->subscriptionOf($this->company);
         $invoice = $this->aPaidInvoiceFor($this->company, $subscription);
 
-        // When the admin reviews that invoice
+        // When the platform admin reviews that invoice
         $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey());
 
         // Then the company summary carries a null plan (not a 500, not a missing key)
@@ -203,10 +203,10 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
     }
 
     // Edge — oversized request-context values (a long AV/enterprise User-Agent,
-    // a client-minted Correlation-Id) must not break a valid admin read: the
+    // a client-minted Correlation-Id) must not break a platform admin's valid read: the
     // audit write bounds both to their column width (MySQL strict mode turns an
     // over-length insert into SQLSTATE 22001 — the s137 I-1 review finding;
-    // only allowlisted admins ever reach this write, so bounded fidelity wins
+    // only allowlisted platform admins ever reach this write, so bounded fidelity wins
     // over schema churn per Chamil's ruling).
     #[Test]
     public function when_the_request_context_values_are_oversized_then_the_read_still_succeeds(): void
@@ -216,7 +216,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $subscription = $this->subscriptionOf($this->company);
         $invoice = $this->aPaidInvoiceFor($this->company, $subscription);
 
-        // When the admin reviews the invoice with 300-char header values
+        // When the platform admin reviews the invoice with 300-char header values
         $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey(), [
             'User-Agent' => str_repeat('a', 300),
             'Correlation-Id' => str_repeat('b', 300),
@@ -247,7 +247,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $paidAt = $invoice->paid_at;
         $this->assertNotNull($paidAt);
 
-        // When the admin reviews the invoice
+        // When the platform admin reviews the invoice
         $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey());
 
         // Then the full admin envelope is returned exactly
@@ -337,7 +337,7 @@ class ReviewInvoiceAsAdminTest extends PlatformAdminTestCase
         $subscription = $this->subscriptionOf($this->company);
         $invoice = $this->aPaidInvoiceFor($this->company, $subscription);
 
-        // When the admin reviews the invoice
+        // When the platform admin reviews the invoice
         $response = $this->reviewInvoiceAsAdmin($platformAdmin, $invoice->getKey());
 
         // Then exactly one audit row records who read what, and when

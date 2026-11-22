@@ -22,7 +22,7 @@ class FileBreachWithRegulatorOnceTest extends BreachIncidentsTestCase
         // Given an incident already filed with the regulator for company A
         $breachId = $this->anIncidentFiledFor($this->companyA);
 
-        // When an admin files it for company A again
+        // When a platform admin files it for company A again
         try {
             BreachIncident::retrieve($breachId)->fileWithRegulator($this->aFilingCommandFor($breachId, $this->companyA), $this->platformAdmin, $this->aRegulatorFiling());
             $this->fail('A second filing for a company must be refused.');

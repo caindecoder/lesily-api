@@ -30,7 +30,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // When the reject endpoint is called as a guest
         $response = $this->rejectCase(null, (string) Str::uuid7());
 
-        // Then the request is rejected as unauthenticated and nothing is audited
+        // Then the request is rejected as unauthenticated and nothing is audited beyond the ready-made company's rows
         $this->assertUnauthenticated($response);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
@@ -52,11 +52,11 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     #[Test]
     public function when_the_case_id_is_unknown_then_nothing_is_found_and_no_rejection_is_recorded(): void
     {
-        // Given an allowlisted admin and no case at all
+        // Given an allowlisted platform admin and no case at all
         // When they reject an unknown case id
         $response = $this->rejectCase($this->platformAdmin, (string) Str::uuid7());
 
-        // Then nothing is found and nothing is audited (find-before-audit)
+        // Then nothing is found and nothing is audited beyond the ready-made company's rows (find-before-audit)
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
@@ -64,11 +64,11 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     #[Test]
     public function when_the_case_id_is_not_a_uuid_then_the_rejection_is_refused_as_invalid(): void
     {
-        // Given an allowlisted admin and a case reference that is not a UUID
+        // Given an allowlisted platform admin and a case reference that is not a UUID
         // When they reject it
         $response = $this->rejectCase($this->platformAdmin, 'not-a-uuid');
 
-        // Then the reference is refused as invalid and nothing is audited
+        // Then the reference is refused as invalid and nothing is audited beyond the ready-made company's rows
         $this->assertValidationRejected($response, 'caseId', 'The case id field must be a valid UUID.');
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
@@ -77,10 +77,10 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     #[DataProvider('invalidRejectionProvider')]
     public function when_the_rejection_reason_or_code_is_invalid_then_the_rejection_is_refused(array $payload, string $field, string $message): void
     {
-        // Given an open case an allowlisted admin could otherwise reject
+        // Given an open case an allowlisted platform admin could otherwise reject
         $case = $this->anOpenCaseFor($this->company);
 
-        // When the admin submits the invalid rejection
+        // When the platform adminsubmits the invalid rejection
         $response = $this->rejectCase($this->platformAdmin, $case->getKey(), $payload);
 
         // Then the rejection is refused on the offending field and nothing was written
@@ -110,7 +110,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given a case already closed, whichever way it ended
         $case = $this->aClosedCaseFor($this->company, $outcome);
 
-        // When the admin attempts to reject it
+        // When the platform adminattempts to reject it
         $response = $this->rejectCase($this->platformAdmin, $case->getKey());
 
         // Then the refusal names the closed state and nothing was written
@@ -141,7 +141,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($this->company);
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the admin rejects the case
+        // When the platform adminrejects the case
         $response = $this->rejectCase($this->platformAdmin, $case->getKey());
 
         // Then the ONE transaction takes back the close, the reason stamp and
@@ -165,7 +165,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($this->company);
         AuditEntry::created(fn () => throw $this->syntheticQueryException($failure));
 
-        // When the admin rejects the case
+        // When the platform adminrejects the case
         $response = $this->rejectCase($this->platformAdmin, $case->getKey());
 
         // Then contention answers as a conflict; anything else passes through
@@ -180,7 +180,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($this->company);
         $reason = str_repeat('a', 1000);
 
-        // When the admin rejects with the at-limit reason
+        // When the platform adminrejects with the at-limit reason
         $response = $this->rejectCase($this->platformAdmin, $case->getKey(), [
             'reason' => $reason,
             'reasonCode' => 'other',
@@ -198,7 +198,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given an open case
         $case = $this->anOpenCaseFor($this->company);
 
-        // When the admin rejects citing this row's code
+        // When the platform adminrejects citing this row's code
         $response = $this->rejectCase($this->platformAdmin, $case->getKey(), [
             'reason' => 'Recorded under the cited reason code',
             'reasonCode' => $code->value,
@@ -247,7 +247,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // execute would need is present, yet reject must move nothing
         $case = $this->aVerifiedCaseFor($this->company, $this->employee);
 
-        // When the admin rejects it citing target ineligibility
+        // When the platform adminrejects it citing target ineligibility
         $response = $this->rejectCase($this->platformAdmin, $case->getKey(), [
             'reason' => 'Target is not eligible to assume ownership',
             'reasonCode' => 'target_ineligible',
@@ -267,12 +267,12 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given Contoso's open case, its owner holding her owner pivot
         $case = $this->anOpenCaseFor($this->company);
 
-        // When the admin rejects it for failed identity evidence
+        // When the platform adminrejects it for failed identity evidence
         $response = $this->rejectCase($this->platformAdmin, $case->getKey());
 
         // Then the case closes rejected with the reason verbatim on the
-        // record, exactly one audit row names the admin, no domain event
-        // exists, the owner keeps her seat AND her pivot, and the wire carries the code
+        // record, exactly one audit row names the platform admin, no domain event
+        // beyond the ready-made company's exists, the owner keeps her seat AND her pivot, and the wire carries the code
         $this->assertCaseClosedRejected($case, 'Requester could not evidence the claimed relationship', RejectionReasonCode::IdentityFailed);
         $this->assertRejectionAudited($case, $response);
         $this->assertNoOwnershipMoved($case, $this->owner->getKey());
@@ -395,7 +395,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     /**
      * Exactly one audit row evidences the rejection, in the cd-audit-trail
      * shape: action case_rejected on the case subject, stored_event_id NULL
-     * (no domain event exists — nothing about the company changed), actor
+     * (the rejection records no domain event — nothing about the company changed), actor
      * trio pinned, and the request-context columns IDENTITY-pinned.
      */
     protected function assertRejectionAudited(OwnershipTransferCase $case, TestResponse $response): void
@@ -479,8 +479,8 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
     /**
      * Nothing was rejected — the case row is exactly as arranged with its
-     * rejection columns still empty, no domain event was recorded, no audit
-     * row exists, the company's owner column still names $ownerUserId, and
+     * rejection columns still empty, no domain event and no audit row exist
+     * beyond the ready-made company's, the company's owner column still names $ownerUserId, and
      * nobody else holds an owner-role pivot (a rejection must never move
      * ownership on ANY path — the UC's Minimal Guarantee).
      */

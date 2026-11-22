@@ -43,7 +43,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // When the verify endpoint is called as a guest
         $response = $this->verifyCase(null, (string) Str::uuid7());
 
-        // Then the request is rejected as unauthenticated and nothing is audited
+        // Then the request is rejected as unauthenticated and nothing is audited beyond the ready-made company's rows
         $this->assertUnauthenticated($response);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
@@ -65,7 +65,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     #[Test]
     public function when_the_case_id_is_unknown_then_nothing_is_found_and_no_verification_is_recorded(): void
     {
-        // Given an allowlisted admin and no case at all
+        // Given an allowlisted platform admin and no case at all
         $stranger = User::factory()->create();
 
         // When they verify an id that names no case
@@ -83,13 +83,13 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     #[Test]
     public function when_the_case_id_is_not_a_uuid_then_verification_is_refused_as_invalid(): void
     {
-        // Given an allowlisted admin, a case reference that is not a UUID, and an otherwise valid payload
+        // Given an allowlisted platform admin, a case reference that is not a UUID, and an otherwise valid payload
         $stranger = User::factory()->create();
 
         // When they verify it
         $response = $this->verifyCase($this->platformAdmin, 'not-a-uuid', $this->aValidVerificationPayload($stranger));
 
-        // Then the reference is refused as invalid and nothing is audited
+        // Then the reference is refused as invalid and nothing is audited beyond the ready-made company's rows
         $this->assertValidationRejected($response, 'caseId', 'The case id field must be a valid UUID.');
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
@@ -102,7 +102,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($this->company);
         $stranger = User::factory()->create();
 
-        // When the admin submits the verification
+        // When the platform adminsubmits the verification
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
@@ -126,7 +126,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             default => $this->fail('Unknown case fixture token: '.$fixture),
         };
 
-        // When the admin attempts to verify it
+        // When the platform adminattempts to verify it
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
@@ -160,7 +160,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->aVerifiedCaseFor($this->company);
         $foreignMember = $this->aCompanyMember(Company::factory()->create(), 'employee');
 
-        // When the admin attempts to verify it naming the non-member
+        // When the platform adminattempts to verify it naming the non-member
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
@@ -181,7 +181,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($this->company);
         $this->softDeleteMembership($this->company, $this->employee);
 
-        // When the admin verifies naming them as the incoming owner
+        // When the platform adminverifies naming them as the incoming owner
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
@@ -202,7 +202,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($this->company);
         $foreignMember = $this->aCompanyMember(Company::factory()->create(), 'employee');
 
-        // When the admin verifies naming them as the incoming owner
+        // When the platform adminverifies naming them as the incoming owner
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
@@ -230,7 +230,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($this->company);
         AuditEntry::created(fn () => throw $this->syntheticQueryException($failure));
 
-        // When the admin verifies the case
+        // When the platform adminverifies the case
         $response = $this->verifyCase($this->platformAdmin, $case->getKey(), $this->aValidVerificationPayload($this->employee));
 
         // Then contention answers as a conflict; anything else passes
@@ -250,7 +250,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             ['sqlstate' => 'HY000', 'code' => 1205, 'message' => 'SQLSTATE[HY000]: General error: 1205'],
         ));
 
-        // When the admin verifies the case
+        // When the platform adminverifies the case
         $response = $this->verifyCase($this->platformAdmin, $case->getKey(), $this->aValidVerificationPayload($this->employee));
 
         // Then the conflict speaks with THIS family's voice and the driver
@@ -270,7 +270,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->anOpenCaseFor($this->company);
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the admin verifies the case
+        // When the platform adminverifies the case
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
@@ -289,7 +289,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // an extra prose key alongside the closed metadata shape
         $case = $this->anOpenCaseFor($this->company);
 
-        // When the admin verifies with notes and the smuggling entry
+        // When the platform adminverifies with notes and the smuggling entry
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
@@ -312,7 +312,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $caseB = $this->anOpenCaseFor($this->company);
         $this->verifyCase($this->platformAdmin, $caseA->getKey(), $this->aValidVerificationPayload($this->employee))->assertOk();
 
-        // When the admin verifies case B
+        // When the platform adminverifies case B
         $response = $this->verifyCase(
             $this->platformAdmin,
             $caseB->getKey(),
@@ -340,7 +340,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->travelTo(CarbonImmutable::parse('2026-08-10 09:00:00'));
         $case = $this->anOpenCaseFor($this->company);
 
-        // When the admin verifies the case naming the employee
+        // When the platform adminverifies the case naming the employee
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
@@ -447,7 +447,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     /**
      * Exactly ONE CompanyOwnershipVerificationRecorded event sits on the
      * case's company stream, its payload pinned to the caseId, the verifying
-     * admin and the projected artefact metadata; returns the stored-event id
+     * platform admin and the projected artefact metadata; returns the stored-event id
      * so the row stamp and the audit row can be pinned to the same record.
      */
     protected function assertVerificationEventRecorded(OwnershipTransferCase $case): int
@@ -469,7 +469,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
     /**
      * The case row carries the whole verification (UC-1-113 postconditions):
-     * status verified, the verifying admin + timestamp, the incoming owner,
+     * status verified, the verifying platform admin + timestamp, the incoming owner,
      * the notes verbatim, the projected artefact metadata, and the
      * verification_event_id pinned to the stored event just asserted.
      */

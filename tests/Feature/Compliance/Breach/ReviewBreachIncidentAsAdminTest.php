@@ -51,7 +51,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     public function when_the_incident_does_not_exist_then_it_is_not_found(string $breachId): void
     {
         // Given no incident with this id
-        // When the admin opens it
+        // When the platform adminopens it
         $response = $this->showIncident($this->platformAdmin, $breachId);
 
         // Then it is not found and no read is recorded
@@ -67,7 +67,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the admin opens the incident
+        // When the platform adminopens the incident
         $response = $this->showIncident($this->platformAdmin, $incident->getKey());
 
         // Then the read fails closed — no incident data, and the evidence row was rolled back with it
@@ -85,7 +85,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
             ->withCompany($this->companyB, ['payroll'], $countB)
             ->createOne();
 
-        // When the admin opens the incident
+        // When the platform adminopens the incident
         $response = $this->showIncident($this->platformAdmin, $incident->getKey());
 
         // Then the total adds the known counts only, and is empty when none is known
@@ -104,7 +104,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
             ->withCompany($acme, ['payroll'], 9)
             ->createOne();
 
-        // When the admin opens the incident
+        // When the platform adminopens the incident
         $response = $this->showIncident($this->platformAdmin, $incident->getKey());
 
         // Then the companies are listed by name, whatever order they were added in
@@ -120,7 +120,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         BreachIncidentCompany::factory()->forIncident($incident, $this->companyA)->withFigures(['pii'], 40)->filingRequested($this->owner->getKey())->createOne();
         BreachIncidentCompany::factory()->forIncident($incident, $this->companyB)->withFigures(['payroll', 'banking'], 7)->notified()->createOne();
 
-        // When the admin opens the incident
+        // When the platform adminopens the incident
         $response = $this->showIncident($this->platformAdmin, $incident->getKey());
 
         // Then every fact of the incident and of each company is shown with the sum, and the read left its evidence
@@ -135,7 +135,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         $incident = $this->anIncident()->deadlineMissed()->resolved()->createOne();
         BreachIncidentCompany::factory()->forIncident($incident, $this->companyA)->filed($this->owner->getKey(), $this->platformAdmin->getKey())->createOne();
 
-        // When the admin opens the incident
+        // When the platform adminopens the incident
         $response = $this->showIncident($this->platformAdmin, $incident->getKey());
 
         // Then the missed deadline, the resolution and the filing are each shown in their own field
@@ -160,7 +160,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         // Given an incident closed as a false alarm
         $incident = $this->anIncident()->falseAlarm()->withCompany($this->companyA, ['pii'], 40)->createOne();
 
-        // When the admin opens the incident
+        // When the platform adminopens the incident
         $response = $this->showIncident($this->platformAdmin, $incident->getKey());
 
         // Then when, by whom, why and what was found are each shown in their own field
@@ -185,7 +185,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         $correction->amendedAt('2026-05-05 09:00:00')->createOne();
         $correction->amendedAt('2026-05-06 10:00:00')->forCompany($this->companyA)->changing(BreachAmendmentField::DataTypes, ['pii'], ['pii', 'banking'])->createOne(['reason' => 'The export held bank details.']);
 
-        // When the admin opens the incident
+        // When the platform adminopens the incident
         $response = $this->showIncident($this->platformAdmin, $incident->getKey());
 
         // Then the history lists the 6 May request first, its changes by field, then the 5 May correction

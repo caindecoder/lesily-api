@@ -49,7 +49,7 @@ abstract class PlatformAdminTestCase extends TestCase
     }
 
     /**
-     * The request's one audit row records the admin read, in the cd-audit-trail
+     * The request's one audit row records the platform admin's read, in the cd-audit-trail
      * Direct-write shape (stored_event_id NULL — a read emits no domain event,
      * B3; severity rides the DB default 'info'), with the request-context
      * columns IDENTITY-pinned (agent-triage MINOR-3: presence-only asserts
@@ -86,7 +86,7 @@ abstract class PlatformAdminTestCase extends TestCase
     /**
      * The admin surface refused the caller with the generic 404 §S21 envelope —
      * byte-identical to any real not-found, so the /api/v1/admin/* family never
-     * acknowledges its existence to non-admins (UC-1-122 2a no-info-leak).
+     * acknowledges its existence to anyone but a platform admin (UC-1-122 2a no-info-leak).
      */
     protected function assertResourceNotFoundNoLeak(TestResponse $response): void
     {

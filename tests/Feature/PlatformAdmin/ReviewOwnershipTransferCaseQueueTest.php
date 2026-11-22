@@ -25,7 +25,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
         // When the case queue is requested as a guest
         $response = $this->listCases(null);
 
-        // Then the request is rejected as unauthenticated and nothing is audited
+        // Then the request is rejected as unauthenticated and nothing is audited beyond the ready-made company's rows
         $this->assertUnauthenticated($response);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
@@ -40,7 +40,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
         $response = $this->listCases($this->owner);
 
         // Then the admin surface is never acknowledged — not even her own
-        // company's case — and nothing is audited
+        // company's case — and nothing is audited beyond the ready-made company's rows
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
@@ -55,7 +55,7 @@ class ReviewOwnershipTransferCaseQueueTest extends OwnershipTransferCasesTestCas
         // When the queue is requested with this row's defective query
         $response = $this->listCases($this->platformAdmin, $query);
 
-        // Then the read is refused naming the offending key and nothing is audited
+        // Then the read is refused naming the offending key and nothing is audited beyond the ready-made company's rows
         $this->assertValidationRejected($response, $field, $message);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }

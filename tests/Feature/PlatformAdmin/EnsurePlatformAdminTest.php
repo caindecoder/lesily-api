@@ -169,7 +169,7 @@ class EnsurePlatformAdminTest extends PlatformAdminTestCase
 
     /**
      * Clean allowlist shapes — the caller as sole entry, and mid-list among
-     * other admins.
+     * other platform admins.
      *
      * @return array<string, array{callable(string): array<int, string>}>
      */
