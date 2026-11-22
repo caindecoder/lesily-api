@@ -304,6 +304,7 @@ class ResetPasswordTest extends AuthTestCase
 
         // Then each company's audit trail records the reset, with the role the user holds there
         $this->assertAuditedInEachCompany($response, $user, AuditAction::PasswordReset);
+        $this->assertDatabaseCount('audit_trail', 2);
     }
 
     /**

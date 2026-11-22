@@ -157,6 +157,7 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
 
         // Then each company's audit trail records the regeneration, with the role the user holds there
         $this->assertAuditedInEachCompany($response, $user, AuditAction::RecoveryCodesRegenerated);
+        $this->assertDatabaseCount('audit_trail', 2);
     }
 
     /**

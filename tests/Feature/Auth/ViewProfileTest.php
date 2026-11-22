@@ -85,7 +85,7 @@ class ViewProfileTest extends AuthTestCase
         $company = Company::factory()->create();
         $this->aMembershipFor($user, $company);
         $this->setDefaultCompany($user, ['companyId' => $company->getKey()])->assertNoContent();
-        $this->removeMembership($company, $user);
+        $this->softDeleteMembership($company, $user);
 
         // When the user requests GET /api/v1/me
         $response = $this->viewProfile($user);

@@ -14,7 +14,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use Tests\Concerns\AssertsAccessLog;
 use Tests\Concerns\AssertsAuditTrail;
-use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Password;
 use App\Foundation\Auth\Totp\TotpVerifier;
 use Tests\Concerns\AssertsCompanyAuditRows;
@@ -36,6 +35,7 @@ use App\Foundation\Auth\Events\UserPasswordChanged;
 use App\Foundation\Auth\Events\UserGoogleOAuthLinked;
 use App\Foundation\Auth\UseCases\Google\GoogleIdentity;
 use App\Foundation\Auth\UseCases\Results\IssuedSession;
+use Tests\Feature\Companies\Memberships\CreatesMemberships;
 use App\Foundation\Auth\UseCases\Google\GoogleIdTokenVerifier;
 use App\Foundation\Auth\Events\User2FARecoveryCodesRegenerated;
 use App\Foundation\Auth\Exceptions\GoogleTokenInvalidException;
@@ -45,7 +45,7 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class AuthTestCase extends TestCase
 {
-    use AssertsAccessLog, AssertsAuditTrail, AssertsCompanyAuditRows, CreatesSessions, InducesProjectorFailures;
+    use AssertsAccessLog, AssertsAuditTrail, AssertsCompanyAuditRows, CreatesMemberships, CreatesSessions, InducesProjectorFailures;
 
     /**
      * Canonical login-ready credentials, shared by the login and logout suites
@@ -197,19 +197,6 @@ abstract class AuthTestCase extends TestCase
         $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
     }
 
-    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
-    {
-        $response->assertUnprocessable();
-        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
-        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
-    }
-
-    protected function assertUnauthenticated(TestResponse $response): void
-    {
-        $response->assertUnauthorized();
-        $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
-    }
-
     /**
      * Assert the user's single issued session token is named for $expectedName — the
      * device-name resolution oracle (sessions slice). `sole()` doubles as the
@@ -277,16 +264,6 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
-     * Look up a seeded RBAC-catalog role by code — requires seedRbacCatalog() in the
-     * calling suite's setUp. Shared by the list-companies (UC-1-034) and
-     * default-company (UC-1-139) suites.
-     */
-    protected function seededRole(string $code): Role
-    {
-        return Role::query()->where('code', $code)->sole();
-    }
-
-    /**
      * Make $user a live member of $company under a seeded role — the company_user
      * pivot row the companies list reads. Shared by the list-companies (UC-1-034)
      * and default-company (UC-1-139) suites.
@@ -298,29 +275,14 @@ abstract class AuthTestCase extends TestCase
 
     /**
      * A membership that was removed (UC-1-024 semantics): the company_user pivot
-     * exists but is soft-deleted — the companies list must exclude it. Mirrors
-     * CreatesMemberships::aRemovedMembership. Shared by the list-companies
-     * (UC-1-034) and default-company (UC-1-139) suites.
+     * exists but is soft-deleted — the companies list must exclude it. No consent
+     * is recorded for it.
      */
     protected function aRemovedMembershipIn(Company $company, User $user): void
     {
         $this->aMembershipFor($user, $company);
 
-        $this->removeMembership($company, $user);
-    }
-
-    /**
-     * Soft-delete an EXISTING membership pivot (the removal half of
-     * aRemovedMembershipIn) — for arrangements that must act between attach and
-     * removal (e.g. set a default company while the membership is still live,
-     * UC-1-014 stale-default pin). Shared by the view-profile suite.
-     */
-    protected function removeMembership(Company $company, User $user): void
-    {
-        CompanyUser::query()
-            ->where('company_id', $company->getKey())
-            ->where('user_id', $user->getKey())
-            ->update(['deleted_at' => now()]);
+        $this->softDeleteMembership($company, $user);
     }
 
     protected function inTwoCompanies(User $user): void
@@ -343,7 +305,7 @@ abstract class AuthTestCase extends TestCase
             ->where('event_class', $eventClass)
             ->sole();
 
-        $this->assertDatabaseCount('audit_trail', 2);
+        $this->assertSame(2, AuditEntry::query()->where('request_id', $requestId)->count());
         foreach ([[$this->ownedCompany, 'owner'], [$this->employingCompany, 'employee']] as [$company, $roleCode]) {
             $this->assertDatabaseHas('audit_trail', [
                 'company_id' => $company->getKey(),
