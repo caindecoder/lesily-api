@@ -10,12 +10,10 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
-use Laravel\Sanctum\NewAccessToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use Tests\Concerns\AssertsAccessLog;
 use Tests\Concerns\AssertsAuditTrail;
-use Illuminate\Support\Facades\Config;
 use App\Companies\Entities\CompanyUser;
 use Illuminate\Support\Facades\Password;
 use App\Foundation\Auth\Totp\TotpVerifier;
@@ -47,7 +45,7 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class AuthTestCase extends TestCase
 {
-    use AssertsAccessLog, AssertsAuditTrail, AssertsCompanyAuditRows, InducesProjectorFailures;
+    use AssertsAccessLog, AssertsAuditTrail, AssertsCompanyAuditRows, CreatesSessions, InducesProjectorFailures;
 
     /**
      * Canonical login-ready credentials, shared by the login and logout suites
@@ -252,28 +250,6 @@ abstract class AuthTestCase extends TestCase
             'challengeId' => $challengeId,
             'code' => $code,
         ]);
-    }
-
-    /**
-     * Mint a production-faithful active session for $user: an explicit ~90-day expiry
-     * exactly as SessionIssuer stamps it (createToken alone leaves expires_at null, which
-     * no real login produces). Returns the NewAccessToken so callers get both the plain
-     * text (to authenticate) and the token id (to target / assert on). Shared by the
-     * view-sessions (UC-1-010) and revoke-session suites.
-     */
-    protected function aSessionFor(User $user, string $name = 'web'): NewAccessToken
-    {
-        return $user->createToken($name, ['*'], now()->addMinutes(Config::integer('sanctum.expiration')));
-    }
-
-    /**
-     * Mint a session whose explicit expiry is already in the past — a dead session whose row
-     * lingers until pruned. Shared by the view-sessions (expired-exclusion) and revoke-session
-     * (revoke-an-expired-row) suites.
-     */
-    protected function anExpiredSessionFor(User $user, string $name = 'old-laptop'): NewAccessToken
-    {
-        return $user->createToken($name, ['*'], now()->subDay());
     }
 
     /**
