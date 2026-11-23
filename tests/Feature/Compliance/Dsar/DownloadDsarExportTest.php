@@ -151,8 +151,8 @@ class DownloadDsarExportTest extends DsarTestCase
     public function when_the_subject_holds_another_role_elsewhere_then_the_download_is_audited_with_their_role_here(): void
     {
         // Given an owner of another company who is an employee here, with a ready export here
-        $subject = $this->employee;
-        $this->attachMember(Company::factory()->create(), $subject, $this->seededRole('owner'));
+        $subject = $this->aCompanyMember(Company::factory()->create(), 'owner');
+        $this->attachMember($this->company, $subject, $this->seededRole('employee'));
         $request = $this->aReadyExportFor($this->company, $subject);
 
         // When

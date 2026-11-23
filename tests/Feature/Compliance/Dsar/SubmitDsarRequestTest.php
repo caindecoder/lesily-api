@@ -181,6 +181,19 @@ class SubmitDsarRequestTest extends DsarTestCase
     }
 
     #[Test]
+    public function when_a_member_who_never_accepted_the_policies_requests_their_data_then_it_is_recorded(): void
+    {
+        // Given a member who has accepted neither the terms nor the privacy policy here
+        $member = $this->aMemberWhoNeverConsented($this->company);
+
+        // When
+        $response = $this->submitDsarRequest($member, $this->company);
+
+        // Then
+        $this->assertDsarRequestRecorded($response, $member, $member);
+    }
+
+    #[Test]
     public function when_the_same_idempotency_key_is_replayed_then_one_request_is_recorded(): void
     {
         // Given

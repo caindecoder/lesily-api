@@ -166,10 +166,11 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_they_changed_their_own_record_then_the_row_appears_once_with_its_ip_and_device(): void
     {
-        // Given an owner who set their emergency contact, then asked for their data
-        $owner = $this->aCompanyMember($this->company, 'owner');
-        $this->theySetTheirEmergencyContact($owner, $this->company);
-        $request = $this->requestFrom($this->submitDsarRequest($owner, $this->company));
+        // Given the owner of another company, who set their emergency contact there, then asked for their data
+        $company = Company::factory()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        $this->theySetTheirEmergencyContact($owner, $company);
+        $request = $this->requestFrom($this->submitDsarRequest($owner, $company));
 
         // When their export is built
         $this->runTheExportFor($request);
@@ -184,10 +185,11 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_a_change_was_encrypted_then_the_export_holds_its_plain_values(): void
     {
-        // Given an owner who set their emergency contact, stored encrypted in its audit row, then asked for their data
-        $owner = $this->aCompanyMember($this->company, 'owner');
-        $this->theySetTheirEmergencyContact($owner, $this->company);
-        $request = $this->requestFrom($this->submitDsarRequest($owner, $this->company));
+        // Given the owner of another company, who set their emergency contact there, stored encrypted in its audit row, then asked for their data
+        $company = Company::factory()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        $this->theySetTheirEmergencyContact($owner, $company);
+        $request = $this->requestFrom($this->submitDsarRequest($owner, $company));
 
         // When their export is built
         $this->runTheExportFor($request);
@@ -441,8 +443,10 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_export_is_built_then_the_consent_section_holds_their_consent_records(): void
     {
-        // Given a member who agreed to the terms and the privacy policy here
+        // Given a member who agreed to the terms and the privacy policy here, before both policies moved on
+        config(['lesily.policies' => ['tos' => '2026-03', 'privacy' => '2026-04']]);
         $member = $this->aCompanyMember($this->company);
+        config(['lesily.policies' => ['tos' => 'v2.0', 'privacy' => 'v2.0']]);
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When their export is built
@@ -450,8 +454,8 @@ class ExportDsarSectionsTest extends DsarTestCase
 
         // Then
         $this->assertSame([
-            ['policy_type' => 'tos', 'version' => 'v1.0', 'ip_address' => '198.51.100.4', 'recorded_at' => now()->toISOString()],
-            ['policy_type' => 'privacy', 'version' => 'v1.0', 'ip_address' => '198.51.100.4', 'recorded_at' => now()->toISOString()],
+            ['policy_type' => 'tos', 'version' => '2026-03', 'ip_address' => '198.51.100.4', 'recorded_at' => now()->toISOString()],
+            ['policy_type' => 'privacy', 'version' => '2026-04', 'ip_address' => '198.51.100.4', 'recorded_at' => now()->toISOString()],
         ], $this->exportedData($request)['consent_records']);
     }
 

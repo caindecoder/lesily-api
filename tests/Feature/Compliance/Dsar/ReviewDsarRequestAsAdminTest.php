@@ -43,9 +43,9 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     #[DataProvider('provideTenantRolesDeniedTheAdminSurface')]
     public function when_a_tenant_member_requests_a_dsar_detail_then_the_admin_surface_is_not_acknowledged(string $roleCode): void
     {
-        // Given a member of the company in this role, not a platform admin, and a request in that company
+        // Given a member of the company in this role, not a platform admin, and another member's request in that company
         $tenantMember = $this->memberWithRole($roleCode);
-        $request = $this->aSubmittedRequest($this->company, $this->employee);
+        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
 
         // When they ask for it on the admin surface
         $response = $this->viewAsAdmin($tenantMember, $request->getKey());
