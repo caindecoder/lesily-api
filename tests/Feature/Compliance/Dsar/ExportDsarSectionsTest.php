@@ -23,15 +23,6 @@ class ExportDsarSectionsTest extends DsarTestCase
 
     protected const HIGHER_ID = 'ffffffff-ffff-4fff-bfff-ffffffffffff';
 
-    protected Company $company;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->company = Company::factory()->create();
-    }
-
     #[Test]
     public function when_the_archive_cannot_be_created_then_the_export_fails_without_fulfilling(): void
     {
@@ -77,7 +68,7 @@ class ExportDsarSectionsTest extends DsarTestCase
         $this->aConsentRecordedBy($member, $this->company);
         $this->aConsentRecordedBy($member, $other);
         $this->anInvitationTo($member, $this->company);
-        $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $member);
+        $this->anOwnershipTransfer($this->company, $this->owner, $member);
         OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->create();
         $this->revokeTheInvitation($this->anInvitationTo($member, $other));
         $this->anOwnershipTransfer($other, $member, $this->aCompanyMember($other));
@@ -86,7 +77,7 @@ class ExportDsarSectionsTest extends DsarTestCase
         $this->aNotificationFor($member, NotificationType::OwnershipReceived, $other);
         $this->lookUpAMissingRequest($member, $this->company);
         $this->lookUpAMissingRequest($member, $other);
-        $this->aConsentRecordedBy($this->aCompanyMember($this->company), $this->company);
+        $this->aCompanyMember($this->company);
         $this->submitDsarRequest($member, $other)->assertCreated();
         $this->idempotencyKey = (string) Str::uuid();
         $request = $this->requestFrom($this->submitDsarRequest($member, $this->company));
@@ -101,7 +92,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_co_workers_have_their_own_sign_ins_invitations_transfers_notices_and_access_records_then_none_of_theirs_is_exported(): void
     {
-        // Given a member beside a co-worker who signed in, was refused a lookup here, was invited, is named on a case, was welcomed here, was told their password changed and switched an email off, and a transfer between two others
+        // Given a member beside a co-worker who signed in, was refused a lookup here, was invited, is named on a case, was welcomed here, was told their password changed and switched an email off, and the owner handing the company to the co-worker
         $member = $this->aCompanyMember($this->company);
         $coWorker = $this->aCompanyMember($this->company);
         $this->aSignInFor($coWorker, 'iPhone', now()->addDays(90));
@@ -109,7 +100,7 @@ class ExportDsarSectionsTest extends DsarTestCase
         $this->lookUpAMissingRequest($coWorker, $this->company);
         $this->anInvitationTo($coWorker, $this->company);
         OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($coWorker)->create();
-        $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $coWorker);
+        $this->anOwnershipTransfer($this->company, $this->owner, $coWorker);
         $this->aNotificationFor($coWorker, NotificationType::TeamWelcome, $this->company);
         $this->aNotificationFor($coWorker, NotificationType::PasswordChanged, null);
         NotificationPreference::factory()->mailDisabled($coWorker, NotificationType::GeneralAccountNotice)->create();
@@ -568,7 +559,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     {
         // Given a member who received the company, was the owner a rejected case expected, handed it on through support, and became new owner on a case executed the day before — recorded after the others
         $member = $this->aCompanyMember($this->company);
-        $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $member);
+        $this->anOwnershipTransfer($this->company, $this->owner, $member);
         $rejected = OwnershipTransferCase::factory()->forCompany($this->company->refresh())->closedRejected()->create();
         $this->aSupportAssistedTransfer($this->company, $member, $this->aCompanyMember($this->company));
         $this->travel(-1)->days();

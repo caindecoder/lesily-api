@@ -1453,13 +1453,14 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * A fresh admin of $company makes $member an HR officer through the
-     * role-change endpoint, from the admin's own network address and device.
+     * An admin of $company — Contoso's own on Contoso, a fresh one elsewhere —
+     * makes $member an HR officer through the role-change endpoint, from the
+     * admin's own network address and device.
      */
     protected function anAdminChangesTheRoleOf(User $member, Company $company): void
     {
         $membershipId = $this->membershipIdOf($company, $member);
-        $admin = $this->aCompanyMember($company, 'admin');
+        $admin = $company->is($this->company) ? $this->admin : $this->aCompanyMember($company, 'admin');
         Sanctum::actingAs($admin);
 
         $this->withHeader('User-Agent', self::ADMIN_DEVICE)
