@@ -20,8 +20,6 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
 {
     use AssertsFilterEmptyValueRejection;
 
-    protected Company $company;
-
     protected Company $otherCompany;
 
     protected User $platformAdmin;
@@ -30,7 +28,6 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     {
         parent::setUp();
 
-        $this->company = Company::factory()->create();
         $this->otherCompany = Company::factory()->create();
         $this->platformAdmin = $this->aPlatformAdmin();
     }
@@ -39,7 +36,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     public function when_no_token_is_presented_then_the_queue_request_is_rejected_as_unauthenticated(): void
     {
         // Given a request in a company
-        DsarRequestRecord::factory()->forSubject($this->company, $this->aCompanyMember($this->company))->create();
+        DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->create();
 
         // When a guest lists the queue
         $response = $this->listQueue(null);
@@ -54,7 +51,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     public function when_a_tenant_member_requests_the_dsar_queue_then_the_admin_surface_is_not_acknowledged(string $roleCode): void
     {
         // Given a member of a company in this role, not a platform admin, and a request in their own company
-        $tenantMember = $this->aCompanyMember($this->company, $roleCode);
+        $tenantMember = $this->memberWithRole($roleCode);
         DsarRequestRecord::factory()->forSubject($this->company, $tenantMember)->create();
 
         // When they list the queue
@@ -74,7 +71,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     public function when_the_queue_query_is_invalid_then_the_read_is_refused(array $query, string $field, string $message): void
     {
         // Given a platform admin and a request in a company
-        DsarRequestRecord::factory()->forSubject($this->company, $this->aCompanyMember($this->company))->create();
+        DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->create();
 
         // When the admin lists the queue with this row's defective query
         $response = $this->listQueue($this->platformAdmin, $query);
@@ -100,7 +97,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     {
         // Given a request, and an audit write that fails AFTER its row is
         // inserted — only the read's transaction can take the row back out
-        DsarRequestRecord::factory()->forSubject($this->company, $this->aCompanyMember($this->company))->create();
+        DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->create();
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the admin lists the queue

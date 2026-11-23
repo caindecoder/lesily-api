@@ -23,15 +23,6 @@ class ExportDsarSectionsTest extends DsarTestCase
 
     protected const HIGHER_ID = 'ffffffff-ffff-4fff-bfff-ffffffffffff';
 
-    protected Company $company;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->company = Company::factory()->create();
-    }
-
     #[Test]
     public function when_the_archive_cannot_be_created_then_the_export_fails_without_fulfilling(): void
     {
@@ -77,7 +68,7 @@ class ExportDsarSectionsTest extends DsarTestCase
         $this->aConsentRecordedBy($member, $this->company);
         $this->aConsentRecordedBy($member, $other);
         $this->anInvitationTo($member, $this->company);
-        $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $member);
+        $this->anOwnershipTransfer($this->company, $this->owner, $member);
         OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->create();
         $this->revokeTheInvitation($this->anInvitationTo($member, $other));
         $this->anOwnershipTransfer($other, $member, $this->aCompanyMember($other));
@@ -86,7 +77,7 @@ class ExportDsarSectionsTest extends DsarTestCase
         $this->aNotificationFor($member, NotificationType::OwnershipReceived, $other);
         $this->lookUpAMissingRequest($member, $this->company);
         $this->lookUpAMissingRequest($member, $other);
-        $this->aConsentRecordedBy($this->aCompanyMember($this->company), $this->company);
+        $this->aCompanyMember($this->company);
         $this->submitDsarRequest($member, $other)->assertCreated();
         $this->idempotencyKey = (string) Str::uuid();
         $request = $this->requestFrom($this->submitDsarRequest($member, $this->company));
@@ -101,7 +92,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_co_workers_have_their_own_sign_ins_invitations_transfers_notices_and_access_records_then_none_of_theirs_is_exported(): void
     {
-        // Given a member beside a co-worker who signed in, was refused a lookup here, was invited, is named on a case, was welcomed here, was told their password changed and switched an email off, and a transfer between two others
+        // Given a member beside a co-worker who signed in, was refused a lookup here, was invited, is named on a case, was welcomed here, was told their password changed and switched an email off, and the owner handing the company to the co-worker
         $member = $this->aCompanyMember($this->company);
         $coWorker = $this->aCompanyMember($this->company);
         $this->aSignInFor($coWorker, 'iPhone', now()->addDays(90));
@@ -109,7 +100,7 @@ class ExportDsarSectionsTest extends DsarTestCase
         $this->lookUpAMissingRequest($coWorker, $this->company);
         $this->anInvitationTo($coWorker, $this->company);
         OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($coWorker)->create();
-        $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $coWorker);
+        $this->anOwnershipTransfer($this->company, $this->owner, $coWorker);
         $this->aNotificationFor($coWorker, NotificationType::TeamWelcome, $this->company);
         $this->aNotificationFor($coWorker, NotificationType::PasswordChanged, null);
         NotificationPreference::factory()->mailDisabled($coWorker, NotificationType::GeneralAccountNotice)->create();
@@ -175,10 +166,11 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_they_changed_their_own_record_then_the_row_appears_once_with_its_ip_and_device(): void
     {
-        // Given an owner who set their emergency contact, then asked for their data
-        $owner = $this->aCompanyMember($this->company, 'owner');
-        $this->theySetTheirEmergencyContact($owner, $this->company);
-        $request = $this->requestFrom($this->submitDsarRequest($owner, $this->company));
+        // Given the owner of another company, who set their emergency contact there, then asked for their data
+        $company = Company::factory()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        $this->theySetTheirEmergencyContact($owner, $company);
+        $request = $this->requestFrom($this->submitDsarRequest($owner, $company));
 
         // When their export is built
         $this->runTheExportFor($request);
@@ -193,16 +185,17 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_a_change_was_encrypted_then_the_export_holds_its_plain_values(): void
     {
-        // Given an owner who set their emergency contact, stored encrypted in its audit row, then asked for their data
-        $owner = $this->aCompanyMember($this->company, 'owner');
-        $this->theySetTheirEmergencyContact($owner, $this->company);
-        $request = $this->requestFrom($this->submitDsarRequest($owner, $this->company));
+        // Given the owner of another company, who set their emergency contact there, stored encrypted in its audit row, then asked for their data
+        $company = Company::factory()->create();
+        $owner = $this->aCompanyMember($company, 'owner');
+        $this->theySetTheirEmergencyContact($owner, $company);
+        $request = $this->requestFrom($this->submitDsarRequest($owner, $company));
 
         // When their export is built
         $this->runTheExportFor($request);
 
         // Then the stored change is encrypted, yet the export shows each value in plain words, with no ciphertext and no marker anywhere
-        $this->assertTrue(AuditEntry::query()->where('action', 'emergency_contact_updated')->sole()->metadata['changes']['name']['encrypted'] ?? false);
+        $this->assertTrue(AuditEntry::query()->where('action', 'emergency_contact_updated')->where('actor_user_id', $owner->getKey())->sole()->metadata['changes']['name']['encrypted'] ?? false);
         /** @var list<array<string, mixed>> $changes */
         $changes = collect($this->auditSectionOf($request))->sole('action', 'emergency_contact_updated')['changes'];
         $this->assertSame([
@@ -282,7 +275,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     public function when_a_section_has_no_entries_then_it_is_exported_empty(): void
     {
         // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited, took part in no transfer, received no notice, switched none off and was never refused
-        $member = $this->aCompanyMember($this->company);
+        $member = $this->aMemberWhoNeverConsented($this->company);
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When their export is built
@@ -450,9 +443,10 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_the_export_is_built_then_the_consent_section_holds_their_consent_records(): void
     {
-        // Given a member who agreed to the terms and the privacy policy here
+        // Given a member who agreed to the terms and the privacy policy here, before both policies moved on
+        config(['lesily.policies' => ['tos' => '2026-03', 'privacy' => '2026-04']]);
         $member = $this->aCompanyMember($this->company);
-        $this->aConsentRecordedBy($member, $this->company);
+        config(['lesily.policies' => ['tos' => 'v2.0', 'privacy' => 'v2.0']]);
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When their export is built
@@ -460,8 +454,8 @@ class ExportDsarSectionsTest extends DsarTestCase
 
         // Then
         $this->assertSame([
-            ['policy_type' => 'tos', 'version' => '2026-03', 'ip_address' => '203.0.113.7', 'recorded_at' => now()->toISOString()],
-            ['policy_type' => 'privacy', 'version' => '2026-04', 'ip_address' => '203.0.113.7', 'recorded_at' => now()->toISOString()],
+            ['policy_type' => 'tos', 'version' => '2026-03', 'ip_address' => '198.51.100.4', 'recorded_at' => now()->toISOString()],
+            ['policy_type' => 'privacy', 'version' => '2026-04', 'ip_address' => '198.51.100.4', 'recorded_at' => now()->toISOString()],
         ], $this->exportedData($request)['consent_records']);
     }
 
@@ -569,7 +563,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     {
         // Given a member who received the company, was the owner a rejected case expected, handed it on through support, and became new owner on a case executed the day before — recorded after the others
         $member = $this->aCompanyMember($this->company);
-        $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $member);
+        $this->anOwnershipTransfer($this->company, $this->owner, $member);
         $rejected = OwnershipTransferCase::factory()->forCompany($this->company->refresh())->closedRejected()->create();
         $this->aSupportAssistedTransfer($this->company, $member, $this->aCompanyMember($this->company));
         $this->travel(-1)->days();
@@ -649,7 +643,7 @@ class ExportDsarSectionsTest extends DsarTestCase
         // Given a member of this company and of another, refused an hour ago at a door no company owns,
         // who then signed in once — a copy logged for each company
         $member = $this->aCompanyMember($this->company);
-        $this->alsoAMemberOf(Company::factory()->create(), $member);
+        $this->attachMember(Company::factory()->create(), $member, $this->seededRole('employee'));
         AccessLogEntry::factory()->byUser($member)->ofEvent(AccessEvent::Forbidden)->seenAt(now()->subHour())->create();
         $this->signInThroughTheApi($member);
         $request = $this->aSubmittedRequest($this->company, $member);

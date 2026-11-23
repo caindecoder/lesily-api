@@ -3,7 +3,6 @@
 namespace Tests\Feature\Compliance\Dsar;
 
 use App\Models\User;
-use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Lang;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -20,15 +19,12 @@ use App\Compliance\Dsar\Exceptions\DsarReportRenderingFailedException;
 
 class ExportDsarReportTest extends DsarTestCase
 {
-    protected Company $company;
-
     protected User $member;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->company = Company::factory()->create();
         $this->member = $this->aCompanyMember($this->company);
     }
 
@@ -76,7 +72,7 @@ class ExportDsarReportTest extends DsarTestCase
     public function when_a_section_has_no_entries_then_the_report_says_none_recorded(): void
     {
         // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited, took part in no transfer, received no notice, switched none off and was never refused
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $request = $this->aSubmittedRequest($this->company, $this->aMemberWhoNeverConsented($this->company));
 
         // When their export is built
         $this->runTheExportFor($request);
@@ -339,7 +335,7 @@ class ExportDsarReportTest extends DsarTestCase
         $this->aSignInFor($member, 'iPhone', now()->addDays(90));
         $this->signInThroughTheApi($member);
         $this->lookUpAMissingRequest($member, $this->company);
-        $this->anOwnershipTransfer($this->company, $this->aCompanyMember($this->company), $member);
+        $this->anOwnershipTransfer($this->company, $this->owner, $member);
         OwnershipTransferCase::factory()->forCompany($this->company->refresh())->proposedOwner($member)->closedRejected()->create();
         $this->aNotificationFor($member, NotificationType::TeamWelcome, $this->company);
         NotificationPreference::factory()->mailDisabled($member, NotificationType::GeneralAccountNotice)->create();

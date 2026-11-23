@@ -147,18 +147,6 @@ abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
     }
 
     /**
-     * The action failed closed (slice-11R spec §4): a 500 INTERNAL_ERROR
-     * envelope carrying no case data at all — for reads, no read without
-     * evidence; for writes, the in-transaction audit veto.
-     */
-    protected function assertFailedClosed(TestResponse $response): void
-    {
-        $response->assertInternalServerError();
-        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
-        $response->assertJsonMissingPath('data');
-    }
-
-    /**
      * The request's one audit row evidences the queue read (UC-1-127 postcondition:
      * one row per PAGE, not per case row). A list has no single subject, so
      * subject_id and company_id are NULL and the read's query context

@@ -131,4 +131,14 @@ abstract class TestCase extends BaseTestCase
         $response->assertJsonPath('message', 'The requested resource was not found.');
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
+
+    /**
+     * The action failed closed — 500 INTERNAL_ERROR and no data in the body.
+     */
+    protected function assertFailedClosed(TestResponse $response): void
+    {
+        $response->assertInternalServerError();
+        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
+        $response->assertJsonMissingPath('data');
+    }
 }
