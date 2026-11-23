@@ -129,7 +129,7 @@ abstract class AuditTrailTestCase extends FoundationTestCase
     }
 
     /**
-     * Contoso's R creation rows (the company created, its emergency contact set, one consent per live policy) in the audit trail's order — written at the one frozen second, so listed by id, newest first.
+     * Contoso's creation rows in the audit trail's order — written in one frozen second, so newest id first.
      *
      * @return list<string>
      */

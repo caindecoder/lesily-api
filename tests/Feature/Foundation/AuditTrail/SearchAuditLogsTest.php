@@ -96,6 +96,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     public function when_a_role_without_audit_view_searches_then_the_role_is_refused_before_the_plan(): void
     {
         // Given Contoso's employee; Contoso is on Free, which has no log search
+        $this->putOnPlan($this->companyA, BillingPlan::Free);
 
         // When the employee searches company A's audit logs
         $response = $this->viewAuditLogs($this->employee, $this->companyA, ['ip' => '203.0.113.5']);
@@ -108,6 +109,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     public function when_a_plan_without_search_sends_an_invalid_search_then_it_is_rejected_before_the_plan(): void
     {
         // Given the owner of company A, which is on Free, a plan with no log search
+        $this->putOnPlan($this->companyA, BillingPlan::Free);
 
         // When the owner searches company A's audit logs with an invalid address
         $response = $this->viewAuditLogs($this->owner, $this->companyA, ['ip' => 'nowhere']);

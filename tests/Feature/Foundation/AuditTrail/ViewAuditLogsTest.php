@@ -124,6 +124,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_the_company_has_no_logs_then_an_empty_list_with_its_start_is_shown(): void
     {
         // Given company A, on the Free plan, with no sign-in or security record
+        $this->putOnPlan($this->companyA, BillingPlan::Free);
 
         // When the owner views company A's audit logs
         $response = $this->viewAuditLogs($this->owner, $this->companyA);
@@ -260,6 +261,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     {
         // Given company A on the Free plan, with a sign-in and a password change at the first moment it keeps,
         // and one of each a second earlier
+        $this->putOnPlan($this->companyA, BillingPlan::Free);
         $signInInside = $this->anAccessRowOfCompanyAAt('2025-11-15 00:00:00');
         $passwordChangeInside = $this->aSecurityEntryOfCompanyAAt('2025-11-15 00:00:00');
         $this->anAccessRowOfCompanyAAt('2025-11-14 23:59:59');
@@ -276,6 +278,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_the_dates_reach_past_the_horizon_then_the_list_is_clamped_to_it(): void
     {
         // Given company A on the Free plan, with a sign-in inside its year and one before it
+        $this->putOnPlan($this->companyA, BillingPlan::Free);
         $inside = $this->anAccessRowOfCompanyAAt('2026-06-01 12:00:00');
         $this->anAccessRowOfCompanyAAt('2025-06-01 12:00:00');
 
@@ -291,6 +294,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_the_dates_lie_wholly_before_the_horizon_then_the_list_is_empty(): void
     {
         // Given company A on the Free plan, with a sign-in in 2024
+        $this->putOnPlan($this->companyA, BillingPlan::Free);
         $this->anAccessRowOfCompanyAAt('2024-06-01 12:00:00');
 
         // When the owner asks for the audit logs of 2024
@@ -305,6 +309,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_the_horizon_falls_on_a_leap_day_then_it_starts_on_the_last_day_of_february(): void
     {
         // Given company A on the Free plan, viewed on 29 February 2028
+        $this->putOnPlan($this->companyA, BillingPlan::Free);
         $this->travelTo('2028-02-29 10:00:00');
 
         // When the owner views company A's audit logs
