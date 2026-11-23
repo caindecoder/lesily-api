@@ -59,7 +59,7 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
     #[Test]
     public function when_no_row_is_past_its_retention_then_nothing_is_deleted_or_audited(): void
     {
-        // Given a company row at its seven-year cutoff and a row with no company at its one-year cutoff
+        // Given a row of Contoso (seven years) at its cutoff and a row with no company at its one-year cutoff
         $rows = [
             $this->anAccessRow($this->company, '2019-11-17 00:00:00'),
             $this->anAccessRow(null, '2025-11-17 00:00:00'),
@@ -118,7 +118,7 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
     #[Test]
     public function when_a_company_row_was_last_seen_at_its_cutoff_then_only_the_row_just_before_is_deleted(): void
     {
-        // Given a company keeping seven years, with a row at its cutoff and one a second before it
+        // Given Contoso, keeping seven years, with a row at its cutoff and one a second before it
         $atCutoff = $this->anAccessRow($this->company, '2019-11-17 00:00:00');
         $this->anAccessRow($this->company, '2019-11-16 23:59:59');
 

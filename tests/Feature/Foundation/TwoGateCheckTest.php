@@ -157,7 +157,7 @@ class TwoGateCheckTest extends FoundationTestCase
     #[Test]
     public function when_a_member_of_a_free_and_a_pro_company_acts_in_the_free_one_then_the_upgrade_prompt_is_returned(): void
     {
-        // Given one member, one role, in a Free company and a Pro company
+        // Given one member, one role, in Contoso on Free and in a Pro company
         $user = User::factory()->create();
         [$freeCompany] = $this->memberOfAFreeAndAProCompany($user);
 
@@ -171,7 +171,7 @@ class TwoGateCheckTest extends FoundationTestCase
     #[Test]
     public function when_a_member_of_a_free_and_a_pro_company_acts_in_the_pro_one_then_access_proceeds(): void
     {
-        // Given one member, one role, in a Free company and a Pro company
+        // Given one member, one role, in Contoso on Free and in a Pro company
         $user = User::factory()->create();
         [, $proCompany] = $this->memberOfAFreeAndAProCompany($user);
 
