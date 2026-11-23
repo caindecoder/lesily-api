@@ -45,7 +45,7 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     {
         // Given company A was notified of a breach, and a member of A whose role cannot view breach notices
         $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, now()->toImmutable());
-        $member = $this->aConsentingMember($this->companyA, $roleCode);
+        $member = $this->memberWithRole($roleCode);
 
         // When the member lists company A's breach notices
         $response = $this->listNotices($member, $this->companyA);
@@ -60,7 +60,7 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     {
         // Given company A was notified of a breach, and the owner of company B
         $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, now()->toImmutable());
-        $outsider = $this->aConsentingMember($this->companyB, 'owner');
+        $outsider = $this->aCompanyMember($this->companyB, 'owner');
 
         // When B's owner lists company A's breach notices
         $response = $this->listNotices($outsider, $this->companyA);
@@ -75,11 +75,10 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     {
         // Given company A was notified of a breach, and A's owner accepted the policies before a new privacy policy version
         $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, now()->toImmutable());
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
         config(['lesily.policies.privacy' => 'v1.1']);
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->companyA);
 
         // Then the list is refused until they accept, and no notice is shown
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::ConsentRequired);
@@ -94,10 +93,9 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     public function when_the_list_query_is_invalid_then_it_is_refused_with_the_reason(array $query, string $field, string $message): void
     {
         // Given company A's owner
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner lists company A's breach notices with an invalid query
-        $response = $this->listNotices($owner, $this->companyA, $query);
+        $response = $this->listNotices($this->owner, $this->companyA, $query);
 
         // Then the query is refused with the reason
         $this->assertValidationRejected($response, $field, $message);
@@ -118,7 +116,7 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     {
         // Given an incident that notified company A only, and the owner of company B
         $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, now()->toImmutable());
-        $owner = $this->aConsentingMember($this->companyB, 'owner');
+        $owner = $this->aCompanyMember($this->companyB, 'owner');
 
         // When B's owner lists company B's breach notices
         $response = $this->listNotices($owner, $this->companyB);
@@ -133,10 +131,9 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     {
         // Given an incident naming company A that never reached its notices, and A's owner
         $atStage($this->anIncident())->withCompany($this->companyA, ['pii'], 40)->createOne();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->companyA);
 
         // Then the incident is not listed
         $this->assertNothingListed($response);
@@ -149,10 +146,9 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         $sentAt = CarbonImmutable::parse('2026-05-05 09:00:00');
         $first = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, $sentAt);
         $second = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, $sentAt);
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->companyA);
 
         // Then the later row comes first
         $this->assertNoticesListed($response, [$second->breach_incident_id, $first->breach_incident_id]);
@@ -165,10 +161,9 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         $oldest = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-05 09:00:00'));
         $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-06 09:00:00'));
         $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-07 09:00:00'));
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner reads the second page, two notices a page
-        $response = $this->listNotices($owner, $this->companyA, ['page' => 2, 'per_page' => 2]);
+        $response = $this->listNotices($this->owner, $this->companyA, ['page' => 2, 'per_page' => 2]);
 
         // Then the second page holds the oldest notice, with the page counts
         $this->assertNoticesListed($response, [$oldest->breach_incident_id]);
@@ -182,10 +177,9 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         foreach (range(1, 16) as $day) {
             $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-01')->addDays($day));
         }
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner sends the page in the request body instead of the query string
-        $response = $this->listNoticesWithBody($owner, $this->companyA, ['page' => 2]);
+        $response = $this->listNoticesWithBody($this->owner, $this->companyA, ['page' => 2]);
 
         // Then the first page is listed
         $response->assertOk();
@@ -199,10 +193,9 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         // Given company A's notice with no estimated count, and A's owner
         $incident = $this->anIncident()->companiesNotified()->createOne();
         $this->aPartFor($incident, $this->companyA)->withFigures(['pii'], null)->notified()->createOne();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->companyA);
 
         // Then the count is shown empty beside the data types
         $response->assertOk();
@@ -215,12 +208,11 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     {
         // Given company A was notified of about 120 people, then the count was corrected to 145, and A's owner
         $breachId = $this->aRecordedIncident(['companies' => [['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 120]]]);
-        $this->notifyCompanies($this->admin, $breachId);
+        $this->notifyCompanies($this->platformAdmin, $breachId);
         BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->update(['estimated_count' => 145]);
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->companyA);
 
         // Then the notice shows the corrected count, while the notice as sent still says 120
         $response->assertOk();
@@ -235,10 +227,9 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         foreach (range(1, 15) as $day) {
             $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-01')->addDays($day));
         }
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner lists company A's breach notices, the queries counted
-        [$response, $queryCount] = $this->listNoticesCountingQueries($owner, $this->companyA);
+        [$response, $queryCount] = $this->listNoticesCountingQueries($this->owner, $this->companyA);
 
         // Then a full page came back for fewer queries than it has rows
         $response->assertOk();
@@ -253,10 +244,9 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         $middle = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-06 09:00:00'));
         $newest = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-07 09:00:00'));
         $oldest = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-05 09:00:00'));
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->companyA);
 
         // Then the notices come newest first
         $this->assertNoticesListed($response, [$newest->breach_incident_id, $middle->breach_incident_id, $oldest->breach_incident_id]);
@@ -270,14 +260,13 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     public function when_the_filing_has_moved_then_the_notice_shows_its_filing_status(BreachFilingStatus $state, array $expectedFiling): void
     {
         // Given company A's notice at the given filing state, and A's owner
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
-        $this->aPartAtFilingState($state, $owner)->createOne();
+        $this->aPartAtFilingState($state, $this->owner)->createOne();
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->companyA);
 
         // Then the notice shows its filing status with the dates, and the owner as requester once asked
-        $this->assertFilingShown($response, $expectedFiling, $state === BreachFilingStatus::NotRequested ? null : $owner->getKey());
+        $this->assertFilingShown($response, $expectedFiling, $state === BreachFilingStatus::NotRequested ? null : $this->owner->getKey());
     }
 
     #[Test]
@@ -285,10 +274,9 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     {
         // Given company A's notice of an incident Lesily has since resolved, and A's owner
         $this->aNoticeFor($this->anIncident()->resolved(), $this->companyA, now()->toImmutable());
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->companyA);
 
         // Then the notice shows the incident as resolved
         $response->assertOk();
@@ -300,12 +288,10 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     {
         // Given company A was notified of a breach, and A's owner and an admin of A
         $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, now()->toImmutable());
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
-        $admin = $this->aConsentingMember($this->companyA, 'admin');
-        $ownersList = $this->listNotices($owner, $this->companyA)->json('data');
+        $ownersList = $this->listNotices($this->owner, $this->companyA)->json('data');
 
         // When the admin lists company A's breach notices
-        $response = $this->listNotices($admin, $this->companyA);
+        $response = $this->listNotices($this->admin, $this->companyA);
 
         // Then the admin sees the same one notice the owner sees
         $response->assertOk();
@@ -320,10 +306,9 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         $incident = $this->anIncident()->companiesNotified()->createOne();
         $this->aPartFor($incident, $this->companyB)->withFigures(['banking'], 30)->notifiedAt(CarbonImmutable::parse('2026-05-05 10:00:00'))->createOne();
         $this->aPartFor($incident, $this->companyA)->withFigures(['nic', 'pii'], 120)->notifiedAt(CarbonImmutable::parse('2026-05-05 09:00:00'))->createOne();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->companyA);
 
         // Then the one notice shows company A's own part and the incident's facts, and nothing of company B
         $this->assertNoticeShows($response, [
@@ -390,7 +375,7 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         return match ($state) {
             BreachFilingStatus::NotRequested => $part->notified(),
             BreachFilingStatus::Requested => $part->filingRequested($owner->getKey()),
-            BreachFilingStatus::Filed => $part->filed($owner->getKey(), $this->admin->getKey()),
+            BreachFilingStatus::Filed => $part->filed($owner->getKey(), $this->platformAdmin->getKey()),
         };
     }
 

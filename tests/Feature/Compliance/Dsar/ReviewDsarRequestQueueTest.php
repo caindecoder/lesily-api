@@ -24,7 +24,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
 
     protected Company $otherCompany;
 
-    protected User $admin;
+    protected User $platformAdmin;
 
     protected function setUp(): void
     {
@@ -32,7 +32,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
 
         $this->company = Company::factory()->create();
         $this->otherCompany = Company::factory()->create();
-        $this->admin = $this->aPlatformAdmin();
+        $this->platformAdmin = $this->aPlatformAdmin();
     }
 
     #[Test]
@@ -77,7 +77,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         DsarRequestRecord::factory()->forSubject($this->company, $this->aCompanyMember($this->company))->create();
 
         // When the admin lists the queue with this row's defective query
-        $response = $this->listQueue($this->admin, $query);
+        $response = $this->listQueue($this->platformAdmin, $query);
 
         // Then the read is refused naming the offending key and no read is recorded
         $this->assertValidationRejected($response, $field, $message);
@@ -104,7 +104,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the admin lists the queue
-        $response = $this->listQueue($this->admin);
+        $response = $this->listQueue($this->platformAdmin);
 
         // Then the read fails closed — no request data, and the evidence row was rolled back with it
         $this->assertFailedClosed($response);
@@ -116,7 +116,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     {
         // Given a platform admin and no DSAR requests anywhere
         // When the admin lists the queue
-        $response = $this->listQueue($this->admin);
+        $response = $this->listQueue($this->platformAdmin);
 
         // Then the page and every count are empty, and the read still left its evidence
         $this->assertListed($response, []);
@@ -135,7 +135,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         $this->aRequestDue($this->company, $deadline);
 
         // When the admin lists the queue
-        $response = $this->listQueue($this->admin);
+        $response = $this->listQueue($this->platformAdmin);
 
         // Then the counts place it by calendar day: overdue through the deadline day, due within seven days after it
         $this->assertKpis($response, $kpis);
@@ -149,7 +149,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         $closed = $this->aRequestDue($this->company, '2026-09-25 09:00:00', $state);
 
         // When the admin lists the queue
-        $response = $this->listQueue($this->admin);
+        $response = $this->listQueue($this->platformAdmin);
 
         // Then it is listed, but no count includes it — open, overdue and due-soon are in-progress counts
         $this->assertListed($response, [$closed]);
@@ -185,7 +185,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         );
 
         // When the admin lists the queue
-        $response = $this->listQueue($this->admin);
+        $response = $this->listQueue($this->platformAdmin);
 
         // Then the tie falls back to the lowest id first — pages can never duplicate or skip a tied request
         $this->assertListed($response, array_reverse($tied));
@@ -228,7 +228,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         $dueSooner = $this->aRequestDue($this->otherCompany, '2026-10-02 09:00:00');
 
         // When the admin lists the queue
-        $response = $this->listQueue($this->admin);
+        $response = $this->listQueue($this->platformAdmin);
 
         // Then both companies' requests are listed soonest deadline first, as admin rows, with the counts
         $response->assertOk();
@@ -254,7 +254,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         }
 
         // When the admin lists the queue filtered by this row's status
-        $response = $this->listQueue($this->admin, ['status' => $status]);
+        $response = $this->listQueue($this->platformAdmin, ['status' => $status]);
 
         // Then only that status is listed, the counts follow the filter, and the filter is recorded
         $this->assertListed($response, [$requests[$status]]);
@@ -271,7 +271,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         $this->aRequestDue($this->otherCompany, '2026-09-29 09:00:00');
 
         // When the admin lists the queue for the first company
-        $response = $this->listQueue($this->admin, ['company_id' => $this->company->getKey()]);
+        $response = $this->listQueue($this->platformAdmin, ['company_id' => $this->company->getKey()]);
 
         // Then only that company's requests are listed and counted, and the filter is recorded
         $this->assertListed($response, [$overdue, $dueSoon]);
@@ -290,7 +290,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         $this->aRequestDue($this->otherCompany, '2026-09-25 09:00:00', 'fulfilled');
 
         // When the admin toggles "Overdue only"
-        $response = $this->listQueue($this->admin, ['overdue' => 'true']);
+        $response = $this->listQueue($this->platformAdmin, ['overdue' => 'true']);
 
         // Then only the overdue in-progress requests are listed, soonest deadline first, the counts recompute
         // against them, and the filter is recorded
@@ -308,7 +308,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         $this->aRequestDue($this->company, '2026-09-30 09:00:00');
 
         // When the admin toggles "Breached"
-        $response = $this->listQueue($this->admin, ['sla_breached' => 'true']);
+        $response = $this->listQueue($this->platformAdmin, ['sla_breached' => 'true']);
 
         // Then only the flagged requests are listed, the counts recompute against them, and the filter is recorded
         $this->assertListed($response, [$flaggedThenFulfilled, $flaggedInProgress]);
@@ -325,7 +325,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         $flaggedOverdue = $this->aRequestDue($this->otherCompany, '2026-09-28 09:00:00', 'breached');
 
         // When the admin lists the queue with this row's flag switched off
-        $response = $this->listQueue($this->admin, [$flag => 'false']);
+        $response = $this->listQueue($this->platformAdmin, [$flag => 'false']);
 
         // Then nothing is filtered out, the counts cover both, and the switched-off flag is recorded
         $this->assertListed($response, [$flaggedOverdue, $dueSoon]);
@@ -340,7 +340,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         $requests = $this->sixteenRequests();
 
         // When the admin asks for the second page of ten
-        $response = $this->listQueue($this->admin, ['page' => 2, 'per_page' => 10]);
+        $response = $this->listQueue($this->platformAdmin, ['page' => 2, 'per_page' => 10]);
 
         // Then the last six are listed, the counts still cover all sixteen, and this page's read is recorded
         $this->assertListed($response, array_slice($requests, 10));
@@ -550,9 +550,9 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
             'subject_id' => null,
             'subject_label' => null,
             'description' => 'Platform admin viewed a page of the DSAR request queue.',
-            'actor_user_id' => $this->admin->getKey(),
+            'actor_user_id' => $this->platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $this->admin->name,
+            'actor_label' => $this->platformAdmin->name,
             'ip_address' => '127.0.0.1',
             'user_agent' => 'Symfony',
             'request_id' => $correlationId,
@@ -570,7 +570,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
      */
     protected function listQueueWithBody(array $body): TestResponse
     {
-        Sanctum::actingAs($this->admin);
+        Sanctum::actingAs($this->platformAdmin);
 
         return $this->json('GET', '/api/v1/admin/dsar-requests', $body);
     }
@@ -598,7 +598,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     {
         DB::flushQueryLog();
         DB::enableQueryLog();
-        $response = $this->listQueue($this->admin);
+        $response = $this->listQueue($this->platformAdmin);
         $queryCount = count(DB::getQueryLog());
         DB::disableQueryLog();
 

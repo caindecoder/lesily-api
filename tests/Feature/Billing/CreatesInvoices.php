@@ -247,6 +247,7 @@ trait CreatesInvoices
             'failed' => $this->aFailedInvoiceFor($company, $subscription, $overrides),
             'refunded' => $this->aRefundedInvoiceFor($company, $subscription, $overrides),
             'voided' => $this->aVoidedInvoiceFor($company, $subscription, $overrides),
+            'disputed' => $this->aDisputedInvoiceFor($company, $subscription, $overrides),
             default => throw new InvalidArgumentException("Unknown invoice state fixture [{$state}]."),
         };
     }

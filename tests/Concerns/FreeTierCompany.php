@@ -19,6 +19,8 @@ trait FreeTierCompany
 
     protected const int READY_MADE_NON_CONSENT_EVENTS = 5;
 
+    protected const int READY_MADE_EVENTS = 11;
+
     protected const int READY_MADE_CONTACT_EVENTS = 1;
 
     protected const int READY_MADE_PEOPLE = 3;

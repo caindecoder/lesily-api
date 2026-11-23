@@ -94,7 +94,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
 
         // Then the incident keeps its one flag, its one audit row and its one alert
         $this->assertFlagged($breachId, CarbonImmutable::parse(self::THE_NIGHT_AFTER));
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertSame(1, $this->queuedHandlerCountFor(BreachDeadlineMissed::class));
     }
 
@@ -111,7 +111,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
 
         // Then no second flag is recorded and none is audited
         $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachDeadlineMissed::class)->count());
-        $this->assertDatabaseCount('audit_trail', 0);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -257,16 +257,16 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
     #[Test]
     public function when_the_admin_list_is_padded_then_the_listed_admin_is_still_alerted(): void
     {
-        // Given an incident still recorded past its deadline, and the admin listed with spaces and a trailing comma
+        // Given an incident still recorded past its deadline, and the platform admin listed with spaces and a trailing comma
         $this->aRecordedIncident();
-        $this->allowlist([" {$this->admin->getKey()} ", '']);
+        $this->allowlist([" {$this->platformAdmin->getKey()} ", '']);
 
         // When the daily scan runs and the alerts leave the queue
         $this->runFlagMissedDeadlines()->assertSuccessful();
         $this->runQueuedHandlersFor(BreachDeadlineMissed::class);
 
-        // Then the listed admin is alerted once
-        Notification::assertSentToTimes($this->admin, SystemNotification::class, 1);
+        // Then the listed platform admin is alerted once
+        Notification::assertSentToTimes($this->platformAdmin, SystemNotification::class, 1);
     }
 
     #[Test]
@@ -287,14 +287,14 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
     public function when_a_flag_is_recorded_then_each_platform_admin_is_alerted_once_naming_its_companies(): void
     {
         // Given an incident affecting Zenith Retail and Acme Payroll, named in that order, two allowlisted
-        // Lesily admins, and both companies' owners
+        // platform admins, and both companies' owners
         $zenith = Company::factory()->named('Zenith Retail')->create();
         $acme = Company::factory()->named('Acme Payroll')->create();
         $breachId = $this->aRecordedIncident(['companies' => [
             ['companyId' => $zenith->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 12],
             ['companyId' => $acme->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 30],
         ]]);
-        $this->allowlist([$this->admin->getKey(), User::factory()->create()->getKey()]);
+        $this->allowlist([$this->platformAdmin->getKey(), User::factory()->create()->getKey()]);
         $this->anOwnerOf($zenith);
         $this->anOwnerOf($acme);
 
@@ -302,7 +302,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
         $this->runFlagMissedDeadlines()->assertSuccessful();
         $this->runQueuedHandlersFor(BreachDeadlineMissed::class);
 
-        // Then each admin is alerted once, naming the companies by name, the incident and its deadline;
+        // Then each platform admin is alerted once, naming the companies by name, the incident and its deadline;
         // no owner is told
         $this->assertAdminsAlertedOnce($breachId, 'Acme Payroll, Zenith Retail');
     }
@@ -428,11 +428,11 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
 
     protected function assertAdminsAlertedOnce(string $breachId, string $companies): void
     {
-        $admins = User::query()->whereKey(config('platform.admin_user_ids'))->get();
-        $this->assertCount(2, $admins);
-        foreach ($admins as $admin) {
-            Notification::assertSentToTimes($admin, SystemNotification::class, 1);
-            Notification::assertSentTo($admin, SystemNotification::class, fn (SystemNotification $alert): bool => $alert->type === NotificationType::BreachDeadlineMissed
+        $platformAdmins = User::query()->whereKey(config('platform.admin_user_ids'))->get();
+        $this->assertCount(2, $platformAdmins);
+        foreach ($platformAdmins as $platformAdmin) {
+            Notification::assertSentToTimes($platformAdmin, SystemNotification::class, 1);
+            Notification::assertSentTo($platformAdmin, SystemNotification::class, fn (SystemNotification $alert): bool => $alert->type === NotificationType::BreachDeadlineMissed
                 && $alert->companyName === $companies
                 && $alert->companyId === null
                 && $alert->details === ['incident' => $breachId, 'deadline' => '7 May 2026, 14:00 UTC']);
@@ -443,7 +443,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
     protected function correctTheDiscovery(string $breachId, string $discovered): void
     {
         BreachIncident::retrieve($breachId)
-            ->amend(AmendBreachCommand::from(['breachId' => $breachId, 'reason' => 'An earlier log entry was found.', 'dateDiscovered' => $discovered]), $this->admin)
+            ->amend(AmendBreachCommand::from(['breachId' => $breachId, 'reason' => 'An earlier log entry was found.', 'dateDiscovered' => $discovered]), $this->platformAdmin)
             ->persist();
     }
 
@@ -462,7 +462,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
         $storedEventId = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachDeadlineMissed::class)->sole()->getKey();
         $this->assertIsInt($storedEventId);
 
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertDatabaseHas('audit_trail', [
             'company_id' => null,
             'stored_event_id' => $storedEventId,

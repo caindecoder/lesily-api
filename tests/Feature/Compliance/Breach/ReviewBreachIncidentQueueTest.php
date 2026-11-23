@@ -36,10 +36,9 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     {
         // Given an incident naming company A, and company A's owner, who is not a platform admin
         $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
-        $owner = $this->aCompanyMember($this->companyA, 'owner');
 
         // When the owner opens the queue
-        $response = $this->listQueue($owner);
+        $response = $this->listQueue($this->owner);
 
         // Then the admin surface is not acknowledged — not even their own company's incident — and no read is recorded
         $this->assertResourceNotFoundNoLeak($response);
@@ -57,8 +56,8 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
         // Given a recorded incident
         $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
 
-        // When the admin opens the queue with this filter
-        $response = $this->listQueue($this->admin, $query);
+        // When the platform admin opens the queue with this filter
+        $response = $this->listQueue($this->platformAdmin, $query);
 
         // Then the filter is refused on its field and no read is recorded
         $this->assertValidationRejected($response, $field, $message);
@@ -73,8 +72,8 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
         $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the admin opens the queue
-        $response = $this->listQueue($this->admin);
+        // When the platform admin opens the queue
+        $response = $this->listQueue($this->platformAdmin);
 
         // Then the read fails closed — no incident data, and the evidence row was rolled back with it
         $this->assertFailedClosed($response);
@@ -96,8 +95,8 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     public function when_no_incident_is_recorded_then_an_empty_page_is_shown_and_the_read_is_audited(): void
     {
         // Given no incident anywhere
-        // When the admin opens the queue
-        $response = $this->listQueue($this->admin);
+        // When the platform admin opens the queue
+        $response = $this->listQueue($this->platformAdmin);
 
         // Then the page is empty, and the read still left its evidence
         $this->assertListed($response, []);
@@ -114,8 +113,8 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
             ['0199a3f0-0000-7000-8000-000000000003', '0199a3f0-0000-7000-8000-000000000002', '0199a3f0-0000-7000-8000-000000000001'],
         );
 
-        // When the admin opens the queue
-        $response = $this->listQueue($this->admin);
+        // When the platform admin opens the queue
+        $response = $this->listQueue($this->platformAdmin);
 
         // Then the tie falls back to the lowest id first — pages can never duplicate or skip a tied incident
         $this->assertListed($response, array_reverse($tied));
@@ -127,8 +126,8 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
         // Given sixteen incidents due on consecutive days
         $incidents = $this->sixteenIncidents();
 
-        // When the admin asks for the second page of ten
-        $response = $this->listQueue($this->admin, ['page' => 2, 'per_page' => 10]);
+        // When the platform admin asks for the second page of ten
+        $response = $this->listQueue($this->platformAdmin, ['page' => 2, 'per_page' => 10]);
 
         // Then the last six are listed, and this page's read is recorded on its own
         $this->assertListed($response, array_slice($incidents, 10));
@@ -142,7 +141,7 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
         // Given sixteen incidents — two pages at the default size
         $this->sixteenIncidents();
 
-        // When the admin sends page 2 in the request body instead of the query string
+        // When the platform admin sends page 2 in the request body instead of the query string
         $response = $this->listQueueWithBody(['page' => 2]);
 
         // Then the body is ignored and the first page comes back
@@ -160,8 +159,8 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
             ->withCompany($this->companyB, ['payroll'], null)
             ->createOne();
 
-        // When the admin opens the queue
-        $response = $this->listQueue($this->admin);
+        // When the platform admin opens the queue
+        $response = $this->listQueue($this->platformAdmin);
 
         // Then the row counts both companies but shows no total — an unknown count is not zero
         $response->assertOk();
@@ -175,8 +174,8 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
         $resolved = $this->anIncident()->deadlineMissed()->resolved()->createOne();
         $falseAlarm = $this->anIncident()->dueAt('2026-05-14 14:00:00')->falseAlarm()->createOne();
 
-        // When the admin opens the queue
-        $response = $this->listQueue($this->admin);
+        // When the platform admin opens the queue
+        $response = $this->listQueue($this->platformAdmin);
 
         // Then each row carries its own stage stamps, each in its own field
         $this->assertListed($response, [$resolved, $falseAlarm]);
@@ -204,8 +203,8 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
             'false_alarm' => $this->anIncident()->falseAlarm()->createOne(),
         ];
 
-        // When the admin filters the queue by this stage
-        $response = $this->listQueue($this->admin, ['stage' => $stage]);
+        // When the platform admin filters the queue by this stage
+        $response = $this->listQueue($this->platformAdmin, ['stage' => $stage]);
 
         // Then only that stage's incident is listed, and the filter is recorded with the read
         $this->assertListed($response, [$atStage[$stage]]);
@@ -220,8 +219,8 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
         $dueFirst = $this->anIncident()->dueAt('2026-05-10 09:00:00')->createOne();
         $dueSecond = $this->anIncident()->dueAt('2026-05-11 09:00:00')->createOne();
 
-        // When the admin opens the queue
-        $response = $this->listQueue($this->admin);
+        // When the platform admin opens the queue
+        $response = $this->listQueue($this->platformAdmin);
 
         // Then the soonest deadline comes first
         $this->assertListed($response, [$dueFirst, $dueSecond, $dueLast]);
@@ -237,8 +236,8 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
             ->withCompany($this->companyB, ['payroll', 'banking'], 7)
             ->createOne();
 
-        // When the admin opens the queue
-        $response = $this->listQueue($this->admin);
+        // When the platform admin opens the queue
+        $response = $this->listQueue($this->platformAdmin);
 
         // Then the row shows the incident's facts, its company count and their total, and the read left its evidence
         $response->assertExactJson([
@@ -348,9 +347,9 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
             'subject_id' => null,
             'subject_label' => null,
             'description' => 'Platform admin viewed a page of the breach queue.',
-            'actor_user_id' => $this->admin->getKey(),
+            'actor_user_id' => $this->platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $this->admin->name,
+            'actor_label' => $this->platformAdmin->name,
             'ip_address' => '127.0.0.1',
             'user_agent' => 'Symfony',
             'request_id' => $correlationId,
@@ -367,7 +366,7 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
      */
     protected function listQueueWithBody(array $body): TestResponse
     {
-        Sanctum::actingAs($this->admin);
+        Sanctum::actingAs($this->platformAdmin);
 
         return $this->json('GET', '/api/v1/admin/breach-incidents', $body);
     }

@@ -26,12 +26,12 @@ class NotifyBreachCompaniesOnceTest extends BreachIncidentsTestCase
         $breachId = $recorded ? $this->aRecordedIncident() : Str::uuid7()->toString();
         $parts = [$this->companyA->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.']];
         if ($notifiedBefore > 0) {
-            BreachIncident::retrieve($breachId)->notifyCompanies($this->admin, $parts)->persist();
+            BreachIncident::retrieve($breachId)->notifyCompanies($this->platformAdmin, $parts)->persist();
         }
 
         // When its companies are notified
         try {
-            BreachIncident::retrieve($breachId)->notifyCompanies($this->admin, $parts);
+            BreachIncident::retrieve($breachId)->notifyCompanies($this->platformAdmin, $parts);
             $this->fail('Notifying an incident that is not at Recorded must be refused.');
         } catch (BreachIncidentNotRecordedException $refusal) {
             // Then it is refused with its stage named and no further notice is recorded

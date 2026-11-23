@@ -38,34 +38,36 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Then the caller is refused as unauthenticated and nothing is recorded
         $this->assertUnauthenticated($response);
         $this->assertNothingRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
     public function when_a_company_owner_records_a_breach_then_the_admin_surface_is_not_acknowledged(): void
     {
         // Given the owner of an affected company, who is not a platform admin
-        $owner = $this->aCompanyMember($this->companyA, 'owner');
 
         // When the owner records a breach
-        $response = $this->recordBreach($owner, $this->validPayload());
+        $response = $this->recordBreach($this->owner, $this->validPayload());
 
         // Then the admin surface answers as if it did not exist and nothing is recorded
         $this->assertResourceNotFoundNoLeak($response);
         $this->assertNothingRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
     public function when_the_idempotency_key_is_missing_then_no_breach_is_recorded(): void
     {
-        // Given the admin sends no Idempotency-Key
+        // Given the platform admin sends no Idempotency-Key
         $this->idempotencyKey = null;
 
-        // When the admin records a breach
-        $response = $this->recordBreach($this->admin, $this->validPayload());
+        // When the platform admin records a breach
+        $response = $this->recordBreach($this->platformAdmin, $this->validPayload());
 
         // Then the request is refused for the missing key and nothing is recorded
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::IdempotencyKeyRequired);
         $this->assertNothingRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test, DataProvider('invalidBreachProvider')]
@@ -74,12 +76,13 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Given the clock reads 2026-05-10 09:00 UTC and one detail of the breach is invalid
         $this->travelTo(CarbonImmutable::parse('2026-05-10T09:00:00Z'));
 
-        // When the admin records the breach
-        $response = $this->recordBreach($this->admin, $this->payloadWith($changes));
+        // When the platform admin records the breach
+        $response = $this->recordBreach($this->platformAdmin, $this->payloadWith($changes));
 
         // Then the breach is refused on that detail and nothing is recorded
         $this->assertValidationRejected($response, $field, $message);
         $this->assertNothingRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -88,12 +91,13 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Given the audit write will fail
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the admin records a breach
-        $response = $this->recordBreach($this->admin, $this->validPayload());
+        // When the platform admin records a breach
+        $response = $this->recordBreach($this->platformAdmin, $this->validPayload());
 
         // Then the request fails safely and the event, the rows and the audit row are all absent
         $this->assertRecordFailedSafely($response);
         $this->assertNothingRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -102,8 +106,8 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Given the clock reads 2026-05-10 09:00 UTC, the moment the breach was discovered
         $this->travelTo(CarbonImmutable::parse('2026-05-10T09:00:00Z'));
 
-        // When the admin records it
-        $response = $this->recordBreach($this->admin, $this->validPayload(['dateDiscovered' => '2026-05-10T09:00:00Z']));
+        // When the platform admin records it
+        $response = $this->recordBreach($this->platformAdmin, $this->validPayload(['dateDiscovered' => '2026-05-10T09:00:00Z']));
 
         // Then it is recorded
         $this->assertIncidentProjected($this->assertIncidentCreated($response), [$this->companyA->getKey() => [['pii'], 40]]);
@@ -115,8 +119,8 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Given a breach discovered at 19:30 in Colombo (+05:30), which is 14:00 UTC
         $payload = $this->validPayload(['dateDiscovered' => '2026-05-04T19:30:00+05:30']);
 
-        // When the admin records it
-        $response = $this->recordBreach($this->admin, $payload);
+        // When the platform admin records it
+        $response = $this->recordBreach($this->platformAdmin, $payload);
 
         // Then the discovery moment and the deadline are kept in UTC
         $breach = BreachIncidentRecord::query()->findOrFail($this->assertIncidentCreated($response));
@@ -127,11 +131,11 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
     #[Test]
     public function when_a_low_severity_breach_is_recorded_then_it_is_recorded_like_any_other(): void
     {
-        // Given a breach the admin judges low severity
+        // Given a breach the platform admin judges low severity
         $payload = $this->validPayload(['severity' => 'low']);
 
-        // When the admin records it
-        $response = $this->recordBreach($this->admin, $payload);
+        // When the platform admin records it
+        $response = $this->recordBreach($this->platformAdmin, $payload);
 
         // Then it is recorded at stage recorded with its severity
         $this->assertDatabaseHas('breach_incidents', ['id' => $this->assertIncidentCreated($response), 'stage' => 'recorded', 'severity' => 'low']);
@@ -143,8 +147,8 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Given company A's number of affected people is not yet known
         $payload = $this->validPayload(['companies' => [['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => null]]]);
 
-        // When the admin records the breach
-        $response = $this->recordBreach($this->admin, $payload);
+        // When the platform admin records the breach
+        $response = $this->recordBreach($this->platformAdmin, $payload);
 
         // Then company A's count is left empty
         $this->assertIncidentProjected($this->assertIncidentCreated($response), [$this->companyA->getKey() => [['pii'], null]]);
@@ -156,8 +160,8 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // Given a breach discovered on 2026-05-04 at 14:00 UTC
         $payload = $this->validPayload(['dateDiscovered' => '2026-05-04T14:00:00Z']);
 
-        // When the admin records it
-        $response = $this->recordBreach($this->admin, $payload);
+        // When the platform admin records it
+        $response = $this->recordBreach($this->platformAdmin, $payload);
 
         // Then its deadline is 2026-05-07 at 14:00 UTC
         $breachId = $this->assertIncidentCreated($response);
@@ -174,8 +178,8 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
             ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll', 'banking'], 'estimatedCount' => 7],
         ]]);
 
-        // When the admin records the breach
-        $response = $this->recordBreach($this->admin, $payload);
+        // When the platform admin records the breach
+        $response = $this->recordBreach($this->platformAdmin, $payload);
 
         // Then each company keeps its own figures, stored per company and never as one incident-wide figure
         $this->assertIncidentProjected($this->assertIncidentCreated($response), [
@@ -217,7 +221,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         $this->travelTo(CarbonImmutable::parse('2026-05-10T09:00:00Z'));
 
         // When the platform admin records the breach
-        $response = $this->recordBreach($this->admin, $this->validPayload());
+        $response = $this->recordBreach($this->platformAdmin, $this->validPayload());
 
         // Then the incident is answered, stored as its genesis event, projected,
         // audited once with no company, and no one is told anything yet
@@ -305,7 +309,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
             'date_discovered' => '2026-05-04T14:00:00.000000Z',
             'deadline' => '2026-05-07T14:00:00.000000Z',
             'recorded_at' => '2026-05-10T09:00:00.000000Z',
-            'recorded_by' => $this->admin->getKey(),
+            'recorded_by' => $this->platformAdmin->getKey(),
             'deadline_missed_at' => null,
             'companies_notified_at' => null,
             'resolved_at' => null,
@@ -343,7 +347,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
 
         $properties = $event->event_properties;
         $this->assertNull($event->meta_data['company_id'] ?? null);
-        $this->assertSame([$breachId, $this->admin->getKey(), 'high'], [$properties['breachId'], $properties['recordedByUserId'], $properties['severity']]);
+        $this->assertSame([$breachId, $this->platformAdmin->getKey(), 'high'], [$properties['breachId'], $properties['recordedByUserId'], $properties['severity']]);
         $this->assertTrue(CarbonImmutable::parse($properties['deadline'])->equalTo(CarbonImmutable::parse('2026-05-07T14:00:00Z')));
         $this->assertSame([['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40]], $properties['companies']);
 
@@ -352,7 +356,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
 
     protected function assertRecordAudited(TestResponse $response, string $breachId, int $storedEventId): void
     {
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertDatabaseHas('audit_trail', [
             'company_id' => null,
             'stored_event_id' => $storedEventId,
@@ -364,17 +368,16 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
             'description' => 'Platform admin recorded a data breach.',
             'metadata' => null,
             'recorded_at' => '2026-05-10 09:00:00',
-            'actor_user_id' => $this->admin->getKey(),
+            'actor_user_id' => $this->platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $this->admin->name,
+            'actor_label' => $this->platformAdmin->name,
             'ip_address' => '127.0.0.1',
             'severity' => 'critical',
         ]);
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->sole();
-        $this->assertSame($correlationId, $entry->request_id);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
         $this->assertSame('Symfony', $entry->user_agent);
     }
 }

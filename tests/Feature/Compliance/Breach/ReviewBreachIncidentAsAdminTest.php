@@ -36,10 +36,9 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     {
         // Given an incident naming company A, and company A's owner, who is not a platform admin
         $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
-        $owner = $this->aCompanyMember($this->companyA, 'owner');
 
         // When the owner opens the incident
-        $response = $this->showIncident($owner, $incident->getKey());
+        $response = $this->showIncident($this->owner, $incident->getKey());
 
         // Then the admin surface is not acknowledged — not even their own company's incident — and no read is recorded
         $this->assertResourceNotFoundNoLeak($response);
@@ -52,8 +51,8 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     public function when_the_incident_does_not_exist_then_it_is_not_found(string $breachId): void
     {
         // Given no incident with this id
-        // When the admin opens it
-        $response = $this->showIncident($this->admin, $breachId);
+        // When the platform admin opens it
+        $response = $this->showIncident($this->platformAdmin, $breachId);
 
         // Then it is not found and no read is recorded
         $this->assertResourceNotFoundNoLeak($response);
@@ -68,8 +67,8 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the admin opens the incident
-        $response = $this->showIncident($this->admin, $incident->getKey());
+        // When the platform admin opens the incident
+        $response = $this->showIncident($this->platformAdmin, $incident->getKey());
 
         // Then the read fails closed — no incident data, and the evidence row was rolled back with it
         $this->assertFailedClosed($response);
@@ -86,8 +85,8 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
             ->withCompany($this->companyB, ['payroll'], $countB)
             ->createOne();
 
-        // When the admin opens the incident
-        $response = $this->showIncident($this->admin, $incident->getKey());
+        // When the platform admin opens the incident
+        $response = $this->showIncident($this->platformAdmin, $incident->getKey());
 
         // Then the total adds the known counts only, and is empty when none is known
         $response->assertOk();
@@ -105,8 +104,8 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
             ->withCompany($acme, ['payroll'], 9)
             ->createOne();
 
-        // When the admin opens the incident
-        $response = $this->showIncident($this->admin, $incident->getKey());
+        // When the platform admin opens the incident
+        $response = $this->showIncident($this->platformAdmin, $incident->getKey());
 
         // Then the companies are listed by name, whatever order they were added in
         $response->assertOk();
@@ -118,12 +117,11 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     {
         // Given an incident whose companies were notified — company A's owner has asked Lesily to file
         $incident = $this->anIncident()->companiesNotified()->createOne();
-        $owner = $this->aCompanyMember($this->companyA, 'owner');
-        BreachIncidentCompany::factory()->forIncident($incident, $this->companyA)->withFigures(['pii'], 40)->filingRequested($owner->getKey())->createOne();
+        BreachIncidentCompany::factory()->forIncident($incident, $this->companyA)->withFigures(['pii'], 40)->filingRequested($this->owner->getKey())->createOne();
         BreachIncidentCompany::factory()->forIncident($incident, $this->companyB)->withFigures(['payroll', 'banking'], 7)->notified()->createOne();
 
-        // When the admin opens the incident
-        $response = $this->showIncident($this->admin, $incident->getKey());
+        // When the platform admin opens the incident
+        $response = $this->showIncident($this->platformAdmin, $incident->getKey());
 
         // Then every fact of the incident and of each company is shown with the sum, and the read left its evidence
         $this->assertIncidentShown($response, $incident);
@@ -135,17 +133,16 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     {
         // Given an incident that missed its deadline, was filed with the regulator for company A, then was resolved
         $incident = $this->anIncident()->deadlineMissed()->resolved()->createOne();
-        $owner = $this->aCompanyMember($this->companyA, 'owner');
-        BreachIncidentCompany::factory()->forIncident($incident, $this->companyA)->filed($owner->getKey(), $this->admin->getKey())->createOne();
+        BreachIncidentCompany::factory()->forIncident($incident, $this->companyA)->filed($this->owner->getKey(), $this->platformAdmin->getKey())->createOne();
 
-        // When the admin opens the incident
-        $response = $this->showIncident($this->admin, $incident->getKey());
+        // When the platform admin opens the incident
+        $response = $this->showIncident($this->platformAdmin, $incident->getKey());
 
         // Then the missed deadline, the resolution and the filing are each shown in their own field
         $response->assertOk();
         $this->assertSame(
             [
-                '2026-05-08T00:00:00.000000Z', '2026-05-09T14:00:00.000000Z', $this->admin->getKey(),
+                '2026-05-08T00:00:00.000000Z', '2026-05-09T14:00:00.000000Z', $this->platformAdmin->getKey(),
                 $incident->root_cause, $incident->remediation_steps, $incident->resolution_summary,
                 '2026-05-07T14:00:00.000000Z',
             ],
@@ -163,13 +160,13 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         // Given an incident closed as a false alarm
         $incident = $this->anIncident()->falseAlarm()->withCompany($this->companyA, ['pii'], 40)->createOne();
 
-        // When the admin opens the incident
-        $response = $this->showIncident($this->admin, $incident->getKey());
+        // When the platform admin opens the incident
+        $response = $this->showIncident($this->platformAdmin, $incident->getKey());
 
         // Then when, by whom, why and what was found are each shown in their own field
         $response->assertOk();
         $this->assertSame(
-            ['2026-05-05T14:00:00.000000Z', $this->admin->getKey(), $incident->false_alarm_reason, $incident->false_alarm_findings],
+            ['2026-05-05T14:00:00.000000Z', $this->platformAdmin->getKey(), $incident->false_alarm_reason, $incident->false_alarm_findings],
             [
                 $response->json('data.false_alarm_at'), $response->json('data.false_alarm_by'),
                 $response->json('data.false_alarm_reason'), $response->json('data.false_alarm_findings'),
@@ -188,15 +185,15 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         $correction->amendedAt('2026-05-05 09:00:00')->createOne();
         $correction->amendedAt('2026-05-06 10:00:00')->forCompany($this->companyA)->changing(BreachAmendmentField::DataTypes, ['pii'], ['pii', 'banking'])->createOne(['reason' => 'The export held bank details.']);
 
-        // When the admin opens the incident
-        $response = $this->showIncident($this->admin, $incident->getKey());
+        // When the platform admin opens the incident
+        $response = $this->showIncident($this->platformAdmin, $incident->getKey());
 
         // Then the history lists the 6 May request first, its changes by field, then the 5 May correction
         $response->assertOk();
         $this->assertSame([
-            ['field' => 'data_types', 'company_id' => $this->companyA->getKey(), 'old_value' => ['pii'], 'new_value' => ['pii', 'banking'], 'reason' => 'The export held bank details.', 'amended_by' => $this->admin->getKey(), 'amended_at' => '2026-05-06T10:00:00.000000Z'],
-            ['field' => 'severity', 'company_id' => null, 'old_value' => 'high', 'new_value' => 'critical', 'reason' => 'The export held bank details.', 'amended_by' => $this->admin->getKey(), 'amended_at' => '2026-05-06T10:00:00.000000Z'],
-            ['field' => 'description', 'company_id' => null, 'old_value' => 'A payroll export was emailed to the wrong recipient.', 'new_value' => 'Payroll and bank export left on a shared drive', 'reason' => 'An earlier log entry showed the export reached a second shared folder.', 'amended_by' => $this->admin->getKey(), 'amended_at' => '2026-05-05T09:00:00.000000Z'],
+            ['field' => 'data_types', 'company_id' => $this->companyA->getKey(), 'old_value' => ['pii'], 'new_value' => ['pii', 'banking'], 'reason' => 'The export held bank details.', 'amended_by' => $this->platformAdmin->getKey(), 'amended_at' => '2026-05-06T10:00:00.000000Z'],
+            ['field' => 'severity', 'company_id' => null, 'old_value' => 'high', 'new_value' => 'critical', 'reason' => 'The export held bank details.', 'amended_by' => $this->platformAdmin->getKey(), 'amended_at' => '2026-05-06T10:00:00.000000Z'],
+            ['field' => 'description', 'company_id' => null, 'old_value' => 'A payroll export was emailed to the wrong recipient.', 'new_value' => 'Payroll and bank export left on a shared drive', 'reason' => 'An earlier log entry showed the export reached a second shared folder.', 'amended_by' => $this->platformAdmin->getKey(), 'amended_at' => '2026-05-05T09:00:00.000000Z'],
         ], $response->json('data.amendments'));
     }
 
@@ -248,7 +245,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
             'date_discovered' => '2026-05-04T14:00:00.000000Z',
             'deadline' => '2026-05-07T14:00:00.000000Z',
             'recorded_at' => '2026-05-04T14:00:00.000000Z',
-            'recorded_by' => $this->admin->getKey(),
+            'recorded_by' => $this->platformAdmin->getKey(),
             'deadline_missed_at' => null,
             'companies_notified_at' => '2026-05-05T14:00:00.000000Z',
             'resolved_at' => null,
@@ -290,9 +287,9 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
             'subject_id' => $incident->getKey(),
             'subject_label' => null,
             'description' => 'Platform admin viewed a data breach.',
-            'actor_user_id' => $this->admin->getKey(),
+            'actor_user_id' => $this->platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $this->admin->name,
+            'actor_label' => $this->platformAdmin->name,
             'ip_address' => '127.0.0.1',
             'user_agent' => 'Symfony',
             'request_id' => $correlationId,

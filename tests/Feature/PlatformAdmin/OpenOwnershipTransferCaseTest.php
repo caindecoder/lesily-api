@@ -9,6 +9,7 @@ use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Companies\Entities\CompanyUser;
+use App\Consent\Events\ConsentRecorded;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
@@ -16,23 +17,12 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 {
-    protected Company $company;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->company = Company::factory()->create();
-    }
-
     #[Test]
     public function when_a_non_allowlisted_caller_attempts_to_open_a_case_then_the_admin_surface_is_not_acknowledged(): void
     {
-        // Given a tenant Owner outside the platform-admin allowlist
-        $owner = $this->aCompanyMember($this->company, 'owner');
-
+        // Given Contoso's owner, outside the platform-admin allowlist
         // When they call the open-case endpoint with a valid payload
-        $response = $this->openCase($owner, $this->validPayload());
+        $response = $this->openCase($this->owner, $this->validPayload());
 
         // Then the admin surface is never acknowledged and nothing is written
         $this->assertResourceNotFoundNoLeak($response);
@@ -57,7 +47,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given an allowlisted platform admin
         // When they submit a payload carrying this row's defect
-        $response = $this->openCase($this->admin, $this->validPayload($overrides));
+        $response = $this->openCase($this->platformAdmin, $this->validPayload($overrides));
 
         // Then the case is refused naming the offending field and nothing is written
         $this->assertValidationRejected($response, $field, $message);
@@ -72,8 +62,8 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // arrange: only the company_id scoping can reject this user)
         $foreignMember = $this->aCompanyMember(Company::factory()->create(), 'employee');
 
-        // When the admin proposes them as the incoming owner
-        $response = $this->openCase($this->admin, $this->validPayload([
+        // When the platform admin proposes them as the incoming owner
+        $response = $this->openCase($this->platformAdmin, $this->validPayload([
             'newOwnerUserId' => $foreignMember->getKey(),
         ]));
 
@@ -85,13 +75,12 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     #[Test]
     public function when_the_proposed_incoming_owner_holds_only_a_removed_membership_then_the_case_is_refused(): void
     {
-        // Given a user whose membership in the company was removed
-        $removed = $this->aCompanyMember($this->company, 'employee');
-        $this->company->users()->updateExistingPivot($removed->getKey(), ['deleted_at' => now()]);
+        // Given Contoso's employee, whose membership in the company was removed
+        $this->softDeleteMembership($this->company, $this->employee);
 
-        // When the admin proposes them as the incoming owner
-        $response = $this->openCase($this->admin, $this->validPayload([
-            'newOwnerUserId' => $removed->getKey(),
+        // When the platform admin proposes them as the incoming owner
+        $response = $this->openCase($this->platformAdmin, $this->validPayload([
+            'newOwnerUserId' => $this->employee->getKey(),
         ]));
 
         // Then the case is refused — an active member means a live pivot
@@ -105,8 +94,8 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given the audit write will fail
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the admin opens a case
-        $response = $this->openCase($this->admin, $this->validPayload());
+        // When the platform admin opens a case
+        $response = $this->openCase($this->platformAdmin, $this->validPayload());
 
         // Then the whole transaction rolls back — a case exists only alongside its audit row
         $this->assertOpenFailedSafely($response);
@@ -118,7 +107,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given company Contoso owned by its live owner
         // When the platform admin opens a case for it
-        $response = $this->openCase($this->admin, $this->validPayload());
+        $response = $this->openCase($this->platformAdmin, $this->validPayload());
 
         // Then the case records that owner as the expected owner of the handover
         $this->assertExpectedOwnerRecorded($response, $this->company);
@@ -128,42 +117,40 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_the_incoming_owner_is_not_yet_known_then_the_case_opens_without_one(): void
     {
         // Given the incoming owner is not yet known
-        // When the admin opens a case with only the company and the context
-        $response = $this->openCase($this->admin, $this->validPayload());
+        // When the platform admin opens a case with only the company and the context
+        $response = $this->openCase($this->platformAdmin, $this->validPayload());
 
         // Then the case is open with no incoming owner and the audit row is present
         $this->assertCaseOpened($response, ['new_owner_user_id' => null]);
-        $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'), $response);
+        $this->assertCaseOpenAudited($this->platformAdmin, (string) $response->json('data.id'), $response);
     }
 
     #[Test]
     public function when_a_case_is_opened_with_a_blank_new_owner_then_it_opens_without_a_designated_successor(): void
     {
         // Given the incoming owner is sent as a blank value rather than omitted
-        // When the admin opens the case
-        $response = $this->openCase($this->admin, $this->validPayload(['newOwnerUserId' => '']));
+        // When the platform admin opens the case
+        $response = $this->openCase($this->platformAdmin, $this->validPayload(['newOwnerUserId' => '']));
 
         // Then the case is open with no incoming owner and the audit row is present
         $this->assertCaseOpened($response, ['new_owner_user_id' => null]);
-        $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'), $response);
+        $this->assertCaseOpenAudited($this->platformAdmin, (string) $response->json('data.id'), $response);
     }
 
     #[Test]
     public function when_a_platform_admin_opens_a_case_for_a_company_then_the_case_is_on_the_record(): void
     {
-        // Given company Contoso and Alex, a live member proposed as incoming owner
-        $alex = $this->aCompanyMember($this->company, 'employee');
-
-        // When the platform admin opens the case naming Alex
-        $response = $this->openCase($this->admin, $this->validPayload([
-            'newOwnerUserId' => $alex->getKey(),
+        // Given company Contoso and its employee, a live member proposed as incoming owner
+        // When the platform admin opens the case naming the employee
+        $response = $this->openCase($this->platformAdmin, $this->validPayload([
+            'newOwnerUserId' => $this->employee->getKey(),
         ]));
 
         // Then the case is on the record, exactly one audit row names the
-        // admin, and nothing about the company changed
-        $this->assertCaseOpened($response, ['new_owner_user_id' => $alex->getKey()]);
-        $this->assertCaseOpenAudited($this->admin, (string) $response->json('data.id'), $response);
-        $this->assertCompanyUntouched($this->company, $alex);
+        // platform admin, and nothing about the company changed
+        $this->assertCaseOpened($response, ['new_owner_user_id' => $this->employee->getKey()]);
+        $this->assertCaseOpenAudited($this->platformAdmin, (string) $response->json('data.id'), $response);
+        $this->assertCompanyUntouched($this->company, $this->employee);
     }
 
     /**
@@ -257,7 +244,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
      */
     protected function assertCaseOpenAudited(User $actor, string $caseId, TestResponse $response): void
     {
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
         $this->assertDatabaseHas('audit_trail', [
             'event_class' => 'OwnershipTransferCaseOpened',
             'subject_type' => 'ownership_transfer_case',
@@ -277,8 +264,7 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->sole();
-        $this->assertSame($correlationId, $entry->request_id);
+        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
         $this->assertSame('Symfony', $entry->user_agent);
     }
 
@@ -299,7 +285,8 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     /**
      * Opening a case changed nothing about the company (UC-1-140
      * postcondition): the owner column still names the pre-act owner, the
-     * company's stream recorded no domain event, and the proposed owner's
+     * company's stream holds no non-consent domain event beyond the
+     * ready-made company's, and the proposed owner's
      * pivot role is untouched — a case is a record, never a transfer.
      */
     protected function assertCompanyUntouched(Company $company, User $proposed): void
@@ -307,8 +294,9 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $ownerBefore = $company->owner_id;
         $this->assertSame($ownerBefore, $company->refresh()->owner_id);
 
-        $this->assertSame(0, LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $company->getKey())
+        $this->assertSame(self::READY_MADE_NON_CONSENT_EVENTS, LesilyStoredEvent::query()
+            ->whereForCompany($company->getKey())
+            ->where('event_class', '!=', ConsentRecorded::class)
             ->count());
 
         $this->assertSame(
@@ -332,13 +320,14 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     }
 
     /**
-     * Nothing was opened — zero case rows and zero audit rows (the UC-1-140
+     * Nothing was opened — zero case rows and no audit row beyond the
+     * ready-made company's (the UC-1-140
      * refusal invariant: no case without its audit evidence, no evidence
      * without a case).
      */
     protected function assertNoCaseOpened(): void
     {
         $this->assertDatabaseCount('ownership_transfer_cases', 0);
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 }

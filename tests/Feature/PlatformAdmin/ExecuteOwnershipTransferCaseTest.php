@@ -40,65 +40,61 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // When the execute endpoint is called as a guest
         $response = $this->executeCase(null, (string) Str::uuid7());
 
-        // Then the request is rejected as unauthenticated and nothing is audited
+        // Then the request is rejected as unauthenticated and nothing is audited beyond the ready-made company's rows
         $this->assertUnauthenticated($response);
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
     public function when_a_non_allowlisted_caller_attempts_to_execute_a_case_then_the_admin_surface_is_not_acknowledged(): void
     {
-        // Given tenant Owner Olive and HER OWN company's verified case
-        $company = Company::factory()->create();
-        $owner = $this->aCompanyMember($company, 'owner');
-        $company->update(['owner_id' => $owner->getKey()]);
-        $case = $this->aVerifiedCaseFor($company);
+        // Given Contoso's owner and HER OWN company's verified case
+        $case = $this->aVerifiedCaseFor($this->company);
 
         // When she calls the execute endpoint for that case
-        $response = $this->executeCase($owner, $case->getKey());
+        $response = $this->executeCase($this->owner, $case->getKey());
 
         // Then the admin surface is never acknowledged and nothing moved
         $this->assertResourceNotFoundNoLeak($response);
-        $this->assertNothingExecuted($case, $owner->getKey());
+        $this->assertNothingExecuted($case, $this->owner->getKey());
     }
 
     #[Test]
     public function when_the_case_id_is_unknown_then_nothing_is_found_and_no_execution_is_recorded(): void
     {
-        // Given an allowlisted admin and no case at all
+        // Given an allowlisted platform admin and no case at all
         // When they execute an unknown case id
-        $response = $this->executeCase($this->admin, (string) Str::uuid7());
+        $response = $this->executeCase($this->platformAdmin, (string) Str::uuid7());
 
-        // Then nothing is found and nothing is audited (find-before-audit)
+        // Then nothing is found and nothing is audited beyond the ready-made company's rows (find-before-audit)
         $this->assertResourceNotFoundNoLeak($response);
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
     public function when_the_case_id_is_not_a_uuid_then_execution_is_refused_as_invalid(): void
     {
-        // Given an allowlisted admin and a case reference that is not a UUID
+        // Given an allowlisted platform admin and a case reference that is not a UUID
         // When they execute it
-        $response = $this->executeCase($this->admin, 'not-a-uuid');
+        $response = $this->executeCase($this->platformAdmin, 'not-a-uuid');
 
-        // Then the reference is refused as invalid and nothing is audited
+        // Then the reference is refused as invalid and nothing is audited beyond the ready-made company's rows
         $this->assertValidationRejected($response, 'caseId', 'The case id field must be a valid UUID.');
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
     public function when_the_idempotency_key_is_missing_then_the_execution_is_refused(): void
     {
-        // Given a verified case an allowlisted admin could otherwise execute
-        $company = Company::factory()->create();
-        $case = $this->aVerifiedCaseFor($company);
+        // Given a verified case an allowlisted platform admin could otherwise execute
+        $case = $this->aVerifiedCaseFor($this->company);
 
         // When the execute is submitted without an Idempotency-Key
-        $response = $this->executeCaseWithoutIdempotencyKey($this->admin, $case->getKey());
+        $response = $this->executeCaseWithoutIdempotencyKey($this->platformAdmin, $case->getKey());
 
         // Then the execution is refused as missing its key and nothing moved
         $this->assertRefusedAsMissingIdempotencyKey($response);
-        $this->assertNothingExecuted($case, $company->owner_id);
+        $this->assertNothingExecuted($case, $this->company->owner_id);
     }
 
     #[Test]
@@ -106,22 +102,21 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_the_case_is_not_verified_then_the_execution_is_refused_with_the_current_state_named(string $fixture, string $stateName): void
     {
         // Given a case that is not verified
-        $company = Company::factory()->create();
         $case = match ($fixture) {
-            'open' => $this->anOpenCaseFor($company),
-            'closedExecuted' => $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Executed),
-            'closedRejected' => $this->aClosedCaseFor($company, OwnershipTransferCaseOutcome::Rejected),
+            'open' => $this->anOpenCaseFor($this->company),
+            'closedExecuted' => $this->aClosedCaseFor($this->company, OwnershipTransferCaseOutcome::Executed),
+            'closedRejected' => $this->aClosedCaseFor($this->company, OwnershipTransferCaseOutcome::Rejected),
             default => $this->fail('Unknown case fixture token: '.$fixture),
         };
 
-        // When the admin attempts to execute it
-        $response = $this->executeCase($this->admin, $case->getKey());
+        // When the platform admin attempts to execute it
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the refusal names the case's current state and nothing moved
         $response->assertConflict();
         $response->assertJsonPath('error_code', 'STATE_GUARD_VIOLATION');
         $response->assertJsonPath('message', 'Only a verified ownership-transfer case can be executed; this case is '.$stateName.'.');
-        $this->assertNothingExecuted($case, $company->owner_id);
+        $this->assertNothingExecuted($case, $this->company->owner_id);
     }
 
     /**
@@ -140,37 +135,33 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_the_case_is_unverified_and_the_member_is_gone_then_the_state_refusal_wins(): void
     {
         // Given an OPEN case whose proposed owner's membership was since removed
-        $company = Company::factory()->create();
-        $gone = $this->aCompanyMember($company, 'employee');
-        $case = $this->anOpenCaseFor($company, $gone);
-        $company->users()->updateExistingPivot($gone->getKey(), ['deleted_at' => now()]);
+        $case = $this->anOpenCaseFor($this->company, $this->employee);
+        $this->softDeleteMembership($this->company, $this->employee);
 
-        // When the admin attempts to execute it
-        $response = $this->executeCase($this->admin, $case->getKey());
+        // When the platform admin attempts to execute it
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the refusal is the STATE guard's, asked before any cross-entity
         // work — never the member guard's (the 422-where-409 leak, P14)
         $response->assertConflict();
         $response->assertJsonPath('message', 'Only a verified ownership-transfer case can be executed; this case is open.');
-        $this->assertNothingExecuted($case, $company->owner_id);
+        $this->assertNothingExecuted($case, $this->company->owner_id);
     }
 
     #[Test]
     public function when_the_recorded_new_owner_is_no_longer_an_active_member_then_the_execution_is_refused(): void
     {
-        // Given a verified case naming Alex, whose membership was since removed
-        $company = Company::factory()->create();
-        $alex = $this->aCompanyMember($company, 'employee');
-        $case = $this->aVerifiedCaseFor($company, $alex);
-        $company->users()->updateExistingPivot($alex->getKey(), ['deleted_at' => now()]);
+        // Given a verified case naming Contoso's employee, whose membership was since removed
+        $case = $this->aVerifiedCaseFor($this->company, $this->employee);
+        $this->softDeleteMembership($this->company, $this->employee);
 
-        // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        // When the platform admin executes the case
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the execution is refused on the vanished member and the case stays verified
         $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'TARGET_NOT_MEMBER');
-        $this->assertNothingExecuted($case, $company->owner_id);
+        $this->assertNothingExecuted($case, $this->company->owner_id);
     }
 
     #[Test]
@@ -183,8 +174,8 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $bob = $this->aCompanyMember($company, 'admin');
         $company->update(['owner_id' => $bob->getKey()]);
 
-        // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        // When the platform admin executes the case
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the world has moved — the execution is refused and the case stays verified
         $response->assertConflict();
@@ -202,10 +193,10 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $case = $this->aVerifiedCaseFor($company, $alex);
         $bob = $this->aCompanyMember($company, 'admin');
         $company->update(['owner_id' => $bob->getKey()]);
-        $company->users()->updateExistingPivot($alex->getKey(), ['deleted_at' => now()]);
+        $this->softDeleteMembership($company, $alex);
 
-        // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        // When the platform admin executes the case
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the STALE refusal wins — 409 answers the world moving before
         // any cross-entity complaint (the owner seat is the deeper premise)
@@ -219,18 +210,16 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given a verified case, a live incoming member, and a case-executed
         // audit write that will fail AFTER its row is inserted (the post-insert oracle)
-        $company = $this->aCompanyWithItsOwner();
-        $alex = $this->aCompanyMember($company, 'employee');
-        $case = $this->aVerifiedCaseFor($company, $alex);
+        $case = $this->aVerifiedCaseFor($this->company, $this->employee);
         $this->onTheCaseExecutedRow(fn () => throw new RuntimeException('induced audit failure'));
 
-        // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        // When the platform admin executes the case
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the ONE transaction takes back the swap, the event, the close
         // and the already-inserted audit row together
         $this->assertFailedClosed($response);
-        $this->assertNothingExecuted($case, $company->owner_id);
+        $this->assertNothingExecuted($case, $this->company->owner_id);
     }
 
     /**
@@ -246,13 +235,11 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given a verified case, a live incoming member, and a write inside
         // the OUTER locked transaction — after the composed transfer — that
         // dies the way the driver reports it
-        $company = $this->aCompanyWithItsOwner();
-        $alex = $this->aCompanyMember($company, 'employee');
-        $case = $this->aVerifiedCaseFor($company, $alex);
+        $case = $this->aVerifiedCaseFor($this->company, $this->employee);
         $this->onTheCaseExecutedRow(fn () => throw $this->syntheticQueryException($failure));
 
-        // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        // When the platform admin executes the case
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then contention answers as a conflict; anything else passes through
         // (render only — the audit-veto row is the atomicity net)
@@ -264,17 +251,15 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given a verified case whose incoming owner IS the company's live owner
         // (verification legally permits it — the owner is a live member)
-        $company = Company::factory()->create();
-        $owner = User::query()->findOrFail($company->owner_id);
-        $case = $this->aVerifiedCaseFor($company, $owner);
+        $case = $this->aVerifiedCaseFor($this->company, $this->owner);
 
-        // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        // When the platform admin executes the case
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the generalized self-guard refuses — an owner cannot succeed themselves
         $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'SELF_TRANSFER_BLOCKED');
-        $this->assertNothingExecuted($case, $company->owner_id);
+        $this->assertNothingExecuted($case, $this->company->owner_id);
     }
 
     #[Test]
@@ -282,33 +267,29 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given a verified case whose incoming owner has NO emergency contact
         // on their membership (the §10b mandate flags-and-prompts, never blocks)
-        $company = $this->aCompanyWithItsOwner();
-        $alex = $this->aCompanyMember($company, 'employee');
-        $case = $this->aVerifiedCaseFor($company, $alex);
+        $case = $this->aVerifiedCaseFor($this->company, $this->employee);
 
-        // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        // When the platform admin executes the case
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the execution completes — the missing contact never blocks it
         $response->assertOk();
         $fresh = $case->fresh();
         $this->assertInstanceOf(OwnershipTransferCase::class, $fresh);
         $this->assertSame('closed', $fresh->status->value);
-        $this->assertSame($alex->getKey(), Company::query()->whereKey($case->company_id)->sole()->owner_id);
+        $this->assertSame($this->employee->getKey(), Company::query()->whereKey($case->company_id)->sole()->owner_id);
     }
 
     #[Test]
     public function when_the_same_idempotency_key_is_replayed_then_the_transfer_is_not_executed_twice(): void
     {
         // Given a verified case executed once under an explicit key
-        $company = $this->aCompanyWithItsOwner();
-        $alex = $this->aCompanyMember($company, 'employee');
-        $case = $this->aVerifiedCaseFor($company, $alex);
+        $case = $this->aVerifiedCaseFor($this->company, $this->employee);
         $key = (string) Str::uuid7();
-        $this->executeCase($this->admin, $case->getKey(), $key)->assertOk();
+        $this->executeCase($this->platformAdmin, $case->getKey(), $key)->assertOk();
 
         // When the identical request is replayed under the SAME key
-        $replay = $this->executeCase($this->admin, $case->getKey(), $key);
+        $replay = $this->executeCase($this->platformAdmin, $case->getKey(), $key);
 
         // Then the remembered response returns and nothing runs twice
         $this->assertExecutedExactlyOnce($case, $replay);
@@ -319,26 +300,22 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given a company whose ownership already moved once via the REAL
         // routine path (event 1, caseId NULL) …
-        $company = $this->aCompanyWithItsOwner();
-        $olive = User::query()->findOrFail($company->owner_id);
-        $bob = $this->aCompanyMember($company, 'admin');
         app(TransferCompanyOwnershipInteractor::class)->execute(
             TransferCompanyOwnershipCommand::validateAndCreate([
-                'company' => $company,
-                'newOwnerUserId' => $bob->getKey(),
-                'transferredBy' => $olive,
+                'company' => $this->company,
+                'newOwnerUserId' => $this->admin->getKey(),
+                'transferredBy' => $this->owner,
                 'source' => TransferSource::SelfService,
             ]),
-            $olive->getKey(),
+            $this->owner->getKey(),
             new RequestOrigin(null, null, null),
         );
 
         // … and a case opened AFTERWARDS, verified for a third member
-        $carol = $this->aCompanyMember($company->refresh(), 'employee');
-        $case = $this->aVerifiedCaseFor($company, $carol);
+        $case = $this->aVerifiedCaseFor($this->company->refresh(), $this->employee);
 
-        // When the admin executes the case (event 2, caseId set)
-        $this->executeCase($this->admin, $case->getKey())->assertOk();
+        // When the platform admin executes the case (event 2, caseId set)
+        $this->executeCase($this->platformAdmin, $case->getKey())->assertOk();
 
         // Then the closed case cites ITS OWN event by identity, never the older routine one
         $this->assertClosedCaseCitesItsOwnTransferEvent($case);
@@ -347,55 +324,49 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     #[Test]
     public function when_the_admin_executes_a_verified_case_then_both_role_changes_are_audited_as_lesily_support(): void
     {
-        // Given Contoso with its owner Olive, a verified case naming HR officer Alex, and a known device
-        $company = $this->aCompanyWithItsOwner();
-        $olive = User::query()->findOrFail($company->owner_id);
-        $alex = $this->aCompanyMember($company, 'hr_officer');
-        $case = $this->aVerifiedCaseFor($company, $alex);
+        // Given Contoso with its owner, a verified case naming HR officer Alex, and a known device
+        $alex = $this->aCompanyMember($this->company, 'hr_officer');
+        $case = $this->aVerifiedCaseFor($this->company, $alex);
         Queue::fake();
         $this->fromADevice();
 
-        // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        // When the platform admin executes the case
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
-        // Then both role moves are audited — Olive owner to admin, Alex HR officer to owner — as Lesily support
+        // Then both role moves are audited — Contoso's owner to admin, Alex HR officer to owner — as Lesily support
         $response->assertOk();
-        $this->assertRoleChangeAudited($response, $this->pivotOf($case, $olive), 'owner');
+        $this->assertRoleChangeAudited($response, $this->pivotOf($case, $this->owner), 'owner');
         $this->assertRoleChangeAudited($response, $this->pivotOf($case, $alex), 'hr_officer');
         $this->assertSame(2, AuditEntry::query()->where('action', AuditAction::RoleChanged)->count());
-        $this->assertEveryRowActedBy(AuditAction::RoleChanged, $this->admin, 'platform_super_admin');
+        $this->assertEveryRowActedBy(AuditAction::RoleChanged, $this->platformAdmin, 'platform_super_admin');
     }
 
     #[Test]
     public function when_the_admin_executes_a_verified_case_then_the_ownership_moves_whole(): void
     {
-        // Given a frozen clock, Contoso recording Olive as its owner, and a
-        // verified case naming live member Alex (emergency contact on file)
+        // Given a frozen clock, Contoso recording its owner, and a verified
+        // case naming its employee, a live member (emergency contact on file)
         $this->freezeTime();
         Mail::fake();
-        $company = Company::factory()->create();
-        $olive = User::query()->findOrFail($company->owner_id);
-        $company->users()->attach($olive->getKey(), ['role_id' => $this->seededRole('owner')->getKey()]);
-        $alex = $this->aCompanyMember($company, 'employee');
-        $company->users()->updateExistingPivot($alex->getKey(), [
+        $this->company->users()->updateExistingPivot($this->employee->getKey(), [
             'emergency_contact_name' => 'Sam Perera',
             'emergency_contact_email' => 'sam@example.com',
         ]);
-        $case = $this->aVerifiedCaseFor($company, $alex);
+        $case = $this->aVerifiedCaseFor($this->company, $this->employee);
         Queue::fake();
 
-        // When the admin executes the case
-        $response = $this->executeCase($this->admin, $case->getKey());
+        // When the platform admin executes the case
+        $response = $this->executeCase($this->platformAdmin, $case->getKey());
 
         // Then the swap, the recorded fact, the closed case, the audit row
-        // and the wire contract land whole — and only Alex is told
-        $eventId = $this->assertAdminTransferRecorded($case, $olive, $alex);
-        $this->assertOwnershipMovedByCase($case, $olive, $alex);
+        // and the wire contract land whole — and only the employee is told
+        $eventId = $this->assertAdminTransferRecorded($case, $this->owner, $this->employee);
+        $this->assertOwnershipMovedByCase($case, $this->owner, $this->employee);
         $this->assertCaseClosedExecuted($case, $eventId);
         $this->assertExecutionAudited($case, $eventId, $response);
         $this->assertExecutedCaseOnTheWire($response, $case);
         $this->runQueuedHandlersFor(CompanyOwnershipTransferred::class);
-        $this->assertOnlyNewOwnerNotifiedOfCase($company, $alex, $olive);
+        $this->assertOnlyNewOwnerNotifiedOfCase($this->company, $this->employee, $this->owner);
     }
 
     /**
@@ -458,7 +429,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     /**
      * Exactly ONE CompanyOwnershipTransferred names this case in its payload
      * (sole — by identity), pinned end-to-end: previous/new owner, the acting
-     * admin as transferredBy, and source=admin. Returns the stored-event id
+     * platform admin as transferredBy, and source=admin. Returns the stored-event id
      * the close and the audit row must both cite.
      */
     protected function assertAdminTransferRecorded(OwnershipTransferCase $case, User $from, User $to): int
@@ -472,7 +443,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
 
         $this->assertSame($from->getKey(), $event->event_properties['previousOwnerUserId']);
         $this->assertSame($to->getKey(), $event->event_properties['newOwnerUserId']);
-        $this->assertSame($this->admin->getKey(), $event->event_properties['transferredBy']);
+        $this->assertSame($this->platformAdmin->getKey(), $event->event_properties['transferredBy']);
         $this->assertSame('admin', $event->event_properties['source']);
 
         return (int) $event->getKey();
@@ -507,7 +478,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $this->assertSame('closed', $fresh->status->value);
         $this->assertSame('executed', $fresh->closed_outcome?->value);
         $this->assertSame(now()->toDateTimeString(), $fresh->executed_at?->toDateTimeString());
-        $this->assertSame($this->admin->getKey(), $fresh->executed_by);
+        $this->assertSame($this->platformAdmin->getKey(), $fresh->executed_by);
         $this->assertSame($transferEventId, $fresh->transfer_event_id);
         $this->assertSame($case->verified_at?->toDateTimeString(), $fresh->verified_at?->toDateTimeString());
     }
@@ -521,7 +492,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
      */
     protected function assertExecutionAudited(OwnershipTransferCase $case, int $transferEventId, TestResponse $response): void
     {
-        $this->assertDatabaseCount('audit_trail', 3);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 3);
         $this->assertSame(1, AuditEntry::query()->where('action', AuditAction::CaseExecuted)->count());
         $this->assertDatabaseHas('audit_trail', [
             'event_class' => 'CompanyOwnershipTransferred',
@@ -531,9 +502,9 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             'action' => 'case_executed',
             'description' => 'Platform admin executed a verified ownership-transfer case.',
             'company_id' => $case->company_id,
-            'actor_user_id' => $this->admin->getKey(),
+            'actor_user_id' => $this->platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $this->admin->name,
+            'actor_label' => $this->platformAdmin->name,
             'stored_event_id' => $transferEventId,
             'metadata' => null,
             'severity' => 'info',
@@ -636,7 +607,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
      * The duplicate submission did NOT re-run the execution — the second
      * response is the remembered one (200 + the replay marker header), the
      * company's stream holds exactly ONE transfer event beside exactly ONE
-     * audit row, and the case is still closed executed.
+     * case_executed audit row, and the case is still closed executed.
      */
     protected function assertExecutedExactlyOnce(OwnershipTransferCase $case, TestResponse $replay): void
     {
@@ -647,7 +618,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             ->where('aggregate_uuid', $case->company_id)
             ->where('event_class', CompanyOwnershipTransferred::class)
             ->count());
-        $this->assertDatabaseCount('audit_trail', 3);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 3);
         $this->assertSame(1, AuditEntry::query()->where('action', AuditAction::CaseExecuted)->count());
 
         $fresh = $case->fresh();
@@ -659,7 +630,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     /**
      * Nothing was executed — the case row is exactly as arranged, the
      * company's stream carries no CompanyOwnershipTransferred event, no audit
-     * row exists, the company's owner column still names $ownerUserId, and
+     * row exists beyond the ready-made company's, the company's owner column still names $ownerUserId, and
      * nobody else was promoted to an owner-role pivot (the split-brain arm:
      * a half-applied swap must fail here even if everything else rolls back).
      */
@@ -672,7 +643,7 @@ class ExecuteOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
             ->where('event_class', CompanyOwnershipTransferred::class)
             ->count());
 
-        $this->assertNoAuditRecorded();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
 
         $this->assertSame($ownerUserId, Company::query()->whereKey($case->company_id)->sole()->owner_id);
 
