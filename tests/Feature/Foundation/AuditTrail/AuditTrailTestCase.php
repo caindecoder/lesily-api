@@ -14,11 +14,11 @@ use Tests\Feature\Foundation\FoundationTestCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
-use Tests\Feature\Foundation\WithRolePermissionFixtures;
+use Tests\Feature\Companies\Memberships\CreatesMemberships;
 
 abstract class AuditTrailTestCase extends FoundationTestCase
 {
-    use FreeTierCompany, WithRolePermissionFixtures;
+    use CreatesMemberships, FreeTierCompany;
 
     protected Company $companyA;
 

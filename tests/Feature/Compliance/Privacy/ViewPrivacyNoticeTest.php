@@ -80,7 +80,7 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
             ->create();
         $this->attachMember($fabrikam, $this->owner, $this->seededRole('owner'));
 
-        // When she views Contoso's privacy notice
+        // When the owner views Contoso's privacy notice
         $response = $this->viewNotice($this->owner, $this->company);
 
         // Then only Contoso appears; nothing of Fabrikam does

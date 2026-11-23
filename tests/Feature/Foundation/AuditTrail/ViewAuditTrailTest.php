@@ -141,7 +141,7 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     #[Test]
     public function when_the_company_has_no_entries_then_the_list_is_empty(): void
     {
-        // Given only company A has an audit entry, and B's owner
+        // Given only company A has audit entries, and B's owner
         AuditEntry::factory()->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
         $owner = $this->aCompanyMember($this->companyB, 'owner');
 
@@ -220,7 +220,7 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         // When the owner asks for pages of one hundred
         $response = $this->viewAuditTrail($this->owner, $this->companyA, ['per_page' => 100]);
 
-        // Then all sixteen are listed on one page
+        // Then all sixteen and Contoso's creation rows are listed on one page
         $response->assertJsonCount(self::READY_MADE_AUDIT_ROWS + 16, 'data');
         $this->assertPageShown($response, ['page' => 1, 'per_page' => 100, 'total' => self::READY_MADE_AUDIT_ROWS + 16, 'last_page' => 1]);
     }
@@ -234,7 +234,7 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         $this->anEntryOfCompanyAAt('2026-04-01 09:00:00');
         Sanctum::actingAs($this->owner);
 
-        // When the owner asks for page two in the request body, two to a page in the query
+        // When the owner asks for page two in the request body, a page size in the query that fits Contoso's rows and two more
         $response = $this->json('GET', '/api/v1/audit-trail?per_page='.(self::READY_MADE_AUDIT_ROWS + 2), ['page' => 2], ['X-Company-Context' => $this->companyA->getKey()]);
 
         // Then the first page is shown

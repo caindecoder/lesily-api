@@ -18,7 +18,6 @@ use App\Companies\Events\CompanySettingReset;
 use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\CountryConfig\Entities\Country;
-use App\Foundation\RolesPermissions\Entities\Role;
 use App\Companies\Entities\CompanyDataProtectionOfficer;
 use App\Companies\Events\CompanyDataProtectionOfficerSet;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
