@@ -3,9 +3,12 @@
 namespace Tests\Feature\Foundation;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Log;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
+use App\Companies\Enums\CompanyStatus;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\Addon;
 use Illuminate\Log\Events\MessageLogged;
@@ -15,7 +18,14 @@ use App\Foundation\RolesPermissions\Entities\Role;
 
 class TwoGateCheckTest extends FoundationTestCase
 {
-    use WithRolePermissionFixtures;
+    use FreeTierCompany, WithRolePermissionFixtures;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->makeFreeTierCompany();
+    }
 
     #[Test]
     #[DataProvider('provideUnderTieredFeatures')]
@@ -24,13 +34,11 @@ class TwoGateCheckTest extends FoundationTestCase
         BillingPlan $plan,
         string $expectedTier,
     ): void {
-        // Given
-        $company = Company::factory()->onPlan($plan)->create();
-        $user = User::factory()->create();
-        $this->joinCompany($company, $user);
+        // Given Contoso on the row's plan
+        $this->putOnPlan($this->company, $plan);
 
         // When
-        $response = $this->attemptGatedAction($route, $user, $company);
+        $response = $this->attemptGatedAction($route, $this->employee, $this->company);
 
         // Then
         $this->assertFeatureUpgradePromptReturned($response, $expectedTier);
@@ -51,14 +59,11 @@ class TwoGateCheckTest extends FoundationTestCase
     #[Test]
     public function when_a_members_role_lacks_the_required_permission_then_a_permission_denial_is_returned(): void
     {
-        // Given
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $user = User::factory()->create();
-        $role = Role::factory()->code('member')->withPermissions([])->create();
-        $this->attachMember($company, $user, $role);
+        // Given Contoso on Pro, its employee's role lacking manage_security
+        $this->putOnPlan($this->company, BillingPlan::Pro);
 
         // When
-        $response = $this->attemptGatedAction('two-gate/secured', $user, $company);
+        $response = $this->attemptGatedAction('two-gate/secured', $this->employee, $this->company);
 
         // Then
         $this->assertRoleInsufficient($response, 'manage_security');
@@ -67,12 +72,11 @@ class TwoGateCheckTest extends FoundationTestCase
     #[Test]
     public function when_the_authenticated_user_is_not_a_member_of_the_requested_company_then_company_access_is_denied(): void
     {
-        // Given
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        // Given a user who is not a member of Contoso
         $user = User::factory()->create();
 
         // When (the user is authenticated but never joined the company)
-        $response = $this->attemptGatedAction('two-gate/secured', $user, $company);
+        $response = $this->attemptGatedAction('two-gate/secured', $user, $this->company);
 
         // Then (denied upstream by AuthorizeCompany — the gates are never reached)
         $this->assertCompanyAccessDenied($response);
@@ -81,13 +85,11 @@ class TwoGateCheckTest extends FoundationTestCase
     #[Test]
     public function when_a_companys_trial_has_expired_then_a_plan_gated_feature_is_denied(): void
     {
-        // Given a company whose trial ended without a plan being chosen
-        $company = Company::factory()->trialExpired()->create();
-        $user = User::factory()->create();
-        $this->joinCompany($company, $user);
+        // Given Contoso's trial ended without a plan being chosen
+        $this->company->update(['status' => CompanyStatus::TrialExpired, 'current_billing_plan' => null]);
 
         // When it attempts a plan-gated feature
-        $response = $this->attemptGatedAction('two-gate/starter-feature', $user, $company);
+        $response = $this->attemptGatedAction('two-gate/starter-feature', $this->employee, $this->company);
 
         // Then the billing gate denies it, pointing at the lowest plan that grants it
         $this->assertFeatureUpgradePromptReturned($response, 'Starter');
@@ -96,10 +98,8 @@ class TwoGateCheckTest extends FoundationTestCase
     #[Test]
     public function when_a_feature_is_offered_by_no_plan_or_addon_then_the_gate_fails_closed(): void
     {
-        // Given (a deprecated feature granted by no plan or add-on, even on the top tier)
-        $company = Company::factory()->onPlan(BillingPlan::Enterprise)->create();
-        $user = User::factory()->create();
-        $this->joinCompany($company, $user);
+        // Given Contoso on Enterprise (a deprecated feature granted by no plan or add-on, even on the top tier)
+        $this->putOnPlan($this->company, BillingPlan::Enterprise);
         $loggedContext = null;
         Log::listen(function (MessageLogged $log) use (&$loggedContext): void {
             if ($log->level === 'warning') {
@@ -108,24 +108,22 @@ class TwoGateCheckTest extends FoundationTestCase
         });
 
         // When
-        $response = $this->attemptGatedAction('two-gate/deprecated', $user, $company);
+        $response = $this->attemptGatedAction('two-gate/deprecated', $this->employee, $this->company);
 
         // Then
         $this->assertFailsClosed($response);
-        $this->assertSame(['feature' => 'legacy_import', 'company_id' => $company->getKey()], $loggedContext);
+        $this->assertSame(['feature' => 'legacy_import', 'company_id' => $this->company->getKey()], $loggedContext);
     }
 
     #[Test]
     #[DataProvider('provideFeaturesNoPlanGrants')]
     public function when_a_trial_company_asks_for_a_feature_no_plan_grants_then_the_gate_fails_closed(string $route): void
     {
-        // Given a company on its trial that has bought no add-on
-        $company = Company::factory()->onTrial()->create();
-        $user = User::factory()->create();
-        $this->joinCompany($company, $user);
+        // Given Contoso on its trial, having bought no add-on
+        $this->putOnTrial($this->company, CarbonImmutable::now()->addDays(30));
 
         // When it asks for a feature that no plan grants
-        $response = $this->attemptGatedAction($route, $user, $company);
+        $response = $this->attemptGatedAction($route, $this->employee, $this->company);
 
         // Then the trial does not open it
         $this->assertFailsClosed($response);
@@ -145,13 +143,12 @@ class TwoGateCheckTest extends FoundationTestCase
     #[Test]
     public function when_a_plan_less_company_has_an_addon_granting_a_feature_then_access_is_allowed(): void
     {
-        // Given (a company with no plan in force — its trial expired — that holds the Template Engine add-on)
-        $company = Company::factory()->trialExpired()->withAddon(Addon::TemplateEngine)->create();
-        $user = User::factory()->create();
-        $this->joinCompany($company, $user);
+        // Given (Contoso with no plan in force — its trial expired — holding the Template Engine add-on)
+        $this->company->update(['status' => CompanyStatus::TrialExpired, 'current_billing_plan' => null]);
+        $this->company->addons()->create(['addon' => Addon::TemplateEngine]);
 
         // When it attempts the add-on-granted feature
-        $response = $this->attemptGatedAction('two-gate/templates', $user, $company);
+        $response = $this->attemptGatedAction('two-gate/templates', $this->employee, $this->company);
 
         // Then access is allowed — the absent plan must not short-circuit the add-on path
         $this->assertGatedActionProceeded($response);
@@ -189,13 +186,11 @@ class TwoGateCheckTest extends FoundationTestCase
     #[DataProvider('provideGrantedFeatures')]
     public function when_a_companys_plan_grants_a_feature_then_access_proceeds(string $route, BillingPlan $plan): void
     {
-        // Given (each tier grants its own features and inherits every lower tier's)
-        $company = Company::factory()->onPlan($plan)->create();
-        $user = User::factory()->create();
-        $this->joinCompany($company, $user);
+        // Given Contoso on the row's plan (each tier grants its own features and inherits every lower tier's)
+        $this->putOnPlan($this->company, $plan);
 
         // When
-        $response = $this->attemptGatedAction($route, $user, $company);
+        $response = $this->attemptGatedAction($route, $this->employee, $this->company);
 
         // Then
         $this->assertGatedActionProceeded($response);
@@ -219,13 +214,11 @@ class TwoGateCheckTest extends FoundationTestCase
     #[DataProvider('provideTrialGrantedFeatures')]
     public function when_a_company_is_on_trial_then_every_plan_feature_is_granted(string $route): void
     {
-        // Given a company on its trial, no plan chosen yet
-        $company = Company::factory()->onTrial()->create();
-        $user = User::factory()->create();
-        $this->joinCompany($company, $user);
+        // Given Contoso on its trial, no plan chosen yet
+        $this->putOnTrial($this->company, CarbonImmutable::now()->addDays(30));
 
         // When it asks for a plan-gated feature
-        $response = $this->attemptGatedAction($route, $user, $company);
+        $response = $this->attemptGatedAction($route, $this->employee, $this->company);
 
         // Then the trial grants it, as the top plan would
         $this->assertGatedActionProceeded($response);
@@ -245,13 +238,12 @@ class TwoGateCheckTest extends FoundationTestCase
     #[Test]
     public function when_an_addon_grants_a_feature_the_plan_excludes_then_access_is_allowed(): void
     {
-        // Given (Free plan lacks TemplateEngine, but the Template Engine add-on grants it)
-        $company = Company::factory()->onPlan(BillingPlan::Free)->withAddon(Addon::TemplateEngine)->create();
-        $user = User::factory()->create();
-        $this->joinCompany($company, $user);
+        // Given Contoso on Free (Free plan lacks TemplateEngine, but the Template Engine add-on grants it)
+        $this->putOnPlan($this->company, BillingPlan::Free);
+        $this->company->addons()->create(['addon' => Addon::TemplateEngine]);
 
         // When
-        $response = $this->attemptGatedAction('two-gate/templates', $user, $company);
+        $response = $this->attemptGatedAction('two-gate/templates', $this->employee, $this->company);
 
         // Then
         $this->assertGatedActionProceeded($response);
@@ -260,14 +252,14 @@ class TwoGateCheckTest extends FoundationTestCase
     #[Test]
     public function when_both_gates_pass_then_the_gated_action_proceeds(): void
     {
-        // Given (Pro company + member whose role grants manage_security)
-        $company = Company::factory()->onPlan(BillingPlan::Pro)->create();
+        // Given (Contoso on Pro + a member whose role grants manage_security)
+        $this->putOnPlan($this->company, BillingPlan::Pro);
         $user = User::factory()->create();
-        $role = Role::factory()->code('admin')->withPermissions(['manage_security'])->create();
-        $this->attachMember($company, $user, $role);
+        $role = Role::factory()->withPermissions(['manage_security'])->create();
+        $this->attachMember($this->company, $user, $role);
 
         // When
-        $response = $this->attemptGatedAction('two-gate/secured', $user, $company);
+        $response = $this->attemptGatedAction('two-gate/secured', $user, $this->company);
 
         // Then
         $this->assertGatedActionProceeded($response);
@@ -300,11 +292,11 @@ class TwoGateCheckTest extends FoundationTestCase
     protected function memberOfAFreeAndAProCompany(User $user): array
     {
         $role = Role::factory()->code('member')->withPermissions(['manage_security'])->create();
-        $freeCompany = Company::factory()->onPlan(BillingPlan::Free)->create();
+        $this->putOnPlan($this->company, BillingPlan::Free);
         $proCompany = Company::factory()->onPlan(BillingPlan::Pro)->create();
-        $this->attachMember($freeCompany, $user, $role);
+        $this->attachMember($this->company, $user, $role);
         $this->attachMember($proCompany, $user, $role);
 
-        return [$freeCompany, $proCompany];
+        return [$this->company, $proCompany];
     }
 }
