@@ -30,7 +30,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
 
     protected Company $proCompany;
 
-    protected User $owner;
+    protected User $proOwner;
 
     protected User $member;
 
@@ -40,9 +40,8 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     {
         parent::setUp();
 
-        $this->travelTo('2026-11-15 14:30:00');
         $this->proCompany = Company::factory()->onPlan(BillingPlan::Pro)->createOne();
-        $this->owner = $this->aConsentingMember($this->proCompany, 'owner');
+        $this->proOwner = $this->aCompanyMember($this->proCompany, 'owner');
         $this->member = User::factory()->createOne();
         $this->staff = User::factory()->createOne();
     }
@@ -57,7 +56,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     {
         // Given a company whose plan has no log search, and its owner
         $company = $standing(Company::factory())->createOne();
-        $owner = $this->aConsentingMember($company, 'owner');
+        $owner = $this->aCompanyMember($company, 'owner');
 
         // When the owner searches the company's audit logs
         $response = $this->viewAuditLogs($owner, $company, $search);
@@ -96,24 +95,24 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     #[Test]
     public function when_a_role_without_audit_view_searches_then_the_role_is_refused_before_the_plan(): void
     {
-        // Given an employee of company A, whose plan has no log search
-        $employee = $this->aConsentingMember($this->companyA, 'employee');
+        // Given Contoso's employee; Contoso is on Free, which has no log search
+        $this->putOnPlan($this->companyA, BillingPlan::Free);
 
         // When the employee searches company A's audit logs
-        $response = $this->viewAuditLogs($employee, $this->companyA, ['ip' => '203.0.113.5']);
+        $response = $this->viewAuditLogs($this->employee, $this->companyA, ['ip' => '203.0.113.5']);
 
         // Then the role is refused, not the plan
-        $this->assertRoleInsufficient($response);
+        $this->assertRoleInsufficient($response, 'audit.view');
     }
 
     #[Test]
     public function when_a_plan_without_search_sends_an_invalid_search_then_it_is_rejected_before_the_plan(): void
     {
-        // Given the owner of company A, whose plan has no log search
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
+        // Given the owner of company A, which is on Free, a plan with no log search
+        $this->putOnPlan($this->companyA, BillingPlan::Free);
 
         // When the owner searches company A's audit logs with an invalid address
-        $response = $this->viewAuditLogs($owner, $this->companyA, ['ip' => 'nowhere']);
+        $response = $this->viewAuditLogs($this->owner, $this->companyA, ['ip' => 'nowhere']);
 
         // Then the address is rejected before the plan is checked
         $this->assertValidationRejected($response, 'ip', 'The ip field must be a valid IP address.');
@@ -204,7 +203,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     {
         // Given a company whose plan has log search, its owner, and two users' sign-ins
         $company = $standing(Company::factory())->createOne();
-        $owner = $this->aConsentingMember($company, 'owner');
+        $owner = $this->aCompanyMember($company, 'owner');
         $signIn = AccessLogEntry::factory()->forCompany($company)->byUser($this->member)->createOne();
         AccessLogEntry::factory()->forCompany($company)->byUser($this->staff)->createOne();
 
@@ -327,7 +326,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
 
         // Then the search leaves no audit-trail row
         $response->assertOk();
-        $this->assertDatabaseCount('audit_trail', 0);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     /**
@@ -403,7 +402,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
      */
     protected function searchAuditLogs(array $search): TestResponse
     {
-        return $this->viewAuditLogs($this->owner, $this->proCompany, $search);
+        return $this->viewAuditLogs($this->proOwner, $this->proCompany, $search);
     }
 
     protected function aSignInBy(User $user): AccessLogEntryFactory

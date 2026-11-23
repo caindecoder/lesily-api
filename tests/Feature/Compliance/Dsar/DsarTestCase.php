@@ -731,17 +731,6 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * The member's role lacks the required permission — 403 ROLE_INSUFFICIENT
-     * naming the missing grant.
-     */
-    protected function assertRoleInsufficient(TestResponse $response, string $permission): void
-    {
-        $response->assertForbidden();
-        $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
-        $response->assertJsonPath('required_permission', $permission);
-    }
-
-    /**
      * The request stayed hidden — the plain 404 envelope, nothing in the body
      * that names $requestId (the random correlation id aside).
      */

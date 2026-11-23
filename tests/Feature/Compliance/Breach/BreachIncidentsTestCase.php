@@ -150,13 +150,6 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         return BreachIncidentCompany::factory()->forIncident($incident, $company);
     }
 
-    protected function assertRoleInsufficient(TestResponse $response, string $permission): void
-    {
-        $response->assertForbidden();
-        $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
-        $response->assertJsonPath('required_permission', $permission);
-    }
-
     /**
      * @param  list<string>  $breachIds
      */

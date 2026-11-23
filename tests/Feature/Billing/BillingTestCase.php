@@ -188,19 +188,6 @@ abstract class BillingTestCase extends TestCase
     }
 
     /**
-     * The member's role lacks the required permission — 403 ROLE_INSUFFICIENT
-     * naming the missing grant. Duplicated from CompaniesTestCase (module bases
-     * are independent — established precedent).
-     */
-    protected function assertRoleInsufficient(TestResponse $response, string $permission): void
-    {
-        $response->assertForbidden();
-        $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
-        $response->assertJsonPath('required_permission', $permission);
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
-    }
-
-    /**
      * A hand-written throwing renderer stub bound for THIS test only (E23 —
      * stub across the boundary; every other walk uses the real renderer). The
      * app-owned exception is what the Chromium adapter itself raises on any

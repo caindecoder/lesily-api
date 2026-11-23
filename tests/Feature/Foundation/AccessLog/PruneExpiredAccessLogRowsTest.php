@@ -5,6 +5,7 @@ namespace Tests\Feature\Foundation\AccessLog;
 use RuntimeException;
 use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Tests\Concerns\AssertsAuditTrail;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
@@ -16,9 +17,7 @@ use App\Foundation\AccessLog\Entities\AccessLogEntry;
 
 class PruneExpiredAccessLogRowsTest extends FoundationTestCase
 {
-    use AssertsAuditTrail;
-
-    protected Company $company;
+    use AssertsAuditTrail, FreeTierCompany;
 
     protected Company $shortCompany;
 
@@ -27,7 +26,7 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
         parent::setUp();
 
         $this->travelTo(CarbonImmutable::parse('2026-11-17 10:00:00'));
-        $this->company = Company::factory()->create();
+        $this->makeFreeTierCompany();
         $this->shortCompany = Company::factory()->keepingAccessLogFor(1)->create();
     }
 
@@ -60,7 +59,7 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
     #[Test]
     public function when_no_row_is_past_its_retention_then_nothing_is_deleted_or_audited(): void
     {
-        // Given a company row at its seven-year cutoff and a row with no company at its one-year cutoff
+        // Given a row of Contoso (seven years) at its cutoff and a row with no company at its one-year cutoff
         $rows = [
             $this->anAccessRow($this->company, '2019-11-17 00:00:00'),
             $this->anAccessRow(null, '2025-11-17 00:00:00'),
@@ -69,9 +68,9 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
         // When the purge runs
         $this->runPrune()->expectsOutput('0 expired access-log row(s) deleted.')->assertSuccessful();
 
-        // Then both rows are still there and nothing is audited
+        // Then both rows are still there and nothing is audited beyond the ready-made company's rows
         $this->assertRemaining($rows);
-        $this->assertNothingAudited();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -112,14 +111,14 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
         } catch (RuntimeException) {
             // Then both companies' rows are still there and neither is audited
             $this->assertRemaining($rows);
-            $this->assertNothingAudited();
+            $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
         }
     }
 
     #[Test]
     public function when_a_company_row_was_last_seen_at_its_cutoff_then_only_the_row_just_before_is_deleted(): void
     {
-        // Given a company keeping seven years, with a row at its cutoff and one a second before it
+        // Given Contoso, keeping seven years, with a row at its cutoff and one a second before it
         $atCutoff = $this->anAccessRow($this->company, '2019-11-17 00:00:00');
         $this->anAccessRow($this->company, '2019-11-16 23:59:59');
 
@@ -255,8 +254,8 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
         // When the purge runs
         $this->runPrune()->expectsOutput('1 expired access-log row(s) deleted.')->assertSuccessful();
 
-        // Then nothing is audited
-        $this->assertNothingAudited();
+        // Then nothing is audited beyond the ready-made company's rows
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]

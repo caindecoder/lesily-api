@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -19,30 +20,25 @@ use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
 class RecordRefusedRequestsTest extends FoundationTestCase
 {
-    use WithRolePermissionFixtures;
-
-    protected Company $company;
-
-    protected User $member;
+    use FreeTierCompany, WithRolePermissionFixtures;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->company = Company::factory()->onPlan(BillingPlan::Free)->create();
-        $this->member = User::factory()->create();
-        $this->joinCompany($this->company, $this->member);
+        $this->makeFreeTierCompany();
     }
 
     #[Test]
     public function when_the_refusal_cannot_be_logged_then_it_still_answers_and_the_failure_is_reported(): void
     {
-        // Given the access log refuses writes
+        // Given Contoso on the Free plan and the access log refusing writes
+        $this->putOnPlan($this->company, BillingPlan::Free);
         $this->failAccessLogWrites();
         $logged = $this->collectLogRecords();
 
         // When the member asks for a feature the company's plan lacks
-        $response = $this->attemptGatedAction('two-gate/pro-feature', $this->member, $this->company);
+        $response = $this->attemptGatedAction('two-gate/pro-feature', $this->employee, $this->company);
 
         // Then the refusal still answers, nothing is stored, and the lost row is reported
         $response->assertForbidden();
@@ -50,7 +46,7 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         $this->assertWriteFailureReported($logged, [
             'event' => 'forbidden',
             'reason' => null,
-            'user_id' => $this->member->getKey(),
+            'user_id' => $this->employee->getKey(),
             'company_id' => $this->company->getKey(),
         ]);
     }
@@ -97,43 +93,43 @@ class RecordRefusedRequestsTest extends FoundationTestCase
     #[Test]
     public function when_access_to_the_company_is_denied_then_the_refusal_is_a_platform_row(): void
     {
-        // Given a company the member does not belong to
+        // Given a company Contoso's employee does not belong to
         $otherCompany = Company::factory()->onPlan(BillingPlan::Free)->create();
 
         // When the member asks for it
-        $response = $this->attemptGatedAction('company-context-probe', $this->member, $otherCompany);
+        $response = $this->attemptGatedAction('company-context-probe', $this->employee, $otherCompany);
 
         // Then it is refused, and the row names the member but no company
         $response->assertForbidden();
-        $entry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->member, null);
+        $entry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->employee, null);
         $this->assertAnsweredAs($entry, Response::HTTP_FORBIDDEN, ApiErrorCode::CompanyAccessDenied);
     }
 
     #[Test]
     public function when_the_company_is_unknown_then_the_refusal_is_a_platform_row(): void
     {
-        // Given the member is signed in
-        Sanctum::actingAs($this->member);
+        // Given Contoso's employee is signed in
+        Sanctum::actingAs($this->employee);
 
         // When the member asks for it
         $response = $this->getJson('/api/_test/company-context-probe', ['X-Company-Context' => (string) Str::uuid7()]);
 
         // Then it is refused, and the row names the member but no company
         $response->assertNotFound();
-        $this->assertRefusalLogged(AccessEvent::NotFound, $this->member, null);
+        $this->assertRefusalLogged(AccessEvent::NotFound, $this->employee, null);
     }
 
     #[Test]
     public function when_a_record_is_hidden_inside_the_company_then_the_refusal_names_the_company(): void
     {
-        // Given (a member of the company)
+        // Given (Contoso's employee)
 
         // When the member asks for a record the company keeps out of sight
-        $response = $this->attemptGatedAction('company-hidden-record-probe', $this->member, $this->company);
+        $response = $this->attemptGatedAction('company-hidden-record-probe', $this->employee, $this->company);
 
         // Then it is refused, and the row names the member and the company
         $response->assertNotFound();
-        $this->assertRefusalLogged(AccessEvent::NotFound, $this->member, $this->company);
+        $this->assertRefusalLogged(AccessEvent::NotFound, $this->employee, $this->company);
     }
 
     #[Test]
@@ -156,14 +152,15 @@ class RecordRefusedRequestsTest extends FoundationTestCase
     #[Test]
     public function when_a_member_lacks_the_feature_then_a_forbidden_refusal_names_the_member_and_the_company(): void
     {
-        // Given a member of a company on the Free plan
+        // Given Contoso's employee, Contoso on the Free plan
+        $this->putOnPlan($this->company, BillingPlan::Free);
 
         // When the member asks for a Pro feature in that company
-        $response = $this->attemptGatedAction('two-gate/pro-feature', $this->member, $this->company);
+        $response = $this->attemptGatedAction('two-gate/pro-feature', $this->employee, $this->company);
 
         // Then it is refused, and the row names the member and the company
         $response->assertForbidden();
-        $entry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->member, $this->company);
+        $entry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->employee, $this->company);
         $this->assertAnsweredAs($entry, Response::HTTP_FORBIDDEN, ApiErrorCode::FeatureNotAvailable);
     }
 

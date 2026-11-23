@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Support\Arr;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
@@ -16,7 +17,7 @@ use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
 class FoldRepeatedRefusalsTest extends FoundationTestCase
 {
-    use WithRolePermissionFixtures;
+    use FreeTierCompany, WithRolePermissionFixtures;
 
     /** @var array<string, User> */
     protected array $people;
@@ -28,16 +29,15 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
     {
         parent::setUp();
 
-        $this->people = ['alice' => User::factory()->create(), 'bob' => User::factory()->create()];
+        $this->makeFreeTierCompany();
+        $this->people = ['alice' => $this->employee, 'bob' => $this->admin];
         $this->companies = [
-            'acme' => Company::factory()->onPlan(BillingPlan::Free)->create(),
+            'contoso' => $this->company,
             'globex' => Company::factory()->onPlan(BillingPlan::Free)->create(),
             'initech' => Company::factory()->onPlan(BillingPlan::Free)->create(),
             'umbrella' => Company::factory()->onPlan(BillingPlan::Free)->create(),
         ];
-        $this->joinCompany($this->companies['acme'], $this->people['alice']);
         $this->joinCompany($this->companies['globex'], $this->people['alice']);
-        $this->joinCompany($this->companies['acme'], $this->people['bob']);
 
         $this->companies['dissolved'] = Company::factory()->create();
         $this->companies['dissolved']->delete();
@@ -82,7 +82,8 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
     #[DataProvider('provideRefusalsThatDifferInOneKey')]
     public function when_a_different_refusal_arrives_inside_the_window_then_it_gets_its_own_row(array $first, array $second): void
     {
-        // Given one refusal on record
+        // Given Contoso on the Free plan and one refusal on record
+        $this->putOnPlan($this->company, BillingPlan::Free);
         $this->refuse($first);
 
         // When a refusal that differs in one key arrives straight after
@@ -97,7 +98,7 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
     {
         $anonymous = ['method' => 'GET', 'uri' => '/api/_test/authenticated-probe', 'from' => '203.0.113.7'];
         $stranger = ['method' => 'GET', 'uri' => '/api/v1/companies/{in}', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'initech'];
-        $member = ['method' => 'GET', 'uri' => '/api/_test/two-gate/pro-feature', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'acme'];
+        $member = ['method' => 'GET', 'uri' => '/api/_test/two-gate/pro-feature', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'contoso'];
         $outsider = ['method' => 'GET', 'uri' => '/api/_test/company-context-probe', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'initech'];
 
         return [
@@ -113,10 +114,11 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
     #[Test]
     public function when_the_same_refusal_comes_for_another_reason_then_it_gets_its_own_row(): void
     {
-        // Given a member refused a secured action for the company's plan, and the company then upgraded
-        $request = ['method' => 'GET', 'uri' => '/api/_test/two-gate/secured', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'acme'];
+        // Given Contoso's employee refused a secured action for Contoso's Free plan, and Contoso then upgraded to Pro
+        $this->putOnPlan($this->company, BillingPlan::Free);
+        $request = ['method' => 'GET', 'uri' => '/api/_test/two-gate/secured', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'contoso'];
         $this->refuse($request);
-        $this->companies['acme']->update(['current_billing_plan' => BillingPlan::Pro]);
+        $this->putOnPlan($this->company, BillingPlan::Pro);
 
         // When the member is refused the same action for their role
         $this->refuse($request);
@@ -167,7 +169,8 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
     #[DataProvider('provideRefusalsThatRepeat')]
     public function when_a_refusal_repeats_with_the_same_key_then_one_row_counts_both(array $first, array $second): void
     {
-        // Given one refusal on record
+        // Given Contoso on the Free plan and one refusal on record
+        $this->putOnPlan($this->company, BillingPlan::Free);
         $this->refuse($first);
 
         // When the same refusal arrives straight after
@@ -180,7 +183,7 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
     /** @return array<string, array{array<string, string>, array<string, string>}> */
     public static function provideRefusalsThatRepeat(): array
     {
-        $member = ['method' => 'GET', 'uri' => '/api/_test/two-gate/pro-feature', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'acme'];
+        $member = ['method' => 'GET', 'uri' => '/api/_test/two-gate/pro-feature', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'contoso'];
         $stranger = ['method' => 'GET', 'uri' => '/api/v1/companies/{in}', 'from' => '203.0.113.7', 'as' => 'alice', 'in' => 'initech'];
 
         return [

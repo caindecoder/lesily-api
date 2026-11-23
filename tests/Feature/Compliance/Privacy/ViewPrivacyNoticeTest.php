@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Compliance\Privacy;
 
-use App\Models\User;
 use Illuminate\Http\Response;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
@@ -13,23 +12,6 @@ use App\Companies\Entities\CompanyDataProtectionOfficer;
 
 class ViewPrivacyNoticeTest extends PrivacyTestCase
 {
-    protected User $owner;
-
-    protected Company $company;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->owner = User::factory()->named('Asha Perera')->withEmail('asha@contoso.lk')->create();
-        $this->company = Company::factory()
-            ->named('Contoso (Pvt) Ltd')
-            ->registeredAs('PV-00012345', 'EPF-0012345')
-            ->ownedBy($this->owner)
-            ->create();
-        $this->attachMember($this->company, $this->owner, $this->seededRole('owner'));
-    }
-
     #[Test]
     public function when_no_token_is_sent_then_the_request_is_unauthenticated(): void
     {
@@ -46,7 +28,7 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
     public function when_the_caller_is_not_a_member_of_the_company_then_company_access_is_denied(): void
     {
         // Given an employee of another company, never a member of Contoso
-        [, $outsider] = $this->aCompanyWithMember('employee');
+        $outsider = $this->aCompanyMember(Company::factory()->create());
 
         // When they view Contoso's privacy notice
         $response = $this->viewNotice($outsider, $this->company);
@@ -59,13 +41,11 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
     public function when_a_member_owes_a_new_policy_version_then_the_notice_still_reads(): void
     {
         // Given an employee of Contoso
-        $employee = User::factory()->create();
-        $this->attachMember($this->company, $employee, $this->seededRole('employee'));
         // And a new privacy-policy version is live that they have not accepted
         config(['lesily.policies.privacy' => 'v1.1']);
 
         // When they view the privacy notice
-        $response = $this->viewNotice($employee, $this->company);
+        $response = $this->viewNotice($this->employee, $this->company);
 
         // Then they still read all thirteen items
         $this->assertThirteenItemsInOrder($response);
@@ -76,8 +56,7 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
     {
         // Given a company where no member holds the owner role
         $company = Company::factory()->named('Northwind (Pvt) Ltd')->registeredAs('PV-00054321', 'EPF-0054321')->create();
-        $employee = User::factory()->create();
-        $this->attachMember($company, $employee, $this->seededRole('employee'));
+        $employee = $this->aCompanyMember($company);
 
         // When its employee views the privacy notice
         $response = $this->viewNotice($employee, $company);
@@ -92,7 +71,8 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
     #[Test]
     public function when_the_owner_also_owns_another_company_then_only_this_company_appears(): void
     {
-        // Given Asha Perera also owns Fabrikam
+        // Given Contoso is Contoso (Pvt) Ltd, BR number PV-00012345, and its owner also owns Fabrikam
+        $this->company->update(['name' => 'Contoso (Pvt) Ltd', 'br_number' => 'PV-00012345']);
         $fabrikam = Company::factory()
             ->named('Fabrikam (Pvt) Ltd')
             ->registeredAs('PV-00099999', 'EPF-0099999')
@@ -100,7 +80,7 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
             ->create();
         $this->attachMember($fabrikam, $this->owner, $this->seededRole('owner'));
 
-        // When she views Contoso's privacy notice
+        // When the owner views Contoso's privacy notice
         $response = $this->viewNotice($this->owner, $this->company);
 
         // Then only Contoso appears; nothing of Fabrikam does
@@ -137,8 +117,7 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
     public function when_any_member_views_the_notice_then_all_thirteen_items_appear_in_order(string $roleCode): void
     {
         // Given a member of Contoso holding the role
-        $member = User::factory()->create();
-        $this->attachMember($this->company, $member, $this->seededRole($roleCode));
+        $member = $this->memberWithRole($roleCode);
 
         // When they view the privacy notice
         $response = $this->viewNotice($member, $this->company);
@@ -150,12 +129,12 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
     #[Test]
     public function when_the_notice_is_viewed_then_the_controller_item_names_the_company_and_its_owner(): void
     {
-        // Given an employee of Contoso, whose owner is Asha Perera
-        $employee = User::factory()->create();
-        $this->attachMember($this->company, $employee, $this->seededRole('employee'));
+        // Given Contoso is Contoso (Pvt) Ltd, BR number PV-00012345, its owner Asha Perera (asha@contoso.lk), and an employee of Contoso
+        $this->company->update(['name' => 'Contoso (Pvt) Ltd', 'br_number' => 'PV-00012345']);
+        $this->owner->update(['name' => 'Asha Perera', 'email' => 'asha@contoso.lk']);
 
         // When they view the privacy notice
-        $response = $this->viewNotice($employee, $this->company);
+        $response = $this->viewNotice($this->employee, $this->company);
 
         // Then item 1 names Contoso, its BR number and country, with Asha Perera as the contact
         // And item 2 says no data protection officer is designated
@@ -167,11 +146,9 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
     {
         // Given Contoso has recorded Nimal Silva as its DPO, and an employee of Contoso
         CompanyDataProtectionOfficer::factory()->for($this->company)->create();
-        $employee = User::factory()->create();
-        $this->attachMember($this->company, $employee, $this->seededRole('employee'));
 
         // When the employee views the privacy notice
-        $response = $this->viewNotice($employee, $this->company);
+        $response = $this->viewNotice($this->employee, $this->company);
 
         // Then item 2 gives Nimal Silva's name, email and phone as the contact
         $this->assertDpoItem($response, 'Contact: Nimal Silva, dpo@contoso.lk, +94771234567');
@@ -181,11 +158,9 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
     public function when_the_notice_is_viewed_then_the_register_items_cover_every_foundation_activity(): void
     {
         // Given an employee of Contoso
-        $employee = User::factory()->create();
-        $this->attachMember($this->company, $employee, $this->seededRole('employee'));
 
         // When they view the privacy notice
-        $response = $this->viewNotice($employee, $this->company);
+        $response = $this->viewNotice($this->employee, $this->company);
 
         // Then the purposes, legitimate interests and retention items name every Foundation activity
         $this->assertActivityItems($response);
@@ -197,11 +172,9 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
     public function when_the_notice_is_viewed_then_the_fixed_items_carry_the_drafted_wording(): void
     {
         // Given an employee of Contoso
-        $employee = User::factory()->create();
-        $this->attachMember($this->company, $employee, $this->seededRole('employee'));
 
         // When they view the privacy notice
-        $response = $this->viewNotice($employee, $this->company);
+        $response = $this->viewNotice($this->employee, $this->company);
 
         // Then the consent, rights and complaint items carry the drafted wording
         $this->assertRightsItems($response);

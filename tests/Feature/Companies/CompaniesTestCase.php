@@ -18,7 +18,6 @@ use App\Companies\Events\CompanySettingReset;
 use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\CountryConfig\Entities\Country;
-use App\Foundation\RolesPermissions\Entities\Role;
 use App\Companies\Entities\CompanyDataProtectionOfficer;
 use App\Companies\Events\CompanyDataProtectionOfficerSet;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
@@ -187,18 +186,6 @@ abstract class CompaniesTestCase extends TestCase
         $this->assertSame($expectedName, $company->name);
         $this->assertNull($settings->timezone);
         $this->assertSame($eventsBefore, LesilyStoredEvent::query()->whereForCompany($company->getKey())->where('event_class', '!=', ConsentRecorded::class)->count());
-    }
-
-    /**
-     * The member's role lacks the required permission — 403 ROLE_INSUFFICIENT
-     * naming the missing grant (TwoGateCheckTest::assertPermissionDenied mirror).
-     */
-    protected function assertRoleInsufficient(TestResponse $response, string $permission): void
-    {
-        $response->assertForbidden();
-        $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
-        $response->assertJsonPath('required_permission', $permission);
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
     /**

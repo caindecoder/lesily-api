@@ -42,13 +42,13 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     {
         // Given company A has an audit entry, and a member of A whose role cannot view the audit trail
         AuditEntry::factory()->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
-        $member = $this->aConsentingMember($this->companyA, $roleCode);
+        $member = $this->memberWithRole($roleCode);
 
         // When the member views company A's audit trail
         $response = $this->viewAuditTrail($member, $this->companyA);
 
         // Then the role is refused and no entry is shown
-        $this->assertRoleInsufficient($response);
+        $this->assertRoleInsufficient($response, 'audit.view');
         $response->assertJsonMissingPath('data');
     }
 
@@ -57,7 +57,7 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     {
         // Given company A has an audit entry, and the owner of company B
         AuditEntry::factory()->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
-        $outsider = $this->aConsentingMember($this->companyB, 'owner');
+        $outsider = $this->aCompanyMember($this->companyB, 'owner');
 
         // When B's owner views company A's audit trail
         $response = $this->viewAuditTrail($outsider, $this->companyA);
@@ -72,11 +72,10 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     {
         // Given company A has an audit entry, and A's owner accepted the policies before a new privacy policy version
         AuditEntry::factory()->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
         config(['lesily.policies.privacy' => 'v1.1']);
 
         // When the owner views company A's audit trail
-        $response = $this->viewAuditTrail($owner, $this->companyA);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA);
 
         // Then the audit trail is refused until they accept, and no entry is shown
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::ConsentRequired);
@@ -91,10 +90,9 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     public function when_the_audit_trail_query_is_invalid_then_it_is_refused_with_the_reason(array $query, string $field, string $message): void
     {
         // Given company A's owner
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail with an invalid query
-        $response = $this->viewAuditTrail($owner, $this->companyA, $query);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA, $query);
 
         // Then the query is refused with the reason
         $this->assertValidationRejected($response, $field, $message);
@@ -116,14 +114,13 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     {
         // Given company A has an audit entry, and A's owner
         AuditEntry::factory()->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner sends a write verb to company A's audit trail
-        $response = $this->sendToAuditTrail($verb, $owner, '/api/v1/audit-trail');
+        $response = $this->sendToAuditTrail($verb, $this->owner, '/api/v1/audit-trail');
 
         // Then no route writes it, and the entry is kept
         $this->assertRefusedWith($response, Response::HTTP_METHOD_NOT_ALLOWED, ApiErrorCode::HttpError);
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
@@ -132,10 +129,9 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     {
         // Given company A has an audit entry, and A's owner
         $entry = AuditEntry::factory()->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner sends the verb to the entry's own address
-        $response = $this->sendToAuditTrail($verb, $owner, '/api/v1/audit-trail/'.$entry->getKey());
+        $response = $this->sendToAuditTrail($verb, $this->owner, '/api/v1/audit-trail/'.$entry->getKey());
 
         // Then no route answers, and the entry is unchanged
         $response->assertNotFound();
@@ -145,12 +141,12 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     #[Test]
     public function when_the_company_has_no_entries_then_the_list_is_empty(): void
     {
-        // Given only company B has an audit entry, and A's owner
-        AuditEntry::factory()->forCompany($this->companyB)->byMember(User::factory()->create(), 'admin')->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
+        // Given only company A has audit entries, and B's owner
+        AuditEntry::factory()->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
+        $owner = $this->aCompanyMember($this->companyB, 'owner');
 
-        // When the owner views company A's audit trail
-        $response = $this->viewAuditTrail($owner, $this->companyA);
+        // When B's owner views company B's audit trail
+        $response = $this->viewAuditTrail($owner, $this->companyB);
 
         // Then the list is empty
         $this->assertNothingListed($response);
@@ -163,13 +159,12 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         $own = AuditEntry::factory()->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
         AuditEntry::factory()->forCompany($this->companyB)->byMember(User::factory()->create(), 'admin')->create();
         AuditEntry::factory()->platformLevel()->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When A's owner views company A's audit trail
-        $response = $this->viewAuditTrail($owner, $this->companyA);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA);
 
         // Then only company A's entry is listed
-        $this->assertEntriesListed($response, [$own->getKey()]);
+        $this->assertEntriesListed($response, [$own->getKey(), ...$this->readyMadeEntryIds()]);
     }
 
     #[Test]
@@ -178,13 +173,12 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         // Given two entries of company A recorded at the same moment
         $first = $this->anEntryOfCompanyAAt('2026-04-01 09:00:00');
         $second = $this->anEntryOfCompanyAAt('2026-04-01 09:00:00');
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail
-        $response = $this->viewAuditTrail($owner, $this->companyA);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA);
 
         // Then the entry written last comes first
-        $this->assertEntriesListed($response, [$second->getKey(), $first->getKey()]);
+        $this->assertEntriesListed($response, [...$this->readyMadeEntryIds(), $second->getKey(), $first->getKey()]);
     }
 
     #[Test]
@@ -194,14 +188,13 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         $this->anEntryOfCompanyAAt('2026-04-03 09:00:00');
         $this->anEntryOfCompanyAAt('2026-04-02 09:00:00');
         $oldest = $this->anEntryOfCompanyAAt('2026-04-01 09:00:00');
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views the second page of two
-        $response = $this->viewAuditTrail($owner, $this->companyA, ['per_page' => 2, 'page' => 2]);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA, ['per_page' => self::READY_MADE_AUDIT_ROWS + 2, 'page' => 2]);
 
         // Then the oldest entry is on it, and the page says where it sits
         $this->assertEntriesListed($response, [$oldest->getKey()]);
-        $this->assertPageShown($response, ['page' => 2, 'per_page' => 2, 'total' => 3, 'last_page' => 2]);
+        $this->assertPageShown($response, ['page' => 2, 'per_page' => self::READY_MADE_AUDIT_ROWS + 2, 'total' => self::READY_MADE_AUDIT_ROWS + 3, 'last_page' => 2]);
     }
 
     #[Test]
@@ -209,14 +202,13 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     {
         // Given sixteen entries of company A
         AuditEntry::factory()->count(16)->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail with no page size
-        $response = $this->viewAuditTrail($owner, $this->companyA);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA);
 
         // Then fifteen entries are listed on the first of two pages
         $response->assertJsonCount(15, 'data');
-        $this->assertPageShown($response, ['page' => 1, 'per_page' => 15, 'total' => 16, 'last_page' => 2]);
+        $this->assertPageShown($response, ['page' => 1, 'per_page' => 15, 'total' => self::READY_MADE_AUDIT_ROWS + 16, 'last_page' => 2]);
     }
 
     #[Test]
@@ -224,14 +216,13 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     {
         // Given sixteen entries of company A
         AuditEntry::factory()->count(16)->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner asks for pages of one hundred
-        $response = $this->viewAuditTrail($owner, $this->companyA, ['per_page' => 100]);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA, ['per_page' => 100]);
 
-        // Then all sixteen are listed on one page
-        $response->assertJsonCount(16, 'data');
-        $this->assertPageShown($response, ['page' => 1, 'per_page' => 100, 'total' => 16, 'last_page' => 1]);
+        // Then all sixteen and Contoso's creation rows are listed on one page
+        $response->assertJsonCount(self::READY_MADE_AUDIT_ROWS + 16, 'data');
+        $this->assertPageShown($response, ['page' => 1, 'per_page' => 100, 'total' => self::READY_MADE_AUDIT_ROWS + 16, 'last_page' => 1]);
     }
 
     #[Test]
@@ -241,14 +232,13 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         $newest = $this->anEntryOfCompanyAAt('2026-04-03 09:00:00');
         $middle = $this->anEntryOfCompanyAAt('2026-04-02 09:00:00');
         $this->anEntryOfCompanyAAt('2026-04-01 09:00:00');
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
-        Sanctum::actingAs($owner);
+        Sanctum::actingAs($this->owner);
 
-        // When the owner asks for page two in the request body, two to a page in the query
-        $response = $this->json('GET', '/api/v1/audit-trail?per_page=2', ['page' => 2], ['X-Company-Context' => $this->companyA->getKey()]);
+        // When the owner asks for page two in the request body, a page size in the query that fits Contoso's rows and two more
+        $response = $this->json('GET', '/api/v1/audit-trail?per_page='.(self::READY_MADE_AUDIT_ROWS + 2), ['page' => 2], ['X-Company-Context' => $this->companyA->getKey()]);
 
         // Then the first page is shown
-        $this->assertEntriesListed($response, [$newest->getKey(), $middle->getKey()]);
+        $this->assertEntriesListed($response, [...$this->readyMadeEntryIds(), $newest->getKey(), $middle->getKey()]);
     }
 
     #[Test]
@@ -256,10 +246,9 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     {
         // Given an entry of company A written by the system, with no actor
         $entry = AuditEntry::factory()->forCompany($this->companyA)->system()->createOne();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail
-        $response = $this->viewAuditTrail($owner, $this->companyA);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA);
 
         // Then the entry is listed and names no one
         $this->assertNoActorShown($response, $entry);
@@ -275,10 +264,9 @@ class ViewAuditTrailTest extends AuditTrailTestCase
             ->byStaff($staff)
             ->fromOrigin('10.0.0.5', 'Mozilla/5.0 (Windows NT 10.0) Edge/140.0')
             ->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail
-        $response = $this->viewAuditTrail($owner, $this->companyA);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA);
 
         // Then the entry shows Lesily support, and nothing that names or locates the staff member
         $this->assertStaffShownAsLesilySupport($response);
@@ -292,10 +280,9 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         // Given an entry of company A by a Lesily staff member
         $staff = User::factory()->create();
         AuditEntry::factory()->forCompany($this->companyA)->byStaff($staff)->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail by the staff member's own id
-        $response = $this->viewAuditTrail($owner, $this->companyA, ['actor' => $staff->getKey()]);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA, ['actor' => $staff->getKey()]);
 
         // Then nothing is listed, so the filter cannot tell who the staff member was
         $this->assertNothingListed($response);
@@ -307,10 +294,9 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         // Given an entry of company A by Alice with no role on record
         $alice = User::factory()->create();
         $entry = AuditEntry::factory()->forCompany($this->companyA)->byMember($alice, 'admin')->withoutRole()->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail by Alice
-        $response = $this->viewAuditTrail($owner, $this->companyA, ['actor' => $alice->getKey()]);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA, ['actor' => $alice->getKey()]);
 
         // Then Alice's entry is listed
         $this->assertEntriesListed($response, [$entry->getKey()]);
@@ -325,13 +311,12 @@ class ViewAuditTrailTest extends AuditTrailTestCase
             ->byMember(User::factory()->create(), 'admin')
             ->withMetadata(['filters' => ['stage' => 'recorded'], 'result_count' => 4])
             ->createOne();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail
-        $response = $this->viewAuditTrail($owner, $this->companyA);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA);
 
         // Then the entry is listed with no changes, and none of the other metadata
-        $this->assertEntriesListed($response, [$entry->getKey()]);
+        $this->assertEntriesListed($response, [$entry->getKey(), ...$this->readyMadeEntryIds()]);
         $this->assertSame(['changes' => null], array_intersect_key($response->json('data.0'), ['changes' => true]));
         $response->assertDontSee('result_count');
     }
@@ -350,7 +335,7 @@ class ViewAuditTrailTest extends AuditTrailTestCase
                 'role' => ['from' => 'employee', 'to' => 'hr_officer'],
             ])
             ->create();
-        $auditor = $this->aConsentingMember($this->companyA, 'auditor');
+        $auditor = $this->memberWithRole('auditor');
 
         // When the auditor views company A's audit trail
         $response = $this->viewAuditTrail($auditor, $this->companyA);
@@ -371,13 +356,12 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         $middle = $this->anEntryOfCompanyAAt('2026-04-02 09:00:00');
         $newest = $this->anEntryOfCompanyAAt('2026-04-03 09:00:00');
         $oldest = $this->anEntryOfCompanyAAt('2026-04-01 09:00:00');
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail
-        $response = $this->viewAuditTrail($owner, $this->companyA);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA);
 
         // Then the newest entry comes first
-        $this->assertEntriesListed($response, [$newest->getKey(), $middle->getKey(), $oldest->getKey()]);
+        $this->assertEntriesListed($response, [...$this->readyMadeEntryIds(), $newest->getKey(), $middle->getKey(), $oldest->getKey()]);
     }
 
     #[Test]
@@ -393,10 +377,9 @@ class ViewAuditTrailTest extends AuditTrailTestCase
             ->fromOrigin('203.0.113.7', 'Mozilla/5.0 (X11; Linux) Firefox/140.0')
             ->recordedAt(CarbonImmutable::parse('2026-04-01 09:00:00'))
             ->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail
-        $response = $this->viewAuditTrail($owner, $this->companyA);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA);
 
         // Then the entry shows who, what, when, where and how severe
         $response->assertOk();
@@ -418,7 +401,7 @@ class ViewAuditTrailTest extends AuditTrailTestCase
             'ip_address' => '203.0.113.7',
             'device' => 'Mozilla/5.0 (X11; Linux) Firefox/140.0',
             'severity' => 'critical',
-        ], $response->json('data.0'));
+        ], $response->json('data.'.self::READY_MADE_AUDIT_ROWS));
     }
 
     #[Test]
@@ -430,10 +413,9 @@ class ViewAuditTrailTest extends AuditTrailTestCase
             ->byMember(User::factory()->create(), 'admin')
             ->withChanges(['role' => ['from' => 'employee', 'to' => 'hr_officer']])
             ->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail
-        $response = $this->viewAuditTrail($owner, $this->companyA);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA);
 
         // Then the entry shows the role's old and new value
         $response->assertOk();
@@ -447,13 +429,13 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     {
         // Given an entry of company A, and a member of A whose role may view the audit trail
         $entry = AuditEntry::factory()->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
-        $member = $this->aConsentingMember($this->companyA, $roleCode);
+        $member = $this->memberWithRole($roleCode);
 
         // When the member views company A's audit trail
         $response = $this->viewAuditTrail($member, $this->companyA);
 
         // Then the entry is listed
-        $this->assertEntriesListed($response, [$entry->getKey()]);
+        $this->assertEntriesListed($response, [$entry->getKey(), ...$this->readyMadeEntryIds()]);
     }
 
     #[Test]
@@ -463,7 +445,7 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         // Given a company with no paid plan, an entry of it, and its owner
         $company = $aCompany();
         $entry = AuditEntry::factory()->forCompany($company)->byMember(User::factory()->create(), 'admin')->create();
-        $owner = $this->aConsentingMember($company, 'owner');
+        $owner = $this->aCompanyMember($company, 'owner');
 
         // When the owner views the company's audit trail
         $response = $this->viewAuditTrail($owner, $company);
@@ -480,10 +462,9 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         $firstInside = $this->anEntryOfCompanyAAt('2026-04-01 00:00:00');
         $lastInside = $this->anEntryOfCompanyAAt('2026-04-30 23:59:59');
         $this->anEntryOfCompanyAAt('2026-05-01 00:00:00');
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail within April
-        $response = $this->viewAuditTrail($owner, $this->companyA, ['within' => '2026-04-01,2026-04-30']);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA, ['within' => '2026-04-01,2026-04-30']);
 
         // Then only April's entries are listed
         $this->assertEntriesListed($response, [$lastInside->getKey(), $firstInside->getKey()]);
@@ -497,10 +478,9 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         $alicesEntry = AuditEntry::factory()->forCompany($this->companyA)->byMember($alice, 'admin')->create();
         AuditEntry::factory()->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
         AuditEntry::factory()->forCompany($this->companyA)->byStaff(User::factory()->create())->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail by Alice
-        $response = $this->viewAuditTrail($owner, $this->companyA, ['actor' => $alice->getKey()]);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA, ['actor' => $alice->getKey()]);
 
         // Then only Alice's entry is listed
         $this->assertEntriesListed($response, [$alicesEntry->getKey()]);
@@ -513,10 +493,9 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         AuditEntry::factory()->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
         $first = AuditEntry::factory()->forCompany($this->companyA)->byStaff(User::factory()->create())->recordedAt(CarbonImmutable::parse('2026-04-01 09:00:00'))->create();
         $second = AuditEntry::factory()->forCompany($this->companyA)->byStaff(User::factory()->create())->recordedAt(CarbonImmutable::parse('2026-04-02 09:00:00'))->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail by Lesily support
-        $response = $this->viewAuditTrail($owner, $this->companyA, ['actor' => 'lesily_support']);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA, ['actor' => 'lesily_support']);
 
         // Then both staff entries are listed, and Alice's is not
         $this->assertEntriesListed($response, [$second->getKey(), $first->getKey()]);
@@ -529,10 +508,9 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         $this->anEntryOfCompanyAFor(AuditAction::DsarRequested, AuditSubjectType::DsarRequest);
         $downloaded = $this->anEntryOfCompanyAFor(AuditAction::DsarDownloaded, AuditSubjectType::DsarRequest);
         $this->anEntryOfCompanyAFor(AuditAction::AdminReviewed, AuditSubjectType::Invoice);
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail for downloads
-        $response = $this->viewAuditTrail($owner, $this->companyA, ['action' => 'dsar_downloaded']);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA, ['action' => 'dsar_downloaded']);
 
         // Then only the download is listed
         $this->assertEntriesListed($response, [$downloaded->getKey()]);
@@ -545,10 +523,9 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         $this->anEntryOfCompanyAFor(AuditAction::DsarRequested, AuditSubjectType::DsarRequest);
         $invoice = $this->anEntryOfCompanyAFor(AuditAction::AdminReviewed, AuditSubjectType::Invoice);
         $this->anEntryOfCompanyAFor(AuditAction::BreachFilingRequested, AuditSubjectType::BreachIncident);
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail about invoices
-        $response = $this->viewAuditTrail($owner, $this->companyA, ['subject_type' => 'invoice']);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA, ['subject_type' => 'invoice']);
 
         // Then only the invoice entry is listed
         $this->assertEntriesListed($response, [$invoice->getKey()]);
@@ -564,10 +541,9 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         $this->anEntryBy(User::factory()->create())->recordedAt(CarbonImmutable::parse('2026-04-10 09:00:00'))->create();
         $this->anEntryBy($alice)->ofAction(AuditAction::DsarRequested, AuditSubjectType::DsarRequest)->recordedAt(CarbonImmutable::parse('2026-04-10 09:00:00'))->create();
         $this->anEntryBy($alice)->ofAction(AuditAction::DsarDownloaded, AuditSubjectType::Invoice)->recordedAt(CarbonImmutable::parse('2026-04-10 09:00:00'))->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail with all four filters
-        $response = $this->viewAuditTrail($owner, $this->companyA, [
+        $response = $this->viewAuditTrail($this->owner, $this->companyA, [
             'within' => '2026-04-01,2026-04-30',
             'actor' => $alice->getKey(),
             'action' => 'dsar_downloaded',
@@ -584,14 +560,13 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     {
         // Given two entries of company A, and A's owner
         AuditEntry::factory()->count(2)->forCompany($this->companyA)->byMember(User::factory()->create(), 'admin')->create();
-        $owner = $this->aConsentingMember($this->companyA, 'owner');
 
         // When the owner views company A's audit trail
-        $response = $this->viewAuditTrail($owner, $this->companyA);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA);
 
         // Then the view itself leaves no audit entry
         $response->assertOk();
-        $this->assertDatabaseCount('audit_trail', 2);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 2);
     }
 
     /**

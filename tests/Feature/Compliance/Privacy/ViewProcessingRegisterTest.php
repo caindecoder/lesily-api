@@ -3,6 +3,7 @@
 namespace Tests\Feature\Compliance\Privacy;
 
 use Illuminate\Http\Response;
+use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -13,11 +14,10 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
     #[Test]
     public function when_no_token_is_sent_then_the_request_is_unauthenticated(): void
     {
-        // Given a company with an owner member
-        [$company] = $this->aCompanyWithMember();
+        // Given Contoso and its owner
 
         // When its processing register is requested with no token
-        $response = $this->getJson('/api/v1/privacy/processing-register', ['X-Company-Context' => $company->getKey()]);
+        $response = $this->getJson('/api/v1/privacy/processing-register', ['X-Company-Context' => $this->company->getKey()]);
 
         // Then the request is unauthenticated
         $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
@@ -26,12 +26,11 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
     #[Test]
     public function when_the_caller_is_not_a_member_of_the_company_then_company_access_is_denied(): void
     {
-        // Given an auditor of one company and a second company they never joined
-        [, $outsider] = $this->aCompanyWithMember('auditor');
-        [$otherCompany] = $this->aCompanyWithMember();
+        // Given an auditor of another company, never a member of Contoso
+        $outsider = $this->aCompanyMember(Company::factory()->create(), 'auditor');
 
-        // When they view the second company's processing register
-        $response = $this->viewRegister($outsider, $otherCompany);
+        // When they view Contoso's processing register
+        $response = $this->viewRegister($outsider, $this->company);
 
         // Then the company context is denied
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::CompanyAccessDenied);
@@ -40,12 +39,11 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
     #[Test]
     public function when_a_member_owes_a_new_policy_version_then_consent_is_required(): void
     {
-        // Given an admin who accepted the policies, then a new privacy policy version is published
-        [$company, $admin] = $this->aCompanyWithMember('admin');
+        // Given Contoso's admin, who accepted the policies, then a new privacy policy version is published
         config(['lesily.policies.privacy' => 'v1.1']);
 
         // When they view the processing register
-        $response = $this->viewRegister($admin, $company);
+        $response = $this->viewRegister($this->admin, $this->company);
 
         // Then the register is refused until they accept
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::ConsentRequired);
@@ -55,11 +53,11 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
     #[DataProvider('provideRolesWithoutRegisterPermission')]
     public function when_a_role_without_the_register_permission_views_it_then_the_role_is_insufficient(string $roleCode): void
     {
-        // Given a member whose role does not carry privacy.view-register
-        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        // Given a member of Contoso whose role does not carry privacy.view-register
+        $actor = $this->memberWithRole($roleCode);
 
         // When they view the processing register
-        $response = $this->viewRegister($actor, $company);
+        $response = $this->viewRegister($actor, $this->company);
 
         // Then the register is refused for the missing permission
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
@@ -68,11 +66,10 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
     #[Test]
     public function when_a_write_verb_is_sent_then_the_method_is_not_allowed(): void
     {
-        // Given an owner of a company
-        [$company, $owner] = $this->aCompanyWithMember();
+        // Given Contoso's owner
 
         // When they try to PATCH the processing register
-        $response = $this->sendToRegister('PATCH', $owner, $company);
+        $response = $this->sendToRegister('PATCH', $this->owner, $this->company);
 
         // Then the register is not editable
         $this->assertRefusedWith($response, Response::HTTP_METHOD_NOT_ALLOWED, ApiErrorCode::HttpError);
@@ -81,11 +78,10 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
     #[Test]
     public function when_the_owner_views_the_register_then_every_foundation_activity_is_listed_in_order_with_its_words(): void
     {
-        // Given an owner of a company
-        [$company, $owner] = $this->aCompanyWithMember();
+        // Given Contoso's owner
 
         // When they view the processing register
-        $response = $this->viewRegister($owner, $company);
+        $response = $this->viewRegister($this->owner, $this->company);
 
         // Then every Foundation processing activity is listed in module order, in words
         $this->assertFoundationRegister($response);
@@ -95,11 +91,11 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
     #[DataProvider('provideOtherRolesHoldingTheRegisterPermission')]
     public function when_another_role_holding_the_permission_views_the_register_then_the_same_activities_are_listed(string $roleCode): void
     {
-        // Given a member whose role carries privacy.view-register
-        [$company, $actor] = $this->aCompanyWithMember($roleCode);
+        // Given a member of Contoso whose role carries privacy.view-register
+        $actor = $this->memberWithRole($roleCode);
 
         // When they view the processing register
-        $response = $this->viewRegister($actor, $company);
+        $response = $this->viewRegister($actor, $this->company);
 
         // Then they see the same Foundation processing activities as the owner
         $this->assertFoundationRegister($response);
