@@ -6,19 +6,19 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
 use Database\Factories\AuditEntryFactory;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use Tests\Feature\Foundation\FoundationTestCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
 abstract class AuditTrailTestCase extends FoundationTestCase
 {
-    use WithRolePermissionFixtures;
+    use FreeTierCompany, WithRolePermissionFixtures;
 
     protected Company $companyA;
 
@@ -28,19 +28,11 @@ abstract class AuditTrailTestCase extends FoundationTestCase
     {
         parent::setUp();
 
-        $this->seedRbacCatalog();
         config(['app.debug' => false]);
-        $this->companyA = Company::factory()->create();
+        $this->travelTo('2026-11-15 14:30:00');
+        $this->makeFreeTierCompany();
+        $this->companyA = $this->company;
         $this->companyB = Company::factory()->create();
-    }
-
-    protected function aConsentingMember(Company $company, string $roleCode): User
-    {
-        $member = User::factory()->create();
-        $this->attachMember($company, $member, Role::query()->where('code', $roleCode)->sole());
-        $this->aConsentRecordedBy($member, $company);
-
-        return $member;
     }
 
     protected function anEntryOfCompanyAAt(string $recordedAt): AuditEntry
@@ -136,6 +128,23 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         return $ids;
     }
 
+    /**
+     * Contoso's R creation rows (the company created, its emergency contact set, one consent per live policy) in the audit trail's order — written at the one frozen second, so listed by id, newest first.
+     *
+     * @return list<string>
+     */
+    protected function readyMadeEntryIds(): array
+    {
+        /** @var list<string> $ids */
+        $ids = AuditEntry::query()
+            ->where('company_id', $this->company->getKey())
+            ->whereIn('action', [AuditAction::CompanyCreated, AuditAction::EmergencyContactUpdated, AuditAction::ConsentRecorded])
+            ->pluck('id')
+            ->all();
+
+        return $this->newestIdFirst($ids);
+    }
+
     protected function assertListStartsOn(TestResponse $response, string $date): void
     {
         $from = $response->json('meta.retention.from');
@@ -184,7 +193,7 @@ abstract class AuditTrailTestCase extends FoundationTestCase
     {
         $expected = ['actor_id' => null, 'actor_name' => null, 'actor_role' => null, 'actor_role_name' => null];
 
-        $this->assertEntriesListed($response, [$entry->getKey()]);
+        $this->assertEntriesListed($response, [$entry->getKey(), ...$this->readyMadeEntryIds()]);
         $this->assertSame($expected, array_intersect_key($response->json('data.0'), $expected));
     }
 

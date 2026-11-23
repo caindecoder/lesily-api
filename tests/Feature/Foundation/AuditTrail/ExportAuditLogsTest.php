@@ -44,15 +44,12 @@ class ExportAuditLogsTest extends AuditTrailTestCase
 
     protected Company $enterprise;
 
-    protected User $owner;
-
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->travelTo('2026-11-15 14:30:00');
-        $this->enterprise = Company::factory()->onPlan(BillingPlan::Enterprise)->createOne();
-        $this->owner = $this->aConsentingMember($this->enterprise, 'owner');
+        $this->putOnPlan($this->company, BillingPlan::Enterprise);
+        $this->enterprise = $this->company;
     }
 
     #[Test]
@@ -72,7 +69,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public function when_a_member_without_audit_view_exports_then_it_is_refused(string $roleCode): void
     {
         // Given a member of the Enterprise company whose role cannot view the audit logs
-        $member = $this->aConsentingMember($this->enterprise, $roleCode);
+        $member = $this->memberWithRole($roleCode);
 
         // When the member exports the company's audit logs
         $response = $this->exportAuditLogs($member, $this->enterprise, ['format' => 'csv']);
@@ -90,7 +87,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     {
         // Given a company whose plan has no log export, and its owner
         $company = $standing(Company::factory())->createOne();
-        $owner = $this->aConsentingMember($company, 'owner');
+        $owner = $this->aCompanyMember($company, 'owner');
 
         // When the owner exports the company's audit logs
         $response = $this->exportAuditLogs($owner, $company, ['format' => 'csv']);
@@ -104,14 +101,14 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     {
         // Given the owner of a Pro company
         $company = Company::factory()->onPlan(BillingPlan::Pro)->createOne();
-        $owner = $this->aConsentingMember($company, 'owner');
+        $owner = $this->aCompanyMember($company, 'owner');
 
         // When the owner tries to export the audit logs
         $response = $this->exportAuditLogs($owner, $company, ['format' => 'csv']);
 
         // Then the export is refused and no audit row records it
         $response->assertForbidden();
-        $this->assertDatabaseCount('audit_trail', 0);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -124,7 +121,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
 
         // Then the export is rejected and no audit row records it
         $response->assertUnprocessable();
-        $this->assertDatabaseCount('audit_trail', 0);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -459,7 +456,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     {
         // Given a company on its trial, and its owner
         $company = Company::factory()->onTrial()->createOne();
-        $owner = $this->aConsentingMember($company, 'owner');
+        $owner = $this->aCompanyMember($company, 'owner');
 
         // When the owner exports the company's audit logs
         $response = $this->exportAuditLogs($owner, $company, ['format' => 'csv']);
@@ -473,7 +470,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public function when_an_admin_or_auditor_exports_then_it_is_served(string $roleCode): void
     {
         // Given an admin or auditor of the Enterprise company
-        $member = $this->aConsentingMember($this->enterprise, $roleCode);
+        $member = $this->memberWithRole($roleCode);
 
         // When the member exports the company's audit logs
         $response = $this->exportAuditLogs($member, $this->enterprise, ['format' => 'csv']);
@@ -565,6 +562,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
             'format' => 'json', 'from' => '2019-11-15', 'until' => '2026-11-14',
             'user' => $this->owner->getKey(), 'event' => 'login_failed', 'ip' => '203.0.113.5',
         ]);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
@@ -578,6 +576,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         // Then the row records the plan's horizon to today and no filter
         $response->assertOk();
         $this->assertExportRecorded(['format' => 'csv', 'from' => '2019-11-15', 'until' => '2026-11-15']);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
@@ -667,7 +666,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public static function provideOtherExporters(): array
     {
         return [
-            'another member of the company' => [fn (self $test) => [$test->aConsentingMember($test->enterprise, 'admin'), $test->enterprise]],
+            'another member of the company' => [fn (self $test) => [$test->memberWithRole('admin'), $test->enterprise]],
             'the same owner in another company' => [fn (self $test) => $test->theOwnerInAnotherEnterprise()],
         ];
     }
@@ -751,7 +750,6 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     {
         $company = Company::factory()->onPlan(BillingPlan::Enterprise)->createOne();
         $this->attachMember($company, $this->owner, Role::query()->where('code', 'owner')->sole());
-        $this->aConsentRecordedBy($this->owner, $company);
 
         return [$this->owner, $company];
     }
@@ -847,7 +845,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
      */
     protected function assertExportRecorded(array $metadata): void
     {
-        $entry = AuditEntry::query()->sole();
+        $entry = AuditEntry::query()->where('action', AuditAction::AuditLogsExported)->sole();
 
         $this->assertSame(
             [AuditAction::AuditLogsExported, 'warning', AuditSubjectType::Company, $this->enterprise->getKey(), $this->owner->getKey()],
