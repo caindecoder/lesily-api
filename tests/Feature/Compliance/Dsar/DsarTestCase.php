@@ -525,7 +525,7 @@ abstract class DsarTestCase extends TestCase
     {
         return match ($kind) {
             'requester' => $requester,
-            'owner' => $this->aCompanyMember($company, 'owner'),
+            'owner' => $this->owner,
             'member' => $this->aCompanyMember($company),
             default => throw new InvalidArgumentException("Unknown viewer: {$kind}"),
         };
