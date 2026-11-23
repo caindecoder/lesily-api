@@ -103,7 +103,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
         $response = $this->viewAuditLogs($employee, $this->companyA, ['ip' => '203.0.113.5']);
 
         // Then the role is refused, not the plan
-        $this->assertRoleInsufficient($response);
+        $this->assertRoleInsufficient($response, 'audit.view');
     }
 
     #[Test]

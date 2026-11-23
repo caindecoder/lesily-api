@@ -78,7 +78,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         $response = $this->exportAuditLogs($member, $this->enterprise, ['format' => 'csv']);
 
         // Then the role is refused
-        $this->assertRoleInsufficient($response);
+        $this->assertRoleInsufficient($response, 'audit.view');
     }
 
     /**

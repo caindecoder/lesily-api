@@ -48,7 +48,7 @@ class ViewAuditTrailTest extends AuditTrailTestCase
         $response = $this->viewAuditTrail($member, $this->companyA);
 
         // Then the role is refused and no entry is shown
-        $this->assertRoleInsufficient($response);
+        $this->assertRoleInsufficient($response, 'audit.view');
         $response->assertJsonMissingPath('data');
     }
 

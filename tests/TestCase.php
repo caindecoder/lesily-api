@@ -95,6 +95,15 @@ abstract class TestCase extends BaseTestCase
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
+    protected function assertRoleInsufficient(TestResponse $response, string $permission): void
+    {
+        $response->assertForbidden();
+        $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
+        $response->assertJsonPath('message', 'You do not have permission to perform this action.');
+        $response->assertJsonPath('required_permission', $permission);
+        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+    }
+
     /**
      * The request was refused with the §S21 envelope for $code — the caller
      * states the status (a Response::HTTP_* constant), never the enum the

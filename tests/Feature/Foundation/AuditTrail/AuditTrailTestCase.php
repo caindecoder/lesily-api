@@ -203,14 +203,6 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         $this->assertSame($expected, array_intersect_key($response->json('data.0'), $expected));
     }
 
-    protected function assertRoleInsufficient(TestResponse $response): void
-    {
-        $response->assertForbidden();
-        $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
-        $response->assertJsonPath('message', 'You do not have permission to perform this action.');
-        $response->assertJsonPath('required_permission', 'audit.view');
-    }
-
     protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
     {
         $response->assertUnprocessable();

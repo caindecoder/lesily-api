@@ -190,18 +190,6 @@ abstract class CompaniesTestCase extends TestCase
     }
 
     /**
-     * The member's role lacks the required permission — 403 ROLE_INSUFFICIENT
-     * naming the missing grant (TwoGateCheckTest::assertPermissionDenied mirror).
-     */
-    protected function assertRoleInsufficient(TestResponse $response, string $permission): void
-    {
-        $response->assertForbidden();
-        $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
-        $response->assertJsonPath('required_permission', $permission);
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
-    }
-
-    /**
      * The exact UC-1-032 CompanyResource wire shape for $company — read back
      * through the models so casts govern the expected types. B7 teeth: no
      * employee_count / legal_hold / owner_id keys exist to be expected.

@@ -61,7 +61,7 @@ class TwoGateCheckTest extends FoundationTestCase
         $response = $this->attemptGatedAction('two-gate/secured', $user, $company);
 
         // Then
-        $this->assertPermissionDenied($response, 'manage_security');
+        $this->assertRoleInsufficient($response, 'manage_security');
     }
 
     #[Test]
@@ -279,14 +279,6 @@ class TwoGateCheckTest extends FoundationTestCase
         $response->assertJsonPath('error_code', 'FEATURE_NOT_AVAILABLE');
         $response->assertJsonPath('upgrade_to', $tier);
         $response->assertJsonPath('upgrade_url', '/settings/billing/upgrade');
-    }
-
-    protected function assertPermissionDenied(TestResponse $response, string $permission): void
-    {
-        $response->assertForbidden();
-        $response->assertJsonPath('error_code', 'ROLE_INSUFFICIENT');
-        $response->assertJsonPath('required_permission', $permission);
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
     protected function assertFailsClosed(TestResponse $response): void

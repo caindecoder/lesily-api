@@ -56,7 +56,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
         $response = $this->viewAuditLogs($member, $this->companyA);
 
         // Then the role is refused and no row is shown
-        $this->assertRoleInsufficient($response);
+        $this->assertRoleInsufficient($response, 'audit.view');
         $response->assertJsonMissingPath('data');
     }
 
