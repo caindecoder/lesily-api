@@ -164,16 +164,16 @@ abstract class DsarTestCase extends TestCase
 
     /**
      * A second request for $subject under a fresh idempotency key — made by the
-     * subject themselves, or by an admin on their behalf.
+     * subject themselves, or by Contoso's admin on their behalf.
      *
      * @return array{0: User, 1: array<string, string>}
      */
-    protected function aRepeatRequestFor(User $subject, Company $company, string $requester): array
+    protected function aRepeatRequestFor(User $subject, string $requester): array
     {
         $this->idempotencyKey = (string) Str::uuid();
 
         if ($requester === 'admin') {
-            return [$this->aCompanyMember($company, 'admin'), ['subjectUserId' => $subject->getKey()]];
+            return [$this->admin, ['subjectUserId' => $subject->getKey()]];
         }
 
         return [$subject, []];
@@ -993,17 +993,18 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * A refused submission left no trace in $company — no event stored and no
-     * request projected, no audit entry.
+     * A refused submission left no trace in Contoso — its stream holds the
+     * ready-made events beside the members' consents, no request projected,
+     * no audit row beyond the ready-made ones.
      */
-    protected function assertNoDsarRequestRecorded(Company $company): void
+    protected function assertNoDsarRequestRecorded(): void
     {
-        $this->assertSame(0, LesilyStoredEvent::query()
-            ->whereForCompany($company->getKey())
+        $this->assertSame(self::READY_MADE_NON_CONSENT_EVENTS, LesilyStoredEvent::query()
+            ->whereForCompany($this->company->getKey())
             ->where('event_class', '!=', ConsentRecorded::class)
             ->count());
-        $this->assertSame(0, DsarRequestRecord::query()->where('company_id', $company->getKey())->count());
-        $this->assertDatabaseMissing('audit_trail', ['company_id' => $company->getKey()]);
+        $this->assertSame(0, DsarRequestRecord::query()->where('company_id', $this->company->getKey())->count());
+        $this->assertSame(self::READY_MADE_AUDIT_ROWS, AuditEntry::query()->where('company_id', $this->company->getKey())->count());
     }
 
     /**
