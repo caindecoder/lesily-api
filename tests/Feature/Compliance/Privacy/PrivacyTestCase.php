@@ -7,7 +7,6 @@ use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
-use App\Foundation\RolesPermissions\Entities\Role;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
 abstract class PrivacyTestCase extends TestCase
@@ -36,11 +35,6 @@ abstract class PrivacyTestCase extends TestCase
         $this->attachMember($company, $actor, $this->seededRole($roleCode));
 
         return [$company, $actor];
-    }
-
-    protected function seededRole(string $code): Role
-    {
-        return Role::query()->where('code', $code)->sole();
     }
 
     protected function viewRegister(User $actor, Company $company): TestResponse

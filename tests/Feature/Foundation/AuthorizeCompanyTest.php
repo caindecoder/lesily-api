@@ -5,7 +5,6 @@ namespace Tests\Feature\Foundation;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
-use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -26,7 +25,7 @@ class AuthorizeCompanyTest extends FoundationTestCase
         ]);
 
         // Then the request is rejected as unauthenticated
-        $this->assertUnauthenticatedResponse($response);
+        $this->assertUnauthenticated($response);
     }
 
     #[Test]
@@ -126,21 +125,5 @@ class AuthorizeCompanyTest extends FoundationTestCase
             'garbage string' => ['not-a-company-id'],
             'numeric value' => ['12345'],
         ];
-    }
-
-    protected function assertResourceNotFound(TestResponse $response): void
-    {
-        $response->assertNotFound();
-        $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
-    }
-
-    protected function assertUnauthenticatedResponse(TestResponse $response): void
-    {
-        $response->assertUnauthorized();
-        $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
-        $response->assertJsonPath('message', 'Unauthenticated.');
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
-        $response->assertJsonPath('errors', []);
     }
 }

@@ -202,18 +202,4 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         $response->assertOk();
         $this->assertSame($expected, array_intersect_key($response->json('data.0'), $expected));
     }
-
-    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
-    {
-        $response->assertUnprocessable();
-        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
-        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
-    }
-
-    protected function assertUnauthenticated(TestResponse $response): void
-    {
-        $response->assertUnauthorized();
-        $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
-        $response->assertJsonMissingPath('data');
-    }
 }

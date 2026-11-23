@@ -130,7 +130,10 @@ abstract class TestCase extends BaseTestCase
     {
         $response->assertUnauthorized();
         $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
+        $response->assertJsonPath('message', 'Unauthenticated.');
+        $response->assertJsonPath('errors', []);
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
+        $response->assertJsonMissingPath('data');
     }
 
     protected function assertResourceNotFound(TestResponse $response): void
