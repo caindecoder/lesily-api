@@ -224,13 +224,6 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         ];
     }
 
-    protected function assertFailedClosed(TestResponse $response): void
-    {
-        $response->assertInternalServerError();
-        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
-        $response->assertJsonMissingPath('data');
-    }
-
     protected function assertNothingRecorded(): void
     {
         $this->assertDatabaseCount('breach_incidents', 0);

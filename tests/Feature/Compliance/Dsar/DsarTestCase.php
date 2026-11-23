@@ -16,13 +16,14 @@ use Illuminate\Http\Response;
 use InvalidArgumentException;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
-use App\Consent\Aggregates\Consent;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Support\Facades\Lang;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Queue;
 use App\Companies\Entities\CompanyUser;
 use App\Companies\Enums\TransferSource;
+use App\Consent\Events\ConsentRecorded;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Exceptions;
@@ -47,13 +48,13 @@ use App\Compliance\Dsar\Events\DsarRequestSubmitted;
 use App\Compliance\Dsar\IO\Export\DsarExportArchive;
 use App\Compliance\Dsar\UseCases\Reports\DsarReport;
 use App\Compliance\Dsar\UseCases\Sections\DsarSections;
-use App\Consent\UseCases\Commands\RecordConsentCommand;
 use App\Companies\Memberships\Aggregates\UserMembership;
 use App\Compliance\Dsar\UseCases\Audit\DsarOutcomeAudit;
 use App\Foundation\Notifications\Enums\NotificationType;
 use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
+use Tests\Feature\Companies\Memberships\CreatesMemberships;
 use App\Compliance\Dsar\UseCases\Jobs\DeleteDsarExportFileJob;
 use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
 use App\Compliance\Dsar\Exceptions\DsarExportFileMissingException;
@@ -74,6 +75,8 @@ use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
 
 abstract class DsarTestCase extends TestCase
 {
+    use CreatesMemberships;
+    use FreeTierCompany;
     use HasPlatformAdmin;
     use InteractsWithQueuedReactors;
 
@@ -102,7 +105,6 @@ abstract class DsarTestCase extends TestCase
     {
         parent::setUp();
 
-        $this->seedRbacCatalog();
         $this->travelTo('2026-10-01 09:00:00');
         config(['app.debug' => false]);
         $this->idempotencyKey = (string) Str::uuid();
@@ -110,23 +112,19 @@ abstract class DsarTestCase extends TestCase
         Storage::fake('dsar');
         $this->reportRenderer = new RecordingDsarReportRenderer(new Filesystem, sys_get_temp_dir());
         $this->app->instance(DsarReportRendererInterface::class, $this->reportRenderer);
+        $this->makeFreeTierCompany();
     }
 
     /**
-     * A fresh user made a live member of $company under a seeded role.
+     * A fresh employee of $company who has accepted no policy there.
      */
-    protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
+    protected function aMemberWhoNeverConsented(Company $company): User
     {
         $user = User::factory()->create();
 
-        $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
+        $company->users()->attach($user, ['role_id' => $this->seededRole('employee')->getKey()]);
 
         return $user;
-    }
-
-    protected function alsoAMemberOf(Company $company, User $member): void
-    {
-        $company->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
     }
 
     /**
@@ -159,11 +157,7 @@ abstract class DsarTestCase extends TestCase
     protected function aRemovedMember(Company $company): User
     {
         $user = $this->aCompanyMember($company);
-
-        CompanyUser::query()
-            ->where('company_id', $company->getKey())
-            ->where('user_id', $user->getKey())
-            ->update(['deleted_at' => now()]);
+        $this->softDeleteMembership($company, $user);
 
         return $user;
     }
@@ -206,11 +200,6 @@ abstract class DsarTestCase extends TestCase
         return DsarRequestRecord::query()->findOrFail($requestId);
     }
 
-    protected function seededRole(string $code): Role
-    {
-        return Role::query()->where('code', $code)->sole();
-    }
-
     /**
      * @return array<string, array{string}>
      */
@@ -250,16 +239,6 @@ abstract class DsarTestCase extends TestCase
             'employee' => ['employee'],
             'auditor' => ['auditor'],
         ];
-    }
-
-    /**
-     * The read failed closed — the internal-error envelope and no request data.
-     */
-    protected function assertFailedClosed(TestResponse $response): void
-    {
-        $response->assertInternalServerError();
-        $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
-        $response->assertJsonMissingPath('data');
     }
 
     /**
@@ -752,29 +731,6 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * The request was rejected as unauthenticated — 401 with the §S21
-     * UNAUTHENTICATED envelope (module bases are independent — the
-     * CompaniesTestCase mirror).
-     */
-    protected function assertUnauthenticated(TestResponse $response): void
-    {
-        $response->assertUnauthorized();
-        $response->assertJsonPath('error_code', 'UNAUTHENTICATED');
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
-    }
-
-    /**
-     * The input was refused as invalid on $invalidField — 422 VALIDATION_FAILED
-     * whose field-level errors contain $expectedMessage (§2.2 Rule 10).
-     */
-    protected function assertValidationRejected(TestResponse $response, string $invalidField, string $expectedMessage): void
-    {
-        $response->assertUnprocessable();
-        $response->assertJsonPath('error_code', 'VALIDATION_FAILED');
-        $response->assertJsonValidationErrors([$invalidField => $expectedMessage]);
-    }
-
-    /**
      * The member's role lacks the required permission — 403 ROLE_INSUFFICIENT
      * naming the missing grant.
      */
@@ -786,24 +742,12 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * The requested resource does not exist — 404 with the §S21 envelope and no
-     * existence leak.
-     */
-    protected function assertResourceNotFound(TestResponse $response): void
-    {
-        $response->assertNotFound();
-        $response->assertJsonPath('error_code', 'RESOURCE_NOT_FOUND');
-        $response->assertJsonPath('message', 'The requested resource was not found.');
-    }
-
-    /**
      * The request stayed hidden — the plain 404 envelope, nothing in the body
      * that names $requestId (the random correlation id aside).
      */
     protected function assertHiddenAsNotFound(TestResponse $response, string $requestId): void
     {
         $this->assertResourceNotFound($response);
-        $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
         $this->assertStringNotContainsString($requestId, (string) json_encode(Arr::except((array) $response->json(), 'correlation_id')));
     }
 
@@ -819,7 +763,7 @@ abstract class DsarTestCase extends TestCase
 
     /**
      * Exactly one request exists for $subject in $company — one submitted event,
-     * one projected row and one audit entry.
+     * one projected row and one `dsar_requested` audit row (the total is the caller's).
      */
     protected function assertOneDsarRequestRecorded(Company $company, User $subject): void
     {
@@ -831,7 +775,10 @@ abstract class DsarTestCase extends TestCase
             ->where('company_id', $company->getKey())
             ->where('subject_user_id', $subject->getKey())
             ->count());
-        $this->assertDatabaseCount('audit_trail', 1);
+        $this->assertSame(1, AuditEntry::query()
+            ->where('company_id', $company->getKey())
+            ->where('action', AuditAction::DsarRequested)
+            ->count());
     }
 
     /**
@@ -986,7 +933,7 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * Exactly one audit entry records the request — "DSAR requested — for:
+     * The request's audit row records it — "DSAR requested — for:
      * <subject>, by: <requester>" — linked to its stored event, stamped with
      * the requester's role, the response's Correlation-Id and the client's
      * address and user agent.
@@ -999,7 +946,6 @@ abstract class DsarTestCase extends TestCase
         $this->assertIsString($correlationId);
         $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
 
-        $this->assertDatabaseCount('audit_trail', 1);
         $this->assertDatabaseHas('audit_trail', [
             'id' => $entry->getKey(),
             'company_id' => $record->company_id,
@@ -1052,7 +998,10 @@ abstract class DsarTestCase extends TestCase
      */
     protected function assertNoDsarRequestRecorded(Company $company): void
     {
-        $this->assertSame(0, LesilyStoredEvent::query()->whereForCompany($company->getKey())->count());
+        $this->assertSame(0, LesilyStoredEvent::query()
+            ->whereForCompany($company->getKey())
+            ->where('event_class', '!=', ConsentRecorded::class)
+            ->count());
         $this->assertSame(0, DsarRequestRecord::query()->where('company_id', $company->getKey())->count());
         $this->assertDatabaseMissing('audit_trail', ['company_id' => $company->getKey()]);
     }
@@ -1335,22 +1284,6 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * $user's consent to the terms and the privacy policy in $company,
-     * recorded the event-sourced way from one IP.
-     */
-    protected function aConsentRecordedBy(User $user, Company $company): void
-    {
-        Consent::retrieve(Str::uuid7()->toString())
-            ->record(RecordConsentCommand::from([
-                'user' => $user,
-                'company' => $company,
-                'policyVersions' => ['tos' => '2026-03', 'privacy' => '2026-04'],
-                'ip' => '203.0.113.7',
-            ]))
-            ->persist();
-    }
-
-    /**
      * A sign-in of $user from $deviceName — a Sanctum token expiring at
      * $expiresAt, not used yet.
      */
@@ -1524,13 +1457,8 @@ abstract class DsarTestCase extends TestCase
      */
     protected function anAdminChangesTheRoleOf(User $member, Company $company): void
     {
-        $membershipId = CompanyUser::query()
-            ->where('company_id', $company->getKey())
-            ->where('user_id', $member->getKey())
-            ->sole()
-            ->getKey();
+        $membershipId = $this->membershipIdOf($company, $member);
         $admin = $this->aCompanyMember($company, 'admin');
-        parent::aConsentRecordedBy($admin, $company);
         Sanctum::actingAs($admin);
 
         $this->withHeader('User-Agent', self::ADMIN_DEVICE)
@@ -1551,7 +1479,6 @@ abstract class DsarTestCase extends TestCase
      */
     protected function theySetTheirEmergencyContact(User $owner, Company $company): void
     {
-        parent::aConsentRecordedBy($owner, $company);
         Sanctum::actingAs($owner);
 
         $this->withHeader('User-Agent', self::MEMBER_DEVICE)

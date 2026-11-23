@@ -202,7 +202,7 @@ class ExportDsarSectionsTest extends DsarTestCase
         $this->runTheExportFor($request);
 
         // Then the stored change is encrypted, yet the export shows each value in plain words, with no ciphertext and no marker anywhere
-        $this->assertTrue(AuditEntry::query()->where('action', 'emergency_contact_updated')->sole()->metadata['changes']['name']['encrypted'] ?? false);
+        $this->assertTrue(AuditEntry::query()->where('action', 'emergency_contact_updated')->where('actor_user_id', $owner->getKey())->sole()->metadata['changes']['name']['encrypted'] ?? false);
         /** @var list<array<string, mixed>> $changes */
         $changes = collect($this->auditSectionOf($request))->sole('action', 'emergency_contact_updated')['changes'];
         $this->assertSame([
@@ -282,7 +282,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     public function when_a_section_has_no_entries_then_it_is_exported_empty(): void
     {
         // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited, took part in no transfer, received no notice, switched none off and was never refused
-        $member = $this->aCompanyMember($this->company);
+        $member = $this->aMemberWhoNeverConsented($this->company);
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When their export is built
@@ -452,7 +452,6 @@ class ExportDsarSectionsTest extends DsarTestCase
     {
         // Given a member who agreed to the terms and the privacy policy here
         $member = $this->aCompanyMember($this->company);
-        $this->aConsentRecordedBy($member, $this->company);
         $request = $this->aSubmittedRequest($this->company, $member);
 
         // When their export is built
@@ -460,8 +459,8 @@ class ExportDsarSectionsTest extends DsarTestCase
 
         // Then
         $this->assertSame([
-            ['policy_type' => 'tos', 'version' => '2026-03', 'ip_address' => '203.0.113.7', 'recorded_at' => now()->toISOString()],
-            ['policy_type' => 'privacy', 'version' => '2026-04', 'ip_address' => '203.0.113.7', 'recorded_at' => now()->toISOString()],
+            ['policy_type' => 'tos', 'version' => 'v1.0', 'ip_address' => '198.51.100.4', 'recorded_at' => now()->toISOString()],
+            ['policy_type' => 'privacy', 'version' => 'v1.0', 'ip_address' => '198.51.100.4', 'recorded_at' => now()->toISOString()],
         ], $this->exportedData($request)['consent_records']);
     }
 
@@ -649,7 +648,7 @@ class ExportDsarSectionsTest extends DsarTestCase
         // Given a member of this company and of another, refused an hour ago at a door no company owns,
         // who then signed in once — a copy logged for each company
         $member = $this->aCompanyMember($this->company);
-        $this->alsoAMemberOf(Company::factory()->create(), $member);
+        $this->attachMember(Company::factory()->create(), $member, $this->seededRole('employee'));
         AccessLogEntry::factory()->byUser($member)->ofEvent(AccessEvent::Forbidden)->seenAt(now()->subHour())->create();
         $this->signInThroughTheApi($member);
         $request = $this->aSubmittedRequest($this->company, $member);

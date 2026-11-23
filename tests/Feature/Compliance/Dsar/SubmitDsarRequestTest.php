@@ -144,6 +144,7 @@ class SubmitDsarRequestTest extends DsarTestCase
         // Then
         $this->assertRefusedAsInProgress($response);
         $this->assertOneDsarRequestRecorded($company, $subject);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     /**
@@ -203,6 +204,7 @@ class SubmitDsarRequestTest extends DsarTestCase
         // Then
         $this->assertReplayedOf($replay, $first);
         $this->assertOneDsarRequestRecorded($company, $subject);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     #[Test]
@@ -233,6 +235,7 @@ class SubmitDsarRequestTest extends DsarTestCase
         // Then
         $this->assertDsarRequestRecorded($response, $member, $member);
         $this->assertDsarRequestAudited($response, $member, $member);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     /**
@@ -265,6 +268,7 @@ class SubmitDsarRequestTest extends DsarTestCase
         // Then
         $this->assertDsarRequestRecorded($response, $member, $actor);
         $this->assertDsarRequestAudited($response, $member, $actor);
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
     /**

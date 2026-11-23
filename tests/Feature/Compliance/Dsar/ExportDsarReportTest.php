@@ -76,7 +76,7 @@ class ExportDsarReportTest extends DsarTestCase
     public function when_a_section_has_no_entries_then_the_report_says_none_recorded(): void
     {
         // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited, took part in no transfer, received no notice, switched none off and was never refused
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $request = $this->aSubmittedRequest($this->company, $this->aMemberWhoNeverConsented($this->company));
 
         // When their export is built
         $this->runTheExportFor($request);
