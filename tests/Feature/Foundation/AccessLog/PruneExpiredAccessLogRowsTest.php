@@ -5,6 +5,7 @@ namespace Tests\Feature\Foundation\AccessLog;
 use RuntimeException;
 use Carbon\CarbonImmutable;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Tests\Concerns\AssertsAuditTrail;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
@@ -16,9 +17,7 @@ use App\Foundation\AccessLog\Entities\AccessLogEntry;
 
 class PruneExpiredAccessLogRowsTest extends FoundationTestCase
 {
-    use AssertsAuditTrail;
-
-    protected Company $company;
+    use AssertsAuditTrail, FreeTierCompany;
 
     protected Company $shortCompany;
 
@@ -27,7 +26,7 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
         parent::setUp();
 
         $this->travelTo(CarbonImmutable::parse('2026-11-17 10:00:00'));
-        $this->company = Company::factory()->create();
+        $this->makeFreeTierCompany();
         $this->shortCompany = Company::factory()->keepingAccessLogFor(1)->create();
     }
 
@@ -69,9 +68,9 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
         // When the purge runs
         $this->runPrune()->expectsOutput('0 expired access-log row(s) deleted.')->assertSuccessful();
 
-        // Then both rows are still there and nothing is audited
+        // Then both rows are still there and nothing is audited beyond the ready-made company's rows
         $this->assertRemaining($rows);
-        $this->assertNothingAudited();
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
@@ -112,7 +111,7 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
         } catch (RuntimeException) {
             // Then both companies' rows are still there and neither is audited
             $this->assertRemaining($rows);
-            $this->assertNothingAudited();
+            $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
         }
     }
 
@@ -255,8 +254,8 @@ class PruneExpiredAccessLogRowsTest extends FoundationTestCase
         // When the purge runs
         $this->runPrune()->expectsOutput('1 expired access-log row(s) deleted.')->assertSuccessful();
 
-        // Then nothing is audited
-        $this->assertNothingAudited();
+        // Then nothing is audited beyond the ready-made company's rows
+        $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
     #[Test]
