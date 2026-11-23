@@ -3,7 +3,6 @@
 namespace Tests\Feature\Compliance\Dsar;
 
 use RuntimeException;
-use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\AssertionFailedError;
 use Illuminate\Support\Facades\Notification;
@@ -15,22 +14,12 @@ use App\Foundation\Notifications\Enums\NotificationType;
 
 class FulfilDsarRequestTest extends DsarTestCase
 {
-    protected Company $company;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->company = Company::factory()->create();
-    }
-
     #[Test]
     #[DataProvider('provideUnfulfilledClosedRequests')]
     public function when_the_request_was_withdrawn_or_rejected_then_the_job_records_nothing_and_discards_the_leftover_file(string $closedBy, DsarRequestStatus $status): void
     {
         // Given a member's own request withdrawn or rejected, with the ZIP an earlier failed try left behind
-        $member = $this->aCompanyMember($this->company);
-        $request = $this->aClosedRequest($this->company, $member, $closedBy);
+        $request = $this->aClosedRequest($this->company, $this->employee, $closedBy);
         $this->aPartialExportFor($request);
 
         // When its export job runs again
@@ -44,8 +33,7 @@ class FulfilDsarRequestTest extends DsarTestCase
     public function when_the_request_is_already_fulfilled_then_a_late_job_leaves_its_export_untouched(): void
     {
         // Given a member's fulfilled request and the export it is downloadable from
-        $member = $this->aCompanyMember($this->company);
-        $request = $this->aClosedRequest($this->company, $member, 'fulfilled');
+        $request = $this->aClosedRequest($this->company, $this->employee, 'fulfilled');
         $this->aPartialExportFor($request);
 
         // When a late copy of its export job runs
@@ -59,8 +47,7 @@ class FulfilDsarRequestTest extends DsarTestCase
     public function when_the_request_is_withdrawn_while_the_export_is_built_then_the_fulfil_is_refused_and_the_file_deleted(): void
     {
         // Given a member's own request, withdrawn by them while its sections are collected
-        $member = $this->aCompanyMember($this->company);
-        $request = $this->aSubmittedRequest($this->company, $member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
         $this->withSections($this->aSectionThatWithdraws($request));
 
         // When its export is built
@@ -75,8 +62,7 @@ class FulfilDsarRequestTest extends DsarTestCase
     public function when_the_audit_entry_cannot_be_written_then_nothing_is_fulfilled(): void
     {
         // Given a member's own request and an audit write that fails after its row is inserted
-        $member = $this->aCompanyMember($this->company);
-        $request = $this->aSubmittedRequest($this->company, $member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         try {
@@ -98,8 +84,7 @@ class FulfilDsarRequestTest extends DsarTestCase
     {
         // Given a member's request, made by them or by an owner on their behalf, with notices captured from the start
         Notification::fake();
-        $member = $this->aCompanyMember($this->company);
-        $request = $this->aSubmittedRequest($this->company, $member, $this->aRequesterFor($this->company, $member, $requestedBy));
+        $request = $this->aSubmittedRequest($this->company, $this->employee, $this->aRequesterFor($this->employee, $requestedBy));
 
         // When its export is built and the notices are delivered
         $this->runTheExportFor($request);
@@ -113,14 +98,13 @@ class FulfilDsarRequestTest extends DsarTestCase
     public function when_the_export_is_built_then_the_request_is_fulfilled_for_seven_days(): void
     {
         // Given a member's own request still in progress
-        $member = $this->aCompanyMember($this->company);
-        $request = $this->aSubmittedRequest($this->company, $member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
 
         // When its export is built
         $this->runTheExportFor($request);
 
         // Then the request is fulfilled with a download window of seven days, and the fulfilment audited
         $this->assertFulfilled($request);
-        $this->assertFulfilmentAudited($request, $member);
+        $this->assertFulfilmentAudited($request, $this->employee);
     }
 }

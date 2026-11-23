@@ -3,7 +3,6 @@
 namespace Tests\Feature\Compliance\Dsar;
 
 use RuntimeException;
-use App\Companies\Entities\Company;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\AssertionFailedError;
 use Illuminate\Support\Facades\Notification;
@@ -16,21 +15,11 @@ use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 
 class RejectDsarRequestTest extends DsarTestCase
 {
-    protected Company $company;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->company = Company::factory()->create();
-    }
-
     #[Test]
     public function when_a_section_fails_then_the_job_fails_without_fulfilling(): void
     {
         // Given a member's own request and a section that fails while collecting
-        $member = $this->aCompanyMember($this->company);
-        $request = $this->aSubmittedRequest($this->company, $member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
         $this->withSections($this->aSectionThatFails());
 
         try {
@@ -50,9 +39,8 @@ class RejectDsarRequestTest extends DsarTestCase
     public function when_the_request_was_withdrawn_before_the_final_failure_then_nothing_is_rejected(): void
     {
         // Given a member's own request they withdrew while its export kept failing
-        $member = $this->aCompanyMember($this->company);
-        $request = $this->aSubmittedRequest($this->company, $member);
-        $this->withdrawDsarRequest($member, $this->company, $request->getKey())->assertOk();
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
+        $this->withdrawDsarRequest($this->employee, $this->company, $request->getKey())->assertOk();
         $this->aPartialExportFor($request);
 
         // When the export fails for good
@@ -67,8 +55,7 @@ class RejectDsarRequestTest extends DsarTestCase
     public function when_the_request_was_fulfilled_before_the_final_failure_then_its_export_is_kept(): void
     {
         // Given a member's request a sibling run already fulfilled, and the export it is downloadable from
-        $member = $this->aCompanyMember($this->company);
-        $request = $this->aClosedRequest($this->company, $member, 'fulfilled');
+        $request = $this->aClosedRequest($this->company, $this->employee, 'fulfilled');
         $this->aPartialExportFor($request);
 
         // When this run's export fails for good
@@ -82,8 +69,7 @@ class RejectDsarRequestTest extends DsarTestCase
     public function when_a_sibling_run_fulfils_the_request_during_the_final_failure_then_its_export_is_kept(): void
     {
         // Given a member's request still in progress, the export a sibling run wrote, and that run fulfilling just as this one gives up
-        $member = $this->aCompanyMember($this->company);
-        $request = $this->aSubmittedRequest($this->company, $member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
         $this->aPartialExportFor($request);
         $this->aSiblingRunFulfilsBeforeTheReject($request);
 
@@ -98,8 +84,7 @@ class RejectDsarRequestTest extends DsarTestCase
     public function when_the_audit_entry_cannot_be_written_then_nothing_is_rejected(): void
     {
         // Given a member's own request, its partial export, and an audit write that fails after its row is inserted
-        $member = $this->aCompanyMember($this->company);
-        $request = $this->aSubmittedRequest($this->company, $member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
         $this->aPartialExportFor($request);
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
@@ -120,7 +105,7 @@ class RejectDsarRequestTest extends DsarTestCase
     public function when_the_job_is_queued_then_it_tries_three_times_with_backoff(): void
     {
         // Given
-        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
 
         // When
         $job = new BuildDsarExportJob($request->getKey(), $request->company_id, $request->subject_user_id);
@@ -135,8 +120,7 @@ class RejectDsarRequestTest extends DsarTestCase
     {
         // Given a member's request, made by them or by an owner on their behalf, with notices captured from the start
         Notification::fake();
-        $member = $this->aCompanyMember($this->company);
-        $request = $this->aSubmittedRequest($this->company, $member, $this->aRequesterFor($this->company, $member, $requestedBy));
+        $request = $this->aSubmittedRequest($this->company, $this->employee, $this->aRequesterFor($this->employee, $requestedBy));
 
         // When its export fails for good and the notices are delivered
         $this->failTheExportFor($request, new RuntimeException('export failure'));
@@ -150,8 +134,7 @@ class RejectDsarRequestTest extends DsarTestCase
     public function when_the_export_fails_for_good_then_the_request_is_rejected_with_a_fixed_reason(): void
     {
         // Given a member's own request and the partial export its last try left behind
-        $member = $this->aCompanyMember($this->company);
-        $request = $this->aSubmittedRequest($this->company, $member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
         $this->aPartialExportFor($request);
 
         // When the export fails for good on an error carrying internal detail
@@ -159,6 +142,6 @@ class RejectDsarRequestTest extends DsarTestCase
 
         // Then the request is rejected with the fixed reason, the partial file is gone and the rejection audited
         $this->assertRejected($request);
-        $this->assertRejectionAudited($request, $member);
+        $this->assertRejectionAudited($request, $this->employee);
     }
 }

@@ -173,7 +173,7 @@ class WithdrawDsarRequestTest extends DsarTestCase
     {
         // Given a member's request, made by them or by an owner on their behalf, with notices captured from the start
         Notification::fake();
-        $requester = $this->aRequesterFor($this->company, $this->employee, $requestedBy);
+        $requester = $this->aRequesterFor($this->employee, $requestedBy);
         $request = $this->aSubmittedRequest($this->company, $this->employee, $requester);
 
         // When the requester withdraws it and the notices are delivered

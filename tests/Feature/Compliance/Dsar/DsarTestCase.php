@@ -128,14 +128,14 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * Who asks for $member's export: $member themselves, or an owner of
-     * $company on their behalf.
+     * Who asks for $member's export: $member themselves, or Contoso's owner
+     * on their behalf.
      */
-    protected function aRequesterFor(Company $company, User $member, string $requestedBy): User
+    protected function aRequesterFor(User $member, string $requestedBy): User
     {
         return match ($requestedBy) {
             'themselves' => $member,
-            'an owner' => $this->aCompanyMember($company, 'owner'),
+            'an owner' => $this->owner,
             default => throw new InvalidArgumentException("Unknown requester: {$requestedBy}"),
         };
     }
