@@ -8,7 +8,6 @@ use RuntimeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
-use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
@@ -27,10 +26,6 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class FlagMissedDsarDeadlinesTest extends DsarTestCase
 {
-    protected Company $company;
-
-    protected User $member;
-
     /** @var list<User> */
     protected array $platformAdmins;
 
@@ -38,8 +33,6 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     {
         parent::setUp();
 
-        $this->company = Company::factory()->create();
-        $this->member = $this->aCompanyMember($this->company);
         $this->platformAdmins = [User::factory()->create(), User::factory()->create()];
         $this->allowlist(array_map(fn (User $platformAdmin): string => $platformAdmin->getKey(), $this->platformAdmins));
         Notification::fake();
@@ -49,7 +42,7 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     public function when_no_open_request_is_past_its_deadline_then_nothing_is_flagged(): void
     {
         // Given a submitted request whose deadline is still ahead
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
 
         // When the daily scan runs with no --date (defaults to now)
         $this->runFlagMissedDeadlines()->expectsOutput('0 missed deadline(s) flagged.')->assertSuccessful();
@@ -99,7 +92,7 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     public function when_a_closed_request_is_past_its_deadline_then_it_is_not_flagged(string $closedBy, DsarRequestStatus $status): void
     {
         // Given a request closed before its deadline, the clock now a day past it
-        $request = $this->aClosedRequest($this->company, $this->member, $closedBy);
+        $request = $this->aClosedRequest($this->company, $this->employee, $closedBy);
         $this->travelTo($request->sla_deadline->addDay());
 
         // When the daily scan runs
@@ -268,7 +261,7 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     public function when_the_scan_runs_at_the_deadline_edge_then_only_a_missed_deadline_is_flagged(int $offsetSeconds, bool $flagged): void
     {
         // Given a submitted request, the clock at its deadline moved by the offset
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
         $this->travelTo($request->sla_deadline->addSeconds($offsetSeconds));
 
         // When the daily scan runs
@@ -293,7 +286,7 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     public function when_a_missed_night_is_replayed_then_the_breach_is_stamped_with_its_date(): void
     {
         // Given a request whose deadline passed before a night the scan missed
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
         $this->travelTo('2026-11-02 12:00:00');
 
         // When that night is replayed
@@ -331,7 +324,7 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
 
         // Then the breach is recorded on the still-open request and audited
         $this->assertBreachRecorded($request, now());
-        $this->assertBreachAudited($request, $this->member);
+        $this->assertBreachAudited($request, $this->employee);
     }
 
     #[Test]
@@ -364,27 +357,27 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     }
 
     /**
-     * $subject's request in this company — $this->member's by default — with
+     * $subject's request in this company — $this->employee's by default — with
      * the clock a day past its 30-day deadline.
      */
     protected function aMissedDeadlineRequest(?User $subject = null): DsarRequestRecord
     {
-        $request = $this->aSubmittedRequest($this->company, $subject ?? $this->member);
+        $request = $this->aSubmittedRequest($this->company, $subject ?? $this->employee);
         $this->travelTo($request->sla_deadline->addDay());
 
         return $request;
     }
 
     /**
-     * $this->member's request in $state, the clock past its deadline —
+     * $this->employee's request in $state, the clock past its deadline —
      * except a request not yet due; an already-flagged one a second after
      * the run that flagged it.
      */
     protected function aRequestInState(string $state): DsarRequestRecord
     {
         $request = match ($state) {
-            'not yet due' => $this->aSubmittedRequest($this->company, $this->member),
-            'fulfilled', 'rejected', 'withdrawn' => $this->aClosedRequest($this->company, $this->member, $state),
+            'not yet due' => $this->aSubmittedRequest($this->company, $this->employee),
+            'fulfilled', 'rejected', 'withdrawn' => $this->aClosedRequest($this->company, $this->employee, $state),
             'due, not flagged', 'already flagged' => $this->aMissedDeadlineRequest(),
             default => throw new InvalidArgumentException("Unknown state: {$state}"),
         };

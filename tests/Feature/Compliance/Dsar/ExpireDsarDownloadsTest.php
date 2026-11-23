@@ -6,7 +6,6 @@ use App\Models\User;
 use RuntimeException;
 use Carbon\CarbonImmutable;
 use InvalidArgumentException;
-use App\Companies\Entities\Company;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
@@ -21,23 +20,11 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class ExpireDsarDownloadsTest extends DsarTestCase
 {
-    protected Company $company;
-
-    protected User $member;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->company = Company::factory()->create();
-        $this->member = $this->aCompanyMember($this->company);
-    }
-
     #[Test]
     public function when_no_download_window_has_closed_then_nothing_is_expired(): void
     {
         // Given a ready export whose download window is still open
-        $request = $this->aReadyExportFor($this->company, $this->member);
+        $request = $this->aReadyExportFor($this->company, $this->employee);
 
         // When the daily scan runs with no --date (defaults to now)
         $this->runExpireLinks()->expectsOutput('0 download(s) expired.')->assertSuccessful();
@@ -112,7 +99,7 @@ class ExpireDsarDownloadsTest extends DsarTestCase
     public function when_one_expiry_fails_then_it_is_reported_and_the_others_still_expire(int $failingPosition): void
     {
         // Given two closed-window exports, the one at the given position failing to expire
-        $exports = [$this->anExportFor($this->member), $this->anExportFor($this->aCompanyMember($this->company))];
+        $exports = [$this->anExportFor($this->employee), $this->anExportFor($this->aCompanyMember($this->company))];
         $failing = $exports[$failingPosition];
         $other = $exports[1 - $failingPosition];
         $cause = $this->failTheAuditOf($failing);
@@ -203,7 +190,7 @@ class ExpireDsarDownloadsTest extends DsarTestCase
     public function when_the_scan_runs_at_the_window_edge_then_only_a_closed_window_expires(int $offsetSeconds, bool $expires): void
     {
         // Given a ready export, with the clock at the close of its window plus the offset
-        $request = $this->aReadyExportFor($this->company, $this->member);
+        $request = $this->aReadyExportFor($this->company, $this->employee);
         $this->travelTo($request->download_expires_at?->addSeconds($offsetSeconds));
 
         // When the daily scan runs
@@ -228,7 +215,7 @@ class ExpireDsarDownloadsTest extends DsarTestCase
     public function when_a_missed_night_is_replayed_then_the_expiry_is_stamped_with_its_date(): void
     {
         // Given a ready export whose window closed before a night the scheduler missed
-        $request = $this->aReadyExportFor($this->company, $this->member);
+        $request = $this->aReadyExportFor($this->company, $this->employee);
         $this->travelTo('2026-10-10 12:00:00');
 
         // When the scan is replayed for that night
@@ -249,8 +236,8 @@ class ExpireDsarDownloadsTest extends DsarTestCase
 
         // Then the expiry is recorded now, audited, and the download is refused as expired
         $this->assertDownloadExpired($request, now());
-        $this->assertExpiryAudited($request, $this->member);
-        $this->assertRefusedAsExpired($this->downloadDsarExport($this->member, $this->company, $request->getKey()));
+        $this->assertExpiryAudited($request, $this->employee);
+        $this->assertRefusedAsExpired($this->downloadDsarExport($this->employee, $this->company, $request->getKey()));
     }
 
     #[Test]
@@ -288,7 +275,7 @@ class ExpireDsarDownloadsTest extends DsarTestCase
     public function when_several_download_windows_have_closed_then_one_run_expires_them_all(): void
     {
         // Given two members' exports whose download windows have closed
-        $first = $this->anExportFor($this->member);
+        $first = $this->anExportFor($this->employee);
         $second = $this->anExportFor($this->aCompanyMember($this->company));
         $this->travel(8)->days();
 
@@ -301,16 +288,16 @@ class ExpireDsarDownloadsTest extends DsarTestCase
     }
 
     /**
-     * $this->member's request in $state, the clock moved past where a
+     * $this->employee's request in $state, the clock moved past where a
      * fulfilled export's window would close — except for the export whose
      * window is still open; an already-expired one a second after its expiry.
      */
     protected function aRequestInState(string $state): DsarRequestRecord
     {
         $request = match ($state) {
-            'in progress' => $this->aSubmittedRequest($this->company, $this->member),
-            'withdrawn', 'rejected' => $this->aClosedRequest($this->company, $this->member, $state),
-            'window still open' => $this->anExportFor($this->member),
+            'in progress' => $this->aSubmittedRequest($this->company, $this->employee),
+            'withdrawn', 'rejected' => $this->aClosedRequest($this->company, $this->employee, $state),
+            'window still open' => $this->anExportFor($this->employee),
             'window closed, not yet expired', 'already expired' => $this->aClosedWindowExport(),
             default => throw new InvalidArgumentException("Unknown state: {$state}"),
         };
@@ -351,12 +338,12 @@ class ExpireDsarDownloadsTest extends DsarTestCase
     }
 
     /**
-     * $this->member's ready export, with the clock a day past the close of its
+     * $this->employee's ready export, with the clock a day past the close of its
      * seven-day download window.
      */
     protected function aClosedWindowExport(): DsarRequestRecord
     {
-        $request = $this->aReadyExportFor($this->company, $this->member);
+        $request = $this->aReadyExportFor($this->company, $this->employee);
         $this->travelTo($request->download_expires_at?->addDay());
 
         return $request;

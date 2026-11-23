@@ -6,7 +6,6 @@ use App\Models\User;
 use RuntimeException;
 use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
-use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -17,18 +16,12 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class ReviewDsarRequestAsAdminTest extends DsarTestCase
 {
-    protected Company $company;
-
-    protected User $member;
-
     protected User $platformAdmin;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->company = Company::factory()->create();
-        $this->member = $this->aCompanyMember($this->company);
         $this->platformAdmin = $this->aPlatformAdmin();
     }
 
@@ -36,7 +29,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_no_token_is_presented_then_the_detail_request_is_rejected_as_unauthenticated(): void
     {
         // Given a submitted request
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
 
         // When a guest asks for it on the admin surface
         $response = $this->viewAsAdmin(null, $request->getKey());
@@ -51,8 +44,8 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_a_tenant_member_requests_a_dsar_detail_then_the_admin_surface_is_not_acknowledged(string $roleCode): void
     {
         // Given a member of the company in this role, not a platform admin, and a request in that company
-        $tenantMember = $this->aCompanyMember($this->company, $roleCode);
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $tenantMember = $this->memberWithRole($roleCode);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
 
         // When they ask for it on the admin surface
         $response = $this->viewAsAdmin($tenantMember, $request->getKey());
@@ -67,7 +60,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_the_request_id_is_unknown_then_nothing_is_found_and_no_read_is_recorded(string $unknownId): void
     {
         // Given a platform admin and a request that is not the one asked for
-        $this->aSubmittedRequest($this->company, $this->member);
+        $this->aSubmittedRequest($this->company, $this->employee);
 
         // When the admin asks for an id no request has
         $response = $this->viewAsAdmin($this->platformAdmin, $unknownId);
@@ -81,7 +74,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_the_audit_write_fails_then_the_detail_returns_no_request_data(): void
     {
         // Given a submitted request and an audit write that fails after its row is inserted
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the admin opens it
@@ -97,7 +90,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_the_deadline_is_near_then_days_remaining_counts_calendar_days(string $viewedAt, int $daysRemaining): void
     {
         // Given a request whose deadline is 31 Oct 09:00 UTC, viewed at this row's moment
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
         $this->travelTo($viewedAt);
 
         // When the admin opens it
@@ -112,7 +105,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_a_breached_request_is_fulfilled_late_then_its_timeline_shows_the_breach_first(): void
     {
         // Given a request flagged at its 31 Oct deadline and fulfilled on 2 Nov
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
         $this->flagTheBreachAt($request, '2026-10-31 09:00:00');
         $this->travelTo('2026-11-02 09:00:00');
         $this->runTheExportFor($request);
@@ -136,7 +129,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_the_admin_opens_a_fulfilled_request_then_its_timeline_shows_the_download_expiry(): void
     {
         // Given a request made on 1 Oct, fulfilled on 8 Oct, its download expired on 15 Oct
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $request = $this->aSubmittedRequest($this->company, $this->employee);
         $this->travelTo('2026-10-08 09:00:00');
         $this->runTheExportFor($request);
         $this->expireTheDownloadAt($request, '2026-10-15 09:00:00');
@@ -150,8 +143,8 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
             'id' => $request->getKey(),
             'status' => 'fulfilled',
             'request_type' => 'access',
-            'subject' => ['id' => $this->member->getKey(), 'name' => $this->member->name],
-            'requested_by' => ['id' => $this->member->getKey(), 'name' => $this->member->name],
+            'subject' => ['id' => $this->employee->getKey(), 'name' => $this->employee->name],
+            'requested_by' => ['id' => $this->employee->getKey(), 'name' => $this->employee->name],
             'requested_at' => '2026-10-01T09:00:00.000000Z',
             'sla_deadline' => '2026-10-31T09:00:00.000000Z',
             'completed_at' => '2026-10-08T09:00:00.000000Z',
@@ -177,8 +170,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_the_admin_opens_a_breached_request_then_it_shows_negative_days_and_the_breach(): void
     {
         // Given a request the Owner made for a member on 1 Oct, flagged by the daily sweep at its 31 Oct deadline, still in progress
-        $owner = $this->aCompanyMember($this->company, 'owner');
-        $request = $this->aSubmittedRequest($this->company, $this->member, $owner);
+        $request = $this->aSubmittedRequest($this->company, $this->employee, $this->owner);
         $this->flagTheBreachAt($request, '2026-10-31 09:00:00');
         $this->travelTo('2026-11-15 09:00:00');
 
@@ -187,8 +179,8 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
 
         // Then it shows who it is about and who asked, fifteen days past the deadline, and the breach on its timeline
         $this->assertShown($response, [
-            'subject.id' => $this->member->getKey(),
-            'requested_by.id' => $owner->getKey(),
+            'subject.id' => $this->employee->getKey(),
+            'requested_by.id' => $this->owner->getKey(),
             'status' => 'in_progress',
             'days_remaining' => -15,
             'sla_breached_at' => '2026-10-31T09:00:00.000000Z',
@@ -203,7 +195,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_the_admin_opens_a_rejected_request_then_it_shows_the_rejection_reason(): void
     {
         // Given a request rejected after its export failed
-        $request = $this->aClosedRequest($this->company, $this->member, 'rejected');
+        $request = $this->aClosedRequest($this->company, $this->employee, 'rejected');
 
         // When the admin opens it
         $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
@@ -223,7 +215,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_the_admin_opens_a_withdrawn_request_then_it_shows_the_cancellation(): void
     {
         // Given a request its requester withdrew before it was fulfilled
-        $request = $this->aClosedRequest($this->company, $this->member, 'withdrawn');
+        $request = $this->aClosedRequest($this->company, $this->employee, 'withdrawn');
 
         // When the admin opens it
         $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
