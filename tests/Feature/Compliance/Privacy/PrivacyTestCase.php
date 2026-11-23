@@ -6,12 +6,13 @@ use Tests\TestCase;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
 abstract class PrivacyTestCase extends TestCase
 {
-    use WithRolePermissionFixtures;
+    use FreeTierCompany, WithRolePermissionFixtures;
 
     protected const string KEPT_UNTIL_ACCOUNT_CLOSURE = 'Kept while the company account is open; after it closes, deleted on the account-closure schedule, with financial records kept as the law requires';
 
@@ -19,22 +20,8 @@ abstract class PrivacyTestCase extends TestCase
     {
         parent::setUp();
 
-        $this->seedRbacCatalog();
         config(['app.debug' => false]);
-    }
-
-    /**
-     * A company with $actor attached under the seeded $roleCode, holding the live policy versions.
-     *
-     * @return array{0: Company, 1: User}
-     */
-    protected function aCompanyWithMember(string $roleCode = 'owner'): array
-    {
-        $company = Company::factory()->create();
-        $actor = User::factory()->create();
-        $this->attachMember($company, $actor, $this->seededRole($roleCode));
-
-        return [$company, $actor];
+        $this->makeFreeTierCompany();
     }
 
     protected function viewRegister(User $actor, Company $company): TestResponse
