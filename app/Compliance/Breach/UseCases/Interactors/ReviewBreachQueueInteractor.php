@@ -19,19 +19,19 @@ class ReviewBreachQueueInteractor
      *
      * @return LengthAwarePaginator<int, BreachIncidentRecord>
      */
-    public function execute(ReviewBreachQueueCommand $filters, User $admin, RequestOrigin $context): LengthAwarePaginator
+    public function execute(ReviewBreachQueueCommand $command, User $admin, RequestOrigin $context): LengthAwarePaginator
     {
-        return DB::transaction(function () use ($filters, $admin, $context): LengthAwarePaginator {
+        return DB::transaction(function () use ($command, $admin, $context): LengthAwarePaginator {
             $page = BreachIncidentRecord::query()
-                ->whereStage($filters->stage)
+                ->whereStage($command->stage)
                 ->withCount('companies')
                 ->withSum('companies', 'estimated_count')
                 ->orderByDeadline()
                 // page defaults here, never through Laravel's resolver, which would
                 // honour a body-supplied page past the validated query filters.
-                ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
+                ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
 
-            $this->recordQueueRead($this->queryContextOf($filters, $page), $admin, $context);
+            $this->recordQueueRead($this->queryContextOf($command, $page), $admin, $context);
 
             return $page;
         });
@@ -41,11 +41,11 @@ class ReviewBreachQueueInteractor
      * @param  LengthAwarePaginator<int, BreachIncidentRecord>  $page
      * @return array<string, mixed>
      */
-    protected function queryContextOf(ReviewBreachQueueCommand $filters, LengthAwarePaginator $page): array
+    protected function queryContextOf(ReviewBreachQueueCommand $command, LengthAwarePaginator $page): array
     {
         return [
             'filters' => array_filter(
-                ['stage' => $filters->stage?->value],
+                ['stage' => $command->stage?->value],
                 fn (?string $value): bool => $value !== null,
             ),
             'result_count' => count($page->items()),

@@ -243,9 +243,11 @@ jobs:
         # Amendment AQ: validateAndCreate only at the HTTP boundary, ::from() internally,
         # internal-only commands carry no rules(). Gating since OQ-1-172 T7 - the legacy
         # internal validateAndCreate sites (design sec 6.1.1 table B) were cleared by
-        # T4-T6. Liveness proof: the summary line must exist and check 1 must have
-        # inspected at least one command - a script that never ran, died before its
-        # summary, or scanned nothing fails this step. A skipped (unresolvable) command
+        # T4-T6. Liveness proof: the summary line must exist and check 1's population must
+        # cover every (controller, command) pair a controller imports from a UseCases\Commands
+        # namespace - counted by import, not by the script's name and mention matchers - so a
+        # script that never ran, died before its summary, scanned nothing, or lost a command
+        # from its view fails this step. A skipped (unresolvable) command
         # is a bypassed check, not a pass, so skips fail too. The script's own exit status
         # carries the same verdict (a violation, a skipped class, an empty check 1), so
         # the lefthook hook enforces these floors as well; the final exit-status read is
@@ -261,7 +263,10 @@ jobs:
           violations=$(echo "$summary" | sed -E 's/^AQ placement check: ([0-9]+) violation.*/\1/')
           checked=$(echo "$summary" | sed -E 's/.*; ([0-9]+) controller-referenced.*/\1/')
           skipped=$(echo "$summary" | sed -E 's/.*; ([0-9]+) skipped.*/\1/')
-          [ "$checked" -ge 1 ]
+          expected=$(grep -HoE '^use [A-Za-z0-9_\\]+[\\]UseCases[\\]Commands[\\][A-Za-z0-9_]+;' $(find app -path '*/IO/Http/Controllers/*Controller.php') | sort -u | wc -l | tr -d ' ')
+          [ "$expected" -ge 1 ] || { echo "the independent count found no command import in any controller"; exit 1; }
+          [ "$checked" -ge "$expected" ] || { echo "AQ population $checked below the $expected (controller, command) imports"; exit 1; }
+          echo "AQ population $checked covers the $expected (controller, command) imports"
           [ "$violations" -eq 0 ]
           [ "$skipped" -eq 0 ]
           [ "$status" -eq 0 ]

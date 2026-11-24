@@ -78,7 +78,8 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     }
 
     /**
-     * The item class of every #[DataCollectionOf] list a command holds, wherever it lives.
+     * The item class of every #[DataCollectionOf] list a command holds, and of every list
+     * those items hold in turn, wherever it lives.
      *
      * @param  list<class-string<Data>>  $commands
      * @return list<class-string<Data>>
@@ -98,7 +99,9 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
             }
         }
 
-        return array_values(array_unique($items));
+        $items = array_values(array_unique($items));
+
+        return $items === [] ? [] : [...$items, ...$this->listItemClasses([...$commands, ...$items])];
     }
 
     /**

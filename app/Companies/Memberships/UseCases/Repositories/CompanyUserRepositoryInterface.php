@@ -28,7 +28,7 @@ interface CompanyUserRepositoryInterface
      *
      * @return LengthAwarePaginator<int, stdClass>
      */
-    public function listForCompany(string $companyId, ListMembershipsCommand $filters): LengthAwarePaginator;
+    public function listForCompany(string $companyId, ListMembershipsCommand $command): LengthAwarePaginator;
 
     /**
      * One ACTIVE membership as its roster-row shape (the same aliased columns

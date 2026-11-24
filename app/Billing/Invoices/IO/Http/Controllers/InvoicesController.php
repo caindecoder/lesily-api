@@ -23,10 +23,10 @@ class InvoicesController
 
     public function index(Request $request): InvoiceCollection
     {
-        $filters = ListInvoicesCommand::fromQuery($request);
+        $command = ListInvoicesCommand::fromQuery($request);
 
         return new InvoiceCollection(
-            $this->invoices->listForCompany($request->company()->getKey(), $filters)
+            $this->invoices->listForCompany($request->company()->getKey(), $command)
         );
     }
 

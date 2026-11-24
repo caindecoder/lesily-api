@@ -21,26 +21,26 @@ class EloquentInvoiceRepository implements InvoiceRepositoryInterface
     /**
      * @return LengthAwarePaginator<int, Invoice>
      */
-    public function listForCompany(string $companyId, ListInvoicesCommand $filters): LengthAwarePaginator
+    public function listForCompany(string $companyId, ListInvoicesCommand $command): LengthAwarePaginator
     {
         $query = Invoice::query()->where('company_id', $companyId);
 
-        if ($filters->status !== null) {
-            $this->applyStatusToken($query, $filters->status);
+        if ($command->status !== null) {
+            $this->applyStatusToken($query, $command->status);
         }
 
-        if ($filters->within !== null) {
-            $this->applyIssuedWithin($query, $filters->within);
+        if ($command->within !== null) {
+            $this->applyIssuedWithin($query, $command->within);
         }
 
         return $query
-            ->when($filters->minAmount !== null, fn (Builder $query) => $query->where('amount_cents', '>=', $filters->minAmount))
-            ->when($filters->maxAmount !== null, fn (Builder $query) => $query->where('amount_cents', '<=', $filters->maxAmount))
-            ->tap(fn (Builder $query) => $this->applySort($query, $filters->sort))
+            ->when($command->minAmount !== null, fn (Builder $query) => $query->where('amount_cents', '>=', $command->minAmount))
+            ->when($command->maxAmount !== null, fn (Builder $query) => $query->where('amount_cents', '<=', $command->maxAmount))
+            ->tap(fn (Builder $query) => $this->applySort($query, $command->sort))
             // page defaults HERE, never by falling through to Laravel's resolver:
             // that reads $request->input('page'), which would honour a body-supplied
             // page and bypass the whitelisted, validated query DTO (api-conventions §10.1).
-            ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
+            ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
     }
 
     public function findForCompany(string $companyId, string $invoiceId): ?Invoice

@@ -2,8 +2,8 @@
 
 namespace Tests\Feature\Auth\TwoFactor;
 
-use Tests\TestCase;
 use PragmaRX\Google2FA\Google2FA;
+use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Auth\Totp\Google2faTotpVerifier;
 
@@ -17,7 +17,7 @@ use App\Foundation\Auth\Totp\Google2faTotpVerifier;
  * delegation; every feature walk stubs the TotpVerifier boundary
  * (AuthTestCase::fakeTotpVerifier), so this is the only place it runs (§2.14 Rule B).
  */
-class Google2faTotpVerifierTest extends TestCase
+class Google2faTotpVerifierTest extends AuthTestCase
 {
     #[Test]
     public function when_a_structurally_impossible_code_is_submitted_then_it_does_not_verify(): void

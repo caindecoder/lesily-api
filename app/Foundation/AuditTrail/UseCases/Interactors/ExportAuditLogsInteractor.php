@@ -25,17 +25,17 @@ class ExportAuditLogsInteractor
     /**
      * @return LazyCollection<int, stdClass>
      */
-    public function execute(ExportAuditLogsCommand $filters, User $actor, RequestOrigin $origin): LazyCollection
+    public function execute(ExportAuditLogsCommand $command, User $actor, RequestOrigin $origin): LazyCollection
     {
         $exportedAt = CarbonImmutable::now();
-        $this->recordExport($filters, $actor, $origin);
+        $this->recordExport($command, $actor, $origin);
 
-        return $this->auditLogRows->newestFirst($filters, $exportedAt);
+        return $this->auditLogRows->newestFirst($command, $exportedAt);
     }
 
-    protected function recordExport(ExportAuditLogsCommand $filters, User $actor, RequestOrigin $origin): void
+    protected function recordExport(ExportAuditLogsCommand $command, User $actor, RequestOrigin $origin): void
     {
-        $companyId = $filters->company->getKey();
+        $companyId = $command->company->getKey();
 
         $this->writer->write([
             ...$this->writer->actorAndOrigin($actor, $this->memberRoleCode->of($actor, $companyId), $origin),
@@ -46,10 +46,10 @@ class ExportAuditLogsInteractor
             'subject_id' => $companyId,
             'subject_label' => null,
             'metadata' => [
-                'format' => $filters->format->value,
-                'from' => $this->auditLogRows->from($filters, $filters->company)->toDateString(),
-                'until' => ($filters->within?->getIncludedEndDate() ?? today())->toDateString(),
-                ...array_filter(['user' => $filters->user, 'event' => $filters->event, 'ip' => $filters->ip]),
+                'format' => $command->format->value,
+                'from' => $this->auditLogRows->from($command, $command->company)->toDateString(),
+                'until' => ($command->within?->getIncludedEndDate() ?? today())->toDateString(),
+                ...array_filter(['user' => $command->user, 'event' => $command->event, 'ip' => $command->ip]),
             ],
         ], AuditAction::AuditLogsExported, 'warning');
     }
