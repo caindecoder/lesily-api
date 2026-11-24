@@ -35,7 +35,7 @@ class FillConsentStoreFromRecordedConsentsTest extends CompaniesTestCase
     public function when_no_consent_was_ever_recorded_then_the_fill_adds_nothing(): void
     {
         // Given a company whose only recorded events are its genesis
-        $this->createCompanyOnTrial(Str::uuid7()->toString());
+        $this->recordCompanyGenesis(Str::uuid7()->toString());
 
         // When the fill migration runs
         $this->runFillMigration();

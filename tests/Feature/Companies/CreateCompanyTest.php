@@ -32,7 +32,7 @@ class CreateCompanyTest extends CompaniesTestCase
     {
         // Given a company that was already created
         $companyId = (string) Str::uuid();
-        $this->createCompanyOnTrial($companyId);
+        $this->recordCompanyGenesis($companyId);
 
         // When the same company is created again
         try {

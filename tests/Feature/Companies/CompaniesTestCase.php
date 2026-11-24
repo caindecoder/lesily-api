@@ -29,11 +29,11 @@ abstract class CompaniesTestCase extends TestCase
     use AssertsAuditTrail, AssertsCompanyAuditRows, InducesProjectorFailures;
 
     /**
-     * The bare owner-signup genesis, through the aggregate alone — for the tests of the
-     * creation itself and of a store that starts empty; every other test takes the
-     * ready-made company. BR / EPF derive from the company id (both globally unique).
+     * Only the company aggregate's genesis — no contact, consent, audit row or subscription —
+     * for the tests of the creation itself and of a store that starts empty; a test about the
+     * trial uses FreeTierCompany::createCompanyOnTrialFor. BR / EPF derive from the company id.
      */
-    protected function createCompanyOnTrial(string $companyId, string $name = 'Contoso'): void
+    protected function recordCompanyGenesis(string $companyId, string $name = 'Contoso'): void
     {
         CompanyAggregate::retrieve($companyId)
             ->create($this->buildCreateCompanyCommand($companyId, $name))
