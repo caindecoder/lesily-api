@@ -190,13 +190,6 @@ abstract class AuthTestCase extends TestCase
         }
     }
 
-    protected function assertThrottled(TestResponse $response): void
-    {
-        $response->assertTooManyRequests();
-        $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
-        $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
-    }
-
     /**
      * Assert the user's single issued session token is named for $expectedName — the
      * device-name resolution oracle (sessions slice). `sole()` doubles as the
@@ -247,42 +240,17 @@ abstract class AuthTestCase extends TestCase
      */
     protected function memberOfCompanyOnPlan(User $user, BillingPlan $plan): void
     {
-        Company::factory()->onPlan($plan)->create()
-            ->users()->attach($user, ['role_id' => Role::factory()->create()->getKey()]);
+        $this->attachMember(Company::factory()->onPlan($plan)->create(), $user, Role::factory()->create());
     }
 
     protected function memberOfTrialCompany(User $user): void
     {
-        Company::factory()->onTrial()->create()
-            ->users()->attach($user, ['role_id' => Role::factory()->create()->getKey()]);
+        $this->attachMember(Company::factory()->onTrial()->create(), $user, Role::factory()->create());
     }
 
     protected function memberOfExpiredTrialCompany(User $user): void
     {
-        Company::factory()->trialExpired()->create()
-            ->users()->attach($user, ['role_id' => Role::factory()->create()->getKey()]);
-    }
-
-    /**
-     * Make $user a live member of $company under a seeded role — the company_user
-     * pivot row the companies list reads. Shared by the list-companies (UC-1-034)
-     * and default-company (UC-1-139) suites.
-     */
-    protected function aMembershipFor(User $user, Company $company, string $roleCode = 'employee'): void
-    {
-        $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
-    }
-
-    /**
-     * A membership that was removed (UC-1-024 semantics): the company_user pivot
-     * exists but is soft-deleted — the companies list must exclude it. No consent
-     * is recorded for it.
-     */
-    protected function aRemovedMembershipIn(Company $company, User $user): void
-    {
-        $this->aMembershipFor($user, $company);
-
-        $this->softDeleteMembership($company, $user);
+        $this->attachMember(Company::factory()->trialExpired()->create(), $user, Role::factory()->create());
     }
 
     protected function inTwoCompanies(User $user): void
@@ -291,15 +259,15 @@ abstract class AuthTestCase extends TestCase
         $this->ownedCompany = Company::factory()->onPlan(BillingPlan::Pro)->create();
         $this->employingCompany = Company::factory()->create();
 
-        $this->aMembershipFor($user, $this->ownedCompany, 'owner');
-        $this->aMembershipFor($user, $this->employingCompany, 'employee');
+        $this->attachMember($this->ownedCompany, $user, $this->seededRole('owner'));
+        $this->attachMember($this->employingCompany, $user, $this->seededRole('employee'));
     }
 
     protected function assertAuditedInEachCompany(TestResponse $response, User $user, AuditAction $action): void
     {
         $requestId = $response->headers->get('Correlation-Id');
         $this->assertIsString($requestId);
-        [$eventClass, $words] = $this->expectedRecordOf($action);
+        [$eventClass, $words] = $this->expectedSecurityRecordOf($action);
         $storedEvent = LesilyStoredEvent::query()
             ->where('aggregate_uuid', $user->getKey())
             ->where('event_class', $eventClass)
@@ -365,7 +333,7 @@ abstract class AuthTestCase extends TestCase
     }
 
     /** @return array{class-string, string} */
-    protected function expectedRecordOf(AuditAction $action): array
+    protected function expectedSecurityRecordOf(AuditAction $action): array
     {
         return match ($action) {
             AuditAction::PasswordChanged => [UserPasswordChanged::class, 'Password changed'],
@@ -597,7 +565,7 @@ abstract class AuthTestCase extends TestCase
     protected function aRemovedStarterMembershipFor(User $user): void
     {
         $this->seedRbacCatalog();
-        $this->aRemovedMembershipIn(Company::factory()->onPlan(BillingPlan::Starter)->create(), $user);
+        $this->aRemovedMembership(Company::factory()->onPlan(BillingPlan::Starter)->create(), $user);
     }
 
     /** @param  array<string, mixed>  $overrides */

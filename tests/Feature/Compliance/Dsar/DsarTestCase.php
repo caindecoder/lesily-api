@@ -54,7 +54,6 @@ use App\Foundation\Notifications\Enums\NotificationType;
 use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
-use Tests\Feature\Companies\Memberships\CreatesMemberships;
 use App\Compliance\Dsar\UseCases\Jobs\DeleteDsarExportFileJob;
 use App\Compliance\Dsar\UseCases\Sections\DsarSectionProvider;
 use App\Compliance\Dsar\Exceptions\DsarExportFileMissingException;
@@ -75,7 +74,6 @@ use App\Companies\Memberships\UseCases\Commands\ChangeMembershipRoleCommand;
 
 abstract class DsarTestCase extends TestCase
 {
-    use CreatesMemberships;
     use FreeTierCompany;
     use HasPlatformAdmin;
     use InteractsWithQueuedReactors;

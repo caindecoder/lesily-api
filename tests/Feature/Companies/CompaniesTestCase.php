@@ -19,7 +19,9 @@ use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\CountryConfig\Entities\Country;
 use App\Companies\Entities\CompanyDataProtectionOfficer;
+use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Companies\Events\CompanyDataProtectionOfficerSet;
+use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class CompaniesTestCase extends TestCase
@@ -27,18 +29,32 @@ abstract class CompaniesTestCase extends TestCase
     use AssertsAuditTrail, AssertsCompanyAuditRows, InducesProjectorFailures;
 
     /**
-     * A fresh user made a live member of $company under a seeded role — the
-     * company_user pivot row the company-scoped gates read — who accepted the
-     * live policy versions there.
+     * Only the company aggregate's genesis — no contact, consent, audit row or subscription —
+     * for the tests of the creation itself and of a store that starts empty; a test about the
+     * trial uses FreeTierCompany::createCompanyOnTrialFor. BR / EPF derive from the company id.
      */
-    protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
+    protected function recordCompanyGenesis(string $companyId, string $name = 'Contoso'): void
     {
-        $user = User::factory()->create();
+        CompanyAggregate::retrieve($companyId)
+            ->create($this->buildCreateCompanyCommand($companyId, $name))
+            ->persist();
+    }
 
-        $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
-        $this->aConsentRecordedBy($user, $company);
+    protected function buildCreateCompanyCommand(string $companyId, string $name = 'Contoso', ?User $owner = null): CreateCompanyCommand
+    {
+        $this->seedRbacCatalog();
 
-        return $user;
+        return CreateCompanyCommand::from([
+            'name' => $name,
+            'brNumber' => "BR-{$companyId}",
+            'epfNumber' => "EPF-{$companyId}",
+            'country' => 'LK',
+            'owner' => $owner ?? User::factory()->create(),
+            'emergencyContactName' => 'Kamala Perera',
+            'emergencyContactEmail' => 'kamala@contoso.lk',
+            'emergencyContactPhone' => '+94771234567',
+            'emergencyContactRelationship' => 'spouse',
+        ]);
     }
 
     /**

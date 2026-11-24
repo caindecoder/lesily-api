@@ -9,13 +9,16 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
+use Tests\Feature\Companies\Memberships\CreatesMemberships;
 use App\Companies\UseCases\Interactors\CreateCompanyInteractor;
 
 trait FreeTierCompany
 {
-    use HasSubscription;
+    use CreatesMemberships, HasSubscription;
 
-    protected const int READY_MADE_AUDIT_ROWS = 4;
+    protected const int SIGNUP_AUDIT_ROWS = 4;
+
+    protected const int READY_MADE_AUDIT_ROWS = self::SIGNUP_AUDIT_ROWS;
 
     protected const int READY_MADE_NON_CONSENT_EVENTS = 5;
 
@@ -44,7 +47,22 @@ trait FreeTierCompany
 
     protected function createFreeCompanyFor(User $owner): Company
     {
-        $company = app(CreateCompanyInteractor::class)->execute(CreateCompanyCommand::from([
+        $company = $this->createCompanyOnTrialFor($owner);
+
+        Subscription::retrieve($this->subscriptionOf($company)->getKey())
+            ->endTrial('trial-expired')
+            ->persist();
+        $company->update(['current_billing_plan' => BillingPlan::Free, 'trial_ends_at' => null]);
+
+        return $company;
+    }
+
+    /**
+     * Contoso as signup leaves it: created through the real interactor, on its one live trial.
+     */
+    protected function createCompanyOnTrialFor(User $owner): Company
+    {
+        return app(CreateCompanyInteractor::class)->execute(CreateCompanyCommand::from([
             'name' => 'Contoso',
             'brNumber' => fake()->unique()->numerify('PV-########'),
             'epfNumber' => fake()->unique()->numerify('EPF-#######'),
@@ -55,13 +73,6 @@ trait FreeTierCompany
             'emergencyContactPhone' => '+94771234567',
             'emergencyContactRelationship' => 'spouse',
         ]), new RequestOrigin('198.51.100.4', null, null));
-
-        Subscription::retrieve($this->subscriptionOf($company)->getKey())
-            ->endTrial('trial-expired')
-            ->persist();
-        $company->update(['current_billing_plan' => BillingPlan::Free, 'trial_ends_at' => null]);
-
-        return $company;
     }
 
     protected function memberWithRole(string $roleCode): User
@@ -72,15 +83,5 @@ trait FreeTierCompany
             'employee' => $this->employee,
             default => $this->aCompanyMember($this->company, $roleCode),
         };
-    }
-
-    protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
-    {
-        $user = User::factory()->create();
-
-        $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
-        $this->aConsentRecordedBy($user, $company);
-
-        return $user;
     }
 }

@@ -696,16 +696,6 @@ abstract class MembershipsTestCase extends CompaniesTestCase
         }
     }
 
-    protected function assertThrottled(TestResponse $response): void
-    {
-        $response->assertTooManyRequests();
-        $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
-        $retryAfter = $response->json('retry_after');
-        $this->assertIsInt($retryAfter);
-        $this->assertGreaterThan(0, $retryAfter, 'A throttled response must carry retry guidance.');
-        $this->assertEqualsWithDelta(time() + $retryAfter, (int) $response->headers->get('X-RateLimit-Reset'), 5, 'X-RateLimit-Reset must be the epoch when the window resets.');
-    }
-
     /**
      * The roster lists exactly the members whose user ids are $expectedUserIds —
      * set equality on data.*.user.id (order-insensitive; ViewSessionsTest pattern).
@@ -1147,7 +1137,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     {
         $requestId = $response->headers->get('Correlation-Id');
         $this->assertIsString($requestId);
-        [$eventClass, $words] = $this->expectedRecordOf($action);
+        [$eventClass, $words] = $this->expectedInvitationRecordOf($action);
         $newestEvent = LesilyStoredEvent::query()
             ->where('aggregate_uuid', $invitation->getKey())
             ->latest('id')
@@ -1208,7 +1198,7 @@ abstract class MembershipsTestCase extends CompaniesTestCase
     }
 
     /** @return array{class-string, string} */
-    protected function expectedRecordOf(AuditAction $action): array
+    protected function expectedInvitationRecordOf(AuditAction $action): array
     {
         return match ($action) {
             AuditAction::UserInvited => [UserInvited::class, 'User invited'],

@@ -87,12 +87,12 @@ class DefaultCompanyTest extends AuthTestCase
             'not a member' => Company::factory()->named('Other')->create()->getKey(),
             'another user\'s company' => tap(
                 Company::factory()->named('Other')->create(),
-                fn (Company $other) => $this->aMembershipFor(User::factory()->create(), $other),
+                fn (Company $other) => $this->attachMember($other, User::factory()->create(), $this->seededRole('employee')),
             )->getKey(),
             'unknown company id' => Str::uuid7()->toString(),
             'removed membership' => tap(
                 Company::factory()->named('Other')->create(),
-                fn (Company $other) => $this->aRemovedMembershipIn($other, $this->employee),
+                fn (Company $other) => $this->aRemovedMembership($other, $this->employee),
             )->getKey(),
             default => self::fail("Unknown provider case: {$case}"),
         };
@@ -147,7 +147,7 @@ class DefaultCompanyTest extends AuthTestCase
     {
         // Given the employee, a member of Contoso and Beta, whose default is Contoso
         $beta = Company::factory()->named('Beta')->create();
-        $this->aMembershipFor($this->employee, $beta);
+        $this->attachMember($beta, $this->employee, $this->seededRole('employee'));
         $this->setDefaultCompany($this->employee, ['companyId' => $this->company->getKey()]);
 
         // When Beta is set as the default
@@ -181,7 +181,7 @@ class DefaultCompanyTest extends AuthTestCase
         // Given the admin with Beta as default, then the owner and the employee with Contoso (a bulk
         // write on the set path would move the admin's; one on the clear path would clear the owner's)
         $beta = Company::factory()->named('Beta')->create();
-        $this->aMembershipFor($this->admin, $beta);
+        $this->attachMember($beta, $this->admin, $this->seededRole('employee'));
         $this->setDefaultCompany($this->admin, ['companyId' => $beta->getKey()]);
         $this->setDefaultCompany($this->owner, ['companyId' => $this->company->getKey()]);
         $this->setDefaultCompany($this->employee, ['companyId' => $this->company->getKey()]);
@@ -200,7 +200,7 @@ class DefaultCompanyTest extends AuthTestCase
     {
         // Given the employee whose default is Home (set through the endpoint)
         $home = Company::factory()->named('Home')->create();
-        $this->aMembershipFor($this->employee, $home);
+        $this->attachMember($home, $this->employee, $this->seededRole('employee'));
         $this->setDefaultCompany($this->employee, ['companyId' => $home->getKey()]);
 
         // When the company row is hard-deleted (schema-level pin — no product
@@ -221,7 +221,7 @@ class DefaultCompanyTest extends AuthTestCase
     {
         // Given the employee, a member of Contoso and Beta with no default
         $beta = Company::factory()->named('Beta')->create();
-        $this->aMembershipFor($this->employee, $beta);
+        $this->attachMember($beta, $this->employee, $this->seededRole('employee'));
 
         // When Beta is set as the default
         $response = $this->setDefaultCompany($this->employee, ['companyId' => $beta->getKey()]);
@@ -236,7 +236,7 @@ class DefaultCompanyTest extends AuthTestCase
     {
         // Given the employee, a member of Contoso and Beta, whose default is Beta
         $beta = Company::factory()->named('Beta')->create();
-        $this->aMembershipFor($this->employee, $beta);
+        $this->attachMember($beta, $this->employee, $this->seededRole('employee'));
         $this->setDefaultCompany($this->employee, ['companyId' => $beta->getKey()]);
 
         // When the default is cleared

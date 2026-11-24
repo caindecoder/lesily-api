@@ -44,7 +44,7 @@ class ListMyCompaniesTest extends AuthTestCase
     public function when_membership_was_removed_then_that_company_absent_from_list(): void
     {
         // Given the employee, live in Contoso, with a removed membership in Beta
-        $this->aRemovedMembershipIn(Company::factory()->named('Beta')->create(), $this->employee);
+        $this->aRemovedMembership(Company::factory()->named('Beta')->create(), $this->employee);
 
         // When they list their companies
         $response = $this->listCompanies($this->employee);
@@ -60,7 +60,7 @@ class ListMyCompaniesTest extends AuthTestCase
     public function when_other_users_have_companies_then_only_my_memberships_listed(): void
     {
         // Given the employee of Contoso, and the admin, who is also a member of Theirs
-        $this->aMembershipFor($this->admin, Company::factory()->named('Theirs')->create());
+        $this->attachMember(Company::factory()->named('Theirs')->create(), $this->admin, $this->seededRole('employee'));
 
         // When the employee lists their companies
         $response = $this->listCompanies($this->employee);
@@ -142,7 +142,7 @@ class ListMyCompaniesTest extends AuthTestCase
     {
         // Given the employee of Contoso, who then joined a second company also named Contoso
         $second = Company::factory()->named('Contoso')->create();
-        $this->aMembershipFor($this->employee, $second);
+        $this->attachMember($second, $this->employee, $this->seededRole('employee'));
 
         // When they list their companies
         $response = $this->listCompanies($this->employee);
@@ -178,7 +178,7 @@ class ListMyCompaniesTest extends AuthTestCase
     {
         // Given the employee, a member of Contoso and Beta, whose default Beta membership was then removed
         $beta = Company::factory()->named('Beta')->create();
-        $this->aMembershipFor($this->employee, $beta);
+        $this->attachMember($beta, $this->employee, $this->seededRole('employee'));
         $this->setDefaultCompany($this->employee, ['companyId' => $beta->getKey()]);
         $this->softDeleteMembership($beta, $this->employee);
 
@@ -203,9 +203,9 @@ class ListMyCompaniesTest extends AuthTestCase
         $user = $this->aRegisteredUser();
         $zeta = Company::factory()->named('Zeta')->onPlan(BillingPlan::Pro)->create();
         $acme = Company::factory()->named('Acme')->onPlan(BillingPlan::Free)->create();
-        $this->aMembershipFor($user, $zeta, 'admin');
+        $this->attachMember($zeta, $user, $this->seededRole('admin'));
         $this->completedOnboardingIn($zeta, $user);
-        $this->aMembershipFor($user, $acme);
+        $this->attachMember($acme, $user, $this->seededRole('employee'));
 
         // When they list their companies
         $response = $this->listCompanies($user);

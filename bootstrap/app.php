@@ -586,7 +586,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ['retry_after' => $e->retryAfter],
         )->withHeaders([
             'Retry-After' => (string) $e->retryAfter,
-            'X-RateLimit-Reset' => (string) (time() + $e->retryAfter),
+            'X-RateLimit-Reset' => (string) now()->addSeconds($e->retryAfter)->getTimestamp(),
         ]));
 
         $exceptions->render(function (ThrottleRequestsException $e) {

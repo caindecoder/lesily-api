@@ -16,11 +16,10 @@ use App\Foundation\Http\Responses\ApiErrorCode;
 use Tests\Feature\Foundation\FoundationTestCase;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AccessLog\Enums\AccessEventReason;
-use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
 class RecordRefusedRequestsTest extends FoundationTestCase
 {
-    use FreeTierCompany, WithRolePermissionFixtures;
+    use FreeTierCompany;
 
     protected function setUp(): void
     {

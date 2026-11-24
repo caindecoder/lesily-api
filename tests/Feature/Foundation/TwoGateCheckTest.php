@@ -18,7 +18,7 @@ use App\Foundation\RolesPermissions\Entities\Role;
 
 class TwoGateCheckTest extends FoundationTestCase
 {
-    use FreeTierCompany, WithRolePermissionFixtures;
+    use FreeTierCompany;
 
     protected function setUp(): void
     {
@@ -85,8 +85,9 @@ class TwoGateCheckTest extends FoundationTestCase
     #[Test]
     public function when_a_companys_trial_has_expired_then_a_plan_gated_feature_is_denied(): void
     {
-        // Given Contoso's trial ended without a plan being chosen
-        $this->company->update(['status' => CompanyStatus::TrialExpired, 'current_billing_plan' => null]);
+        // Given Contoso was on its trial, every feature unlocked, and the trial ended yesterday without a plan being chosen
+        $this->putOnTrial($this->company, CarbonImmutable::now()->subDay());
+        $this->company->update(['status' => CompanyStatus::TrialExpired]);
 
         // When it attempts a plan-gated feature
         $response = $this->attemptGatedAction('two-gate/starter-feature', $this->employee, $this->company);

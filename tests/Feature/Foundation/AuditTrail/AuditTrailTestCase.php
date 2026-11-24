@@ -14,11 +14,10 @@ use Tests\Feature\Foundation\FoundationTestCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
 use App\Foundation\AuditTrail\Enums\AuditSubjectType;
-use Tests\Feature\Companies\Memberships\CreatesMemberships;
 
 abstract class AuditTrailTestCase extends FoundationTestCase
 {
-    use CreatesMemberships, FreeTierCompany;
+    use FreeTierCompany;
 
     protected Company $companyA;
 
@@ -172,13 +171,6 @@ abstract class AuditTrailTestCase extends FoundationTestCase
             ->ofAction(AuditAction::PasswordChanged, AuditSubjectType::User)
             ->recordedAt(CarbonImmutable::parse($recordedAt))
             ->create();
-    }
-
-    protected function assertNothingListed(TestResponse $response): void
-    {
-        $response->assertOk();
-        $response->assertJsonCount(0, 'data');
-        $response->assertJsonPath('meta.pagination.total', 0);
     }
 
     /**
