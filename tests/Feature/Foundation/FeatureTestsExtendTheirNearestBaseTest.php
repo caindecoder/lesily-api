@@ -55,7 +55,7 @@ class FeatureTestsExtendTheirNearestBaseTest extends FoundationTestCase
 
             if (str_ends_with($relative, 'Test.php')) {
                 /** @var class-string $class */
-                $class = 'Tests\\Feature\\'.str_replace(['/', '.php'], ['\\', ''], $relative);
+                $class = $this->classOf($relative);
                 $tests[self::FEATURE_ROOT.'/'.$relative] = $class;
             }
         }
@@ -96,10 +96,20 @@ class FeatureTestsExtendTheirNearestBaseTest extends FoundationTestCase
             $bases = glob(base_path($folder).'/*TestCase.php') ?: [];
 
             if ($bases !== []) {
-                return array_map(fn (string $base): string => 'Tests\\Feature\\'.str_replace(['/', '.php'], ['\\', ''], substr($folder, strlen(self::FEATURE_ROOT) + 1).'/'.basename($base)), $bases);
+                $module = substr($folder, strlen(self::FEATURE_ROOT) + 1);
+
+                return array_map(fn (string $base): string => $this->classOf($module.'/'.basename($base)), $bases);
             }
         }
 
         return [];
+    }
+
+    /**
+     * The class a file under tests/Feature declares, from its path relative to that folder.
+     */
+    protected function classOf(string $relative): string
+    {
+        return 'Tests\\Feature\\'.str_replace(['/', '.php'], ['\\', ''], $relative);
     }
 }
