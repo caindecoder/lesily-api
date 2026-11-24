@@ -5,6 +5,7 @@ namespace Tests\Feature\Foundation;
 use Illuminate\Support\Facades\File;
 use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
+use Tests\Feature\Companies\Memberships\MembershipsTestCase;
 
 /**
  * Every feature test extends the nearest module base up its path: its own
@@ -39,6 +40,7 @@ class FeatureTestsExtendTheirNearestBaseTest extends FoundationTestCase
         $this->assertGreaterThanOrEqual(self::TEST_CLASSES_AT_LEAST, $walked, "walked {$walked} feature test classes, expected at least ".self::TEST_CLASSES_AT_LEAST);
         $this->assertSame([], $offenders);
         $this->assertSame([AuthTestCase::class], $this->nearestBasesFor(self::FEATURE_ROOT.'/Auth/TwoFactor/DisableTwoFactorTest.php'));
+        $this->assertSame([MembershipsTestCase::class], $this->nearestBasesFor(self::FEATURE_ROOT.'/Companies/Memberships/AcceptConsentTest.php'));
     }
 
     /**
