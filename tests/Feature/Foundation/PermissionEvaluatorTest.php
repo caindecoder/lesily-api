@@ -6,7 +6,6 @@ use App\Models\User;
 use Tests\Concerns\FreeTierCompany;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\RolesPermissions\Entities\Role;
-use Tests\Feature\Companies\Memberships\CreatesMemberships;
 use App\Foundation\RolesPermissions\Services\PermissionEvaluator;
 
 /**
@@ -16,7 +15,7 @@ use App\Foundation\RolesPermissions\Services\PermissionEvaluator;
  */
 class PermissionEvaluatorTest extends FoundationTestCase
 {
-    use CreatesMemberships, FreeTierCompany;
+    use FreeTierCompany;
 
     protected function setUp(): void
     {

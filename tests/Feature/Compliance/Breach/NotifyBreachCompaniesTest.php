@@ -24,14 +24,12 @@ use App\Foundation\Notifications\Enums\NotificationType;
 use App\Compliance\Breach\Entities\BreachIncidentCompany;
 use App\Compliance\Breach\Events\BreachCompaniesNotified;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
-use Tests\Feature\Companies\Memberships\CreatesMemberships;
 use Spatie\EventSourcing\StoredEvents\Models\EloquentStoredEvent;
 use App\Foundation\Notifications\Notifications\SystemNotification;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
 {
-    use CreatesMemberships;
     use InteractsWithQueuedReactors;
 
     protected const string NOTIFIED_AT = '2026-05-05 14:00:00';

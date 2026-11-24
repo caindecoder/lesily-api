@@ -24,8 +24,7 @@ trait CreatesMemberships
      */
     protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
     {
-        $user = User::factory()->create();
-        $this->attachMember($company, $user, $this->seededRole($roleCode));
+        [$user] = $this->aMembership($company, $roleCode);
 
         return $user;
     }

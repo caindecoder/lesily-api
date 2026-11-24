@@ -12,13 +12,11 @@ use Tests\Concerns\AssertsMembershipAuditRows;
 use App\Companies\Entities\OwnershipTransferCase;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
 use App\Companies\Enums\OwnershipTransferCaseOutcome;
-use Tests\Feature\Companies\Memberships\CreatesMemberships;
 
 abstract class OwnershipTransferCasesTestCase extends PlatformAdminTestCase
 {
     use AssertsAuditTrail;
     use AssertsMembershipAuditRows;
-    use CreatesMemberships;
     use FreeTierCompany;
 
     protected User $platformAdmin;

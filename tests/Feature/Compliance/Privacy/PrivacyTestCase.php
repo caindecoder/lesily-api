@@ -8,11 +8,10 @@ use Laravel\Sanctum\Sanctum;
 use App\Companies\Entities\Company;
 use Tests\Concerns\FreeTierCompany;
 use Illuminate\Testing\TestResponse;
-use Tests\Feature\Companies\Memberships\CreatesMemberships;
 
 abstract class PrivacyTestCase extends TestCase
 {
-    use CreatesMemberships, FreeTierCompany;
+    use FreeTierCompany;
 
     protected const string KEPT_UNTIL_ACCOUNT_CLOSURE = 'Kept while the company account is open; after it closes, deleted on the account-closure schedule, with financial records kept as the law requires';
 

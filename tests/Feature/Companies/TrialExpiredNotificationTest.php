@@ -69,8 +69,7 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
         Notification::fake();
         $companyId = $this->givenTrialCompany();
         $owner = $this->genesisOwnerOf($companyId);
-        $otherOwner = User::factory()->create();
-        CompanyReadModel::factory()->ownedBy($otherOwner)->create();
+        $otherOwner = $this->aCompanyMember(CompanyReadModel::factory()->create(), 'owner');
 
         // When the first company's trial expires
         $this->expire($companyId);

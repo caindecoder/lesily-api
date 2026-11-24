@@ -23,24 +23,24 @@ class SharedTestHelpersAreDefinedOnceTest extends FoundationTestCase
         // Given the root test case, every module base and every test trait
         $files = $this->sharedTestFiles();
 
-        // When the helper names declared in more than one of them are listed
-        $definedTwice = $this->namesDeclaredInMoreThanOne($files);
+        // When the helper names each declares are collected
+        $declaredIn = $this->helpersDeclaredIn($files);
 
-        // Then the walk read every kind of shared file and listed none
-        $this->assertWalkedAndNoneListed($files, $definedTwice);
+        // Then the walk read the files and their helpers, and no name sits in two of them
+        $this->assertWalkedAndNoneDefinedTwice($files, $declaredIn);
     }
 
     /**
      * @param  array<string, class-string>  $files
-     * @param  array<string, list<string>>  $listed
+     * @param  array<string, list<string>>  $declaredIn
      */
-    protected function assertWalkedAndNoneListed(array $files, array $listed): void
+    protected function assertWalkedAndNoneDefinedTwice(array $files, array $declaredIn): void
     {
         $this->assertGreaterThanOrEqual(self::SHARED_FILES_AT_LEAST, count($files));
         $this->assertArrayHasKey('tests/TestCase.php', $files);
-        $this->assertNotEmpty(array_filter(array_keys($files), fn (string $path): bool => $this->isModuleBase($path)));
-        $this->assertNotEmpty(array_filter($files, fn (string $class): bool => trait_exists($class)));
-        $this->assertSame([], $listed);
+        $this->assertSame(['tests/TestCase.php'], $declaredIn['seededrole'] ?? []);
+        $this->assertSame(['tests/Feature/Companies/Memberships/CreatesMemberships.php'], $declaredIn['attachmember'] ?? []);
+        $this->assertSame([], array_filter($declaredIn, fn (array $paths): bool => count($paths) > 1));
     }
 
     /**
@@ -68,12 +68,12 @@ class SharedTestHelpersAreDefinedOnceTest extends FoundationTestCase
     }
 
     /**
-     * Every method name (case-insensitive, as PHP reads it) declared in more than one file.
+     * Every method name (case-insensitive, as PHP reads it) with the files that declare it.
      *
      * @param  array<string, class-string>  $files
      * @return array<string, list<string>>
      */
-    protected function namesDeclaredInMoreThanOne(array $files): array
+    protected function helpersDeclaredIn(array $files): array
     {
         $declaredIn = [];
 
@@ -89,7 +89,7 @@ class SharedTestHelpersAreDefinedOnceTest extends FoundationTestCase
 
         ksort($declaredIn);
 
-        return array_filter($declaredIn, fn (array $paths): bool => count($paths) > 1);
+        return $declaredIn;
     }
 
     /**
