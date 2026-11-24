@@ -288,7 +288,7 @@ class PasswordChangedNotificationTest extends AuthTestCase
      * the acting user's membership. The name is unique-per-test so the tier-distinguishing
      * assertions cannot be satisfied by a faker name collision between two companies (a wrong
      * resolution must FAIL, never alias). $joinedAt backdates the pivot's created_at AFTER
-     * attaching (attach-then-update, the aRemovedMembershipIn pattern) because withTimestamps()
+     * attaching (attach-then-update, the shape of CreatesMemberships::aRemovedMembership) because withTimestamps()
      * overwrites an explicitly-passed created_at — it lets a test invert insertion order vs
      * joined time.
      */
