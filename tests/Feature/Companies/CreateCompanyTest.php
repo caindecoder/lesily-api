@@ -25,8 +25,6 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class CreateCompanyTest extends CompaniesTestCase
 {
-    use CreatesTrialCompanies;
-
     // Sad — genesis is illegal from any state but [*]: an existing company cannot
     // be re-created, and the rejection must leave the original genesis untouched.
     #[Test]

@@ -19,12 +19,43 @@ use App\Companies\Events\CompanyDetailsUpdated;
 use App\Companies\Events\CompanySettingsUpdated;
 use App\Foundation\CountryConfig\Entities\Country;
 use App\Companies\Entities\CompanyDataProtectionOfficer;
+use App\Companies\Aggregates\Company as CompanyAggregate;
 use App\Companies\Events\CompanyDataProtectionOfficerSet;
+use App\Companies\UseCases\Commands\CreateCompanyCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 abstract class CompaniesTestCase extends TestCase
 {
     use AssertsAuditTrail, AssertsCompanyAuditRows, InducesProjectorFailures;
+
+    /**
+     * The bare owner-signup genesis, through the aggregate alone — for the tests of the
+     * creation itself and of a store that starts empty; every other test takes the
+     * ready-made company. BR / EPF derive from the company id (both globally unique).
+     */
+    protected function createCompanyOnTrial(string $companyId, string $name = 'Contoso'): void
+    {
+        CompanyAggregate::retrieve($companyId)
+            ->create($this->buildCreateCompanyCommand($companyId, $name))
+            ->persist();
+    }
+
+    protected function buildCreateCompanyCommand(string $companyId, string $name = 'Contoso', ?User $owner = null): CreateCompanyCommand
+    {
+        $this->seedRbacCatalog();
+
+        return CreateCompanyCommand::from([
+            'name' => $name,
+            'brNumber' => "BR-{$companyId}",
+            'epfNumber' => "EPF-{$companyId}",
+            'country' => 'LK',
+            'owner' => $owner ?? User::factory()->create(),
+            'emergencyContactName' => 'Kamala Perera',
+            'emergencyContactEmail' => 'kamala@contoso.lk',
+            'emergencyContactPhone' => '+94771234567',
+            'emergencyContactRelationship' => 'spouse',
+        ]);
+    }
 
     /**
      * An authenticated member requests a company's details by URL id. $context

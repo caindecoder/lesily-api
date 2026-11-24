@@ -20,7 +20,7 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class FillConsentStoreFromRecordedConsentsTest extends CompaniesTestCase
 {
-    use CreatesMemberships, CreatesTrialCompanies;
+    use CreatesMemberships;
 
     protected const string FILL_MIGRATION = '2026_10_26_152314_fill_consent_records_from_recorded_consents.php';
 

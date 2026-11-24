@@ -3,13 +3,12 @@
 namespace Tests\Feature\Companies;
 
 use App\Models\User;
-use Illuminate\Support\Str;
+use Tests\Concerns\FreeTierCompany;
 use App\Companies\Aggregates\Company;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Notification;
 use App\Companies\Events\CompanyTrialExpired;
-use App\Foundation\RolesPermissions\Entities\Role;
 use App\Companies\Entities\Company as CompanyReadModel;
 use App\Foundation\Notifications\Enums\NotificationType;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
@@ -17,7 +16,7 @@ use App\Foundation\Notifications\Notifications\SystemNotification;
 
 class TrialExpiredNotificationTest extends CompaniesTestCase
 {
-    use CreatesTrialCompanies;
+    use FreeTierCompany;
     use InteractsWithQueuedReactors;
 
     private const COMPANY_NAME = 'Contoso';
@@ -31,8 +30,7 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
     {
         // Given a trial company whose only membership no longer holds the owner role
         Notification::fake();
-        $companyId = (string) Str::uuid();
-        $this->createCompanyOnTrial($companyId);
+        $companyId = $this->givenTrialCompany();
         $this->demoteGenesisOwner($companyId);
 
         // When the trial expires
@@ -50,10 +48,9 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
     {
         // Given a trial company with its genesis-enrolled owner and a non-owner member
         Notification::fake();
-        $companyId = (string) Str::uuid();
-        $this->createCompanyOnTrial($companyId);
+        $companyId = $this->givenTrialCompany();
         $owner = $this->genesisOwnerOf($companyId);
-        $member = $this->attachUserWithRole($companyId, 'admin');
+        $member = $this->aCompanyMember(CompanyReadModel::query()->findOrFail($companyId), 'admin');
 
         // When the trial expires
         $this->expire($companyId);
@@ -68,12 +65,12 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
     #[Test]
     public function when_a_trial_expires_then_another_companys_owner_is_not_notified(): void
     {
-        // Given two trial companies, each with its genesis-enrolled owner
+        // Given a trial company with its genesis-enrolled owner, and another company with its own owner
         Notification::fake();
-        $companyId = (string) Str::uuid();
-        $this->createCompanyOnTrial($companyId);
+        $companyId = $this->givenTrialCompany();
         $owner = $this->genesisOwnerOf($companyId);
-        $otherOwner = $this->genesisOwnerOf($this->givenOtherTrialCompany());
+        $otherOwner = User::factory()->create();
+        CompanyReadModel::factory()->ownedBy($otherOwner)->create();
 
         // When the first company's trial expires
         $this->expire($companyId);
@@ -88,8 +85,7 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
     public function when_a_trial_expires_then_the_owner_notice_is_queued_not_sent_inline(): void
     {
         // Given a trial company, with the fakes armed only after genesis
-        $companyId = (string) Str::uuid();
-        $this->createCompanyOnTrial($companyId);
+        $companyId = $this->givenTrialCompany();
         Notification::fake();
         Queue::fake();
 
@@ -102,31 +98,16 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
         Notification::assertSentTo($this->genesisOwnerOf($companyId), SystemNotification::class);
     }
 
-    protected function givenOtherTrialCompany(): string
+    protected function givenTrialCompany(): string
     {
-        $otherCompanyId = (string) Str::uuid();
-        $this->createCompanyOnTrial($otherCompanyId, 'ACME');
+        $this->seedRbacCatalog();
 
-        return $otherCompanyId;
+        return $this->createCompanyOnTrialFor(User::factory()->create())->getKey();
     }
 
     protected function expire(string $companyId): void
     {
         Company::retrieve($companyId)->trialExpire()->persist();
-    }
-
-    protected function attachUserWithRole(string $companyId, string $roleCode): User
-    {
-        $user = User::factory()->create();
-        CompanyReadModel::query()->findOrFail($companyId)
-            ->users()->attach($user, ['role_id' => $this->ensureRoleExists($roleCode)->getKey()]);
-
-        return $user;
-    }
-
-    protected function ensureRoleExists(string $roleCode): Role
-    {
-        return Role::findByCode($roleCode) ?? Role::factory()->code($roleCode)->create();
     }
 
     protected function genesisOwnerOf(string $companyId): User
@@ -141,7 +122,7 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
         CompanyReadModel::query()->findOrFail($companyId)
             ->users()->updateExistingPivot(
                 $this->genesisOwnerOf($companyId)->getKey(),
-                ['role_id' => $this->ensureRoleExists('admin')->getKey()],
+                ['role_id' => $this->seededRole('admin')->getKey()],
             );
     }
 

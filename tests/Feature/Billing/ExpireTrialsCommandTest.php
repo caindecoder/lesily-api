@@ -2,10 +2,11 @@
 
 namespace Tests\Feature\Billing;
 
+use App\Models\User;
 use RuntimeException;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
-use Illuminate\Support\Str;
+use Tests\Concerns\FreeTierCompany;
 use Illuminate\Support\Facades\Queue;
 use App\Companies\Enums\CompanyStatus;
 use Illuminate\Testing\PendingCommand;
@@ -16,14 +17,13 @@ use App\Companies\Events\CompanyTrialExpired;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\AuditTrail\Enums\AuditAction;
 use App\Foundation\AuditTrail\Entities\AuditEntry;
-use Tests\Feature\Companies\CreatesTrialCompanies;
 use App\Companies\Reactors\TrialExpiredEmailReactor;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Billing\Subscriptions\Enums\SubscriptionStatus;
 use App\Companies\Entities\Company as CompanyReadModel;
+use App\Companies\Aggregates\Company as CompanyAggregate;
 use Tests\Feature\Foundation\InteractsWithQueuedReactors;
 use App\Billing\Subscriptions\Events\SubscriptionTrialEnded;
-use App\Billing\Subscriptions\UseCases\Commands\StartTrialCommand;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 use App\Billing\Subscriptions\UseCases\Commands\ApplyTrialExpirationCommand;
 use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
@@ -35,7 +35,7 @@ use App\Billing\Subscriptions\UseCases\Interactors\ApplyTrialExpirationInteracto
  */
 class ExpireTrialsCommandTest extends BillingTestCase
 {
-    use CreatesTrialCompanies;
+    use FreeTierCompany;
     use InteractsWithQueuedReactors;
 
     protected function setUp(): void
@@ -55,15 +55,14 @@ class ExpireTrialsCommandTest extends BillingTestCase
     public function when_no_trial_has_elapsed_then_the_default_scan_expires_nothing(): void
     {
         // Given a company still within its trial
-        $companyId = (string) Str::uuid();
-        $this->givenTrialEndingAt($companyId, (string) Str::uuid(), CarbonImmutable::now()->addDay());
+        [$companyId] = $this->givenTrialEndingAt(CarbonImmutable::now()->addDay());
 
         // When the daily scan runs with no --date (defaults to now)
         $this->runExpireTrials()->expectsOutputToContain('0 trial(s) expired.')->assertSuccessful();
 
-        // Then the company is untouched
+        // Then the company is untouched — nothing audited beyond its signup
         $this->assertSame(CompanyStatus::Trial, CompanyReadModel::findOrFail($companyId)->status);
-        $this->assertNothingAudited();
+        $this->assertDatabaseCount('audit_trail', self::SIGNUP_AUDIT_ROWS);
     }
 
     // Sad (UC-1-049 Sc5 guard / idempotency) — once a trial has been expired, a later daily
@@ -73,9 +72,7 @@ class ExpireTrialsCommandTest extends BillingTestCase
     public function when_an_already_expired_trial_is_scanned_again_then_nothing_is_re_expired(): void
     {
         // Given a company whose elapsed trial was already expired by an earlier run
-        $companyId = (string) Str::uuid();
-        $subscriptionId = (string) Str::uuid();
-        $this->givenTrialEndingAt($companyId, $subscriptionId, CarbonImmutable::now()->subDay());
+        [$companyId, $subscriptionId] = $this->givenTrialEndingAt(CarbonImmutable::now()->subDay());
         $this->runExpireTrials()->assertSuccessful();
 
         // When the daily scan runs again
@@ -93,9 +90,7 @@ class ExpireTrialsCommandTest extends BillingTestCase
     public function when_an_already_expired_trial_is_expired_again_then_nothing_changes(): void
     {
         // Given a company and subscription whose trial has already been expired once
-        $companyId = (string) Str::uuid();
-        $subscriptionId = (string) Str::uuid();
-        $this->givenTrialEndingAt($companyId, $subscriptionId, CarbonImmutable::now()->addDays(30));
+        [$companyId, $subscriptionId] = $this->givenTrialEndingAt(CarbonImmutable::now()->addDays(30));
         app(ApplyTrialExpirationInteractor::class)->execute(
             $this->expiryCommandFor($companyId, $subscriptionId),
         );
@@ -114,9 +109,7 @@ class ExpireTrialsCommandTest extends BillingTestCase
     public function when_the_trial_expiry_cannot_be_audited_then_the_company_stays_in_trial(): void
     {
         // Given a company whose trial elapsed yesterday, and an audit trail that cannot be written
-        $companyId = (string) Str::uuid();
-        $subscriptionId = (string) Str::uuid();
-        $this->givenTrialEndingAt($companyId, $subscriptionId, CarbonImmutable::now()->subDay());
+        [$companyId, $subscriptionId] = $this->givenTrialEndingAt(CarbonImmutable::now()->subDay());
         $this->failTheAuditTrail();
 
         try {
@@ -139,9 +132,7 @@ class ExpireTrialsCommandTest extends BillingTestCase
     public function when_a_queued_reactor_fails_after_the_trial_expiry_commits_then_the_expiry_is_not_undone(): void
     {
         // Given an elapsed trial and a reactor that fails at delivery time
-        $companyId = (string) Str::uuid();
-        $subscriptionId = (string) Str::uuid();
-        $this->givenTrialEndingAt($companyId, $subscriptionId, CarbonImmutable::now()->subDay());
+        [$companyId, $subscriptionId] = $this->givenTrialEndingAt(CarbonImmutable::now()->subDay());
         Queue::fake();
         $this->bindThrowingTrialExpiredReactor();
 
@@ -170,9 +161,7 @@ class ExpireTrialsCommandTest extends BillingTestCase
         CompanyStatus $expectedStatus,
     ): void {
         // Given a company whose trial ends at a known instant
-        $companyId = (string) Str::uuid();
-        $subscriptionId = (string) Str::uuid();
-        $this->givenTrialEndingAt($companyId, $subscriptionId, CarbonImmutable::parse($trialEndsAt));
+        [$companyId] = $this->givenTrialEndingAt(CarbonImmutable::parse($trialEndsAt));
 
         // When the daily trials:expire scan runs as of a given date
         $this->runExpireTrials($asOf)->assertSuccessful();
@@ -198,9 +187,7 @@ class ExpireTrialsCommandTest extends BillingTestCase
     public function when_a_trial_has_elapsed_then_its_subscription_is_cancelled_as_trial_expired(): void
     {
         // Given a company whose trial elapsed yesterday
-        $companyId = (string) Str::uuid();
-        $subscriptionId = (string) Str::uuid();
-        $this->givenTrialEndingAt($companyId, $subscriptionId, CarbonImmutable::now()->subDay());
+        [$companyId, $subscriptionId] = $this->givenTrialEndingAt(CarbonImmutable::now()->subDay());
 
         // When the daily scan runs for today (no --date — defaults to now)
         $this->runExpireTrials()->expectsOutputToContain('1 trial(s) expired.')->assertSuccessful();
@@ -214,10 +201,8 @@ class ExpireTrialsCommandTest extends BillingTestCase
     public function when_multiple_trials_have_elapsed_then_all_of_them_are_expired(): void
     {
         // Given two companies whose trials have elapsed
-        $firstCompanyId = (string) Str::uuid();
-        $secondCompanyId = (string) Str::uuid();
-        $this->givenTrialEndingAt($firstCompanyId, (string) Str::uuid(), CarbonImmutable::now()->subDay());
-        $this->givenTrialEndingAt($secondCompanyId, (string) Str::uuid(), CarbonImmutable::now()->subDay());
+        [$firstCompanyId] = $this->givenTrialEndingAt(CarbonImmutable::now()->subDay());
+        [$secondCompanyId] = $this->givenTrialEndingAt(CarbonImmutable::now()->subDay());
 
         // When the daily scan runs
         $this->runExpireTrials()->expectsOutputToContain('2 trial(s) expired.')->assertSuccessful();
@@ -232,8 +217,7 @@ class ExpireTrialsCommandTest extends BillingTestCase
     public function when_a_trial_expires_then_it_is_audited_as_a_system_action(): void
     {
         // Given Contoso, whose trial elapsed yesterday
-        $companyId = (string) Str::uuid();
-        $this->givenTrialEndingAt($companyId, (string) Str::uuid(), CarbonImmutable::now()->subDay());
+        [$companyId] = $this->givenTrialEndingAt(CarbonImmutable::now()->subDay());
 
         // When the daily scan runs
         $this->runExpireTrials()->assertSuccessful();
@@ -242,14 +226,20 @@ class ExpireTrialsCommandTest extends BillingTestCase
         $this->assertTrialExpiryAudited($companyId);
     }
 
-    protected function givenTrialEndingAt(string $companyId, string $subscriptionId, CarbonInterface $trialEndsAt): void
+    /**
+     * A company as signup leaves it, created so its one trial ends at $trialEndsAt; the clock is back where it was.
+     *
+     * @return array{0: string, 1: string} the company id and its subscription id
+     */
+    protected function givenTrialEndingAt(CarbonInterface $trialEndsAt): array
     {
-        $this->createCompanyOnTrial($companyId);
-        $command = StartTrialCommand::from([
-            'company' => CompanyReadModel::query()->findOrFail($companyId),
-            'trialEndsAt' => $trialEndsAt,
-        ]);
-        Subscription::retrieve($subscriptionId)->startTrial($command)->persist();
+        $now = CarbonImmutable::now();
+        $this->travelTo(CarbonImmutable::instance($trialEndsAt)->subDays(CompanyAggregate::TRIAL_DAYS));
+        $this->seedRbacCatalog();
+        $company = $this->createCompanyOnTrialFor(User::factory()->create());
+        $this->travelTo($now);
+
+        return [$company->getKey(), $this->subscriptionOf($company)->getKey()];
     }
 
     protected function expiryCommandFor(string $companyId, string $subscriptionId): ApplyTrialExpirationCommand
