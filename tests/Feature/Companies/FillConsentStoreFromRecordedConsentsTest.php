@@ -11,6 +11,7 @@ use App\Consent\Entities\ConsentRecord;
 use App\Consent\Events\ConsentRecorded;
 use App\Companies\Events\CompanyCreated;
 use Illuminate\Database\Migrations\Migration;
+use Tests\Feature\Companies\Memberships\CreatesMemberships;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 /**
@@ -19,7 +20,7 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class FillConsentStoreFromRecordedConsentsTest extends CompaniesTestCase
 {
-    use CreatesTrialCompanies;
+    use CreatesMemberships, CreatesTrialCompanies;
 
     protected const string FILL_MIGRATION = '2026_10_26_152314_fill_consent_records_from_recorded_consents.php';
 

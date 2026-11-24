@@ -190,13 +190,6 @@ abstract class AuthTestCase extends TestCase
         }
     }
 
-    protected function assertThrottled(TestResponse $response): void
-    {
-        $response->assertTooManyRequests();
-        $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
-        $this->assertGreaterThan(0, (int) $response->json('retry_after'), 'A throttled response must carry retry guidance.');
-    }
-
     /**
      * Assert the user's single issued session token is named for $expectedName — the
      * device-name resolution oracle (sessions slice). `sole()` doubles as the
@@ -299,7 +292,7 @@ abstract class AuthTestCase extends TestCase
     {
         $requestId = $response->headers->get('Correlation-Id');
         $this->assertIsString($requestId);
-        [$eventClass, $words] = $this->expectedRecordOf($action);
+        [$eventClass, $words] = $this->expectedSecurityRecordOf($action);
         $storedEvent = LesilyStoredEvent::query()
             ->where('aggregate_uuid', $user->getKey())
             ->where('event_class', $eventClass)
@@ -365,7 +358,7 @@ abstract class AuthTestCase extends TestCase
     }
 
     /** @return array{class-string, string} */
-    protected function expectedRecordOf(AuditAction $action): array
+    protected function expectedSecurityRecordOf(AuditAction $action): array
     {
         return match ($action) {
             AuditAction::PasswordChanged => [UserPasswordChanged::class, 'Password changed'],

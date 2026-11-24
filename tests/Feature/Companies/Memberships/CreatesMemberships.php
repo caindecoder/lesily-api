@@ -19,6 +19,18 @@ trait CreatesMemberships
     }
 
     /**
+     * A fresh user who joins $company under the seeded $roleCode and accepts the
+     * live policy versions there.
+     */
+    protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
+    {
+        $user = User::factory()->create();
+        $this->attachMember($company, $user, $this->seededRole($roleCode));
+
+        return $user;
+    }
+
+    /**
      * Soft-delete ($user)'s membership pivot in $company — the removed-member
      * state (UC-1-024) without going through the endpoint's session kill, so a
      * still-valid session can prove the R7 auth-gate filters trashed memberships.

@@ -151,4 +151,21 @@ abstract class TestCase extends BaseTestCase
         $response->assertJsonPath('error_code', 'INTERNAL_ERROR');
         $response->assertJsonMissingPath('data');
     }
+
+    protected function assertThrottled(TestResponse $response): void
+    {
+        $response->assertTooManyRequests();
+        $response->assertJsonPath('error_code', 'RATE_LIMIT_EXCEEDED');
+        $retryAfter = $response->json('retry_after');
+        $this->assertIsInt($retryAfter);
+        $this->assertGreaterThan(0, $retryAfter, 'A throttled response must carry retry guidance.');
+        $this->assertEqualsWithDelta(now()->getTimestamp() + $retryAfter, (int) $response->headers->get('X-RateLimit-Reset'), 5, 'X-RateLimit-Reset must be the epoch when the window resets.');
+    }
+
+    protected function assertNothingListed(TestResponse $response): void
+    {
+        $response->assertOk();
+        $response->assertJsonPath('data', []);
+        $response->assertJsonPath('meta.pagination.total', 0);
+    }
 }

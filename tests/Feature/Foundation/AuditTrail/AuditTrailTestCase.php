@@ -174,13 +174,6 @@ abstract class AuditTrailTestCase extends FoundationTestCase
             ->create();
     }
 
-    protected function assertNothingListed(TestResponse $response): void
-    {
-        $response->assertOk();
-        $response->assertJsonCount(0, 'data');
-        $response->assertJsonPath('meta.pagination.total', 0);
-    }
-
     /**
      * @param  array{page: int, per_page: int, total: int, last_page: int}  $pagination
      */

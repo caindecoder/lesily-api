@@ -9,11 +9,12 @@ use App\Foundation\Billing\Enums\BillingPlan;
 use App\Foundation\AuditTrail\Values\RequestOrigin;
 use App\Billing\Subscriptions\Aggregates\Subscription;
 use App\Companies\UseCases\Commands\CreateCompanyCommand;
+use Tests\Feature\Companies\Memberships\CreatesMemberships;
 use App\Companies\UseCases\Interactors\CreateCompanyInteractor;
 
 trait FreeTierCompany
 {
-    use HasSubscription;
+    use CreatesMemberships, HasSubscription;
 
     protected const int READY_MADE_AUDIT_ROWS = 4;
 
@@ -72,15 +73,5 @@ trait FreeTierCompany
             'employee' => $this->employee,
             default => $this->aCompanyMember($this->company, $roleCode),
         };
-    }
-
-    protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
-    {
-        $user = User::factory()->create();
-
-        $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
-        $this->aConsentRecordedBy($user, $company);
-
-        return $user;
     }
 }

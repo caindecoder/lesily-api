@@ -27,21 +27,6 @@ abstract class CompaniesTestCase extends TestCase
     use AssertsAuditTrail, AssertsCompanyAuditRows, InducesProjectorFailures;
 
     /**
-     * A fresh user made a live member of $company under a seeded role — the
-     * company_user pivot row the company-scoped gates read — who accepted the
-     * live policy versions there.
-     */
-    protected function aCompanyMember(Company $company, string $roleCode = 'employee'): User
-    {
-        $user = User::factory()->create();
-
-        $company->users()->attach($user, ['role_id' => $this->seededRole($roleCode)->getKey()]);
-        $this->aConsentRecordedBy($user, $company);
-
-        return $user;
-    }
-
-    /**
      * An authenticated member requests a company's details by URL id. $context
      * optionally supplies the X-Company-Context header (the pre-R8 mechanism) —
      * on this param route the URL must win over it.
