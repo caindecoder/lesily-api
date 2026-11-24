@@ -83,7 +83,7 @@ class ViewProfileTest extends AuthTestCase
         $this->seedRbacCatalog();
         $user = User::factory()->create();
         $company = Company::factory()->create();
-        $this->aMembershipFor($user, $company);
+        $this->attachMember($company, $user, $this->seededRole('employee'));
         $this->setDefaultCompany($user, ['companyId' => $company->getKey()])->assertNoContent();
         $this->softDeleteMembership($company, $user);
 
@@ -106,7 +106,7 @@ class ViewProfileTest extends AuthTestCase
             ->lastLoggedAt('2026-07-10 09:30:00')
             ->create();
         $company = Company::factory()->create();
-        $this->aMembershipFor($user, $company);
+        $this->attachMember($company, $user, $this->seededRole('employee'));
         $this->setDefaultCompany($user, ['companyId' => $company->getKey()])->assertNoContent();
 
         // When the user requests GET /api/v1/me
