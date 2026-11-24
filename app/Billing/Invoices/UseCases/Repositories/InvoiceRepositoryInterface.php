@@ -17,7 +17,7 @@ interface InvoiceRepositoryInterface
      *
      * @return LengthAwarePaginator<int, Invoice>
      */
-    public function listForCompany(string $companyId, ListInvoicesCommand $filters): LengthAwarePaginator;
+    public function listForCompany(string $companyId, ListInvoicesCommand $command): LengthAwarePaginator;
 
     /**
      * One invoice by id, tenant-scoped — null when the id is unknown OR belongs

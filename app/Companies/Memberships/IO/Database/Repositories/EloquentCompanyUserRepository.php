@@ -35,19 +35,19 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
     /**
      * @return LengthAwarePaginator<int, stdClass>
      */
-    public function listForCompany(string $companyId, ListMembershipsCommand $filters): LengthAwarePaginator
+    public function listForCompany(string $companyId, ListMembershipsCommand $command): LengthAwarePaginator
     {
-        $rows = match ($filters->status) {
-            MembershipStatus::Active => $this->activeMembers($companyId, $filters),
-            MembershipStatus::Invited => $this->pendingInvitations($companyId, $filters),
-            null => $this->activeMembers($companyId, $filters)
-                ->unionAll($this->pendingInvitations($companyId, $filters)),
+        $rows = match ($command->status) {
+            MembershipStatus::Active => $this->activeMembers($companyId, $command),
+            MembershipStatus::Invited => $this->pendingInvitations($companyId, $command),
+            null => $this->activeMembers($companyId, $command)
+                ->unionAll($this->pendingInvitations($companyId, $command)),
         };
 
         return $rows
             ->when(
                 // Newest membership/invitation first (?sort=-created_at, api-1-users).
-                $filters->sort === '-created_at',
+                $command->sort === '-created_at',
                 fn (Builder $query) => $query->orderByDesc('created_at'),
                 fn (Builder $query) => $query->orderBy('sort_name'),
             )
@@ -57,7 +57,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             // page defaults HERE, never by falling through to Laravel's resolver:
             // that reads $request->input('page'), which would honour a body-supplied
             // page and bypass the whitelisted, validated query DTO (api-conventions §10.1).
-            ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
+            ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
     }
 
     /**
@@ -104,7 +104,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             ->first();
     }
 
-    protected function activeMembers(string $companyId, ListMembershipsCommand $filters): Builder
+    protected function activeMembers(string $companyId, ListMembershipsCommand $command): Builder
     {
         return DB::table('company_user')
             ->join('users', 'users.id', '=', 'company_user.user_id')
@@ -113,8 +113,8 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             // DB::table sees no Eloquent SoftDeletes scope — removed members are
             // excluded here explicitly (UC-1-024 D5).
             ->whereNull('company_user.deleted_at')
-            ->when($filters->role !== null, fn (Builder $query) => $query->where('roles.code', $filters->role))
-            ->tap(fn (Builder $query) => $this->applyMemberSearch($query, $filters->search))
+            ->when($command->role !== null, fn (Builder $query) => $query->where('roles.code', $command->role))
+            ->tap(fn (Builder $query) => $this->applyMemberSearch($query, $command->search))
             ->select([
                 'company_user.id as id',
                 'users.id as user_id',
@@ -129,7 +129,7 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             ]);
     }
 
-    protected function pendingInvitations(string $companyId, ListMembershipsCommand $filters): Builder
+    protected function pendingInvitations(string $companyId, ListMembershipsCommand $command): Builder
     {
         return DB::table('invitations')
             ->join('roles', 'roles.id', '=', 'invitations.role_id')
@@ -140,8 +140,8 @@ class EloquentCompanyUserRepository implements CompanyUserRepositoryInterface
             ->whereNull('invitations.accepted_at')
             ->whereNull('invitations.revoked_at')
             ->where('invitations.expires_at', '>', now())
-            ->when($filters->role !== null, fn (Builder $query) => $query->where('roles.code', $filters->role))
-            ->tap(fn (Builder $query) => $this->applyInvitationSearch($query, $filters->search))
+            ->when($command->role !== null, fn (Builder $query) => $query->where('roles.code', $command->role))
+            ->tap(fn (Builder $query) => $this->applyInvitationSearch($query, $command->search))
             ->select([
                 'invitations.id as id',
                 DB::raw('null as user_id'),

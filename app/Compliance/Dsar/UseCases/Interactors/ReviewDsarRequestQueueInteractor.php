@@ -21,21 +21,21 @@ class ReviewDsarRequestQueueInteractor
     /**
      * The read and its audit row share one transaction — no read without its evidence.
      */
-    public function execute(ReviewDsarRequestQueueCommand $filters, User $admin, RequestOrigin $context): DsarRequestQueue
+    public function execute(ReviewDsarRequestQueueCommand $command, User $admin, RequestOrigin $context): DsarRequestQueue
     {
         $now = CarbonImmutable::now();
 
-        return DB::transaction(function () use ($filters, $now, $admin, $context): DsarRequestQueue {
-            $page = $this->selectedBy($filters, $now)
+        return DB::transaction(function () use ($command, $now, $admin, $context): DsarRequestQueue {
+            $page = $this->selectedBy($command, $now)
                 ->with(['company', 'subject', 'requestedBy'])
                 ->orderBy('sla_deadline')
                 ->orderBy('id')
                 // page defaults here, never through Laravel's resolver, which would
                 // honour a body-supplied page past the validated query filters.
-                ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
-            $counts = $this->countInProgress($this->selectedBy($filters, $now), $now);
+                ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
+            $counts = $this->countInProgress($this->selectedBy($command, $now), $now);
 
-            $this->recordQueueRead($this->queryContextOf($filters, $page), $admin, $context);
+            $this->recordQueueRead($this->queryContextOf($command, $page), $admin, $context);
 
             return new DsarRequestQueue($page, ...$counts);
         });
@@ -46,13 +46,13 @@ class ReviewDsarRequestQueueInteractor
      *
      * @return Builder<DsarRequestRecord>
      */
-    protected function selectedBy(ReviewDsarRequestQueueCommand $filters, CarbonImmutable $now): Builder
+    protected function selectedBy(ReviewDsarRequestQueueCommand $command, CarbonImmutable $now): Builder
     {
         return DsarRequestRecord::query()
-            ->when($filters->status, fn (Builder $query, DsarRequestStatus $status) => $query->where('status', $status))
-            ->when($filters->companyId, fn (Builder $query, string $companyId) => $query->where('company_id', $companyId))
-            ->when($filters->overdue, fn (Builder $query) => $query->whereOverdue($now))
-            ->when($filters->slaBreached, fn (Builder $query) => $query->whereSlaBreached());
+            ->when($command->status, fn (Builder $query, DsarRequestStatus $status) => $query->where('status', $status))
+            ->when($command->companyId, fn (Builder $query, string $companyId) => $query->where('company_id', $companyId))
+            ->when($command->overdue, fn (Builder $query) => $query->whereOverdue($now))
+            ->when($command->slaBreached, fn (Builder $query) => $query->whereSlaBreached());
     }
 
     /**
@@ -89,15 +89,15 @@ class ReviewDsarRequestQueueInteractor
      * @param  LengthAwarePaginator<int, DsarRequestRecord>  $page
      * @return array<string, mixed>
      */
-    protected function queryContextOf(ReviewDsarRequestQueueCommand $filters, LengthAwarePaginator $page): array
+    protected function queryContextOf(ReviewDsarRequestQueueCommand $command, LengthAwarePaginator $page): array
     {
         return [
             'filters' => array_filter(
                 [
-                    'status' => $filters->status?->value,
-                    'company_id' => $filters->companyId,
-                    'overdue' => $this->asQueryValue($filters->overdue),
-                    'sla_breached' => $this->asQueryValue($filters->slaBreached),
+                    'status' => $command->status?->value,
+                    'company_id' => $command->companyId,
+                    'overdue' => $this->asQueryValue($command->overdue),
+                    'sla_breached' => $this->asQueryValue($command->slaBreached),
                 ],
                 fn (?string $value): bool => $value !== null,
             ),

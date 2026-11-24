@@ -17,15 +17,15 @@ class ListDsarRequestsInteractor
     /**
      * @return LengthAwarePaginator<int, DsarRequestRecord>
      */
-    public function execute(ListDsarRequestsCommand $filters, User $actor, Company $company): LengthAwarePaginator
+    public function execute(ListDsarRequestsCommand $command, User $actor, Company $company): LengthAwarePaginator
     {
         return $this->visibility->visibleTo($actor, $company)
             ->with(['subject', 'requestedBy'])
-            ->when($filters->status, fn ($query, DsarRequestStatus $status) => $query->where('status', $status))
+            ->when($command->status, fn ($query, DsarRequestStatus $status) => $query->where('status', $status))
             ->orderByDesc('requested_at')
             ->orderByDesc('id')
             // page defaults here, never through Laravel's resolver, which would
             // honour a body-supplied page past the validated query filters.
-            ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
+            ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
     }
 }

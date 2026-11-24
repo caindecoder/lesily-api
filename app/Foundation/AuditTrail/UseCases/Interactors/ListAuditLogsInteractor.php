@@ -13,14 +13,14 @@ class ListAuditLogsInteractor
 {
     public function __construct(protected AuditLogRows $auditLogRows) {}
 
-    public function execute(ListAuditLogsCommand $filters, Company $company): AuditLogPage
+    public function execute(ListAuditLogsCommand $command, Company $company): AuditLogPage
     {
-        if ($filters->usesSearch() && ! $company->canUseFeature(Feature::AuditLogSearch)) {
+        if ($command->usesSearch() && ! $company->canUseFeature(Feature::AuditLogSearch)) {
             throw FeatureUnavailableException::forFeature(Feature::AuditLogSearch);
         }
 
-        $rows = $this->auditLogRows->of($filters, $company)
-            ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
+        $rows = $this->auditLogRows->of($command, $company)
+            ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
 
         return new AuditLogPage($rows, $this->auditLogRows->retentionFrom($company));
     }

@@ -32,16 +32,16 @@ class AuditLogController extends Controller
 
     public function export(Request $request, ExportAuditLogsInteractor $interactor): StreamedResponse
     {
-        $filters = ExportAuditLogsCommand::fromQuery($request);
+        $command = ExportAuditLogsCommand::fromQuery($request);
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
-        $rows = $interactor->execute($filters, $actor, RequestOrigin::fromRequest($request));
+        $rows = $interactor->execute($command, $actor, RequestOrigin::fromRequest($request));
 
         return response()->streamDownload(
-            fn () => $filters->format === ExportFormat::Json ? $this->writeJson($rows, $request) : $this->writeCsv($rows, $request),
-            'audit-logs-'.today()->toDateString().'.'.$filters->format->value,
-            ['Content-Type' => $filters->format->contentType()],
+            fn () => $command->format === ExportFormat::Json ? $this->writeJson($rows, $request) : $this->writeCsv($rows, $request),
+            'audit-logs-'.today()->toDateString().'.'.$command->format->value,
+            ['Content-Type' => $command->format->contentType()],
         );
     }
 

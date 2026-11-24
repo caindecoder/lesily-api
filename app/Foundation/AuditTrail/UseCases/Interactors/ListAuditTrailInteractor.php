@@ -17,21 +17,21 @@ class ListAuditTrailInteractor
     /**
      * @return LengthAwarePaginator<int, AuditEntry>
      */
-    public function execute(ListAuditTrailCommand $filters, Company $company): LengthAwarePaginator
+    public function execute(ListAuditTrailCommand $command, Company $company): LengthAwarePaginator
     {
         return AuditEntry::query()
             ->leftJoin('roles', 'roles.code', '=', 'audit_trail.actor_role_code')
             ->select(['audit_trail.*', 'roles.name as actor_role_name'])
             ->where('audit_trail.company_id', $company->getKey())
-            ->when($filters->within, fn (Builder $query, CarbonPeriod $within) => $query
+            ->when($command->within, fn (Builder $query, CarbonPeriod $within) => $query
                 ->where('audit_trail.recorded_at', '>=', $within->getStartDate())
                 ->where('audit_trail.recorded_at', '<', $within->getIncludedEndDate()->toImmutable()->addDay()))
-            ->when($filters->actor, fn (Builder $query, string $actor) => $this->byActor($query, $actor))
-            ->when($filters->action, fn (Builder $query, AuditAction $action) => $query->where('audit_trail.action', $action))
-            ->when($filters->subjectType, fn (Builder $query, AuditSubjectType $type) => $query->where('audit_trail.subject_type', $type))
+            ->when($command->actor, fn (Builder $query, string $actor) => $this->byActor($query, $actor))
+            ->when($command->action, fn (Builder $query, AuditAction $action) => $query->where('audit_trail.action', $action))
+            ->when($command->subjectType, fn (Builder $query, AuditSubjectType $type) => $query->where('audit_trail.subject_type', $type))
             ->orderByDesc('audit_trail.recorded_at')
             ->orderByDesc('audit_trail.id')
-            ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
+            ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
     }
 
     /**

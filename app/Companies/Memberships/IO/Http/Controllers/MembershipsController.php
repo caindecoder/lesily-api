@@ -32,10 +32,10 @@ class MembershipsController
 
     public function index(Request $request): MembershipCollection
     {
-        $filters = ListMembershipsCommand::fromQuery($request);
+        $command = ListMembershipsCommand::fromQuery($request);
 
         return new MembershipCollection(
-            $this->memberships->listForCompany($request->company()->getKey(), $filters)
+            $this->memberships->listForCompany($request->company()->getKey(), $command)
         );
     }
 

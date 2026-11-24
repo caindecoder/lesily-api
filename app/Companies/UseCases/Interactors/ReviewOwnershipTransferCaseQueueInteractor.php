@@ -27,19 +27,19 @@ class ReviewOwnershipTransferCaseQueueInteractor
     /**
      * @return LengthAwarePaginator<int, OwnershipTransferCase>
      */
-    public function execute(ReviewOwnershipTransferCaseQueueCommand $filters, User $admin, RequestOrigin $context): LengthAwarePaginator
+    public function execute(ReviewOwnershipTransferCaseQueueCommand $command, User $admin, RequestOrigin $context): LengthAwarePaginator
     {
-        return DB::transaction(function () use ($filters, $admin, $context): LengthAwarePaginator {
+        return DB::transaction(function () use ($command, $admin, $context): LengthAwarePaginator {
             $page = OwnershipTransferCase::query()
-                ->when($filters->status, fn ($query, OwnershipTransferCaseStatus $status) => $query->withStatus($status))
-                ->when($filters->companyId, fn ($query, string $companyId) => $query->forCompanyId($companyId))
+                ->when($command->status, fn ($query, OwnershipTransferCaseStatus $status) => $query->withStatus($status))
+                ->when($command->companyId, fn ($query, string $companyId) => $query->forCompanyId($companyId))
                 ->newestFirst()
                 // page defaults HERE, never by falling through to Laravel's resolver:
                 // that reads $request->input('page'), which would honour a body-supplied
                 // page and bypass the whitelisted, validated query DTO (api-conventions §10.1).
-                ->paginate(perPage: $filters->perPage ?? 15, page: $filters->page ?? 1);
+                ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
 
-            $this->recordQueueRead($this->queryContextOf($filters, $page), $admin, $context);
+            $this->recordQueueRead($this->queryContextOf($command, $page), $admin, $context);
 
             return $page;
         });
@@ -49,11 +49,11 @@ class ReviewOwnershipTransferCaseQueueInteractor
      * @param  LengthAwarePaginator<int, OwnershipTransferCase>  $page
      * @return array<string, mixed>
      */
-    protected function queryContextOf(ReviewOwnershipTransferCaseQueueCommand $filters, LengthAwarePaginator $page): array
+    protected function queryContextOf(ReviewOwnershipTransferCaseQueueCommand $command, LengthAwarePaginator $page): array
     {
         return [
             'filters' => array_filter(
-                ['status' => $filters->status?->value, 'company_id' => $filters->companyId],
+                ['status' => $command->status?->value, 'company_id' => $command->companyId],
                 fn (?string $value): bool => $value !== null,
             ),
             'result_count' => count($page->items()),
