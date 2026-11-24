@@ -20,13 +20,13 @@ use App\Foundation\Auth\Events\User2FAEnabled;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Foundation\Http\Responses\ApiErrorCode;
 use App\Foundation\AuditTrail\Enums\AuditAction;
-use Tests\Feature\Foundation\WithRolePermissionFixtures;
+use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\Auth\Aggregates\User as UserAggregate;
 use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class EnableTwoFactorTest extends AuthTestCase
 {
-    use FreeTierCompany, WithRolePermissionFixtures;
+    use FreeTierCompany;
 
     protected function setUp(): void
     {
@@ -137,7 +137,7 @@ class EnableTwoFactorTest extends AuthTestCase
         // Given (a Pro member who already has 2FA enabled)
         $this->putOnPlan($this->company, BillingPlan::Pro);
         $user = User::factory()->withTwoFactor()->create();
-        $this->joinCompany($this->company, $user);
+        $this->attachMember($this->company, $user, Role::factory()->create());
 
         // When they start enrollment a second time
         $response = $this->enable($user, $this->company);

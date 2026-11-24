@@ -18,7 +18,7 @@ use App\Foundation\RolesPermissions\Entities\Role;
 
 class TwoGateCheckTest extends FoundationTestCase
 {
-    use FreeTierCompany, WithRolePermissionFixtures;
+    use FreeTierCompany;
 
     protected function setUp(): void
     {

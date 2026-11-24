@@ -12,12 +12,12 @@ use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Billing\Enums\BillingPlan;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\Foundation\FoundationTestCase;
+use App\Foundation\RolesPermissions\Entities\Role;
 use App\Foundation\AccessLog\Entities\AccessLogEntry;
-use Tests\Feature\Foundation\WithRolePermissionFixtures;
 
 class FoldRepeatedRefusalsTest extends FoundationTestCase
 {
-    use FreeTierCompany, WithRolePermissionFixtures;
+    use FreeTierCompany;
 
     /** @var array<string, User> */
     protected array $people;
@@ -37,7 +37,7 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
             'initech' => Company::factory()->onPlan(BillingPlan::Free)->create(),
             'umbrella' => Company::factory()->onPlan(BillingPlan::Free)->create(),
         ];
-        $this->joinCompany($this->companies['globex'], $this->people['alice']);
+        $this->attachMember($this->companies['globex'], $this->people['alice'], Role::factory()->create());
 
         $this->companies['dissolved'] = Company::factory()->create();
         $this->companies['dissolved']->delete();
