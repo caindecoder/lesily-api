@@ -3,7 +3,6 @@
 namespace Tests\Feature\Auth\Google;
 
 use Closure;
-use Tests\TestCase;
 use Firebase\JWT\JWT;
 use phpseclib3\Crypt\RSA;
 use Google\Auth\AccessToken;
@@ -11,6 +10,7 @@ use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Facades\File;
 use phpseclib3\Crypt\RSA\PrivateKey;
+use Tests\Feature\Auth\AuthTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use Psr\Http\Message\ResponseInterface;
 use GuzzleHttp\Exception\ConnectException;
@@ -25,7 +25,7 @@ use App\Foundation\Auth\Exceptions\GoogleSignInUnavailableException;
  * locally generated keys; every feature walk stubs the GoogleIdTokenVerifier boundary
  * (AuthTestCase::fakeGoogleIdTokenVerifier), so this is the only place it runs (§2.14 Rule B).
  */
-class GoogleAuthIdTokenVerifierTest extends TestCase
+class GoogleAuthIdTokenVerifierTest extends AuthTestCase
 {
     protected const CLIENT_ID = 'lesily-web.apps.googleusercontent.com';
 

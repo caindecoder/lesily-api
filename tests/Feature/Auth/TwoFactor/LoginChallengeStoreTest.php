@@ -2,8 +2,8 @@
 
 namespace Tests\Feature\Auth\TwoFactor;
 
-use Tests\TestCase;
 use Illuminate\Support\Str;
+use Tests\Feature\Auth\AuthTestCase;
 use Illuminate\Support\Facades\Cache;
 use PHPUnit\Framework\Attributes\Test;
 use App\Foundation\Auth\Totp\LoginChallengeStore;
@@ -13,7 +13,7 @@ use App\Foundation\Auth\Totp\LoginChallengeStore;
  * mechanics of the 2FA challenge port, provable only at the store seam; no HTTP
  * walk can pin expiry/decrement timing or a half-shaped cache entry deterministically.
  */
-class LoginChallengeStoreTest extends TestCase
+class LoginChallengeStoreTest extends AuthTestCase
 {
     #[Test]
     public function when_a_cached_challenge_payload_is_incomplete_then_it_does_not_resolve(): void
