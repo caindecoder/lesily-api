@@ -3,14 +3,17 @@
 namespace Tests\Feature\Foundation\AuditTrail;
 
 use Closure;
+use stdClass;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 use Illuminate\Http\Response;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use App\Companies\Entities\Company;
 use Illuminate\Testing\TestResponse;
 use Database\Factories\CompanyFactory;
+use Illuminate\Database\Query\Builder;
 use PHPUnit\Framework\Attributes\Test;
 use Database\Factories\AuditEntryFactory;
 use App\Foundation\Billing\Enums\BillingPlan;
@@ -438,6 +441,22 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     }
 
     #[Test]
+    #[DataProvider('provideRowCountsAroundAPage')]
+    public function when_rows_are_exported_then_they_are_read_a_thousand_to_a_page(int $rows, int $reads): void
+    {
+        // Given the export's own page size, and a full page of sign-ins or one fewer
+        $pageReads = $this->countPageReads();
+        $this->signInsAt($rows, '2026-11-10 12:00:00');
+
+        // When the owner exports the audit logs
+        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+
+        // Then every row is in the file, read a thousand to a page
+        $this->assertCount($rows, $this->csvRowsOf($response));
+        $this->assertSame($reads, $pageReads->count());
+    }
+
+    #[Test]
     public function when_the_logs_are_exported_then_the_file_stops_at_the_export_moment(): void
     {
         // Given a sign-in a second before the export and one at its moment
@@ -721,6 +740,17 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     }
 
     /**
+     * @return array<string, array{int, int}>
+     */
+    public static function provideRowCountsAroundAPage(): array
+    {
+        return [
+            'one fewer than a page, read once' => [999, 1],
+            'a full page, read again to find the end' => [1000, 2],
+        ];
+    }
+
+    /**
      * @return array<string, array{string}>
      */
     public static function provideExportingRoles(): array
@@ -772,6 +802,36 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         });
     }
 
+    /**
+     * Swap the export's reader for one that records each page it reads, its page size unchanged.
+     *
+     * @return Collection<int, ?stdClass>
+     */
+    protected function countPageReads(): Collection
+    {
+        $pageReads = collect();
+
+        $this->app->instance(AuditLogRows::class, new class($pageReads) extends AuditLogRows
+        {
+            /**
+             * @param  Collection<int, ?stdClass>  $pageReads
+             */
+            public function __construct(protected Collection $pageReads)
+            {
+                parent::__construct();
+            }
+
+            protected function merged(array $halves, ?stdClass $after): Builder
+            {
+                $this->pageReads->push($after);
+
+                return parent::merged($halves, $after);
+            }
+        });
+
+        return $pageReads;
+    }
+
     protected function exhaustTheHourlyExports(User $actor, Company $company): void
     {
         $this->exportRepeatedly($actor, $company, 10);
@@ -790,6 +850,17 @@ class ExportAuditLogsTest extends AuditTrailTestCase
             ->forCompany($this->enterprise)
             ->byUser(User::factory()->createOne())
             ->seenAt(CarbonImmutable::parse($seenAt));
+    }
+
+    /**
+     * $count sign-ins by one member at the same moment, written in one insert.
+     */
+    protected function signInsAt(int $count, string $seenAt): void
+    {
+        $signIn = $this->aSignInAt($seenAt);
+        $rows = Collection::times($count, fn (): array => ['id' => ($row = $signIn->makeOne())->newUniqueId()] + $row->getAttributes());
+
+        AccessLogEntry::query()->insert($rows->all());
     }
 
     protected function aChangeAt(string $recordedAt): AuditEntryFactory
