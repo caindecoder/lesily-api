@@ -42,18 +42,18 @@ final class MethodParametersCollector implements Collector
         return VariableNamer::misnamedParameters($params, $reflections);
     }
 
-    protected function isSignatureFixed(InClassMethodNode $node): bool
+    protected function isSignatureFixed(InClassMethodNode $inClassMethodNode): bool
     {
-        $method = $node->getMethodReflection();
-        $class = $node->getClassReflection();
+        $phpMethodFromParserNodeReflection = $inClassMethodNode->getMethodReflection();
+        $classReflection = $inClassMethodNode->getClassReflection();
 
-        return $method->getPrototype()->getDeclaringClass()->getName() !== $class->getName()
-            || ($method->getName() === 'rules' && $class->is(Data::class));
+        return $phpMethodFromParserNodeReflection->getPrototype()->getDeclaringClass()->getName() !== $classReflection->getName()
+            || ($phpMethodFromParserNodeReflection->getName() === 'rules' && $classReflection->is(Data::class));
     }
 
-    protected function isRouteBound(ParameterReflection $parameter): bool
+    protected function isRouteBound(ParameterReflection $parameterReflection): bool
     {
-        $type = $parameter->getType();
+        $type = $parameterReflection->getType();
 
         return (new ObjectType(UrlRoutable::class))->isSuperTypeOf($type)->yes()
             || (new ObjectType(BackedEnum::class))->isSuperTypeOf($type)->yes();

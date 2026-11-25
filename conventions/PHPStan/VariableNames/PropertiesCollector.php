@@ -36,12 +36,12 @@ final class PropertiesCollector implements Collector
         return $message === null ? null : [[$node->getStartLine(), $message]];
     }
 
-    protected function leavesTheCode(ClassPropertyNode $node): bool
+    protected function leavesTheCode(ClassPropertyNode $classPropertyNode): bool
     {
-        $class = $node->getClassReflection();
+        $classReflection = $classPropertyNode->getClassReflection();
 
-        return $class->is(Data::class)
-            || $class->implementsInterface(ShouldQueue::class)
-            || ($node->isPublic() && $class->is(ShouldBeStored::class));
+        return $classReflection->is(Data::class)
+            || $classReflection->implementsInterface(ShouldQueue::class)
+            || ($classPropertyNode->isPublic() && $classReflection->is(ShouldBeStored::class));
     }
 }

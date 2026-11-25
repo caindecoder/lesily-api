@@ -1,8 +1,20 @@
 includes:
     - ./vendor/larastan/larastan/extension.neon
+    - ./conventions/PHPStan/variable-names-offenders.neon  # §2.26 VN7/VN10: today's misnamed variables; each rename increment deletes its entries, the last deletes the file
 
 rules:
     - Conventions\PHPStan\ModelKeyReadRule
+    - Conventions\PHPStan\VariableNameRule
+
+services:
+    - {class: Conventions\PHPStan\VariableNames\MethodParametersCollector, tags: [phpstan.collector]}
+    - {class: Conventions\PHPStan\VariableNames\PropertiesCollector, tags: [phpstan.collector]}
+    - {class: Conventions\PHPStan\VariableNames\AssignedLocalsCollector, tags: [phpstan.collector]}
+    - {class: Conventions\PHPStan\VariableNames\CaughtExceptionsCollector, tags: [phpstan.collector]}
+    - {class: Conventions\PHPStan\VariableNames\ForeachValuesCollector, tags: [phpstan.collector]}
+    - {class: Conventions\PHPStan\VariableNames\ClosureParametersCollector, tags: [phpstan.collector]}
+    - {class: Conventions\PHPStan\VariableNames\ArrowFunctionParametersCollector, tags: [phpstan.collector]}
+    - {class: Conventions\PHPStan\VariableNames\FunctionParametersCollector, tags: [phpstan.collector]}
 
 parameters:
     level: 8

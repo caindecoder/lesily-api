@@ -25,8 +25,8 @@ final class CaughtExceptionsCollector implements Collector
             return null;
         }
 
-        $caught = TypeCombinator::union(...array_map($scope->resolveTypeByName(...), $node->types));
-        $message = VariableNamer::misnaming($caught, $node->var->name);
+        $type = TypeCombinator::union(...array_map($scope->resolveTypeByName(...), $node->types));
+        $message = VariableNamer::misnaming($type, $node->var->name);
 
         return $message === null ? null : [[$node->var->getStartLine(), $message]];
     }

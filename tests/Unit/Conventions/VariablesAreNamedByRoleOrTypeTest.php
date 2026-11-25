@@ -246,6 +246,15 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
         $this->assertPasses('OutsideTypes.php');
     }
 
+    #[Test]
+    public function when_every_variable_is_named_by_role_or_type_then_nothing_is_flagged(): void
+    {
+        // Given a property, promoted properties, parameters, locals, a foreach value and a caught exception, each named by role or type
+        // When the rule analyses them
+        // Then nothing is reported
+        $this->assertPasses('WellNamed.php');
+    }
+
     /**
      * @param  array<int, string>  $expected
      */

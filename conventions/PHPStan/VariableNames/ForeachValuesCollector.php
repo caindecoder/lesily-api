@@ -24,8 +24,8 @@ final class ForeachValuesCollector implements Collector
             return null;
         }
 
-        $value = $scope->getIterableValueType($scope->getType($node->expr));
-        $message = VariableNamer::misnaming($value, $node->valueVar->name);
+        $type = $scope->getIterableValueType($scope->getType($node->expr));
+        $message = VariableNamer::misnaming($type, $node->valueVar->name);
 
         return $message === null ? null : [[$node->valueVar->getStartLine(), $message]];
     }
