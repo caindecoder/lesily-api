@@ -10,4 +10,9 @@ final class MisnamedParameter
     {
         return $origin;
     }
+
+    public function copy(RequestOrigin $oldRequestOriginCopy): RequestOrigin
+    {
+        return $oldRequestOriginCopy;
+    }
 }

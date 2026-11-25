@@ -493,7 +493,7 @@ parameters:
 			path: ../../app/Companies/IO/Http/Controllers/PlatformAdminOwnershipTransferCasesController.php
 
 		-
-			message: '#^`LengthAwarePaginator \$page` should be named `\$lengthAwarePaginator` \(coding\-conventions §2\.26\)\.$#'
+			message: '#^`LengthAwarePaginator \$page` should be named `\$ownershipTransferCases` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../app/Companies/IO/Http/Controllers/PlatformAdminOwnershipTransferCasesController.php
@@ -1567,7 +1567,7 @@ parameters:
 			path: ../../app/Companies/UseCases/Interactors/ReviewOwnershipTransferCaseAsAdminInteractor.php
 
 		-
-			message: '#^`LengthAwarePaginator \$page` should be named `\$lengthAwarePaginator` \(coding\-conventions §2\.26\)\.$#'
+			message: '#^`LengthAwarePaginator \$page` should be named `\$ownershipTransferCases` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 2
 			path: ../../app/Companies/UseCases/Interactors/ReviewOwnershipTransferCaseQueueInteractor.php
@@ -1951,7 +1951,7 @@ parameters:
 			path: ../../app/Compliance/Breach/IO/Console/FlagMissedBreachDeadlines.php
 
 		-
-			message: '#^`LengthAwarePaginator \$notices` should be named `\$lengthAwarePaginator` \(coding\-conventions §2\.26\)\.$#'
+			message: '#^`LengthAwarePaginator \$notices` should be named `\$breachIncidentCompanies` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../app/Compliance/Breach/IO/Http/Controllers/BreachNoticesController.php
@@ -2455,9 +2455,15 @@ parameters:
 			path: ../../app/Compliance/Breach/UseCases/Interactors/ReviewBreachAsAdminInteractor.php
 
 		-
+			message: '#^`LengthAwarePaginator \$page` should be named `\$breachIncidents` \(coding\-conventions §2\.26\)\.$#'
+			identifier: lesily.variableName
+			count: 1
+			path: ../../app/Compliance/Breach/UseCases/Interactors/ReviewBreachQueueInteractor.php
+
+		-
 			message: '#^`LengthAwarePaginator \$page` should be named `\$lengthAwarePaginator` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
-			count: 2
+			count: 1
 			path: ../../app/Compliance/Breach/UseCases/Interactors/ReviewBreachQueueInteractor.php
 
 		-
@@ -3061,7 +3067,7 @@ parameters:
 			path: ../../app/Compliance/Dsar/UseCases/Interactors/ReviewDsarRequestQueueInteractor.php
 
 		-
-			message: '#^`LengthAwarePaginator \$page` should be named `\$lengthAwarePaginator` \(coding\-conventions §2\.26\)\.$#'
+			message: '#^`LengthAwarePaginator \$page` should be named `\$dsarRequests` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 2
 			path: ../../app/Compliance/Dsar/UseCases/Interactors/ReviewDsarRequestQueueInteractor.php
@@ -3157,7 +3163,7 @@ parameters:
 			path: ../../app/Compliance/Dsar/UseCases/Reports/DsarReportPresenter.php
 
 		-
-			message: '#^`LengthAwarePaginator \$page` should be named `\$lengthAwarePaginator` \(coding\-conventions §2\.26\)\.$#'
+			message: '#^`LengthAwarePaginator \$page` should be named `\$dsarRequests` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../app/Compliance/Dsar/UseCases/Responses/DsarRequestQueue.php
@@ -3529,7 +3535,7 @@ parameters:
 			path: ../../app/Foundation/AuditTrail/IO/Http/Controllers/AuditLogController.php
 
 		-
-			message: '#^`LazyCollection \$rows` should be named `\$lazyCollection` \(coding\-conventions §2\.26\)\.$#'
+			message: '#^`LazyCollection \$rows` should be named `\$stdClasses` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 3
 			path: ../../app/Foundation/AuditTrail/IO/Http/Controllers/AuditLogController.php
@@ -3553,7 +3559,7 @@ parameters:
 			path: ../../app/Foundation/AuditTrail/IO/Http/Controllers/AuditLogController.php
 
 		-
-			message: '#^`LengthAwarePaginator \$entries` should be named `\$lengthAwarePaginator` \(coding\-conventions §2\.26\)\.$#'
+			message: '#^`LengthAwarePaginator \$entries` should be named `\$auditEntries` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../app/Foundation/AuditTrail/IO/Http/Controllers/AuditTrailController.php
@@ -3793,7 +3799,7 @@ parameters:
 			path: ../../app/Foundation/AuditTrail/Values/AuditLogPage.php
 
 		-
-			message: '#^`LengthAwarePaginator \$rows` should be named `\$lengthAwarePaginator` \(coding\-conventions §2\.26\)\.$#'
+			message: '#^`LengthAwarePaginator \$rows` should be named `\$stdClasses` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../app/Foundation/AuditTrail/Values/AuditLogPage.php
@@ -7669,12 +7675,6 @@ parameters:
 			path: ../../tests/Feature/Compliance/Breach/BreachIncidentsTestCase.php
 
 		-
-			message: '#^`Company \$companies` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Breach/BreachIncidentsTestCase.php
-
-		-
 			message: '#^`Company \$companyA` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -8467,7 +8467,7 @@ parameters:
 			path: ../../tests/Feature/Compliance/Dsar/DsarTestCase.php
 
 		-
-			message: '#^`DsarSectionProvider \$sections` should be named `\$dsarSectionProvider` \(coding\-conventions §2\.26\)\.$#'
+			message: '#^`DsarSectionProvider \.\.\.\$sections` should be named `\$dsarSectionProviders` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Compliance/Dsar/DsarTestCase.php

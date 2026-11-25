@@ -13,10 +13,13 @@ use PHPStan\Type\TypeCombinator;
 use PhpParser\Node\Expr\Variable;
 use Illuminate\Support\Collection;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Support\LazyCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 use PHPStan\Reflection\ParameterReflection;
+use Illuminate\Pagination\AbstractPaginator;
 use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Pagination\AbstractCursorPaginator;
 
 /**
  * Coding-conventions §2.26: whether a variable's name fits what it holds.
@@ -45,7 +48,10 @@ final class VariableNamer
                 continue;
             }
 
-            $message = self::misnaming($reflections[$position]->getType(), $param->var->name);
+            $type = $reflections[$position]->getType();
+            $message = $param->variadic
+                ? self::variadicMisnaming($type, $param->var->name)
+                : self::misnaming($type, $param->var->name);
 
             if ($message !== null) {
                 $misnamed[] = [$param->getStartLine(), $message];
@@ -53,6 +59,24 @@ final class VariableNamer
         }
 
         return $misnamed === [] ? null : $misnamed;
+    }
+
+    /**
+     * A variadic parameter holds a list of its declared type.
+     */
+    protected static function variadicMisnaming(Type $type, string $name): ?string
+    {
+        $className = self::onlyClass(TypeCombinator::removeNull($type));
+
+        if ($className === null || $className === Closure::class) {
+            return null;
+        }
+
+        $declared = class_basename($className).' ...$'.$name;
+
+        return $className === User::class
+            ? self::personMisnaming($declared, $name, true)
+            : self::thingMisnaming($declared, $name, Str::plural(self::typeName(class_basename($className))));
     }
 
     /**
@@ -118,6 +142,18 @@ final class VariableNamer
 
         if ((new ObjectType(Builder::class))->isSuperTypeOf($type)->yes()) {
             return self::onlyClass($type->getTemplateType(Builder::class, 'TModel'));
+        }
+
+        if ((new ObjectType(AbstractPaginator::class))->isSuperTypeOf($type)->yes()) {
+            return self::onlyClass($type->getTemplateType(AbstractPaginator::class, 'TValue'));
+        }
+
+        if ((new ObjectType(AbstractCursorPaginator::class))->isSuperTypeOf($type)->yes()) {
+            return self::onlyClass($type->getTemplateType(AbstractCursorPaginator::class, 'TValue'));
+        }
+
+        if ((new ObjectType(LazyCollection::class))->isSuperTypeOf($type)->yes()) {
+            return self::onlyClass($type->getTemplateType(LazyCollection::class, 'TValue'));
         }
 
         return null;

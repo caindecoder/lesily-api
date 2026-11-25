@@ -28,11 +28,12 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
     #[Test]
     public function when_a_parameter_is_not_named_after_its_type_then_it_is_flagged(): void
     {
-        // Given a method taking RequestOrigin $origin
-        // When the rule analyses it
-        // Then the parameter is reported with its type's name
+        // Given methods taking RequestOrigin $origin and RequestOrigin $oldRequestOriginCopy
+        // When the rule analyses them
+        // Then each parameter is reported with its type's name
         $this->assertFlags('MisnamedParameter.php', [
             9 => $this->message('RequestOrigin $origin', 'requestOrigin'),
+            14 => $this->message('RequestOrigin $oldRequestOriginCopy', 'requestOrigin'),
         ]);
     }
 
@@ -133,9 +134,10 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
         // When the rule analyses them
         // Then each is reported as not a role word
         $this->assertFlags('UnlistedPeople.php', [
-            10 => $this->notARole('User $caller'),
-            11 => $this->notARole('User $currentUser'),
-            12 => $this->notARole('User $authUser'),
+            14 => $this->notARole('User $caller'),
+            15 => $this->notARole('User $currentUser'),
+            16 => $this->notARole('User $authUser'),
+            17 => $this->notARole('Collection $staff'),
         ]);
     }
 
@@ -154,12 +156,16 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
     #[Test]
     public function when_a_list_or_query_is_not_the_plural_of_its_item_then_it_is_flagged(): void
     {
-        // Given Collection<int, CompanyUser> $members and Builder<BreachIncidentRecord> $query
+        // Given a Collection, a Builder, a LengthAwarePaginator, a CursorPaginator and a LazyCollection not named after their items
         // When the rule analyses them
         // Then each is reported with the plural of its item's name
         $this->assertFlags('UnpluralLists.php', [
-            17 => $this->message('Collection $members', 'companyUsers'),
-            18 => $this->message('Builder $query', 'breachIncidents'),
+            25 => $this->message('Collection $members', 'companyUsers'),
+            26 => $this->message('Builder $query', 'breachIncidents'),
+            27 => $this->message('LengthAwarePaginator $page', 'dsarRequests'),
+            28 => $this->message('CursorPaginator $cursor', 'invoices'),
+            29 => $this->message('LazyCollection $rows', 'companyUsers'),
+            30 => $this->message('Builder $scope', 'builder'),
         ]);
     }
 
@@ -171,6 +177,62 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
         // Then the parameter is reported with its class's name
         $this->assertFlags('MisnamedNullable.php', [
             9 => $this->message('RequestOrigin $origin', 'requestOrigin'),
+        ]);
+    }
+
+    #[Test]
+    public function when_a_variadic_parameter_is_not_the_plural_of_its_type_then_it_is_flagged(): void
+    {
+        // Given Company ...$company and User ...$member
+        // When the rule analyses them
+        // Then the companies are asked for the plural, the people for a plural role word
+        $this->assertFlags('VariadicParameters.php', [
+            10 => $this->message('Company ...$company', 'companies'),
+            15 => $this->notARole('User ...$member'),
+        ]);
+    }
+
+    #[Test]
+    public function when_an_event_property_that_stays_in_the_code_is_misnamed_then_it_is_flagged(): void
+    {
+        // Given a stored event's protected property RequestOrigin $origin
+        // When the rule analyses it
+        // Then the property is reported with its type's name
+        $this->assertFlags('ProtectedEventProperty.php', [
+            10 => $this->message('RequestOrigin $origin', 'requestOrigin'),
+        ]);
+    }
+
+    #[Test]
+    public function when_a_command_method_other_than_rules_is_misnamed_then_it_is_flagged(): void
+    {
+        // Given a command with rules(ValidationContext $context) and a helper taking RequestOrigin $origin
+        // When the rule analyses it
+        // Then only the helper's parameter is reported
+        $this->assertFlags('CommandHelperMethod.php', [
+            19 => $this->message('RequestOrigin $origin', 'requestOrigin'),
+        ]);
+    }
+
+    #[Test]
+    public function when_a_controller_parameter_is_not_route_bound_then_it_is_flagged(): void
+    {
+        // Given a controller action taking RequestOrigin $origin and a route-bound Company $tenant
+        // When the rule analyses it
+        // Then only the unbound parameter is reported
+        $this->assertFlags('IO/Http/Controllers/UnboundController.php', [
+            11 => $this->message('RequestOrigin $origin', 'requestOrigin'),
+        ]);
+    }
+
+    #[Test]
+    public function when_an_enum_parameter_is_outside_a_controller_then_it_is_named_after_its_type(): void
+    {
+        // Given ResettableSetting $setting outside a controller
+        // When the rule analyses it
+        // Then it is reported with its type's name
+        $this->assertFlags('EnumOutsideController.php', [
+            9 => $this->message('ResettableSetting $setting', 'resettableSetting'),
         ]);
     }
 
@@ -244,10 +306,19 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
     #[Test]
     public function when_the_type_is_outside_the_rule_then_any_name_passes(): void
     {
-        // Given a string, a Closure, a callable, mixed, object, a union of two classes and a bare Builder
+        // Given a string, a Closure, a callable, mixed, object and a union of two classes
         // When the rule analyses them
         // Then nothing is reported
         $this->assertPasses('OutsideTypes.php');
+    }
+
+    #[Test]
+    public function when_phpstan_loads_the_rule_then_every_collector_it_reads_is_registered(): void
+    {
+        // Given the collectors the rule reads
+        // When phpstan.neon is read
+        // Then it registers exactly those collectors, and the rule
+        $this->assertSame($this->sorted(VariableNameRule::COLLECTORS), $this->sorted($this->registeredCollectors()));
     }
 
     #[Test]
@@ -288,6 +359,29 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
     protected function unnamedDate(string $declared): string
     {
         return "`{$declared}` does not say what happened — end it in At, On, Date, Deadline or Until (coding-conventions §2.26).";
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function registeredCollectors(): array
+    {
+        $neon = (string) file_get_contents(__DIR__.'/../../../phpstan.neon');
+        $this->assertStringContainsString('- '.VariableNameRule::class, $neon);
+        preg_match_all('/class: (\S+), tags: \[phpstan\.collector\]/', $neon, $matches);
+
+        return $matches[1];
+    }
+
+    /**
+     * @param  array<int, string>  $classNames
+     * @return list<string>
+     */
+    protected function sorted(array $classNames): array
+    {
+        sort($classNames);
+
+        return $classNames;
     }
 
     protected function fixturePath(string $fixture): string
