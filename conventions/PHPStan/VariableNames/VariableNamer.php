@@ -67,30 +67,44 @@ final class VariableNamer
             return null;
         }
 
-        $shortName = class_basename($classNames[0]);
+        $declared = class_basename($classNames[0]).' $'.$name;
         $item = self::listItem($type);
 
-        if ($classNames[0] === User::class || $item === User::class) {
-            return self::isRoleWord($name, $item === User::class)
-                ? null
-                : sprintf('`%s $%s` is not a role word (coding-conventions §2.26).', $shortName, $name);
-        }
-
-        if ((new ObjectType(DateTimeInterface::class))->isSuperTypeOf($type)->yes()) {
-            return preg_match('/[a-z](At|On|Date|Deadline|Until)$/', $name) === 1
-                ? null
-                : sprintf('`%s $%s` does not say what happened — end it in At, On, Date, Deadline or Until (coding-conventions §2.26).', $shortName, $name);
-        }
-
-        $expected = match (true) {
-            self::isResponse($type) => 'response',
-            $item !== null => Str::plural(self::typeName(class_basename($item))),
-            default => self::typeName($shortName),
+        return match (true) {
+            $classNames[0] === User::class || $item === User::class => self::personMisnaming($declared, $name, $item !== null),
+            (new ObjectType(DateTimeInterface::class))->isSuperTypeOf($type)->yes() => self::dateMisnaming($declared, $name),
+            default => self::thingMisnaming($declared, $name, self::expectedName($type, $classNames[0], $item)),
         };
+    }
 
+    protected static function personMisnaming(string $declared, string $name, bool $isList): ?string
+    {
+        return self::isRoleWord($name, $isList)
+            ? null
+            : "`{$declared}` is not a role word (coding-conventions §2.26).";
+    }
+
+    protected static function dateMisnaming(string $declared, string $name): ?string
+    {
+        return preg_match('/[a-z](At|On|Date|Deadline|Until)$/', $name) === 1
+            ? null
+            : "`{$declared}` does not say what happened — end it in At, On, Date, Deadline or Until (coding-conventions §2.26).";
+    }
+
+    protected static function thingMisnaming(string $declared, string $name, string $expected): ?string
+    {
         return self::endsIn($name, $expected)
             ? null
-            : sprintf('`%s $%s` should be named `$%s` (coding-conventions §2.26).', $shortName, $name, $expected);
+            : "`{$declared}` should be named `\${$expected}` (coding-conventions §2.26).";
+    }
+
+    protected static function expectedName(Type $type, string $className, ?string $item): string
+    {
+        return match (true) {
+            self::isResponse($type) => 'response',
+            $item !== null => Str::plural(self::typeName(class_basename($item))),
+            default => self::typeName(class_basename($className)),
+        };
     }
 
     /**

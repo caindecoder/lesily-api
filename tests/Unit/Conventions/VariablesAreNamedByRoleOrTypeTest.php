@@ -216,7 +216,11 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
         // Given a command's rules(ValidationContext $context), a Cast's cast(DataProperty $property, …), and a route-bound ResettableSetting $setting
         // When the rule analyses them
         // Then nothing is reported
-        $this->assertPasses('ParentFixedRules.php', 'InterfaceFixedCast.php', 'IO/Http/Controllers/RouteBoundController.php');
+        $this->assertPasses(
+            'ParentFixedRules.php',
+            'InterfaceFixedCast.php',
+            'IO/Http/Controllers/RouteBoundController.php',
+        );
     }
 
     #[Test]

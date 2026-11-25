@@ -1,6 +1,6 @@
 includes:
     - ./vendor/larastan/larastan/extension.neon
-    - ./conventions/PHPStan/variable-names-offenders.neon  # §2.26 VN7/VN10: today's misnamed variables; each rename increment deletes its entries, the last deletes the file
+    - ./conventions/PHPStan/variable-names-offenders.neon  # §2.26: the misnamed variables still to rename; a rename deletes its entries
 
 rules:
     - Conventions\PHPStan\ModelKeyReadRule

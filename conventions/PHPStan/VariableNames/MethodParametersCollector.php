@@ -46,8 +46,9 @@ final class MethodParametersCollector implements Collector
     {
         $phpMethodFromParserNodeReflection = $inClassMethodNode->getMethodReflection();
         $classReflection = $inClassMethodNode->getClassReflection();
+        $declaringClassReflection = $phpMethodFromParserNodeReflection->getPrototype()->getDeclaringClass();
 
-        return $phpMethodFromParserNodeReflection->getPrototype()->getDeclaringClass()->getName() !== $classReflection->getName()
+        return $declaringClassReflection->getName() !== $classReflection->getName()
             || ($phpMethodFromParserNodeReflection->getName() === 'rules' && $classReflection->is(Data::class));
     }
 
