@@ -56,13 +56,10 @@ class Company extends AggregateRoot
      * Update the editable details (UC-1-033). The details event fires only when
      * a name is supplied. A setting sent with its country's default over an own
      * value follows the country again (UC-1-058); the other sent settings become
-     * own values. forCompany re-tags the tenant so the events carry company_id
-     * metadata even for a read-model-seeded company.
+     * own values.
      */
     public function updateDetails(UpdateCompanyCommand $command, SettingsBaseline $baseline, string $updatedBy): static
     {
-        $this->forCompany($this->uuid());
-
         if ($command->name !== null) {
             $this->recordThat(new CompanyDetailsUpdated(
                 name: $command->name,
@@ -102,8 +99,6 @@ class Company extends AggregateRoot
             return $this;
         }
 
-        $this->forCompany($this->uuid());
-
         return $this->recordReset($setting, $resetBy);
     }
 
@@ -122,8 +117,6 @@ class Company extends AggregateRoot
      */
     public function setDataProtectionOfficer(SetDataProtectionOfficerCommand $command, string $setBy): static
     {
-        $this->forCompany($this->uuid());
-
         return $this->recordThat(new CompanyDataProtectionOfficerSet(
             encryptedName: Crypt::encryptString($command->name),
             encryptedEmail: Crypt::encryptString($command->email),
@@ -135,8 +128,6 @@ class Company extends AggregateRoot
 
     public function removeDataProtectionOfficer(string $removedBy): static
     {
-        $this->forCompany($this->uuid());
-
         return $this->recordThat(new CompanyDataProtectionOfficerRemoved(
             removedBy: $removedBy,
             removedAt: CarbonImmutable::now(),
@@ -156,12 +147,9 @@ class Company extends AggregateRoot
      * Record the ownership move (UC-1-028 / UC-1-093). Guardless — eligibility
      * and staleness are decided at the interactor seam under row locks (T2
      * precedent), which supplies previousOwnerUserId from the locked read.
-     * forCompany re-tags the tenant (updateDetails parity).
      */
     public function transferOwnership(TransferCompanyOwnershipCommand $command, string $previousOwnerUserId): static
     {
-        $this->forCompany($this->uuid());
-
         return $this->recordThat(new CompanyOwnershipTransferred(
             previousOwnerUserId: $previousOwnerUserId,
             newOwnerUserId: $command->newOwnerUserId,
@@ -176,12 +164,9 @@ class Company extends AggregateRoot
      * (UC-1-113). Guardless — the open-only case guard lives at the interactor
      * seam (T2 precedent). Artefact METADATA only, never the prose notes
      * (spec §2 invariant: the Command projects entries to the closed shape).
-     * forCompany re-tags the tenant (updateDetails parity).
      */
     public function recordOwnershipVerification(VerifyOwnershipTransferCaseCommand $command, string $verifiedBy): static
     {
-        $this->forCompany($this->uuid());
-
         return $this->recordThat(new CompanyOwnershipVerificationRecorded(
             caseId: $command->caseId,
             verifiedBy: $verifiedBy,
