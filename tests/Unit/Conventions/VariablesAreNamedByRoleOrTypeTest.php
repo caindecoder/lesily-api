@@ -48,6 +48,84 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
         ]);
     }
 
+    #[Test]
+    public function when_a_property_is_not_named_after_its_type_then_it_is_flagged(): void
+    {
+        // Given a property RequestOrigin $origin
+        // When the rule analyses it
+        // Then the property is reported with its type's name
+        $this->assertFlags('MisnamedProperty.php', [
+            9 => $this->message('RequestOrigin $origin', 'requestOrigin'),
+        ]);
+    }
+
+    #[Test]
+    public function when_a_promoted_parameter_is_misnamed_then_it_is_flagged_once(): void
+    {
+        // Given a constructor promoting RequestOrigin $origin
+        // When the rule analyses it
+        // Then it is reported once, not as a parameter and again as a property
+        $this->assertFlags('MisnamedPromotedParameter.php', [
+            9 => $this->message('RequestOrigin $origin', 'requestOrigin'),
+        ]);
+    }
+
+    #[Test]
+    public function when_a_local_holds_an_inferred_type_under_another_name_then_it_is_flagged(): void
+    {
+        // Given $row assigned BreachIncidentRecord::query()->sole()
+        // When the rule analyses it
+        // Then the local is reported with the inferred type's name
+        $this->assertFlags('MisnamedLocal.php', [
+            11 => $this->message('BreachIncidentRecord $row', 'breachIncident'),
+        ]);
+    }
+
+    #[Test]
+    public function when_a_caught_exception_is_not_named_after_its_type_then_it_is_flagged(): void
+    {
+        // Given catch (QueryException $e)
+        // When the rule analyses it
+        // Then the caught exception is reported with its type's name
+        $this->assertFlags('MisnamedCatch.php', [
+            13 => $this->message('QueryException $e', 'queryException'),
+        ]);
+    }
+
+    #[Test]
+    public function when_a_foreach_value_is_not_named_after_its_type_then_it_is_flagged(): void
+    {
+        // Given foreach over a list of CompanyUser as $membership
+        // When the rule analyses it
+        // Then the value is reported with its type's name
+        $this->assertFlags('MisnamedForeachValue.php', [
+            16 => $this->message('CompanyUser $membership', 'companyUser'),
+        ]);
+    }
+
+    #[Test]
+    public function when_a_closure_parameter_is_not_named_after_its_type_then_it_is_flagged(): void
+    {
+        // Given a closure taking RequestOrigin $origin and an arrow function taking CompanyUser $membership
+        // When the rule analyses them
+        // Then each parameter is reported with its type's name
+        $this->assertFlags('MisnamedClosureParameters.php', [
+            13 => $this->message('RequestOrigin $origin', 'requestOrigin'),
+            20 => $this->message('CompanyUser $membership', 'companyUser'),
+        ]);
+    }
+
+    #[Test]
+    public function when_a_function_parameter_is_not_named_after_its_type_then_it_is_flagged(): void
+    {
+        // Given a named function taking RequestOrigin $origin
+        // When the rule analyses it
+        // Then the parameter is reported with its type's name
+        $this->assertFlags('MisnamedFunctionParameter.php', [
+            7 => $this->message('RequestOrigin $origin', 'requestOrigin'),
+        ]);
+    }
+
     /**
      * @param  array<int, string>  $expected
      */
