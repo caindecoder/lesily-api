@@ -3,9 +3,14 @@
 namespace Conventions\PHPStan\VariableNames;
 
 use App\Models\User;
+use DateTimeInterface;
 use PHPStan\Type\Type;
 use PhpParser\Node\Param;
+use Illuminate\Support\Str;
+use PHPStan\Type\ObjectType;
 use PhpParser\Node\Expr\Variable;
+use Illuminate\Support\Collection;
+use Illuminate\Database\Eloquent\Builder;
 use PHPStan\Reflection\ParameterReflection;
 
 /**
@@ -57,22 +62,69 @@ final class VariableNamer
         }
 
         $shortName = class_basename($classNames[0]);
+        $item = self::listItem($type);
 
-        if ($classNames[0] === User::class) {
-            return self::isRoleWord($name)
+        if ($classNames[0] === User::class || $item === User::class) {
+            return self::isRoleWord($name, $item === User::class)
                 ? null
                 : sprintf('`%s $%s` is not a role word (coding-conventions §2.26).', $shortName, $name);
         }
 
-        $expected = lcfirst(preg_replace('/(Record|Interface)$/', '', $shortName) ?? $shortName);
+        if ((new ObjectType(DateTimeInterface::class))->isSuperTypeOf($type)->yes()) {
+            return preg_match('/[a-z](At|On|Date|Deadline|Until)$/', $name) === 1
+                ? null
+                : sprintf('`%s $%s` does not say what happened — end it in At, On, Date, Deadline or Until (coding-conventions §2.26).', $shortName, $name);
+        }
 
-        return $expected === $name
+        $expected = $item === null ? self::typeName($shortName) : Str::plural(self::typeName(class_basename($item)));
+
+        return self::endsIn($name, $expected)
             ? null
             : sprintf('`%s $%s` should be named `$%s` (coding-conventions §2.26).', $shortName, $name, $expected);
     }
 
-    protected static function isRoleWord(string $name): bool
+    /**
+     * The class a list or a query holds; its name is the plural of the item's.
+     */
+    protected static function listItem(Type $type): ?string
     {
+        if ((new ObjectType(Collection::class))->isSuperTypeOf($type)->yes()) {
+            return self::onlyClass($type->getTemplateType(Collection::class, 'TValue'));
+        }
+
+        if ((new ObjectType(Builder::class))->isSuperTypeOf($type)->yes()) {
+            return self::onlyClass($type->getTemplateType(Builder::class, 'TModel'));
+        }
+
+        return null;
+    }
+
+    protected static function onlyClass(Type $type): ?string
+    {
+        $classNames = $type->getObjectClassNames();
+
+        return count($classNames) === 1 ? $classNames[0] : null;
+    }
+
+    /**
+     * The expected name itself, or a role word in front of it.
+     */
+    protected static function endsIn(string $name, string $expected): bool
+    {
+        return $name === $expected || preg_match('/^[a-z][a-zA-Z0-9]*'.preg_quote(ucfirst($expected), '/').'$/', $name) === 1;
+    }
+
+    protected static function typeName(string $shortName): string
+    {
+        return lcfirst(preg_replace('/(Record|Interface)$/', '', $shortName) ?? $shortName);
+    }
+
+    protected static function isRoleWord(string $name, bool $isList): bool
+    {
+        if ($isList) {
+            return in_array($name, array_map(Str::plural(...), self::ROLE_WORDS), true);
+        }
+
         return in_array($name, self::ROLE_WORDS, true) || preg_match('/^[a-z]+(?:[A-Z][a-z]*)*By$/', $name) === 1;
     }
 }

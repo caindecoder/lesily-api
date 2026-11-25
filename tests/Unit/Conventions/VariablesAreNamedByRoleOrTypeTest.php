@@ -140,12 +140,54 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
     }
 
     #[Test]
+    public function when_a_date_does_not_say_what_happened_then_it_is_flagged(): void
+    {
+        // Given CarbonInterface $at and CarbonImmutable $asOf
+        // When the rule analyses them
+        // Then each is reported as a date that does not say what happened
+        $this->assertFlags('UnnamedDates.php', [
+            11 => $this->unnamedDate('CarbonInterface $at'),
+            12 => $this->unnamedDate('CarbonImmutable $asOf'),
+        ]);
+    }
+
+    #[Test]
+    public function when_a_list_or_query_is_not_the_plural_of_its_item_then_it_is_flagged(): void
+    {
+        // Given Collection<int, CompanyUser> $members and Builder<BreachIncidentRecord> $query
+        // When the rule analyses them
+        // Then each is reported with the plural of its item's name
+        $this->assertFlags('UnpluralLists.php', [
+            17 => $this->message('Collection $members', 'companyUsers'),
+            18 => $this->message('Builder $query', 'breachIncidents'),
+        ]);
+    }
+
+    #[Test]
+    public function when_a_role_word_stands_before_the_type_name_then_it_passes(): void
+    {
+        // Given PersonalAccessToken $currentPersonalAccessToken and Collection<int, CompanyUser> $activeCompanyUsers
+        // When the rule analyses them
+        // Then nothing is reported
+        $this->assertPasses('PrefixedTypeNames.php');
+    }
+
+    #[Test]
     public function when_a_person_is_named_from_the_role_list_then_it_passes(): void
     {
-        // Given a User named by every listed role word, and a …By name
+        // Given a User named by every listed role word, a …By name, and a list of them by a plural role word
         // When the rule analyses them
         // Then nothing is reported
         $this->assertPasses('ListedPeople.php');
+    }
+
+    #[Test]
+    public function when_a_date_ends_in_a_listed_suffix_then_it_passes(): void
+    {
+        // Given dates named $filedAt, $startsOn, $dueDate, $notifyDeadline and $validUntil
+        // When the rule analyses them
+        // Then nothing is reported
+        $this->assertPasses('NamedDates.php');
     }
 
     /**
@@ -172,6 +214,11 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
     protected function notARole(string $declared): string
     {
         return "`{$declared}` is not a role word (coding-conventions §2.26).";
+    }
+
+    protected function unnamedDate(string $declared): string
+    {
+        return "`{$declared}` does not say what happened — end it in At, On, Date, Deadline or Until (coding-conventions §2.26).";
     }
 
     protected function fixturePath(string $fixture): string
