@@ -4993,12 +4993,6 @@ parameters:
 			path: ../../tests/Feature/Auth/AuthTestCase.php
 
 		-
-			message: '#^`AnonymousClassff2c52e71ca0407aa27635c6d31efb58 \$projector` should be named `\$anonymousClassff2c52e71ca0407aa27635c6d31efb58` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
 			message: '#^`ApiErrorCode \$errorCode` should be named `\$apiErrorCode` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -5959,12 +5953,6 @@ parameters:
 			path: ../../tests/Feature/Billing/BillingTestCase.php
 
 		-
-			message: '#^`AnonymousClassbcc70eeaab87b965f0721c485b8bf606 \$emptyRender` should be named `\$anonymousClassbcc70eeaab87b965f0721c485b8bf606` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/DownloadInvoiceReceiptTest.php
-
-		-
 			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -6379,12 +6367,6 @@ parameters:
 			path: ../../tests/Feature/Companies/AddCompanyTest.php
 
 		-
-			message: '#^`AnonymousClassff2c52e71ca0407aa27635c6d31efb58 \$projector` should be named `\$anonymousClassff2c52e71ca0407aa27635c6d31efb58` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/CompaniesTestCase.php
-
-		-
 			message: '#^`AuditAction \$action` should be named `\$auditAction` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -6749,12 +6731,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 2
 			path: ../../tests/Feature/Companies/Memberships/InviteUserTest.php
-
-		-
-			message: '#^`AnonymousClass2b7aca980cce4c82fb0a00df455ac434 \$interactor` should be named `\$anonymousClass2b7aca980cce4c82fb0a00df455ac434` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/MembershipsTestCase.php
 
 		-
 			message: '#^`AuditAction \$action` should be named `\$auditAction` \(coding\-conventions §2\.26\)\.$#'
@@ -8873,12 +8849,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 2
 			path: ../../tests/Feature/Compliance/Dsar/RejectDsarRequestTest.php
-
-		-
-			message: '#^`AnonymousClass86bc4b0232d7cd7ded6809b2bbefad7f \$emptyRender` should be named `\$anonymousClass86bc4b0232d7cd7ded6809b2bbefad7f` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Dsar/RenderDsarReportPdfTest.php
 
 		-
 			message: '#^`ChromiumDsarReportRenderer \$renderer` should be named `\$chromiumDsarReportRenderer` \(coding\-conventions §2\.26\)\.$#'

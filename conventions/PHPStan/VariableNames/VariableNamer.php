@@ -87,7 +87,7 @@ final class VariableNamer
         $type = TypeCombinator::removeNull($type);
         $classNames = $type->getObjectClassNames();
 
-        if (count($classNames) !== 1 || $classNames[0] === Closure::class) {
+        if (count($classNames) !== 1 || $classNames[0] === Closure::class || self::isAnonymous($type)) {
             return null;
         }
 
@@ -157,6 +157,20 @@ final class VariableNamer
         }
 
         return null;
+    }
+
+    /**
+     * An anonymous class has no name to give a variable.
+     */
+    protected static function isAnonymous(Type $type): bool
+    {
+        foreach ($type->getObjectClassReflections() as $classReflection) {
+            if ($classReflection->isAnonymous()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected static function isResponse(Type $type): bool

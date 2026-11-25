@@ -306,7 +306,7 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
     #[Test]
     public function when_the_type_is_outside_the_rule_then_any_name_passes(): void
     {
-        // Given a string, a Closure, a callable, mixed, object and a union of two classes
+        // Given a string, a Closure, a callable, mixed, object, a union of two classes and an anonymous class
         // When the rule analyses them
         // Then nothing is reported
         $this->assertPasses('OutsideTypes.php');

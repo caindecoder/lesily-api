@@ -16,6 +16,6 @@ final class OutsideTypes
         object $thing,
         RequestOrigin|CompanyUser $either,
     ): void {
-        //
+        $handler = new class {};
     }
 }
