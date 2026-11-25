@@ -2,6 +2,7 @@
 
 namespace Conventions\PHPStan\VariableNames;
 
+use App\Models\User;
 use PHPStan\Type\Type;
 use PhpParser\Node\Param;
 use PhpParser\Node\Expr\Variable;
@@ -12,6 +13,12 @@ use PHPStan\Reflection\ParameterReflection;
  */
 final class VariableNamer
 {
+    /** The roles a person may be named by; a new one is added to coding-conventions §2.26 first. */
+    protected const array ROLE_WORDS = [
+        'user', 'actor', 'admin', 'platformAdmin', 'owner', 'newOwner', 'member',
+        'subject', 'invitee', 'inviter', 'recipient', 'requester', 'viewer',
+    ];
+
     /**
      * A promoted parameter is left to the property it declares.
      *
@@ -43,10 +50,18 @@ final class VariableNamer
      */
     public static function misnaming(Type $type, string $name): ?string
     {
-        $shortName = self::shortName($type);
+        $classNames = $type->getObjectClassNames();
 
-        if ($shortName === null) {
+        if (count($classNames) !== 1) {
             return null;
+        }
+
+        $shortName = class_basename($classNames[0]);
+
+        if ($classNames[0] === User::class) {
+            return self::isRoleWord($name)
+                ? null
+                : sprintf('`%s $%s` is not a role word (coding-conventions §2.26).', $shortName, $name);
         }
 
         $expected = lcfirst(preg_replace('/(Record|Interface)$/', '', $shortName) ?? $shortName);
@@ -56,16 +71,8 @@ final class VariableNamer
             : sprintf('`%s $%s` should be named `$%s` (coding-conventions §2.26).', $shortName, $name, $expected);
     }
 
-    protected static function shortName(Type $type): ?string
+    protected static function isRoleWord(string $name): bool
     {
-        $classNames = $type->getObjectClassNames();
-
-        if (count($classNames) !== 1) {
-            return null;
-        }
-
-        $parts = explode('\\', $classNames[0]);
-
-        return end($parts);
+        return in_array($name, self::ROLE_WORDS, true) || preg_match('/^[a-z]+(?:[A-Z][a-z]*)*By$/', $name) === 1;
     }
 }

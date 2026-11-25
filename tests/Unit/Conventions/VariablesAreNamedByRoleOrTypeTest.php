@@ -126,6 +126,28 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
         ]);
     }
 
+    #[Test]
+    public function when_a_person_is_named_outside_the_role_list_then_it_is_flagged(): void
+    {
+        // Given User $caller, User $currentUser and User $authUser
+        // When the rule analyses them
+        // Then each is reported as not a role word
+        $this->assertFlags('UnlistedPeople.php', [
+            10 => $this->notARole('User $caller'),
+            11 => $this->notARole('User $currentUser'),
+            12 => $this->notARole('User $authUser'),
+        ]);
+    }
+
+    #[Test]
+    public function when_a_person_is_named_from_the_role_list_then_it_passes(): void
+    {
+        // Given a User named by every listed role word, and a …By name
+        // When the rule analyses them
+        // Then nothing is reported
+        $this->assertPasses('ListedPeople.php');
+    }
+
     /**
      * @param  array<int, string>  $expected
      */
@@ -137,9 +159,19 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
         );
     }
 
+    protected function assertPasses(string ...$fixtures): void
+    {
+        $this->analyse(array_map($this->fixturePath(...), $fixtures), []);
+    }
+
     protected function message(string $declared, string $expected): string
     {
         return "`{$declared}` should be named `\${$expected}` (coding-conventions §2.26).";
+    }
+
+    protected function notARole(string $declared): string
+    {
+        return "`{$declared}` is not a role word (coding-conventions §2.26).";
     }
 
     protected function fixturePath(string $fixture): string
