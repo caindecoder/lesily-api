@@ -445,7 +445,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public function when_rows_are_exported_then_they_are_read_a_thousand_to_a_page(int $rows, int $reads): void
     {
         // Given the export's own page size, and a full page of sign-ins or one fewer
-        $pageReads = $this->countPageReads();
+        $pageReads = $this->recordPageReads();
         $this->signInsAt($rows, '2026-11-10 12:00:00');
 
         // When the owner exports the audit logs
@@ -807,7 +807,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
      *
      * @return Collection<int, ?stdClass>
      */
-    protected function countPageReads(): Collection
+    protected function recordPageReads(): Collection
     {
         $pageReads = collect();
 
@@ -858,7 +858,11 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     protected function signInsAt(int $count, string $seenAt): void
     {
         $signIn = $this->aSignInAt($seenAt);
-        $rows = Collection::times($count, fn (): array => ['id' => ($row = $signIn->makeOne())->newUniqueId()] + $row->getAttributes());
+        $rows = Collection::times($count, function () use ($signIn): array {
+            $row = $signIn->makeOne();
+
+            return ['id' => $row->newUniqueId()] + $row->getAttributes();
+        });
 
         AccessLogEntry::query()->insert($rows->all());
     }
