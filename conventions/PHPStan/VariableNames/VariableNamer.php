@@ -2,16 +2,21 @@
 
 namespace Conventions\PHPStan\VariableNames;
 
+use Closure;
 use App\Models\User;
 use DateTimeInterface;
 use PHPStan\Type\Type;
 use PhpParser\Node\Param;
 use Illuminate\Support\Str;
 use PHPStan\Type\ObjectType;
+use PHPStan\Type\TypeCombinator;
 use PhpParser\Node\Expr\Variable;
 use Illuminate\Support\Collection;
+use Illuminate\Testing\TestResponse;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 use PHPStan\Reflection\ParameterReflection;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Coding-conventions §2.26: whether a variable's name fits what it holds.
@@ -55,9 +60,10 @@ final class VariableNamer
      */
     public static function misnaming(Type $type, string $name): ?string
     {
+        $type = TypeCombinator::removeNull($type);
         $classNames = $type->getObjectClassNames();
 
-        if (count($classNames) !== 1) {
+        if (count($classNames) !== 1 || $classNames[0] === Closure::class) {
             return null;
         }
 
@@ -76,7 +82,11 @@ final class VariableNamer
                 : sprintf('`%s $%s` does not say what happened — end it in At, On, Date, Deadline or Until (coding-conventions §2.26).', $shortName, $name);
         }
 
-        $expected = $item === null ? self::typeName($shortName) : Str::plural(self::typeName(class_basename($item)));
+        $expected = match (true) {
+            self::isResponse($type) => 'response',
+            $item !== null => Str::plural(self::typeName(class_basename($item))),
+            default => self::typeName($shortName),
+        };
 
         return self::endsIn($name, $expected)
             ? null
@@ -99,11 +109,20 @@ final class VariableNamer
         return null;
     }
 
+    protected static function isResponse(Type $type): bool
+    {
+        return (new ObjectType(Response::class))->isSuperTypeOf($type)->yes()
+            || (new ObjectType(TestResponse::class))->isSuperTypeOf($type)->yes();
+    }
+
+    /**
+     * The bare Model is a template's bound: the item is unknown.
+     */
     protected static function onlyClass(Type $type): ?string
     {
         $classNames = $type->getObjectClassNames();
 
-        return count($classNames) === 1 ? $classNames[0] : null;
+        return count($classNames) === 1 && $classNames[0] !== Model::class ? $classNames[0] : null;
     }
 
     /**

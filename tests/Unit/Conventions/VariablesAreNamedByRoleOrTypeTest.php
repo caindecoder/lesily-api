@@ -164,6 +164,17 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
     }
 
     #[Test]
+    public function when_a_nullable_parameter_is_misnamed_then_it_is_flagged(): void
+    {
+        // Given ?RequestOrigin $origin
+        // When the rule analyses it
+        // Then the parameter is reported with its class's name
+        $this->assertFlags('MisnamedNullable.php', [
+            9 => $this->message('RequestOrigin $origin', 'requestOrigin'),
+        ]);
+    }
+
+    #[Test]
     public function when_a_role_word_stands_before_the_type_name_then_it_passes(): void
     {
         // Given PersonalAccessToken $currentPersonalAccessToken and Collection<int, CompanyUser> $activeCompanyUsers
@@ -188,6 +199,51 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
         // When the rule analyses them
         // Then nothing is reported
         $this->assertPasses('NamedDates.php');
+    }
+
+    #[Test]
+    public function when_a_nullable_type_is_named_after_its_class_then_it_passes(): void
+    {
+        // Given ?RequestOrigin $requestOrigin and a ->first() local named $companyUser
+        // When the rule analyses them
+        // Then nothing is reported
+        $this->assertPasses('NullableTypes.php');
+    }
+
+    #[Test]
+    public function when_a_parent_signature_fixes_the_name_then_it_passes(): void
+    {
+        // Given a command's rules(ValidationContext $context), a Cast's cast(DataProperty $property, …), and a route-bound ResettableSetting $setting
+        // When the rule analyses them
+        // Then nothing is reported
+        $this->assertPasses('ParentFixedRules.php', 'InterfaceFixedCast.php', 'IO/Http/Controllers/RouteBoundController.php');
+    }
+
+    #[Test]
+    public function when_a_variable_holds_a_response_then_it_passes(): void
+    {
+        // Given TestResponse $response and JsonResponse $response
+        // When the rule analyses them
+        // Then nothing is reported
+        $this->assertPasses('Responses.php');
+    }
+
+    #[Test]
+    public function when_a_property_leaves_the_code_then_it_passes(): void
+    {
+        // Given a command's, an event's public and a queued class's property RequestOrigin $origin
+        // When the rule analyses them
+        // Then nothing is reported
+        $this->assertPasses('LeavingCommand.php', 'LeavingEvent.php', 'LeavingQueuedClass.php');
+    }
+
+    #[Test]
+    public function when_the_type_is_outside_the_rule_then_any_name_passes(): void
+    {
+        // Given a string, a Closure, a callable, mixed, object, a union of two classes and a bare Builder
+        // When the rule analyses them
+        // Then nothing is reported
+        $this->assertPasses('OutsideTypes.php');
     }
 
     /**
