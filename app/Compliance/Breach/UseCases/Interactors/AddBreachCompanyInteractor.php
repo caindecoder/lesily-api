@@ -23,19 +23,19 @@ class AddBreachCompanyInteractor
 {
     public function __construct(protected readonly BreachCompanyPartRenderer $renderer) {}
 
-    public function execute(AddBreachCompanyCommand $command, User $admin, RequestOrigin $context): BreachIncidentRecord
+    public function execute(AddBreachCompanyCommand $command, User $platformAdmin, RequestOrigin $context): BreachIncidentRecord
     {
-        return DB::transaction(function () use ($command, $admin, $context): BreachIncidentRecord {
+        return DB::transaction(function () use ($command, $platformAdmin, $context): BreachIncidentRecord {
             $breach = BreachIncidentRecord::query()->whereKey($command->breachId)->lockForUpdate()->first()
                 ?? throw new ModelNotFoundException;
 
             $this->guardOpen($breach);
 
             BreachIncident::retrieve($breach->getKey())
-                ->addLateCompany($command, $admin, $this->partFor($breach, $command))
+                ->addLateCompany($command, $platformAdmin, $this->partFor($breach, $command))
                 ->persist();
 
-            $this->recordAudit($breach, $admin, $context);
+            $this->recordAudit($breach, $platformAdmin, $context);
 
             return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breach->getKey())->firstOrFail();
         });
@@ -63,7 +63,7 @@ class AddBreachCompanyInteractor
         ]));
     }
 
-    protected function recordAudit(BreachIncidentRecord $breach, User $admin, RequestOrigin $context): void
+    protected function recordAudit(BreachIncidentRecord $breach, User $platformAdmin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'stored_event_id' => $this->addedEventIdFor($breach),
@@ -73,9 +73,9 @@ class AddBreachCompanyInteractor
             'subject_label' => null,
             'action' => AuditAction::BreachCompanyAdded,
             'description' => 'Platform admin added a company found after the breach notices and told it.',
-            'actor_user_id' => $admin->getKey(),
+            'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),

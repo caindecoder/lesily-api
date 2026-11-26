@@ -19,15 +19,15 @@ use App\Foundation\RolesPermissions\Services\PlatformAdminAllowlist;
 
 class BreachNotificationReactor extends Reactor implements ShouldQueue
 {
-    public function __construct(protected readonly PlatformAdminAllowlist $platformAdmins) {}
+    public function __construct(protected readonly PlatformAdminAllowlist $platformAdminAllowlist) {}
 
     public function onBreachFilingRequested(BreachFilingRequested $event): void
     {
         $company = Company::query()->findOrFail($event->companyId);
-        $admins = User::query()->whereKey($this->platformAdmins->userIds())->get();
+        $platformAdmins = User::query()->whereKey($this->platformAdminAllowlist->userIds())->get();
 
-        if ($admins->isNotEmpty()) {
-            Notification::send($admins, new SystemNotification(NotificationType::BreachFilingRequested, $company->name, null, [
+        if ($platformAdmins->isNotEmpty()) {
+            Notification::send($platformAdmins, new SystemNotification(NotificationType::BreachFilingRequested, $company->name, null, [
                 'incident' => $event->breachId,
             ]));
         } else {
@@ -38,10 +38,10 @@ class BreachNotificationReactor extends Reactor implements ShouldQueue
     public function onBreachDeadlineMissed(BreachDeadlineMissed $event): void
     {
         $incident = BreachIncidentRecord::query()->findOrFail($event->breachId);
-        $admins = User::query()->whereKey($this->platformAdmins->userIds())->get();
+        $platformAdmins = User::query()->whereKey($this->platformAdminAllowlist->userIds())->get();
 
-        if ($admins->isNotEmpty()) {
-            Notification::send($admins, new SystemNotification(NotificationType::BreachDeadlineMissed, $this->companyNamesOf($incident), null, [
+        if ($platformAdmins->isNotEmpty()) {
+            Notification::send($platformAdmins, new SystemNotification(NotificationType::BreachDeadlineMissed, $this->companyNamesOf($incident), null, [
                 'incident' => $event->breachId,
                 'deadline' => $incident->deadline->format('j M Y, H:i').' UTC',
             ]));

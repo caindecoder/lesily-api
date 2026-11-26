@@ -19,9 +19,9 @@ class ReviewBreachQueueInteractor
      *
      * @return LengthAwarePaginator<int, BreachIncidentRecord>
      */
-    public function execute(ReviewBreachQueueCommand $command, User $admin, RequestOrigin $context): LengthAwarePaginator
+    public function execute(ReviewBreachQueueCommand $command, User $platformAdmin, RequestOrigin $context): LengthAwarePaginator
     {
-        return DB::transaction(function () use ($command, $admin, $context): LengthAwarePaginator {
+        return DB::transaction(function () use ($command, $platformAdmin, $context): LengthAwarePaginator {
             $page = BreachIncidentRecord::query()
                 ->whereStage($command->stage)
                 ->withCount('companies')
@@ -31,7 +31,7 @@ class ReviewBreachQueueInteractor
                 // honour a body-supplied page past the validated query filters.
                 ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
 
-            $this->recordQueueRead($this->queryContextOf($command, $page), $admin, $context);
+            $this->recordQueueRead($this->queryContextOf($command, $page), $platformAdmin, $context);
 
             return $page;
         });
@@ -56,16 +56,16 @@ class ReviewBreachQueueInteractor
     /**
      * @param  array<string, mixed>  $queryContext
      */
-    protected function recordQueueRead(array $queryContext, User $admin, RequestOrigin $context): void
+    protected function recordQueueRead(array $queryContext, User $platformAdmin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'event_class' => 'BreachIncidentQueueViewed',
             'subject_type' => AuditSubjectType::BreachIncidentQueue,
             'action' => AuditAction::BreachQueueViewed,
             'description' => 'Platform admin viewed a page of the breach queue.',
-            'actor_user_id' => $admin->getKey(),
+            'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),

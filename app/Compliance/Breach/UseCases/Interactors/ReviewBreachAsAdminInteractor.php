@@ -16,19 +16,19 @@ class ReviewBreachAsAdminInteractor
     /**
      * The read and its audit row share one transaction — no read without its evidence.
      */
-    public function execute(string $breachId, User $admin, RequestOrigin $context): BreachIncidentRecord
+    public function execute(string $breachId, User $platformAdmin, RequestOrigin $context): BreachIncidentRecord
     {
-        return DB::transaction(function () use ($breachId, $admin, $context): BreachIncidentRecord {
+        return DB::transaction(function () use ($breachId, $platformAdmin, $context): BreachIncidentRecord {
             $breach = BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breachId)->first()
                 ?? throw new ModelNotFoundException;
 
-            $this->recordAdminRead($breach, $admin, $context);
+            $this->recordAdminRead($breach, $platformAdmin, $context);
 
             return $breach;
         });
     }
 
-    protected function recordAdminRead(BreachIncidentRecord $breach, User $admin, RequestOrigin $context): void
+    protected function recordAdminRead(BreachIncidentRecord $breach, User $platformAdmin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'event_class' => 'BreachIncidentViewedByAdmin',
@@ -37,9 +37,9 @@ class ReviewBreachAsAdminInteractor
             'subject_label' => null,
             'action' => AuditAction::BreachAdminViewed,
             'description' => 'Platform admin viewed a data breach.',
-            'actor_user_id' => $admin->getKey(),
+            'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),

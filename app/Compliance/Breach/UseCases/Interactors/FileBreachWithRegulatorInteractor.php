@@ -27,7 +27,7 @@ class FileBreachWithRegulatorInteractor
 {
     public function __construct(protected readonly BreachCompanyPartRenderer $renderer) {}
 
-    public function execute(FileBreachWithRegulatorCommand $command, User $admin, RequestOrigin $context): BreachIncidentRecord
+    public function execute(FileBreachWithRegulatorCommand $command, User $platformAdmin, RequestOrigin $context): BreachIncidentRecord
     {
         $regulatorAddress = Config::string('platform.regulator_address');
 
@@ -35,7 +35,7 @@ class FileBreachWithRegulatorInteractor
             throw RegulatorAddressNotConfiguredException::forFiling();
         }
 
-        return DB::transaction(function () use ($command, $admin, $context, $regulatorAddress): BreachIncidentRecord {
+        return DB::transaction(function () use ($command, $platformAdmin, $context, $regulatorAddress): BreachIncidentRecord {
             $breach = BreachIncidentRecord::query()->whereKey($command->breachId)->lockForUpdate()->first()
                 ?? throw new ModelNotFoundException;
 
@@ -48,9 +48,9 @@ class FileBreachWithRegulatorInteractor
             $this->guardFilingOpen($breach, $filing);
             $regulatorFiling = $this->regulatorFilingFor($breach, $filing, $regulatorAddress);
 
-            BreachIncident::retrieve($breach->getKey())->fileWithRegulator($command, $admin, $regulatorFiling)->persist();
+            BreachIncident::retrieve($breach->getKey())->fileWithRegulator($command, $platformAdmin, $regulatorFiling)->persist();
 
-            $this->recordAudit($filing, $admin, $context);
+            $this->recordAudit($filing, $platformAdmin, $context);
 
             return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breach->getKey())->firstOrFail();
         });
@@ -69,7 +69,7 @@ class FileBreachWithRegulatorInteractor
         );
     }
 
-    protected function recordAudit(BreachIncidentCompany $filing, User $admin, RequestOrigin $context): void
+    protected function recordAudit(BreachIncidentCompany $filing, User $platformAdmin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'stored_event_id' => $this->filedEventIdFor($filing),
@@ -79,9 +79,9 @@ class FileBreachWithRegulatorInteractor
             'subject_label' => null,
             'action' => AuditAction::BreachFiledWithRegulator,
             'description' => 'Platform admin filed a data breach with the Data Protection Authority for a company that asked.',
-            'actor_user_id' => $admin->getKey(),
+            'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),

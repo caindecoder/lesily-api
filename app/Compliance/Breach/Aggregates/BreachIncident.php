@@ -58,7 +58,7 @@ class BreachIncident extends AggregateRoot
     /** @var array<string, CarbonInterface> each company's regulator filing time, keyed by company id */
     protected array $filedAt = [];
 
-    public function record(RecordBreachCommand $command, User $admin): static
+    public function record(RecordBreachCommand $command, User $platformAdmin): static
     {
         if ($this->stage !== null) {
             throw BreachIncidentAlreadyRecordedException::withId($this->uuid());
@@ -67,7 +67,7 @@ class BreachIncident extends AggregateRoot
         return $this->recordThat(new BreachRecorded(
             breachId: $this->uuid(),
             recordedAt: CarbonImmutable::now(),
-            recordedByUserId: $admin->getKey(),
+            recordedByUserId: $platformAdmin->getKey(),
             description: $command->description,
             likelyConsequences: $command->likelyConsequences,
             measures: $command->measures,
@@ -81,7 +81,7 @@ class BreachIncident extends AggregateRoot
     /**
      * @param  array<string, array<string, string>>  $parts  each affected company's own part, keyed by company id
      */
-    public function notifyCompanies(User $admin, array $parts): static
+    public function notifyCompanies(User $platformAdmin, array $parts): static
     {
         if ($this->stage !== BreachStage::Recorded) {
             throw new BreachIncidentNotRecordedException($this->stage);
@@ -94,7 +94,7 @@ class BreachIncident extends AggregateRoot
                 breachId: $this->uuid(),
                 companyId: $companyId,
                 notifiedAt: $notifiedAt,
-                notifiedByUserId: $admin->getKey(),
+                notifiedByUserId: $platformAdmin->getKey(),
                 part: $part,
             ));
         }
@@ -102,14 +102,14 @@ class BreachIncident extends AggregateRoot
         return $this->recordThat(new BreachCompaniesNotified(
             breachId: $this->uuid(),
             notifiedAt: $notifiedAt,
-            notifiedByUserId: $admin->getKey(),
+            notifiedByUserId: $platformAdmin->getKey(),
         ));
     }
 
     /**
      * @param  array<string, string>  $part  the late company's own part of the incident, as sent
      */
-    public function addLateCompany(AddBreachCompanyCommand $command, User $admin, array $part): static
+    public function addLateCompany(AddBreachCompanyCommand $command, User $platformAdmin, array $part): static
     {
         if ($this->stage === BreachStage::Resolved) {
             throw LateBreachCompanyRefusedException::incidentResolved();
@@ -137,14 +137,14 @@ class BreachIncident extends AggregateRoot
             estimatedCount: $figures['estimatedCount'],
             reason: $command->reason,
             addedAt: $addedAt,
-            addedByUserId: $admin->getKey(),
+            addedByUserId: $platformAdmin->getKey(),
         ));
 
         return $this->recordThat(new BreachCompanyNotified(
             breachId: $this->uuid(),
             companyId: $command->company->getKey(),
             notifiedAt: $addedAt,
-            notifiedByUserId: $admin->getKey(),
+            notifiedByUserId: $platformAdmin->getKey(),
             part: $part,
         ));
     }
@@ -177,7 +177,7 @@ class BreachIncident extends AggregateRoot
         ));
     }
 
-    public function fileWithRegulator(FileBreachWithRegulatorCommand $command, User $admin, RegulatorFiling $filing): static
+    public function fileWithRegulator(FileBreachWithRegulatorCommand $command, User $platformAdmin, RegulatorFiling $filing): static
     {
         if ($this->stage === BreachStage::Resolved) {
             throw BreachFilingNotOpenException::incidentResolved();
@@ -202,14 +202,14 @@ class BreachIncident extends AggregateRoot
             companyId: $companyId,
             companyName: $filing->companyName,
             filedAt: CarbonImmutable::now(),
-            filedByUserId: $admin->getKey(),
+            filedByUserId: $platformAdmin->getKey(),
             regulatorAddress: $filing->regulatorAddress,
             part: $filing->part,
             bodyHash: $filing->bodyHash,
         ));
     }
 
-    public function amend(AmendBreachCommand $command, User $admin): static
+    public function amend(AmendBreachCommand $command, User $platformAdmin): static
     {
         if ($this->stage === BreachStage::Resolved) {
             throw BreachAmendmentRefusedException::incidentResolved();
@@ -237,7 +237,7 @@ class BreachIncident extends AggregateRoot
         return $this->recordThat(new BreachAmended(
             breachId: $this->uuid(),
             amendedAt: $amendedAt,
-            amendedByUserId: $admin->getKey(),
+            amendedByUserId: $platformAdmin->getKey(),
             reason: $command->reason,
             changes: $changes,
             deadline: $deadline,
@@ -245,7 +245,7 @@ class BreachIncident extends AggregateRoot
         ));
     }
 
-    public function resolve(ResolveBreachCommand $command, User $admin): static
+    public function resolve(ResolveBreachCommand $command, User $platformAdmin): static
     {
         if ($this->stage === BreachStage::Resolved) {
             throw BreachResolutionRefusedException::incidentResolved();
@@ -270,7 +270,7 @@ class BreachIncident extends AggregateRoot
         return $this->recordThat(new BreachResolved(
             breachId: $this->uuid(),
             resolvedAt: CarbonImmutable::now(),
-            resolvedByUserId: $admin->getKey(),
+            resolvedByUserId: $platformAdmin->getKey(),
             rootCause: $command->rootCause,
             remediationSteps: $command->remediationSteps,
             summary: $command->summary,
@@ -299,7 +299,7 @@ class BreachIncident extends AggregateRoot
         };
     }
 
-    public function markFalseAlarm(MarkBreachFalseAlarmCommand $command, User $admin): static
+    public function markFalseAlarm(MarkBreachFalseAlarmCommand $command, User $platformAdmin): static
     {
         match ($this->stage) {
             BreachStage::CompaniesNotified => throw BreachFalseAlarmRefusedException::companiesNotified(),
@@ -312,7 +312,7 @@ class BreachIncident extends AggregateRoot
         return $this->recordThat(new BreachMarkedFalseAlarm(
             breachId: $this->uuid(),
             markedAt: CarbonImmutable::now(),
-            markedByUserId: $admin->getKey(),
+            markedByUserId: $platformAdmin->getKey(),
             reason: $command->reason,
             findings: $command->findings,
         ));

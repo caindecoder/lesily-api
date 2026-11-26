@@ -17,25 +17,25 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RecordBreachInteractor
 {
-    public function execute(RecordBreachCommand $command, User $admin, RequestOrigin $context): BreachIncidentRecord
+    public function execute(RecordBreachCommand $command, User $platformAdmin, RequestOrigin $context): BreachIncidentRecord
     {
-        return DB::transaction(function () use ($command, $admin, $context): BreachIncidentRecord {
+        return DB::transaction(function () use ($command, $platformAdmin, $context): BreachIncidentRecord {
             $breachId = Str::uuid7()->toString();
 
             BreachIncident::retrieve($breachId)
-                ->record($command, $admin)
+                ->record($command, $platformAdmin)
                 ->persist();
 
             $breach = BreachIncidentRecord::query()
                 ->with(['companies.company', 'amendments'])
                 ->findOrFail($breachId);
-            $this->recordAudit($breach, $admin, $context);
+            $this->recordAudit($breach, $platformAdmin, $context);
 
             return $breach;
         });
     }
 
-    protected function recordAudit(BreachIncidentRecord $breach, User $admin, RequestOrigin $context): void
+    protected function recordAudit(BreachIncidentRecord $breach, User $platformAdmin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'stored_event_id' => $this->recordedEventIdFor($breach),
@@ -45,9 +45,9 @@ class RecordBreachInteractor
             'subject_label' => null,
             'action' => AuditAction::BreachRecorded,
             'description' => 'Platform admin recorded a data breach.',
-            'actor_user_id' => $admin->getKey(),
+            'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),
