@@ -24,7 +24,7 @@ use App\Foundation\RolesPermissions\Services\PlatformAdminAllowlist;
  */
 class EnsurePlatformAdmin
 {
-    public function __construct(private readonly PlatformAdminAllowlist $platformAdmins) {}
+    public function __construct(private readonly PlatformAdminAllowlist $platformAdminAllowlist) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -41,6 +41,6 @@ class EnsurePlatformAdmin
      */
     protected function isAllowlisted(Request $request): bool
     {
-        return in_array($request->user()?->getKey() ?? '', $this->platformAdmins->userIds(), true);
+        return in_array($request->user()?->getKey() ?? '', $this->platformAdminAllowlist->userIds(), true);
     }
 }

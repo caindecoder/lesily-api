@@ -4783,12 +4783,6 @@ parameters:
 			path: ../../app/Foundation/Http/Middleware/EnsurePermission.php
 
 		-
-			message: '#^`PlatformAdminAllowlist \$platformAdmins` should be named `\$platformAdminAllowlist` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Http/Middleware/EnsurePlatformAdmin.php
-
-		-
 			message: '#^`AccessLogRecorder \$recorder` should be named `\$accessLogRecorder` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -4856,12 +4850,6 @@ parameters:
 
 		-
 			message: '#^`AuditSubjectType \$subjectType` should be named `\$auditSubjectType` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../database/factories/AuditEntryFactory.php
-
-		-
-			message: '#^`User \$staff` is not a role word \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../database/factories/AuditEntryFactory.php
@@ -9493,12 +9481,6 @@ parameters:
 			path: ../../tests/Feature/Foundation/AuditTrail/SearchAuditLogsTest.php
 
 		-
-			message: '#^`User \$staff` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Foundation/AuditTrail/SearchAuditLogsTest.php
-
-		-
 			message: '#^`ValidationException \$exception` should be named `\$validationException` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -9730,12 +9712,6 @@ parameters:
 			message: '#^`User \$outsider` is not a role word \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
-			path: ../../tests/Feature/Foundation/AuditTrail/ViewAuditTrailTest.php
-
-		-
-			message: '#^`User \$staff` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
 			path: ../../tests/Feature/Foundation/AuditTrail/ViewAuditTrailTest.php
 
 		-

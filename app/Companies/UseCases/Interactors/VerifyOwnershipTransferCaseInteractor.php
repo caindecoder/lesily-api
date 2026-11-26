@@ -31,10 +31,10 @@ use App\Companies\UseCases\Commands\VerifyOwnershipTransferCaseCommand;
  */
 class VerifyOwnershipTransferCaseInteractor
 {
-    public function execute(VerifyOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
+    public function execute(VerifyOwnershipTransferCaseCommand $command, User $platformAdmin, RequestOrigin $context): OwnershipTransferCase
     {
         try {
-            return $this->executeLocked($command, $admin, $context);
+            return $this->executeLocked($command, $platformAdmin, $context);
         } catch (DeadlockException $exception) {
             throw new OwnershipTransferContentionException($exception);
         } catch (QueryException $exception) {
@@ -44,16 +44,16 @@ class VerifyOwnershipTransferCaseInteractor
         }
     }
 
-    protected function executeLocked(VerifyOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
+    protected function executeLocked(VerifyOwnershipTransferCaseCommand $command, User $platformAdmin, RequestOrigin $context): OwnershipTransferCase
     {
-        return DB::transaction(function () use ($command, $admin, $context): OwnershipTransferCase {
+        return DB::transaction(function () use ($command, $platformAdmin, $context): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()->lockForUpdate()->findOrFail($command->caseId);
 
             $this->guardCaseIsOpen($case);
             $this->guardTargetIsLiveMember($case, $command->newOwnerUserId);
 
             CompanyAggregate::retrieve($case->company_id)
-                ->recordOwnershipVerification($command, $admin->getKey())
+                ->recordOwnershipVerification($command, $platformAdmin->getKey())
                 ->persist();
 
             $verificationEventId = $this->verificationEventIdFor($case);
@@ -61,14 +61,14 @@ class VerifyOwnershipTransferCaseInteractor
             $case->update([
                 'status' => OwnershipTransferCaseStatus::Verified,
                 'verified_at' => now(),
-                'verified_by' => $admin->getKey(),
+                'verified_by' => $platformAdmin->getKey(),
                 'new_owner_user_id' => $command->newOwnerUserId,
                 'verification_notes' => $command->notes,
                 'verification_artefacts' => $command->artefactMetadata(),
                 'verification_event_id' => $verificationEventId,
             ]);
 
-            $this->recordCaseVerified($case, $admin, $context);
+            $this->recordCaseVerified($case, $platformAdmin, $context);
 
             return $case;
         });
@@ -115,7 +115,7 @@ class VerifyOwnershipTransferCaseInteractor
             ->getKey();
     }
 
-    protected function recordCaseVerified(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
+    protected function recordCaseVerified(OwnershipTransferCase $case, User $platformAdmin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $case->company_id,
@@ -126,9 +126,9 @@ class VerifyOwnershipTransferCaseInteractor
             'subject_label' => null,
             'action' => AuditAction::CaseVerified,
             'description' => 'Platform admin recorded identity verification on an ownership-transfer case.',
-            'actor_user_id' => $admin->getKey(),
-            'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_user_id' => $platformAdmin->getKey(),
+            'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),

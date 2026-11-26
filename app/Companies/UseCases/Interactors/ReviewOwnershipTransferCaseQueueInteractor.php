@@ -27,9 +27,9 @@ class ReviewOwnershipTransferCaseQueueInteractor
     /**
      * @return LengthAwarePaginator<int, OwnershipTransferCase>
      */
-    public function execute(ReviewOwnershipTransferCaseQueueCommand $command, User $admin, RequestOrigin $context): LengthAwarePaginator
+    public function execute(ReviewOwnershipTransferCaseQueueCommand $command, User $platformAdmin, RequestOrigin $context): LengthAwarePaginator
     {
-        return DB::transaction(function () use ($command, $admin, $context): LengthAwarePaginator {
+        return DB::transaction(function () use ($command, $platformAdmin, $context): LengthAwarePaginator {
             $page = OwnershipTransferCase::query()
                 ->when($command->status, fn ($query, OwnershipTransferCaseStatus $status) => $query->withStatus($status))
                 ->when($command->companyId, fn ($query, string $companyId) => $query->forCompanyId($companyId))
@@ -39,7 +39,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
                 // page and bypass the whitelisted, validated query DTO (api-conventions §10.1).
                 ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
 
-            $this->recordQueueRead($this->queryContextOf($command, $page), $admin, $context);
+            $this->recordQueueRead($this->queryContextOf($command, $page), $platformAdmin, $context);
 
             return $page;
         });
@@ -64,7 +64,7 @@ class ReviewOwnershipTransferCaseQueueInteractor
     /**
      * @param  array<string, mixed>  $queryContext
      */
-    protected function recordQueueRead(array $queryContext, User $admin, RequestOrigin $context): void
+    protected function recordQueueRead(array $queryContext, User $platformAdmin, RequestOrigin $context): void
     {
         // The queue read points at a PAGE, not a record.
         AuditEntry::query()->create([
@@ -72,9 +72,9 @@ class ReviewOwnershipTransferCaseQueueInteractor
             'subject_type' => AuditSubjectType::OwnershipTransferCaseQueue,
             'action' => AuditAction::CaseQueueViewed,
             'description' => 'Platform admin viewed a page of the ownership-transfer case queue.',
-            'actor_user_id' => $admin->getKey(),
-            'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_user_id' => $platformAdmin->getKey(),
+            'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),

@@ -16,19 +16,19 @@ class ReviewDsarRequestAsAdminInteractor
     /**
      * The read and its audit row share one transaction — no read without its evidence.
      */
-    public function execute(string $requestId, User $admin, RequestOrigin $context): DsarRequestRecord
+    public function execute(string $requestId, User $platformAdmin, RequestOrigin $context): DsarRequestRecord
     {
-        return DB::transaction(function () use ($requestId, $admin, $context): DsarRequestRecord {
+        return DB::transaction(function () use ($requestId, $platformAdmin, $context): DsarRequestRecord {
             $request = DsarRequestRecord::query()->whereKey($requestId)->first()
                 ?? throw new ModelNotFoundException;
 
-            $this->recordAdminRead($request, $admin, $context);
+            $this->recordAdminRead($request, $platformAdmin, $context);
 
             return $request;
         });
     }
 
-    protected function recordAdminRead(DsarRequestRecord $request, User $admin, RequestOrigin $context): void
+    protected function recordAdminRead(DsarRequestRecord $request, User $platformAdmin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $request->company_id,
@@ -39,9 +39,9 @@ class ReviewDsarRequestAsAdminInteractor
             'subject_label' => null,
             'action' => AuditAction::DsarAdminViewed,
             'description' => 'DSAR request viewed by a platform admin.',
-            'actor_user_id' => $admin->getKey(),
-            'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_user_id' => $platformAdmin->getKey(),
+            'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),

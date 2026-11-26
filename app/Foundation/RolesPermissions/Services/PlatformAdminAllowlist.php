@@ -14,10 +14,10 @@ class PlatformAdminAllowlist
      */
     public function userIds(): array
     {
-        /** @var array<int, string> $adminUserIds raw env explode (config/platform.php) */
-        $adminUserIds = config('platform.admin_user_ids', []);
+        /** @var array<int, string> $platformAdminIds raw env explode (config/platform.php) */
+        $platformAdminIds = config('platform.admin_user_ids', []);
 
-        return collect($adminUserIds)
+        return collect($platformAdminIds)
             ->map(fn (string $id): string => trim($id))
             ->reject(fn (string $id): bool => $id === '')
             ->all();

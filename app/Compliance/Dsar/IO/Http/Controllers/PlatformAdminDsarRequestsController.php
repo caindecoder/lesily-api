@@ -17,10 +17,10 @@ class PlatformAdminDsarRequestsController extends Controller
 {
     public function index(Request $request, ReviewDsarRequestQueueInteractor $interactor): JsonResponse
     {
-        /** @var User $admin — guaranteed by auth:sanctum */
-        $admin = $request->user();
+        /** @var User $platformAdmin — guaranteed by auth:sanctum */
+        $platformAdmin = $request->user();
 
-        $queue = $interactor->execute(ReviewDsarRequestQueueCommand::fromQuery($request), $admin, RequestOrigin::fromRequest($request));
+        $queue = $interactor->execute(ReviewDsarRequestQueueCommand::fromQuery($request), $platformAdmin, RequestOrigin::fromRequest($request));
 
         return (new DsarRequestAdminCollection($queue->page))
             ->additional(['kpis' => ['open' => $queue->open, 'overdue' => $queue->overdue, 'due_in_7_days' => $queue->dueInSevenDays]])
@@ -29,9 +29,9 @@ class PlatformAdminDsarRequestsController extends Controller
 
     public function show(Request $request, string $requestId, ReviewDsarRequestAsAdminInteractor $interactor): DsarRequestAdminDetailResource
     {
-        /** @var User $admin — guaranteed by auth:sanctum */
-        $admin = $request->user();
+        /** @var User $platformAdmin — guaranteed by auth:sanctum */
+        $platformAdmin = $request->user();
 
-        return new DsarRequestAdminDetailResource($interactor->execute($requestId, $admin, RequestOrigin::fromRequest($request)));
+        return new DsarRequestAdminDetailResource($interactor->execute($requestId, $platformAdmin, RequestOrigin::fromRequest($request)));
     }
 }

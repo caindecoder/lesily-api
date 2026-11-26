@@ -43,7 +43,7 @@ class AuditEntryFactory extends Factory
             'action' => AuditAction::AdminReviewed,
             'description' => "Platform admin reviewed invoice {$invoiceNumber}.",
             'actor_user_id' => User::factory(),
-            'actor_role_code' => 'platform_super_admin',
+            'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $this->faker->name(),
             'ip_address' => $this->faker->ipv4(),
             'user_agent' => $this->faker->userAgent(),
@@ -73,12 +73,12 @@ class AuditEntryFactory extends Factory
     /**
      * A row written by a Lesily platform admin acting on the company's data.
      */
-    public function byStaff(User $staff): static
+    public function byStaff(User $platformAdmin): static
     {
         return $this->state([
-            'actor_user_id' => $staff->getKey(),
-            'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $staff->name,
+            'actor_user_id' => $platformAdmin->getKey(),
+            'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
+            'actor_label' => $platformAdmin->name,
         ]);
     }
 

@@ -65,9 +65,9 @@ class BreachIncidentRecordFactory extends Factory
         ]);
     }
 
-    public function recordedBy(User $admin): static
+    public function recordedBy(User $platformAdmin): static
     {
-        return $this->state(['recorded_by' => $admin->getKey()]);
+        return $this->state(['recorded_by' => $platformAdmin->getKey()]);
     }
 
     public function companiesNotified(): static

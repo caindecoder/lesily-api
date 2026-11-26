@@ -204,6 +204,16 @@ class VariablesAreNamedByRoleOrTypeTest extends RuleTestCase
     }
 
     #[Test]
+    public function when_a_queued_event_handler_property_is_misnamed_then_it_is_flagged(): void
+    {
+        // Given a queued reactor's and a queued projector's property RequestOrigin $origin
+        // When the rule analyses them
+        // Then both are reported with their type's name
+        $this->assertFlags('QueuedReactor.php', [11 => $this->message('RequestOrigin $origin', 'requestOrigin')]);
+        $this->assertFlags('QueuedProjector.php', [11 => $this->message('RequestOrigin $origin', 'requestOrigin')]);
+    }
+
+    #[Test]
     public function when_a_command_method_other_than_rules_is_misnamed_then_it_is_flagged(): void
     {
         // Given a command with rules(ValidationContext $context) and a helper taking RequestOrigin $origin

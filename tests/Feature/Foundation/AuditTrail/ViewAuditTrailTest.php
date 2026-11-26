@@ -258,10 +258,10 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     public function when_lesily_staff_wrote_an_entry_then_it_shows_lesily_support_without_name_ip_or_device(): void
     {
         // Given a Lesily platform admin reviewed company A's invoice from their own address and browser
-        $staff = User::factory()->named('Pat Silva')->create();
+        $platformAdmin = User::factory()->named('Pat Silva')->create();
         AuditEntry::factory()
             ->forCompany($this->companyA)
-            ->byStaff($staff)
+            ->byStaff($platformAdmin)
             ->fromOrigin('10.0.0.5', 'Mozilla/5.0 (Windows NT 10.0) Edge/140.0')
             ->create();
 
@@ -278,11 +278,11 @@ class ViewAuditTrailTest extends AuditTrailTestCase
     public function when_the_actor_filter_names_a_staff_member_then_nothing_is_listed(): void
     {
         // Given an entry of company A by a Lesily staff member
-        $staff = User::factory()->create();
-        AuditEntry::factory()->forCompany($this->companyA)->byStaff($staff)->create();
+        $platformAdmin = User::factory()->create();
+        AuditEntry::factory()->forCompany($this->companyA)->byStaff($platformAdmin)->create();
 
         // When the owner views company A's audit trail by the staff member's own id
-        $response = $this->viewAuditTrail($this->owner, $this->companyA, ['actor' => $staff->getKey()]);
+        $response = $this->viewAuditTrail($this->owner, $this->companyA, ['actor' => $platformAdmin->getKey()]);
 
         // Then nothing is listed, so the filter cannot tell who the staff member was
         $this->assertNothingListed($response);

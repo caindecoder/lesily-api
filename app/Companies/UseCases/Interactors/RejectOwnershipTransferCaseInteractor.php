@@ -25,10 +25,10 @@ use App\Companies\Exceptions\OwnershipTransferCaseAlreadyClosedException;
  */
 class RejectOwnershipTransferCaseInteractor
 {
-    public function execute(RejectOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
+    public function execute(RejectOwnershipTransferCaseCommand $command, User $platformAdmin, RequestOrigin $context): OwnershipTransferCase
     {
         try {
-            return $this->executeLocked($command, $admin, $context);
+            return $this->executeLocked($command, $platformAdmin, $context);
         } catch (DeadlockException $exception) {
             throw new OwnershipTransferContentionException($exception);
         } catch (QueryException $exception) {
@@ -38,9 +38,9 @@ class RejectOwnershipTransferCaseInteractor
         }
     }
 
-    protected function executeLocked(RejectOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
+    protected function executeLocked(RejectOwnershipTransferCaseCommand $command, User $platformAdmin, RequestOrigin $context): OwnershipTransferCase
     {
-        return DB::transaction(function () use ($command, $admin, $context): OwnershipTransferCase {
+        return DB::transaction(function () use ($command, $platformAdmin, $context): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()
                 ->lockForUpdate()
                 ->findOrFail($command->caseId);
@@ -57,13 +57,13 @@ class RejectOwnershipTransferCaseInteractor
                 'rejection_reason_code' => $command->reasonCode,
             ]);
 
-            $this->recordCaseRejected($case, $admin, $context);
+            $this->recordCaseRejected($case, $platformAdmin, $context);
 
             return $case;
         });
     }
 
-    protected function recordCaseRejected(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
+    protected function recordCaseRejected(OwnershipTransferCase $case, User $platformAdmin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $case->company_id,
@@ -74,9 +74,9 @@ class RejectOwnershipTransferCaseInteractor
             'subject_label' => null,
             'action' => AuditAction::CaseRejected,
             'description' => 'Platform admin rejected an ownership-transfer case.',
-            'actor_user_id' => $admin->getKey(),
-            'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_user_id' => $platformAdmin->getKey(),
+            'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),

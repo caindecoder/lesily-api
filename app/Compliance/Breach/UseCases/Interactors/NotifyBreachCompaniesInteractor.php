@@ -23,9 +23,9 @@ class NotifyBreachCompaniesInteractor
 {
     public function __construct(protected BreachCompanyPartRenderer $renderer) {}
 
-    public function execute(NotifyBreachCompaniesCommand $command, User $admin, RequestOrigin $context): BreachIncidentRecord
+    public function execute(NotifyBreachCompaniesCommand $command, User $platformAdmin, RequestOrigin $context): BreachIncidentRecord
     {
-        return DB::transaction(function () use ($command, $admin, $context): BreachIncidentRecord {
+        return DB::transaction(function () use ($command, $platformAdmin, $context): BreachIncidentRecord {
             $breach = BreachIncidentRecord::query()->with('companies')->whereKey($command->breachId)->lockForUpdate()->first()
                 ?? throw new ModelNotFoundException;
 
@@ -37,15 +37,15 @@ class NotifyBreachCompaniesInteractor
                 $company->company_id => $this->renderer->render($breach, $company),
             ])->all();
 
-            BreachIncident::retrieve($breach->getKey())->notifyCompanies($admin, $parts)->persist();
+            BreachIncident::retrieve($breach->getKey())->notifyCompanies($platformAdmin, $parts)->persist();
 
-            $this->recordAudit($breach, $admin, $context);
+            $this->recordAudit($breach, $platformAdmin, $context);
 
             return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breach->getKey())->firstOrFail();
         });
     }
 
-    protected function recordAudit(BreachIncidentRecord $breach, User $admin, RequestOrigin $context): void
+    protected function recordAudit(BreachIncidentRecord $breach, User $platformAdmin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'stored_event_id' => $this->notifiedEventIdFor($breach),
@@ -55,9 +55,9 @@ class NotifyBreachCompaniesInteractor
             'subject_label' => null,
             'action' => AuditAction::BreachCompaniesNotified,
             'description' => 'Platform admin notified the companies affected by a data breach.',
-            'actor_user_id' => $admin->getKey(),
-            'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_user_id' => $platformAdmin->getKey(),
+            'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),
