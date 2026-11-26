@@ -34,10 +34,10 @@ class ExecuteOwnershipTransferCaseInteractor
 {
     public function __construct(private TransferCompanyOwnershipInteractor $transferInteractor) {}
 
-    public function execute(ExecuteOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
+    public function execute(ExecuteOwnershipTransferCaseCommand $command, User $platformAdmin, RequestOrigin $context): OwnershipTransferCase
     {
         try {
-            return $this->executeLocked($command, $admin, $context);
+            return $this->executeLocked($command, $platformAdmin, $context);
         } catch (DeadlockException $exception) {
             throw new OwnershipTransferContentionException($exception);
         } catch (QueryException $exception) {
@@ -47,9 +47,9 @@ class ExecuteOwnershipTransferCaseInteractor
         }
     }
 
-    protected function executeLocked(ExecuteOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
+    protected function executeLocked(ExecuteOwnershipTransferCaseCommand $command, User $platformAdmin, RequestOrigin $context): OwnershipTransferCase
     {
-        return DB::transaction(function () use ($command, $admin, $context): OwnershipTransferCase {
+        return DB::transaction(function () use ($command, $platformAdmin, $context): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()
                 ->lockForUpdate()
                 ->findOrFail($command->caseId);
@@ -63,7 +63,7 @@ class ExecuteOwnershipTransferCaseInteractor
             $this->transferInteractor->execute(TransferCompanyOwnershipCommand::from([
                 'company' => $company,
                 'newOwnerUserId' => $case->new_owner_user_id,
-                'transferredBy' => $admin,
+                'transferredBy' => $platformAdmin,
                 'source' => TransferSource::Admin,
                 'case' => $case,
             ]), $case->expected_owner_user_id, $context);
@@ -72,11 +72,11 @@ class ExecuteOwnershipTransferCaseInteractor
                 'status' => OwnershipTransferCaseStatus::Closed,
                 'closed_outcome' => OwnershipTransferCaseOutcome::Executed,
                 'executed_at' => now(),
-                'executed_by' => $admin->getKey(),
+                'executed_by' => $platformAdmin->getKey(),
                 'transfer_event_id' => $this->transferEventIdFor($case),
             ]);
 
-            $this->recordCaseExecuted($case, $admin, $context);
+            $this->recordCaseExecuted($case, $platformAdmin, $context);
 
             return $case;
         });
@@ -99,7 +99,7 @@ class ExecuteOwnershipTransferCaseInteractor
             ->getKey();
     }
 
-    protected function recordCaseExecuted(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
+    protected function recordCaseExecuted(OwnershipTransferCase $case, User $platformAdmin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $case->company_id,
@@ -110,9 +110,9 @@ class ExecuteOwnershipTransferCaseInteractor
             'subject_label' => null,
             'action' => AuditAction::CaseExecuted,
             'description' => 'Platform admin executed a verified ownership-transfer case.',
-            'actor_user_id' => $admin->getKey(),
+            'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),

@@ -26,7 +26,7 @@ class ReviewInvoiceAsAdminInteractor
 {
     public function __construct(private readonly InvoiceRepositoryInterface $invoices) {}
 
-    public function execute(string $invoiceId, User $admin, RequestOrigin $context): Invoice
+    public function execute(string $invoiceId, User $platformAdmin, RequestOrigin $context): Invoice
     {
         $invoice = $this->invoices->findById($invoiceId);
 
@@ -34,7 +34,7 @@ class ReviewInvoiceAsAdminInteractor
             throw new ModelNotFoundException;
         }
 
-        $this->recordAdminReview($invoice, $admin, $context);
+        $this->recordAdminReview($invoice, $platformAdmin, $context);
 
         return $invoice;
     }
@@ -44,7 +44,7 @@ class ReviewInvoiceAsAdminInteractor
      * emits no domain event — B3), severity riding the DB default 'info'.
      * Immutable by convention — no update/delete path exists.
      */
-    protected function recordAdminReview(Invoice $invoice, User $admin, RequestOrigin $context): void
+    protected function recordAdminReview(Invoice $invoice, User $platformAdmin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $invoice->company_id,
@@ -55,9 +55,9 @@ class ReviewInvoiceAsAdminInteractor
             'subject_label' => $invoice->invoice_number,
             'action' => AuditAction::AdminReviewed,
             'description' => "Platform admin reviewed invoice {$invoice->invoice_number}.",
-            'actor_user_id' => $admin->getKey(),
+            'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),

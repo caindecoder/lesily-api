@@ -32,12 +32,12 @@ class PlatformAdminOwnershipTransferCasesController
 {
     public function index(Request $request, ReviewOwnershipTransferCaseQueueInteractor $interactor): JsonResponse
     {
-        /** @var User $admin */
-        $admin = $request->user();
+        /** @var User $platformAdmin */
+        $platformAdmin = $request->user();
 
         $page = $interactor->execute(
             ReviewOwnershipTransferCaseQueueCommand::fromQuery($request),
-            $admin,
+            $platformAdmin,
             RequestOrigin::fromRequest($request),
         );
 
@@ -46,20 +46,20 @@ class PlatformAdminOwnershipTransferCasesController
 
     public function show(string $caseId, Request $request, ReviewOwnershipTransferCaseAsAdminInteractor $interactor): OwnershipTransferCaseAdminResource
     {
-        /** @var User $admin */
-        $admin = $request->user();
+        /** @var User $platformAdmin */
+        $platformAdmin = $request->user();
 
         return new OwnershipTransferCaseAdminResource($interactor->execute(
             $caseId,
-            $admin,
+            $platformAdmin,
             RequestOrigin::fromRequest($request),
         ));
     }
 
     public function verify(string $caseId, Request $request, VerifyOwnershipTransferCaseInteractor $interactor): OwnershipTransferCaseAdminResource
     {
-        /** @var User $admin */
-        $admin = $request->user();
+        /** @var User $platformAdmin */
+        $platformAdmin = $request->user();
 
         $command = VerifyOwnershipTransferCaseCommand::validateAndCreate([
             ...$request->all(),
@@ -68,15 +68,15 @@ class PlatformAdminOwnershipTransferCasesController
 
         return new OwnershipTransferCaseAdminResource($interactor->execute(
             $command,
-            $admin,
+            $platformAdmin,
             RequestOrigin::fromRequest($request),
         ));
     }
 
     public function execute(string $caseId, Request $request, ExecuteOwnershipTransferCaseInteractor $interactor): OwnershipTransferCaseAdminResource
     {
-        /** @var User $admin */
-        $admin = $request->user();
+        /** @var User $platformAdmin */
+        $platformAdmin = $request->user();
 
         $command = ExecuteOwnershipTransferCaseCommand::validateAndCreate([
             'caseId' => $caseId,
@@ -84,15 +84,15 @@ class PlatformAdminOwnershipTransferCasesController
 
         return new OwnershipTransferCaseAdminResource($interactor->execute(
             $command,
-            $admin,
+            $platformAdmin,
             RequestOrigin::fromRequest($request),
         ));
     }
 
     public function reject(string $caseId, Request $request, RejectOwnershipTransferCaseInteractor $interactor): OwnershipTransferCaseAdminResource
     {
-        /** @var User $admin */
-        $admin = $request->user();
+        /** @var User $platformAdmin */
+        $platformAdmin = $request->user();
 
         $command = RejectOwnershipTransferCaseCommand::validateAndCreate([
             ...$request->all(),
@@ -101,19 +101,19 @@ class PlatformAdminOwnershipTransferCasesController
 
         return new OwnershipTransferCaseAdminResource($interactor->execute(
             $command,
-            $admin,
+            $platformAdmin,
             RequestOrigin::fromRequest($request),
         ));
     }
 
     public function store(Request $request, OpenOwnershipTransferCaseInteractor $interactor): JsonResponse
     {
-        /** @var User $admin */
-        $admin = $request->user();
+        /** @var User $platformAdmin */
+        $platformAdmin = $request->user();
 
         $case = $interactor->execute(
             OpenOwnershipTransferCaseCommand::validateAndCreate($request),
-            $admin,
+            $platformAdmin,
             RequestOrigin::fromRequest($request),
         );
 

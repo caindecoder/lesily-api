@@ -22,9 +22,9 @@ use App\Companies\UseCases\Commands\OpenOwnershipTransferCaseCommand;
  */
 class OpenOwnershipTransferCaseInteractor
 {
-    public function execute(OpenOwnershipTransferCaseCommand $command, User $admin, RequestOrigin $context): OwnershipTransferCase
+    public function execute(OpenOwnershipTransferCaseCommand $command, User $platformAdmin, RequestOrigin $context): OwnershipTransferCase
     {
-        return DB::transaction(function () use ($command, $admin, $context): OwnershipTransferCase {
+        return DB::transaction(function () use ($command, $platformAdmin, $context): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()->create([
                 'company_id' => $command->company->getKey(),
                 'expected_owner_user_id' => $command->company->owner_id,
@@ -33,13 +33,13 @@ class OpenOwnershipTransferCaseInteractor
                 'requested_context' => $command->requestedContext,
             ]);
 
-            $this->recordCaseOpened($case, $admin, $context);
+            $this->recordCaseOpened($case, $platformAdmin, $context);
 
             return $case;
         });
     }
 
-    protected function recordCaseOpened(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
+    protected function recordCaseOpened(OwnershipTransferCase $case, User $platformAdmin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $case->company_id,
@@ -50,9 +50,9 @@ class OpenOwnershipTransferCaseInteractor
             'subject_label' => null,
             'action' => AuditAction::CaseOpened,
             'description' => 'Platform admin opened an ownership-transfer case.',
-            'actor_user_id' => $admin->getKey(),
+            'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),

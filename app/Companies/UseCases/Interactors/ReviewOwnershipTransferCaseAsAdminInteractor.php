@@ -19,18 +19,18 @@ use App\Foundation\AuditTrail\Enums\AuditSubjectType;
  */
 class ReviewOwnershipTransferCaseAsAdminInteractor
 {
-    public function execute(string $caseId, User $admin, RequestOrigin $context): OwnershipTransferCase
+    public function execute(string $caseId, User $platformAdmin, RequestOrigin $context): OwnershipTransferCase
     {
-        return DB::transaction(function () use ($caseId, $admin, $context): OwnershipTransferCase {
+        return DB::transaction(function () use ($caseId, $platformAdmin, $context): OwnershipTransferCase {
             $case = OwnershipTransferCase::query()->findOrFail($caseId);
 
-            $this->recordCaseRead($case, $admin, $context);
+            $this->recordCaseRead($case, $platformAdmin, $context);
 
             return $case;
         });
     }
 
-    protected function recordCaseRead(OwnershipTransferCase $case, User $admin, RequestOrigin $context): void
+    protected function recordCaseRead(OwnershipTransferCase $case, User $platformAdmin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'company_id' => $case->company_id,
@@ -41,9 +41,9 @@ class ReviewOwnershipTransferCaseAsAdminInteractor
             'subject_label' => null,
             'action' => AuditAction::CaseViewed,
             'description' => 'Platform admin viewed an ownership-transfer case.',
-            'actor_user_id' => $admin->getKey(),
+            'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),

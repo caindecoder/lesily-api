@@ -19,11 +19,11 @@ class PlatformAdminInvoicesController
 {
     public function show(string $invoiceId, Request $request, ReviewInvoiceAsAdminInteractor $interactor): InvoiceAdminResource
     {
-        /** @var User $admin */
-        $admin = $request->user();
+        /** @var User $platformAdmin */
+        $platformAdmin = $request->user();
 
         return new InvoiceAdminResource(
-            $interactor->execute($invoiceId, $admin, RequestOrigin::fromRequest($request))
+            $interactor->execute($invoiceId, $platformAdmin, RequestOrigin::fromRequest($request))
         );
     }
 }
