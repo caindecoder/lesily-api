@@ -43,7 +43,7 @@ class AuditEntryFactory extends Factory
             'action' => AuditAction::AdminReviewed,
             'description' => "Platform admin reviewed invoice {$invoiceNumber}.",
             'actor_user_id' => User::factory(),
-            'actor_role_code' => 'platform_super_admin',
+            'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $this->faker->name(),
             'ip_address' => $this->faker->ipv4(),
             'user_agent' => $this->faker->userAgent(),
@@ -77,7 +77,7 @@ class AuditEntryFactory extends Factory
     {
         return $this->state([
             'actor_user_id' => $platformAdmin->getKey(),
-            'actor_role_code' => 'platform_super_admin',
+            'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $platformAdmin->name,
         ]);
     }

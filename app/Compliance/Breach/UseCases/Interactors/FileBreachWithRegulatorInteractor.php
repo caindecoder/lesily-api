@@ -80,7 +80,7 @@ class FileBreachWithRegulatorInteractor
             'action' => AuditAction::BreachFiledWithRegulator,
             'description' => 'Platform admin filed a data breach with the Data Protection Authority for a company that asked.',
             'actor_user_id' => $platformAdmin->getKey(),
-            'actor_role_code' => 'platform_super_admin',
+            'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),

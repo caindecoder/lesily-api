@@ -46,7 +46,7 @@ class RecordBreachInteractor
             'action' => AuditAction::BreachRecorded,
             'description' => 'Platform admin recorded a data breach.',
             'actor_user_id' => $platformAdmin->getKey(),
-            'actor_role_code' => 'platform_super_admin',
+            'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
