@@ -21,11 +21,11 @@ class ReviewDsarRequestQueueInteractor
     /**
      * The read and its audit row share one transaction — no read without its evidence.
      */
-    public function execute(ReviewDsarRequestQueueCommand $command, User $admin, RequestOrigin $context): DsarRequestQueue
+    public function execute(ReviewDsarRequestQueueCommand $command, User $platformAdmin, RequestOrigin $context): DsarRequestQueue
     {
         $now = CarbonImmutable::now();
 
-        return DB::transaction(function () use ($command, $now, $admin, $context): DsarRequestQueue {
+        return DB::transaction(function () use ($command, $now, $platformAdmin, $context): DsarRequestQueue {
             $page = $this->selectedBy($command, $now)
                 ->with(['company', 'subject', 'requestedBy'])
                 ->orderBy('sla_deadline')
@@ -35,7 +35,7 @@ class ReviewDsarRequestQueueInteractor
                 ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
             $counts = $this->countInProgress($this->selectedBy($command, $now), $now);
 
-            $this->recordQueueRead($this->queryContextOf($command, $page), $admin, $context);
+            $this->recordQueueRead($this->queryContextOf($command, $page), $platformAdmin, $context);
 
             return new DsarRequestQueue($page, ...$counts);
         });
@@ -121,16 +121,16 @@ class ReviewDsarRequestQueueInteractor
      *
      * @param  array<string, mixed>  $queryContext
      */
-    protected function recordQueueRead(array $queryContext, User $admin, RequestOrigin $context): void
+    protected function recordQueueRead(array $queryContext, User $platformAdmin, RequestOrigin $context): void
     {
         AuditEntry::query()->create([
             'event_class' => 'DsarRequestQueueViewed',
             'subject_type' => AuditSubjectType::DsarRequestQueue,
             'action' => AuditAction::DsarQueueViewed,
             'description' => 'Platform admin viewed a page of the DSAR request queue.',
-            'actor_user_id' => $admin->getKey(),
+            'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => 'platform_super_admin',
-            'actor_label' => $admin->name,
+            'actor_label' => $platformAdmin->name,
             'ip_address' => $context->ip,
             'user_agent' => $context->boundedUserAgent(),
             'request_id' => $context->boundedRequestId(),

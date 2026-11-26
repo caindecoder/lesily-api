@@ -20,7 +20,7 @@ use App\Foundation\RolesPermissions\Services\PlatformAdminAllowlist;
 
 class DsarNotificationReactor extends Reactor implements ShouldQueue
 {
-    public function __construct(private readonly PlatformAdminAllowlist $platformAdmins) {}
+    public function __construct(private readonly PlatformAdminAllowlist $platformAdminAllowlist) {}
 
     public function onDsarRequestFulfilled(DsarRequestFulfilled $event): void
     {
@@ -45,10 +45,10 @@ class DsarNotificationReactor extends Reactor implements ShouldQueue
     public function onDsarSlaBreached(DsarSlaBreached $event): void
     {
         $request = DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid());
-        $admins = User::query()->whereKey($this->platformAdmins->userIds())->get();
+        $platformAdmins = User::query()->whereKey($this->platformAdminAllowlist->userIds())->get();
 
-        if ($admins->isNotEmpty()) {
-            Notification::send($admins, $this->deadlineMissedAlert($request));
+        if ($platformAdmins->isNotEmpty()) {
+            Notification::send($platformAdmins, $this->deadlineMissedAlert($request));
         } else {
             report(new RuntimeException("No platform admin to alert about DSAR request {$request->getKey()}."));
         }

@@ -4783,12 +4783,6 @@ parameters:
 			path: ../../app/Foundation/Http/Middleware/EnsurePermission.php
 
 		-
-			message: '#^`PlatformAdminAllowlist \$platformAdmins` should be named `\$platformAdminAllowlist` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Http/Middleware/EnsurePlatformAdmin.php
-
-		-
 			message: '#^`AccessLogRecorder \$recorder` should be named `\$accessLogRecorder` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
