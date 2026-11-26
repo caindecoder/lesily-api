@@ -59,21 +59,21 @@ class VoidInvoiceTest extends BillingTestCase
         // Given a pending invoice and the admin correcting it
         $subscription = $this->subscriptionOf($this->company);
         $invoice = $this->anIssuedInvoiceFor($this->company, $subscription);
-        $admin = User::factory()->create();
+        $platformAdmin = User::factory()->create();
 
         // When the admin voids it as issued-in-error
         Invoice::retrieve($invoice->getKey())
-            ->void($this->voidInvoiceCommand($invoice, ['voidedBy' => $admin]))
+            ->void($this->voidInvoiceCommand($invoice, ['voidedBy' => $platformAdmin]))
             ->persist();
 
         // Then the void event is stored and the row reflects the terminal void
         $this->assertInvoiceEventRecorded(InvoiceVoided::class, $invoice->getKey(), [
-            'voidedBy' => $admin->getKey(),
+            'voidedBy' => $platformAdmin->getKey(),
             'source' => 'admin-correction',
         ]);
         $this->assertInvoiceRowState($invoice->getKey(), [
             'status' => 'voided',
-            'voided_by' => $admin->getKey(),
+            'voided_by' => $platformAdmin->getKey(),
             'void_reason' => 'Issued in error - admin correction.',
             'void_source' => 'admin-correction',
         ]);

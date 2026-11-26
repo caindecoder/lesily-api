@@ -67,11 +67,11 @@ class BreachIncidentCompanyFactory extends Factory
         return $this->state(['notified_at' => $at]);
     }
 
-    public function filed(string $ownerId, string $adminId): static
+    public function filed(string $ownerId, string $platformAdminId): static
     {
         return $this->filingRequested($ownerId)->state(fn (array $attributes): array => [
             'filed_at' => CarbonImmutable::parse($attributes['added_at'])->addDays(3),
-            'filed_by' => $adminId,
+            'filed_by' => $platformAdminId,
             'filed_body_hash' => hash('sha256', 'the regulator notice'),
         ]);
     }

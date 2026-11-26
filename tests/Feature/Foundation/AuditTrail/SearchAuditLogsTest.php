@@ -34,7 +34,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
 
     protected User $member;
 
-    protected User $staff;
+    protected User $platformAdmin;
 
     protected function setUp(): void
     {
@@ -43,7 +43,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
         $this->proCompany = Company::factory()->onPlan(BillingPlan::Pro)->createOne();
         $this->proOwner = $this->aCompanyMember($this->proCompany, 'owner');
         $this->member = User::factory()->createOne();
-        $this->staff = User::factory()->createOne();
+        $this->platformAdmin = User::factory()->createOne();
     }
 
     /**
@@ -205,7 +205,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
         $company = $standing(Company::factory())->createOne();
         $owner = $this->aCompanyMember($company, 'owner');
         $signIn = AccessLogEntry::factory()->forCompany($company)->byUser($this->member)->createOne();
-        AccessLogEntry::factory()->forCompany($company)->byUser($this->staff)->createOne();
+        AccessLogEntry::factory()->forCompany($company)->byUser($this->platformAdmin)->createOne();
 
         // When the owner searches by the member
         $response = $this->viewAuditLogs($owner, $company, ['user' => $this->member->getKey()]);
@@ -426,7 +426,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     {
         return AuditEntry::factory()
             ->forCompany($this->proCompany)
-            ->byStaff($this->staff)
+            ->byStaff($this->platformAdmin)
             ->ofAction(AuditAction::RoleChanged, AuditSubjectType::User)
             ->recordedAt(CarbonImmutable::parse('2026-11-10 12:00:00'));
     }
