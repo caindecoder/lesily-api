@@ -37,11 +37,11 @@ class GoogleAccountLinkedNotificationTest extends AuthTestCase
         $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor('alice@gmail.com'));
 
         // When the employee links that Google account
-        $response = $this->linkGoogle($this->employee);
+        $response = $this->linkGoogle($this->member);
 
         // Then the refusal sends them nothing
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::GoogleEmailMismatch);
-        Notification::assertNothingSentTo($this->employee);
+        Notification::assertNothingSentTo($this->member);
     }
 
     #[Test]
@@ -51,10 +51,10 @@ class GoogleAccountLinkedNotificationTest extends AuthTestCase
         $this->putOnPlan($this->company, BillingPlan::Starter);
         Notification::fake();
         Queue::fake();
-        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->employee->email));
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->member->email));
 
         // When the employee links that Google account
-        $response = $this->linkGoogle($this->employee);
+        $response = $this->linkGoogle($this->member);
 
         // Then the notice is deferred, and reaches them when the queue runs
         $this->assertReactorDeferred(UserGoogleOAuthLinked::class, SystemNotification::class);
@@ -68,10 +68,10 @@ class GoogleAccountLinkedNotificationTest extends AuthTestCase
         // Given the employee of Contoso on Starter, holding their own verified Google account
         $this->putOnPlan($this->company, BillingPlan::Starter);
         Notification::fake();
-        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->employee->email));
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->member->email));
 
         // When the employee links that Google account
-        $response = $this->linkGoogle($this->employee);
+        $response = $this->linkGoogle($this->member);
 
         // Then they get the Google-account-linked security notice
         $this->assertLinkedNoticeSent($response);
@@ -82,7 +82,7 @@ class GoogleAccountLinkedNotificationTest extends AuthTestCase
         $response->assertNoContent();
 
         Notification::assertSentTo(
-            $this->employee,
+            $this->member,
             SystemNotification::class,
             fn (SystemNotification $notification): bool => $notification->type === NotificationType::GoogleAccountLinked
                 && $notification->companyName === $this->company->name

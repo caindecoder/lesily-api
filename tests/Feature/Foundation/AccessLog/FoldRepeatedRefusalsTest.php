@@ -30,7 +30,7 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
         parent::setUp();
 
         $this->makeFreeTierCompany();
-        $this->people = ['alice' => $this->employee, 'bob' => $this->admin];
+        $this->people = ['alice' => $this->member, 'bob' => $this->admin];
         $this->companies = [
             'contoso' => $this->company,
             'globex' => Company::factory()->onPlan(BillingPlan::Free)->create(),

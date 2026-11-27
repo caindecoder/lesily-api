@@ -26,8 +26,8 @@ trait AssertsFilterEmptyValueRejection
             $filtersClass::validateAndCreate([$field => $value]);
 
             $this->fail("Expected ValidationException for {$field} => '{$value}'.");
-        } catch (ValidationException $exception) {
-            $this->assertArrayHasKey($field, $exception->errors());
+        } catch (ValidationException $validationException) {
+            $this->assertArrayHasKey($field, $validationException->errors());
         }
     }
 }

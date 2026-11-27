@@ -10,8 +10,8 @@ use App\Compliance\Breach\Events\BreachFiledWithRegulator;
 
 class BreachRegulatorFilingReactor extends Reactor implements ShouldQueue
 {
-    public function onBreachFiledWithRegulator(BreachFiledWithRegulator $event): void
+    public function onBreachFiledWithRegulator(BreachFiledWithRegulator $breachFiledWithRegulator): void
     {
-        Mail::to($event->regulatorAddress)->send(new BreachRegulatorNoticeMail($event->companyName, $event->part));
+        Mail::to($breachFiledWithRegulator->regulatorAddress)->send(new BreachRegulatorNoticeMail($breachFiledWithRegulator->companyName, $breachFiledWithRegulator->part));
     }
 }

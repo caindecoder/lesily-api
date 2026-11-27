@@ -47,11 +47,11 @@ class AcceptConsentTest extends MembershipsTestCase
         $this->withServerVariables(['REMOTE_ADDR' => '']);
 
         // When they accept the policies
-        $response = $this->acceptConsent($this->employee, $this->company);
+        $response = $this->acceptConsent($this->member, $this->company);
 
         // Then the accept is refused as invalid and the new version is not kept
         $this->assertValidationRejected($response, 'ip', 'The ip field is required.');
-        $this->assertDatabaseMissing('consent_records', ['user_id' => $this->employee->getKey(), 'version' => 'v1.1']);
+        $this->assertDatabaseMissing('consent_records', ['user_id' => $this->member->getKey(), 'version' => 'v1.1']);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
@@ -63,11 +63,11 @@ class AcceptConsentTest extends MembershipsTestCase
         $this->failTheAuditTrail();
 
         // When they accept the policies
-        $response = $this->acceptConsent($this->employee, $this->company);
+        $response = $this->acceptConsent($this->member, $this->company);
 
         // Then the request fails and the new version is neither kept nor stored
         $response->assertInternalServerError();
-        $this->assertDatabaseMissing('consent_records', ['user_id' => $this->employee->getKey(), 'version' => 'v1.1']);
+        $this->assertDatabaseMissing('consent_records', ['user_id' => $this->member->getKey(), 'version' => 'v1.1']);
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', ConsentRecorded::class)->where('event_properties->version', 'v1.1')->count());
     }
 
@@ -76,15 +76,15 @@ class AcceptConsentTest extends MembershipsTestCase
     {
         // Given a member of two companies facing a new privacy policy version
         $second = Company::factory()->create();
-        $this->attachMember($second, $this->employee, $this->seededRole('employee'));
+        $this->attachMember($second, $this->member, $this->seededRole('employee'));
         config(['lesily.policies.privacy' => 'v1.1']);
 
         // When they accept the policies for the first company
-        $this->acceptConsent($this->employee, $this->company);
+        $this->acceptConsent($this->member, $this->company);
 
         // Then the new version is kept for the first company only
-        $this->assertDatabaseHas('consent_records', ['user_id' => $this->employee->getKey(), 'company_id' => $this->company->getKey(), 'version' => 'v1.1']);
-        $this->assertDatabaseMissing('consent_records', ['user_id' => $this->employee->getKey(), 'company_id' => $second->getKey(), 'version' => 'v1.1']);
+        $this->assertDatabaseHas('consent_records', ['user_id' => $this->member->getKey(), 'company_id' => $this->company->getKey(), 'version' => 'v1.1']);
+        $this->assertDatabaseMissing('consent_records', ['user_id' => $this->member->getKey(), 'company_id' => $second->getKey(), 'version' => 'v1.1']);
         $this->assertDatabaseMissing('audit_trail', ['company_id' => $second->getKey()]);
     }
 
@@ -110,11 +110,11 @@ class AcceptConsentTest extends MembershipsTestCase
         $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.9']);
 
         // When they accept the policies
-        $response = $this->acceptConsent($this->employee, $this->company);
+        $response = $this->acceptConsent($this->member, $this->company);
 
         // Then both live versions are recorded for them in this company, with that address
         $response->assertNoContent();
-        $this->assertLiveConsentsRecorded($this->employee, $this->company, '203.0.113.9');
+        $this->assertLiveConsentsRecorded($this->member, $this->company, '203.0.113.9');
     }
 
     #[Test]
@@ -125,12 +125,12 @@ class AcceptConsentTest extends MembershipsTestCase
         $this->fromADevice();
 
         // When they accept the policies
-        $response = $this->acceptConsent($this->employee, $this->company);
+        $response = $this->acceptConsent($this->member, $this->company);
 
         // Then each policy they accepted is audited on its own row, as theirs
         $response->assertNoContent();
-        $this->assertConsentsAudited($response, $this->company, $this->employee);
-        $this->assertEveryRowCameFrom($response, $this->employee, 'employee');
+        $this->assertConsentsAudited($response, $this->company, $this->member);
+        $this->assertEveryRowCameFrom($response, $this->member, 'employee');
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 2);
     }
 }

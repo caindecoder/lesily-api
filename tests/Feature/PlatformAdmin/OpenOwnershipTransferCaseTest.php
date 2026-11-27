@@ -76,11 +76,11 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     public function when_the_proposed_incoming_owner_holds_only_a_removed_membership_then_the_case_is_refused(): void
     {
         // Given Contoso's employee, whose membership in the company was removed
-        $this->softDeleteMembership($this->company, $this->employee);
+        $this->softDeleteMembership($this->company, $this->member);
 
         // When the platform admin proposes them as the incoming owner
         $response = $this->openCase($this->platformAdmin, $this->validPayload([
-            'newOwnerUserId' => $this->employee->getKey(),
+            'newOwnerUserId' => $this->member->getKey(),
         ]));
 
         // Then the case is refused — an active member means a live pivot
@@ -143,14 +143,14 @@ class OpenOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given company Contoso and its employee, a live member proposed as incoming owner
         // When the platform admin opens the case naming the employee
         $response = $this->openCase($this->platformAdmin, $this->validPayload([
-            'newOwnerUserId' => $this->employee->getKey(),
+            'newOwnerUserId' => $this->member->getKey(),
         ]));
 
         // Then the case is on the record, exactly one audit row names the
         // platform admin, and nothing about the company changed
-        $this->assertCaseOpened($response, ['new_owner_user_id' => $this->employee->getKey()]);
+        $this->assertCaseOpened($response, ['new_owner_user_id' => $this->member->getKey()]);
         $this->assertCaseOpenAudited($this->platformAdmin, (string) $response->json('data.id'), $response);
-        $this->assertCompanyUntouched($this->company, $this->employee);
+        $this->assertCompanyUntouched($this->company, $this->member);
     }
 
     /**

@@ -32,9 +32,9 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
 
     protected User $platformAdmin;
 
-    protected Company $companyA;
+    protected Company $contosoCompany;
 
-    protected Company $companyB;
+    protected Company $otherCompany;
 
     protected ?string $idempotencyKey;
 
@@ -48,8 +48,8 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         Notification::fake();
 
         $this->platformAdmin = $this->aPlatformAdmin();
-        $this->companyA = $this->company;
-        $this->companyB = Company::factory()->create();
+        $this->contosoCompany = $this->company;
+        $this->otherCompany = Company::factory()->create();
         $this->idempotencyKey = (string) Str::uuid();
     }
 
@@ -116,10 +116,10 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         return new RegulatorFiling('Acme (Pvt) Ltd', 'dpa@regulator.test', ['count' => '40'], hash('sha256', 'the regulator notice'));
     }
 
-    protected function notifyCompanies(?User $caller, string $breachId): TestResponse
+    protected function notifyCompanies(?User $actor, string $breachId): TestResponse
     {
-        if ($caller !== null) {
-            Sanctum::actingAs($caller);
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
         }
 
         return $this->postJson("/api/v1/admin/breach-incidents/{$breachId}/notifications/companies");
@@ -137,17 +137,17 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         ];
     }
 
-    protected function aNoticeFor(BreachIncidentRecordFactory $incident, Company $company, CarbonImmutable $notifiedAt): BreachIncidentCompany
+    protected function aNoticeFor(BreachIncidentRecordFactory $breachIncidentRecordFactory, Company $company, CarbonImmutable $notifiedAt): BreachIncidentCompany
     {
         return BreachIncidentCompany::factory()
-            ->forIncident($incident->createOne(), $company)
+            ->forIncident($breachIncidentRecordFactory->createOne(), $company)
             ->notifiedAt($notifiedAt)
             ->createOne();
     }
 
-    protected function aPartFor(BreachIncidentRecord $incident, Company $company): BreachIncidentCompanyFactory
+    protected function aPartFor(BreachIncidentRecord $breachIncident, Company $company): BreachIncidentCompanyFactory
     {
-        return BreachIncidentCompany::factory()->forIncident($incident, $company);
+        return BreachIncidentCompany::factory()->forIncident($breachIncident, $company);
     }
 
     /**
@@ -168,10 +168,10 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         return $this->getJson("/api/v1/companies/{$company->getKey()}/breach-notices?".http_build_query($query));
     }
 
-    protected function requestFiling(?User $caller, Company $company, string $breachId): TestResponse
+    protected function requestFiling(?User $actor, Company $company, string $breachId): TestResponse
     {
-        if ($caller !== null) {
-            Sanctum::actingAs($caller);
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
         }
 
         return $this->postJson("/api/v1/companies/{$company->getKey()}/breach-notices/{$breachId}/filing-request");
@@ -184,10 +184,10 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         return $this->json('GET', "/api/v1/companies/{$company->getKey()}/breach-notices", $body);
     }
 
-    protected function recordBreach(?User $caller, array $body): TestResponse
+    protected function recordBreach(?User $actor, array $body): TestResponse
     {
-        if ($caller !== null) {
-            Sanctum::actingAs($caller);
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
         }
 
         $headers = $this->idempotencyKey === null ? [] : ['Idempotency-Key' => $this->idempotencyKey];
@@ -204,7 +204,7 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
             'dateDiscovered' => '2026-05-04T14:00:00Z',
             'severity' => 'high',
             'companies' => [
-                ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
+                ['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
             ],
             ...$overrides,
         ];
@@ -227,12 +227,12 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         $this->assertNotEmpty($companies);
 
         foreach ($companies as $companyId => [$dataTypes, $estimatedCount]) {
-            $row = BreachIncidentCompany::query()
+            $breachIncidentCompany = BreachIncidentCompany::query()
                 ->where('breach_incident_id', $breachId)
                 ->where('company_id', $companyId)
                 ->sole();
-            $this->assertSame([$dataTypes, $estimatedCount, $this->platformAdmin->getKey()], [$row->data_types, $row->estimated_count, $row->added_by]);
-            $this->assertTrue($row->added_at->equalTo(BreachIncidentRecord::query()->findOrFail($breachId)->recorded_at));
+            $this->assertSame([$dataTypes, $estimatedCount, $this->platformAdmin->getKey()], [$breachIncidentCompany->data_types, $breachIncidentCompany->estimated_count, $breachIncidentCompany->added_by]);
+            $this->assertTrue($breachIncidentCompany->added_at->equalTo(BreachIncidentRecord::query()->findOrFail($breachId)->recorded_at));
         }
     }
 
@@ -252,9 +252,9 @@ abstract class BreachIncidentsTestCase extends PlatformAdminTestCase
         return $this->aCompanyMember($company, 'owner');
     }
 
-    protected function aFactoryNotice(BreachIncidentRecordFactory $incident, Closure $state): BreachIncidentCompany
+    protected function aFactoryNotice(BreachIncidentRecordFactory $breachIncidentRecordFactory, Closure $state): BreachIncidentCompany
     {
-        return $state($this->aPartFor($incident->createOne(), $this->companyA))->createOne();
+        return $state($this->aPartFor($breachIncidentRecordFactory->createOne(), $this->contosoCompany))->createOne();
     }
 
     /**

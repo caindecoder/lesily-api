@@ -17,19 +17,19 @@ class BreachNoticeResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $breach = $this->resource->breach;
+        $breachIncident = $this->resource->breach;
         /** @var CarbonImmutable $notifiedAt the list holds notified rows only (whereNotified) */
         $notifiedAt = $this->resource->notified_at;
 
         return [
             'breach_id' => $this->resource->breach_incident_id,
             'company_name' => $this->resource->company->name,
-            'stage' => $breach->stage->value,
-            'description' => $breach->description,
-            'likely_consequences' => $breach->likely_consequences,
-            'measures' => $breach->measures,
-            'date_discovered' => $breach->date_discovered->toISOString(),
-            'deadline' => $breach->deadline->toISOString(),
+            'stage' => $breachIncident->stage->value,
+            'description' => $breachIncident->description,
+            'likely_consequences' => $breachIncident->likely_consequences,
+            'measures' => $breachIncident->measures,
+            'date_discovered' => $breachIncident->date_discovered->toISOString(),
+            'deadline' => $breachIncident->deadline->toISOString(),
             'data_types' => $this->resource->data_types,
             'estimated_count' => $this->resource->estimated_count,
             'notified_at' => $notifiedAt->toISOString(),

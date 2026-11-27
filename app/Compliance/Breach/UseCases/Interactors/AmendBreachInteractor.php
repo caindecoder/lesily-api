@@ -20,65 +20,65 @@ use App\Compliance\Breach\Exceptions\BreachAmendmentRefusedException;
 
 class AmendBreachInteractor
 {
-    public function execute(AmendBreachCommand $command, User $platformAdmin, RequestOrigin $context): BreachIncidentRecord
+    public function execute(AmendBreachCommand $amendBreachCommand, User $platformAdmin, RequestOrigin $requestOrigin): BreachIncidentRecord
     {
-        return DB::transaction(function () use ($command, $platformAdmin, $context): BreachIncidentRecord {
-            $breach = BreachIncidentRecord::query()->whereKey($command->breachId)->lockForUpdate()->first()
+        return DB::transaction(function () use ($amendBreachCommand, $platformAdmin, $requestOrigin): BreachIncidentRecord {
+            $breachIncident = BreachIncidentRecord::query()->whereKey($amendBreachCommand->breachId)->lockForUpdate()->first()
                 ?? throw new ModelNotFoundException;
 
-            $this->guardOpen($breach);
-            $this->guardDiscoveredBeforeRecording($breach, $command);
+            $this->guardOpen($breachIncident);
+            $this->guardDiscoveredBeforeRecording($breachIncident, $amendBreachCommand);
 
-            BreachIncident::retrieve($breach->getKey())->amend($command, $platformAdmin)->persist();
+            BreachIncident::retrieve($breachIncident->getKey())->amend($amendBreachCommand, $platformAdmin)->persist();
 
-            $this->recordAudit($breach, $platformAdmin, $context);
+            $this->recordAudit($breachIncident, $platformAdmin, $requestOrigin);
 
-            return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breach->getKey())->firstOrFail();
+            return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breachIncident->getKey())->firstOrFail();
         });
     }
 
-    protected function guardDiscoveredBeforeRecording(BreachIncidentRecord $breach, AmendBreachCommand $command): void
+    protected function guardDiscoveredBeforeRecording(BreachIncidentRecord $breachIncident, AmendBreachCommand $amendBreachCommand): void
     {
-        if ($command->dateDiscovered?->greaterThan($breach->recorded_at)) {
+        if ($amendBreachCommand->dateDiscovered?->greaterThan($breachIncident->recorded_at)) {
             throw ValidationException::withMessages(['dateDiscovered' => 'The date discovered cannot be later than when the incident was recorded.']);
         }
     }
 
-    protected function recordAudit(BreachIncidentRecord $breach, User $platformAdmin, RequestOrigin $context): void
+    protected function recordAudit(BreachIncidentRecord $breachIncident, User $platformAdmin, RequestOrigin $requestOrigin): void
     {
         AuditEntry::query()->create([
-            'stored_event_id' => $this->amendedEventIdFor($breach),
+            'stored_event_id' => $this->amendedEventIdFor($breachIncident),
             'event_class' => 'BreachAmended',
             'subject_type' => AuditSubjectType::BreachIncident,
-            'subject_id' => $breach->getKey(),
+            'subject_id' => $breachIncident->getKey(),
             'subject_label' => null,
             'action' => AuditAction::BreachAmended,
             'description' => 'Platform admin corrected a data breach record.',
             'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $platformAdmin->name,
-            'ip_address' => $context->ip,
-            'user_agent' => $context->boundedUserAgent(),
-            'request_id' => $context->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'metadata' => null,
             'severity' => 'critical',
             'recorded_at' => now(),
         ]);
     }
 
-    protected function amendedEventIdFor(BreachIncidentRecord $breach): int
+    protected function amendedEventIdFor(BreachIncidentRecord $breachIncident): int
     {
         return LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $breach->getKey())
+            ->where('aggregate_uuid', $breachIncident->getKey())
             ->where('event_class', BreachAmended::class)
             ->latest('id')
             ->firstOrFail()
             ->getKey();
     }
 
-    protected function guardOpen(BreachIncidentRecord $breach): void
+    protected function guardOpen(BreachIncidentRecord $breachIncident): void
     {
-        match ($breach->stage) {
+        match ($breachIncident->stage) {
             BreachStage::Resolved => throw BreachAmendmentRefusedException::incidentResolved(),
             BreachStage::FalseAlarm => throw BreachAmendmentRefusedException::falseAlarm(),
             BreachStage::Recorded, BreachStage::CompaniesNotified => null,

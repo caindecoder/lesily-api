@@ -30,9 +30,9 @@ class BreachRegulatorNoticeMail extends Mailable implements ShouldQueue
      * The filing stays recorded after the retries; the failure is reported for an
      * admin to resend by hand (UC-1-131 5a).
      */
-    public function failed(Throwable $exception): void
+    public function failed(Throwable $throwable): void
     {
-        report($exception);
+        report($throwable);
     }
 
     public function envelope(): Envelope

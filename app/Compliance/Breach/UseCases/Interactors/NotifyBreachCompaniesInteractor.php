@@ -21,56 +21,56 @@ use App\Compliance\Breach\UseCases\Commands\NotifyBreachCompaniesCommand;
 
 class NotifyBreachCompaniesInteractor
 {
-    public function __construct(protected BreachCompanyPartRenderer $renderer) {}
+    public function __construct(protected BreachCompanyPartRenderer $breachCompanyPartRenderer) {}
 
-    public function execute(NotifyBreachCompaniesCommand $command, User $platformAdmin, RequestOrigin $context): BreachIncidentRecord
+    public function execute(NotifyBreachCompaniesCommand $notifyBreachCompaniesCommand, User $platformAdmin, RequestOrigin $requestOrigin): BreachIncidentRecord
     {
-        return DB::transaction(function () use ($command, $platformAdmin, $context): BreachIncidentRecord {
-            $breach = BreachIncidentRecord::query()->with('companies')->whereKey($command->breachId)->lockForUpdate()->first()
+        return DB::transaction(function () use ($notifyBreachCompaniesCommand, $platformAdmin, $requestOrigin): BreachIncidentRecord {
+            $breachIncident = BreachIncidentRecord::query()->with('companies')->whereKey($notifyBreachCompaniesCommand->breachId)->lockForUpdate()->first()
                 ?? throw new ModelNotFoundException;
 
-            if ($breach->stage !== BreachStage::Recorded) {
-                throw new BreachIncidentNotRecordedException($breach->stage);
+            if ($breachIncident->stage !== BreachStage::Recorded) {
+                throw new BreachIncidentNotRecordedException($breachIncident->stage);
             }
 
-            $parts = $breach->companies->mapWithKeys(fn (BreachIncidentCompany $company): array => [
-                $company->company_id => $this->renderer->render($breach, $company),
+            $parts = $breachIncident->companies->mapWithKeys(fn (BreachIncidentCompany $breachIncidentCompany): array => [
+                $breachIncidentCompany->company_id => $this->breachCompanyPartRenderer->render($breachIncident, $breachIncidentCompany),
             ])->all();
 
-            BreachIncident::retrieve($breach->getKey())->notifyCompanies($platformAdmin, $parts)->persist();
+            BreachIncident::retrieve($breachIncident->getKey())->notifyCompanies($platformAdmin, $parts)->persist();
 
-            $this->recordAudit($breach, $platformAdmin, $context);
+            $this->recordAudit($breachIncident, $platformAdmin, $requestOrigin);
 
-            return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breach->getKey())->firstOrFail();
+            return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breachIncident->getKey())->firstOrFail();
         });
     }
 
-    protected function recordAudit(BreachIncidentRecord $breach, User $platformAdmin, RequestOrigin $context): void
+    protected function recordAudit(BreachIncidentRecord $breachIncident, User $platformAdmin, RequestOrigin $requestOrigin): void
     {
         AuditEntry::query()->create([
-            'stored_event_id' => $this->notifiedEventIdFor($breach),
+            'stored_event_id' => $this->notifiedEventIdFor($breachIncident),
             'event_class' => 'BreachCompaniesNotified',
             'subject_type' => AuditSubjectType::BreachIncident,
-            'subject_id' => $breach->getKey(),
+            'subject_id' => $breachIncident->getKey(),
             'subject_label' => null,
             'action' => AuditAction::BreachCompaniesNotified,
             'description' => 'Platform admin notified the companies affected by a data breach.',
             'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $platformAdmin->name,
-            'ip_address' => $context->ip,
-            'user_agent' => $context->boundedUserAgent(),
-            'request_id' => $context->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'metadata' => null,
             'severity' => 'critical',
             'recorded_at' => now(),
         ]);
     }
 
-    protected function notifiedEventIdFor(BreachIncidentRecord $breach): int
+    protected function notifiedEventIdFor(BreachIncidentRecord $breachIncident): int
     {
         return LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $breach->getKey())
+            ->where('aggregate_uuid', $breachIncident->getKey())
             ->where('event_class', BreachCompaniesNotified::class)
             ->sole()
             ->getKey();

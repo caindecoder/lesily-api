@@ -16,18 +16,18 @@ class BreachCompanyPartRenderer
      *
      * @return array<string, string>
      */
-    public function render(BreachIncidentRecord $incident, BreachIncidentCompany $company): array
+    public function render(BreachIncidentRecord $breachIncident, BreachIncidentCompany $breachIncidentCompany): array
     {
         return [
-            'discovered' => $incident->date_discovered->format(self::MOMENT_FORMAT).' UTC',
-            'deadline' => $incident->deadline->format(self::MOMENT_FORMAT).' UTC',
-            'description' => $incident->description,
-            'consequences' => $incident->likely_consequences,
-            'measures' => $incident->measures,
-            'data_types' => implode(', ', array_map(fn (string $type): string => __("notifications.breach_data_types.{$type}"), $company->data_types)),
-            'count' => $company->estimated_count === null
+            'discovered' => $breachIncident->date_discovered->format(self::MOMENT_FORMAT).' UTC',
+            'deadline' => $breachIncident->deadline->format(self::MOMENT_FORMAT).' UTC',
+            'description' => $breachIncident->description,
+            'consequences' => $breachIncident->likely_consequences,
+            'measures' => $breachIncident->measures,
+            'data_types' => implode(', ', array_map(fn (string $type): string => __("notifications.breach_data_types.{$type}"), $breachIncidentCompany->data_types)),
+            'count' => $breachIncidentCompany->estimated_count === null
                 ? __('notifications.breach_company_notice.count_not_known')
-                : (string) $company->estimated_count,
+                : (string) $breachIncidentCompany->estimated_count,
         ];
     }
 }

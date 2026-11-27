@@ -19,57 +19,57 @@ use App\Compliance\Breach\UseCases\Commands\MarkBreachFalseAlarmCommand;
 
 class MarkBreachFalseAlarmInteractor
 {
-    public function execute(MarkBreachFalseAlarmCommand $command, User $platformAdmin, RequestOrigin $context): BreachIncidentRecord
+    public function execute(MarkBreachFalseAlarmCommand $markBreachFalseAlarmCommand, User $platformAdmin, RequestOrigin $requestOrigin): BreachIncidentRecord
     {
-        return DB::transaction(function () use ($command, $platformAdmin, $context): BreachIncidentRecord {
-            $breach = BreachIncidentRecord::query()->whereKey($command->breachId)->lockForUpdate()->first()
+        return DB::transaction(function () use ($markBreachFalseAlarmCommand, $platformAdmin, $requestOrigin): BreachIncidentRecord {
+            $breachIncident = BreachIncidentRecord::query()->whereKey($markBreachFalseAlarmCommand->breachId)->lockForUpdate()->first()
                 ?? throw new ModelNotFoundException;
 
-            $this->guardOpen($breach);
+            $this->guardOpen($breachIncident);
 
-            BreachIncident::retrieve($breach->getKey())->markFalseAlarm($command, $platformAdmin)->persist();
+            BreachIncident::retrieve($breachIncident->getKey())->markFalseAlarm($markBreachFalseAlarmCommand, $platformAdmin)->persist();
 
-            $this->recordAudit($breach, $platformAdmin, $context);
+            $this->recordAudit($breachIncident, $platformAdmin, $requestOrigin);
 
-            return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breach->getKey())->firstOrFail();
+            return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breachIncident->getKey())->firstOrFail();
         });
     }
 
-    protected function guardOpen(BreachIncidentRecord $breach): void
+    protected function guardOpen(BreachIncidentRecord $breachIncident): void
     {
-        match ($breach->stage) {
+        match ($breachIncident->stage) {
             BreachStage::Resolved => throw BreachFalseAlarmRefusedException::incidentResolved(),
             BreachStage::FalseAlarm => throw BreachFalseAlarmRefusedException::alreadyMarked(),
             BreachStage::Recorded, BreachStage::CompaniesNotified => null,
         };
     }
 
-    protected function recordAudit(BreachIncidentRecord $breach, User $platformAdmin, RequestOrigin $context): void
+    protected function recordAudit(BreachIncidentRecord $breachIncident, User $platformAdmin, RequestOrigin $requestOrigin): void
     {
         AuditEntry::query()->create([
-            'stored_event_id' => $this->markedEventIdFor($breach),
+            'stored_event_id' => $this->markedEventIdFor($breachIncident),
             'event_class' => 'BreachMarkedFalseAlarm',
             'subject_type' => AuditSubjectType::BreachIncident,
-            'subject_id' => $breach->getKey(),
+            'subject_id' => $breachIncident->getKey(),
             'subject_label' => null,
             'action' => AuditAction::BreachMarkedFalseAlarm,
             'description' => 'Platform admin marked a data breach incident a false alarm.',
             'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $platformAdmin->name,
-            'ip_address' => $context->ip,
-            'user_agent' => $context->boundedUserAgent(),
-            'request_id' => $context->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'metadata' => null,
             'severity' => 'critical',
             'recorded_at' => now(),
         ]);
     }
 
-    protected function markedEventIdFor(BreachIncidentRecord $breach): int
+    protected function markedEventIdFor(BreachIncidentRecord $breachIncident): int
     {
         return LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $breach->getKey())
+            ->where('aggregate_uuid', $breachIncident->getKey())
             ->where('event_class', BreachMarkedFalseAlarm::class)
             ->sole()
             ->getKey();

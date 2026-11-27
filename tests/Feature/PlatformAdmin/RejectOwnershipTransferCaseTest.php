@@ -245,7 +245,7 @@ class RejectOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
     {
         // Given a VERIFIED case naming Contoso's employee, a live member — everything an
         // execute would need is present, yet reject must move nothing
-        $case = $this->aVerifiedCaseFor($this->company, $this->employee);
+        $case = $this->aVerifiedCaseFor($this->company, $this->member);
 
         // When the platform admin rejects it citing target ineligibility
         $response = $this->rejectCase($this->platformAdmin, $case->getKey(), [

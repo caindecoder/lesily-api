@@ -36,9 +36,9 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
 
     protected const string NOTIFIED_AT_JSON = '2026-05-05T14:00:00.000000Z';
 
-    protected Company $acme;
+    protected Company $acmeCompany;
 
-    protected Company $globex;
+    protected Company $globexCompany;
 
     /** @var list<User> */
     protected array $acmeMembers;
@@ -99,21 +99,21 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     public function when_the_incident_is_past_recorded_then_the_notify_is_refused_with_its_stage_named(string $stage): void
     {
         // Given an incident that has moved past Recorded
-        $incident = match ($stage) {
+        $breachIncidentRecordFactory = match ($stage) {
             'companies_notified' => $this->anIncident()->companiesNotified(),
             'resolved' => $this->anIncident()->resolved(),
             'false_alarm' => $this->anIncident()->falseAlarm(),
             default => $this->fail('Unknown stage: '.$stage),
         };
-        $incident = $incident->withCompany($this->companyA, ['pii'], 40)->createOne();
-        $before = $this->snapshotOf($incident->getKey());
+        $breachIncident = $breachIncidentRecordFactory->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
+        $before = $this->snapshotOf($breachIncident->getKey());
 
         // When the platform admin presses notify
-        $response = $this->notifyCompanies($this->platformAdmin, $incident->getKey());
+        $response = $this->notifyCompanies($this->platformAdmin, $breachIncident->getKey());
 
         // Then it is refused with its stage named, and the incident is left as it was
         $this->assertRefusedAt($response, $stage);
-        $this->assertIncidentUnchanged($incident, $before);
+        $this->assertIncidentUnchanged($breachIncident, $before);
     }
 
     /**
@@ -133,8 +133,8 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     {
         // Given a recorded incident naming companies A and B, and an audit trail that refuses every write
         $breachId = $this->aRecordedIncident(['companies' => [
-            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
-            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
+            ['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
+            ['companyId' => $this->otherCompany->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
         ]]);
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
 
@@ -183,7 +183,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     {
         // Given a recorded incident naming company A with no estimated count, and A's owner and admin
         $breachId = $this->aRecordedIncident(['companies' => [
-            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => null],
+            ['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => null],
         ]]);
 
         // When the platform admin presses notify and the notice leaves the queue
@@ -191,7 +191,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->runTheNotices();
 
         // Then A's notice says the number of people affected is not yet known
-        $this->assertToldOnceEach([$this->owner, $this->admin], $this->companyA, $this->partFor('Personal details', 'Not yet known'));
+        $this->assertToldOnceEach([$this->owner, $this->admin], $this->contosoCompany, $this->partFor('Personal details', 'Not yet known'));
     }
 
     #[Test]
@@ -202,17 +202,17 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $breachId = $this->aRecordedIncident();
         $toldMembers = [$this->owner, $this->admin, $this->aCompanyMember($this->company, 'admin')];
         foreach (['hr_officer', 'payroll_officer', 'employee'] as $role) {
-            $this->aCompanyMember($this->companyA, $role);
+            $this->aCompanyMember($this->contosoCompany, $role);
         }
-        $removedAdmin = $this->aCompanyMember($this->company, 'admin');
-        $this->softDeleteMembership($this->company, $removedAdmin);
+        $admin = $this->aCompanyMember($this->company, 'admin');
+        $this->softDeleteMembership($this->company, $admin);
 
         // When the platform admin presses notify and the notices leave the queue
         $this->notifyCompanies($this->platformAdmin, $breachId);
         $this->runTheNotices();
 
         // Then only the owner and the two current admins are told, once each
-        $this->assertToldExactly($toldMembers, $this->companyA);
+        $this->assertToldExactly($toldMembers, $this->contosoCompany);
     }
 
     #[Test]
@@ -232,21 +232,21 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
 
     protected function anIncidentNamingAcmeAndGlobex(): string
     {
-        $this->acme = Company::factory()->named('Acme Holdings')->createOne();
-        $this->globex = Company::factory()->named('Globex Traders')->createOne();
-        $this->acmeMembers = [$this->aCompanyMember($this->acme, 'owner'), $this->aCompanyMember($this->acme, 'admin')];
-        $this->globexMembers = [$this->aCompanyMember($this->globex, 'owner'), $this->aCompanyMember($this->globex, 'admin')];
+        $this->acmeCompany = Company::factory()->named('Acme Holdings')->createOne();
+        $this->globexCompany = Company::factory()->named('Globex Traders')->createOne();
+        $this->acmeMembers = [$this->aCompanyMember($this->acmeCompany, 'owner'), $this->aCompanyMember($this->acmeCompany, 'admin')];
+        $this->globexMembers = [$this->aCompanyMember($this->globexCompany, 'owner'), $this->aCompanyMember($this->globexCompany, 'admin')];
 
         return $this->aRecordedIncident(['companies' => [
-            ['companyId' => $this->acme->getKey(), 'dataTypes' => ['pii', 'banking'], 'estimatedCount' => 120],
-            ['companyId' => $this->globex->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 30],
+            ['companyId' => $this->acmeCompany->getKey(), 'dataTypes' => ['pii', 'banking'], 'estimatedCount' => 120],
+            ['companyId' => $this->globexCompany->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 30],
         ]]);
     }
 
     protected function assertAcmeAndGlobexToldTheirOwnParts(): void
     {
-        $this->assertToldOnceEach($this->acmeMembers, $this->acme, $this->partFor('Personal details, Bank details', '120'));
-        $this->assertToldOnceEach($this->globexMembers, $this->globex, $this->partFor('Payroll records', '30'));
+        $this->assertToldOnceEach($this->acmeMembers, $this->acmeCompany, $this->partFor('Personal details, Bank details', '120'));
+        $this->assertToldOnceEach($this->globexMembers, $this->globexCompany, $this->partFor('Payroll records', '30'));
         Notification::assertCount(4);
     }
 
@@ -297,8 +297,8 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     {
         // Given a recorded incident naming company A (an owner and an admin) and company B (no members)
         $breachId = $this->aRecordedIncident(['companies' => [
-            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
-            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
+            ['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
+            ['companyId' => $this->otherCompany->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
         ]]);
         $toldMembers = [$this->owner, $this->admin];
         Exceptions::fake();
@@ -308,8 +308,8 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->runTheNotices();
 
         // Then B's missing recipients are reported and A's owner and admin are still told
-        Exceptions::assertReported(fn (RuntimeException $gap): bool => $gap->getMessage() === "No owner or admin of company {$this->companyB->getKey()} to tell about breach incident {$breachId}.");
-        $this->assertToldExactly($toldMembers, $this->companyA);
+        Exceptions::assertReported(fn (RuntimeException $runtimeException): bool => $runtimeException->getMessage() === "No owner or admin of company {$this->otherCompany->getKey()} to tell about breach incident {$breachId}.");
+        $this->assertToldExactly($toldMembers, $this->contosoCompany);
     }
 
     #[Test]
@@ -318,7 +318,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     {
         // Given a recorded incident naming company A with one data type, and A's owner and admin
         $breachId = $this->aRecordedIncident(['companies' => [
-            ['companyId' => $this->companyA->getKey(), 'dataTypes' => [$dataType], 'estimatedCount' => 40],
+            ['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => [$dataType], 'estimatedCount' => 40],
         ]]);
 
         // When the platform admin presses notify and the notice leaves the queue
@@ -326,7 +326,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->runTheNotices();
 
         // Then the notice names that data type in words
-        $this->assertToldOnceEach([$this->owner, $this->admin], $this->companyA, $this->partFor($words, '40'));
+        $this->assertToldOnceEach([$this->owner, $this->admin], $this->contosoCompany, $this->partFor($words, '40'));
     }
 
     /**
@@ -345,7 +345,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         ];
 
         return collect(BreachDataType::cases())
-            ->mapWithKeys(fn (BreachDataType $type): array => [$type->value => [$type->value, $words[$type->value]]])
+            ->mapWithKeys(fn (BreachDataType $breachDataType): array => [$breachDataType->value => [$breachDataType->value, $words[$breachDataType->value]]])
             ->all();
     }
 
@@ -370,32 +370,32 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
 
     protected function assertNotificationsStored(string $breachId): int
     {
-        $events = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->orderBy('id')->get();
+        $eloquentStoredEvents = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->orderBy('id')->get();
         $this->assertSame(
             [BreachRecorded::class, BreachCompanyNotified::class, BreachCompanyNotified::class, BreachCompaniesNotified::class],
-            $events->pluck('event_class')->all(),
+            $eloquentStoredEvents->pluck('event_class')->all(),
         );
 
-        $parts = $events->where('event_class', BreachCompanyNotified::class)
-            ->mapWithKeys(fn (EloquentStoredEvent $event): array => [$event->event_properties['companyId'] => [
-                $event->event_properties['notifiedByUserId'],
-                CarbonImmutable::parse($event->event_properties['notifiedAt'])->toIso8601String(),
-                $event->event_properties['part'],
+        $parts = $eloquentStoredEvents->where('event_class', BreachCompanyNotified::class)
+            ->mapWithKeys(fn (EloquentStoredEvent $eloquentStoredEvent): array => [$eloquentStoredEvent->event_properties['companyId'] => [
+                $eloquentStoredEvent->event_properties['notifiedByUserId'],
+                CarbonImmutable::parse($eloquentStoredEvent->event_properties['notifiedAt'])->toIso8601String(),
+                $eloquentStoredEvent->event_properties['part'],
             ]])->all();
         $notifiedAt = CarbonImmutable::parse(self::NOTIFIED_AT)->toIso8601String();
         $this->assertEquals([
-            $this->acme->getKey() => [$this->platformAdmin->getKey(), $notifiedAt, $this->partFor('Personal details, Bank details', '120')],
-            $this->globex->getKey() => [$this->platformAdmin->getKey(), $notifiedAt, $this->partFor('Payroll records', '30')],
+            $this->acmeCompany->getKey() => [$this->platformAdmin->getKey(), $notifiedAt, $this->partFor('Personal details, Bank details', '120')],
+            $this->globexCompany->getKey() => [$this->platformAdmin->getKey(), $notifiedAt, $this->partFor('Payroll records', '30')],
         ], $parts);
 
-        $closing = $events->last();
-        $this->assertInstanceOf(LesilyStoredEvent::class, $closing);
+        $closingEloquentStoredEvent = $eloquentStoredEvents->last();
+        $this->assertInstanceOf(LesilyStoredEvent::class, $closingEloquentStoredEvent);
         $this->assertSame([$this->platformAdmin->getKey(), $notifiedAt], [
-            $closing->event_properties['notifiedByUserId'],
-            CarbonImmutable::parse($closing->event_properties['notifiedAt'])->toIso8601String(),
+            $closingEloquentStoredEvent->event_properties['notifiedByUserId'],
+            CarbonImmutable::parse($closingEloquentStoredEvent->event_properties['notifiedAt'])->toIso8601String(),
         ]);
 
-        return (int) $closing->getKey();
+        return (int) $closingEloquentStoredEvent->getKey();
     }
 
     protected function assertNotifyAudited(TestResponse $response, string $breachId, int $storedEventId): void
@@ -421,8 +421,8 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
-        $this->assertSame('Symfony', $entry->user_agent);
+        $auditEntry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $this->assertSame('Symfony', $auditEntry->user_agent);
     }
 
     /**
@@ -450,10 +450,10 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->assertNotEmpty($recipients);
         foreach ($recipients as $recipient) {
             Notification::assertSentToTimes($recipient, SystemNotification::class, 1);
-            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->type === NotificationType::BreachCompanyNotice
-                && $notice->companyName === $company->name
-                && $notice->companyId === $company->getKey()
-                && $notice->details === $part);
+            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::BreachCompanyNotice
+                && $systemNotification->companyName === $company->name
+                && $systemNotification->companyId === $company->getKey()
+                && $systemNotification->details === $part);
         }
     }
 
@@ -465,9 +465,9 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->assertNotEmpty($recipients);
         foreach ($recipients as $recipient) {
             Notification::assertSentToTimes($recipient, SystemNotification::class, 1);
-            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->type === NotificationType::BreachCompanyNotice
-                && $notice->companyName === $company->name
-                && $notice->companyId === $company->getKey());
+            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::BreachCompanyNotice
+                && $systemNotification->companyName === $company->name
+                && $systemNotification->companyId === $company->getKey());
         }
         Notification::assertCount(count($recipients));
     }
@@ -486,10 +486,10 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
             ...array_column($response->json('data.companies'), 'notified_at'),
         ])));
 
-        $incident = BreachIncidentRecord::query()->with('companies')->findOrFail($breachId);
-        $this->assertSame(BreachStage::CompaniesNotified, $incident->stage);
-        $this->assertNotEmpty($incident->companies);
-        foreach ([$incident->companies_notified_at, ...$incident->companies->pluck('notified_at')] as $stamp) {
+        $breachIncident = BreachIncidentRecord::query()->with('companies')->findOrFail($breachId);
+        $this->assertSame(BreachStage::CompaniesNotified, $breachIncident->stage);
+        $this->assertNotEmpty($breachIncident->companies);
+        foreach ([$breachIncident->companies_notified_at, ...$breachIncident->companies->pluck('notified_at')] as $stamp) {
             $this->assertTrue(CarbonImmutable::parse(self::NOTIFIED_AT)->equalTo($stamp));
         }
     }
@@ -503,10 +503,10 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     /**
      * @param  array{0: array<string, mixed>, 1: array<int, array<string, mixed>>}  $before
      */
-    protected function assertIncidentUnchanged(BreachIncidentRecord $incident, array $before): void
+    protected function assertIncidentUnchanged(BreachIncidentRecord $breachIncident, array $before): void
     {
-        $this->assertSame($before, $this->snapshotOf($incident->getKey()));
-        $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $incident->getKey())->count());
+        $this->assertSame($before, $this->snapshotOf($breachIncident->getKey()));
+        $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $breachIncident->getKey())->count());
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
         $this->assertNoHandlersQueuedFor(BreachCompanyNotified::class);
     }
@@ -519,13 +519,13 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
 
     protected function assertStillRecorded(string $breachId): void
     {
-        $incident = BreachIncidentRecord::query()->whereKey($breachId)->firstOrFail();
+        $breachIncident = BreachIncidentRecord::query()->whereKey($breachId)->firstOrFail();
 
         $this->assertSame(0, LesilyStoredEvent::query()
             ->where('aggregate_uuid', $breachId)
             ->where('event_class', '!=', BreachRecorded::class)
             ->count());
-        $this->assertNull($incident->companies_notified_at);
+        $this->assertNull($breachIncident->companies_notified_at);
         $this->assertSame(0, BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->whereNotNull('notified_at')->count());
     }
 }

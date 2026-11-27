@@ -49,7 +49,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     public function when_an_unauthenticated_caller_resolves_then_it_is_refused_as_unauthenticated(): void
     {
         // Given an incident whose companies A and B have been notified, its deadline passed
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
 
@@ -65,7 +65,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     public function when_a_company_owner_resolves_then_the_admin_surface_is_not_acknowledged(): void
     {
         // Given an incident whose companies A and B have been notified, its deadline passed, and company A's owner
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
 
@@ -95,7 +95,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     public function when_the_resolution_is_invalid_then_it_is_refused_and_nothing_is_recorded(array $override, string $field, string $message): void
     {
         // Given an incident whose company A has been notified, its deadline passed
-        $breachId = $this->aNotifiedIncident($this->companyA);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany);
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
 
@@ -127,7 +127,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     public function when_the_deadline_has_not_passed_then_the_close_is_refused(): void
     {
         // Given an incident at companies_notified discovered at 2026-05-04 14:00 UTC with no filing request
-        $breachId = $this->aNotifiedIncident($this->companyA);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany);
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse('2026-05-07T13:59:59Z'));
 
@@ -144,8 +144,8 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     {
         // Given an incident at companies_notified past its deadline affecting companies A and B,
         // and company A's owner asked for a filing Lesily has not sent
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
-        $this->aFilingRequestBy($this->companyA, $breachId);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
+        $this->aFilingRequestBy($this->contosoCompany, $breachId);
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
 
@@ -162,9 +162,9 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     {
         // Given an incident at companies_notified past its deadline affecting company A, with company B
         // added late, and company B's owner asked for a filing Lesily has not sent
-        $breachId = $this->aNotifiedIncident($this->companyA);
-        $this->aLateCompanyOn($breachId, $this->companyB);
-        $this->aFilingRequestBy($this->companyB, $breachId);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany);
+        $this->aLateCompanyOn($breachId, $this->otherCompany);
+        $this->aFilingRequestBy($this->otherCompany, $breachId);
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
 
@@ -196,7 +196,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     public function when_an_incident_already_resolved_is_resolved_again_then_it_is_refused_and_recorded_once(): void
     {
         // Given an incident company A was notified of, already resolved by the platform admin after its deadline
-        $breachId = $this->aNotifiedIncident($this->companyA);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
         $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
         $before = $this->snapshotOf($breachId);
@@ -215,7 +215,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     public function when_the_audit_row_cannot_be_written_then_nothing_is_resolved(): void
     {
         // Given an incident at companies_notified past its deadline, and an audit trail that refuses every write
-        $breachId = $this->aNotifiedIncident($this->companyA);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany);
         $before = $this->snapshotOf($breachId);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
@@ -232,7 +232,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     public function when_resolved_exactly_at_the_deadline_then_the_incident_is_resolved(): void
     {
         // Given an incident at companies_notified discovered at 2026-05-04 14:00 UTC with no filing request
-        $breachId = $this->aNotifiedIncident($this->companyA);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany);
         $this->travelTo(CarbonImmutable::parse('2026-05-07T14:00:00Z'));
 
         // When the platform admin resolves it at the moment its deadline is reached
@@ -247,7 +247,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     public function when_every_fact_is_at_its_longest_then_the_incident_is_resolved(): void
     {
         // Given an incident at companies_notified past its deadline
-        $breachId = $this->aNotifiedIncident($this->companyA);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
         $longest = [str_repeat('r', 1000), str_repeat('s', 1000), str_repeat('t', 1000)];
 
@@ -256,8 +256,8 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
 
         // Then the incident is resolved with every fact kept whole
         $response->assertOk();
-        $row = BreachIncidentRecord::query()->findOrFail($breachId);
-        $this->assertSame($longest, [$row->root_cause, $row->remediation_steps, $row->resolution_summary]);
+        $breachIncident = BreachIncidentRecord::query()->findOrFail($breachId);
+        $this->assertSame($longest, [$breachIncident->root_cause, $breachIncident->remediation_steps, $breachIncident->resolution_summary]);
     }
 
     #[Test]
@@ -266,10 +266,10 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         // Given a critical incident at companies_notified whose deadline passed an hour ago, company A's filing request sent
         $breachId = $this->aRecordedIncident(['severity' => 'critical']);
         BreachIncident::retrieve($breachId)->notifyCompanies($this->platformAdmin, [
-            $this->companyA->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.'],
+            $this->contosoCompany->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.'],
         ])->persist();
-        $this->aFilingRequestBy($this->companyA, $breachId);
-        $this->fileFor($this->companyA, $breachId);
+        $this->aFilingRequestBy($this->contosoCompany, $breachId);
+        $this->fileFor($this->contosoCompany, $breachId);
         $this->travelTo(CarbonImmutable::parse('2026-05-07T15:00:00Z'));
 
         // When the platform admin resolves it
@@ -284,12 +284,12 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     public function when_an_incident_is_resolved_then_its_companies_see_it_resolved_in_their_list(): void
     {
         // Given an incident company A was notified of, resolved by the platform admin after its deadline, and company A's owner
-        $breachId = $this->aNotifiedIncident($this->companyA);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
         $this->resolve($this->platformAdmin, $breachId, $this->aResolution());
 
         // When company A's owner lists its breach notices
-        $response = $this->listNotices($this->owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->contosoCompany);
 
         // Then the list shows the incident resolved
         $response->assertOk();
@@ -303,8 +303,8 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     public function when_the_body_names_another_incident_then_the_incident_in_the_address_is_resolved(): void
     {
         // Given two incidents company A was notified of, both past their deadline
-        $addressed = $this->aNotifiedIncident($this->companyA);
-        $other = $this->aNotifiedIncident($this->companyA);
+        $addressed = $this->aNotifiedIncident($this->contosoCompany);
+        $other = $this->aNotifiedIncident($this->contosoCompany);
         $otherBefore = $this->snapshotOf($other);
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
 
@@ -322,9 +322,9 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     {
         // Given an incident at companies_notified affecting companies A and B, its deadline passed;
         // company A's owner asked for a filing and Lesily filed for A; company B did not ask
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
-        $this->aFilingRequestBy($this->companyA, $breachId);
-        $this->fileFor($this->companyA, $breachId);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
+        $this->aFilingRequestBy($this->contosoCompany, $breachId);
+        $this->fileFor($this->contosoCompany, $breachId);
         Notification::fake();
         Mail::fake();
         $this->travelTo(CarbonImmutable::parse(self::PAST_THE_DEADLINE));
@@ -344,8 +344,8 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     public static function provideClosedStages(): array
     {
         return [
-            'resolved' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->resolved(), 'A resolved breach incident cannot be resolved again.'],
-            'a false alarm' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->falseAlarm(), 'A breach incident marked as a false alarm cannot be resolved.'],
+            'resolved' => [fn (BreachIncidentRecordFactory $breachIncidentRecordFactory): BreachIncidentRecordFactory => $breachIncidentRecordFactory->resolved(), 'A resolved breach incident cannot be resolved again.'],
+            'a false alarm' => [fn (BreachIncidentRecordFactory $breachIncidentRecordFactory): BreachIncidentRecordFactory => $breachIncidentRecordFactory->falseAlarm(), 'A breach incident marked as a false alarm cannot be resolved.'],
         ];
     }
 
@@ -364,10 +364,10 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         ];
     }
 
-    protected function resolve(?User $caller, string $breachId, array $body): TestResponse
+    protected function resolve(?User $actor, string $breachId, array $body): TestResponse
     {
-        if ($caller !== null) {
-            Sanctum::actingAs($caller);
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
         }
 
         return $this->patchJson("/api/v1/admin/breach-incidents/{$breachId}/resolve", $body);
@@ -385,7 +385,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
 
     protected function aLateCompanyOn(string $breachId, Company $company): void
     {
-        $command = AddBreachCompanyCommand::from([
+        $addBreachCompanyCommand = AddBreachCompanyCommand::from([
             'breachId' => $breachId,
             'companyId' => $company,
             'dataTypes' => ['payroll'],
@@ -394,7 +394,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         ]);
 
         BreachIncident::retrieve($breachId)
-            ->addLateCompany($command, $this->platformAdmin, ['description' => 'A payroll export was emailed to the wrong recipient.'])
+            ->addLateCompany($addBreachCompanyCommand, $this->platformAdmin, ['description' => 'A payroll export was emailed to the wrong recipient.'])
             ->persist();
     }
 
@@ -423,26 +423,26 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
 
     protected function assertResolutionStored(string $breachId): int
     {
-        $resolved = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->latest('id')->firstOrFail();
-        $this->assertSame(BreachResolved::class, $resolved->event_class);
+        $resolvedEloquentStoredEvent = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->latest('id')->firstOrFail();
+        $this->assertSame(BreachResolved::class, $resolvedEloquentStoredEvent->event_class);
         $this->assertSame([$breachId, self::ROOT_CAUSE, self::REMEDIATION, self::SUMMARY, $this->platformAdmin->getKey(), self::RESOLVED_AT_ISO], [
-            $resolved->event_properties['breachId'],
-            $resolved->event_properties['rootCause'],
-            $resolved->event_properties['remediationSteps'],
-            $resolved->event_properties['summary'],
-            $resolved->event_properties['resolvedByUserId'],
-            CarbonImmutable::parse($resolved->event_properties['resolvedAt'])->toIso8601String(),
+            $resolvedEloquentStoredEvent->event_properties['breachId'],
+            $resolvedEloquentStoredEvent->event_properties['rootCause'],
+            $resolvedEloquentStoredEvent->event_properties['remediationSteps'],
+            $resolvedEloquentStoredEvent->event_properties['summary'],
+            $resolvedEloquentStoredEvent->event_properties['resolvedByUserId'],
+            CarbonImmutable::parse($resolvedEloquentStoredEvent->event_properties['resolvedAt'])->toIso8601String(),
         ]);
 
-        return (int) $resolved->getKey();
+        return (int) $resolvedEloquentStoredEvent->getKey();
     }
 
     protected function assertResolutionProjected(string $breachId): void
     {
-        $row = BreachIncidentRecord::query()->findOrFail($breachId);
+        $breachIncident = BreachIncidentRecord::query()->findOrFail($breachId);
         $this->assertSame(
             [BreachStage::Resolved, self::ROOT_CAUSE, self::REMEDIATION, self::SUMMARY, $this->platformAdmin->getKey(), self::RESOLVED_AT_ISO],
-            [$row->stage, $row->root_cause, $row->remediation_steps, $row->resolution_summary, $row->resolved_by, $row->resolved_at?->toIso8601String()],
+            [$breachIncident->stage, $breachIncident->root_cause, $breachIncident->remediation_steps, $breachIncident->resolution_summary, $breachIncident->resolved_by, $breachIncident->resolved_at?->toIso8601String()],
         );
     }
 
@@ -469,8 +469,8 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
-        $this->assertSame('Symfony', $entry->user_agent);
+        $auditEntry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $this->assertSame('Symfony', $auditEntry->user_agent);
     }
 
     protected function assertNobodyTold(): void

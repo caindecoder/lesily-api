@@ -45,7 +45,7 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         config(['lesily.policies.privacy' => 'v1.1']);
 
         // When they view the privacy notice
-        $response = $this->viewNotice($this->employee, $this->company);
+        $response = $this->viewNotice($this->member, $this->company);
 
         // Then they still read all thirteen items
         $this->assertThirteenItemsInOrder($response);
@@ -134,7 +134,7 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         $this->owner->update(['name' => 'Asha Perera', 'email' => 'asha@contoso.lk']);
 
         // When they view the privacy notice
-        $response = $this->viewNotice($this->employee, $this->company);
+        $response = $this->viewNotice($this->member, $this->company);
 
         // Then item 1 names Contoso, its BR number and country, with Asha Perera as the contact
         // And item 2 says no data protection officer is designated
@@ -148,7 +148,7 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         CompanyDataProtectionOfficer::factory()->for($this->company)->create();
 
         // When the employee views the privacy notice
-        $response = $this->viewNotice($this->employee, $this->company);
+        $response = $this->viewNotice($this->member, $this->company);
 
         // Then item 2 gives Nimal Silva's name, email and phone as the contact
         $this->assertDpoItem($response, 'Contact: Nimal Silva, dpo@contoso.lk, +94771234567');
@@ -160,7 +160,7 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         // Given an employee of Contoso
 
         // When they view the privacy notice
-        $response = $this->viewNotice($this->employee, $this->company);
+        $response = $this->viewNotice($this->member, $this->company);
 
         // Then the purposes, legitimate interests and retention items name every Foundation activity
         $this->assertActivityItems($response);
@@ -174,7 +174,7 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
         // Given an employee of Contoso
 
         // When they view the privacy notice
-        $response = $this->viewNotice($this->employee, $this->company);
+        $response = $this->viewNotice($this->member, $this->company);
 
         // Then the consent, rights and complaint items carry the drafted wording
         $this->assertRightsItems($response);

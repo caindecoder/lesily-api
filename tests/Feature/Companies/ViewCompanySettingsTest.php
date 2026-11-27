@@ -49,7 +49,7 @@ class ViewCompanySettingsTest extends CompaniesTestCase
         $companyB = Company::factory()->withSettings()->create();
 
         // When they request company B's settings
-        $response = $this->viewCompanySettings($this->employee, $companyB->getKey());
+        $response = $this->viewCompanySettings($this->member, $companyB->getKey());
 
         // Then company access is denied
         $this->assertCompanyAccessDenied($response);
@@ -62,7 +62,7 @@ class ViewCompanySettingsTest extends CompaniesTestCase
         // Given a member of a real company
 
         // When they request the settings of an unknown company id
-        $response = $this->viewCompanySettings($this->employee, $companyId);
+        $response = $this->viewCompanySettings($this->member, $companyId);
 
         // Then the resource is not found
         $this->assertResourceNotFound($response);
@@ -131,7 +131,7 @@ class ViewCompanySettingsTest extends CompaniesTestCase
         // Given an employee of a new Sri Lankan company that chose no own values
 
         // When they view the company's settings
-        $response = $this->viewCompanySettings($this->employee, $this->company->getKey());
+        $response = $this->viewCompanySettings($this->member, $this->company->getKey());
 
         // Then every setting follows Sri Lanka's default
         $response->assertExactJson(['data' => [

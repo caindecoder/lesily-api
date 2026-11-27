@@ -29,10 +29,10 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     public function when_a_guest_lists_breach_notices_then_they_are_unauthenticated(): void
     {
         // Given company A was notified of a breach
-        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, now()->toImmutable());
+        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, now()->toImmutable());
 
         // When a caller with no token lists company A's breach notices
-        $response = $this->listNotices(null, $this->companyA);
+        $response = $this->listNotices(null, $this->contosoCompany);
 
         // Then they are refused as unauthenticated and no notice is shown
         $this->assertUnauthenticated($response);
@@ -44,11 +44,11 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     public function when_a_member_without_the_view_permission_lists_then_the_role_is_insufficient(string $roleCode): void
     {
         // Given company A was notified of a breach, and a member of A whose role cannot view breach notices
-        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, now()->toImmutable());
+        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, now()->toImmutable());
         $member = $this->memberWithRole($roleCode);
 
         // When the member lists company A's breach notices
-        $response = $this->listNotices($member, $this->companyA);
+        $response = $this->listNotices($member, $this->contosoCompany);
 
         // Then the role is refused and no notice is shown
         $this->assertRoleInsufficient($response, 'breach.view-notices');
@@ -59,11 +59,11 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     public function when_a_member_of_another_company_lists_then_company_access_is_denied(): void
     {
         // Given company A was notified of a breach, and the owner of company B
-        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, now()->toImmutable());
-        $outsider = $this->aCompanyMember($this->companyB, 'owner');
+        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, now()->toImmutable());
+        $actor = $this->aCompanyMember($this->otherCompany, 'owner');
 
         // When B's owner lists company A's breach notices
-        $response = $this->listNotices($outsider, $this->companyA);
+        $response = $this->listNotices($actor, $this->contosoCompany);
 
         // Then access to company A is denied and no notice is shown
         $this->assertCompanyAccessDenied($response);
@@ -74,11 +74,11 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     public function when_a_member_owes_a_new_policy_version_then_consent_is_required(): void
     {
         // Given company A was notified of a breach, and A's owner accepted the policies before a new privacy policy version
-        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, now()->toImmutable());
+        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, now()->toImmutable());
         config(['lesily.policies.privacy' => 'v1.1']);
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($this->owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->contosoCompany);
 
         // Then the list is refused until they accept, and no notice is shown
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::ConsentRequired);
@@ -95,7 +95,7 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         // Given company A's owner
 
         // When the owner lists company A's breach notices with an invalid query
-        $response = $this->listNotices($this->owner, $this->companyA, $query);
+        $response = $this->listNotices($this->owner, $this->contosoCompany, $query);
 
         // Then the query is refused with the reason
         $this->assertValidationRejected($response, $field, $message);
@@ -115,11 +115,11 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     public function when_the_company_is_on_no_incident_then_the_list_is_empty(): void
     {
         // Given an incident that notified company A only, and the owner of company B
-        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, now()->toImmutable());
-        $owner = $this->aCompanyMember($this->companyB, 'owner');
+        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, now()->toImmutable());
+        $owner = $this->aCompanyMember($this->otherCompany, 'owner');
 
         // When B's owner lists company B's breach notices
-        $response = $this->listNotices($owner, $this->companyB);
+        $response = $this->listNotices($owner, $this->otherCompany);
 
         // Then the list is empty
         $this->assertNothingListed($response);
@@ -130,10 +130,10 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     public function when_the_company_has_not_been_told_of_an_incident_then_it_is_not_listed(Closure $atStage): void
     {
         // Given an incident naming company A that never reached its notices, and A's owner
-        $atStage($this->anIncident())->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $atStage($this->anIncident())->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($this->owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->contosoCompany);
 
         // Then the incident is not listed
         $this->assertNothingListed($response);
@@ -144,29 +144,29 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     {
         // Given two notices to company A sent at the same instant, and A's owner
         $sentAt = CarbonImmutable::parse('2026-05-05 09:00:00');
-        $first = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, $sentAt);
-        $second = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, $sentAt);
+        $firstBreachIncidentCompany = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, $sentAt);
+        $secondBreachIncidentCompany = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, $sentAt);
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($this->owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->contosoCompany);
 
         // Then the later row comes first
-        $this->assertNoticesListed($response, [$second->breach_incident_id, $first->breach_incident_id]);
+        $this->assertNoticesListed($response, [$secondBreachIncidentCompany->breach_incident_id, $firstBreachIncidentCompany->breach_incident_id]);
     }
 
     #[Test]
     public function when_the_notices_span_pages_then_they_are_listed_page_by_page(): void
     {
         // Given three notices to company A sent a day apart, and A's owner
-        $oldest = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-05 09:00:00'));
-        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-06 09:00:00'));
-        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-07 09:00:00'));
+        $oldestBreachIncidentCompany = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, CarbonImmutable::parse('2026-05-05 09:00:00'));
+        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, CarbonImmutable::parse('2026-05-06 09:00:00'));
+        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, CarbonImmutable::parse('2026-05-07 09:00:00'));
 
         // When the owner reads the second page, two notices a page
-        $response = $this->listNotices($this->owner, $this->companyA, ['page' => 2, 'per_page' => 2]);
+        $response = $this->listNotices($this->owner, $this->contosoCompany, ['page' => 2, 'per_page' => 2]);
 
         // Then the second page holds the oldest notice, with the page counts
-        $this->assertNoticesListed($response, [$oldest->breach_incident_id]);
+        $this->assertNoticesListed($response, [$oldestBreachIncidentCompany->breach_incident_id]);
         $response->assertJsonPath('meta.pagination', ['page' => 2, 'per_page' => 2, 'total' => 3, 'last_page' => 2]);
     }
 
@@ -175,11 +175,11 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     {
         // Given sixteen notices to company A, and A's owner
         foreach (range(1, 16) as $day) {
-            $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-01')->addDays($day));
+            $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, CarbonImmutable::parse('2026-05-01')->addDays($day));
         }
 
         // When the owner sends the page in the request body instead of the query string
-        $response = $this->listNoticesWithBody($this->owner, $this->companyA, ['page' => 2]);
+        $response = $this->listNoticesWithBody($this->owner, $this->contosoCompany, ['page' => 2]);
 
         // Then the first page is listed
         $response->assertOk();
@@ -191,11 +191,11 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     public function when_no_estimated_count_is_known_then_the_count_is_empty(): void
     {
         // Given company A's notice with no estimated count, and A's owner
-        $incident = $this->anIncident()->companiesNotified()->createOne();
-        $this->aPartFor($incident, $this->companyA)->withFigures(['pii'], null)->notified()->createOne();
+        $breachIncident = $this->anIncident()->companiesNotified()->createOne();
+        $this->aPartFor($breachIncident, $this->contosoCompany)->withFigures(['pii'], null)->notified()->createOne();
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($this->owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->contosoCompany);
 
         // Then the count is shown empty beside the data types
         $response->assertOk();
@@ -207,12 +207,12 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     public function when_a_fact_is_corrected_after_the_notice_then_the_current_value_is_shown(): void
     {
         // Given company A was notified of about 120 people, then the count was corrected to 145, and A's owner
-        $breachId = $this->aRecordedIncident(['companies' => [['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 120]]]);
+        $breachId = $this->aRecordedIncident(['companies' => [['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 120]]]);
         $this->notifyCompanies($this->platformAdmin, $breachId);
         BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->update(['estimated_count' => 145]);
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($this->owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->contosoCompany);
 
         // Then the notice shows the corrected count, while the notice as sent still says 120
         $response->assertOk();
@@ -225,11 +225,11 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     {
         // Given fifteen notices to company A, and A's owner
         foreach (range(1, 15) as $day) {
-            $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-01')->addDays($day));
+            $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, CarbonImmutable::parse('2026-05-01')->addDays($day));
         }
 
         // When the owner lists company A's breach notices, the queries counted
-        [$response, $queryCount] = $this->listNoticesCountingQueries($this->owner, $this->companyA);
+        [$response, $queryCount] = $this->listNoticesCountingQueries($this->owner, $this->contosoCompany);
 
         // Then a full page came back for fewer queries than it has rows
         $response->assertOk();
@@ -241,15 +241,15 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     public function when_notices_are_listed_then_the_newest_notice_comes_first(): void
     {
         // Given three notices to company A, created in an order unlike the order they were sent, and A's owner
-        $middle = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-06 09:00:00'));
-        $newest = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-07 09:00:00'));
-        $oldest = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, CarbonImmutable::parse('2026-05-05 09:00:00'));
+        $middleBreachIncidentCompany = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, CarbonImmutable::parse('2026-05-06 09:00:00'));
+        $newestBreachIncidentCompany = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, CarbonImmutable::parse('2026-05-07 09:00:00'));
+        $oldestBreachIncidentCompany = $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, CarbonImmutable::parse('2026-05-05 09:00:00'));
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($this->owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->contosoCompany);
 
         // Then the notices come newest first
-        $this->assertNoticesListed($response, [$newest->breach_incident_id, $middle->breach_incident_id, $oldest->breach_incident_id]);
+        $this->assertNoticesListed($response, [$newestBreachIncidentCompany->breach_incident_id, $middleBreachIncidentCompany->breach_incident_id, $oldestBreachIncidentCompany->breach_incident_id]);
     }
 
     /**
@@ -257,26 +257,26 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
      */
     #[Test]
     #[DataProvider('provideFilingStates')]
-    public function when_the_filing_has_moved_then_the_notice_shows_its_filing_status(BreachFilingStatus $state, array $expectedFiling): void
+    public function when_the_filing_has_moved_then_the_notice_shows_its_filing_status(BreachFilingStatus $breachFilingStatus, array $expectedFiling): void
     {
         // Given company A's notice at the given filing state, and A's owner
-        $this->aPartAtFilingState($state, $this->owner)->createOne();
+        $this->aPartAtFilingState($breachFilingStatus, $this->owner)->createOne();
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($this->owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->contosoCompany);
 
         // Then the notice shows its filing status with the dates, and the owner as requester once asked
-        $this->assertFilingShown($response, $expectedFiling, $state === BreachFilingStatus::NotRequested ? null : $this->owner->getKey());
+        $this->assertFilingShown($response, $expectedFiling, $breachFilingStatus === BreachFilingStatus::NotRequested ? null : $this->owner->getKey());
     }
 
     #[Test]
     public function when_an_incident_is_resolved_then_its_notice_shows_the_resolved_stage(): void
     {
         // Given company A's notice of an incident Lesily has since resolved, and A's owner
-        $this->aNoticeFor($this->anIncident()->resolved(), $this->companyA, now()->toImmutable());
+        $this->aNoticeFor($this->anIncident()->resolved(), $this->contosoCompany, now()->toImmutable());
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($this->owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->contosoCompany);
 
         // Then the notice shows the incident as resolved
         $response->assertOk();
@@ -287,11 +287,11 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     public function when_an_admin_lists_then_they_see_the_same_notice_as_the_owner(): void
     {
         // Given company A was notified of a breach, and A's owner and an admin of A
-        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->companyA, now()->toImmutable());
-        $ownersList = $this->listNotices($this->owner, $this->companyA)->json('data');
+        $this->aNoticeFor($this->anIncident()->companiesNotified(), $this->contosoCompany, now()->toImmutable());
+        $ownersList = $this->listNotices($this->owner, $this->contosoCompany)->json('data');
 
         // When the admin lists company A's breach notices
-        $response = $this->listNotices($this->admin, $this->companyA);
+        $response = $this->listNotices($this->admin, $this->contosoCompany);
 
         // Then the admin sees the same one notice the owner sees
         $response->assertOk();
@@ -303,17 +303,17 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     public function when_the_owner_lists_then_each_notice_shows_only_the_company_own_part(): void
     {
         // Given one incident that notified company A (NICs and names, about 120 people) and company B (bank details, about 30), and A's owner
-        $incident = $this->anIncident()->companiesNotified()->createOne();
-        $this->aPartFor($incident, $this->companyB)->withFigures(['banking'], 30)->notifiedAt(CarbonImmutable::parse('2026-05-05 10:00:00'))->createOne();
-        $this->aPartFor($incident, $this->companyA)->withFigures(['nic', 'pii'], 120)->notifiedAt(CarbonImmutable::parse('2026-05-05 09:00:00'))->createOne();
+        $breachIncident = $this->anIncident()->companiesNotified()->createOne();
+        $this->aPartFor($breachIncident, $this->otherCompany)->withFigures(['banking'], 30)->notifiedAt(CarbonImmutable::parse('2026-05-05 10:00:00'))->createOne();
+        $this->aPartFor($breachIncident, $this->contosoCompany)->withFigures(['nic', 'pii'], 120)->notifiedAt(CarbonImmutable::parse('2026-05-05 09:00:00'))->createOne();
 
         // When the owner lists company A's breach notices
-        $response = $this->listNotices($this->owner, $this->companyA);
+        $response = $this->listNotices($this->owner, $this->contosoCompany);
 
         // Then the one notice shows company A's own part and the incident's facts, and nothing of company B
         $this->assertNoticeShows($response, [
-            'breach_id' => $incident->getKey(),
-            'company_name' => $this->companyA->name,
+            'breach_id' => $breachIncident->getKey(),
+            'company_name' => $this->contosoCompany->name,
             'stage' => 'companies_notified',
             'description' => 'A payroll export was emailed to the wrong recipient.',
             'likely_consequences' => 'Salary and bank details may be read by one outside person.',
@@ -346,12 +346,12 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
      */
     protected function sentPartOf(string $breachId): array
     {
-        $event = LesilyStoredEvent::query()
+        $eloquentStoredEvent = LesilyStoredEvent::query()
             ->where('event_class', BreachCompanyNotified::class)
             ->where('aggregate_uuid', $breachId)
             ->sole();
 
-        return $event->event_properties['part'];
+        return $eloquentStoredEvent->event_properties['part'];
     }
 
     /**
@@ -368,14 +368,14 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
         return [$response, $queryCount];
     }
 
-    protected function aPartAtFilingState(BreachFilingStatus $state, User $owner): BreachIncidentCompanyFactory
+    protected function aPartAtFilingState(BreachFilingStatus $breachFilingStatus, User $owner): BreachIncidentCompanyFactory
     {
-        $part = $this->aPartFor($this->anIncident()->companiesNotified()->createOne(), $this->companyA);
+        $breachIncidentCompanyFactory = $this->aPartFor($this->anIncident()->companiesNotified()->createOne(), $this->contosoCompany);
 
-        return match ($state) {
-            BreachFilingStatus::NotRequested => $part->notified(),
-            BreachFilingStatus::Requested => $part->filingRequested($owner->getKey()),
-            BreachFilingStatus::Filed => $part->filed($owner->getKey(), $this->platformAdmin->getKey()),
+        return match ($breachFilingStatus) {
+            BreachFilingStatus::NotRequested => $breachIncidentCompanyFactory->notified(),
+            BreachFilingStatus::Requested => $breachIncidentCompanyFactory->filingRequested($owner->getKey()),
+            BreachFilingStatus::Filed => $breachIncidentCompanyFactory->filed($owner->getKey(), $this->platformAdmin->getKey()),
         };
     }
 
@@ -393,7 +393,7 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
 
     protected function assertNothingOfCompanyB(TestResponse $response): void
     {
-        $response->assertDontSee($this->companyB->name);
+        $response->assertDontSee($this->otherCompany->name);
         $response->assertDontSee('banking');
         $response->assertJsonMissing(['estimated_count' => 30]);
     }
@@ -446,8 +446,8 @@ class ListBreachNoticesTest extends BreachIncidentsTestCase
     public static function provideStagesNeverShown(): array
     {
         return [
-            'recorded' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident],
-            'false alarm' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->falseAlarm()],
+            'recorded' => [fn (BreachIncidentRecordFactory $breachIncidentRecordFactory): BreachIncidentRecordFactory => $breachIncidentRecordFactory],
+            'false alarm' => [fn (BreachIncidentRecordFactory $breachIncidentRecordFactory): BreachIncidentRecordFactory => $breachIncidentRecordFactory->falseAlarm()],
         ];
     }
 

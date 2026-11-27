@@ -47,7 +47,7 @@ class ListDsarRequestsTest extends DsarTestCase
     public function when_the_list_query_is_invalid_then_it_is_rejected_with_the_reason(array $query, string $invalidField, string $expectedMessage): void
     {
         // Given
-        $member = $this->employee;
+        $member = $this->member;
 
         // When
         $response = $this->listDsarRequests($member, $this->company, $query);
@@ -60,7 +60,7 @@ class ListDsarRequestsTest extends DsarTestCase
     public function when_a_view_all_holder_lists_then_other_companies_requests_stay_hidden(): void
     {
         // Given
-        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->create();
+        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
         $otherCompany = Company::factory()->create();
         DsarRequestRecord::factory()->forSubject($otherCompany, $this->aCompanyMember($otherCompany))->create();
 
@@ -76,12 +76,12 @@ class ListDsarRequestsTest extends DsarTestCase
     {
         // Given
         $otherCompany = Company::factory()->create();
-        $this->attachMember($otherCompany, $this->employee, $this->seededRole('employee'));
-        DsarRequestRecord::factory()->forSubject($otherCompany, $this->employee)->create();
-        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->create();
+        $this->attachMember($otherCompany, $this->member, $this->seededRole('employee'));
+        DsarRequestRecord::factory()->forSubject($otherCompany, $this->member)->create();
+        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
 
         // When
-        $response = $this->listDsarRequests($this->employee, $this->company);
+        $response = $this->listDsarRequests($this->member, $this->company);
 
         // Then
         $this->assertDsarRequestsListed($response, [$request->getKey()]);
@@ -106,7 +106,7 @@ class ListDsarRequestsTest extends DsarTestCase
     public function when_a_requester_no_longer_holds_view_all_then_the_requests_they_made_stay_listed(): void
     {
         // Given a former admin, now an employee, who requested an export for a member
-        $formerAdmin = $this->employee;
+        $formerAdmin = $this->member;
         $request = DsarRequestRecord::factory()
             ->forSubject($this->company, $this->aCompanyMember($this->company))
             ->requestedBy($formerAdmin, 'admin')
@@ -123,11 +123,11 @@ class ListDsarRequestsTest extends DsarTestCase
     public function when_a_status_filter_is_given_then_only_requests_in_that_status_are_listed(): void
     {
         // Given
-        $fulfilled = DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->requestedDaysAgo(10)->fulfilled()->create();
-        DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->create();
+        $fulfilled = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->requestedDaysAgo(10)->fulfilled()->create();
+        DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
 
         // When
-        $response = $this->listDsarRequests($this->employee, $this->company, ['status' => 'fulfilled']);
+        $response = $this->listDsarRequests($this->member, $this->company, ['status' => 'fulfilled']);
 
         // Then
         $this->assertDsarRequestsListed($response, [$fulfilled->getKey()]);
@@ -185,10 +185,10 @@ class ListDsarRequestsTest extends DsarTestCase
     public function when_the_download_window_has_closed_then_the_request_is_listed_as_no_longer_downloadable(): void
     {
         // Given a fulfilled request whose download window has closed and been marked expired
-        $expired = DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->fulfilled()->downloadExpired()->create();
+        $expired = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->fulfilled()->downloadExpired()->create();
 
         // When
-        $response = $this->listDsarRequests($this->employee, $this->company);
+        $response = $this->listDsarRequests($this->member, $this->company);
 
         // Then
         $this->assertListedRowShows($response, $expired, false);
@@ -226,14 +226,14 @@ class ListDsarRequestsTest extends DsarTestCase
     public function when_a_member_lists_then_their_requests_show_the_sla_dates_and_download_availability(): void
     {
         // Given a fulfilled request from 28 days ago and an open one an admin made today
-        $fulfilled = DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->requestedDaysAgo(28)->fulfilled()->create();
+        $fulfilled = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->requestedDaysAgo(28)->fulfilled()->create();
         $open = DsarRequestRecord::factory()
-            ->forSubject($this->company, $this->employee)
+            ->forSubject($this->company, $this->member)
             ->requestedBy($this->admin, 'admin')
             ->create();
 
         // When
-        $response = $this->listDsarRequests($this->employee, $this->company);
+        $response = $this->listDsarRequests($this->member, $this->company);
 
         // Then
         $this->assertDsarRequestsListed($response, [$open->getKey(), $fulfilled->getKey()]);

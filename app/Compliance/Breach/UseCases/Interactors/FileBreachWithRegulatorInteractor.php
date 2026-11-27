@@ -25,9 +25,9 @@ use App\Compliance\Breach\Exceptions\RegulatorAddressNotConfiguredException;
 
 class FileBreachWithRegulatorInteractor
 {
-    public function __construct(protected readonly BreachCompanyPartRenderer $renderer) {}
+    public function __construct(protected readonly BreachCompanyPartRenderer $breachCompanyPartRenderer) {}
 
-    public function execute(FileBreachWithRegulatorCommand $command, User $platformAdmin, RequestOrigin $context): BreachIncidentRecord
+    public function execute(FileBreachWithRegulatorCommand $fileBreachWithRegulatorCommand, User $platformAdmin, RequestOrigin $requestOrigin): BreachIncidentRecord
     {
         $regulatorAddress = Config::string('platform.regulator_address');
 
@@ -35,31 +35,31 @@ class FileBreachWithRegulatorInteractor
             throw RegulatorAddressNotConfiguredException::forFiling();
         }
 
-        return DB::transaction(function () use ($command, $platformAdmin, $context, $regulatorAddress): BreachIncidentRecord {
-            $breach = BreachIncidentRecord::query()->whereKey($command->breachId)->lockForUpdate()->first()
+        return DB::transaction(function () use ($fileBreachWithRegulatorCommand, $platformAdmin, $requestOrigin, $regulatorAddress): BreachIncidentRecord {
+            $breachIncident = BreachIncidentRecord::query()->whereKey($fileBreachWithRegulatorCommand->breachId)->lockForUpdate()->first()
                 ?? throw new ModelNotFoundException;
 
-            $filing = BreachIncidentCompany::query()
-                ->where('breach_incident_id', $breach->getKey())
-                ->whereCompany($command->company)
+            $breachIncidentCompany = BreachIncidentCompany::query()
+                ->where('breach_incident_id', $breachIncident->getKey())
+                ->whereCompany($fileBreachWithRegulatorCommand->company)
                 ->first()
                 ?? throw new ModelNotFoundException;
 
-            $this->guardFilingOpen($breach, $filing);
-            $regulatorFiling = $this->regulatorFilingFor($breach, $filing, $regulatorAddress);
+            $this->guardFilingOpen($breachIncident, $breachIncidentCompany);
+            $regulatorFiling = $this->regulatorFilingFor($breachIncident, $breachIncidentCompany, $regulatorAddress);
 
-            BreachIncident::retrieve($breach->getKey())->fileWithRegulator($command, $platformAdmin, $regulatorFiling)->persist();
+            BreachIncident::retrieve($breachIncident->getKey())->fileWithRegulator($fileBreachWithRegulatorCommand, $platformAdmin, $regulatorFiling)->persist();
 
-            $this->recordAudit($filing, $platformAdmin, $context);
+            $this->recordAudit($breachIncidentCompany, $platformAdmin, $requestOrigin);
 
-            return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breach->getKey())->firstOrFail();
+            return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breachIncident->getKey())->firstOrFail();
         });
     }
 
-    protected function regulatorFilingFor(BreachIncidentRecord $breach, BreachIncidentCompany $filing, string $regulatorAddress): RegulatorFiling
+    protected function regulatorFilingFor(BreachIncidentRecord $breachIncident, BreachIncidentCompany $breachIncidentCompany, string $regulatorAddress): RegulatorFiling
     {
-        $companyName = $filing->company->name;
-        $part = $this->renderer->render($breach, $filing);
+        $companyName = $breachIncidentCompany->company->name;
+        $part = $this->breachCompanyPartRenderer->render($breachIncident, $breachIncidentCompany);
 
         return new RegulatorFiling(
             companyName: $companyName,
@@ -69,48 +69,48 @@ class FileBreachWithRegulatorInteractor
         );
     }
 
-    protected function recordAudit(BreachIncidentCompany $filing, User $platformAdmin, RequestOrigin $context): void
+    protected function recordAudit(BreachIncidentCompany $breachIncidentCompany, User $platformAdmin, RequestOrigin $requestOrigin): void
     {
         AuditEntry::query()->create([
-            'stored_event_id' => $this->filedEventIdFor($filing),
+            'stored_event_id' => $this->filedEventIdFor($breachIncidentCompany),
             'event_class' => 'BreachFiledWithRegulator',
             'subject_type' => AuditSubjectType::BreachIncident,
-            'subject_id' => $filing->breach_incident_id,
+            'subject_id' => $breachIncidentCompany->breach_incident_id,
             'subject_label' => null,
             'action' => AuditAction::BreachFiledWithRegulator,
             'description' => 'Platform admin filed a data breach with the Data Protection Authority for a company that asked.',
             'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $platformAdmin->name,
-            'ip_address' => $context->ip,
-            'user_agent' => $context->boundedUserAgent(),
-            'request_id' => $context->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'metadata' => null,
             'severity' => 'critical',
             'recorded_at' => now(),
         ]);
     }
 
-    protected function filedEventIdFor(BreachIncidentCompany $filing): int
+    protected function filedEventIdFor(BreachIncidentCompany $breachIncidentCompany): int
     {
         return LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $filing->breach_incident_id)
+            ->where('aggregate_uuid', $breachIncidentCompany->breach_incident_id)
             ->where('event_class', BreachFiledWithRegulator::class)
-            ->where('event_properties->companyId', $filing->company_id)
+            ->where('event_properties->companyId', $breachIncidentCompany->company_id)
             ->sole()
             ->getKey();
     }
 
-    protected function guardFilingOpen(BreachIncidentRecord $breach, BreachIncidentCompany $filing): void
+    protected function guardFilingOpen(BreachIncidentRecord $breachIncident, BreachIncidentCompany $breachIncidentCompany): void
     {
-        match ($breach->stage) {
+        match ($breachIncident->stage) {
             BreachStage::Recorded => throw BreachFilingNotOpenException::filingBeforeTheNotices(),
             BreachStage::Resolved => throw BreachFilingNotOpenException::incidentResolved(),
             BreachStage::FalseAlarm => throw BreachFilingNotOpenException::falseAlarm(),
             BreachStage::CompaniesNotified => null,
         };
 
-        if ($filing->filed_at !== null) {
+        if ($breachIncidentCompany->filed_at !== null) {
             throw BreachFilingNotOpenException::alreadyFiled();
         }
     }

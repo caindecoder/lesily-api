@@ -16,76 +16,76 @@ class BreachIncidentCompanyProjector extends Projector
 {
     public int $weight = 1;
 
-    public function onBreachRecorded(BreachRecorded $event): void
+    public function onBreachRecorded(BreachRecorded $breachRecorded): void
     {
-        foreach ($event->companies as $company) {
-            $this->insertCompany($event, $company);
+        foreach ($breachRecorded->companies as $company) {
+            $this->insertCompany($breachRecorded, $company);
         }
     }
 
-    public function onBreachCompanyAdded(BreachCompanyAdded $event): void
+    public function onBreachCompanyAdded(BreachCompanyAdded $breachCompanyAdded): void
     {
         BreachIncidentCompany::query()->create([
-            'breach_incident_id' => $event->breachId,
-            'company_id' => $event->companyId,
-            'data_types' => $event->dataTypes,
-            'estimated_count' => $event->estimatedCount,
-            'added_at' => $event->addedAt,
-            'added_by' => $event->addedByUserId,
-            'added_reason' => $event->reason,
+            'breach_incident_id' => $breachCompanyAdded->breachId,
+            'company_id' => $breachCompanyAdded->companyId,
+            'data_types' => $breachCompanyAdded->dataTypes,
+            'estimated_count' => $breachCompanyAdded->estimatedCount,
+            'added_at' => $breachCompanyAdded->addedAt,
+            'added_by' => $breachCompanyAdded->addedByUserId,
+            'added_reason' => $breachCompanyAdded->reason,
         ]);
     }
 
-    public function onBreachCompanyNotified(BreachCompanyNotified $event): void
+    public function onBreachCompanyNotified(BreachCompanyNotified $breachCompanyNotified): void
     {
         BreachIncidentCompany::query()
-            ->where('breach_incident_id', $event->breachId)
-            ->where('company_id', $event->companyId)
-            ->update(['notified_at' => $event->notifiedAt]);
+            ->where('breach_incident_id', $breachCompanyNotified->breachId)
+            ->where('company_id', $breachCompanyNotified->companyId)
+            ->update(['notified_at' => $breachCompanyNotified->notifiedAt]);
     }
 
-    public function onBreachFilingRequested(BreachFilingRequested $event): void
+    public function onBreachFilingRequested(BreachFilingRequested $breachFilingRequested): void
     {
         BreachIncidentCompany::query()
-            ->where('breach_incident_id', $event->breachId)
-            ->where('company_id', $event->companyId)
-            ->update(['filing_requested_at' => $event->requestedAt, 'filing_requested_by' => $event->requestedByUserId]);
+            ->where('breach_incident_id', $breachFilingRequested->breachId)
+            ->where('company_id', $breachFilingRequested->companyId)
+            ->update(['filing_requested_at' => $breachFilingRequested->requestedAt, 'filing_requested_by' => $breachFilingRequested->requestedByUserId]);
     }
 
-    public function onBreachFiledWithRegulator(BreachFiledWithRegulator $event): void
+    public function onBreachFiledWithRegulator(BreachFiledWithRegulator $breachFiledWithRegulator): void
     {
         BreachIncidentCompany::query()
-            ->where('breach_incident_id', $event->breachId)
-            ->where('company_id', $event->companyId)
-            ->update(['filed_at' => $event->filedAt, 'filed_by' => $event->filedByUserId, 'filed_body_hash' => $event->bodyHash]);
+            ->where('breach_incident_id', $breachFiledWithRegulator->breachId)
+            ->where('company_id', $breachFiledWithRegulator->companyId)
+            ->update(['filed_at' => $breachFiledWithRegulator->filedAt, 'filed_by' => $breachFiledWithRegulator->filedByUserId, 'filed_body_hash' => $breachFiledWithRegulator->bodyHash]);
     }
 
-    public function onBreachAmended(BreachAmended $event): void
+    public function onBreachAmended(BreachAmended $breachAmended): void
     {
-        foreach ($event->changes as $change) {
-            $this->applyChange($event, $change);
+        foreach ($breachAmended->changes as $change) {
+            $this->applyChange($breachAmended, $change);
         }
     }
 
     /**
      * @param  array{field: string, companyId: ?string, old: mixed, new: mixed}  $change
      */
-    protected function applyChange(BreachAmended $event, array $change): void
+    protected function applyChange(BreachAmended $breachAmended, array $change): void
     {
-        $company = BreachIncidentCompany::query()->where('breach_incident_id', $event->breachId)->where('company_id', $change['companyId']);
+        $breachIncidentCompanies = BreachIncidentCompany::query()->where('breach_incident_id', $breachAmended->breachId)->where('company_id', $change['companyId']);
 
         match (BreachAmendmentField::from($change['field'])) {
-            BreachAmendmentField::DataTypes => $company->update(['data_types' => $change['new']]),
-            BreachAmendmentField::EstimatedCount => $company->update(['estimated_count' => $change['new']]),
+            BreachAmendmentField::DataTypes => $breachIncidentCompanies->update(['data_types' => $change['new']]),
+            BreachAmendmentField::EstimatedCount => $breachIncidentCompanies->update(['estimated_count' => $change['new']]),
             BreachAmendmentField::CompanyAdded => BreachIncidentCompany::query()->create([
-                'breach_incident_id' => $event->breachId,
+                'breach_incident_id' => $breachAmended->breachId,
                 'company_id' => $change['companyId'],
                 'data_types' => $change['new']['dataTypes'],
                 'estimated_count' => $change['new']['estimatedCount'],
-                'added_at' => $event->amendedAt,
-                'added_by' => $event->amendedByUserId,
+                'added_at' => $breachAmended->amendedAt,
+                'added_by' => $breachAmended->amendedByUserId,
             ]),
-            BreachAmendmentField::CompanyRemoved => $company->delete(),
+            BreachAmendmentField::CompanyRemoved => $breachIncidentCompanies->delete(),
             default => null,
         };
     }
@@ -93,15 +93,15 @@ class BreachIncidentCompanyProjector extends Projector
     /**
      * @param  array{companyId: string, dataTypes: list<string>, estimatedCount: ?int}  $company
      */
-    protected function insertCompany(BreachRecorded $event, array $company): void
+    protected function insertCompany(BreachRecorded $breachRecorded, array $company): void
     {
         BreachIncidentCompany::query()->create([
-            'breach_incident_id' => $event->breachId,
+            'breach_incident_id' => $breachRecorded->breachId,
             'company_id' => $company['companyId'],
             'data_types' => $company['dataTypes'],
             'estimated_count' => $company['estimatedCount'],
-            'added_at' => $event->recordedAt,
-            'added_by' => $event->recordedByUserId,
+            'added_at' => $breachRecorded->recordedAt,
+            'added_by' => $breachRecorded->recordedByUserId,
         ]);
     }
 }

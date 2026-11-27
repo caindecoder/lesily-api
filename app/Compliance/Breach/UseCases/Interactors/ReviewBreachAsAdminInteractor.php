@@ -16,33 +16,33 @@ class ReviewBreachAsAdminInteractor
     /**
      * The read and its audit row share one transaction — no read without its evidence.
      */
-    public function execute(string $breachId, User $platformAdmin, RequestOrigin $context): BreachIncidentRecord
+    public function execute(string $breachId, User $platformAdmin, RequestOrigin $requestOrigin): BreachIncidentRecord
     {
-        return DB::transaction(function () use ($breachId, $platformAdmin, $context): BreachIncidentRecord {
-            $breach = BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breachId)->first()
+        return DB::transaction(function () use ($breachId, $platformAdmin, $requestOrigin): BreachIncidentRecord {
+            $breachIncident = BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breachId)->first()
                 ?? throw new ModelNotFoundException;
 
-            $this->recordAdminRead($breach, $platformAdmin, $context);
+            $this->recordAdminRead($breachIncident, $platformAdmin, $requestOrigin);
 
-            return $breach;
+            return $breachIncident;
         });
     }
 
-    protected function recordAdminRead(BreachIncidentRecord $breach, User $platformAdmin, RequestOrigin $context): void
+    protected function recordAdminRead(BreachIncidentRecord $breachIncident, User $platformAdmin, RequestOrigin $requestOrigin): void
     {
         AuditEntry::query()->create([
             'event_class' => 'BreachIncidentViewedByAdmin',
             'subject_type' => AuditSubjectType::BreachIncident,
-            'subject_id' => $breach->getKey(),
+            'subject_id' => $breachIncident->getKey(),
             'subject_label' => null,
             'action' => AuditAction::BreachAdminViewed,
             'description' => 'Platform admin viewed a data breach.',
             'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $platformAdmin->name,
-            'ip_address' => $context->ip,
-            'user_agent' => $context->boundedUserAgent(),
-            'request_id' => $context->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'metadata' => null,
             'severity' => 'info',
             'recorded_at' => now(),

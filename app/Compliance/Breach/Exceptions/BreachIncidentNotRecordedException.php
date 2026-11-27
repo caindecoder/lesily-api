@@ -7,9 +7,9 @@ use App\Compliance\Breach\Enums\BreachStage;
 
 class BreachIncidentNotRecordedException extends DomainException
 {
-    public function __construct(?BreachStage $stage)
+    public function __construct(?BreachStage $breachStage)
     {
-        $state = $stage === null ? 'not recorded' : $stage->value;
+        $state = $breachStage === null ? 'not recorded' : $breachStage->value;
 
         parent::__construct("Only a recorded breach incident can have its companies notified; this incident is {$state}.");
     }

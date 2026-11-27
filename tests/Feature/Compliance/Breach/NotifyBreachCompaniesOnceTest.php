@@ -24,7 +24,7 @@ class NotifyBreachCompaniesOnceTest extends BreachIncidentsTestCase
     {
         // Given an incident never recorded, or one whose companies were already notified
         $breachId = $recorded ? $this->aRecordedIncident() : Str::uuid7()->toString();
-        $parts = [$this->companyA->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.']];
+        $parts = [$this->contosoCompany->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.']];
         if ($notifiedBefore > 0) {
             BreachIncident::retrieve($breachId)->notifyCompanies($this->platformAdmin, $parts)->persist();
         }
@@ -33,9 +33,9 @@ class NotifyBreachCompaniesOnceTest extends BreachIncidentsTestCase
         try {
             BreachIncident::retrieve($breachId)->notifyCompanies($this->platformAdmin, $parts);
             $this->fail('Notifying an incident that is not at Recorded must be refused.');
-        } catch (BreachIncidentNotRecordedException $refusal) {
+        } catch (BreachIncidentNotRecordedException $breachIncidentNotRecordedException) {
             // Then it is refused with its stage named and no further notice is recorded
-            $this->assertSame($message, $refusal->getMessage());
+            $this->assertSame($message, $breachIncidentNotRecordedException->getMessage());
             $this->assertSame($notifiedBefore, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachCompaniesNotified::class)->count());
         }
     }

@@ -39,7 +39,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
 
     protected const string ADDED_AT_JSON = '2026-05-06T10:00:00.000000Z';
 
-    protected Company $initech;
+    protected Company $initechCompany;
 
     /** @var list<User> */
     protected array $initechMembers;
@@ -50,15 +50,15 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
 
         Queue::fake();
         $this->travelTo(CarbonImmutable::parse('2026-05-05T09:00:00Z'));
-        $this->initech = Company::factory()->named('Initech Systems')->createOne();
-        $this->initechMembers = $this->anOwnerAndAdmins($this->initech);
+        $this->initechCompany = Company::factory()->named('Initech Systems')->createOne();
+        $this->initechMembers = $this->anOwnerAndAdmins($this->initechCompany);
     }
 
     #[Test]
     public function when_an_unauthenticated_caller_adds_a_company_then_it_is_refused_as_unauthenticated(): void
     {
         // Given an incident whose companies A and B have been notified
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $before = $this->stateOf($breachId);
 
         // When a caller with no token adds Initech to it
@@ -73,7 +73,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     public function when_a_company_owner_adds_a_company_then_the_admin_surface_is_not_acknowledged(): void
     {
         // Given an incident whose companies A and B have been notified, and company A's owner
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $before = $this->stateOf($breachId);
 
         // When the owner adds Initech on the admin surface
@@ -102,7 +102,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     public function when_the_addition_is_invalid_then_it_is_refused_and_nothing_is_added(array $override, string $field, string $message): void
     {
         // Given an incident whose companies A and B have been notified
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $before = $this->stateOf($breachId);
 
         // When the platform admin adds Initech with one value wrong
@@ -147,11 +147,11 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     public function when_the_company_is_already_on_the_incident_then_it_is_refused_and_nobody_is_told(): void
     {
         // Given an incident whose companies A and B have been notified
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $before = $this->stateOf($breachId);
 
         // When the platform admin adds company A again as a late company
-        $response = $this->addCompany($this->platformAdmin, $breachId, $this->aLateCompany(['companyId' => $this->companyA->getKey()]));
+        $response = $this->addCompany($this->platformAdmin, $breachId, $this->aLateCompany(['companyId' => $this->contosoCompany->getKey()]));
 
         // Then it is refused, nothing is added and no second notice is queued
         $this->assertRefusedAsNotOpen($response, 'The company is already on this breach incident.');
@@ -178,7 +178,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     public function when_the_audit_row_cannot_be_written_then_neither_event_nor_row_is_written(): void
     {
         // Given an incident whose companies A and B have been notified, and an audit trail that refuses every write
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $before = $this->stateOf($breachId);
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
 
@@ -193,8 +193,8 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     public static function provideClosedStages(): array
     {
         return [
-            'resolved' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->resolved(), 'A company cannot be added to a resolved breach incident.'],
-            'a false alarm' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->falseAlarm(), 'A company cannot be added to a breach incident marked as a false alarm.'],
+            'resolved' => [fn (BreachIncidentRecordFactory $breachIncidentRecordFactory): BreachIncidentRecordFactory => $breachIncidentRecordFactory->resolved(), 'A company cannot be added to a resolved breach incident.'],
+            'a false alarm' => [fn (BreachIncidentRecordFactory $breachIncidentRecordFactory): BreachIncidentRecordFactory => $breachIncidentRecordFactory->falseAlarm(), 'A company cannot be added to a breach incident marked as a false alarm.'],
         ];
     }
 
@@ -245,7 +245,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
         // Then Initech's owner and admins are told the count is not known
         $this->assertCount(3, $this->initechMembers);
         foreach ($this->initechMembers as $member) {
-            Notification::assertSentTo($member, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->details['count'] === 'Not yet known');
+            Notification::assertSentTo($member, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->details['count'] === 'Not yet known');
         }
     }
 
@@ -253,8 +253,8 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     public function when_a_company_on_another_incident_is_added_late_then_that_incident_is_untouched(): void
     {
         // Given an incident naming Initech, and a second incident at companies_notified affecting companies A and B
-        $otherBreachId = $this->aNotifiedIncident($this->initech);
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $otherBreachId = $this->aNotifiedIncident($this->initechCompany);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $otherBefore = $this->stateOf($otherBreachId);
 
         // When the platform admin adds Initech to the second incident as a late company
@@ -270,11 +270,11 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     {
         // Given an incident at companies_notified affecting companies A and B, and a fourth company found late too
         $breachId = $this->anIncidentNotifiedEarlier();
-        $hooli = Company::factory()->named('Hooli Retail')->createOne();
+        $hooliCompany = Company::factory()->named('Hooli Retail')->createOne();
 
         // When the platform admin adds Initech, then Hooli
         $this->addCompany($this->platformAdmin, $breachId, $this->aLateCompany());
-        $this->addCompany($this->platformAdmin, $breachId, $this->aLateCompany(['companyId' => $hooli->getKey()]));
+        $this->addCompany($this->platformAdmin, $breachId, $this->aLateCompany(['companyId' => $hooliCompany->getKey()]));
 
         // Then each audit row cites the BreachCompanyAdded event of its own company
         $added = LesilyStoredEvent::query()->where('event_class', BreachCompanyAdded::class)->orderBy('id')->pluck('id')->all();
@@ -288,11 +288,11 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     {
         // Given an incident at companies_notified affecting companies A and B, and Initech's owner
         $breachId = $this->anIncidentNotifiedEarlier();
-        $owner = $this->aCompanyMember($this->initech, 'owner');
+        $owner = $this->aCompanyMember($this->initechCompany, 'owner');
 
         // When the platform admin adds Initech as a late company and Initech's owner lists its breach notices
         $this->addCompany($this->platformAdmin, $breachId, $this->aLateCompany());
-        $response = $this->listNotices($owner, $this->initech);
+        $response = $this->listNotices($owner, $this->initechCompany);
 
         // Then the list holds this incident with Initech's own figures
         $response->assertOk();
@@ -307,15 +307,15 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     {
         // Given an incident at companies_notified affecting companies A and B, Initech added late, and Initech's owner
         $breachId = $this->anIncidentNotifiedEarlier();
-        $owner = $this->aCompanyMember($this->initech, 'owner');
+        $owner = $this->aCompanyMember($this->initechCompany, 'owner');
         $this->addCompany($this->platformAdmin, $breachId, $this->aLateCompany());
 
         // When Initech's owner asks Lesily to file with the regulator
-        $response = $this->requestFiling($owner, $this->initech, $breachId);
+        $response = $this->requestFiling($owner, $this->initechCompany, $breachId);
 
         // Then the request is taken and Initech's row carries it
         $response->assertOk();
-        $this->assertNotNull(BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->where('company_id', $this->initech->getKey())->sole()->filing_requested_at);
+        $this->assertNotNull(BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->where('company_id', $this->initechCompany->getKey())->sole()->filing_requested_at);
     }
 
     #[Test]
@@ -342,8 +342,8 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     protected function anIncidentNotifiedEarlier(): string
     {
         $this->aCompanyMember($this->company, 'admin');
-        $this->anOwnerAndAdmins($this->companyB);
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $this->anOwnerAndAdmins($this->otherCompany);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         Queue::fake();
 
         return $breachId;
@@ -355,10 +355,10 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
         $response->assertJsonPath('data.stage', 'companies_notified');
         /** @var list<array<string, mixed>> $companies */
         $companies = $response->json('data.companies');
-        $initech = collect($companies)->firstWhere('company_id', $this->initech->getKey());
+        $initech = collect($companies)->firstWhere('company_id', $this->initechCompany->getKey());
         $this->assertIsArray($initech);
         $this->assertSame([['payroll', 'banking'], 15, self::ADDED_AT_JSON], [$initech['data_types'], $initech['estimated_count'], $initech['notified_at']]);
-        $this->assertSame(['late_company_added', $this->initech->getKey(), self::REASON], [
+        $this->assertSame(['late_company_added', $this->initechCompany->getKey(), self::REASON], [
             $response->json('data.amendments.0.field'),
             $response->json('data.amendments.0.company_id'),
             $response->json('data.amendments.0.reason'),
@@ -367,43 +367,43 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
 
     protected function assertLateCompanyStored(string $breachId): int
     {
-        $events = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->orderBy('id')->get();
-        $this->assertSame([BreachCompanyAdded::class, BreachCompanyNotified::class], $events->slice(-2)->pluck('event_class')->values()->all());
-        $this->assertCount(6, $events);
+        $eloquentStoredEvents = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->orderBy('id')->get();
+        $this->assertSame([BreachCompanyAdded::class, BreachCompanyNotified::class], $eloquentStoredEvents->slice(-2)->pluck('event_class')->values()->all());
+        $this->assertCount(6, $eloquentStoredEvents);
 
-        $added = $events->firstWhere('event_class', BreachCompanyAdded::class);
-        $notified = $events->last();
-        $this->assertInstanceOf(LesilyStoredEvent::class, $added);
-        $this->assertInstanceOf(LesilyStoredEvent::class, $notified);
-        $this->assertEquals([$breachId, $this->initech->getKey(), ['payroll', 'banking'], 15, self::REASON, $this->platformAdmin->getKey(), self::ADDED_AT_ISO], [
-            $added->event_properties['breachId'],
-            $added->event_properties['companyId'],
-            $added->event_properties['dataTypes'],
-            $added->event_properties['estimatedCount'],
-            $added->event_properties['reason'],
-            $added->event_properties['addedByUserId'],
-            CarbonImmutable::parse($added->event_properties['addedAt'])->toIso8601String(),
+        $addedEloquentStoredEvent = $eloquentStoredEvents->firstWhere('event_class', BreachCompanyAdded::class);
+        $notifiedEloquentStoredEvent = $eloquentStoredEvents->last();
+        $this->assertInstanceOf(LesilyStoredEvent::class, $addedEloquentStoredEvent);
+        $this->assertInstanceOf(LesilyStoredEvent::class, $notifiedEloquentStoredEvent);
+        $this->assertEquals([$breachId, $this->initechCompany->getKey(), ['payroll', 'banking'], 15, self::REASON, $this->platformAdmin->getKey(), self::ADDED_AT_ISO], [
+            $addedEloquentStoredEvent->event_properties['breachId'],
+            $addedEloquentStoredEvent->event_properties['companyId'],
+            $addedEloquentStoredEvent->event_properties['dataTypes'],
+            $addedEloquentStoredEvent->event_properties['estimatedCount'],
+            $addedEloquentStoredEvent->event_properties['reason'],
+            $addedEloquentStoredEvent->event_properties['addedByUserId'],
+            CarbonImmutable::parse($addedEloquentStoredEvent->event_properties['addedAt'])->toIso8601String(),
         ]);
-        $this->assertEquals([$this->initech->getKey(), $this->platformAdmin->getKey(), self::ADDED_AT_ISO, $this->initechPart()], [
-            $notified->event_properties['companyId'],
-            $notified->event_properties['notifiedByUserId'],
-            CarbonImmutable::parse($notified->event_properties['notifiedAt'])->toIso8601String(),
-            $notified->event_properties['part'],
+        $this->assertEquals([$this->initechCompany->getKey(), $this->platformAdmin->getKey(), self::ADDED_AT_ISO, $this->initechPart()], [
+            $notifiedEloquentStoredEvent->event_properties['companyId'],
+            $notifiedEloquentStoredEvent->event_properties['notifiedByUserId'],
+            CarbonImmutable::parse($notifiedEloquentStoredEvent->event_properties['notifiedAt'])->toIso8601String(),
+            $notifiedEloquentStoredEvent->event_properties['part'],
         ]);
 
-        return (int) $added->getKey();
+        return (int) $addedEloquentStoredEvent->getKey();
     }
 
     protected function assertLateCompanyProjected(string $breachId): void
     {
-        $row = BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->where('company_id', $this->initech->getKey())->sole();
-        $this->assertSame([['payroll', 'banking'], 15, self::REASON, $this->platformAdmin->getKey()], [$row->data_types, $row->estimated_count, $row->added_reason, $row->added_by]);
-        $this->assertSame([self::ADDED_AT_ISO, self::ADDED_AT_ISO], [$row->added_at->toIso8601String(), $row->notified_at?->toIso8601String()]);
+        $breachIncidentCompany = BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->where('company_id', $this->initechCompany->getKey())->sole();
+        $this->assertSame([['payroll', 'banking'], 15, self::REASON, $this->platformAdmin->getKey()], [$breachIncidentCompany->data_types, $breachIncidentCompany->estimated_count, $breachIncidentCompany->added_reason, $breachIncidentCompany->added_by]);
+        $this->assertSame([self::ADDED_AT_ISO, self::ADDED_AT_ISO], [$breachIncidentCompany->added_at->toIso8601String(), $breachIncidentCompany->notified_at?->toIso8601String()]);
 
-        $history = BreachAmendment::query()->where('breach_incident_id', $breachId)->sole();
+        $breachAmendment = BreachAmendment::query()->where('breach_incident_id', $breachId)->sole();
         $this->assertEquals(
-            [BreachAmendmentField::LateCompanyAdded, $this->initech->getKey(), null, ['dataTypes' => ['payroll', 'banking'], 'estimatedCount' => 15], self::REASON, $this->platformAdmin->getKey()],
-            [$history->field, $history->company_id, $history->old_value, $history->new_value, $history->reason, $history->amended_by],
+            [BreachAmendmentField::LateCompanyAdded, $this->initechCompany->getKey(), null, ['dataTypes' => ['payroll', 'banking'], 'estimatedCount' => 15], self::REASON, $this->platformAdmin->getKey()],
+            [$breachAmendment->field, $breachAmendment->company_id, $breachAmendment->old_value, $breachAmendment->new_value, $breachAmendment->reason, $breachAmendment->amended_by],
         );
         $this->assertSame(BreachStage::CompaniesNotified, BreachIncidentRecord::query()->findOrFail($breachId)->stage);
     }
@@ -431,8 +431,8 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
-        $this->assertSame('Symfony', $entry->user_agent);
+        $auditEntry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $this->assertSame('Symfony', $auditEntry->user_agent);
     }
 
     protected function assertOnlyInitechTold(): void
@@ -440,10 +440,10 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
         $this->assertCount(3, $this->initechMembers);
         foreach ($this->initechMembers as $member) {
             Notification::assertSentToTimes($member, SystemNotification::class, 1);
-            Notification::assertSentTo($member, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->type === NotificationType::BreachCompanyNotice
-                && $notice->companyName === 'Initech Systems'
-                && $notice->companyId === $this->initech->getKey()
-                && $notice->details === $this->initechPart());
+            Notification::assertSentTo($member, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::BreachCompanyNotice
+                && $systemNotification->companyName === 'Initech Systems'
+                && $systemNotification->companyId === $this->initechCompany->getKey()
+                && $systemNotification->details === $this->initechPart());
         }
         Notification::assertCount(3);
     }
@@ -464,10 +464,10 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
         ];
     }
 
-    protected function addCompany(?User $caller, string $breachId, array $body): TestResponse
+    protected function addCompany(?User $actor, string $breachId, array $body): TestResponse
     {
-        if ($caller !== null) {
-            Sanctum::actingAs($caller);
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
         }
 
         return $this->postJson("/api/v1/admin/breach-incidents/{$breachId}/companies", $body);
@@ -476,7 +476,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     protected function aLateCompany(array $overrides = []): array
     {
         return [
-            'companyId' => $this->initech->getKey(),
+            'companyId' => $this->initechCompany->getKey(),
             'dataTypes' => ['payroll', 'banking'],
             'estimatedCount' => 15,
             'reason' => self::REASON,

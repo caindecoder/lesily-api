@@ -17,50 +17,50 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class RecordBreachInteractor
 {
-    public function execute(RecordBreachCommand $command, User $platformAdmin, RequestOrigin $context): BreachIncidentRecord
+    public function execute(RecordBreachCommand $recordBreachCommand, User $platformAdmin, RequestOrigin $requestOrigin): BreachIncidentRecord
     {
-        return DB::transaction(function () use ($command, $platformAdmin, $context): BreachIncidentRecord {
+        return DB::transaction(function () use ($recordBreachCommand, $platformAdmin, $requestOrigin): BreachIncidentRecord {
             $breachId = Str::uuid7()->toString();
 
             BreachIncident::retrieve($breachId)
-                ->record($command, $platformAdmin)
+                ->record($recordBreachCommand, $platformAdmin)
                 ->persist();
 
-            $breach = BreachIncidentRecord::query()
+            $breachIncident = BreachIncidentRecord::query()
                 ->with(['companies.company', 'amendments'])
                 ->findOrFail($breachId);
-            $this->recordAudit($breach, $platformAdmin, $context);
+            $this->recordAudit($breachIncident, $platformAdmin, $requestOrigin);
 
-            return $breach;
+            return $breachIncident;
         });
     }
 
-    protected function recordAudit(BreachIncidentRecord $breach, User $platformAdmin, RequestOrigin $context): void
+    protected function recordAudit(BreachIncidentRecord $breachIncident, User $platformAdmin, RequestOrigin $requestOrigin): void
     {
         AuditEntry::query()->create([
-            'stored_event_id' => $this->recordedEventIdFor($breach),
+            'stored_event_id' => $this->recordedEventIdFor($breachIncident),
             'event_class' => 'BreachRecorded',
             'subject_type' => AuditSubjectType::BreachIncident,
-            'subject_id' => $breach->getKey(),
+            'subject_id' => $breachIncident->getKey(),
             'subject_label' => null,
             'action' => AuditAction::BreachRecorded,
             'description' => 'Platform admin recorded a data breach.',
             'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $platformAdmin->name,
-            'ip_address' => $context->ip,
-            'user_agent' => $context->boundedUserAgent(),
-            'request_id' => $context->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'metadata' => null,
             'severity' => 'critical',
             'recorded_at' => now(),
         ]);
     }
 
-    protected function recordedEventIdFor(BreachIncidentRecord $breach): int
+    protected function recordedEventIdFor(BreachIncidentRecord $breachIncident): int
     {
         return LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $breach->getKey())
+            ->where('aggregate_uuid', $breachIncident->getKey())
             ->where('event_class', BreachRecorded::class)
             ->sole()
             ->getKey();

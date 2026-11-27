@@ -79,19 +79,19 @@ class BreachIncidentCompany extends Model
     }
 
     /**
-     * @param  Builder<self>  $query
+     * @param  Builder<self>  $breachIncidentCompanies
      */
-    protected function scopeWhereCompany(Builder $query, Company $company): void
+    protected function scopeWhereCompany(Builder $breachIncidentCompanies, Company $company): void
     {
-        $query->where('company_id', $company->getKey());
+        $breachIncidentCompanies->where('company_id', $company->getKey());
     }
 
     /**
-     * @param  Builder<self>  $query
+     * @param  Builder<self>  $breachIncidentCompanies
      */
-    protected function scopeWhereNotified(Builder $query): void
+    protected function scopeWhereNotified(Builder $breachIncidentCompanies): void
     {
-        $query->whereNotNull('notified_at');
+        $breachIncidentCompanies->whereNotNull('notified_at');
     }
 
     protected static function newFactory(): BreachIncidentCompanyFactory

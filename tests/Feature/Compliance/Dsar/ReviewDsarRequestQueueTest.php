@@ -36,7 +36,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     public function when_no_token_is_presented_then_the_queue_request_is_rejected_as_unauthenticated(): void
     {
         // Given a request in a company
-        DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->create();
+        DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
 
         // When a guest lists the queue
         $response = $this->listQueue(null);
@@ -71,7 +71,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     public function when_the_queue_query_is_invalid_then_the_read_is_refused(array $query, string $field, string $message): void
     {
         // Given a platform admin and a request in a company
-        DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->create();
+        DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
 
         // When the admin lists the queue with this row's defective query
         $response = $this->listQueue($this->platformAdmin, $query);
@@ -97,7 +97,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     {
         // Given a request, and an audit write that fails AFTER its row is
         // inserted — only the read's transaction can take the row back out
-        DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->create();
+        DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the admin lists the queue

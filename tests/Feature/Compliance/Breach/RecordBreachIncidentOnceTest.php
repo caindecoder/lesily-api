@@ -23,12 +23,12 @@ class RecordBreachIncidentOnceTest extends BreachIncidentsTestCase
     {
         // Given an incident already recorded
         $breachId = Str::uuid7()->toString();
-        $command = RecordBreachCommand::from($this->validPayload());
-        BreachIncident::retrieve($breachId)->record($command, $this->platformAdmin)->persist();
+        $recordBreachCommand = RecordBreachCommand::from($this->validPayload());
+        BreachIncident::retrieve($breachId)->record($recordBreachCommand, $this->platformAdmin)->persist();
 
         // When the same incident is recorded again
         try {
-            BreachIncident::retrieve($breachId)->record($command, $this->platformAdmin);
+            BreachIncident::retrieve($breachId)->record($recordBreachCommand, $this->platformAdmin);
             $this->fail('Recording an incident twice must be refused.');
         } catch (BreachIncidentAlreadyRecordedException) {
             // Then it is refused and the first record stands alone

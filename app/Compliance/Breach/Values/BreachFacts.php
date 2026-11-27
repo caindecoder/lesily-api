@@ -18,25 +18,25 @@ class BreachFacts
         public readonly string $description,
         public readonly string $likelyConsequences,
         public readonly string $measures,
-        public readonly CarbonImmutable $dateDiscovered,
+        public readonly CarbonImmutable $discoveredAt,
         public readonly string $severity,
         public readonly array $companies,
     ) {}
 
-    public static function recordedBy(BreachRecorded $event): self
+    public static function recordedBy(BreachRecorded $breachRecorded): self
     {
         $companies = [];
 
-        foreach ($event->companies as $company) {
+        foreach ($breachRecorded->companies as $company) {
             $companies[$company['companyId']] = ['dataTypes' => $company['dataTypes'], 'estimatedCount' => $company['estimatedCount']];
         }
 
         return new self(
-            description: $event->description,
-            likelyConsequences: $event->likelyConsequences,
-            measures: $event->measures,
-            dateDiscovered: CarbonImmutable::instance($event->dateDiscovered),
-            severity: $event->severity,
+            description: $breachRecorded->description,
+            likelyConsequences: $breachRecorded->likelyConsequences,
+            measures: $breachRecorded->measures,
+            discoveredAt: CarbonImmutable::instance($breachRecorded->dateDiscovered),
+            severity: $breachRecorded->severity,
             companies: $companies,
         );
     }
@@ -50,7 +50,7 @@ class BreachFacts
             'description' => $this->description,
             'likelyConsequences' => $this->likelyConsequences,
             'measures' => $this->measures,
-            'dateDiscovered' => $this->dateDiscovered,
+            'discoveredAt' => $this->discoveredAt,
             'severity' => $this->severity,
             'companies' => $this->companies,
         ];
@@ -63,9 +63,9 @@ class BreachFacts
     }
 
     /**
-     * @param  array{description: string, likelyConsequences: string, measures: string, dateDiscovered: CarbonImmutable, severity: string, companies: array<string, array{dataTypes: list<string>, estimatedCount: ?int}>}  $facts
+     * @param  array{description: string, likelyConsequences: string, measures: string, discoveredAt: CarbonImmutable, severity: string, companies: array<string, array{dataTypes: list<string>, estimatedCount: ?int}>}  $facts
      * @param  array{field: string, companyId: ?string, old: mixed, new: mixed}  $change
-     * @return array{description: string, likelyConsequences: string, measures: string, dateDiscovered: CarbonImmutable, severity: string, companies: array<string, array{dataTypes: list<string>, estimatedCount: ?int}>}
+     * @return array{description: string, likelyConsequences: string, measures: string, discoveredAt: CarbonImmutable, severity: string, companies: array<string, array{dataTypes: list<string>, estimatedCount: ?int}>}
      */
     protected function withChange(array $facts, array $change): array
     {
@@ -76,7 +76,7 @@ class BreachFacts
             BreachAmendmentField::Description => $facts['description'] = $change['new'],
             BreachAmendmentField::LikelyConsequences => $facts['likelyConsequences'] = $change['new'],
             BreachAmendmentField::Measures => $facts['measures'] = $change['new'],
-            BreachAmendmentField::DateDiscovered => $facts['dateDiscovered'] = CarbonImmutable::parse($change['new']),
+            BreachAmendmentField::DateDiscovered => $facts['discoveredAt'] = CarbonImmutable::parse($change['new']),
             BreachAmendmentField::Severity => $facts['severity'] = $change['new'],
             BreachAmendmentField::CompanyAdded,
             BreachAmendmentField::LateCompanyAdded => $facts['companies'][$companyId] = $change['new'],
@@ -91,29 +91,29 @@ class BreachFacts
     /**
      * @return list<array{field: string, companyId: ?string, old: mixed, new: mixed}>
      */
-    public function changesTo(AmendBreachCommand $command): array
+    public function changesTo(AmendBreachCommand $amendBreachCommand): array
     {
         $changes = [
-            ...$this->valueChange(BreachAmendmentField::Description, $this->description, $command->description),
-            ...$this->valueChange(BreachAmendmentField::LikelyConsequences, $this->likelyConsequences, $command->likelyConsequences),
-            ...$this->valueChange(BreachAmendmentField::Measures, $this->measures, $command->measures),
+            ...$this->valueChange(BreachAmendmentField::Description, $this->description, $amendBreachCommand->description),
+            ...$this->valueChange(BreachAmendmentField::LikelyConsequences, $this->likelyConsequences, $amendBreachCommand->likelyConsequences),
+            ...$this->valueChange(BreachAmendmentField::Measures, $this->measures, $amendBreachCommand->measures),
         ];
 
-        if ($command->dateDiscovered !== null && ! $command->dateDiscovered->equalTo($this->dateDiscovered)) {
-            $changes[] = $this->change(BreachAmendmentField::DateDiscovered, null, [$this->dateDiscovered->toIso8601ZuluString(), $command->dateDiscovered->toIso8601ZuluString()]);
+        if ($amendBreachCommand->dateDiscovered !== null && ! $amendBreachCommand->dateDiscovered->equalTo($this->discoveredAt)) {
+            $changes[] = $this->change(BreachAmendmentField::DateDiscovered, null, [$this->discoveredAt->toIso8601ZuluString(), $amendBreachCommand->dateDiscovered->toIso8601ZuluString()]);
         }
 
-        $changes = [...$changes, ...$this->valueChange(BreachAmendmentField::Severity, $this->severity, $command->severity?->value)];
+        $changes = [...$changes, ...$this->valueChange(BreachAmendmentField::Severity, $this->severity, $amendBreachCommand->severity?->value)];
 
-        return $command->companies === null ? $changes : [...$changes, ...$this->companyChanges($command->companies)];
+        return $amendBreachCommand->companies === null ? $changes : [...$changes, ...$this->companyChanges($amendBreachCommand->companies)];
     }
 
     /**
      * @return list<array{field: string, companyId: ?string, old: mixed, new: mixed}>
      */
-    protected function valueChange(BreachAmendmentField $field, string $current, ?string $sent): array
+    protected function valueChange(BreachAmendmentField $breachAmendmentField, string $current, ?string $sent): array
     {
-        return $sent === null || $sent === $current ? [] : [$this->change($field, null, [$current, $sent])];
+        return $sent === null || $sent === $current ? [] : [$this->change($breachAmendmentField, null, [$current, $sent])];
     }
 
     /**
@@ -125,10 +125,10 @@ class BreachFacts
         $changes = [];
         $sentById = [];
 
-        foreach ($sent as $company) {
-            $sentById[$company->company->getKey()] = [
-                'dataTypes' => array_map(fn (BreachDataType $type): string => $type->value, $company->dataTypes),
-                'estimatedCount' => $company->estimatedCount,
+        foreach ($sent as $affectedCompany) {
+            $sentById[$affectedCompany->company->getKey()] = [
+                'dataTypes' => array_map(fn (BreachDataType $breachDataType): string => $breachDataType->value, $affectedCompany->dataTypes),
+                'estimatedCount' => $affectedCompany->estimatedCount,
             ];
         }
 
@@ -173,9 +173,9 @@ class BreachFacts
      * @param  array{mixed, mixed}  $oldAndNew
      * @return array{field: string, companyId: ?string, old: mixed, new: mixed}
      */
-    protected function change(BreachAmendmentField $field, ?string $companyId, array $oldAndNew): array
+    protected function change(BreachAmendmentField $breachAmendmentField, ?string $companyId, array $oldAndNew): array
     {
-        return ['field' => $field->value, 'companyId' => $companyId, 'old' => $oldAndNew[0], 'new' => $oldAndNew[1]];
+        return ['field' => $breachAmendmentField->value, 'companyId' => $companyId, 'old' => $oldAndNew[0], 'new' => $oldAndNew[1]];
     }
 
     /**

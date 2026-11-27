@@ -19,57 +19,57 @@ use App\Compliance\Breach\Exceptions\BreachResolutionRefusedException;
 
 class ResolveBreachInteractor
 {
-    public function execute(ResolveBreachCommand $command, User $platformAdmin, RequestOrigin $context): BreachIncidentRecord
+    public function execute(ResolveBreachCommand $resolveBreachCommand, User $platformAdmin, RequestOrigin $requestOrigin): BreachIncidentRecord
     {
-        return DB::transaction(function () use ($command, $platformAdmin, $context): BreachIncidentRecord {
-            $breach = BreachIncidentRecord::query()->whereKey($command->breachId)->lockForUpdate()->first()
+        return DB::transaction(function () use ($resolveBreachCommand, $platformAdmin, $requestOrigin): BreachIncidentRecord {
+            $breachIncident = BreachIncidentRecord::query()->whereKey($resolveBreachCommand->breachId)->lockForUpdate()->first()
                 ?? throw new ModelNotFoundException;
 
-            $this->guardOpen($breach);
+            $this->guardOpen($breachIncident);
 
-            BreachIncident::retrieve($breach->getKey())->resolve($command, $platformAdmin)->persist();
+            BreachIncident::retrieve($breachIncident->getKey())->resolve($resolveBreachCommand, $platformAdmin)->persist();
 
-            $this->recordAudit($breach, $platformAdmin, $context);
+            $this->recordAudit($breachIncident, $platformAdmin, $requestOrigin);
 
-            return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breach->getKey())->firstOrFail();
+            return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breachIncident->getKey())->firstOrFail();
         });
     }
 
-    protected function guardOpen(BreachIncidentRecord $breach): void
+    protected function guardOpen(BreachIncidentRecord $breachIncident): void
     {
-        match ($breach->stage) {
+        match ($breachIncident->stage) {
             BreachStage::Resolved => throw BreachResolutionRefusedException::incidentResolved(),
             BreachStage::FalseAlarm => throw BreachResolutionRefusedException::falseAlarm(),
             BreachStage::Recorded, BreachStage::CompaniesNotified => null,
         };
     }
 
-    protected function recordAudit(BreachIncidentRecord $breach, User $platformAdmin, RequestOrigin $context): void
+    protected function recordAudit(BreachIncidentRecord $breachIncident, User $platformAdmin, RequestOrigin $requestOrigin): void
     {
         AuditEntry::query()->create([
-            'stored_event_id' => $this->resolvedEventIdFor($breach),
+            'stored_event_id' => $this->resolvedEventIdFor($breachIncident),
             'event_class' => 'BreachResolved',
             'subject_type' => AuditSubjectType::BreachIncident,
-            'subject_id' => $breach->getKey(),
+            'subject_id' => $breachIncident->getKey(),
             'subject_label' => null,
             'action' => AuditAction::BreachResolved,
             'description' => 'Platform admin resolved a data breach incident.',
             'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $platformAdmin->name,
-            'ip_address' => $context->ip,
-            'user_agent' => $context->boundedUserAgent(),
-            'request_id' => $context->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'metadata' => null,
             'severity' => 'critical',
             'recorded_at' => now(),
         ]);
     }
 
-    protected function resolvedEventIdFor(BreachIncidentRecord $breach): int
+    protected function resolvedEventIdFor(BreachIncidentRecord $breachIncident): int
     {
         return LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $breach->getKey())
+            ->where('aggregate_uuid', $breachIncident->getKey())
             ->where('event_class', BreachResolved::class)
             ->sole()
             ->getKey();
