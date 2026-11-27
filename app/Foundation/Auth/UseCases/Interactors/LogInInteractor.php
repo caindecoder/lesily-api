@@ -29,22 +29,22 @@ use App\Foundation\Auth\Exceptions\InvalidCredentialsException;
 class LogInInteractor
 {
     public function __construct(
-        private readonly LoginChallengeStore $challenges,
-        private readonly SignInFinisher $finisher,
+        private readonly LoginChallengeStore $loginChallengeStore,
+        private readonly SignInFinisher $signInFinisher,
         private readonly DeviceLimitGuard $deviceLimitGuard,
-        private readonly AccessLogRecorder $accessLog,
+        private readonly AccessLogRecorder $accessLogRecorder,
     ) {}
 
-    public function execute(LoginCommand $command): ChallengeRequired|SessionIssued
+    public function execute(LoginCommand $loginCommand): ChallengeRequired|SessionIssued
     {
-        $user = $this->authenticate($command);
+        $user = $this->authenticate($loginCommand);
 
         // 2FA gate (UC-1-002 alt-4a): an enrolled user gets a transient challenge, not a
         // token — login is suspended at "awaiting-2fa" until /2fa/verify. Non-enrolled users
         // get a session straight away (the existing 200 path, forward-compatible).
         if ($user->two_factor_confirmed_at !== null) {
-            $challengeId = $this->challenges->create($user->getKey());
-            $this->accessLog->note(AccessEvent::LoginChallenged, null, $user);
+            $challengeId = $this->loginChallengeStore->create($user->getKey());
+            $this->accessLogRecorder->note(AccessEvent::LoginChallenged, null, $user);
 
             return new ChallengeRequired($challengeId, now()->addMinutes(LoginChallengeStore::TTL_MINUTES));
         }
@@ -54,16 +54,16 @@ class LogInInteractor
         // bumped last_logged_at. 2FA users mint at /2fa/verify, where the cap is enforced too.
         $this->deviceLimitGuard->enforce($user);
 
-        return $this->finisher->finish(new PendingSession($user, $command->deviceName));
+        return $this->signInFinisher->finish(new PendingSession($user, $loginCommand->deviceName));
     }
 
-    protected function authenticate(LoginCommand $command): User
+    protected function authenticate(LoginCommand $loginCommand): User
     {
-        $user = User::query()->where('email', $command->email)->first();
-        $failure = $this->failureReason($command, $user);
+        $user = User::query()->where('email', $loginCommand->email)->first();
+        $accessEventReason = $this->failureReason($loginCommand, $user);
 
-        if ($failure !== null) {
-            $this->accessLog->note(AccessEvent::LoginFailed, $failure, $user);
+        if ($accessEventReason !== null) {
+            $this->accessLogRecorder->note(AccessEvent::LoginFailed, $accessEventReason, $user);
 
             throw new InvalidCredentialsException;
         }
@@ -73,11 +73,11 @@ class LogInInteractor
     }
 
     /** The access log tells the two apart; the client never can (one throw, one message). */
-    protected function failureReason(LoginCommand $command, ?User $user): ?AccessEventReason
+    protected function failureReason(LoginCommand $loginCommand, ?User $user): ?AccessEventReason
     {
         return match (true) {
             $user === null => AccessEventReason::UnknownAccount,
-            ! Hash::check($command->password, $user->password) => AccessEventReason::WrongPassword,
+            ! Hash::check($loginCommand->password, $user->password) => AccessEventReason::WrongPassword,
             default => null,
         };
     }

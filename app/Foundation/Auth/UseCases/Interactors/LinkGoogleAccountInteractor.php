@@ -17,18 +17,18 @@ use App\Foundation\Auth\UseCases\Commands\LinkGoogleAccountCommand;
 class LinkGoogleAccountInteractor
 {
     public function __construct(
-        protected GoogleIdTokenVerifier $verifier,
+        protected GoogleIdTokenVerifier $googleIdTokenVerifier,
     ) {}
 
-    public function execute(User $user, LinkGoogleAccountCommand $command): void
+    public function execute(User $user, LinkGoogleAccountCommand $linkGoogleAccountCommand): void
     {
-        $identity = $this->verifier->verify($command->idToken);
+        $googleIdentity = $this->googleIdTokenVerifier->verify($linkGoogleAccountCommand->idToken);
 
-        if (Str::lower($identity->email) !== Str::lower($user->email)) {
+        if (Str::lower($googleIdentity->email) !== Str::lower($user->email)) {
             throw GoogleEmailMismatchException::notTheUsersEmail();
         }
 
-        if (! $identity->emailVerified) {
+        if (! $googleIdentity->emailVerified) {
             throw GoogleEmailMismatchException::notVerifiedByGoogle();
         }
 
@@ -37,14 +37,14 @@ class LinkGoogleAccountInteractor
         }
 
         try {
-            DB::transaction(function () use ($user, $identity): void {
-                UserAggregate::retrieve($user->getKey())->linkGoogleOAuth($identity->subject)->persist();
+            DB::transaction(function () use ($user, $googleIdentity): void {
+                UserAggregate::retrieve($user->getKey())->linkGoogleOAuth($googleIdentity->subject)->persist();
             });
-        } catch (UniqueConstraintViolationException $violation) {
+        } catch (UniqueConstraintViolationException $uniqueConstraintViolationException) {
             // One Google account links to one user; the index answers even a concurrent link.
-            throw str_contains($violation->getMessage(), 'users_google_id_unique')
+            throw str_contains($uniqueConstraintViolationException->getMessage(), 'users_google_id_unique')
                 ? new GoogleAccountInUseException
-                : $violation;
+                : $uniqueConstraintViolationException;
         }
     }
 }

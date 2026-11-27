@@ -27,15 +27,15 @@ use App\Foundation\Auth\Exceptions\TwoFactorSetupNotStartedException;
 class ConfirmTwoFactorInteractor
 {
     public function __construct(
-        private readonly TotpVerifier $totp,
-        private readonly RecoveryCodeGenerator $recoveryCodes,
-        private readonly UserLevelAudit $audit,
+        private readonly TotpVerifier $totpVerifier,
+        private readonly RecoveryCodeGenerator $recoveryCodeGenerator,
+        private readonly UserLevelAudit $userLevelAudit,
     ) {}
 
     /**
      * @return list<string>
      */
-    public function execute(User $user, ConfirmTwoFactorCommand $command, RequestOrigin $origin): array
+    public function execute(User $user, ConfirmTwoFactorCommand $confirmTwoFactorCommand, RequestOrigin $requestOrigin): array
     {
         $secret = Cache::get("2fa-setup:{$user->getKey()}");
 
@@ -43,23 +43,23 @@ class ConfirmTwoFactorInteractor
             throw new TwoFactorSetupNotStartedException;
         }
 
-        if (! $this->totp->verify($secret, $command->code)) {
+        if (! $this->totpVerifier->verify($secret, $confirmTwoFactorCommand->code)) {
             throw new InvalidTwoFactorCodeException;
         }
 
-        $plaintextCodes = $this->recoveryCodes->generate();
+        $plaintextCodes = $this->recoveryCodeGenerator->generate();
 
         // Atomic: the direct credential write and the marker-event persist commit
         // together, so a failure can never leave a stored secret with a null
         // two_factor_confirmed_at (which reads as "2FA disabled" — orphan material).
-        DB::transaction(function () use ($user, $secret, $plaintextCodes, $origin): void {
+        DB::transaction(function () use ($user, $secret, $plaintextCodes, $requestOrigin): void {
             $user->two_factor_secret = $secret;
             $user->two_factor_recovery_codes = array_map(Hash::make(...), $plaintextCodes);
             $user->save();
 
             UserAggregate::retrieve($user->getKey())->confirmTwoFactor()->persist();
 
-            $this->audit->record($user, AuditAction::TwoFactorEnabled, $origin);
+            $this->userLevelAudit->record($user, AuditAction::TwoFactorEnabled, $requestOrigin);
         });
 
         // Clear AFTER commit — if the transaction rolled back, the staged secret

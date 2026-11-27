@@ -12,9 +12,9 @@ use App\Foundation\Auth\UseCases\Commands\SetDefaultCompanyCommand;
  */
 class SetDefaultCompanyInteractor
 {
-    public function execute(User $user, SetDefaultCompanyCommand $command): void
+    public function execute(User $user, SetDefaultCompanyCommand $setDefaultCompanyCommand): void
     {
-        $user->default_company_id = $command->company->getKey();
+        $user->default_company_id = $setDefaultCompanyCommand->company->getKey();
         $user->save();
     }
 }

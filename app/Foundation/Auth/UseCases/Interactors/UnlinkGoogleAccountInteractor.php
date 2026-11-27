@@ -17,13 +17,13 @@ class UnlinkGoogleAccountInteractor
         private TokenRevoker $tokenRevoker,
     ) {}
 
-    public function execute(User $user, UnlinkGoogleAccountCommand $command, string $currentTokenId): void
+    public function execute(User $user, UnlinkGoogleAccountCommand $unlinkGoogleAccountCommand, string $currentTokenId): void
     {
         if ($user->google_id === null) {
             throw new GoogleNotLinkedException;
         }
 
-        $this->passwordVerifier->verify($user, $command->password);
+        $this->passwordVerifier->verify($user, $unlinkGoogleAccountCommand->password);
 
         DB::transaction(function () use ($user): void {
             UserAggregate::retrieve($user->getKey())->unlinkGoogleOAuth()->persist();

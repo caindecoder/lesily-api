@@ -28,21 +28,21 @@ class ResetPasswordInteractor
 {
     public function __construct(
         private TokenRevoker $tokenRevoker,
-        private UserLevelAudit $audit,
+        private UserLevelAudit $userLevelAudit,
     ) {}
 
-    public function execute(ResetPasswordCommand $command, RequestOrigin $origin): void
+    public function execute(ResetPasswordCommand $resetPasswordCommand, RequestOrigin $requestOrigin): void
     {
         $status = DB::transaction(fn (): string => Password::broker()->reset(
-            ['email' => $command->email, 'password' => $command->password, 'token' => $command->token],
-            function (User $user, string $plainPassword) use ($origin): void {
+            ['email' => $resetPasswordCommand->email, 'password' => $resetPasswordCommand->password, 'token' => $resetPasswordCommand->token],
+            function (User $user, string $plainPassword) use ($requestOrigin): void {
                 UserAggregate::retrieve($user->getKey())
                     ->resetPassword(Hash::make($plainPassword))
                     ->persist();
 
                 $this->tokenRevoker->revokeAllForUserExcept($user, null);
 
-                $this->audit->record($user, AuditAction::PasswordReset, $origin);
+                $this->userLevelAudit->record($user, AuditAction::PasswordReset, $requestOrigin);
             },
         ));
 

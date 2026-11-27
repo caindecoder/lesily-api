@@ -16,11 +16,11 @@ use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
  */
 class RevokeSessionInteractor
 {
-    public function __construct(private readonly AccessLogRecorder $accessLog) {}
+    public function __construct(private readonly AccessLogRecorder $accessLogRecorder) {}
 
     public function execute(User $user, string $tokenId): void
     {
         $user->tokens()->whereKey($tokenId)->firstOrFail()->delete();
-        $this->accessLog->note(AccessEvent::SessionRevoked, null, $user);
+        $this->accessLogRecorder->note(AccessEvent::SessionRevoked, null, $user);
     }
 }

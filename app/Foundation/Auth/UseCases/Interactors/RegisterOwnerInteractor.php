@@ -26,26 +26,26 @@ use App\Foundation\Auth\UseCases\Commands\RegisterOwnerCommand;
 class RegisterOwnerInteractor
 {
     public function __construct(
-        private RegistrationUniquenessGuard $uniqueness,
+        private RegistrationUniquenessGuard $registrationUniquenessGuard,
         private SessionIssuer $sessionIssuer,
-        private CreateCompanyInteractor $createCompany,
-        private RegistrationAudit $audit,
+        private CreateCompanyInteractor $createCompanyInteractor,
+        private RegistrationAudit $registrationAudit,
     ) {}
 
-    public function execute(RegisterOwnerCommand $command, RequestOrigin $origin, string $deviceName): RegisterResult
+    public function execute(RegisterOwnerCommand $registerOwnerCommand, RequestOrigin $requestOrigin, string $deviceName): RegisterResult
     {
         // A consent record is evidence and is never minted without the client IP
         // it was given from (UC-1-069); an unresolvable IP is refused up front.
-        if (blank($origin->ip)) {
+        if (blank($requestOrigin->ip)) {
             throw ValidationException::withMessages(['ip' => 'The ip field is required.']);
         }
 
         // Reject a taken email / BR / EPF before opening the transaction, so a
         // conflict never leaves a partial account behind (E04 §13 — do something
         // or handle errors, not both).
-        $this->uniqueness->ensureUnique($command);
+        $this->registrationUniquenessGuard->ensureUnique($registerOwnerCommand);
 
-        [$userId, $companyId] = $this->persistRegistration($command, $origin);
+        [$userId, $companyId] = $this->persistRegistration($registerOwnerCommand, $requestOrigin);
 
         // After the transaction commits, the projectors have written the owner's `users`
         // read-model row. Materialise it and issue the session here — token mint is a
@@ -66,43 +66,43 @@ class RegisterOwnerInteractor
      *
      * @return array{string, string} [userId, companyId]
      */
-    protected function persistRegistration(RegisterOwnerCommand $command, RequestOrigin $origin): array
+    protected function persistRegistration(RegisterOwnerCommand $registerOwnerCommand, RequestOrigin $requestOrigin): array
     {
         try {
-            return DB::transaction(function () use ($command, $origin): array {
+            return DB::transaction(function () use ($registerOwnerCommand, $requestOrigin): array {
                 $userId = Str::uuid7()->toString();
                 $companyId = Str::uuid7()->toString();
 
                 // The owner first — companies.owner_id is a RESTRICT FK to users (#02) —
                 // and the company opened with the id the owner's genesis already names.
-                User::retrieve($userId)->createOwner($companyId, $command)->persist();
+                User::retrieve($userId)->createOwner($companyId, $registerOwnerCommand)->persist();
 
-                $createCompany = $this->buildCreateCompanyCommand($command, $userId);
-                $company = $this->createCompany->execute($createCompany, $origin, $companyId);
-                $this->audit->registered($createCompany->owner, $company, $origin);
+                $createCompanyCommand = $this->buildCreateCompanyCommand($registerOwnerCommand, $userId);
+                $company = $this->createCompanyInteractor->execute($createCompanyCommand, $requestOrigin, $companyId);
+                $this->registrationAudit->registered($createCompanyCommand->owner, $company, $requestOrigin);
 
                 return [$userId, $companyId];
             });
-        } catch (UniqueConstraintViolationException $violation) {
+        } catch (UniqueConstraintViolationException $uniqueConstraintViolationException) {
             // A concurrent signup slipped past the pre-tx guard on email; the DB UNIQUE
             // index is the backstop. Surface the same conflict — or re-raise an unmapped
             // violation untouched, so a genuine fault is never masked as a 409.
-            throw $this->uniqueness->conflictFor($violation) ?? $violation;
+            throw $this->registrationUniquenessGuard->conflictFor($uniqueConstraintViolationException) ?? $uniqueConstraintViolationException;
         }
     }
 
-    protected function buildCreateCompanyCommand(RegisterOwnerCommand $command, string $ownerUserId): CreateCompanyCommand
+    protected function buildCreateCompanyCommand(RegisterOwnerCommand $registerOwnerCommand, string $ownerUserId): CreateCompanyCommand
     {
         return CreateCompanyCommand::from([
-            'name' => $command->companyName,
-            'brNumber' => $command->brNumber,
-            'epfNumber' => $command->epfNumber,
-            'country' => $command->country,
+            'name' => $registerOwnerCommand->companyName,
+            'brNumber' => $registerOwnerCommand->brNumber,
+            'epfNumber' => $registerOwnerCommand->epfNumber,
+            'country' => $registerOwnerCommand->country,
             'owner' => UserReadModel::query()->findOrFail($ownerUserId),
-            'emergencyContactName' => $command->emergencyContactName,
-            'emergencyContactEmail' => $command->emergencyContactEmail,
-            'emergencyContactPhone' => $command->emergencyContactPhone,
-            'emergencyContactRelationship' => $command->emergencyContactRelationship,
+            'emergencyContactName' => $registerOwnerCommand->emergencyContactName,
+            'emergencyContactEmail' => $registerOwnerCommand->emergencyContactEmail,
+            'emergencyContactPhone' => $registerOwnerCommand->emergencyContactPhone,
+            'emergencyContactRelationship' => $registerOwnerCommand->emergencyContactRelationship,
         ]);
     }
 }

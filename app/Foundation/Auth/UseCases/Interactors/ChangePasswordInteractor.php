@@ -25,21 +25,21 @@ class ChangePasswordInteractor
     public function __construct(
         private PasswordVerifier $passwordVerifier,
         private TokenRevoker $tokenRevoker,
-        private UserLevelAudit $audit,
+        private UserLevelAudit $userLevelAudit,
     ) {}
 
-    public function execute(User $user, ChangePasswordCommand $command, CurrentSession $session): void
+    public function execute(User $user, ChangePasswordCommand $changePasswordCommand, CurrentSession $currentSession): void
     {
-        $this->passwordVerifier->verify($user, $command->currentPassword);
+        $this->passwordVerifier->verify($user, $changePasswordCommand->currentPassword);
 
-        DB::transaction(function () use ($user, $command, $session): void {
+        DB::transaction(function () use ($user, $changePasswordCommand, $currentSession): void {
             UserAggregate::retrieve($user->getKey())
-                ->changePassword(Hash::make($command->newPassword))
+                ->changePassword(Hash::make($changePasswordCommand->newPassword))
                 ->persist();
 
-            $this->tokenRevoker->revokeAllForUserExcept($user, $session->tokenId);
+            $this->tokenRevoker->revokeAllForUserExcept($user, $currentSession->tokenId);
 
-            $this->audit->record($user, AuditAction::PasswordChanged, $session->requestOrigin);
+            $this->userLevelAudit->record($user, AuditAction::PasswordChanged, $currentSession->requestOrigin);
         });
     }
 }

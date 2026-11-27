@@ -23,14 +23,14 @@ class RevokeAllSessionsInteractor
     public function __construct(
         private TokenRevoker $tokenRevoker,
         private PasswordVerifier $passwordVerifier,
-        private AccessLogRecorder $accessLog,
+        private AccessLogRecorder $accessLogRecorder,
     ) {}
 
-    public function execute(User $user, LogoutAllCommand $command, string $currentTokenId): int
+    public function execute(User $user, LogoutAllCommand $logoutAllCommand, string $currentTokenId): int
     {
-        $this->passwordVerifier->verify($user, $command->password);
+        $this->passwordVerifier->verify($user, $logoutAllCommand->password);
         $revoked = $this->tokenRevoker->revokeAllForUserExcept($user, $currentTokenId);
-        $this->accessLog->note(AccessEvent::OtherSessionsRevoked, null, $user);
+        $this->accessLogRecorder->note(AccessEvent::OtherSessionsRevoked, null, $user);
 
         return $revoked;
     }
