@@ -60,15 +60,15 @@ class PrivacyNotice
         return match ($key) {
             'controller' => $this->controllerLines(),
             'dpo' => $this->dpoLines(),
-            'purposes' => $this->activityLines($key, $this->activities, fn (ProcessingActivity $activity): array => [
-                'purpose' => __("privacy.activities.{$activity->key()}.purpose"),
-                'basis' => __("privacy.legal_bases.{$activity->legalBasis->value}"),
+            'purposes' => $this->activityLines($key, $this->activities, fn (ProcessingActivity $processingActivity): array => [
+                'purpose' => __("privacy.activities.{$processingActivity->key()}.purpose"),
+                'basis' => __("privacy.legal_bases.{$processingActivity->legalBasis->value}"),
             ]),
-            'legitimate_interests' => $this->activityLines($key, $this->activitiesOnLegitimateInterests(), fn (ProcessingActivity $activity): array => [
-                'purpose' => __("privacy.activities.{$activity->key()}.purpose"),
+            'legitimate_interests' => $this->activityLines($key, $this->activitiesOnLegitimateInterests(), fn (ProcessingActivity $processingActivity): array => [
+                'purpose' => __("privacy.activities.{$processingActivity->key()}.purpose"),
             ]),
-            'retention' => $this->activityLines($key, $this->activities, fn (ProcessingActivity $activity): array => [
-                'retention' => __("privacy.activities.{$activity->key()}.retention"),
+            'retention' => $this->activityLines($key, $this->activities, fn (ProcessingActivity $processingActivity): array => [
+                'retention' => __("privacy.activities.{$processingActivity->key()}.retention"),
             ]),
             'data_categories' => $this->dataCategoryLines(),
             'recipients' => $this->recipientLines(),
@@ -111,15 +111,15 @@ class PrivacyNotice
      */
     protected function dpoLines(): array
     {
-        $officer = $this->company->dataProtectionOfficer;
+        $companyDataProtectionOfficer = $this->company->dataProtectionOfficer;
 
-        if ($officer === null) {
+        if ($companyDataProtectionOfficer === null) {
             return [__('privacy.notice.dpo.lines.none_designated')];
         }
 
-        return [$officer->phone === null
-            ? __('privacy.notice.dpo.contact_without_phone', ['name' => $officer->name, 'email' => $officer->email])
-            : __('privacy.notice.dpo.contact', ['name' => $officer->name, 'email' => $officer->email, 'phone' => $officer->phone])];
+        return [$companyDataProtectionOfficer->phone === null
+            ? __('privacy.notice.dpo.contact_without_phone', ['name' => $companyDataProtectionOfficer->name, 'email' => $companyDataProtectionOfficer->email])
+            : __('privacy.notice.dpo.contact', ['name' => $companyDataProtectionOfficer->name, 'email' => $companyDataProtectionOfficer->email, 'phone' => $companyDataProtectionOfficer->phone])];
     }
 
     /**
@@ -131,9 +131,9 @@ class PrivacyNotice
      */
     protected function activityLines(string $item, array $activities, callable $replacements): array
     {
-        return array_map(fn (ProcessingActivity $activity): mixed => __(
+        return array_map(fn (ProcessingActivity $processingActivity): mixed => __(
             "privacy.notice.{$item}.line",
-            ['activity' => __("privacy.activities.{$activity->key()}.name"), ...$replacements($activity)],
+            ['activity' => __("privacy.activities.{$processingActivity->key()}.name"), ...$replacements($processingActivity)],
         ), $activities);
     }
 
@@ -144,7 +144,7 @@ class PrivacyNotice
     {
         return array_filter(
             $this->activities,
-            fn (ProcessingActivity $activity): bool => $activity->legalBasis === LegalBasis::LegitimateInterests,
+            fn (ProcessingActivity $processingActivity): bool => $processingActivity->legalBasis === LegalBasis::LegitimateInterests,
         );
     }
 
@@ -153,7 +153,7 @@ class PrivacyNotice
      */
     protected function dataCategoryLines(): array
     {
-        $categories = array_merge(...array_map(fn (ProcessingActivity $activity): array => $activity->dataCategories, $this->activities));
+        $categories = array_merge(...array_map(fn (ProcessingActivity $processingActivity): array => $processingActivity->dataCategories, $this->activities));
 
         return array_map(fn (string $category): mixed => __("privacy.data_categories.{$category}"), array_unique($categories));
     }
@@ -164,7 +164,7 @@ class PrivacyNotice
     protected function recipientLines(): array
     {
         $parties = array_merge(...array_map(
-            fn (ProcessingActivity $activity): array => array_map(fn (ThirdParty $party): string => $party->value, $activity->thirdParties),
+            fn (ProcessingActivity $processingActivity): array => array_map(fn (ThirdParty $thirdParty): string => $thirdParty->value, $processingActivity->thirdParties),
             $this->activities,
         ));
 

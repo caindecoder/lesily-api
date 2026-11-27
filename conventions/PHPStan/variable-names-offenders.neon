@@ -1747,60 +1747,6 @@ parameters:
 			path: ../../app/Companies/UseCases/Interactors/VerifyOwnershipTransferCaseInteractor.php
 
 		-
-			message: '#^`Application \$app` should be named `\$application` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Compliance/Privacy/CompliancePrivacyServiceProvider.php
-
-		-
-			message: '#^`ProcessingRegister \$register` should be named `\$processingRegister` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Compliance/Privacy/IO/Http/Controllers/PrivacyNoticeController.php
-
-		-
-			message: '#^`ProcessingRegister \$register` should be named `\$processingRegister` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Compliance/Privacy/IO/Http/Controllers/ProcessingRegisterController.php
-
-		-
-			message: '#^`ProcessingActivity \$activity` should be named `\$processingActivity` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Compliance/Privacy/IO/Http/Resources/ProcessingActivityResource.php
-
-		-
-			message: '#^`ThirdParty \$party` should be named `\$thirdParty` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Compliance/Privacy/IO/Http/Resources/ProcessingActivityResource.php
-
-		-
-			message: '#^`CompanyDataProtectionOfficer \$officer` should be named `\$companyDataProtectionOfficer` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Compliance/Privacy/UseCases/Notice/PrivacyNotice.php
-
-		-
-			message: '#^`ProcessingActivity \$activity` should be named `\$processingActivity` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 7
-			path: ../../app/Compliance/Privacy/UseCases/Notice/PrivacyNotice.php
-
-		-
-			message: '#^`ThirdParty \$party` should be named `\$thirdParty` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Compliance/Privacy/UseCases/Notice/PrivacyNotice.php
-
-		-
-			message: '#^`ProcessingActivityProvider \$provider` should be named `\$processingActivityProvider` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Compliance/Privacy/UseCases/Register/ProcessingRegister.php
-
-		-
 			message: '#^`RecordConsentCommand \$command` should be named `\$recordConsentCommand` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -6053,30 +5999,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Compliance/Dsar/WithdrawDsarRequestTest.php
-
-		-
-			message: '#^`Company \$fabrikam` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Privacy/ViewPrivacyNoticeTest.php
-
-		-
-			message: '#^`User \$employee` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Privacy/ViewPrivacyNoticeTest.php
-
-		-
-			message: '#^`User \$outsider` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Privacy/ViewPrivacyNoticeTest.php
-
-		-
-			message: '#^`User \$outsider` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Privacy/ViewProcessingRegisterTest.php
 
 		-
 			message: '#^`AccessLogEntry \$after` should be named `\$accessLogEntry` \(coding\-conventions §2\.26\)\.$#'

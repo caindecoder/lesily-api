@@ -14,11 +14,11 @@ class CompliancePrivacyServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->bind(ProcessingRegister::class, fn (Application $app): ProcessingRegister => new ProcessingRegister([
-            $app->make(AccountsProcessingActivities::class),
-            $app->make(CompaniesProcessingActivities::class),
-            $app->make(BillingProcessingActivities::class),
-            $app->make(AuditProcessingActivities::class),
+        $this->app->bind(ProcessingRegister::class, fn (Application $application): ProcessingRegister => new ProcessingRegister([
+            $application->make(AccountsProcessingActivities::class),
+            $application->make(CompaniesProcessingActivities::class),
+            $application->make(BillingProcessingActivities::class),
+            $application->make(AuditProcessingActivities::class),
         ]));
     }
 }
