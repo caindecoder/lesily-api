@@ -10,11 +10,11 @@ use App\Foundation\Auth\UseCases\Interactors\EnableTwoFactorInteractor;
 
 class EnableTwoFactorController
 {
-    public function __invoke(Request $request, EnableTwoFactorInteractor $interactor): JsonResponse
+    public function __invoke(Request $request, EnableTwoFactorInteractor $enableTwoFactorInteractor): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        return (new TwoFactorSetupResource($interactor->execute($user)))->response();
+        return (new TwoFactorSetupResource($enableTwoFactorInteractor->execute($user)))->response();
     }
 }

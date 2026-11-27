@@ -19,14 +19,14 @@ use App\Foundation\Auth\UseCases\Interactors\RegenerateRecoveryCodesInteractor;
  */
 class RegenerateRecoveryCodesController extends Controller
 {
-    public function __invoke(Request $request, RegenerateRecoveryCodesInteractor $interactor): JsonResponse
+    public function __invoke(Request $request, RegenerateRecoveryCodesInteractor $regenerateRecoveryCodesInteractor): JsonResponse
     {
-        $command = RegenerateRecoveryCodesCommand::validateAndCreate($request);
+        $regenerateRecoveryCodesCommand = RegenerateRecoveryCodesCommand::validateAndCreate($request);
 
         /** @var User $user */
         $user = $request->user();
 
-        $codes = $interactor->execute($user, $command, RequestOrigin::fromRequest($request));
+        $codes = $regenerateRecoveryCodesInteractor->execute($user, $regenerateRecoveryCodesCommand, RequestOrigin::fromRequest($request));
 
         return (new RecoveryCodesResource($codes))->response();
     }

@@ -15,12 +15,12 @@ use App\Foundation\Auth\UseCases\Interactors\RevokeSessionInteractor;
  */
 class RevokeSessionController extends Controller
 {
-    public function __invoke(Request $request, string $tokenId, RevokeSessionInteractor $interactor): Response
+    public function __invoke(Request $request, string $tokenId, RevokeSessionInteractor $revokeSessionInteractor): Response
     {
         /** @var User $user */
         $user = $request->user();
 
-        $interactor->execute($user, $tokenId);
+        $revokeSessionInteractor->execute($user, $tokenId);
 
         return response()->noContent();
     }

@@ -16,9 +16,9 @@ use App\Foundation\Auth\UseCases\Interactors\ForgotPasswordInteractor;
  */
 class ForgotPasswordController extends Controller
 {
-    public function __invoke(Request $request, ForgotPasswordInteractor $interactor): Response
+    public function __invoke(Request $request, ForgotPasswordInteractor $forgotPasswordInteractor): Response
     {
-        $interactor->execute(ForgotPasswordCommand::validateAndCreate($request));
+        $forgotPasswordInteractor->execute(ForgotPasswordCommand::validateAndCreate($request));
 
         return response()->noContent();
     }

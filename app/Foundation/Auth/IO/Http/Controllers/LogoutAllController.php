@@ -19,17 +19,17 @@ use App\Foundation\Auth\UseCases\Interactors\RevokeAllSessionsInteractor;
  */
 class LogoutAllController extends Controller
 {
-    public function __invoke(Request $request, RevokeAllSessionsInteractor $interactor): JsonResponse
+    public function __invoke(Request $request, RevokeAllSessionsInteractor $revokeAllSessionsInteractor): JsonResponse
     {
-        $command = LogoutAllCommand::validateAndCreate($request);
+        $logoutAllCommand = LogoutAllCommand::validateAndCreate($request);
 
         /** @var User $user */
         $user = $request->user();
 
-        /** @var PersonalAccessToken $current */
-        $current = $user->currentAccessToken();
+        /** @var PersonalAccessToken $currentPersonalAccessToken */
+        $currentPersonalAccessToken = $user->currentAccessToken();
 
-        $tokensRevoked = $interactor->execute($user, $command, $current->getKey());
+        $tokensRevoked = $revokeAllSessionsInteractor->execute($user, $logoutAllCommand, $currentPersonalAccessToken->getKey());
 
         return LogoutAllResource::make($tokensRevoked)->response();
     }

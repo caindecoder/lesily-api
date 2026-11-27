@@ -15,12 +15,12 @@ use App\Foundation\Auth\UseCases\Interactors\LogOutInteractor;
  */
 class LogoutController extends Controller
 {
-    public function __invoke(Request $request, LogOutInteractor $interactor): Response
+    public function __invoke(Request $request, LogOutInteractor $logOutInteractor): Response
     {
         /** @var User $user */
         $user = $request->user();
 
-        $interactor->execute($user);
+        $logOutInteractor->execute($user);
 
         return response()->noContent();
     }

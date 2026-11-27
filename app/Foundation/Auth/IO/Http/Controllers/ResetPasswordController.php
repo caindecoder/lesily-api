@@ -17,9 +17,9 @@ use App\Foundation\Auth\UseCases\Interactors\ResetPasswordInteractor;
  */
 class ResetPasswordController extends Controller
 {
-    public function __invoke(Request $request, ResetPasswordInteractor $interactor): Response
+    public function __invoke(Request $request, ResetPasswordInteractor $resetPasswordInteractor): Response
     {
-        $interactor->execute(ResetPasswordCommand::validateAndCreate($request), RequestOrigin::fromRequest($request));
+        $resetPasswordInteractor->execute(ResetPasswordCommand::validateAndCreate($request), RequestOrigin::fromRequest($request));
 
         return response()->noContent();
     }

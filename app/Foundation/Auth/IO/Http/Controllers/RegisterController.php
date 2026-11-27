@@ -20,9 +20,9 @@ use App\Foundation\Auth\UseCases\Interactors\RegisterOwnerInteractor;
  */
 class RegisterController extends Controller
 {
-    public function __invoke(Request $request, RegisterOwnerInteractor $interactor): JsonResponse
+    public function __invoke(Request $request, RegisterOwnerInteractor $registerOwnerInteractor): JsonResponse
     {
-        $result = $interactor->execute(
+        $registerResult = $registerOwnerInteractor->execute(
             RegisterOwnerCommand::validateAndCreate($request),
             RequestOrigin::fromRequest($request),
             // Register is UA-derived: pass null so a client-supplied deviceName in the body
@@ -30,7 +30,7 @@ class RegisterController extends Controller
             DeviceName::resolve(null, $request),
         );
 
-        return (new RegisterSuccessResource($result->user, $result->issuedSession->token, $result->companyId))
+        return (new RegisterSuccessResource($registerResult->user, $registerResult->issuedSession->token, $registerResult->companyId))
             ->response()
             ->setStatusCode(Response::HTTP_CREATED);
     }

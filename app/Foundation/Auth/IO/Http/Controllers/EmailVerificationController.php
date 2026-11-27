@@ -19,9 +19,9 @@ use App\Foundation\Auth\UseCases\Interactors\VerifyEmailInteractor;
  */
 class EmailVerificationController extends Controller
 {
-    public function __invoke(string $id, VerifyEmailInteractor $interactor): JsonResponse
+    public function __invoke(string $id, VerifyEmailInteractor $verifyEmailInteractor): JsonResponse
     {
-        $interactor->execute($id);
+        $verifyEmailInteractor->execute($id);
 
         return response()->json(['message' => 'Email verified.']);
     }

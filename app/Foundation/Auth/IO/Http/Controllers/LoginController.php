@@ -22,9 +22,9 @@ use App\Foundation\Auth\IO\Http\Resources\TwoFactorChallengeResource;
  */
 class LoginController extends Controller
 {
-    public function __invoke(Request $request, LogInInteractor $interactor): JsonResponse
+    public function __invoke(Request $request, LogInInteractor $logInInteractor): JsonResponse
     {
-        $outcome = $interactor->execute(LoginCommand::validateAndCreate(
+        $outcome = $logInInteractor->execute(LoginCommand::validateAndCreate(
             $request->merge(['deviceName' => DeviceName::resolve($request->input('deviceName'), $request)])
         ));
 

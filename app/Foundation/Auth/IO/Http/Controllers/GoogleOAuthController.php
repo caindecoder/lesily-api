@@ -16,9 +16,9 @@ use App\Foundation\Auth\IO\Http\Resources\TwoFactorChallengeResource;
 /** POST /api/v1/auth/google — the password login's delivery shape for a Google ID token. */
 class GoogleOAuthController extends Controller
 {
-    public function __invoke(Request $request, GoogleOAuthInteractor $interactor): JsonResponse
+    public function __invoke(Request $request, GoogleOAuthInteractor $googleOAuthInteractor): JsonResponse
     {
-        $outcome = $interactor->execute(GoogleOAuthCommand::validateAndCreate(
+        $outcome = $googleOAuthInteractor->execute(GoogleOAuthCommand::validateAndCreate(
             $request->merge(['deviceName' => DeviceName::resolve($request->input('deviceName'), $request)])
         ));
 

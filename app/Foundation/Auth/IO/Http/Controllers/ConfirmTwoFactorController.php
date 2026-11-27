@@ -12,14 +12,14 @@ use App\Foundation\Auth\UseCases\Interactors\ConfirmTwoFactorInteractor;
 
 class ConfirmTwoFactorController
 {
-    public function __invoke(Request $request, ConfirmTwoFactorInteractor $interactor): JsonResponse
+    public function __invoke(Request $request, ConfirmTwoFactorInteractor $confirmTwoFactorInteractor): JsonResponse
     {
-        $command = ConfirmTwoFactorCommand::validateAndCreate($request);
+        $confirmTwoFactorCommand = ConfirmTwoFactorCommand::validateAndCreate($request);
 
         /** @var User $user */
         $user = $request->user();
 
-        $codes = $interactor->execute($user, $command, RequestOrigin::fromRequest($request));
+        $codes = $confirmTwoFactorInteractor->execute($user, $confirmTwoFactorCommand, RequestOrigin::fromRequest($request));
 
         return (new RecoveryCodesResource($codes))->response();
     }
