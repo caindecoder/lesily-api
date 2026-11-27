@@ -29,7 +29,7 @@ final class VariableNamer
     /** The roles a person may be named by; a new one is added to coding-conventions §2.26 first. */
     protected const array ROLE_WORDS = [
         'user', 'actor', 'admin', 'platformAdmin', 'owner', 'newOwner', 'member',
-        'subject', 'invitee', 'inviter', 'recipient', 'requester', 'viewer',
+        'subject', 'invitee', 'inviter', 'recipient', 'requester', 'viewer', 'otherUser',
     ];
 
     /**

@@ -9,6 +9,7 @@ final class ListedPeople
 {
     /**
      * @param  Collection<int, User>  $platformAdmins
+     * @param  Collection<int, User>  $otherUsers
      */
     public function meet(
         User $user,
@@ -24,8 +25,10 @@ final class ListedPeople
         User $recipient,
         User $requester,
         User $viewer,
+        User $otherUser,
         User $revokedBy,
         Collection $platformAdmins,
+        Collection $otherUsers,
     ): void {
         //
     }
