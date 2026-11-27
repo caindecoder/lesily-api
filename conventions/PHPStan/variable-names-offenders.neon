@@ -6835,42 +6835,6 @@ parameters:
 			path: ../../tests/Feature/Compliance/Breach/BreachIncidentsTestCase.php
 
 		-
-			message: '#^`BreachIncidentCompany \$row` should be named `\$breachIncidentCompany` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Breach/BreachIncidentsTestCase.php
-
-		-
-			message: '#^`BreachIncidentRecord \$incident` should be named `\$breachIncident` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Breach/BreachIncidentsTestCase.php
-
-		-
-			message: '#^`BreachIncidentRecordFactory \$incident` should be named `\$breachIncidentRecordFactory` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Compliance/Breach/BreachIncidentsTestCase.php
-
-		-
-			message: '#^`Company \$companyA` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Breach/BreachIncidentsTestCase.php
-
-		-
-			message: '#^`Company \$companyB` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Breach/BreachIncidentsTestCase.php
-
-		-
-			message: '#^`User \$caller` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 3
-			path: ../../tests/Feature/Compliance/Breach/BreachIncidentsTestCase.php
-
-		-
 			message: '#^`User \$employee` is not a role word \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1

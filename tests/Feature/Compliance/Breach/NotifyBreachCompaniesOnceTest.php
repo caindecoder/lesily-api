@@ -24,7 +24,7 @@ class NotifyBreachCompaniesOnceTest extends BreachIncidentsTestCase
     {
         // Given an incident never recorded, or one whose companies were already notified
         $breachId = $recorded ? $this->aRecordedIncident() : Str::uuid7()->toString();
-        $parts = [$this->companyA->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.']];
+        $parts = [$this->contosoCompany->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.']];
         if ($notifiedBefore > 0) {
             BreachIncident::retrieve($breachId)->notifyCompanies($this->platformAdmin, $parts)->persist();
         }

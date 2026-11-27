@@ -110,7 +110,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         $response = $this->recordBreach($this->platformAdmin, $this->validPayload(['dateDiscovered' => '2026-05-10T09:00:00Z']));
 
         // Then it is recorded
-        $this->assertIncidentProjected($this->assertIncidentCreated($response), [$this->companyA->getKey() => [['pii'], 40]]);
+        $this->assertIncidentProjected($this->assertIncidentCreated($response), [$this->contosoCompany->getKey() => [['pii'], 40]]);
     }
 
     #[Test]
@@ -145,13 +145,13 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
     public function when_a_company_count_is_not_yet_known_then_it_is_recorded_empty(): void
     {
         // Given company A's number of affected people is not yet known
-        $payload = $this->validPayload(['companies' => [['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => null]]]);
+        $payload = $this->validPayload(['companies' => [['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => null]]]);
 
         // When the platform admin records the breach
         $response = $this->recordBreach($this->platformAdmin, $payload);
 
         // Then company A's count is left empty
-        $this->assertIncidentProjected($this->assertIncidentCreated($response), [$this->companyA->getKey() => [['pii'], null]]);
+        $this->assertIncidentProjected($this->assertIncidentCreated($response), [$this->contosoCompany->getKey() => [['pii'], null]]);
     }
 
     #[Test]
@@ -174,8 +174,8 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
     {
         // Given company A lost contact details of 40 people and company B payroll and bank details of 7
         $payload = $this->validPayload(['companies' => [
-            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
-            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll', 'banking'], 'estimatedCount' => 7],
+            ['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
+            ['companyId' => $this->otherCompany->getKey(), 'dataTypes' => ['payroll', 'banking'], 'estimatedCount' => 7],
         ]]);
 
         // When the platform admin records the breach
@@ -183,15 +183,15 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
 
         // Then each company keeps its own figures, stored per company and never as one incident-wide figure
         $this->assertIncidentProjected($this->assertIncidentCreated($response), [
-            $this->companyA->getKey() => [['pii'], 40],
-            $this->companyB->getKey() => [['payroll', 'banking'], 7],
+            $this->contosoCompany->getKey() => [['pii'], 40],
+            $this->otherCompany->getKey() => [['payroll', 'banking'], 7],
         ]);
         $shown = array_column($response->json('data.companies'), null, 'company_id');
         $this->assertSame(
             [[['pii'], 40], [['payroll', 'banking'], 7]],
             [
-                [$shown[$this->companyA->getKey()]['data_types'], $shown[$this->companyA->getKey()]['estimated_count']],
-                [$shown[$this->companyB->getKey()]['data_types'], $shown[$this->companyB->getKey()]['estimated_count']],
+                [$shown[$this->contosoCompany->getKey()]['data_types'], $shown[$this->contosoCompany->getKey()]['estimated_count']],
+                [$shown[$this->otherCompany->getKey()]['data_types'], $shown[$this->otherCompany->getKey()]['estimated_count']],
             ],
         );
     }
@@ -211,7 +211,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
 
         // Then the incident row and its company row are both projected
         $this->assertTrue(BreachIncidentRecord::query()->whereKey($breachId)->exists());
-        $this->assertSame([$this->companyA->getKey()], BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->pluck('company_id')->all());
+        $this->assertSame([$this->contosoCompany->getKey()], BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->pluck('company_id')->all());
     }
 
     #[Test]
@@ -227,7 +227,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         // audited once with no company, and no one is told anything yet
         $breachId = $this->assertIncidentResponded($response);
         $storedEventId = $this->assertBreachRecordedStored($breachId);
-        $this->assertIncidentProjected($breachId, [$this->companyA->getKey() => [['pii'], 40]]);
+        $this->assertIncidentProjected($breachId, [$this->contosoCompany->getKey() => [['pii'], 40]]);
         $this->assertRecordAudited($response, $breachId, $storedEventId);
         Notification::assertNothingSent();
     }
@@ -271,8 +271,8 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
 
         foreach ($changes as $path => $value) {
             Arr::set($payload, $path, match ($value) {
-                self::COMPANY_A => $this->companyA->getKey(),
-                self::COMPANY_A_UPPERCASE => strtoupper($this->companyA->getKey()),
+                self::COMPANY_A => $this->contosoCompany->getKey(),
+                self::COMPANY_A_UPPERCASE => strtoupper($this->contosoCompany->getKey()),
                 default => $value,
             });
         }
@@ -322,8 +322,8 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
             'false_alarm_reason' => null,
             'false_alarm_findings' => null,
             'companies' => [[
-                'company_id' => $this->companyA->getKey(),
-                'name' => $this->companyA->name,
+                'company_id' => $this->contosoCompany->getKey(),
+                'name' => $this->contosoCompany->name,
                 'data_types' => ['pii'],
                 'estimated_count' => 40,
                 'notified_at' => null,
@@ -349,7 +349,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         $this->assertNull($event->meta_data['company_id'] ?? null);
         $this->assertSame([$breachId, $this->platformAdmin->getKey(), 'high'], [$properties['breachId'], $properties['recordedByUserId'], $properties['severity']]);
         $this->assertTrue(CarbonImmutable::parse($properties['deadline'])->equalTo(CarbonImmutable::parse('2026-05-07T14:00:00Z')));
-        $this->assertSame([['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40]], $properties['companies']);
+        $this->assertSame([['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40]], $properties['companies']);
 
         return (int) $event->getKey();
     }

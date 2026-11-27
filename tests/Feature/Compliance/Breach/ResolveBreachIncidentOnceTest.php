@@ -74,7 +74,7 @@ class ResolveBreachIncidentOnceTest extends BreachIncidentsTestCase
             ],
             'notify its companies again' => [
                 fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)->notifyCompanies($test->platformAdmin, [
-                    $test->companyA->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.'],
+                    $test->contosoCompany->getKey() => ['description' => 'A payroll export was emailed to the wrong recipient.'],
                 ])->persist(),
                 BreachIncidentNotRecordedException::class,
                 'Only a recorded breach incident can have its companies notified; this incident is resolved.',
@@ -91,7 +91,7 @@ class ResolveBreachIncidentOnceTest extends BreachIncidentsTestCase
             'add a late company' => [
                 fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)->addLateCompany(AddBreachCompanyCommand::from([
                     'breachId' => $breachId,
-                    'companyId' => $test->companyB,
+                    'companyId' => $test->otherCompany,
                     'dataTypes' => ['payroll'],
                     'estimatedCount' => 12,
                     'reason' => 'The export also reached this company.',
@@ -101,7 +101,7 @@ class ResolveBreachIncidentOnceTest extends BreachIncidentsTestCase
             ],
             'ask Lesily to file it' => [
                 fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)->requestFiling(
-                    RequestBreachFilingCommand::from(['breachId' => $breachId, 'company' => $test->companyA]),
+                    RequestBreachFilingCommand::from(['breachId' => $breachId, 'company' => $test->contosoCompany]),
                     $test->owner,
                 )->persist(),
                 BreachFilingNotOpenException::class,
@@ -109,7 +109,7 @@ class ResolveBreachIncidentOnceTest extends BreachIncidentsTestCase
             ],
             'file it with the regulator' => [
                 fn (self $test, string $breachId) => BreachIncident::retrieve($breachId)
-                    ->fileWithRegulator($test->aFilingCommandFor($breachId, $test->companyA), $test->platformAdmin, $test->aRegulatorFiling())
+                    ->fileWithRegulator($test->aFilingCommandFor($breachId, $test->contosoCompany), $test->platformAdmin, $test->aRegulatorFiling())
                     ->persist(),
                 BreachFilingNotOpenException::class,
                 'A resolved breach incident is not filed with the regulator.',
@@ -119,7 +119,7 @@ class ResolveBreachIncidentOnceTest extends BreachIncidentsTestCase
 
     protected function aResolvedIncident(): string
     {
-        $breachId = $this->aNotifiedIncident($this->companyA);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany);
         $this->travelTo(CarbonImmutable::parse('2026-05-08T10:00:00Z'));
         BreachIncident::retrieve($breachId)->resolve($this->aResolutionFor($breachId), $this->platformAdmin)->persist();
 

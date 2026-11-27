@@ -20,11 +20,11 @@ class FileBreachWithRegulatorOnceTest extends BreachIncidentsTestCase
     public function when_a_company_already_filed_for_is_filed_again_then_the_aggregate_refuses_it(): void
     {
         // Given an incident already filed with the regulator for company A
-        $breachId = $this->anIncidentFiledFor($this->companyA);
+        $breachId = $this->anIncidentFiledFor($this->contosoCompany);
 
         // When a platform admin files it for company A again
         try {
-            BreachIncident::retrieve($breachId)->fileWithRegulator($this->aFilingCommandFor($breachId, $this->companyA), $this->platformAdmin, $this->aRegulatorFiling());
+            BreachIncident::retrieve($breachId)->fileWithRegulator($this->aFilingCommandFor($breachId, $this->contosoCompany), $this->platformAdmin, $this->aRegulatorFiling());
             $this->fail('A second filing for a company must be refused.');
         } catch (BreachFilingNotOpenException $refusal) {
             // Then it is refused with the reason and no second filing is recorded

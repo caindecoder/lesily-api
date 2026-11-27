@@ -54,7 +54,7 @@ class RequestBreachFilingOnceTest extends BreachIncidentsTestCase
                 1,
             ],
             'a request after the filing' => [
-                fn (self $test): string => $test->anIncidentFiledFor($test->companyA),
+                fn (self $test): string => $test->anIncidentFiledFor($test->contosoCompany),
                 'Lesily has already filed this breach with the regulator for the company.',
                 1,
             ],
@@ -63,7 +63,7 @@ class RequestBreachFilingOnceTest extends BreachIncidentsTestCase
 
     protected function anIncidentAlreadyAskedToBeFiled(): string
     {
-        $breachId = $this->aNotifiedIncident($this->companyA);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany);
         BreachIncident::retrieve($breachId)
             ->requestFiling($this->aRequestFor($breachId), $this->owner)
             ->persist();
@@ -73,6 +73,6 @@ class RequestBreachFilingOnceTest extends BreachIncidentsTestCase
 
     protected function aRequestFor(string $breachId): RequestBreachFilingCommand
     {
-        return RequestBreachFilingCommand::from(['breachId' => $breachId, 'company' => $this->companyA]);
+        return RequestBreachFilingCommand::from(['breachId' => $breachId, 'company' => $this->contosoCompany]);
     }
 }

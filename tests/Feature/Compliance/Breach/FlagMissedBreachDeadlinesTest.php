@@ -412,7 +412,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
     protected function anIncidentInStage(string $stage): string
     {
         return match ($stage) {
-            'companies notified' => $this->aNotifiedIncident($this->companyA),
+            'companies notified' => $this->aNotifiedIncident($this->contosoCompany),
             'resolved' => $this->anIncident()->resolved()->createOne()->getKey(),
             'false alarm' => $this->anIncident()->falseAlarm()->createOne()->getKey(),
             default => throw new InvalidArgumentException("Unknown stage: {$stage}"),

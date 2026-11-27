@@ -118,7 +118,7 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
     public function when_the_companies_were_notified_then_the_false_alarm_is_refused(): void
     {
         // Given an incident whose companies A and B have been notified
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $before = $this->snapshotOf($breachId);
         Notification::fake();
         Mail::fake();
@@ -272,8 +272,8 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
     {
         // Given a recorded incident affecting companies A and B, discovered 20 hours ago
         $breachId = $this->aRecordedIncident(['companies' => [
-            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
-            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 12],
+            ['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
+            ['companyId' => $this->otherCompany->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 12],
         ]]);
         Notification::fake();
         Mail::fake();

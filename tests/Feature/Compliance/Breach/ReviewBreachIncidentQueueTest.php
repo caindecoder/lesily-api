@@ -21,7 +21,7 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     public function when_an_unauthenticated_caller_opens_the_queue_then_they_are_refused(): void
     {
         // Given a recorded incident
-        $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
 
         // When a caller with no token opens the queue
         $response = $this->listQueue(null);
@@ -35,7 +35,7 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     public function when_a_company_owner_opens_the_queue_then_it_is_not_found_and_nothing_is_audited(): void
     {
         // Given an incident naming company A, and company A's owner, who is not a platform admin
-        $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
 
         // When the owner opens the queue
         $response = $this->listQueue($this->owner);
@@ -54,7 +54,7 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     public function when_the_filter_is_invalid_then_it_is_refused(array $query, string $field, string $message): void
     {
         // Given a recorded incident
-        $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
 
         // When the platform admin opens the queue with this filter
         $response = $this->listQueue($this->platformAdmin, $query);
@@ -69,7 +69,7 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     {
         // Given an incident, and an audit write that fails after its row is inserted —
         // only the read's transaction can take the row back out
-        $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the platform admin opens the queue
@@ -155,8 +155,8 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     {
         // Given an incident whose two companies have not yet counted the people affected
         $this->anIncident()
-            ->withCompany($this->companyA, ['pii'], null)
-            ->withCompany($this->companyB, ['payroll'], null)
+            ->withCompany($this->contosoCompany, ['pii'], null)
+            ->withCompany($this->otherCompany, ['payroll'], null)
             ->createOne();
 
         // When the platform admin opens the queue
@@ -232,8 +232,8 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
         // Given an incident whose two companies were notified — company A counted 40 people, company B 7
         $incident = $this->anIncident()
             ->companiesNotified()
-            ->withCompany($this->companyA, ['pii'], 40)
-            ->withCompany($this->companyB, ['payroll', 'banking'], 7)
+            ->withCompany($this->contosoCompany, ['pii'], 40)
+            ->withCompany($this->otherCompany, ['payroll', 'banking'], 7)
             ->createOne();
 
         // When the platform admin opens the queue

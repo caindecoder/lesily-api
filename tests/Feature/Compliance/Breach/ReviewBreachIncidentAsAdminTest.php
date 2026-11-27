@@ -21,7 +21,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     public function when_an_unauthenticated_caller_opens_an_incident_then_they_are_refused(): void
     {
         // Given a recorded incident
-        $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $incident = $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
 
         // When a caller with no token opens it
         $response = $this->showIncident(null, $incident->getKey());
@@ -35,7 +35,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     public function when_a_company_owner_opens_an_incident_then_it_is_not_found_and_nothing_is_audited(): void
     {
         // Given an incident naming company A, and company A's owner, who is not a platform admin
-        $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $incident = $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
 
         // When the owner opens the incident
         $response = $this->showIncident($this->owner, $incident->getKey());
@@ -64,7 +64,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     {
         // Given an incident, and an audit write that fails after its row is inserted —
         // only the read's transaction can take the row back out
-        $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $incident = $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the platform admin opens the incident
@@ -81,8 +81,8 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     {
         // Given an incident whose two companies carry these counts — a null count is not yet known
         $incident = $this->anIncident()
-            ->withCompany($this->companyA, ['pii'], $countA)
-            ->withCompany($this->companyB, ['payroll'], $countB)
+            ->withCompany($this->contosoCompany, ['pii'], $countA)
+            ->withCompany($this->otherCompany, ['payroll'], $countB)
             ->createOne();
 
         // When the platform admin opens the incident
@@ -117,8 +117,8 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     {
         // Given an incident whose companies were notified — company A's owner has asked Lesily to file
         $incident = $this->anIncident()->companiesNotified()->createOne();
-        BreachIncidentCompany::factory()->forIncident($incident, $this->companyA)->withFigures(['pii'], 40)->filingRequested($this->owner->getKey())->createOne();
-        BreachIncidentCompany::factory()->forIncident($incident, $this->companyB)->withFigures(['payroll', 'banking'], 7)->notified()->createOne();
+        BreachIncidentCompany::factory()->forIncident($incident, $this->contosoCompany)->withFigures(['pii'], 40)->filingRequested($this->owner->getKey())->createOne();
+        BreachIncidentCompany::factory()->forIncident($incident, $this->otherCompany)->withFigures(['payroll', 'banking'], 7)->notified()->createOne();
 
         // When the platform admin opens the incident
         $response = $this->showIncident($this->platformAdmin, $incident->getKey());
@@ -133,7 +133,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     {
         // Given an incident that missed its deadline, was filed with the regulator for company A, then was resolved
         $incident = $this->anIncident()->deadlineMissed()->resolved()->createOne();
-        BreachIncidentCompany::factory()->forIncident($incident, $this->companyA)->filed($this->owner->getKey(), $this->platformAdmin->getKey())->createOne();
+        BreachIncidentCompany::factory()->forIncident($incident, $this->contosoCompany)->filed($this->owner->getKey(), $this->platformAdmin->getKey())->createOne();
 
         // When the platform admin opens the incident
         $response = $this->showIncident($this->platformAdmin, $incident->getKey());
@@ -158,7 +158,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     public function when_a_false_alarm_is_opened_then_its_reason_and_findings_are_shown(): void
     {
         // Given an incident closed as a false alarm
-        $incident = $this->anIncident()->falseAlarm()->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $incident = $this->anIncident()->falseAlarm()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
 
         // When the platform admin opens the incident
         $response = $this->showIncident($this->platformAdmin, $incident->getKey());
@@ -179,11 +179,11 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     {
         // Given an incident corrected twice - its description on 5 May, then on 6 May its severity
         // and company A's data types - with the rows stored out of that order
-        $incident = $this->anIncident()->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $incident = $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
         $correction = BreachAmendment::factory()->forIncident($incident);
         $correction->amendedAt('2026-05-06 10:00:00')->changing(BreachAmendmentField::Severity, 'high', 'critical')->createOne(['reason' => 'The export held bank details.']);
         $correction->amendedAt('2026-05-05 09:00:00')->createOne();
-        $correction->amendedAt('2026-05-06 10:00:00')->forCompany($this->companyA)->changing(BreachAmendmentField::DataTypes, ['pii'], ['pii', 'banking'])->createOne(['reason' => 'The export held bank details.']);
+        $correction->amendedAt('2026-05-06 10:00:00')->forCompany($this->contosoCompany)->changing(BreachAmendmentField::DataTypes, ['pii'], ['pii', 'banking'])->createOne(['reason' => 'The export held bank details.']);
 
         // When the platform admin opens the incident
         $response = $this->showIncident($this->platformAdmin, $incident->getKey());
@@ -191,7 +191,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         // Then the history lists the 6 May request first, its changes by field, then the 5 May correction
         $response->assertOk();
         $this->assertSame([
-            ['field' => 'data_types', 'company_id' => $this->companyA->getKey(), 'old_value' => ['pii'], 'new_value' => ['pii', 'banking'], 'reason' => 'The export held bank details.', 'amended_by' => $this->platformAdmin->getKey(), 'amended_at' => '2026-05-06T10:00:00.000000Z'],
+            ['field' => 'data_types', 'company_id' => $this->contosoCompany->getKey(), 'old_value' => ['pii'], 'new_value' => ['pii', 'banking'], 'reason' => 'The export held bank details.', 'amended_by' => $this->platformAdmin->getKey(), 'amended_at' => '2026-05-06T10:00:00.000000Z'],
             ['field' => 'severity', 'company_id' => null, 'old_value' => 'high', 'new_value' => 'critical', 'reason' => 'The export held bank details.', 'amended_by' => $this->platformAdmin->getKey(), 'amended_at' => '2026-05-06T10:00:00.000000Z'],
             ['field' => 'description', 'company_id' => null, 'old_value' => 'A payroll export was emailed to the wrong recipient.', 'new_value' => 'Payroll and bank export left on a shared drive', 'reason' => 'An earlier log entry showed the export reached a second shared folder.', 'amended_by' => $this->platformAdmin->getKey(), 'amended_at' => '2026-05-05T09:00:00.000000Z'],
         ], $response->json('data.amendments'));
@@ -263,7 +263,7 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
                 'data_types' => $company->data_types,
                 'estimated_count' => $company->estimated_count,
                 'notified_at' => '2026-05-05T14:00:00.000000Z',
-                'filing_requested_at' => $company->company_id === $this->companyA->getKey() ? '2026-05-06T14:00:00.000000Z' : null,
+                'filing_requested_at' => $company->company_id === $this->contosoCompany->getKey() ? '2026-05-06T14:00:00.000000Z' : null,
                 'filing_requested_by' => $company->filing_requested_by,
                 'filed_at' => null,
             ])->all(),

@@ -56,7 +56,7 @@ class FlagMissedBreachDeadlineOnceTest extends BreachIncidentsTestCase
     protected function anIncidentThat(string $state): string
     {
         return match ($state) {
-            'its companies were notified' => $this->aNotifiedIncident($this->companyA),
+            'its companies were notified' => $this->aNotifiedIncident($this->contosoCompany),
             'it is already flagged' => $this->aFlaggedIncident(),
             'it is before its deadline' => $this->aRecordedIncident(['dateDiscovered' => '2026-05-06T00:00:00Z']),
             default => throw new InvalidArgumentException("Unknown state: {$state}"),

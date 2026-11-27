@@ -58,7 +58,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     public function when_an_unauthenticated_caller_adds_a_company_then_it_is_refused_as_unauthenticated(): void
     {
         // Given an incident whose companies A and B have been notified
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $before = $this->stateOf($breachId);
 
         // When a caller with no token adds Initech to it
@@ -73,7 +73,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     public function when_a_company_owner_adds_a_company_then_the_admin_surface_is_not_acknowledged(): void
     {
         // Given an incident whose companies A and B have been notified, and company A's owner
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $before = $this->stateOf($breachId);
 
         // When the owner adds Initech on the admin surface
@@ -102,7 +102,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     public function when_the_addition_is_invalid_then_it_is_refused_and_nothing_is_added(array $override, string $field, string $message): void
     {
         // Given an incident whose companies A and B have been notified
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $before = $this->stateOf($breachId);
 
         // When the platform admin adds Initech with one value wrong
@@ -147,11 +147,11 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     public function when_the_company_is_already_on_the_incident_then_it_is_refused_and_nobody_is_told(): void
     {
         // Given an incident whose companies A and B have been notified
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $before = $this->stateOf($breachId);
 
         // When the platform admin adds company A again as a late company
-        $response = $this->addCompany($this->platformAdmin, $breachId, $this->aLateCompany(['companyId' => $this->companyA->getKey()]));
+        $response = $this->addCompany($this->platformAdmin, $breachId, $this->aLateCompany(['companyId' => $this->contosoCompany->getKey()]));
 
         // Then it is refused, nothing is added and no second notice is queued
         $this->assertRefusedAsNotOpen($response, 'The company is already on this breach incident.');
@@ -178,7 +178,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     public function when_the_audit_row_cannot_be_written_then_neither_event_nor_row_is_written(): void
     {
         // Given an incident whose companies A and B have been notified, and an audit trail that refuses every write
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $before = $this->stateOf($breachId);
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
 
@@ -254,7 +254,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     {
         // Given an incident naming Initech, and a second incident at companies_notified affecting companies A and B
         $otherBreachId = $this->aNotifiedIncident($this->initech);
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         $otherBefore = $this->stateOf($otherBreachId);
 
         // When the platform admin adds Initech to the second incident as a late company
@@ -342,8 +342,8 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
     protected function anIncidentNotifiedEarlier(): string
     {
         $this->aCompanyMember($this->company, 'admin');
-        $this->anOwnerAndAdmins($this->companyB);
-        $breachId = $this->aNotifiedIncident($this->companyA, $this->companyB);
+        $this->anOwnerAndAdmins($this->otherCompany);
+        $breachId = $this->aNotifiedIncident($this->contosoCompany, $this->otherCompany);
         Queue::fake();
 
         return $breachId;

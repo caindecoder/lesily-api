@@ -105,7 +105,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
             'false_alarm' => $this->anIncident()->falseAlarm(),
             default => $this->fail('Unknown stage: '.$stage),
         };
-        $incident = $incident->withCompany($this->companyA, ['pii'], 40)->createOne();
+        $incident = $incident->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
         $before = $this->snapshotOf($incident->getKey());
 
         // When the platform admin presses notify
@@ -133,8 +133,8 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     {
         // Given a recorded incident naming companies A and B, and an audit trail that refuses every write
         $breachId = $this->aRecordedIncident(['companies' => [
-            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
-            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
+            ['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
+            ['companyId' => $this->otherCompany->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
         ]]);
         AuditEntry::creating(fn () => throw new RuntimeException('induced audit failure'));
 
@@ -183,7 +183,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     {
         // Given a recorded incident naming company A with no estimated count, and A's owner and admin
         $breachId = $this->aRecordedIncident(['companies' => [
-            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => null],
+            ['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => null],
         ]]);
 
         // When the platform admin presses notify and the notice leaves the queue
@@ -191,7 +191,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->runTheNotices();
 
         // Then A's notice says the number of people affected is not yet known
-        $this->assertToldOnceEach([$this->owner, $this->admin], $this->companyA, $this->partFor('Personal details', 'Not yet known'));
+        $this->assertToldOnceEach([$this->owner, $this->admin], $this->contosoCompany, $this->partFor('Personal details', 'Not yet known'));
     }
 
     #[Test]
@@ -202,7 +202,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $breachId = $this->aRecordedIncident();
         $toldMembers = [$this->owner, $this->admin, $this->aCompanyMember($this->company, 'admin')];
         foreach (['hr_officer', 'payroll_officer', 'employee'] as $role) {
-            $this->aCompanyMember($this->companyA, $role);
+            $this->aCompanyMember($this->contosoCompany, $role);
         }
         $removedAdmin = $this->aCompanyMember($this->company, 'admin');
         $this->softDeleteMembership($this->company, $removedAdmin);
@@ -212,7 +212,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->runTheNotices();
 
         // Then only the owner and the two current admins are told, once each
-        $this->assertToldExactly($toldMembers, $this->companyA);
+        $this->assertToldExactly($toldMembers, $this->contosoCompany);
     }
 
     #[Test]
@@ -297,8 +297,8 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     {
         // Given a recorded incident naming company A (an owner and an admin) and company B (no members)
         $breachId = $this->aRecordedIncident(['companies' => [
-            ['companyId' => $this->companyA->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
-            ['companyId' => $this->companyB->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
+            ['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
+            ['companyId' => $this->otherCompany->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7],
         ]]);
         $toldMembers = [$this->owner, $this->admin];
         Exceptions::fake();
@@ -308,8 +308,8 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->runTheNotices();
 
         // Then B's missing recipients are reported and A's owner and admin are still told
-        Exceptions::assertReported(fn (RuntimeException $gap): bool => $gap->getMessage() === "No owner or admin of company {$this->companyB->getKey()} to tell about breach incident {$breachId}.");
-        $this->assertToldExactly($toldMembers, $this->companyA);
+        Exceptions::assertReported(fn (RuntimeException $gap): bool => $gap->getMessage() === "No owner or admin of company {$this->otherCompany->getKey()} to tell about breach incident {$breachId}.");
+        $this->assertToldExactly($toldMembers, $this->contosoCompany);
     }
 
     #[Test]
@@ -318,7 +318,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
     {
         // Given a recorded incident naming company A with one data type, and A's owner and admin
         $breachId = $this->aRecordedIncident(['companies' => [
-            ['companyId' => $this->companyA->getKey(), 'dataTypes' => [$dataType], 'estimatedCount' => 40],
+            ['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => [$dataType], 'estimatedCount' => 40],
         ]]);
 
         // When the platform admin presses notify and the notice leaves the queue
@@ -326,7 +326,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->runTheNotices();
 
         // Then the notice names that data type in words
-        $this->assertToldOnceEach([$this->owner, $this->admin], $this->companyA, $this->partFor($words, '40'));
+        $this->assertToldOnceEach([$this->owner, $this->admin], $this->contosoCompany, $this->partFor($words, '40'));
     }
 
     /**
