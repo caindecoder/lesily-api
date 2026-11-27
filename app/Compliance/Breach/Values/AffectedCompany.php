@@ -33,7 +33,7 @@ class AffectedCompany extends Data
     {
         return [
             'companyId' => $this->company->getKey(),
-            'dataTypes' => array_map(fn (BreachDataType $type): string => $type->value, $this->dataTypes),
+            'dataTypes' => array_map(fn (BreachDataType $breachDataType): string => $breachDataType->value, $this->dataTypes),
             'estimatedCount' => $this->estimatedCount,
         ];
     }
