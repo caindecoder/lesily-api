@@ -88,7 +88,7 @@ class ExportDsarReportTest extends DsarTestCase
             'Notifications and preferences', 'Notifications', 'None recorded', 'Preferences', 'None recorded',
             'Account access history', 'None recorded',
         ]);
-        $this->assertSame(9, substr_count($this->reportRenderer->html, 'None recorded'));
+        $this->assertSame(9, substr_count($this->recordingDsarReportRenderer->html, 'None recorded'));
     }
 
     /**

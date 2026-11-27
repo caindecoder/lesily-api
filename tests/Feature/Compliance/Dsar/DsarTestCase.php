@@ -97,7 +97,7 @@ abstract class DsarTestCase extends TestCase
 
     protected ?string $idempotencyKey;
 
-    protected RecordingDsarReportRenderer $reportRenderer;
+    protected RecordingDsarReportRenderer $recordingDsarReportRenderer;
 
     protected function setUp(): void
     {
@@ -108,8 +108,8 @@ abstract class DsarTestCase extends TestCase
         $this->idempotencyKey = (string) Str::uuid();
         Queue::fake();
         Storage::fake('dsar');
-        $this->reportRenderer = new RecordingDsarReportRenderer(new Filesystem, sys_get_temp_dir());
-        $this->app->instance(DsarReportRendererInterface::class, $this->reportRenderer);
+        $this->recordingDsarReportRenderer = new RecordingDsarReportRenderer(new Filesystem, sys_get_temp_dir());
+        $this->app->instance(DsarReportRendererInterface::class, $this->recordingDsarReportRenderer);
         $this->makeFreeTierCompany();
     }
 
@@ -316,38 +316,38 @@ abstract class DsarTestCase extends TestCase
      */
     protected function aClosedRequest(Company $company, User $subject, string $closedBy): DsarRequestRecord
     {
-        $request = $this->aSubmittedRequest($company, $subject);
-        $aggregate = DsarRequest::retrieve($request->getKey());
+        $dsarRequest = $this->aSubmittedRequest($company, $subject);
+        $retrievedDsarRequest = DsarRequest::retrieve($dsarRequest->getKey());
 
         match ($closedBy) {
-            'withdrawn' => $aggregate->cancel(CancelDsarRequestCommand::from([
-                'dsarRequest' => $request,
+            'withdrawn' => $retrievedDsarRequest->cancel(CancelDsarRequestCommand::from([
+                'dsarRequest' => $dsarRequest,
                 'company' => $company,
                 'cancelledBy' => $subject,
             ])),
-            'fulfilled' => $aggregate->fulfil(FulfilDsarRequestCommand::from([
-                'dsarRequest' => $request,
-                'filePath' => $this->exportPathOf($request),
+            'fulfilled' => $retrievedDsarRequest->fulfil(FulfilDsarRequestCommand::from([
+                'dsarRequest' => $dsarRequest,
+                'filePath' => $this->exportPathOf($dsarRequest),
             ])),
-            'rejected' => $aggregate->reject(RejectDsarRequestCommand::from([
-                'dsarRequest' => $request,
+            'rejected' => $retrievedDsarRequest->reject(RejectDsarRequestCommand::from([
+                'dsarRequest' => $dsarRequest,
                 'reason' => 'The export could not be built. Please submit a new request.',
             ])),
             default => throw new InvalidArgumentException("Unknown closure: {$closedBy}"),
         };
-        $aggregate->persist();
+        $retrievedDsarRequest->persist();
 
-        return $request;
+        return $dsarRequest;
     }
 
     /**
-     * $request is still closed as $status: its stream holds the submission
+     * $dsarRequest is still closed as $dsarRequestStatus: its stream holds the submission
      * and the one event that closed it — nothing recorded since.
      */
-    protected function assertStillClosedAs(DsarRequestRecord $request, DsarRequestStatus $status): void
+    protected function assertStillClosedAs(DsarRequestRecord $dsarRequest, DsarRequestStatus $dsarRequestStatus): void
     {
-        $this->assertSame($status, $request->fresh()?->status);
-        $this->assertSame(2, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->count());
+        $this->assertSame($dsarRequestStatus, $dsarRequest->fresh()?->status);
+        $this->assertSame(2, LesilyStoredEvent::query()->where('aggregate_uuid', $dsarRequest->getKey())->count());
     }
 
     /**
@@ -392,47 +392,47 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * $request's row in the list carries every resource field as recorded,
+     * $dsarRequest's row in the list carries every resource field as recorded,
      * with $downloadAvailable stated by the test.
      */
-    protected function assertListedRowShows(TestResponse $response, DsarRequestRecord $request, bool $downloadAvailable): void
+    protected function assertListedRowShows(TestResponse $response, DsarRequestRecord $dsarRequest, bool $downloadAvailable): void
     {
         $response->assertOk();
         /** @var list<array<string, mixed>> $rows */
         $rows = $response->json('data');
-        $this->assertSame($this->expectedRow($request, $downloadAvailable), collect($rows)->firstWhere('id', $request->getKey()));
+        $this->assertSame($this->expectedRow($dsarRequest, $downloadAvailable), collect($rows)->firstWhere('id', $dsarRequest->getKey()));
     }
 
     /**
-     * The detail answered with $request — every resource field as recorded,
+     * The detail answered with $dsarRequest — every resource field as recorded,
      * with $downloadAvailable stated by the test.
      */
-    protected function assertDsarRequestShown(TestResponse $response, DsarRequestRecord $request, bool $downloadAvailable): void
+    protected function assertDsarRequestShown(TestResponse $response, DsarRequestRecord $dsarRequest, bool $downloadAvailable): void
     {
         $response->assertOk();
-        $this->assertSame($this->expectedRow($request, $downloadAvailable), $response->json('data'));
+        $this->assertSame($this->expectedRow($dsarRequest, $downloadAvailable), $response->json('data'));
     }
 
     /**
-     * Every resource field of $request as recorded, with $downloadAvailable
+     * Every resource field of $dsarRequest as recorded, with $downloadAvailable
      * stated by the test.
      *
      * @return array<string, mixed>
      */
-    protected function expectedRow(DsarRequestRecord $request, bool $downloadAvailable): array
+    protected function expectedRow(DsarRequestRecord $dsarRequest, bool $downloadAvailable): array
     {
         return [
-            'id' => $request->getKey(),
-            'status' => $request->status->value,
+            'id' => $dsarRequest->getKey(),
+            'status' => $dsarRequest->status->value,
             'request_type' => 'access',
-            'subject' => ['id' => $request->subject->getKey(), 'name' => $request->subject->name],
-            'requested_by' => ['id' => $request->requestedBy->getKey(), 'name' => $request->requestedBy->name],
-            'requested_at' => $request->requested_at->toISOString(),
-            'sla_deadline' => $request->requested_at->addDays(30)->toISOString(),
-            'completed_at' => $request->completed_at?->toISOString(),
+            'subject' => ['id' => $dsarRequest->subject->getKey(), 'name' => $dsarRequest->subject->name],
+            'requested_by' => ['id' => $dsarRequest->requestedBy->getKey(), 'name' => $dsarRequest->requestedBy->name],
+            'requested_at' => $dsarRequest->requested_at->toISOString(),
+            'sla_deadline' => $dsarRequest->requested_at->addDays(30)->toISOString(),
+            'completed_at' => $dsarRequest->completed_at?->toISOString(),
             'download_available' => $downloadAvailable,
-            'download_expires_at' => $request->download_expires_at?->toISOString(),
-            'cancelled_at' => $request->cancelled_at?->toISOString(),
+            'download_expires_at' => $dsarRequest->download_expires_at?->toISOString(),
+            'cancelled_at' => $dsarRequest->cancelled_at?->toISOString(),
             'rejection_reason' => null,
         ];
     }
@@ -561,15 +561,15 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * $request's export ZIP was served as a download named for the day it
+     * $dsarRequest's export ZIP was served as a download named for the day it
      * was fulfilled, byte for byte the file on the dsar disk.
      */
-    protected function assertExportServed(TestResponse $response, DsarRequestRecord $request): void
+    protected function assertExportServed(TestResponse $response, DsarRequestRecord $dsarRequest): void
     {
         $response->assertOk();
         $response->assertDownload('lesily-data-export-2026-10-01.zip');
         $response->assertHeader('Content-Type', 'application/zip');
-        $this->assertSame(Storage::disk('dsar')->get($this->exportPathOf($request)), $response->streamedContent());
+        $this->assertSame(Storage::disk('dsar')->get($this->exportPathOf($dsarRequest)), $response->streamedContent());
     }
 
     /**
@@ -584,14 +584,14 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * $request's export ZIP is lost: deleted from the dsar disk, or its path
+     * $dsarRequest's export ZIP is lost: deleted from the dsar disk, or its path
      * never recorded on the row.
      */
-    protected function loseTheExportFile(string $how, DsarRequestRecord $request): void
+    protected function loseTheExportFile(string $how, DsarRequestRecord $dsarRequest): void
     {
         match ($how) {
-            'deleted' => Storage::disk('dsar')->delete($this->exportPathOf($request)),
-            'unrecorded' => DsarRequestRecord::query()->whereKey($request->getKey())->update(['file_path' => null]),
+            'deleted' => Storage::disk('dsar')->delete($this->exportPathOf($dsarRequest)),
+            'unrecorded' => DsarRequestRecord::query()->whereKey($dsarRequest->getKey())->update(['file_path' => null]),
             default => throw new InvalidArgumentException("Unknown loss: {$how}"),
         };
     }
@@ -616,11 +616,11 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * $request's export was downloaded — and audited — exactly $times times.
+     * $dsarRequest's export was downloaded — and audited — exactly $times times.
      */
-    protected function assertDownloadsAudited(DsarRequestRecord $request, int $times): void
+    protected function assertDownloadsAudited(DsarRequestRecord $dsarRequest, int $times): void
     {
-        $this->assertSame($times, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_downloaded')->count());
+        $this->assertSame($times, DB::table('audit_trail')->where('subject_id', $dsarRequest->getKey())->where('action', 'dsar_downloaded')->count());
     }
 
     /**
@@ -629,24 +629,24 @@ abstract class DsarTestCase extends TestCase
      * Correlation-Id, no stored event, the subject as actor, the client's
      * address and user agent.
      */
-    protected function assertDownloadAudited(TestResponse $response, DsarRequestRecord $request, User $subject): void
+    protected function assertDownloadAudited(TestResponse $response, DsarRequestRecord $dsarRequest, User $subject): void
     {
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $auditEntry = AuditEntry::query()->where('request_id', $correlationId)->sole();
 
         $this->assertDatabaseHas('audit_trail', [
-            'id' => $entry->getKey(),
-            'company_id' => $request->company_id,
+            'id' => $auditEntry->getKey(),
+            'company_id' => $dsarRequest->company_id,
             'stored_event_id' => null,
             'event_class' => 'DsarExportDownloaded',
             'subject_type' => 'dsar_request',
-            'subject_id' => $request->getKey(),
+            'subject_id' => $dsarRequest->getKey(),
             'subject_label' => null,
             'action' => 'dsar_downloaded',
             'description' => 'DSAR export downloaded — by: '.$subject->name,
             'actor_user_id' => $subject->getKey(),
-            'actor_role_code' => $this->roleCodeOf($subject, $request->company_id),
+            'actor_role_code' => $this->roleCodeOf($subject, $dsarRequest->company_id),
             'actor_label' => $subject->name,
             'metadata' => null,
             'ip_address' => '127.0.0.1',
@@ -669,10 +669,10 @@ abstract class DsarTestCase extends TestCase
      */
     protected function aReadyExportFor(Company $company, User $subject, ?User $requester = null): DsarRequestRecord
     {
-        $request = $this->aSubmittedRequest($company, $subject, $requester);
-        $this->runTheExportFor($request);
+        $dsarRequest = $this->aSubmittedRequest($company, $subject, $requester);
+        $this->runTheExportFor($dsarRequest);
 
-        return $request->refresh();
+        return $dsarRequest->refresh();
     }
 
     /**
@@ -789,17 +789,17 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * $request was withdrawn exactly once — one DsarRequestCancelled on its
+     * $dsarRequest was withdrawn exactly once — one DsarRequestCancelled on its
      * stream and one withdrawal audited — and stays cancelled.
      */
-    protected function assertWithdrawnOnce(DsarRequestRecord $request): void
+    protected function assertWithdrawnOnce(DsarRequestRecord $dsarRequest): void
     {
-        $this->assertSame(DsarRequestStatus::Cancelled, $request->fresh()?->status);
+        $this->assertSame(DsarRequestStatus::Cancelled, $dsarRequest->fresh()?->status);
         $this->assertSame(1, LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $request->getKey())
+            ->where('aggregate_uuid', $dsarRequest->getKey())
             ->where('event_class', DsarRequestCancelled::class)
             ->count());
-        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_withdrawn')->count());
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $dsarRequest->getKey())->where('action', 'dsar_withdrawn')->count());
     }
 
     /**
@@ -807,18 +807,18 @@ abstract class DsarTestCase extends TestCase
      * as cancelled, its row stamped with when and by whom, and one
      * DsarRequestCancelled naming the actor on its stream.
      */
-    protected function assertWithdrawn(TestResponse $response, DsarRequestRecord $request, User $actor): void
+    protected function assertWithdrawn(TestResponse $response, DsarRequestRecord $dsarRequest, User $actor): void
     {
-        $withdrawn = $request->fresh() ?? $request;
-        $this->assertDsarRequestShown($response, $withdrawn, false);
+        $withdrawnDsarRequest = $dsarRequest->fresh() ?? $dsarRequest;
+        $this->assertDsarRequestShown($response, $withdrawnDsarRequest, false);
         $this->assertSame(
             [DsarRequestStatus::Cancelled, now()->toISOString(), $actor->getKey()],
-            [$withdrawn->status, $withdrawn->cancelled_at?->toISOString(), $withdrawn->cancelled_by],
+            [$withdrawnDsarRequest->status, $withdrawnDsarRequest->cancelled_at?->toISOString(), $withdrawnDsarRequest->cancelled_by],
         );
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', DsarRequestCancelled::class)
-            ->where('aggregate_uuid', $request->getKey())
-            ->whereForCompany($request->company_id)
+            ->where('aggregate_uuid', $dsarRequest->getKey())
+            ->whereForCompany($dsarRequest->company_id)
             ->where('event_properties->cancelledByUserId', $actor->getKey())
             ->count());
     }
@@ -831,28 +831,28 @@ abstract class DsarTestCase extends TestCase
      */
     protected function assertWithdrawalAudited(TestResponse $response, User $subject, User $actor): void
     {
-        $request = $this->dsarRequestIn($response);
+        $dsarRequest = $this->dsarRequestIn($response);
         $storedEventId = LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $request->getKey())
+            ->where('aggregate_uuid', $dsarRequest->getKey())
             ->where('event_class', DsarRequestCancelled::class)
             ->sole()
             ->getKey();
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $auditEntry = AuditEntry::query()->where('request_id', $correlationId)->sole();
 
-        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_withdrawn')->count());
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $dsarRequest->getKey())->where('action', 'dsar_withdrawn')->count());
         $this->assertDatabaseHas('audit_trail', [
-            'id' => $entry->getKey(),
-            'company_id' => $request->company_id,
+            'id' => $auditEntry->getKey(),
+            'company_id' => $dsarRequest->company_id,
             'stored_event_id' => $storedEventId,
             'event_class' => 'DsarRequestCancelled',
             'subject_type' => 'dsar_request',
-            'subject_id' => $request->getKey(),
+            'subject_id' => $dsarRequest->getKey(),
             'action' => 'dsar_withdrawn',
             'description' => 'DSAR withdrawn — for: '.$subject->name.', by: '.$actor->name,
             'actor_user_id' => $actor->getKey(),
-            'actor_role_code' => $this->roleCodeOf($actor, $request->company_id),
+            'actor_role_code' => $this->roleCodeOf($actor, $dsarRequest->company_id),
             'actor_label' => $actor->name,
             'ip_address' => '127.0.0.1',
             'user_agent' => 'Symfony',
@@ -874,14 +874,14 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * $replay is the remembered answer to $first — same status and body,
+     * $replayResponse is the remembered answer to $firstResponse — same status and body,
      * flagged as replayed.
      */
-    protected function assertReplayedOf(TestResponse $replay, TestResponse $first): void
+    protected function assertReplayedOf(TestResponse $replayResponse, TestResponse $firstResponse): void
     {
-        $replay->assertCreated();
-        $replay->assertHeader('Idempotency-Replayed', 'true');
-        $this->assertSame($first->getContent(), $replay->getContent());
+        $replayResponse->assertCreated();
+        $replayResponse->assertHeader('Idempotency-Replayed', 'true');
+        $this->assertSame($firstResponse->getContent(), $replayResponse->getContent());
     }
 
     /**
@@ -893,9 +893,9 @@ abstract class DsarTestCase extends TestCase
     protected function assertDsarRequestRecorded(TestResponse $response, User $subject, User $requester): void
     {
         $response->assertCreated();
-        $record = $this->dsarRequestIn($response);
+        $dsarRequest = $this->dsarRequestIn($response);
         $response->assertJsonPath('data', [
-            'id' => $record->getKey(),
+            'id' => $dsarRequest->getKey(),
             'status' => 'in_progress',
             'request_type' => 'access',
             'subject' => ['id' => $subject->getKey(), 'name' => $subject->name],
@@ -910,13 +910,13 @@ abstract class DsarTestCase extends TestCase
         ]);
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', DsarRequestSubmitted::class)
-            ->where('aggregate_uuid', $record->getKey())
-            ->where('event_properties->companyId', $record->company_id)
+            ->where('aggregate_uuid', $dsarRequest->getKey())
+            ->where('event_properties->companyId', $dsarRequest->company_id)
             ->where('event_properties->subjectUserId', $subject->getKey())
             ->where('event_properties->requestedByUserId', $requester->getKey())
             ->where('event_properties->requestType', 'access')
             ->count());
-        $this->assertSame($this->roleCodeOf($requester, $record->company_id), $record->requested_by_role);
+        $this->assertSame($this->roleCodeOf($requester, $dsarRequest->company_id), $dsarRequest->requested_by_role);
     }
 
     /**
@@ -927,23 +927,23 @@ abstract class DsarTestCase extends TestCase
      */
     protected function assertDsarRequestAudited(TestResponse $response, User $subject, User $requester): void
     {
-        $record = $this->dsarRequestIn($response);
-        $storedEventId = LesilyStoredEvent::query()->where('aggregate_uuid', $record->getKey())->sole()->getKey();
+        $dsarRequest = $this->dsarRequestIn($response);
+        $storedEventId = LesilyStoredEvent::query()->where('aggregate_uuid', $dsarRequest->getKey())->sole()->getKey();
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $auditEntry = AuditEntry::query()->where('request_id', $correlationId)->sole();
 
         $this->assertDatabaseHas('audit_trail', [
-            'id' => $entry->getKey(),
-            'company_id' => $record->company_id,
+            'id' => $auditEntry->getKey(),
+            'company_id' => $dsarRequest->company_id,
             'stored_event_id' => $storedEventId,
             'event_class' => 'DsarRequestSubmitted',
             'subject_type' => 'dsar_request',
-            'subject_id' => $record->getKey(),
+            'subject_id' => $dsarRequest->getKey(),
             'action' => 'dsar_requested',
             'description' => 'DSAR requested — for: '.$subject->name.', by: '.$requester->name,
             'actor_user_id' => $requester->getKey(),
-            'actor_role_code' => $this->roleCodeOf($requester, $record->company_id),
+            'actor_role_code' => $this->roleCodeOf($requester, $dsarRequest->company_id),
             'actor_label' => $requester->name,
             'ip_address' => '127.0.0.1',
             'user_agent' => 'Symfony',
@@ -969,14 +969,14 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * A refused or rolled-back change left $request as it was — still in
+     * A refused or rolled-back change left $dsarRequest as it was — still in
      * progress, its stream holding only the submission, no withdrawal audited.
      */
-    protected function assertStillInProgress(DsarRequestRecord $request): void
+    protected function assertStillInProgress(DsarRequestRecord $dsarRequest): void
     {
-        $this->assertSame(DsarRequestStatus::InProgress, $request->fresh()?->status);
-        $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->count());
-        $this->assertSame(0, DB::table('audit_trail')->where('subject_id', $request->getKey())->count());
+        $this->assertSame(DsarRequestStatus::InProgress, $dsarRequest->fresh()?->status);
+        $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $dsarRequest->getKey())->count());
+        $this->assertSame(0, DB::table('audit_trail')->where('subject_id', $dsarRequest->getKey())->count());
     }
 
     /**
@@ -995,23 +995,23 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * The export collects exactly $sections — the container hands the job
+     * The export collects exactly $dsarSectionProviders — the container hands the job
      * this list instead of the registered one.
      */
-    protected function withSections(DsarSectionProvider ...$sections): void
+    protected function withSections(DsarSectionProvider ...$dsarSectionProviders): void
     {
-        $this->app->instance(DsarSections::class, new DsarSections(array_values($sections)));
+        $this->app->instance(DsarSections::class, new DsarSections(array_values($dsarSectionProviders)));
     }
 
     /**
-     * A section that withdraws $request, as its requester, while the export
+     * A section that withdraws $dsarRequest, as its requester, while the export
      * is being collected — the race a worker can lose.
      */
-    protected function aSectionThatWithdraws(DsarRequestRecord $request): DsarSectionProvider
+    protected function aSectionThatWithdraws(DsarRequestRecord $dsarRequest): DsarSectionProvider
     {
-        return new class($request) implements DsarSectionProvider
+        return new class($dsarRequest) implements DsarSectionProvider
         {
-            public function __construct(private readonly DsarRequestRecord $request) {}
+            public function __construct(private readonly DsarRequestRecord $dsarRequest) {}
 
             public function key(): string
             {
@@ -1020,11 +1020,11 @@ abstract class DsarTestCase extends TestCase
 
             public function collect(string $subjectUserId, string $companyId): array
             {
-                DsarRequest::retrieve($this->request->getKey())
+                DsarRequest::retrieve($this->dsarRequest->getKey())
                     ->cancel(CancelDsarRequestCommand::from([
-                        'dsarRequest' => $this->request,
+                        'dsarRequest' => $this->dsarRequest,
                         'company' => Company::query()->findOrFail($companyId),
-                        'cancelledBy' => User::query()->findOrFail($this->request->requested_by),
+                        'cancelledBy' => User::query()->findOrFail($this->dsarRequest->requested_by),
                     ]))
                     ->persist();
 
@@ -1034,78 +1034,78 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * Nothing was fulfilled for $request: no DsarRequestFulfilled on its
+     * Nothing was fulfilled for $dsarRequest: no DsarRequestFulfilled on its
      * stream, no fulfilment audited, no export file left, and its status is
-     * still $status.
+     * still $dsarRequestStatus.
      */
-    protected function assertNothingFulfilled(DsarRequestRecord $request, DsarRequestStatus $status): void
+    protected function assertNothingFulfilled(DsarRequestRecord $dsarRequest, DsarRequestStatus $dsarRequestStatus): void
     {
-        $this->assertSame($status, $request->fresh()?->status);
+        $this->assertSame($dsarRequestStatus, $dsarRequest->fresh()?->status);
         $this->assertSame(0, LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $request->getKey())
+            ->where('aggregate_uuid', $dsarRequest->getKey())
             ->where('event_class', DsarRequestFulfilled::class)
             ->count());
-        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_fulfilled']);
-        Storage::disk('dsar')->assertMissing('dsar/'.$request->company_id.'/'.$request->getKey().'.zip');
+        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $dsarRequest->getKey(), 'action' => 'dsar_fulfilled']);
+        Storage::disk('dsar')->assertMissing('dsar/'.$dsarRequest->company_id.'/'.$dsarRequest->getKey().'.zip');
     }
 
     /**
-     * The half-written ZIP a failed try leaves on the dsar disk for $request.
+     * The half-written ZIP a failed try leaves on the dsar disk for $dsarRequest.
      */
-    protected function aPartialExportFor(DsarRequestRecord $request): void
+    protected function aPartialExportFor(DsarRequestRecord $dsarRequest): void
     {
-        Storage::disk('dsar')->put($this->exportPathOf($request), 'partial');
+        Storage::disk('dsar')->put($this->exportPathOf($dsarRequest), 'partial');
     }
 
     /**
-     * The worker gave up on $request's export: failed() runs once, after the
+     * The worker gave up on $dsarRequest's export: failed() runs once, after the
      * last try, with the error that ended it.
      */
-    protected function failTheExportFor(DsarRequestRecord $request, Throwable $cause): void
+    protected function failTheExportFor(DsarRequestRecord $dsarRequest, Throwable $throwable): void
     {
-        (new BuildDsarExportJob($request->getKey(), $request->company_id, $request->subject_user_id))->failed($cause);
+        (new BuildDsarExportJob($dsarRequest->getKey(), $dsarRequest->company_id, $dsarRequest->subject_user_id))->failed($throwable);
     }
 
     /**
-     * $request was rejected the event-sourced way: one DsarRequestRejected on
+     * $dsarRequest was rejected the event-sourced way: one DsarRequestRejected on
      * its stream, the row rejected now with the fixed reason — never the error
      * — and no export file left.
      */
-    protected function assertRejected(DsarRequestRecord $request): void
+    protected function assertRejected(DsarRequestRecord $dsarRequest): void
     {
-        $rejected = $request->fresh() ?? $request;
+        $rejectedDsarRequest = $dsarRequest->fresh() ?? $dsarRequest;
 
         $this->assertSame(
             [DsarRequestStatus::Rejected, now()->toISOString(), 'The export could not be built. Please submit a new request.'],
-            [$rejected->status, $rejected->rejected_at?->toISOString(), $rejected->rejection_reason],
+            [$rejectedDsarRequest->status, $rejectedDsarRequest->rejected_at?->toISOString(), $rejectedDsarRequest->rejection_reason],
         );
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', DsarRequestRejected::class)
-            ->where('aggregate_uuid', $request->getKey())
-            ->whereForCompany($request->company_id)
+            ->where('aggregate_uuid', $dsarRequest->getKey())
+            ->whereForCompany($dsarRequest->company_id)
             ->count());
-        Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
+        Storage::disk('dsar')->assertMissing($this->exportPathOf($dsarRequest));
     }
 
     /**
      * Exactly one audit entry records the rejection — "DSAR rejected — for:
      * <subject>" — linked to its stored event, with no actor (ERD-1-11).
      */
-    protected function assertRejectionAudited(DsarRequestRecord $request, User $subject): void
+    protected function assertRejectionAudited(DsarRequestRecord $dsarRequest, User $subject): void
     {
         $storedEventId = LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $request->getKey())
+            ->where('aggregate_uuid', $dsarRequest->getKey())
             ->where('event_class', DsarRequestRejected::class)
             ->sole()
             ->getKey();
 
-        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_rejected')->count());
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $dsarRequest->getKey())->where('action', 'dsar_rejected')->count());
         $this->assertDatabaseHas('audit_trail', [
-            'company_id' => $request->company_id,
+            'company_id' => $dsarRequest->company_id,
             'stored_event_id' => $storedEventId,
             'event_class' => 'DsarRequestRejected',
             'subject_type' => 'dsar_request',
-            'subject_id' => $request->getKey(),
+            'subject_id' => $dsarRequest->getKey(),
             'action' => 'dsar_rejected',
             'description' => 'DSAR rejected — for: '.$subject->name,
             'actor_user_id' => null,
@@ -1118,50 +1118,50 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * Nothing was rejected for $request: no DsarRequestRejected on its stream,
+     * Nothing was rejected for $dsarRequest: no DsarRequestRejected on its stream,
      * no rejection audited, no export file left, and its status is still
-     * $status.
+     * $dsarRequestStatus.
      */
-    protected function assertNothingRejected(DsarRequestRecord $request, DsarRequestStatus $status): void
+    protected function assertNothingRejected(DsarRequestRecord $dsarRequest, DsarRequestStatus $dsarRequestStatus): void
     {
-        $this->assertSame($status, $request->fresh()?->status);
+        $this->assertSame($dsarRequestStatus, $dsarRequest->fresh()?->status);
         $this->assertSame(0, LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $request->getKey())
+            ->where('aggregate_uuid', $dsarRequest->getKey())
             ->where('event_class', DsarRequestRejected::class)
             ->count());
-        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_rejected']);
-        Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
+        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $dsarRequest->getKey(), 'action' => 'dsar_rejected']);
+        Storage::disk('dsar')->assertMissing($this->exportPathOf($dsarRequest));
     }
 
     /**
-     * A failed change left $request still in progress with nothing recorded
+     * A failed change left $dsarRequest still in progress with nothing recorded
      * since, and no partial export file at its path.
      */
-    protected function assertStillInProgressWithoutExportFile(DsarRequestRecord $request): void
+    protected function assertStillInProgressWithoutExportFile(DsarRequestRecord $dsarRequest): void
     {
-        $this->assertStillInProgress($request);
-        Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
+        $this->assertStillInProgress($dsarRequest);
+        Storage::disk('dsar')->assertMissing($this->exportPathOf($dsarRequest));
     }
 
     /**
-     * A sibling run of $request's export fulfils it in the instant before this
+     * A sibling run of $dsarRequest's export fulfils it in the instant before this
      * run's reject lands — the reject then finds the request already closed.
      */
-    protected function aSiblingRunFulfilsBeforeTheReject(DsarRequestRecord $request): void
+    protected function aSiblingRunFulfilsBeforeTheReject(DsarRequestRecord $dsarRequest): void
     {
-        $this->app->instance(RejectDsarRequestInteractor::class, new class(app(DsarOutcomeAudit::class), $request) extends RejectDsarRequestInteractor
+        $this->app->instance(RejectDsarRequestInteractor::class, new class(app(DsarOutcomeAudit::class), $dsarRequest) extends RejectDsarRequestInteractor
         {
-            public function __construct(DsarOutcomeAudit $audit, private readonly DsarRequestRecord $request)
+            public function __construct(DsarOutcomeAudit $dsarOutcomeAudit, private readonly DsarRequestRecord $dsarRequest)
             {
-                parent::__construct($audit);
+                parent::__construct($dsarOutcomeAudit);
             }
 
             public function execute(RejectDsarRequestCommand $command): void
             {
-                DsarRequest::retrieve($this->request->getKey())
+                DsarRequest::retrieve($this->dsarRequest->getKey())
                     ->fulfil(FulfilDsarRequestCommand::from([
-                        'dsarRequest' => $this->request,
-                        'filePath' => 'dsar/'.$this->request->company_id.'/'.$this->request->getKey().'.zip',
+                        'dsarRequest' => $this->dsarRequest,
+                        'filePath' => 'dsar/'.$this->dsarRequest->company_id.'/'.$this->dsarRequest->getKey().'.zip',
                     ]))
                     ->persist();
 
@@ -1171,23 +1171,23 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * $request is still closed as $status with nothing recorded since, and no
+     * $dsarRequest is still closed as $dsarRequestStatus with nothing recorded since, and no
      * export file is left at its path — no personal data outlives it (N27).
      */
-    protected function assertStillClosedWithoutExportFile(DsarRequestRecord $request, DsarRequestStatus $status): void
+    protected function assertStillClosedWithoutExportFile(DsarRequestRecord $dsarRequest, DsarRequestStatus $dsarRequestStatus): void
     {
-        $this->assertStillClosedAs($request, $status);
-        Storage::disk('dsar')->assertMissing($this->exportPathOf($request));
+        $this->assertStillClosedAs($dsarRequest, $dsarRequestStatus);
+        Storage::disk('dsar')->assertMissing($this->exportPathOf($dsarRequest));
     }
 
     /**
-     * $request is still fulfilled with nothing recorded since, and the export
+     * $dsarRequest is still fulfilled with nothing recorded since, and the export
      * planted at its path is still there, unchanged.
      */
-    protected function assertStillFulfilledWithExportKept(DsarRequestRecord $request): void
+    protected function assertStillFulfilledWithExportKept(DsarRequestRecord $dsarRequest): void
     {
-        $this->assertStillClosedAs($request, DsarRequestStatus::Fulfilled);
-        $this->assertSame('partial', Storage::disk('dsar')->get($this->exportPathOf($request)));
+        $this->assertStillClosedAs($dsarRequest, DsarRequestStatus::Fulfilled);
+        $this->assertSame('partial', Storage::disk('dsar')->get($this->exportPathOf($dsarRequest)));
     }
 
     /**
@@ -1208,7 +1208,7 @@ abstract class DsarTestCase extends TestCase
     {
         $this->app->instance(DsarReportRendererInterface::class, new class implements DsarReportRendererInterface
         {
-            public function render(DsarReport $report): string
+            public function render(DsarReport $dsarReport): string
             {
                 throw new DsarReportRenderingFailedException('induced rendering failure');
             }
@@ -1261,14 +1261,14 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * $job gives the worker three tries, waiting one minute and then five
+     * $buildDsarExportJob gives the worker three tries, waiting one minute and then five
      * before the last, on the default queue (ruling N24).
      */
-    protected function assertTriesThreeTimesWithBackoff(BuildDsarExportJob $job): void
+    protected function assertTriesThreeTimesWithBackoff(BuildDsarExportJob $buildDsarExportJob): void
     {
-        $this->assertSame(3, $job->tries);
-        $this->assertSame([60, 300], $job->backoff);
-        $this->assertNull($job->queue);
+        $this->assertSame(3, $buildDsarExportJob->tries);
+        $this->assertSame([60, 300], $buildDsarExportJob->backoff);
+        $this->assertNull($buildDsarExportJob->queue);
     }
 
     /**
@@ -1318,31 +1318,31 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * $request's subject and its requester were each sent one $type notice
+     * $dsarRequest's subject and its requester were each sent one $notificationType notice
      * about the request's company, and $total notices went out in all.
      */
-    protected function assertNoticeSentOnceEach(DsarRequestRecord $request, NotificationType $type, int $total): void
+    protected function assertNoticeSentOnceEach(DsarRequestRecord $dsarRequest, NotificationType $notificationType, int $total): void
     {
-        $request->load(['subject', 'requestedBy']);
-        $company = Company::query()->findOrFail($request->company_id);
+        $dsarRequest->load(['subject', 'requestedBy']);
+        $company = Company::query()->findOrFail($dsarRequest->company_id);
 
-        foreach ([$request->subject, $request->requestedBy] as $recipient) {
+        foreach ([$dsarRequest->subject, $dsarRequest->requestedBy] as $recipient) {
             Notification::assertSentToTimes($recipient, SystemNotification::class, 1);
-            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->type === $type
-                && $notice->companyName === $company->name
-                && $notice->companyId === $company->getKey());
+            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === $notificationType
+                && $systemNotification->companyName === $company->name
+                && $systemNotification->companyId === $company->getKey());
         }
         Notification::assertCount($total);
     }
 
     /**
-     * A $type notice sent to $recipient about $company — or about their whole
+     * A $notificationType notice sent to $recipient about $company — or about their whole
      * account when $company is null — as the production writers send it.
      */
-    protected function aNotificationFor(User $recipient, NotificationType $type, ?Company $company): void
+    protected function aNotificationFor(User $recipient, NotificationType $notificationType, ?Company $company): void
     {
         $recipient->notify(new SystemNotification(
-            $type,
+            $notificationType,
             $company === null ? $recipient->notificationCompanyName() : $company->name,
             $company?->getKey(),
         ));
@@ -1425,17 +1425,17 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * $from hands $company to $to through the self-service transfer, recorded
+     * $owner hands $company to $newOwner through the self-service transfer, recorded
      * the event-sourced way.
      */
-    protected function anOwnershipTransfer(Company $company, User $from, User $to): void
+    protected function anOwnershipTransfer(Company $company, User $owner, User $newOwner): void
     {
         CompanyAggregate::retrieve($company->getKey())
             ->transferOwnership(TransferCompanyOwnershipCommand::from([
-                'newOwnerUserId' => $to->getKey(),
-                'transferredBy' => $from,
+                'newOwnerUserId' => $newOwner->getKey(),
+                'transferredBy' => $owner,
                 'source' => TransferSource::SelfService,
-            ]), $from->getKey())
+            ]), $owner->getKey())
             ->persist();
     }
 
@@ -1479,13 +1479,13 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * The audit section of $request's export.
+     * The audit section of $dsarRequest's export.
      *
      * @return array<int, array<string, mixed>>
      */
-    protected function auditSectionOf(DsarRequestRecord $request): array
+    protected function auditSectionOf(DsarRequestRecord $dsarRequest): array
     {
-        $section = $this->exportedData($request)['audit_trail'];
+        $section = $this->exportedData($dsarRequest)['audit_trail'];
         $this->assertIsArray($section);
 
         return $section;
@@ -1509,17 +1509,17 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * Support hands $company from $from to $to (the admin-assisted path),
+     * Support hands $company from $owner to $newOwner (the admin-assisted path),
      * recorded the event-sourced way.
      */
-    protected function aSupportAssistedTransfer(Company $company, User $from, User $to): void
+    protected function aSupportAssistedTransfer(Company $company, User $owner, User $newOwner): void
     {
         CompanyAggregate::retrieve($company->getKey())
             ->transferOwnership(TransferCompanyOwnershipCommand::from([
-                'newOwnerUserId' => $to->getKey(),
+                'newOwnerUserId' => $newOwner->getKey(),
                 'transferredBy' => User::factory()->create(),
                 'source' => TransferSource::Admin,
-            ]), $from->getKey())
+            ]), $owner->getKey())
             ->persist();
     }
 
@@ -1534,38 +1534,38 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * The sections $request's export holds — data.json decoded from its ZIP
+     * The sections $dsarRequest's export holds — data.json decoded from its ZIP
      * on the dsar disk.
      *
      * @return array<string, mixed>
      */
-    protected function exportedData(DsarRequestRecord $request): array
+    protected function exportedData(DsarRequestRecord $dsarRequest): array
     {
-        return json_decode($this->exportedJsonOf($request), true, flags: JSON_THROW_ON_ERROR);
+        return json_decode($this->exportedJsonOf($dsarRequest), true, flags: JSON_THROW_ON_ERROR);
     }
 
     /**
-     * data.json exactly as $request's export ZIP holds it.
+     * data.json exactly as $dsarRequest's export ZIP holds it.
      */
-    protected function exportedJsonOf(DsarRequestRecord $request): string
+    protected function exportedJsonOf(DsarRequestRecord $dsarRequest): string
     {
-        $zip = $this->exportZipOf($request);
-        $json = (string) $zip->getFromName('data.json');
-        $zip->close();
+        $zipArchive = $this->exportZipOf($dsarRequest);
+        $json = (string) $zipArchive->getFromName('data.json');
+        $zipArchive->close();
 
         return $json;
     }
 
     /**
-     * $request's export ZIP holds exactly data.json and report.pdf, the
+     * $dsarRequest's export ZIP holds exactly data.json and report.pdf, the
      * report being the bytes the renderer produced.
      */
-    protected function assertExportHoldsDataAndReport(DsarRequestRecord $request): void
+    protected function assertExportHoldsDataAndReport(DsarRequestRecord $dsarRequest): void
     {
-        $zip = $this->exportZipOf($request);
-        $entries = array_map(fn (int $index): string => (string) $zip->getNameIndex($index), range(0, $zip->numFiles - 1));
-        $report = $zip->getFromName('report.pdf');
-        $zip->close();
+        $zipArchive = $this->exportZipOf($dsarRequest);
+        $entries = array_map(fn (int $index): string => (string) $zipArchive->getNameIndex($index), range(0, $zipArchive->numFiles - 1));
+        $report = $zipArchive->getFromName('report.pdf');
+        $zipArchive->close();
 
         $this->assertSame(['data.json', 'report.pdf'], $entries);
         $this->assertSame(self::STAND_IN_REPORT, $report);
@@ -1575,7 +1575,7 @@ abstract class DsarTestCase extends TestCase
      * The report opens with the Lesily cover — whose data, which company,
      * which request, when — and then the guide to its two parts, in order.
      */
-    protected function assertReportCover(DsarRequestRecord $request, User $subject, Company $company): void
+    protected function assertReportCover(DsarRequestRecord $dsarRequest, User $subject, Company $company): void
     {
         $this->assertReportShowsInOrder([
             'lesily',
@@ -1583,7 +1583,7 @@ abstract class DsarTestCase extends TestCase
             $subject->name,
             $subject->email,
             $company->name,
-            $request->getKey(),
+            $dsarRequest->getKey(),
             'Requested',
             '1 Oct 2026, 09:00 UTC',
             'Generated',
@@ -1611,7 +1611,7 @@ abstract class DsarTestCase extends TestCase
         foreach (array_unique($fields) as $field) {
             $this->assertTrue(Lang::has($field), "No label for {$field}");
         }
-        $this->assertStringNotContainsString('dsar.', $this->reportRenderer->html);
+        $this->assertStringNotContainsString('dsar.', $this->recordingDsarReportRenderer->html);
     }
 
     /**
@@ -1633,7 +1633,7 @@ abstract class DsarTestCase extends TestCase
      */
     protected function assertReportCell(string $text): void
     {
-        $this->assertStringContainsString('<td>'.e($text).'</td>', $this->reportRenderer->html);
+        $this->assertStringContainsString('<td>'.e($text).'</td>', $this->recordingDsarReportRenderer->html);
     }
 
     /**
@@ -1641,28 +1641,28 @@ abstract class DsarTestCase extends TestCase
      */
     protected function assertReportShowsInOrder(array $texts): void
     {
-        $this->assertThat(array_map(e(...), $texts), new SeeInOrder($this->reportRenderer->html));
+        $this->assertThat(array_map(e(...), $texts), new SeeInOrder($this->recordingDsarReportRenderer->html));
     }
 
-    protected function exportZipOf(DsarRequestRecord $request): ZipArchive
+    protected function exportZipOf(DsarRequestRecord $dsarRequest): ZipArchive
     {
-        $path = Storage::disk('dsar')->path($this->exportPathOf($request));
-        $zip = new ZipArchive;
-        $this->assertTrue($zip->open($path), "The export ZIP at {$path} could not be opened.");
+        $path = Storage::disk('dsar')->path($this->exportPathOf($dsarRequest));
+        $zipArchive = new ZipArchive;
+        $this->assertTrue($zipArchive->open($path), "The export ZIP at {$path} could not be opened.");
 
-        return $zip;
+        return $zipArchive;
     }
 
     /**
      * The archive builds its ZIP in a fresh, empty directory of its own —
      * returned so a test can see what the build leaves there.
      */
-    protected function anArchiveWorkingInAnEmptyDirectory(Filesystem $files = new Filesystem): string
+    protected function anArchiveWorkingInAnEmptyDirectory(Filesystem $filesystem = new Filesystem): string
     {
         $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-work-'.Str::uuid7()->toString();
         mkdir($directory);
         $this->beforeApplicationDestroyed(fn () => (new Filesystem)->deleteDirectory($directory));
-        $this->app->instance(DsarExportArchive::class, new DsarExportArchive($files, $directory));
+        $this->app->instance(DsarExportArchive::class, new DsarExportArchive($filesystem, $directory));
 
         return $directory;
     }
@@ -1703,12 +1703,12 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * $request's ZIP is on the dsar disk and the archive's working directory
+     * $dsarRequest's ZIP is on the dsar disk and the archive's working directory
      * holds nothing — no temporary copy of the person's data survives.
      */
-    protected function assertExportBuiltWithoutLeftovers(DsarRequestRecord $request, string $workDirectory): void
+    protected function assertExportBuiltWithoutLeftovers(DsarRequestRecord $dsarRequest, string $workDirectory): void
     {
-        Storage::disk('dsar')->assertExists($this->exportPathOf($request));
+        Storage::disk('dsar')->assertExists($this->exportPathOf($dsarRequest));
         $this->assertSame([], (new Filesystem)->files($workDirectory));
     }
 
@@ -1766,8 +1766,8 @@ abstract class DsarTestCase extends TestCase
      */
     protected function assertReportHoldsNoSecretOf(User $user, array $otherSecrets): void
     {
-        $this->assertStringContainsString(e($user->email), $this->reportRenderer->html);
-        $this->assertNoSecretIn($this->reportRenderer->html, $user, $otherSecrets);
+        $this->assertStringContainsString(e($user->email), $this->recordingDsarReportRenderer->html);
+        $this->assertNoSecretIn($this->recordingDsarReportRenderer->html, $user, $otherSecrets);
     }
 
     /**
@@ -1798,38 +1798,38 @@ abstract class DsarTestCase extends TestCase
         return DsarRequestRecord::query()->findOrFail((string) $response->json('data.id'));
     }
 
-    protected function exportPathOf(DsarRequestRecord $request): string
+    protected function exportPathOf(DsarRequestRecord $dsarRequest): string
     {
-        return 'dsar/'.$request->company_id.'/'.$request->getKey().'.zip';
+        return 'dsar/'.$dsarRequest->company_id.'/'.$dsarRequest->getKey().'.zip';
     }
 
     /**
-     * Runs $request's export job the way a worker would — handle() with its
+     * Runs $dsarRequest's export job the way a worker would — handle() with its
      * dependencies resolved from the container.
      */
-    protected function runTheExportFor(DsarRequestRecord $request): void
+    protected function runTheExportFor(DsarRequestRecord $dsarRequest): void
     {
-        app()->call([new BuildDsarExportJob($request->getKey(), $request->company_id, $request->subject_user_id), 'handle']);
+        app()->call([new BuildDsarExportJob($dsarRequest->getKey(), $dsarRequest->company_id, $dsarRequest->subject_user_id), 'handle']);
     }
 
     /**
-     * $request was fulfilled the event-sourced way: one DsarRequestFulfilled
+     * $dsarRequest was fulfilled the event-sourced way: one DsarRequestFulfilled
      * naming its file, the row fulfilled now with a download window of seven
      * days, and the export ZIP on the private dsar disk.
      */
-    protected function assertFulfilled(DsarRequestRecord $request): void
+    protected function assertFulfilled(DsarRequestRecord $dsarRequest): void
     {
-        $filePath = 'dsar/'.$request->company_id.'/'.$request->getKey().'.zip';
-        $fulfilled = $request->fresh() ?? $request;
+        $filePath = 'dsar/'.$dsarRequest->company_id.'/'.$dsarRequest->getKey().'.zip';
+        $fulfilledDsarRequest = $dsarRequest->fresh() ?? $dsarRequest;
 
         $this->assertSame(
             [DsarRequestStatus::Fulfilled, now()->toISOString(), $filePath, now()->addDays(7)->toISOString()],
-            [$fulfilled->status, $fulfilled->completed_at?->toISOString(), $fulfilled->file_path, $fulfilled->download_expires_at?->toISOString()],
+            [$fulfilledDsarRequest->status, $fulfilledDsarRequest->completed_at?->toISOString(), $fulfilledDsarRequest->file_path, $fulfilledDsarRequest->download_expires_at?->toISOString()],
         );
         $this->assertSame(1, LesilyStoredEvent::query()
             ->where('event_class', DsarRequestFulfilled::class)
-            ->where('aggregate_uuid', $request->getKey())
-            ->whereForCompany($request->company_id)
+            ->where('aggregate_uuid', $dsarRequest->getKey())
+            ->whereForCompany($dsarRequest->company_id)
             ->where('event_properties->filePath', $filePath)
             ->count());
         Storage::disk('dsar')->assertExists($filePath);
@@ -1847,27 +1847,27 @@ abstract class DsarTestCase extends TestCase
         $queue = Queue::getFacadeRoot();
         $this->assertInstanceOf(QueueFake::class, $queue);
 
-        $deletions = $queue->pushed(DeleteDsarExportFileJob::class);
-        $this->assertNotEmpty($deletions);
-        $deletions->each(fn (DeleteDsarExportFileJob $job) => app()->call([$job, 'handle']));
+        $deletionCollection = $queue->pushed(DeleteDsarExportFileJob::class);
+        $this->assertNotEmpty($deletionCollection);
+        $deletionCollection->each(fn (DeleteDsarExportFileJob $deleteDsarExportFileJob) => app()->call([$deleteDsarExportFileJob, 'handle']));
     }
 
     /**
-     * $request's download was expired at $at the event-sourced way: still
-     * fulfilled, its row stamped $at, and exactly one DsarDownloadExpired on
-     * its stream carrying $at.
+     * $dsarRequest's download was expired at $expiredAt the event-sourced way: still
+     * fulfilled, its row stamped $expiredAt, and exactly one DsarDownloadExpired on
+     * its stream carrying $expiredAt.
      */
-    protected function assertDownloadExpired(DsarRequestRecord $request, CarbonInterface $at): void
+    protected function assertDownloadExpired(DsarRequestRecord $dsarRequest, CarbonInterface $expiredAt): void
     {
-        $expired = $request->fresh() ?? $request;
-        $event = LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $request->getKey())
+        $expiredDsarRequest = $dsarRequest->fresh() ?? $dsarRequest;
+        $eloquentStoredEvent = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $dsarRequest->getKey())
             ->where('event_class', DsarDownloadExpired::class)
             ->sole();
 
         $this->assertSame(
-            [DsarRequestStatus::Fulfilled, $at->toISOString(), $at->toISOString()],
-            [$expired->status, $expired->download_expired_at?->toISOString(), CarbonImmutable::parse($event->event_properties['expiredAt'])->toISOString()],
+            [DsarRequestStatus::Fulfilled, $expiredAt->toISOString(), $expiredAt->toISOString()],
+            [$expiredDsarRequest->status, $expiredDsarRequest->download_expired_at?->toISOString(), CarbonImmutable::parse($eloquentStoredEvent->event_properties['expiredAt'])->toISOString()],
         );
     }
 
@@ -1876,21 +1876,21 @@ abstract class DsarTestCase extends TestCase
      * for: <subject>" — linked to its stored event, with no actor: the daily
      * scan is a system process (ERD-1-11).
      */
-    protected function assertExpiryAudited(DsarRequestRecord $request, User $subject): void
+    protected function assertExpiryAudited(DsarRequestRecord $dsarRequest, User $subject): void
     {
         $storedEventId = LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $request->getKey())
+            ->where('aggregate_uuid', $dsarRequest->getKey())
             ->where('event_class', DsarDownloadExpired::class)
             ->sole()
             ->getKey();
 
-        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_download_expired')->count());
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $dsarRequest->getKey())->where('action', 'dsar_download_expired')->count());
         $this->assertDatabaseHas('audit_trail', [
-            'company_id' => $request->company_id,
+            'company_id' => $dsarRequest->company_id,
             'stored_event_id' => $storedEventId,
             'event_class' => 'DsarDownloadExpired',
             'subject_type' => 'dsar_request',
-            'subject_id' => $request->getKey(),
+            'subject_id' => $dsarRequest->getKey(),
             'action' => 'dsar_download_expired',
             'description' => 'DSAR download expired — for: '.$subject->name,
             'actor_user_id' => null,
@@ -1903,47 +1903,47 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * Makes auditing $request's outcome fail inside its transaction — every
+     * Makes auditing $dsarRequest's outcome fail inside its transaction — every
      * other request's outcome records as usual — and returns the failure.
      */
-    protected function failTheAuditOf(DsarRequestRecord $request): RuntimeException
+    protected function failTheAuditOf(DsarRequestRecord $dsarRequest): RuntimeException
     {
         Exceptions::fake();
-        $cause = new RuntimeException('Induced audit failure.');
+        $runtimeException = new RuntimeException('Induced audit failure.');
 
-        $this->app->instance(DsarOutcomeAudit::class, new class($request, $cause) extends DsarOutcomeAudit
+        $this->app->instance(DsarOutcomeAudit::class, new class($dsarRequest, $runtimeException) extends DsarOutcomeAudit
         {
-            public function __construct(private readonly DsarRequestRecord $failing, private readonly RuntimeException $cause) {}
+            public function __construct(private readonly DsarRequestRecord $failingDsarRequest, private readonly RuntimeException $runtimeException) {}
 
-            public function record(DsarRequestRecord $request, string $eventClass, AuditAction $outcome): void
+            public function record(DsarRequestRecord $dsarRequest, string $eventClass, AuditAction $auditAction): void
             {
-                if ($request->is($this->failing)) {
-                    throw $this->cause;
+                if ($dsarRequest->is($this->failingDsarRequest)) {
+                    throw $this->runtimeException;
                 }
 
-                parent::record($request, $eventClass, $outcome);
+                parent::record($dsarRequest, $eventClass, $auditAction);
             }
         });
 
-        return $cause;
+        return $runtimeException;
     }
 
     /**
-     * $request's missed deadline was flagged at $at the event-sourced way:
-     * still in progress, its row stamped $at, and exactly one DsarSlaBreached
-     * on its stream carrying $at.
+     * $dsarRequest's missed deadline was flagged at $breachedAt the event-sourced way:
+     * still in progress, its row stamped $breachedAt, and exactly one DsarSlaBreached
+     * on its stream carrying $breachedAt.
      */
-    protected function assertBreachRecorded(DsarRequestRecord $request, CarbonInterface $at): void
+    protected function assertBreachRecorded(DsarRequestRecord $dsarRequest, CarbonInterface $breachedAt): void
     {
-        $flagged = $request->fresh() ?? $request;
-        $event = LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $request->getKey())
+        $flaggedDsarRequest = $dsarRequest->fresh() ?? $dsarRequest;
+        $eloquentStoredEvent = LesilyStoredEvent::query()
+            ->where('aggregate_uuid', $dsarRequest->getKey())
             ->where('event_class', DsarSlaBreached::class)
             ->sole();
 
         $this->assertSame(
-            [DsarRequestStatus::InProgress, $at->toISOString(), $at->toISOString()],
-            [$flagged->status, $flagged->sla_breached_at?->toISOString(), CarbonImmutable::parse($event->event_properties['breachedAt'])->toISOString()],
+            [DsarRequestStatus::InProgress, $breachedAt->toISOString(), $breachedAt->toISOString()],
+            [$flaggedDsarRequest->status, $flaggedDsarRequest->sla_breached_at?->toISOString(), CarbonImmutable::parse($eloquentStoredEvent->event_properties['breachedAt'])->toISOString()],
         );
     }
 
@@ -1952,21 +1952,21 @@ abstract class DsarTestCase extends TestCase
      * missed — for: <subject>" — linked to its stored event, with no actor:
      * the daily scan is a system process (ERD-1-11).
      */
-    protected function assertBreachAudited(DsarRequestRecord $request, User $subject): void
+    protected function assertBreachAudited(DsarRequestRecord $dsarRequest, User $subject): void
     {
         $storedEventId = LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $request->getKey())
+            ->where('aggregate_uuid', $dsarRequest->getKey())
             ->where('event_class', DsarSlaBreached::class)
             ->sole()
             ->getKey();
 
-        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_deadline_missed')->count());
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $dsarRequest->getKey())->where('action', 'dsar_deadline_missed')->count());
         $this->assertDatabaseHas('audit_trail', [
-            'company_id' => $request->company_id,
+            'company_id' => $dsarRequest->company_id,
             'stored_event_id' => $storedEventId,
             'event_class' => 'DsarSlaBreached',
             'subject_type' => 'dsar_request',
-            'subject_id' => $request->getKey(),
+            'subject_id' => $dsarRequest->getKey(),
             'action' => 'dsar_deadline_missed',
             'description' => 'DSAR deadline missed — for: '.$subject->name,
             'actor_user_id' => null,
@@ -1983,21 +1983,21 @@ abstract class DsarTestCase extends TestCase
      * <subject>" — linked to its stored event, with no actor: the export job
      * is a system process (ERD-1-11).
      */
-    protected function assertFulfilmentAudited(DsarRequestRecord $request, User $subject): void
+    protected function assertFulfilmentAudited(DsarRequestRecord $dsarRequest, User $subject): void
     {
         $storedEventId = LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $request->getKey())
+            ->where('aggregate_uuid', $dsarRequest->getKey())
             ->where('event_class', DsarRequestFulfilled::class)
             ->sole()
             ->getKey();
 
-        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $request->getKey())->where('action', 'dsar_fulfilled')->count());
+        $this->assertSame(1, DB::table('audit_trail')->where('subject_id', $dsarRequest->getKey())->where('action', 'dsar_fulfilled')->count());
         $this->assertDatabaseHas('audit_trail', [
-            'company_id' => $request->company_id,
+            'company_id' => $dsarRequest->company_id,
             'stored_event_id' => $storedEventId,
             'event_class' => 'DsarRequestFulfilled',
             'subject_type' => 'dsar_request',
-            'subject_id' => $request->getKey(),
+            'subject_id' => $dsarRequest->getKey(),
             'action' => 'dsar_fulfilled',
             'description' => 'DSAR fulfilled — for: '.$subject->name,
             'actor_user_id' => null,
@@ -2010,14 +2010,14 @@ abstract class DsarTestCase extends TestCase
     }
 
     /**
-     * Submitting $request queued its export — one job naming the request, its
+     * Submitting $dsarRequest queued its export — one job naming the request, its
      * company and its data subject.
      */
-    protected function assertExportQueuedFor(DsarRequestRecord $request): void
+    protected function assertExportQueuedFor(DsarRequestRecord $dsarRequest): void
     {
         Queue::assertPushed(BuildDsarExportJob::class, 1);
-        Queue::assertPushed(BuildDsarExportJob::class, fn (BuildDsarExportJob $job): bool => $job->requestId === $request->getKey()
-            && $job->companyId === $request->company_id
-            && $job->subjectUserId === $request->subject_user_id);
+        Queue::assertPushed(BuildDsarExportJob::class, fn (BuildDsarExportJob $buildDsarExportJob): bool => $buildDsarExportJob->requestId === $dsarRequest->getKey()
+            && $buildDsarExportJob->companyId === $dsarRequest->company_id
+            && $buildDsarExportJob->subjectUserId === $dsarRequest->subject_user_id);
     }
 }
