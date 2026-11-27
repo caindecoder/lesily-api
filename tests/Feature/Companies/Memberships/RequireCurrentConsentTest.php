@@ -30,7 +30,7 @@ class RequireCurrentConsentTest extends MembershipsTestCase
         config(["lesily.policies.{$policy}" => 'v1.1']);
 
         // When they request the company
-        $response = $this->viewCompany($this->employee, $this->company);
+        $response = $this->viewCompany($this->member, $this->company);
 
         // Then the request is refused until they accept
         $this->assertConsentRequired($response);
@@ -54,12 +54,12 @@ class RequireCurrentConsentTest extends MembershipsTestCase
     {
         // Given a member of two companies who accepted a new privacy policy version in the second only
         $second = Company::factory()->create();
-        $this->attachMember($second, $this->employee, $this->seededRole('employee'));
+        $this->attachMember($second, $this->member, $this->seededRole('employee'));
         config(['lesily.policies.privacy' => 'v1.1']);
-        $this->aConsentRecordedBy($this->employee, $second);
+        $this->aConsentRecordedBy($this->member, $second);
 
         // When they request the first company
-        $response = $this->viewCompany($this->employee, $this->company);
+        $response = $this->viewCompany($this->member, $this->company);
 
         // Then the request is refused until they accept there too
         $this->assertConsentRequired($response);
@@ -69,10 +69,10 @@ class RequireCurrentConsentTest extends MembershipsTestCase
     public function when_the_member_accepted_the_live_versions_twice_then_the_company_request_proceeds(): void
     {
         // Given a member who accepted the live policy versions a second time
-        $this->aConsentRecordedBy($this->employee, $this->company);
+        $this->aConsentRecordedBy($this->member, $this->company);
 
         // When they request the company
-        $response = $this->viewCompany($this->employee, $this->company);
+        $response = $this->viewCompany($this->member, $this->company);
 
         // Then the request proceeds
         $response->assertOk();
@@ -83,7 +83,7 @@ class RequireCurrentConsentTest extends MembershipsTestCase
     {
         // Given a member refused by a new privacy policy version
         config(['lesily.policies.privacy' => 'v1.1']);
-        Sanctum::actingAs($this->employee);
+        Sanctum::actingAs($this->member);
 
         // When they read their own profile
         $response = $this->getJson('/api/v1/me');
@@ -97,7 +97,7 @@ class RequireCurrentConsentTest extends MembershipsTestCase
     {
         // Given a member refused by a new privacy policy version, signed in on a session
         config(['lesily.policies.privacy' => 'v1.1']);
-        $session = $this->aSessionFor($this->employee);
+        $session = $this->aSessionFor($this->member);
 
         // When they sign out
         $response = $this->withToken($session->plainTextToken)->postJson('/api/v1/auth/logout');
@@ -112,7 +112,7 @@ class RequireCurrentConsentTest extends MembershipsTestCase
         // Given Contoso's employee, who accepted the live policy versions
 
         // When they request the company
-        $response = $this->viewCompany($this->employee, $this->company);
+        $response = $this->viewCompany($this->member, $this->company);
 
         // Then the request proceeds
         $response->assertOk();

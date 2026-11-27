@@ -420,7 +420,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
         // Given company A asked Lesily to file, and A has an admin, an HR officer and an employee besides its owner
         $breachId = $this->aNotifiedIncident($this->contosoCompany);
         $this->aFilingRequestBy($this->contosoCompany, $breachId);
-        $others = [$this->aCompanyMember($this->company, 'hr_officer'), $this->employee];
+        $others = [$this->aCompanyMember($this->company, 'hr_officer'), $this->member];
         $this->travelTo(CarbonImmutable::parse(self::FILED_AT));
 
         // When a platform admin files it for company A and the queued reactors run

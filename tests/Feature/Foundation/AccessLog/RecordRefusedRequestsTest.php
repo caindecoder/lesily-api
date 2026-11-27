@@ -37,7 +37,7 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         $logged = $this->collectLogRecords();
 
         // When the member asks for a feature the company's plan lacks
-        $response = $this->attemptGatedAction('two-gate/pro-feature', $this->employee, $this->company);
+        $response = $this->attemptGatedAction('two-gate/pro-feature', $this->member, $this->company);
 
         // Then the refusal still answers, nothing is stored, and the lost row is reported
         $response->assertForbidden();
@@ -45,7 +45,7 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         $this->assertWriteFailureReported($logged, [
             'event' => 'forbidden',
             'reason' => null,
-            'user_id' => $this->employee->getKey(),
+            'user_id' => $this->member->getKey(),
             'company_id' => $this->company->getKey(),
         ]);
     }
@@ -96,11 +96,11 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         $otherCompany = Company::factory()->onPlan(BillingPlan::Free)->create();
 
         // When the member asks for it
-        $response = $this->attemptGatedAction('company-context-probe', $this->employee, $otherCompany);
+        $response = $this->attemptGatedAction('company-context-probe', $this->member, $otherCompany);
 
         // Then it is refused, and the row names the member but no company
         $response->assertForbidden();
-        $entry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->employee, null);
+        $entry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->member, null);
         $this->assertAnsweredAs($entry, Response::HTTP_FORBIDDEN, ApiErrorCode::CompanyAccessDenied);
     }
 
@@ -108,14 +108,14 @@ class RecordRefusedRequestsTest extends FoundationTestCase
     public function when_the_company_is_unknown_then_the_refusal_is_a_platform_row(): void
     {
         // Given Contoso's employee is signed in
-        Sanctum::actingAs($this->employee);
+        Sanctum::actingAs($this->member);
 
         // When the member asks for it
         $response = $this->getJson('/api/_test/company-context-probe', ['X-Company-Context' => (string) Str::uuid7()]);
 
         // Then it is refused, and the row names the member but no company
         $response->assertNotFound();
-        $this->assertRefusalLogged(AccessEvent::NotFound, $this->employee, null);
+        $this->assertRefusalLogged(AccessEvent::NotFound, $this->member, null);
     }
 
     #[Test]
@@ -124,11 +124,11 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         // Given (Contoso's employee)
 
         // When the member asks for a record the company keeps out of sight
-        $response = $this->attemptGatedAction('company-hidden-record-probe', $this->employee, $this->company);
+        $response = $this->attemptGatedAction('company-hidden-record-probe', $this->member, $this->company);
 
         // Then it is refused, and the row names the member and the company
         $response->assertNotFound();
-        $this->assertRefusalLogged(AccessEvent::NotFound, $this->employee, $this->company);
+        $this->assertRefusalLogged(AccessEvent::NotFound, $this->member, $this->company);
     }
 
     #[Test]
@@ -155,11 +155,11 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         $this->putOnPlan($this->company, BillingPlan::Free);
 
         // When the member asks for a Pro feature in that company
-        $response = $this->attemptGatedAction('two-gate/pro-feature', $this->employee, $this->company);
+        $response = $this->attemptGatedAction('two-gate/pro-feature', $this->member, $this->company);
 
         // Then it is refused, and the row names the member and the company
         $response->assertForbidden();
-        $entry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->employee, $this->company);
+        $entry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->member, $this->company);
         $this->assertAnsweredAs($entry, Response::HTTP_FORBIDDEN, ApiErrorCode::FeatureNotAvailable);
     }
 

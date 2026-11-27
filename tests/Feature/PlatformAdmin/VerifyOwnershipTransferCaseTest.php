@@ -130,7 +130,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
-            $this->aValidVerificationPayload($this->employee),
+            $this->aValidVerificationPayload($this->member),
         );
 
         // Then the refusal names the case's current state and nothing new is recorded
@@ -179,13 +179,13 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // Given an open case and a user whose membership in the case's
         // company was removed — an active member means a live pivot
         $case = $this->anOpenCaseFor($this->company);
-        $this->softDeleteMembership($this->company, $this->employee);
+        $this->softDeleteMembership($this->company, $this->member);
 
         // When the platform admin verifies naming them as the incoming owner
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
-            $this->aValidVerificationPayload($this->employee),
+            $this->aValidVerificationPayload($this->member),
         );
 
         // Then the verification is refused on the target and nothing is written
@@ -231,7 +231,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         AuditEntry::created(fn () => throw $this->syntheticQueryException($failure));
 
         // When the platform admin verifies the case
-        $response = $this->verifyCase($this->platformAdmin, $case->getKey(), $this->aValidVerificationPayload($this->employee));
+        $response = $this->verifyCase($this->platformAdmin, $case->getKey(), $this->aValidVerificationPayload($this->member));
 
         // Then contention answers as a conflict; anything else passes
         // through (render only — a synthetic deadlock cannot model MySQL's
@@ -251,7 +251,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         ));
 
         // When the platform admin verifies the case
-        $response = $this->verifyCase($this->platformAdmin, $case->getKey(), $this->aValidVerificationPayload($this->employee));
+        $response = $this->verifyCase($this->platformAdmin, $case->getKey(), $this->aValidVerificationPayload($this->member));
 
         // Then the conflict speaks with THIS family's voice and the driver
         // cause rides the reported exception into the log chain
@@ -274,7 +274,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
-            $this->aValidVerificationPayload($this->employee),
+            $this->aValidVerificationPayload($this->member),
         );
 
         // Then the whole verification rolls back — no event, no stamp, no evidence
@@ -293,7 +293,7 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
-            $this->aValidVerificationPayload($this->employee, [
+            $this->aValidVerificationPayload($this->member, [
                 'artefacts' => [[...$this->artefact, 'note' => 'smuggled prose that must not survive']],
             ]),
         );
@@ -310,13 +310,13 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         // endpoint, and a second open case B for the same company
         $caseA = $this->anOpenCaseFor($this->company);
         $caseB = $this->anOpenCaseFor($this->company);
-        $this->verifyCase($this->platformAdmin, $caseA->getKey(), $this->aValidVerificationPayload($this->employee))->assertOk();
+        $this->verifyCase($this->platformAdmin, $caseA->getKey(), $this->aValidVerificationPayload($this->member))->assertOk();
 
         // When the platform admin verifies case B
         $response = $this->verifyCase(
             $this->platformAdmin,
             $caseB->getKey(),
-            $this->aValidVerificationPayload($this->employee),
+            $this->aValidVerificationPayload($this->member),
         );
 
         // Then B's stamp and B's audit row cite B's OWN event, never A's
@@ -344,15 +344,15 @@ class VerifyOwnershipTransferCaseTest extends OwnershipTransferCasesTestCase
         $response = $this->verifyCase(
             $this->platformAdmin,
             $case->getKey(),
-            $this->aValidVerificationPayload($this->employee),
+            $this->aValidVerificationPayload($this->member),
         );
 
         // Then the event, the stamp and the audit row landed together, and the
         // wire carries the verification facts without the prose
         $eventId = $this->assertVerificationEventRecorded($case);
-        $this->assertCaseRowStampedVerified($case, $this->employee, $eventId);
+        $this->assertCaseRowStampedVerified($case, $this->member, $eventId);
         $this->assertVerificationAudited($case, $eventId, $response);
-        $this->assertVerifiedCaseOnTheWire($response, $this->employee);
+        $this->assertVerifiedCaseOnTheWire($response, $this->member);
     }
 
     /**

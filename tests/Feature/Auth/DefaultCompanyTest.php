@@ -61,10 +61,10 @@ class DefaultCompanyTest extends AuthTestCase
         // Given the employee, a live member of Contoso (the membership rule must never be reached)
 
         // When
-        $response = $this->setDefaultCompany($this->employee, $payload);
+        $response = $this->setDefaultCompany($this->member, $payload);
 
         // Then
-        $this->assertSetRefusedAsInvalid($response, $this->employee, $expectedMessage);
+        $this->assertSetRefusedAsInvalid($response, $this->member, $expectedMessage);
     }
 
     /**
@@ -92,16 +92,16 @@ class DefaultCompanyTest extends AuthTestCase
             'unknown company id' => Str::uuid7()->toString(),
             'removed membership' => tap(
                 Company::factory()->named('Other')->create(),
-                fn (Company $other) => $this->aRemovedMembership($other, $this->employee),
+                fn (Company $other) => $this->aRemovedMembership($other, $this->member),
             )->getKey(),
             default => self::fail("Unknown provider case: {$case}"),
         };
 
         // When
-        $response = $this->setDefaultCompany($this->employee, ['companyId' => $targetId]);
+        $response = $this->setDefaultCompany($this->member, ['companyId' => $targetId]);
 
         // Then — the same collapsed envelope for every variant (no existence leak)
-        $this->assertSetRefusedLeavingDefault($response, $this->employee, null);
+        $this->assertSetRefusedLeavingDefault($response, $this->member, null);
     }
 
     /**
@@ -123,23 +123,23 @@ class DefaultCompanyTest extends AuthTestCase
         // Given the employee, with no default company set
 
         // When
-        $response = $this->clearDefaultCompany($this->employee);
+        $response = $this->clearDefaultCompany($this->member);
 
         // Then — idempotent: 204 even though nothing was set (UC-1-139 alt-1a)
-        $this->assertDefaultStored($response, $this->employee, null);
+        $this->assertDefaultStored($response, $this->member, null);
     }
 
     #[Test]
     public function when_setting_the_same_default_again_then_replace_is_idempotent(): void
     {
         // Given the employee whose default is already Contoso (set through the endpoint)
-        $this->setDefaultCompany($this->employee, ['companyId' => $this->company->getKey()]);
+        $this->setDefaultCompany($this->member, ['companyId' => $this->company->getKey()]);
 
         // When the same default is set again
-        $response = $this->setDefaultCompany($this->employee, ['companyId' => $this->company->getKey()]);
+        $response = $this->setDefaultCompany($this->member, ['companyId' => $this->company->getKey()]);
 
         // Then — the idempotent replace: same 204, same stored value
-        $this->assertDefaultStored($response, $this->employee, $this->company->getKey());
+        $this->assertDefaultStored($response, $this->member, $this->company->getKey());
     }
 
     #[Test]
@@ -147,32 +147,32 @@ class DefaultCompanyTest extends AuthTestCase
     {
         // Given the employee, a member of Contoso and Beta, whose default is Contoso
         $beta = Company::factory()->named('Beta')->create();
-        $this->attachMember($beta, $this->employee, $this->seededRole('employee'));
-        $this->setDefaultCompany($this->employee, ['companyId' => $this->company->getKey()]);
+        $this->attachMember($beta, $this->member, $this->seededRole('employee'));
+        $this->setDefaultCompany($this->member, ['companyId' => $this->company->getKey()]);
 
         // When Beta is set as the default
-        $response = $this->setDefaultCompany($this->employee, ['companyId' => $beta->getKey()]);
+        $response = $this->setDefaultCompany($this->member, ['companyId' => $beta->getKey()]);
 
         // Then — one default per user by construction: Beta replaced Contoso,
         // and the list re-flags exactly Beta (Contoso is not flagged)
-        $this->assertDefaultStored($response, $this->employee, $beta->getKey());
-        $this->assertListFlagsDefault($this->employee, $beta->getKey());
+        $this->assertDefaultStored($response, $this->member, $beta->getKey());
+        $this->assertListFlagsDefault($this->member, $beta->getKey());
     }
 
     #[Test]
     public function when_set_is_refused_then_the_existing_default_is_retained(): void
     {
         // Given the employee whose default is Contoso (set through the endpoint)
-        $this->setDefaultCompany($this->employee, ['companyId' => $this->company->getKey()]);
+        $this->setDefaultCompany($this->member, ['companyId' => $this->company->getKey()]);
 
         // When they attempt to set a company they are not a member of
-        $response = $this->setDefaultCompany($this->employee, [
+        $response = $this->setDefaultCompany($this->member, [
             'companyId' => Company::factory()->named('Other')->create()->getKey(),
         ]);
 
         // Then — the refusal leaves the existing non-null default intact
         // (UC-1-139 Minimal Guarantee against a write-before-guard reorder)
-        $this->assertSetRefusedLeavingDefault($response, $this->employee, $this->company->getKey());
+        $this->assertSetRefusedLeavingDefault($response, $this->member, $this->company->getKey());
     }
 
     #[Test]
@@ -184,13 +184,13 @@ class DefaultCompanyTest extends AuthTestCase
         $this->attachMember($beta, $this->admin, $this->seededRole('employee'));
         $this->setDefaultCompany($this->admin, ['companyId' => $beta->getKey()]);
         $this->setDefaultCompany($this->owner, ['companyId' => $this->company->getKey()]);
-        $this->setDefaultCompany($this->employee, ['companyId' => $this->company->getKey()]);
+        $this->setDefaultCompany($this->member, ['companyId' => $this->company->getKey()]);
 
         // When the employee clears their default
-        $response = $this->clearDefaultCompany($this->employee);
+        $response = $this->clearDefaultCompany($this->member);
 
         // Then — the employee's is null; the admin's and the owner's are untouched (user-scoped writes)
-        $this->assertDefaultStored($response, $this->employee, null);
+        $this->assertDefaultStored($response, $this->member, null);
         $this->assertDatabaseHas('users', ['id' => $this->admin->getKey(), 'default_company_id' => $beta->getKey()]);
         $this->assertDatabaseHas('users', ['id' => $this->owner->getKey(), 'default_company_id' => $this->company->getKey()]);
     }
@@ -200,8 +200,8 @@ class DefaultCompanyTest extends AuthTestCase
     {
         // Given the employee whose default is Home (set through the endpoint)
         $home = Company::factory()->named('Home')->create();
-        $this->attachMember($home, $this->employee, $this->seededRole('employee'));
-        $this->setDefaultCompany($this->employee, ['companyId' => $home->getKey()]);
+        $this->attachMember($home, $this->member, $this->seededRole('employee'));
+        $this->setDefaultCompany($this->member, ['companyId' => $home->getKey()]);
 
         // When the company row is hard-deleted (schema-level pin — no product
         // delete path exists until UC-1-037; the pivot goes first, its FK is
@@ -211,7 +211,7 @@ class DefaultCompanyTest extends AuthTestCase
 
         // Then — the nullOnDelete FK clears the preference instead of stranding it
         $this->assertDatabaseHas('users', [
-            'id' => $this->employee->getKey(),
+            'id' => $this->member->getKey(),
             'default_company_id' => null,
         ]);
     }
@@ -221,14 +221,14 @@ class DefaultCompanyTest extends AuthTestCase
     {
         // Given the employee, a member of Contoso and Beta with no default
         $beta = Company::factory()->named('Beta')->create();
-        $this->attachMember($beta, $this->employee, $this->seededRole('employee'));
+        $this->attachMember($beta, $this->member, $this->seededRole('employee'));
 
         // When Beta is set as the default
-        $response = $this->setDefaultCompany($this->employee, ['companyId' => $beta->getKey()]);
+        $response = $this->setDefaultCompany($this->member, ['companyId' => $beta->getKey()]);
 
         // Then — stored AND the switcher list flags exactly that row (Gherkin 1)
-        $this->assertDefaultStored($response, $this->employee, $beta->getKey());
-        $this->assertListFlagsDefault($this->employee, $beta->getKey());
+        $this->assertDefaultStored($response, $this->member, $beta->getKey());
+        $this->assertListFlagsDefault($this->member, $beta->getKey());
     }
 
     #[Test]
@@ -236,15 +236,15 @@ class DefaultCompanyTest extends AuthTestCase
     {
         // Given the employee, a member of Contoso and Beta, whose default is Beta
         $beta = Company::factory()->named('Beta')->create();
-        $this->attachMember($beta, $this->employee, $this->seededRole('employee'));
-        $this->setDefaultCompany($this->employee, ['companyId' => $beta->getKey()]);
+        $this->attachMember($beta, $this->member, $this->seededRole('employee'));
+        $this->setDefaultCompany($this->member, ['companyId' => $beta->getKey()]);
 
         // When the default is cleared
-        $response = $this->clearDefaultCompany($this->employee);
+        $response = $this->clearDefaultCompany($this->member);
 
         // Then — stored null and the list flags nothing (Gherkin 3 + alt-1a)
-        $this->assertDefaultStored($response, $this->employee, null);
-        $this->assertListFlagsDefault($this->employee, null);
+        $this->assertDefaultStored($response, $this->member, null);
+        $this->assertListFlagsDefault($this->member, null);
     }
 
     /**

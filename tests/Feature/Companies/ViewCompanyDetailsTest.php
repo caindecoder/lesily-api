@@ -57,7 +57,7 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
         $companyB = Company::factory()->create();
 
         // When they request Company B's details under their own company context
-        $response = $this->viewCompanyDetails($this->employee, $companyB->getKey(), context: $this->company->getKey());
+        $response = $this->viewCompanyDetails($this->member, $companyB->getKey(), context: $this->company->getKey());
 
         // Then company access is denied
         $this->assertCompanyAccessDenied($response);
@@ -72,7 +72,7 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
         // Given a member of a real company
 
         // When they request details for an unknown company id under their own context
-        $response = $this->viewCompanyDetails($this->employee, $companyId, context: $this->company->getKey());
+        $response = $this->viewCompanyDetails($this->member, $companyId, context: $this->company->getKey());
 
         // Then the resource is not found
         $this->assertResourceNotFound($response);
@@ -115,7 +115,7 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
         $companyA = Company::factory()->create();
 
         // When they request Company B's details under Company A's stale context
-        $response = $this->viewCompanyDetails($this->employee, $this->company->getKey(), context: $companyA->getKey());
+        $response = $this->viewCompanyDetails($this->member, $this->company->getKey(), context: $companyA->getKey());
 
         // Then Company B's details are returned
         $response->assertOk();
@@ -131,7 +131,7 @@ class ViewCompanyDetailsTest extends CompaniesTestCase
         // Given a member of a company
 
         // When they request its details with no context header
-        $response = $this->viewCompanyDetails($this->employee, $this->company->getKey());
+        $response = $this->viewCompanyDetails($this->member, $this->company->getKey());
 
         // Then the company's details are returned
         $response->assertOk();

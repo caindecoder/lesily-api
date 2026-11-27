@@ -32,7 +32,7 @@ class LinkGoogleAccountTest extends AuthTestCase
 
         config(['app.debug' => false]);
         $this->makeFreeTierCompany();
-        $this->alice = $this->employee;
+        $this->alice = $this->member;
     }
 
     #[Test]

@@ -28,7 +28,7 @@ class ViewMembershipsTest extends MembershipsTestCase
         $this->makeFreeTierCompany();
         $this->owner->update(['name' => 'Bhanu Fernando', 'email' => 'bhanu@contoso.lk']);
         $this->admin->update(['name' => 'Anna Perera', 'email' => 'anna@contoso.lk']);
-        $this->employee->update(['name' => 'Chamil Silva', 'email' => 'chamil@contoso.lk']);
+        $this->member->update(['name' => 'Chamil Silva', 'email' => 'chamil@contoso.lk']);
     }
 
     // --- Sad ---
@@ -160,7 +160,7 @@ class ViewMembershipsTest extends MembershipsTestCase
         $response = $this->viewMemberships($this->owner, $this->company);
 
         // Then only the active memberships are listed — the removed member is absent
-        $this->assertRosterUserIds($response, [$this->owner->getKey(), $this->admin->getKey(), $this->employee->getKey()]);
+        $this->assertRosterUserIds($response, [$this->owner->getKey(), $this->admin->getKey(), $this->member->getKey()]);
     }
 
     #[Test]
@@ -259,7 +259,7 @@ class ViewMembershipsTest extends MembershipsTestCase
 
         // Then B's pending invitation leaks nowhere — only A's own rows are
         // listed (the union's second tenant surface, s110 #13)
-        $this->assertRosterUserIds($response, [$this->owner->getKey(), $this->admin->getKey(), $this->employee->getKey()]);
+        $this->assertRosterUserIds($response, [$this->owner->getKey(), $this->admin->getKey(), $this->member->getKey()]);
     }
 
     // --- Happy ---
@@ -282,7 +282,7 @@ class ViewMembershipsTest extends MembershipsTestCase
         // default name-ascending order, under the paginated envelope
         $this->assertMembershipListed($response, $this->owner, 'owner');
         $this->assertMembershipListed($response, $this->admin, 'admin');
-        $this->assertMembershipListed($response, $this->employee, 'employee');
+        $this->assertMembershipListed($response, $this->member, 'employee');
         $this->assertMembershipListed($response, $actor, $roleCode);
         $this->assertRosterOrder($response, $expectedNames);
         $this->assertPaginationMeta($response, ['page' => 1, 'per_page' => 15, 'total' => count($expectedNames), 'last_page' => 1]);
@@ -329,7 +329,7 @@ class ViewMembershipsTest extends MembershipsTestCase
         $response = $this->viewMemberships($this->owner, $this->company, ['status' => 'active']);
 
         // Then only the memberships are listed — the pending invitation is absent
-        $this->assertRosterUserIds($response, [$this->owner->getKey(), $this->admin->getKey(), $this->employee->getKey()]);
+        $this->assertRosterUserIds($response, [$this->owner->getKey(), $this->admin->getKey(), $this->member->getKey()]);
     }
 
     #[Test]
@@ -449,7 +449,7 @@ class ViewMembershipsTest extends MembershipsTestCase
     {
         // Given members whose join order, either way, disagrees with name order
         $this->backdateMembership($this->company, $this->owner, now()->subDays(2));
-        $this->backdateMembership($this->company, $this->employee, now()->subDay());
+        $this->backdateMembership($this->company, $this->member, now()->subDay());
 
         // When the owner sorts the roster by name explicitly (the whitelisted token,
         // not the default fallback)
@@ -515,7 +515,7 @@ class ViewMembershipsTest extends MembershipsTestCase
         // Given members who joined on earlier days and an invitation issued today
         $this->backdateMembership($this->company, $this->owner, now()->subDays(3));
         $this->backdateMembership($this->company, $this->admin, now()->subDays(2));
-        $this->backdateMembership($this->company, $this->employee, now()->subDay());
+        $this->backdateMembership($this->company, $this->member, now()->subDay());
         $this->aPendingInvitation($this->company, $this->owner, 'kasun@contoso.lk');
 
         // When the owner sorts the roster by newest first
@@ -621,8 +621,8 @@ class ViewMembershipsTest extends MembershipsTestCase
                     'last_active_at' => null,
                 ],
                 [
-                    'id' => $this->membershipIdOf($this->company, $this->employee),
-                    'user' => ['id' => $this->employee->getKey(), 'name' => 'Chamil Silva', 'email' => 'chamil@contoso.lk'],
+                    'id' => $this->membershipIdOf($this->company, $this->member),
+                    'user' => ['id' => $this->member->getKey(), 'name' => 'Chamil Silva', 'email' => 'chamil@contoso.lk'],
                     'role' => ['code' => 'employee', 'name' => $this->seededRole('employee')->name],
                     'status' => 'active',
                     'invited_at' => null,

@@ -34,7 +34,7 @@ trait FreeTierCompany
 
     protected User $admin;
 
-    protected User $employee;
+    protected User $member;
 
     protected function makeFreeTierCompany(): void
     {
@@ -42,7 +42,7 @@ trait FreeTierCompany
         $this->owner = User::factory()->create();
         $this->company = $this->createFreeCompanyFor($this->owner);
         $this->admin = $this->aCompanyMember($this->company, 'admin');
-        $this->employee = $this->aCompanyMember($this->company);
+        $this->member = $this->aCompanyMember($this->company);
     }
 
     protected function createFreeCompanyFor(User $owner): Company
@@ -80,7 +80,7 @@ trait FreeTierCompany
         return match ($roleCode) {
             'owner' => $this->owner,
             'admin' => $this->admin,
-            'employee' => $this->employee,
+            'employee' => $this->member,
             default => $this->aCompanyMember($this->company, $roleCode),
         };
     }

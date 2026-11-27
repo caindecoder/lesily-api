@@ -49,7 +49,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         // Given Contoso's owner, admin and employee
 
         // When
-        $response = $this->transferOwnership($this->admin, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
+        $response = $this->transferOwnership($this->admin, $this->company, ['newOwnerUserId' => $this->member->getKey()]);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::RoleInsufficient);
@@ -153,7 +153,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $this->company->update(['owner_id' => $usurper->getKey()]);
 
         // When
-        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->member->getKey()]);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::StateGuardViolation);
@@ -167,12 +167,12 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $this->induceProjectorFailureFor(CompanyOwnershipTransferred::class);
 
         // When
-        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->member->getKey()]);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
         $this->assertNothingTransferred($this->company, $this->owner);
-        $this->assertSame($this->seededRole('employee')->getKey(), $this->pivotOf($this->company, $this->employee)->role_id);
+        $this->assertSame($this->seededRole('employee')->getKey(), $this->pivotOf($this->company, $this->member)->role_id);
     }
 
     #[Test]
@@ -183,7 +183,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $this->failTheAuditTrailAfter(1);
 
         // When Olive transfers ownership
-        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->member->getKey()]);
 
         // Then the transfer fails whole: Olive still owns the company and no row is written
         $this->assertRefusedWith($response, Response::HTTP_INTERNAL_SERVER_ERROR, ApiErrorCode::InternalError);
@@ -206,7 +206,7 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $this->induceProjectorFailureFor(CompanyOwnershipTransferred::class, $this->syntheticQueryException($failure));
 
         // When
-        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->member->getKey()]);
 
         // Then — contention answers as a conflict; anything else passes
         // through (render only — a detector-matched deadlock skips the
@@ -243,18 +243,18 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         Queue::fake();
 
         // When
-        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->member->getKey()]);
 
         // Then
         $response->assertOk();
         $this->assertSame([
             'company_id' => $this->company->getKey(),
-            'owner' => ['id' => $this->employee->getKey(), 'name' => $this->employee->name, 'email' => $this->employee->email],
+            'owner' => ['id' => $this->member->getKey(), 'name' => $this->member->name, 'email' => $this->member->email],
         ], $response->json('data'));
-        $this->assertOwnershipMoved($this->company, $this->owner, $this->employee);
-        $this->assertTransferRecorded($this->company, $this->owner, $this->employee);
+        $this->assertOwnershipMoved($this->company, $this->owner, $this->member);
+        $this->assertTransferRecorded($this->company, $this->owner, $this->member);
         $this->runQueuedHandlersFor(CompanyOwnershipTransferred::class);
-        $this->assertOnlyNewOwnerNotified($this->company, $this->employee, $this->owner);
+        $this->assertOnlyNewOwnerNotified($this->company, $this->member, $this->owner);
     }
 
     #[Test]
@@ -284,11 +284,11 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         $this->attachMember($acme, $this->owner, $this->seededRole('owner'));
 
         // When
-        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->member->getKey()]);
 
         // Then
         $response->assertOk();
-        $this->assertOwnershipMoved($this->company, $this->owner, $this->employee);
+        $this->assertOwnershipMoved($this->company, $this->owner, $this->member);
         $this->assertNothingTransferred($acme, $this->owner);
         $this->assertSame($this->seededRole('owner')->getKey(), $this->pivotOf($acme, $this->owner)->role_id);
     }
@@ -298,18 +298,18 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
     {
         // Given — ownership is a control-surface change; its notice is critical
         // and cannot be silenced (s170 PAUSE-1 ruling)
-        NotificationPreference::factory()->mailDisabled($this->employee, NotificationType::OwnershipReceived)->create();
+        NotificationPreference::factory()->mailDisabled($this->member, NotificationType::OwnershipReceived)->create();
         Queue::fake();
 
         // When
-        $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()])->assertOk();
+        $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->member->getKey()])->assertOk();
 
         // Then
         $this->runQueuedHandlersFor(CompanyOwnershipTransferred::class);
         Mail::assertQueued(
             SystemNotificationMail::class,
             fn (SystemNotificationMail $mail): bool => $mail->type === NotificationType::OwnershipReceived
-                && $mail->hasTo($this->employee->email),
+                && $mail->hasTo($this->member->email),
         );
     }
 
@@ -321,13 +321,13 @@ class TransferCompanyOwnershipTest extends MembershipsTestCase
         Queue::fake();
 
         // When
-        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->employee->getKey()]);
+        $response = $this->transferOwnership($this->owner, $this->company, ['newOwnerUserId' => $this->member->getKey()]);
 
         // Then — queued, not inline: the swap is committed while zero notices
         // have been sent and the reactor job sits on the queue (the after-commit
         // half is config/queue.php after_commit, pinned app-level elsewhere)
         $response->assertOk();
-        $this->assertOwnershipMoved($this->company, $this->owner, $this->employee);
+        $this->assertOwnershipMoved($this->company, $this->owner, $this->member);
         $this->assertReactorDeferred(CompanyOwnershipTransferred::class, SystemNotification::class);
     }
 

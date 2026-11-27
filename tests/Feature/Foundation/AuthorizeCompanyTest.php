@@ -38,7 +38,7 @@ class AuthorizeCompanyTest extends FoundationTestCase
     public function when_no_company_context_is_supplied_then_company_access_is_denied(?string $companyContext): void
     {
         // Given Contoso's employee, signed in
-        Sanctum::actingAs($this->employee);
+        Sanctum::actingAs($this->member);
 
         // When the request supplies no usable company context
         $headers = $companyContext === null ? [] : ['X-Company-Context' => $companyContext];
@@ -64,7 +64,7 @@ class AuthorizeCompanyTest extends FoundationTestCase
     public function when_the_requested_company_is_unknown_then_the_resource_is_not_found(string $companyContext): void
     {
         // Given Contoso's employee, signed in
-        Sanctum::actingAs($this->employee);
+        Sanctum::actingAs($this->member);
 
         // When the supplied company context resolves to no company
         $response = $this->getJson('/api/_test/two-gate/secured', [
@@ -79,7 +79,7 @@ class AuthorizeCompanyTest extends FoundationTestCase
     public function when_an_authenticated_member_supplies_their_company_context_then_the_company_is_bound_to_the_request(): void
     {
         // Given Contoso's employee, signed in
-        Sanctum::actingAs($this->employee);
+        Sanctum::actingAs($this->member);
 
         // When the member supplies their company context
         $response = $this->getJson('/api/_test/company-context-probe', [
@@ -96,8 +96,8 @@ class AuthorizeCompanyTest extends FoundationTestCase
     {
         // Given Contoso's employee whose membership was soft-deleted (removed
         // per UC-1-024) but whose session is still valid (R7 defense-in-depth)
-        $this->softDeleteMembership($this->company, $this->employee);
-        Sanctum::actingAs($this->employee);
+        $this->softDeleteMembership($this->company, $this->member);
+        Sanctum::actingAs($this->member);
 
         // When they hit a company-scoped route with that session
         $response = $this->getJson('/api/_test/company-context-probe', [

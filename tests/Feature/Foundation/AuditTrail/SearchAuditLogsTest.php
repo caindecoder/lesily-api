@@ -32,7 +32,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
 
     protected User $proOwner;
 
-    protected User $member;
+    protected User $actor;
 
     protected User $platformAdmin;
 
@@ -42,7 +42,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
 
         $this->proCompany = Company::factory()->onPlan(BillingPlan::Pro)->createOne();
         $this->proOwner = $this->aCompanyMember($this->proCompany, 'owner');
-        $this->member = User::factory()->createOne();
+        $this->actor = User::factory()->createOne();
         $this->platformAdmin = User::factory()->createOne();
     }
 
@@ -99,7 +99,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
         $this->putOnPlan($this->companyA, BillingPlan::Free);
 
         // When the employee searches company A's audit logs
-        $response = $this->viewAuditLogs($this->employee, $this->companyA, ['ip' => '203.0.113.5']);
+        $response = $this->viewAuditLogs($this->member, $this->companyA, ['ip' => '203.0.113.5']);
 
         // Then the role is refused, not the plan
         $this->assertRoleInsufficient($response, 'audit.view');
@@ -122,16 +122,16 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     public function when_filtered_by_a_member_then_staff_rows_under_their_id_are_not_listed(): void
     {
         // Given the member's change, and a change written by the same user as Lesily staff
-        $change = $this->aChangeBy($this->member)->createOne();
+        $change = $this->aChangeBy($this->actor)->createOne();
         AuditEntry::factory()
             ->forCompany($this->proCompany)
-            ->byStaff($this->member)
+            ->byStaff($this->actor)
             ->ofAction(AuditAction::RoleChanged, AuditSubjectType::User)
             ->recordedAt(CarbonImmutable::parse('2026-11-11 12:00:00'))
             ->createOne();
 
         // When the owner searches by the member
-        $response = $this->searchAuditLogs(['user' => $this->member->getKey()]);
+        $response = $this->searchAuditLogs(['user' => $this->actor->getKey()]);
 
         // Then only the member's own change is listed
         $this->assertEntriesListed($response, [$change->getKey()]);
@@ -141,7 +141,7 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     public function when_filtered_by_an_ip_then_staff_rows_from_it_are_not_listed(): void
     {
         // Given the member's sign-in and a staff change, both from the address
-        $signIn = $this->aSignInBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->createOne();
+        $signIn = $this->aSignInBy($this->actor)->fromOrigin('203.0.113.5', 'Firefox')->createOne();
         $this->aStaffChange()->fromOrigin('203.0.113.5', 'Firefox')->recordedAt(CarbonImmutable::parse('2026-11-11 12:00:00'))->createOne();
 
         // When the owner searches by the address
@@ -155,10 +155,10 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     public function when_a_member_row_has_no_role_on_record_then_the_user_filter_still_lists_it(): void
     {
         // Given a change by the member written when their membership was gone
-        $change = $this->aChangeBy($this->member)->withoutRole()->createOne();
+        $change = $this->aChangeBy($this->actor)->withoutRole()->createOne();
 
         // When the owner searches by the member
-        $response = $this->searchAuditLogs(['user' => $this->member->getKey()]);
+        $response = $this->searchAuditLogs(['user' => $this->actor->getKey()]);
 
         // Then the change is listed
         $this->assertEntriesListed($response, [$change->getKey()]);
@@ -168,13 +168,13 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     public function when_another_company_has_matching_rows_then_they_are_not_listed(): void
     {
         // Given the member's sign-in here, and the member's sign-in and change from the same address in company B
-        $signIn = $this->aSignInBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->createOne();
-        AccessLogEntry::factory()->forCompany($this->companyB)->byUser($this->member)->fromOrigin('203.0.113.5', 'Firefox')->createOne();
-        AuditEntry::factory()->forCompany($this->companyB)->byMember($this->member, 'admin')
+        $signIn = $this->aSignInBy($this->actor)->fromOrigin('203.0.113.5', 'Firefox')->createOne();
+        AccessLogEntry::factory()->forCompany($this->companyB)->byUser($this->actor)->fromOrigin('203.0.113.5', 'Firefox')->createOne();
+        AuditEntry::factory()->forCompany($this->companyB)->byMember($this->actor, 'admin')
             ->ofAction(AuditAction::PasswordChanged, AuditSubjectType::User)->fromOrigin('203.0.113.5', 'Firefox')->createOne();
 
         // When the owner searches by the member and the address
-        $response = $this->searchAuditLogs(['user' => $this->member->getKey(), 'ip' => '203.0.113.5']);
+        $response = $this->searchAuditLogs(['user' => $this->actor->getKey(), 'ip' => '203.0.113.5']);
 
         // Then only this company's sign-in is listed
         $this->assertEntriesListed($response, [$signIn->getKey()]);
@@ -184,11 +184,11 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     public function when_a_matching_row_is_past_the_horizon_then_it_is_not_listed(): void
     {
         // Given the member's sign-ins on the first day Pro keeps and the second before it
-        $onTheFirstDay = $this->aSignInBy($this->member)->seenAt(CarbonImmutable::parse('2023-11-15 00:00:00'))->createOne();
-        $this->aSignInBy($this->member)->seenAt(CarbonImmutable::parse('2023-11-14 23:59:59'))->createOne();
+        $onTheFirstDay = $this->aSignInBy($this->actor)->seenAt(CarbonImmutable::parse('2023-11-15 00:00:00'))->createOne();
+        $this->aSignInBy($this->actor)->seenAt(CarbonImmutable::parse('2023-11-14 23:59:59'))->createOne();
 
         // When the owner searches by the member
-        $response = $this->searchAuditLogs(['user' => $this->member->getKey()]);
+        $response = $this->searchAuditLogs(['user' => $this->actor->getKey()]);
 
         // Then only the sign-in inside the horizon is listed
         $this->assertEntriesListed($response, [$onTheFirstDay->getKey()]);
@@ -204,11 +204,11 @@ class SearchAuditLogsTest extends AuditTrailTestCase
         // Given a company whose plan has log search, its owner, and two users' sign-ins
         $company = $standing(Company::factory())->createOne();
         $owner = $this->aCompanyMember($company, 'owner');
-        $signIn = AccessLogEntry::factory()->forCompany($company)->byUser($this->member)->createOne();
+        $signIn = AccessLogEntry::factory()->forCompany($company)->byUser($this->actor)->createOne();
         AccessLogEntry::factory()->forCompany($company)->byUser($this->platformAdmin)->createOne();
 
         // When the owner searches by the member
-        $response = $this->viewAuditLogs($owner, $company, ['user' => $this->member->getKey()]);
+        $response = $this->viewAuditLogs($owner, $company, ['user' => $this->actor->getKey()]);
 
         // Then only the member's sign-in is listed
         $this->assertEntriesListed($response, [$signIn->getKey()]);
@@ -219,13 +219,13 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     {
         // Given the member's sign-in and change, and another user's
         $other = User::factory()->createOne();
-        $signIn = $this->aSignInBy($this->member)->seenAt(CarbonImmutable::parse('2026-11-10 09:00:00'))->createOne();
-        $change = $this->aChangeBy($this->member)->recordedAt(CarbonImmutable::parse('2026-11-11 09:00:00'))->createOne();
+        $signIn = $this->aSignInBy($this->actor)->seenAt(CarbonImmutable::parse('2026-11-10 09:00:00'))->createOne();
+        $change = $this->aChangeBy($this->actor)->recordedAt(CarbonImmutable::parse('2026-11-11 09:00:00'))->createOne();
         $this->aSignInBy($other)->createOne();
         $this->aChangeBy($other)->createOne();
 
         // When the owner searches by the member
-        $response = $this->searchAuditLogs(['user' => $this->member->getKey()]);
+        $response = $this->searchAuditLogs(['user' => $this->actor->getKey()]);
 
         // Then only the member's rows are listed, newest first
         $this->assertEntriesListed($response, [$change->getKey(), $signIn->getKey()]);
@@ -236,8 +236,8 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     {
         // Given a staff change, and the member's change and sign-in
         $staffChange = $this->aStaffChange()->createOne();
-        $this->aChangeBy($this->member)->createOne();
-        $this->aSignInBy($this->member)->createOne();
+        $this->aChangeBy($this->actor)->createOne();
+        $this->aSignInBy($this->actor)->createOne();
 
         // When the owner searches by Lesily support
         $response = $this->searchAuditLogs(['user' => 'lesily_support']);
@@ -250,9 +250,9 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     public function when_filtered_by_a_sign_in_event_then_only_those_access_rows_are_listed(): void
     {
         // Given a failed sign-in, a successful one and a change
-        $failed = $this->aSignInBy($this->member)->ofEvent(AccessEvent::LoginFailed, AccessEventReason::WrongPassword)->createOne();
-        $this->aSignInBy($this->member)->createOne();
-        $this->aChangeBy($this->member)->createOne();
+        $failed = $this->aSignInBy($this->actor)->ofEvent(AccessEvent::LoginFailed, AccessEventReason::WrongPassword)->createOne();
+        $this->aSignInBy($this->actor)->createOne();
+        $this->aChangeBy($this->actor)->createOne();
 
         // When the owner searches by the failed sign-in event
         $response = $this->searchAuditLogs(['event' => 'login_failed']);
@@ -265,9 +265,9 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     public function when_filtered_by_a_security_action_then_only_those_changes_are_listed(): void
     {
         // Given a 2FA disable, a password change and a sign-in
-        $twoFactorDisabled = $this->aChangeBy($this->member)->ofAction(AuditAction::TwoFactorDisabled, AuditSubjectType::User)->createOne();
-        $this->aChangeBy($this->member)->createOne();
-        $this->aSignInBy($this->member)->createOne();
+        $twoFactorDisabled = $this->aChangeBy($this->actor)->ofAction(AuditAction::TwoFactorDisabled, AuditSubjectType::User)->createOne();
+        $this->aChangeBy($this->actor)->createOne();
+        $this->aSignInBy($this->actor)->createOne();
 
         // When the owner searches by the 2FA-disable action
         $response = $this->searchAuditLogs(['event' => 'two_factor_disabled']);
@@ -280,10 +280,10 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     public function when_filtered_by_an_ip_then_only_rows_from_it_of_both_kinds_are_listed(): void
     {
         // Given a sign-in and a change from the address, and a pair from another
-        $signIn = $this->aSignInBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->seenAt(CarbonImmutable::parse('2026-11-10 09:00:00'))->createOne();
-        $change = $this->aChangeBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->recordedAt(CarbonImmutable::parse('2026-11-11 09:00:00'))->createOne();
-        $this->aSignInBy($this->member)->fromOrigin('198.51.100.7', 'Safari')->createOne();
-        $this->aChangeBy($this->member)->fromOrigin('198.51.100.7', 'Safari')->createOne();
+        $signIn = $this->aSignInBy($this->actor)->fromOrigin('203.0.113.5', 'Firefox')->seenAt(CarbonImmutable::parse('2026-11-10 09:00:00'))->createOne();
+        $change = $this->aChangeBy($this->actor)->fromOrigin('203.0.113.5', 'Firefox')->recordedAt(CarbonImmutable::parse('2026-11-11 09:00:00'))->createOne();
+        $this->aSignInBy($this->actor)->fromOrigin('198.51.100.7', 'Safari')->createOne();
+        $this->aChangeBy($this->actor)->fromOrigin('198.51.100.7', 'Safari')->createOne();
 
         // When the owner searches by the address
         $response = $this->searchAuditLogs(['ip' => '203.0.113.5']);
@@ -297,16 +297,16 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     {
         // Given the member's rows from the address inside the dates, inserted out of time order, and rows each missing one condition
         $other = User::factory()->createOne();
-        $second = $this->aChangeBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->recordedAt(CarbonImmutable::parse('2026-11-05 09:00:00'))->createOne();
-        $newest = $this->aSignInBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->seenAt(CarbonImmutable::parse('2026-11-14 23:59:59'))->createOne();
-        $oldest = $this->aSignInBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->seenAt(CarbonImmutable::parse('2026-11-01 00:00:00'))->createOne();
-        $this->aSignInBy($this->member)->fromOrigin('203.0.113.5', 'Firefox')->seenAt(CarbonImmutable::parse('2026-11-15 00:00:00'))->createOne();
+        $second = $this->aChangeBy($this->actor)->fromOrigin('203.0.113.5', 'Firefox')->recordedAt(CarbonImmutable::parse('2026-11-05 09:00:00'))->createOne();
+        $newest = $this->aSignInBy($this->actor)->fromOrigin('203.0.113.5', 'Firefox')->seenAt(CarbonImmutable::parse('2026-11-14 23:59:59'))->createOne();
+        $oldest = $this->aSignInBy($this->actor)->fromOrigin('203.0.113.5', 'Firefox')->seenAt(CarbonImmutable::parse('2026-11-01 00:00:00'))->createOne();
+        $this->aSignInBy($this->actor)->fromOrigin('203.0.113.5', 'Firefox')->seenAt(CarbonImmutable::parse('2026-11-15 00:00:00'))->createOne();
         $this->aSignInBy($other)->fromOrigin('203.0.113.5', 'Firefox')->seenAt(CarbonImmutable::parse('2026-11-06 09:00:00'))->createOne();
-        $this->aChangeBy($this->member)->fromOrigin('198.51.100.7', 'Safari')->recordedAt(CarbonImmutable::parse('2026-11-07 09:00:00'))->createOne();
+        $this->aChangeBy($this->actor)->fromOrigin('198.51.100.7', 'Safari')->recordedAt(CarbonImmutable::parse('2026-11-07 09:00:00'))->createOne();
 
         // When the owner searches by the member and the address within the dates
         $response = $this->searchAuditLogs([
-            'user' => $this->member->getKey(),
+            'user' => $this->actor->getKey(),
             'ip' => '203.0.113.5',
             'within' => '2026-11-01,2026-11-14',
         ]);
@@ -319,10 +319,10 @@ class SearchAuditLogsTest extends AuditTrailTestCase
     public function when_the_audit_logs_are_searched_then_no_audit_entry_is_written(): void
     {
         // Given the member's sign-in
-        $this->aSignInBy($this->member)->createOne();
+        $this->aSignInBy($this->actor)->createOne();
 
         // When the owner searches by the member
-        $response = $this->searchAuditLogs(['user' => $this->member->getKey()]);
+        $response = $this->searchAuditLogs(['user' => $this->actor->getKey()]);
 
         // Then the search leaves no audit-trail row
         $response->assertOk();

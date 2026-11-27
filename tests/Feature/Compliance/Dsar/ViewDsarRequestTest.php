@@ -13,7 +13,7 @@ class ViewDsarRequestTest extends DsarTestCase
     public function when_a_guest_views_a_request_then_they_are_refused_as_unauthenticated(): void
     {
         // Given
-        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->create();
+        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
 
         // When
         $response = $this->viewDsarRequestAsGuest($request->getKey());
@@ -27,10 +27,10 @@ class ViewDsarRequestTest extends DsarTestCase
     public function when_the_request_id_is_unknown_then_it_is_not_found(string $unknownId): void
     {
         // Given a member with a request of their own
-        DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->create();
+        DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
 
         // When
-        $response = $this->viewDsarRequest($this->employee, $this->company, $unknownId);
+        $response = $this->viewDsarRequest($this->member, $this->company, $unknownId);
 
         // Then
         $this->assertHiddenAsNotFound($response, $unknownId);
@@ -41,7 +41,7 @@ class ViewDsarRequestTest extends DsarTestCase
     public function when_the_request_belongs_to_another_company_then_it_is_not_found(string $viewerKind): void
     {
         // Given a member of both companies whose request lives in the other one
-        $subject = $this->employee;
+        $subject = $this->member;
         $otherCompany = Company::factory()->create();
         $this->attachMember($otherCompany, $subject, $this->seededRole('employee'));
         $request = DsarRequestRecord::factory()->forSubject($otherCompany, $subject)->create();
@@ -73,7 +73,7 @@ class ViewDsarRequestTest extends DsarTestCase
     public function when_the_download_window_has_closed_then_no_download_is_offered(): void
     {
         // Given a fulfilled request whose window has closed, its expiry not yet recorded
-        $subject = $this->employee;
+        $subject = $this->member;
         $request = DsarRequestRecord::factory()->forSubject($this->company, $subject)->fulfilled()->create();
         $this->travelTo($request->download_expires_at);
 
@@ -88,7 +88,7 @@ class ViewDsarRequestTest extends DsarTestCase
     public function when_the_requester_no_longer_holds_view_all_then_they_still_see_the_request_they_made(): void
     {
         // Given a former admin, now an employee, who requested an export for a member
-        $formerAdmin = $this->employee;
+        $formerAdmin = $this->member;
         $request = DsarRequestRecord::factory()
             ->forSubject($this->company, $this->aCompanyMember($this->company))
             ->requestedBy($formerAdmin, 'admin')
@@ -105,7 +105,7 @@ class ViewDsarRequestTest extends DsarTestCase
     public function when_a_request_was_made_on_the_subjects_behalf_then_the_subject_sees_it(): void
     {
         // Given an admin requested an export for the subject
-        $subject = $this->employee;
+        $subject = $this->member;
         $request = DsarRequestRecord::factory()
             ->forSubject($this->company, $subject)
             ->requestedBy($this->admin, 'admin')
@@ -124,7 +124,7 @@ class ViewDsarRequestTest extends DsarTestCase
     {
         // Given
         $holder = $this->memberWithRole($roleCode);
-        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->employee)->create();
+        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
 
         // When
         $response = $this->viewDsarRequest($holder, $this->company, $request->getKey());
@@ -137,7 +137,7 @@ class ViewDsarRequestTest extends DsarTestCase
     public function when_the_subject_views_their_fulfilled_request_then_the_sla_dates_are_shown(): void
     {
         // Given a request made 28 days ago and fulfilled today
-        $subject = $this->employee;
+        $subject = $this->member;
         $request = DsarRequestRecord::factory()->forSubject($this->company, $subject)->requestedDaysAgo(28)->fulfilled()->create();
 
         // When

@@ -38,7 +38,7 @@ class TwoGateCheckTest extends FoundationTestCase
         $this->putOnPlan($this->company, $plan);
 
         // When
-        $response = $this->attemptGatedAction($route, $this->employee, $this->company);
+        $response = $this->attemptGatedAction($route, $this->member, $this->company);
 
         // Then
         $this->assertFeatureUpgradePromptReturned($response, $expectedTier);
@@ -63,7 +63,7 @@ class TwoGateCheckTest extends FoundationTestCase
         $this->putOnPlan($this->company, BillingPlan::Pro);
 
         // When
-        $response = $this->attemptGatedAction('two-gate/secured', $this->employee, $this->company);
+        $response = $this->attemptGatedAction('two-gate/secured', $this->member, $this->company);
 
         // Then
         $this->assertRoleInsufficient($response, 'manage_security');
@@ -90,7 +90,7 @@ class TwoGateCheckTest extends FoundationTestCase
         $this->company->update(['status' => CompanyStatus::TrialExpired]);
 
         // When it attempts a plan-gated feature
-        $response = $this->attemptGatedAction('two-gate/starter-feature', $this->employee, $this->company);
+        $response = $this->attemptGatedAction('two-gate/starter-feature', $this->member, $this->company);
 
         // Then the billing gate denies it, pointing at the lowest plan that grants it
         $this->assertFeatureUpgradePromptReturned($response, 'Starter');
@@ -109,7 +109,7 @@ class TwoGateCheckTest extends FoundationTestCase
         });
 
         // When
-        $response = $this->attemptGatedAction('two-gate/deprecated', $this->employee, $this->company);
+        $response = $this->attemptGatedAction('two-gate/deprecated', $this->member, $this->company);
 
         // Then
         $this->assertFailsClosed($response);
@@ -124,7 +124,7 @@ class TwoGateCheckTest extends FoundationTestCase
         $this->putOnTrial($this->company, CarbonImmutable::now()->addDays(30));
 
         // When it asks for a feature that no plan grants
-        $response = $this->attemptGatedAction($route, $this->employee, $this->company);
+        $response = $this->attemptGatedAction($route, $this->member, $this->company);
 
         // Then the trial does not open it
         $this->assertFailsClosed($response);
@@ -149,7 +149,7 @@ class TwoGateCheckTest extends FoundationTestCase
         $this->company->addons()->create(['addon' => Addon::TemplateEngine]);
 
         // When it attempts the add-on-granted feature
-        $response = $this->attemptGatedAction('two-gate/templates', $this->employee, $this->company);
+        $response = $this->attemptGatedAction('two-gate/templates', $this->member, $this->company);
 
         // Then access is allowed — the absent plan must not short-circuit the add-on path
         $this->assertGatedActionProceeded($response);
@@ -191,7 +191,7 @@ class TwoGateCheckTest extends FoundationTestCase
         $this->putOnPlan($this->company, $plan);
 
         // When
-        $response = $this->attemptGatedAction($route, $this->employee, $this->company);
+        $response = $this->attemptGatedAction($route, $this->member, $this->company);
 
         // Then
         $this->assertGatedActionProceeded($response);
@@ -219,7 +219,7 @@ class TwoGateCheckTest extends FoundationTestCase
         $this->putOnTrial($this->company, CarbonImmutable::now()->addDays(30));
 
         // When it asks for a plan-gated feature
-        $response = $this->attemptGatedAction($route, $this->employee, $this->company);
+        $response = $this->attemptGatedAction($route, $this->member, $this->company);
 
         // Then the trial grants it, as the top plan would
         $this->assertGatedActionProceeded($response);
@@ -244,7 +244,7 @@ class TwoGateCheckTest extends FoundationTestCase
         $this->company->addons()->create(['addon' => Addon::TemplateEngine]);
 
         // When
-        $response = $this->attemptGatedAction('two-gate/templates', $this->employee, $this->company);
+        $response = $this->attemptGatedAction('two-gate/templates', $this->member, $this->company);
 
         // Then
         $this->assertGatedActionProceeded($response);

@@ -41,10 +41,10 @@ class EnableTwoFactorTest extends AuthTestCase
         // Given (a Pro member mid-enrollment)
         $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: true);
-        $this->enable($this->employee, $this->company);
+        $this->enable($this->member, $this->company);
 
         // When they confirm with no code at all
-        $response = $this->confirmWith($this->employee, $this->company, []);
+        $response = $this->confirmWith($this->member, $this->company, []);
 
         // Then the request is rejected as a validation error naming the code
         $this->assertValidationRejected($response, 'code', 'The code field is required.');
@@ -58,10 +58,10 @@ class EnableTwoFactorTest extends AuthTestCase
         $this->putOnPlan($this->company, $plan);
 
         // When the member starts 2FA enrollment
-        $response = $this->enable($this->employee, $this->company);
+        $response = $this->enable($this->member, $this->company);
 
         // Then enrollment is refused and no secret is staged
-        $this->assertFeatureUnavailable($response, $this->employee);
+        $this->assertFeatureUnavailable($response, $this->member);
     }
 
     #[Test]
@@ -71,12 +71,12 @@ class EnableTwoFactorTest extends AuthTestCase
         $this->putOnPlan($this->company, BillingPlan::Pro);
 
         // When they submit a confirmation code
-        $response = $this->confirm($this->employee, $this->company, '123456');
+        $response = $this->confirm($this->member, $this->company, '123456');
 
         // Then it is rejected and nothing is enabled
         $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'TWO_FACTOR_SETUP_NOT_STARTED');
-        $this->assertNoTwoFactorPersisted($this->employee);
+        $this->assertNoTwoFactorPersisted($this->member);
     }
 
     #[Test]
@@ -85,14 +85,14 @@ class EnableTwoFactorTest extends AuthTestCase
         // Given (a Pro member who started enrollment and let the staged secret age past its window)
         $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: true);
-        $this->enable($this->employee, $this->company);
+        $this->enable($this->member, $this->company);
         $this->travel(10 * 60 + 30)->seconds();
 
         // When they confirm with a valid code
-        $response = $this->confirm($this->employee, $this->company, '123456');
+        $response = $this->confirm($this->member, $this->company, '123456');
 
         // Then the setup has expired and nothing is enabled
-        $this->assertSetupExpired($response, $this->employee);
+        $this->assertSetupExpired($response, $this->member);
     }
 
     #[Test]
@@ -101,15 +101,15 @@ class EnableTwoFactorTest extends AuthTestCase
         // Given (a Pro member mid-enrollment whose authenticator code will not verify)
         $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: false);
-        $this->enable($this->employee, $this->company);
+        $this->enable($this->member, $this->company);
 
         // When they submit a code the authenticator does not accept
-        $response = $this->confirm($this->employee, $this->company, '000000');
+        $response = $this->confirm($this->member, $this->company, '000000');
 
         // Then it is rejected, 2FA stays disabled and nothing is audited beyond the ready-made company's rows
         $response->assertUnprocessable();
         $response->assertJsonPath('error_code', 'INVALID_TWO_FACTOR_CODE');
-        $this->assertNoTwoFactorPersisted($this->employee);
+        $this->assertNoTwoFactorPersisted($this->member);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS);
     }
 
@@ -171,9 +171,9 @@ class EnableTwoFactorTest extends AuthTestCase
 
         // When confirm is called past the per-IP auth-tier allowance (the TOTP brute-force surface)
         for ($attempt = 0; $attempt < 10; $attempt++) {
-            $this->confirm($this->employee, $this->company, '123456');
+            $this->confirm($this->member, $this->company, '123456');
         }
-        $response = $this->confirm($this->employee, $this->company, '123456');
+        $response = $this->confirm($this->member, $this->company, '123456');
 
         // Then the over-limit attempt is throttled
         $this->assertThrottled($response);
@@ -185,14 +185,14 @@ class EnableTwoFactorTest extends AuthTestCase
         // Given (a Pro member who started enrollment and returns just inside the window)
         $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: true);
-        $stagedSecret = (string) $this->enable($this->employee, $this->company)->json('data.secret');
+        $stagedSecret = (string) $this->enable($this->member, $this->company)->json('data.secret');
         $this->travel(9 * 60 + 30)->seconds();
 
         // When they confirm with a valid code
-        $response = $this->confirm($this->employee, $this->company, '123456');
+        $response = $this->confirm($this->member, $this->company, '123456');
 
         // Then 2FA is enabled from the still-staged secret
-        $this->assertTwoFactorEnabled($response, $this->employee, $stagedSecret);
+        $this->assertTwoFactorEnabled($response, $this->member, $stagedSecret);
     }
 
     #[Test]
@@ -201,11 +201,11 @@ class EnableTwoFactorTest extends AuthTestCase
         // Given (a Pro member completing enrollment, whose second recovery-code draw repeats the first)
         $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: true);
-        $this->enable($this->employee, $this->company);
+        $this->enable($this->member, $this->company);
         $expectedCodes = $this->recoveryCodeDrawsRepeatingTheFirst();
 
         // When they confirm with a valid code
-        $codes = $this->confirm($this->employee, $this->company, '123456')->json('data.recovery_codes');
+        $codes = $this->confirm($this->member, $this->company, '123456')->json('data.recovery_codes');
 
         // Then the repeat is replaced by the next draw and ten distinct codes come back, in the order drawn
         $this->assertSame($expectedCodes, $codes);
@@ -219,10 +219,10 @@ class EnableTwoFactorTest extends AuthTestCase
         $this->fakeTotpVerifier();
 
         // When they start enrollment
-        $response = $this->enable($this->employee, $this->company);
+        $response = $this->enable($this->member, $this->company);
 
         // Then a TOTP secret + provisioning URI are returned, but nothing is persisted yet
-        $this->assertProvisioningReturnedWithoutPersisting($response, $this->employee);
+        $this->assertProvisioningReturnedWithoutPersisting($response, $this->member);
     }
 
     #[Test]
@@ -231,14 +231,14 @@ class EnableTwoFactorTest extends AuthTestCase
         // Given (a Pro member completing enrollment)
         $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: true);
-        $this->enable($this->employee, $this->company);
+        $this->enable($this->member, $this->company);
 
         // When they confirm with a valid code
         /** @var list<string> $codes */
-        $codes = $this->confirm($this->employee, $this->company, '123456')->json('data.recovery_codes');
+        $codes = $this->confirm($this->member, $this->company, '123456')->json('data.recovery_codes');
 
         // Then exactly 10 distinct codes are returned, stored hashed (never plaintext)
-        $this->assertRecoveryCodesHashed($this->employee, $codes);
+        $this->assertRecoveryCodesHashed($this->member, $codes);
     }
 
     #[Test]
@@ -247,10 +247,10 @@ class EnableTwoFactorTest extends AuthTestCase
         // Given (a Pro member completing enrollment)
         $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: true);
-        $stagedSecret = (string) $this->enable($this->employee, $this->company)->json('data.secret');
+        $stagedSecret = (string) $this->enable($this->member, $this->company)->json('data.secret');
 
         // When they confirm
-        $this->confirm($this->employee, $this->company, '123456');
+        $this->confirm($this->member, $this->company, '123456');
 
         // Then the recorded User2FAEnabled marker holds only non-secret metadata (Design-Y)
         $this->assertEnableMarkerCarriesNoSecret($stagedSecret);
@@ -262,13 +262,13 @@ class EnableTwoFactorTest extends AuthTestCase
         // Given (a Pro member mid-enrollment whose authenticator code verifies)
         $this->putOnPlan($this->company, BillingPlan::Pro);
         $this->fakeTotpVerifier(verifies: true);
-        $stagedSecret = (string) $this->enable($this->employee, $this->company)->json('data.secret');
+        $stagedSecret = (string) $this->enable($this->member, $this->company)->json('data.secret');
 
         // When they confirm with a valid code
-        $response = $this->confirm($this->employee, $this->company, '123456');
+        $response = $this->confirm($this->member, $this->company, '123456');
 
         // Then 2FA is enabled and the secret is stored encrypted
-        $this->assertTwoFactorEnabled($response, $this->employee, $stagedSecret);
+        $this->assertTwoFactorEnabled($response, $this->member, $stagedSecret);
     }
 
     #[Test]

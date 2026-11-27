@@ -32,7 +32,7 @@ class SubmitDsarRequestTest extends DsarTestCase
         $this->idempotencyKey = null;
 
         // When
-        $response = $this->submitDsarRequest($this->employee, $this->company);
+        $response = $this->submitDsarRequest($this->member, $this->company);
 
         // Then
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::IdempotencyKeyRequired);
@@ -47,7 +47,7 @@ class SubmitDsarRequestTest extends DsarTestCase
         $body = ['subjectUserId' => $subjectReference];
 
         // When
-        $response = $this->submitDsarRequest($this->employee, $this->company, $body);
+        $response = $this->submitDsarRequest($this->member, $this->company, $body);
 
         // Then
         $this->assertValidationRejected($response, 'subjectUserId', 'The subject user id field must be a valid UUID.');
@@ -126,7 +126,7 @@ class SubmitDsarRequestTest extends DsarTestCase
     public function when_an_open_request_exists_for_the_subject_then_another_is_refused_as_in_progress(string $repeatRequester): void
     {
         // Given
-        $subject = $this->employee;
+        $subject = $this->member;
         $this->submitDsarRequest($subject, $this->company);
         [$actor, $body] = $this->aRepeatRequestFor($subject, $repeatRequester);
 
@@ -154,7 +154,7 @@ class SubmitDsarRequestTest extends DsarTestCase
     public function when_only_a_closed_request_exists_for_the_subject_then_a_new_request_is_accepted(): void
     {
         // Given
-        $subject = $this->employee;
+        $subject = $this->member;
         DsarRequestRecord::factory()->forSubject($this->company, $subject)->fulfilled()->create();
 
         // When
@@ -168,7 +168,7 @@ class SubmitDsarRequestTest extends DsarTestCase
     public function when_the_subject_has_an_open_request_in_another_company_then_a_request_here_is_accepted(): void
     {
         // Given
-        $subject = $this->employee;
+        $subject = $this->member;
         $otherCompany = Company::factory()->create();
         $this->attachMember($otherCompany, $subject, $this->seededRole('employee'));
         DsarRequestRecord::factory()->forSubject($otherCompany, $subject)->create();
@@ -197,7 +197,7 @@ class SubmitDsarRequestTest extends DsarTestCase
     public function when_the_same_idempotency_key_is_replayed_then_one_request_is_recorded(): void
     {
         // Given
-        $subject = $this->employee;
+        $subject = $this->member;
         $first = $this->submitDsarRequest($subject, $this->company);
 
         // When
@@ -213,13 +213,13 @@ class SubmitDsarRequestTest extends DsarTestCase
     public function when_a_member_names_themselves_as_the_subject_then_it_is_their_own_request(): void
     {
         // Given
-        $body = ['subjectUserId' => $this->employee->getKey()];
+        $body = ['subjectUserId' => $this->member->getKey()];
 
         // When
-        $response = $this->submitDsarRequest($this->employee, $this->company, $body);
+        $response = $this->submitDsarRequest($this->member, $this->company, $body);
 
         // Then
-        $this->assertDsarRequestRecorded($response, $this->employee, $this->employee);
+        $this->assertDsarRequestRecorded($response, $this->member, $this->member);
     }
 
     #[Test]
@@ -261,11 +261,11 @@ class SubmitDsarRequestTest extends DsarTestCase
         $actor = $this->memberWithRole($roleCode);
 
         // When
-        $response = $this->submitDsarRequest($actor, $this->company, ['subjectUserId' => $this->employee->getKey()]);
+        $response = $this->submitDsarRequest($actor, $this->company, ['subjectUserId' => $this->member->getKey()]);
 
         // Then
-        $this->assertDsarRequestRecorded($response, $this->employee, $actor);
-        $this->assertDsarRequestAudited($response, $this->employee, $actor);
+        $this->assertDsarRequestRecorded($response, $this->member, $actor);
+        $this->assertDsarRequestAudited($response, $this->member, $actor);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
 
@@ -284,7 +284,7 @@ class SubmitDsarRequestTest extends DsarTestCase
     public function when_a_request_is_submitted_then_its_export_is_queued(): void
     {
         // Given
-        $member = $this->employee;
+        $member = $this->member;
 
         // When
         $response = $this->submitDsarRequest($member, $this->company);
