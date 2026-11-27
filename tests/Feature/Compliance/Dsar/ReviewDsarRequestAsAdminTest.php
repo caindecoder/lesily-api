@@ -258,11 +258,11 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     }
 
     /**
-     * $dsarRequest's missed deadline is flagged at $at, recorded by the aggregate itself.
+     * $dsarRequest's missed deadline is flagged at $breachedAt, recorded by the aggregate itself.
      */
-    protected function flagTheBreachAt(DsarRequestRecord $dsarRequest, string $at): void
+    protected function flagTheBreachAt(DsarRequestRecord $dsarRequest, string $breachedAt): void
     {
-        $this->travelTo($at);
+        $this->travelTo($breachedAt);
         DsarRequest::retrieve($dsarRequest->getKey())->flagSlaBreach(CarbonImmutable::now())->persist();
     }
 
@@ -285,11 +285,11 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     }
 
     /**
-     * $dsarRequest's download expires at $at, recorded by the aggregate itself.
+     * $dsarRequest's download expires at $expiredAt, recorded by the aggregate itself.
      */
-    protected function expireTheDownloadAt(DsarRequestRecord $dsarRequest, string $at): void
+    protected function expireTheDownloadAt(DsarRequestRecord $dsarRequest, string $expiredAt): void
     {
-        $this->travelTo($at);
+        $this->travelTo($expiredAt);
         DsarRequest::retrieve($dsarRequest->getKey())->expireDownload(CarbonImmutable::now())->persist();
     }
 

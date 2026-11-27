@@ -92,7 +92,7 @@ class ExportDsarSectionsTest extends DsarTestCase
     #[Test]
     public function when_co_workers_have_their_own_sign_ins_invitations_transfers_notices_and_access_records_then_none_of_theirs_is_exported(): void
     {
-        // Given a member beside a co-worker who signed in, was refused a lookup here, was invited, is named on a case, was welcomed here, was told their password changed and switched an email off, and the owner handing the company to the co-worker
+        // Given a subject beside a co-worker who signed in, was refused a lookup here, was invited, is named on a case, was welcomed here, was told their password changed and switched an email off, and the owner handing the company to the co-worker
         $subject = $this->aCompanyMember($this->company);
         $member = $this->aCompanyMember($this->company);
         $this->aSignInFor($member, 'iPhone', now()->addDays(90));
@@ -106,7 +106,7 @@ class ExportDsarSectionsTest extends DsarTestCase
         NotificationPreference::factory()->mailDisabled($member, NotificationType::GeneralAccountNotice)->create();
         $dsarRequest = $this->aSubmittedRequest($this->company, $subject);
 
-        // When the member's export is built
+        // When the subject's export is built
         $this->runTheExportFor($dsarRequest);
 
         // Then none of the others' sign-ins, invitations, transfers, cases, notices, preferences or access records is theirs
