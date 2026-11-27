@@ -18,9 +18,9 @@ use App\Foundation\Notifications\Notifications\SystemNotification;
  */
 class WelcomeEmailReactor extends Reactor implements ShouldQueue
 {
-    public function onUserSignedUpAsOwner(UserSignedUpAsOwner $event): void
+    public function onUserSignedUpAsOwner(UserSignedUpAsOwner $userSignedUpAsOwner): void
     {
-        User::query()->findOrFail($event->userId)
-            ->notify(new SystemNotification(NotificationType::GeneralAccountNotice, $event->companyName, $event->companyId));
+        User::query()->findOrFail($userSignedUpAsOwner->userId)
+            ->notify(new SystemNotification(NotificationType::GeneralAccountNotice, $userSignedUpAsOwner->companyName, $userSignedUpAsOwner->companyId));
     }
 }

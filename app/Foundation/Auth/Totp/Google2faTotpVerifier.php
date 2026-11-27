@@ -13,20 +13,20 @@ use Illuminate\Support\Facades\Config;
  */
 class Google2faTotpVerifier implements TotpVerifier
 {
-    public function __construct(private readonly Google2FA $google2fa) {}
+    public function __construct(private readonly Google2FA $google2FA) {}
 
     public function generateSecret(): string
     {
-        return $this->google2fa->generateSecretKey();
+        return $this->google2FA->generateSecretKey();
     }
 
     public function provisioningUri(string $secret, string $accountName): string
     {
-        return $this->google2fa->getQRCodeUrl(Config::string('app.name'), $accountName, $secret);
+        return $this->google2FA->getQRCodeUrl(Config::string('app.name'), $accountName, $secret);
     }
 
     public function verify(string $secret, string $code): bool
     {
-        return $this->google2fa->verifyKey($secret, $code) !== false;
+        return $this->google2FA->verifyKey($secret, $code) !== false;
     }
 }

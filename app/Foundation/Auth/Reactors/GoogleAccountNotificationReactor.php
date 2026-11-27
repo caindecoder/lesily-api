@@ -12,9 +12,9 @@ use App\Foundation\Notifications\Notifications\SystemNotification;
 
 class GoogleAccountNotificationReactor extends Reactor implements ShouldQueue
 {
-    public function onUserGoogleOAuthLinked(UserGoogleOAuthLinked $event): void
+    public function onUserGoogleOAuthLinked(UserGoogleOAuthLinked $userGoogleOAuthLinked): void
     {
-        $user = User::query()->findOrFail($event->userId);
+        $user = User::query()->findOrFail($userGoogleOAuthLinked->userId);
 
         $user->notify(new SystemNotification(
             NotificationType::GoogleAccountLinked,
@@ -23,9 +23,9 @@ class GoogleAccountNotificationReactor extends Reactor implements ShouldQueue
         ));
     }
 
-    public function onUserGoogleOAuthUnlinked(UserGoogleOAuthUnlinked $event): void
+    public function onUserGoogleOAuthUnlinked(UserGoogleOAuthUnlinked $userGoogleOAuthUnlinked): void
     {
-        $user = User::query()->findOrFail($event->userId);
+        $user = User::query()->findOrFail($userGoogleOAuthUnlinked->userId);
 
         $user->notify(new SystemNotification(
             NotificationType::GoogleAccountUnlinked,
