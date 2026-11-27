@@ -14,61 +14,61 @@ use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 
 class DsarRequestProjector extends Projector
 {
-    public function onDsarRequestSubmitted(DsarRequestSubmitted $event): void
+    public function onDsarRequestSubmitted(DsarRequestSubmitted $dsarRequestSubmitted): void
     {
         DsarRequestRecord::query()->create([
-            'id' => $event->requestId,
-            'company_id' => $event->companyId,
-            'subject_user_id' => $event->subjectUserId,
-            'requested_by' => $event->requestedByUserId,
-            'requested_by_role' => $event->requestedByRole,
-            'request_type' => $event->requestType,
+            'id' => $dsarRequestSubmitted->requestId,
+            'company_id' => $dsarRequestSubmitted->companyId,
+            'subject_user_id' => $dsarRequestSubmitted->subjectUserId,
+            'requested_by' => $dsarRequestSubmitted->requestedByUserId,
+            'requested_by_role' => $dsarRequestSubmitted->requestedByRole,
+            'request_type' => $dsarRequestSubmitted->requestType,
             'status' => DsarRequestStatus::InProgress,
-            'requested_at' => $event->requestedAt,
-            'sla_deadline' => $event->slaDeadline,
-            'created_by' => $event->requestedByUserId,
+            'requested_at' => $dsarRequestSubmitted->requestedAt,
+            'sla_deadline' => $dsarRequestSubmitted->slaDeadline,
+            'created_by' => $dsarRequestSubmitted->requestedByUserId,
         ]);
     }
 
-    public function onDsarRequestFulfilled(DsarRequestFulfilled $event): void
+    public function onDsarRequestFulfilled(DsarRequestFulfilled $dsarRequestFulfilled): void
     {
-        DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid())->update([
+        DsarRequestRecord::query()->findOrFail($dsarRequestFulfilled->aggregateRootUuid())->update([
             'status' => DsarRequestStatus::Fulfilled,
-            'completed_at' => $event->completedAt,
-            'file_path' => $event->filePath,
-            'download_expires_at' => $event->downloadExpiresAt,
+            'completed_at' => $dsarRequestFulfilled->completedAt,
+            'file_path' => $dsarRequestFulfilled->filePath,
+            'download_expires_at' => $dsarRequestFulfilled->downloadExpiresAt,
         ]);
     }
 
-    public function onDsarRequestRejected(DsarRequestRejected $event): void
+    public function onDsarRequestRejected(DsarRequestRejected $dsarRequestRejected): void
     {
-        DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid())->update([
+        DsarRequestRecord::query()->findOrFail($dsarRequestRejected->aggregateRootUuid())->update([
             'status' => DsarRequestStatus::Rejected,
-            'rejected_at' => $event->rejectedAt,
-            'rejection_reason' => $event->reason,
+            'rejected_at' => $dsarRequestRejected->rejectedAt,
+            'rejection_reason' => $dsarRequestRejected->reason,
         ]);
     }
 
-    public function onDsarRequestCancelled(DsarRequestCancelled $event): void
+    public function onDsarRequestCancelled(DsarRequestCancelled $dsarRequestCancelled): void
     {
-        DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid())->update([
+        DsarRequestRecord::query()->findOrFail($dsarRequestCancelled->aggregateRootUuid())->update([
             'status' => DsarRequestStatus::Cancelled,
-            'cancelled_at' => $event->cancelledAt,
-            'cancelled_by' => $event->cancelledByUserId,
+            'cancelled_at' => $dsarRequestCancelled->cancelledAt,
+            'cancelled_by' => $dsarRequestCancelled->cancelledByUserId,
         ]);
     }
 
-    public function onDsarSlaBreached(DsarSlaBreached $event): void
+    public function onDsarSlaBreached(DsarSlaBreached $dsarSlaBreached): void
     {
-        DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid())->update([
-            'sla_breached_at' => $event->breachedAt,
+        DsarRequestRecord::query()->findOrFail($dsarSlaBreached->aggregateRootUuid())->update([
+            'sla_breached_at' => $dsarSlaBreached->breachedAt,
         ]);
     }
 
-    public function onDsarDownloadExpired(DsarDownloadExpired $event): void
+    public function onDsarDownloadExpired(DsarDownloadExpired $dsarDownloadExpired): void
     {
-        DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid())->update([
-            'download_expired_at' => $event->expiredAt,
+        DsarRequestRecord::query()->findOrFail($dsarDownloadExpired->aggregateRootUuid())->update([
+            'download_expired_at' => $dsarDownloadExpired->expiredAt,
         ]);
     }
 }

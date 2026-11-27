@@ -9,8 +9,8 @@ use App\Compliance\Dsar\UseCases\Jobs\BuildDsarExportJob;
 
 class QueueDsarExportReactor extends Reactor implements ShouldQueue
 {
-    public function onDsarRequestSubmitted(DsarRequestSubmitted $event): void
+    public function onDsarRequestSubmitted(DsarRequestSubmitted $dsarRequestSubmitted): void
     {
-        dispatch(new BuildDsarExportJob($event->requestId, $event->companyId, $event->subjectUserId));
+        dispatch(new BuildDsarExportJob($dsarRequestSubmitted->requestId, $dsarRequestSubmitted->companyId, $dsarRequestSubmitted->subjectUserId));
     }
 }

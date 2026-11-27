@@ -13,7 +13,7 @@
             size: A4;
             margin: 18mm 16mm 20mm;
             @bottom-right { content: "{{ __('dsar.report.page') }} " counter(page) " / " counter(pages); font-family: 'Inter', Arial, sans-serif; font-size: 9px; color: #64748B; }
-            @bottom-left { content: "{{ __('dsar.report.title') }} · {{ $report->cover->reference }}"; font-family: 'Inter', Arial, sans-serif; font-size: 9px; color: #64748B; }
+            @bottom-left { content: "{{ __('dsar.report.title') }} · {{ $report->dsarReportCover->reference }}"; font-family: 'Inter', Arial, sans-serif; font-size: 9px; color: #64748B; }
         }
         @page :first {
             @bottom-right { content: none; }
@@ -42,11 +42,11 @@
         <div class="wordmark">lesily</div>
         <h1>{{ __('dsar.report.title') }}</h1>
         <table>
-            <tr><td colspan="2"><strong>{{ $report->cover->subjectName }}</strong><br>{{ $report->cover->subjectEmail }}</td></tr>
-            <tr><td class="label">{{ __('dsar.report.company') }}</td><td>{{ $report->cover->companyName }}</td></tr>
-            <tr><td class="label">{{ __('dsar.report.reference') }}</td><td>{{ $report->cover->reference }}</td></tr>
-            <tr><td class="label">{{ __('dsar.report.requested') }}</td><td>{{ $report->cover->requestedAt }}</td></tr>
-            <tr><td class="label">{{ __('dsar.report.generated') }}</td><td>{{ $report->cover->generatedAt }}</td></tr>
+            <tr><td colspan="2"><strong>{{ $report->dsarReportCover->subjectName }}</strong><br>{{ $report->dsarReportCover->subjectEmail }}</td></tr>
+            <tr><td class="label">{{ __('dsar.report.company') }}</td><td>{{ $report->dsarReportCover->companyName }}</td></tr>
+            <tr><td class="label">{{ __('dsar.report.reference') }}</td><td>{{ $report->dsarReportCover->reference }}</td></tr>
+            <tr><td class="label">{{ __('dsar.report.requested') }}</td><td>{{ $report->dsarReportCover->requestedAt }}</td></tr>
+            <tr><td class="label">{{ __('dsar.report.generated') }}</td><td>{{ $report->dsarReportCover->generatedAt }}</td></tr>
         </table>
         <p class="guide">{{ __('dsar.report.guide') }}</p>
         <h2>{{ __('dsar.report.contents') }}</h2>

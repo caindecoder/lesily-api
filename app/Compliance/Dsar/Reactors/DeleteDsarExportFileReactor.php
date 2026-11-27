@@ -10,10 +10,10 @@ use App\Compliance\Dsar\UseCases\Jobs\DeleteDsarExportFileJob;
 
 class DeleteDsarExportFileReactor extends Reactor implements ShouldQueue
 {
-    public function onDsarDownloadExpired(DsarDownloadExpired $event): void
+    public function onDsarDownloadExpired(DsarDownloadExpired $dsarDownloadExpired): void
     {
-        $request = DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid());
+        $dsarRequest = DsarRequestRecord::query()->findOrFail($dsarDownloadExpired->aggregateRootUuid());
 
-        dispatch(new DeleteDsarExportFileJob($request->exportFilePath()));
+        dispatch(new DeleteDsarExportFileJob($dsarRequest->exportFilePath()));
     }
 }
