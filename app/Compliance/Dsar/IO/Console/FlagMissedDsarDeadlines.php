@@ -13,23 +13,23 @@ use App\Compliance\Dsar\UseCases\Interactors\FlagMissedDsarDeadlinesInteractor;
 #[Description('Flag DSAR requests still open past their 30-day deadline (defaults to now; --date replays a missed night).')]
 class FlagMissedDsarDeadlines extends Command
 {
-    public function handle(FlagMissedDsarDeadlinesInteractor $interactor): int
+    public function handle(FlagMissedDsarDeadlinesInteractor $flagMissedDsarDeadlinesInteractor): int
     {
         try {
-            $cutoff = CarbonImmutable::parse($this->option('date'));
+            $scannedAt = CarbonImmutable::parse($this->option('date'));
         } catch (InvalidFormatException) {
             $this->error('The --date option must be a date, such as 2026-10-31.');
 
             return self::FAILURE;
         }
 
-        if ($cutoff->isFuture()) {
+        if ($scannedAt->isFuture()) {
             $this->error('The --date option cannot be later than now.');
 
             return self::FAILURE;
         }
 
-        $flagged = $interactor->execute($cutoff);
+        $flagged = $flagMissedDsarDeadlinesInteractor->execute($scannedAt);
 
         $this->info("{$flagged} missed deadline(s) flagged.");
 

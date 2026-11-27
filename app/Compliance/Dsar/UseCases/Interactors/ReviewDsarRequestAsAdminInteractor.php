@@ -16,35 +16,35 @@ class ReviewDsarRequestAsAdminInteractor
     /**
      * The read and its audit row share one transaction — no read without its evidence.
      */
-    public function execute(string $requestId, User $platformAdmin, RequestOrigin $context): DsarRequestRecord
+    public function execute(string $requestId, User $platformAdmin, RequestOrigin $requestOrigin): DsarRequestRecord
     {
-        return DB::transaction(function () use ($requestId, $platformAdmin, $context): DsarRequestRecord {
-            $request = DsarRequestRecord::query()->whereKey($requestId)->first()
+        return DB::transaction(function () use ($requestId, $platformAdmin, $requestOrigin): DsarRequestRecord {
+            $dsarRequest = DsarRequestRecord::query()->whereKey($requestId)->first()
                 ?? throw new ModelNotFoundException;
 
-            $this->recordAdminRead($request, $platformAdmin, $context);
+            $this->recordAdminRead($dsarRequest, $platformAdmin, $requestOrigin);
 
-            return $request;
+            return $dsarRequest;
         });
     }
 
-    protected function recordAdminRead(DsarRequestRecord $request, User $platformAdmin, RequestOrigin $context): void
+    protected function recordAdminRead(DsarRequestRecord $dsarRequest, User $platformAdmin, RequestOrigin $requestOrigin): void
     {
         AuditEntry::query()->create([
-            'company_id' => $request->company_id,
+            'company_id' => $dsarRequest->company_id,
             'stored_event_id' => null,
             'event_class' => 'DsarRequestViewedByAdmin',
             'subject_type' => AuditSubjectType::DsarRequest,
-            'subject_id' => $request->getKey(),
+            'subject_id' => $dsarRequest->getKey(),
             'subject_label' => null,
             'action' => AuditAction::DsarAdminViewed,
             'description' => 'DSAR request viewed by a platform admin.',
             'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $platformAdmin->name,
-            'ip_address' => $context->ip,
-            'user_agent' => $context->boundedUserAgent(),
-            'request_id' => $context->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'metadata' => null,
             'recorded_at' => now(),
         ]);

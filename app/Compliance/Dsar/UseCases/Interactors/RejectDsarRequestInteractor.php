@@ -12,14 +12,14 @@ use App\Compliance\Dsar\UseCases\Commands\RejectDsarRequestCommand;
 
 class RejectDsarRequestInteractor
 {
-    public function __construct(private readonly DsarOutcomeAudit $audit) {}
+    public function __construct(private readonly DsarOutcomeAudit $dsarOutcomeAudit) {}
 
-    public function execute(RejectDsarRequestCommand $command): void
+    public function execute(RejectDsarRequestCommand $rejectDsarRequestCommand): void
     {
-        DB::transaction(function () use ($command): void {
-            DsarRequest::retrieve($command->dsarRequest->getKey())->reject($command)->persist();
+        DB::transaction(function () use ($rejectDsarRequestCommand): void {
+            DsarRequest::retrieve($rejectDsarRequestCommand->dsarRequest->getKey())->reject($rejectDsarRequestCommand)->persist();
 
-            $this->audit->record(DsarRequestRecord::query()->whereKey($command->dsarRequest->getKey())->firstOrFail(), DsarRequestRejected::class, AuditAction::DsarRejected);
+            $this->dsarOutcomeAudit->record(DsarRequestRecord::query()->whereKey($rejectDsarRequestCommand->dsarRequest->getKey())->firstOrFail(), DsarRequestRejected::class, AuditAction::DsarRejected);
         });
     }
 }

@@ -17,18 +17,18 @@ class ProcessingActivityResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $activity = $this->resource;
-        $key = $activity->key();
+        $processingActivity = $this->resource;
+        $key = $processingActivity->key();
 
         return [
             'key' => $key,
-            'module' => __("privacy.modules.{$activity->module}"),
+            'module' => __("privacy.modules.{$processingActivity->module}"),
             'activity' => __("privacy.activities.{$key}.name"),
-            'data_categories' => array_map(fn (string $category): mixed => __("privacy.data_categories.{$category}"), $activity->dataCategories),
+            'data_categories' => array_map(fn (string $category): mixed => __("privacy.data_categories.{$category}"), $processingActivity->dataCategories),
             'purpose' => __("privacy.activities.{$key}.purpose"),
-            'legal_basis' => __("privacy.legal_bases.{$activity->legalBasis->value}"),
+            'legal_basis' => __("privacy.legal_bases.{$processingActivity->legalBasis->value}"),
             'retention' => __("privacy.activities.{$key}.retention"),
-            'third_parties' => array_map(fn (ThirdParty $party): mixed => __("privacy.third_parties.{$party->value}"), $activity->thirdParties),
+            'third_parties' => array_map(fn (ThirdParty $thirdParty): mixed => __("privacy.third_parties.{$thirdParty->value}"), $processingActivity->thirdParties),
         ];
     }
 }

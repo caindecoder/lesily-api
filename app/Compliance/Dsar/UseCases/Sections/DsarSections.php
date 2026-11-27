@@ -18,8 +18,8 @@ class DsarSections
     {
         $sections = [];
 
-        foreach ($this->providers as $provider) {
-            $sections[$provider->key()] = $provider->collect($subjectUserId, $companyId);
+        foreach ($this->providers as $dsarSectionProvider) {
+            $sections[$dsarSectionProvider->key()] = $dsarSectionProvider->collect($subjectUserId, $companyId);
         }
 
         return $sections;

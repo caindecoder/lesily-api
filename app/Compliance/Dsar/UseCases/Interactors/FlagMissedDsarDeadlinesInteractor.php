@@ -14,27 +14,27 @@ use App\Compliance\Dsar\UseCases\Audit\DsarOutcomeAudit;
 
 class FlagMissedDsarDeadlinesInteractor
 {
-    public function __construct(private readonly DsarOutcomeAudit $audit) {}
+    public function __construct(private readonly DsarOutcomeAudit $dsarOutcomeAudit) {}
 
     /**
-     * Flags every open request whose deadline passed by $at, each request in
+     * Flags every open request whose deadline passed by $scannedAt, each request in
      * its own transaction, and returns how many it flagged. A request that
      * fails is reported and left for the next run; the others are still
      * flagged.
      */
-    public function execute(CarbonInterface $at): int
+    public function execute(CarbonInterface $scannedAt): int
     {
         /** @var array<int, string> $requestIds */
-        $requestIds = DsarRequestRecord::query()->whereBreachDueToFlag($at)->pluck('id')->all();
+        $requestIds = DsarRequestRecord::query()->whereBreachDueToFlag($scannedAt)->pluck('id')->all();
         $flagged = 0;
 
         foreach ($requestIds as $requestId) {
             try {
-                if ($this->flag($requestId, $at)) {
+                if ($this->flag($requestId, $scannedAt)) {
                     $flagged++;
                 }
-            } catch (Throwable $failure) {
-                report(new RuntimeException("DSAR deadline flag failed for request {$requestId}.", previous: $failure));
+            } catch (Throwable $throwable) {
+                report(new RuntimeException("DSAR deadline flag failed for request {$requestId}.", previous: $throwable));
             }
         }
 
@@ -45,17 +45,17 @@ class FlagMissedDsarDeadlinesInteractor
      * Whether the request's aggregate recorded the breach — one a concurrent
      * run already recorded is neither audited nor counted again.
      */
-    protected function flag(string $requestId, CarbonInterface $at): bool
+    protected function flag(string $requestId, CarbonInterface $scannedAt): bool
     {
-        return DB::transaction(function () use ($requestId, $at): bool {
-            $request = DsarRequest::retrieve($requestId)->flagSlaBreach($at);
+        return DB::transaction(function () use ($requestId, $scannedAt): bool {
+            $dsarRequest = DsarRequest::retrieve($requestId)->flagSlaBreach($scannedAt);
 
-            if ($request->getRecordedEvents() === []) {
+            if ($dsarRequest->getRecordedEvents() === []) {
                 return false;
             }
 
-            $request->persist();
-            $this->audit->record(DsarRequestRecord::query()->findOrFail($requestId), DsarSlaBreached::class, AuditAction::DsarDeadlineMissed);
+            $dsarRequest->persist();
+            $this->dsarOutcomeAudit->record(DsarRequestRecord::query()->findOrFail($requestId), DsarSlaBreached::class, AuditAction::DsarDeadlineMissed);
 
             return true;
         });

@@ -12,7 +12,7 @@ class DsarRequestVisibility
 {
     public const string VIEW_ALL = 'dsar.view-all';
 
-    public function __construct(private readonly PermissionEvaluator $permissions) {}
+    public function __construct(private readonly PermissionEvaluator $permissionEvaluator) {}
 
     /**
      * The requests in $company that $actor may see: every one with
@@ -24,6 +24,6 @@ class DsarRequestVisibility
     {
         return DsarRequestRecord::query()
             ->whereCompany($company)
-            ->unless($this->permissions->canUserDo($actor, $company, self::VIEW_ALL), fn ($query) => $query->whereVisibleTo($actor));
+            ->unless($this->permissionEvaluator->canUserDo($actor, $company, self::VIEW_ALL), fn ($query) => $query->whereVisibleTo($actor));
     }
 }

@@ -42,20 +42,20 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     public function when_no_open_request_is_past_its_deadline_then_nothing_is_flagged(): void
     {
         // Given a submitted request whose deadline is still ahead
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member);
 
         // When the daily scan runs with no --date (defaults to now)
         $this->runFlagMissedDeadlines()->expectsOutput('0 missed deadline(s) flagged.')->assertSuccessful();
 
         // Then the request is untouched
-        $this->assertNotFlagged($request);
+        $this->assertNotFlagged($dsarRequest);
     }
 
     #[Test]
     public function when_a_flagged_request_is_scanned_again_then_it_is_not_flagged_or_alerted_twice(): void
     {
         // Given a missed deadline the daily scan already flagged yesterday
-        $request = $this->aMissedDeadlineRequest();
+        $dsarRequest = $this->aMissedDeadlineRequest();
         $this->runFlagMissedDeadlines()->assertSuccessful();
         $flaggedAt = now();
         $this->travel(1)->day();
@@ -64,7 +64,7 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
         $this->runFlagMissedDeadlines()->expectsOutput('0 missed deadline(s) flagged.')->assertSuccessful();
 
         // Then no second breach is recorded, no second alert is queued, and its time is unchanged
-        $this->assertBreachRecorded($request, $flaggedAt);
+        $this->assertBreachRecorded($dsarRequest, $flaggedAt);
         $this->assertAlertsQueued(1);
     }
 
@@ -75,59 +75,59 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     public function when_another_run_flagged_the_request_first_then_it_is_neither_counted_nor_audited_again(): void
     {
         // Given a missed deadline already flagged on its stream, its row not yet showing it
-        $request = $this->aMissedDeadlineRequest();
-        $this->flagDirectly($request);
-        DsarRequestRecord::query()->whereKey($request->getKey())->update(['sla_breached_at' => null]);
+        $dsarRequest = $this->aMissedDeadlineRequest();
+        $this->flagDirectly($dsarRequest);
+        DsarRequestRecord::query()->whereKey($dsarRequest->getKey())->update(['sla_breached_at' => null]);
 
         // When the daily scan runs
         $this->runFlagMissedDeadlines()->expectsOutput('0 missed deadline(s) flagged.')->assertSuccessful();
 
         // Then no second breach is recorded and none is audited
-        $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->where('event_class', DsarSlaBreached::class)->count());
-        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $request->getKey(), 'action' => 'dsar_deadline_missed']);
+        $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $dsarRequest->getKey())->where('event_class', DsarSlaBreached::class)->count());
+        $this->assertDatabaseMissing('audit_trail', ['subject_id' => $dsarRequest->getKey(), 'action' => 'dsar_deadline_missed']);
     }
 
     #[Test]
     #[DataProvider('provideClosedRequests')]
-    public function when_a_closed_request_is_past_its_deadline_then_it_is_not_flagged(string $closedBy, DsarRequestStatus $status): void
+    public function when_a_closed_request_is_past_its_deadline_then_it_is_not_flagged(string $closedBy, DsarRequestStatus $dsarRequestStatus): void
     {
         // Given a request closed before its deadline, the clock now a day past it
-        $request = $this->aClosedRequest($this->company, $this->member, $closedBy);
-        $this->travelTo($request->sla_deadline->addDay());
+        $dsarRequest = $this->aClosedRequest($this->company, $this->member, $closedBy);
+        $this->travelTo($dsarRequest->sla_deadline->addDay());
 
         // When the daily scan runs
         $this->runFlagMissedDeadlines()->expectsOutput('0 missed deadline(s) flagged.')->assertSuccessful();
 
         // Then it is not flagged, no alert is queued, and it stays closed as it was
-        $this->assertNotFlagged($request);
+        $this->assertNotFlagged($dsarRequest);
         $this->assertNoHandlersQueuedFor(DsarSlaBreached::class);
-        $this->assertStillClosedAs($request, $status);
+        $this->assertStillClosedAs($dsarRequest, $dsarRequestStatus);
     }
 
     #[Test]
     public function when_the_date_is_not_a_date_then_the_scan_is_refused_and_nothing_is_flagged(): void
     {
         // Given a request past its deadline
-        $request = $this->aMissedDeadlineRequest();
+        $dsarRequest = $this->aMissedDeadlineRequest();
 
         // When the scan is run with a --date that is not a date
         $this->runFlagMissedDeadlines('not-a-date')->expectsOutputToContain('The --date option must be a date, such as 2026-10-31.')->assertFailed();
 
         // Then nothing is flagged
-        $this->assertNotFlagged($request);
+        $this->assertNotFlagged($dsarRequest);
     }
 
     #[Test]
     public function when_the_date_is_in_the_future_then_the_scan_is_refused_and_nothing_is_flagged(): void
     {
         // Given a request past its deadline
-        $request = $this->aMissedDeadlineRequest();
+        $dsarRequest = $this->aMissedDeadlineRequest();
 
         // When the scan is run with a --date later than now
         $this->runFlagMissedDeadlines(now()->addDay()->toDateString())->expectsOutputToContain('The --date option cannot be later than now.')->assertFailed();
 
         // Then nothing is flagged
-        $this->assertNotFlagged($request);
+        $this->assertNotFlagged($dsarRequest);
     }
 
     #[Test]
@@ -136,17 +136,17 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     {
         // Given two missed deadlines, the one at the given position failing to flag
         $requests = [$this->aMissedDeadlineRequest(), $this->aMissedDeadlineRequest($this->aCompanyMember($this->company))];
-        $failing = $requests[$failingPosition];
-        $other = $requests[1 - $failingPosition];
-        $cause = $this->failTheAuditOf($failing);
+        $failingDsarRequest = $requests[$failingPosition];
+        $otherDsarRequest = $requests[1 - $failingPosition];
+        $inducedRuntimeException = $this->failTheAuditOf($failingDsarRequest);
 
         // When the daily scan runs
         $this->runFlagMissedDeadlines()->expectsOutput('1 missed deadline(s) flagged.')->assertSuccessful();
 
         // Then the failure is reported, the failed one is left for the next run, the other is flagged
-        $this->assertFlagFailureReported($failing, $cause);
-        $this->assertNotFlagged($failing);
-        $this->assertBreachRecorded($other, now());
+        $this->assertFlagFailureReported($failingDsarRequest, $inducedRuntimeException);
+        $this->assertNotFlagged($failingDsarRequest);
+        $this->assertBreachRecorded($otherDsarRequest, now());
     }
 
     /**
@@ -170,16 +170,16 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
         // Given an allowlist that names no existing user, and a missed deadline the scan flagged
         Exceptions::fake();
         $this->allowlist($allowlist());
-        $request = $this->aMissedDeadlineRequest();
+        $dsarRequest = $this->aMissedDeadlineRequest();
         $this->runFlagMissedDeadlines()->assertSuccessful();
 
         // When the queued alert runs
         $this->deliverTheNoticesOf(DsarSlaBreached::class);
 
         // Then the gap is reported, no one is sent anything, and the breach stays recorded
-        Exceptions::assertReported(fn (RuntimeException $reported): bool => $reported->getMessage() === "No platform admin to alert about DSAR request {$request->getKey()}.");
+        Exceptions::assertReported(fn (RuntimeException $reportedRuntimeException): bool => $reportedRuntimeException->getMessage() === "No platform admin to alert about DSAR request {$dsarRequest->getKey()}.");
         Notification::assertNothingSent();
-        $this->assertBreachRecorded($request, now());
+        $this->assertBreachRecorded($dsarRequest, now());
     }
 
     /**
@@ -200,15 +200,15 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     public function when_a_request_cannot_be_flagged_then_flagging_it_directly_records_nothing(string $state, int $kept): void
     {
         // Given a request in a state that cannot be flagged
-        $request = $this->aRequestInState($state);
-        $breachedAt = $request->fresh()?->sla_breached_at;
+        $dsarRequest = $this->aRequestInState($state);
+        $breachedAt = $dsarRequest->fresh()?->sla_breached_at;
 
         // When its aggregate is asked to flag the deadline directly
-        $this->flagDirectly($request);
+        $this->flagDirectly($dsarRequest);
 
         // Then no new breach is recorded and its breach time is unchanged
-        $this->assertSame($kept, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->where('event_class', DsarSlaBreached::class)->count());
-        $this->assertEquals($breachedAt, $request->fresh()?->sla_breached_at);
+        $this->assertSame($kept, LesilyStoredEvent::query()->where('aggregate_uuid', $dsarRequest->getKey())->where('event_class', DsarSlaBreached::class)->count());
+        $this->assertEquals($breachedAt, $dsarRequest->fresh()?->sla_breached_at);
     }
 
     /**
@@ -232,13 +232,13 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     public function when_the_scan_selects_then_only_an_open_unflagged_request_past_its_deadline_is_picked(string $state, bool $picked): void
     {
         // Given a request in the state
-        $request = $this->aRequestInState($state);
+        $dsarRequest = $this->aRequestInState($state);
 
         // When the scan's selection is read for now
         $selected = DsarRequestRecord::query()->whereBreachDueToFlag(now())->pluck('id')->all();
 
         // Then the request is picked only when it is open, due and not yet flagged
-        $this->assertSame($picked ? [$request->getKey()] : [], $selected);
+        $this->assertSame($picked ? [$dsarRequest->getKey()] : [], $selected);
     }
 
     /**
@@ -261,14 +261,14 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     public function when_the_scan_runs_at_the_deadline_edge_then_only_a_missed_deadline_is_flagged(int $offsetSeconds, bool $flagged): void
     {
         // Given a submitted request, the clock at its deadline moved by the offset
-        $request = $this->aSubmittedRequest($this->company, $this->member);
-        $this->travelTo($request->sla_deadline->addSeconds($offsetSeconds));
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member);
+        $this->travelTo($dsarRequest->sla_deadline->addSeconds($offsetSeconds));
 
         // When the daily scan runs
         $this->runFlagMissedDeadlines()->assertSuccessful();
 
         // Then it is flagged only once its deadline has been reached
-        $flagged ? $this->assertBreachRecorded($request, now()) : $this->assertNotFlagged($request);
+        $flagged ? $this->assertBreachRecorded($dsarRequest, now()) : $this->assertNotFlagged($dsarRequest);
     }
 
     /**
@@ -286,14 +286,14 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     public function when_a_missed_night_is_replayed_then_the_breach_is_stamped_with_its_date(): void
     {
         // Given a request whose deadline passed before a night the scan missed
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member);
         $this->travelTo('2026-11-02 12:00:00');
 
         // When that night is replayed
         $this->runFlagMissedDeadlines('2026-11-01')->expectsOutput('1 missed deadline(s) flagged.')->assertSuccessful();
 
         // Then the breach is stamped with the replayed date, not with now
-        $this->assertBreachRecorded($request, CarbonImmutable::parse('2026-11-01 00:00:00'));
+        $this->assertBreachRecorded($dsarRequest, CarbonImmutable::parse('2026-11-01 00:00:00'));
     }
 
     #[Test]
@@ -317,43 +317,43 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     public function when_an_open_request_misses_its_deadline_then_the_breach_is_recorded_and_audited(): void
     {
         // Given a request still in progress a day past its 30-day deadline
-        $request = $this->aMissedDeadlineRequest();
+        $dsarRequest = $this->aMissedDeadlineRequest();
 
         // When the daily scan runs
         $this->runFlagMissedDeadlines()->expectsOutput('1 missed deadline(s) flagged.')->assertSuccessful();
 
         // Then the breach is recorded on the still-open request and audited
-        $this->assertBreachRecorded($request, now());
-        $this->assertBreachAudited($request, $this->member);
+        $this->assertBreachRecorded($dsarRequest, now());
+        $this->assertBreachAudited($dsarRequest, $this->member);
     }
 
     #[Test]
     public function when_a_breach_is_recorded_then_each_platform_admin_is_alerted_once(): void
     {
         // Given a request still in progress past its deadline
-        $request = $this->aMissedDeadlineRequest();
+        $dsarRequest = $this->aMissedDeadlineRequest();
 
         // When the daily scan flags it and the queued alert runs
         $this->runFlagMissedDeadlines()->assertSuccessful();
         $this->deliverTheNoticesOf(DsarSlaBreached::class);
 
         // Then each platform admin is alerted once about the request, at platform level
-        $this->assertAdminsAlertedOnce($request);
+        $this->assertAdminsAlertedOnce($dsarRequest);
     }
 
     #[Test]
     public function when_several_requests_miss_their_deadline_then_one_run_flags_them_all(): void
     {
         // Given two requests still in progress past their deadlines
-        $first = $this->aMissedDeadlineRequest();
-        $second = $this->aMissedDeadlineRequest($this->aCompanyMember($this->company));
+        $firstDsarRequest = $this->aMissedDeadlineRequest();
+        $secondDsarRequest = $this->aMissedDeadlineRequest($this->aCompanyMember($this->company));
 
         // When the daily scan runs
         $this->runFlagMissedDeadlines()->expectsOutput('2 missed deadline(s) flagged.')->assertSuccessful();
 
         // Then both breaches are recorded
-        $this->assertBreachRecorded($first, now());
-        $this->assertBreachRecorded($second, now());
+        $this->assertBreachRecorded($firstDsarRequest, now());
+        $this->assertBreachRecorded($secondDsarRequest, now());
     }
 
     /**
@@ -362,10 +362,10 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
      */
     protected function aMissedDeadlineRequest(?User $subject = null): DsarRequestRecord
     {
-        $request = $this->aSubmittedRequest($this->company, $subject ?? $this->member);
-        $this->travelTo($request->sla_deadline->addDay());
+        $dsarRequest = $this->aSubmittedRequest($this->company, $subject ?? $this->member);
+        $this->travelTo($dsarRequest->sla_deadline->addDay());
 
-        return $request;
+        return $dsarRequest;
     }
 
     /**
@@ -375,7 +375,7 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
      */
     protected function aRequestInState(string $state): DsarRequestRecord
     {
-        $request = match ($state) {
+        $dsarRequest = match ($state) {
             'not yet due' => $this->aSubmittedRequest($this->company, $this->member),
             'fulfilled', 'rejected', 'withdrawn' => $this->aClosedRequest($this->company, $this->member, $state),
             'due, not flagged', 'already flagged' => $this->aMissedDeadlineRequest(),
@@ -386,45 +386,45 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
             $this->runFlagMissedDeadlines()->assertSuccessful();
             $this->travel(1)->second();
         } elseif (in_array($state, ['fulfilled', 'rejected', 'withdrawn'], true)) {
-            $this->travelTo($request->sla_deadline->addDay());
+            $this->travelTo($dsarRequest->sla_deadline->addDay());
         }
 
-        return $request;
+        return $dsarRequest;
     }
 
     /**
-     * Asks $request's aggregate to flag its deadline now, outside the scan.
+     * Asks $dsarRequest's aggregate to flag its deadline now, outside the scan.
      */
-    protected function flagDirectly(DsarRequestRecord $request): void
+    protected function flagDirectly(DsarRequestRecord $dsarRequest): void
     {
-        DsarRequest::retrieve($request->getKey())->flagSlaBreach(CarbonImmutable::now())->persist();
+        DsarRequest::retrieve($dsarRequest->getKey())->flagSlaBreach(CarbonImmutable::now())->persist();
     }
 
     /**
-     * Each platform admin got one missed-deadline alert naming $request's
+     * Each platform admin got one missed-deadline alert naming $dsarRequest's
      * company, the request and its deadline, filed under no company — and no
      * one else was sent anything.
      */
-    protected function assertAdminsAlertedOnce(DsarRequestRecord $request): void
+    protected function assertAdminsAlertedOnce(DsarRequestRecord $dsarRequest): void
     {
         $this->assertCount(2, $this->platformAdmins);
         foreach ($this->platformAdmins as $platformAdmin) {
             Notification::assertSentToTimes($platformAdmin, SystemNotification::class, 1);
-            Notification::assertSentTo($platformAdmin, SystemNotification::class, fn (SystemNotification $notice): bool => $notice->type === NotificationType::DsarDeadlineMissed
-                && $notice->companyName === $this->company->name
-                && $notice->companyId === null
-                && $notice->details === ['request' => $request->getKey(), 'deadline' => '31 Oct 2026, 09:00 UTC']);
+            Notification::assertSentTo($platformAdmin, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::DsarDeadlineMissed
+                && $systemNotification->companyName === $this->company->name
+                && $systemNotification->companyId === null
+                && $systemNotification->details === ['request' => $dsarRequest->getKey(), 'deadline' => '31 Oct 2026, 09:00 UTC']);
         }
         Notification::assertCount(count($this->platformAdmins));
     }
 
     /**
-     * The scan reported $request's failed flag by its id, keeping $cause.
+     * The scan reported $dsarRequest's failed flag by its id, keeping $inducedRuntimeException.
      */
-    protected function assertFlagFailureReported(DsarRequestRecord $request, RuntimeException $cause): void
+    protected function assertFlagFailureReported(DsarRequestRecord $dsarRequest, RuntimeException $inducedRuntimeException): void
     {
-        Exceptions::assertReported(fn (RuntimeException $reported): bool => $reported->getMessage() === "DSAR deadline flag failed for request {$request->getKey()}."
-            && $reported->getPrevious() === $cause);
+        Exceptions::assertReported(fn (RuntimeException $reportedRuntimeException): bool => $reportedRuntimeException->getMessage() === "DSAR deadline flag failed for request {$dsarRequest->getKey()}."
+            && $reportedRuntimeException->getPrevious() === $inducedRuntimeException);
     }
 
     /**
@@ -438,7 +438,7 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
 
         $this->assertCount($times, $queue->pushed(
             HandleStoredEventJob::class,
-            fn (HandleStoredEventJob $job): bool => $job->storedEvent->event_class === DsarSlaBreached::class,
+            fn (HandleStoredEventJob $handleStoredEventJob): bool => $handleStoredEventJob->storedEvent->event_class === DsarSlaBreached::class,
         ));
     }
 
@@ -451,12 +451,12 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
     }
 
     /**
-     * $request's deadline was never flagged: no DsarSlaBreached on its
+     * $dsarRequest's deadline was never flagged: no DsarSlaBreached on its
      * stream and no breach on its row.
      */
-    protected function assertNotFlagged(DsarRequestRecord $request): void
+    protected function assertNotFlagged(DsarRequestRecord $dsarRequest): void
     {
-        $this->assertNull($request->fresh()?->getAttribute('sla_breached_at'));
-        $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->where('event_class', DsarSlaBreached::class)->count());
+        $this->assertNull($dsarRequest->fresh()?->getAttribute('sla_breached_at'));
+        $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $dsarRequest->getKey())->where('event_class', DsarSlaBreached::class)->count());
     }
 }

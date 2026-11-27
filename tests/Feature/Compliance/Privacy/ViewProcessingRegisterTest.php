@@ -27,10 +27,10 @@ class ViewProcessingRegisterTest extends PrivacyTestCase
     public function when_the_caller_is_not_a_member_of_the_company_then_company_access_is_denied(): void
     {
         // Given an auditor of another company, never a member of Contoso
-        $outsider = $this->aCompanyMember(Company::factory()->create(), 'auditor');
+        $actor = $this->aCompanyMember(Company::factory()->create(), 'auditor');
 
         // When they view Contoso's processing register
-        $response = $this->viewRegister($outsider, $this->company);
+        $response = $this->viewRegister($actor, $this->company);
 
         // Then the company context is denied
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::CompanyAccessDenied);

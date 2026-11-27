@@ -25,68 +25,68 @@ class SubmitDsarRequestInteractor
 {
     public const string REQUEST_FOR_OTHERS = 'dsar.request-for-others';
 
-    public function __construct(private readonly PermissionEvaluator $permissions) {}
+    public function __construct(private readonly PermissionEvaluator $permissionEvaluator) {}
 
-    public function execute(SubmitDsarRequestCommand $command, User $actor, RequestOrigin $context): DsarRequestRecord
+    public function execute(SubmitDsarRequestCommand $submitDsarRequestCommand, User $actor, RequestOrigin $requestOrigin): DsarRequestRecord
     {
-        $company = $command->company;
+        $company = $submitDsarRequestCommand->company;
 
-        if ($command->isForSomeoneElse() && ! $this->permissions->canUserDo($actor, $company, self::REQUEST_FOR_OTHERS)) {
+        if ($submitDsarRequestCommand->isForSomeoneElse() && ! $this->permissionEvaluator->canUserDo($actor, $company, self::REQUEST_FOR_OTHERS)) {
             throw new RoleInsufficientException(self::REQUEST_FOR_OTHERS);
         }
 
-        $this->liveMembership($company->getKey(), $command->resolvedSubjectUserId());
+        $this->liveMembership($company->getKey(), $submitDsarRequestCommand->resolvedSubjectUserId());
 
         try {
-            return DB::transaction(fn () => $this->record($command, $actor, $context));
+            return DB::transaction(fn () => $this->record($submitDsarRequestCommand, $actor, $requestOrigin));
         } catch (UniqueConstraintViolationException) {
             throw new DsarRequestInProgressException;
         }
     }
 
-    protected function record(SubmitDsarRequestCommand $command, User $actor, RequestOrigin $context): DsarRequestRecord
+    protected function record(SubmitDsarRequestCommand $submitDsarRequestCommand, User $actor, RequestOrigin $requestOrigin): DsarRequestRecord
     {
         $requestId = Str::uuid7()->toString();
         $requestedByRole = Role::query()
-            ->whereKey($this->liveMembership($command->company->getKey(), $actor->getKey())->role_id)
+            ->whereKey($this->liveMembership($submitDsarRequestCommand->company->getKey(), $actor->getKey())->role_id)
             ->value('code');
 
         DsarRequest::retrieve($requestId)
-            ->submit($command, $requestedByRole)
+            ->submit($submitDsarRequestCommand, $requestedByRole)
             ->persist();
 
-        $request = DsarRequestRecord::query()->findOrFail($requestId);
-        $this->recordRequested($request, $actor, $context);
+        $dsarRequest = DsarRequestRecord::query()->findOrFail($requestId);
+        $this->recordRequested($dsarRequest, $actor, $requestOrigin);
 
-        return $request;
+        return $dsarRequest;
     }
 
-    protected function recordRequested(DsarRequestRecord $request, User $actor, RequestOrigin $context): void
+    protected function recordRequested(DsarRequestRecord $dsarRequest, User $actor, RequestOrigin $requestOrigin): void
     {
         AuditEntry::query()->create([
-            'company_id' => $request->company_id,
-            'stored_event_id' => $this->submittedEventIdFor($request),
+            'company_id' => $dsarRequest->company_id,
+            'stored_event_id' => $this->submittedEventIdFor($dsarRequest),
             'event_class' => 'DsarRequestSubmitted',
             'subject_type' => AuditSubjectType::DsarRequest,
-            'subject_id' => $request->getKey(),
+            'subject_id' => $dsarRequest->getKey(),
             'subject_label' => null,
             'action' => AuditAction::DsarRequested,
-            'description' => 'DSAR requested — for: '.$request->subject->name.', by: '.$actor->name,
+            'description' => 'DSAR requested — for: '.$dsarRequest->subject->name.', by: '.$actor->name,
             'actor_user_id' => $actor->getKey(),
-            'actor_role_code' => $request->requested_by_role,
+            'actor_role_code' => $dsarRequest->requested_by_role,
             'actor_label' => $actor->name,
-            'ip_address' => $context->ip,
-            'user_agent' => $context->boundedUserAgent(),
-            'request_id' => $context->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'metadata' => null,
             'recorded_at' => now(),
         ]);
     }
 
-    protected function submittedEventIdFor(DsarRequestRecord $request): int
+    protected function submittedEventIdFor(DsarRequestRecord $dsarRequest): int
     {
         return LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $request->getKey())
+            ->where('aggregate_uuid', $dsarRequest->getKey())
             ->where('event_class', DsarRequestSubmitted::class)
             ->sole()
             ->getKey();

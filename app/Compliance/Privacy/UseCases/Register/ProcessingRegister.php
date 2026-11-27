@@ -18,8 +18,8 @@ class ProcessingRegister
     {
         $activities = [];
 
-        foreach ($this->providers as $provider) {
-            array_push($activities, ...$provider->activities());
+        foreach ($this->providers as $processingActivityProvider) {
+            array_push($activities, ...$processingActivityProvider->activities());
         }
 
         return $activities;

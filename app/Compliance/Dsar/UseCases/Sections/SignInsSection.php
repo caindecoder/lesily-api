@@ -25,11 +25,11 @@ class SignInsSection implements DsarSectionProvider
             ->orderBy('created_at')
             ->orderBy('id')
             ->get()
-            ->map(fn (PersonalAccessToken $token): array => [
-                'device_name' => $token->name,
-                'signed_in_at' => $token->created_at?->toISOString(),
-                'last_used_at' => $token->last_used_at?->toISOString(),
-                'expires_at' => $token->expires_at?->toISOString(),
+            ->map(fn (PersonalAccessToken $personalAccessToken): array => [
+                'device_name' => $personalAccessToken->name,
+                'signed_in_at' => $personalAccessToken->created_at?->toISOString(),
+                'last_used_at' => $personalAccessToken->last_used_at?->toISOString(),
+                'expires_at' => $personalAccessToken->expires_at?->toISOString(),
             ])
             ->all();
     }

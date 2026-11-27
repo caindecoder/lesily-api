@@ -29,10 +29,10 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_no_token_is_presented_then_the_detail_request_is_rejected_as_unauthenticated(): void
     {
         // Given a submitted request
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member);
 
         // When a guest asks for it on the admin surface
-        $response = $this->viewAsAdmin(null, $request->getKey());
+        $response = $this->viewAsAdmin(null, $dsarRequest->getKey());
 
         // Then the guest is refused and no read is recorded
         $this->assertUnauthenticated($response);
@@ -44,14 +44,14 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_a_tenant_member_requests_a_dsar_detail_then_the_admin_surface_is_not_acknowledged(string $roleCode): void
     {
         // Given a member of the company in this role, not a platform admin, and another member's request in that company
-        $tenantMember = $this->memberWithRole($roleCode);
-        $request = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
+        $member = $this->memberWithRole($roleCode);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->aCompanyMember($this->company));
 
         // When they ask for it on the admin surface
-        $response = $this->viewAsAdmin($tenantMember, $request->getKey());
+        $response = $this->viewAsAdmin($member, $dsarRequest->getKey());
 
         // Then the admin surface is not acknowledged and no read is recorded
-        $this->assertHiddenAsNotFound($response, $request->getKey());
+        $this->assertHiddenAsNotFound($response, $dsarRequest->getKey());
         $this->assertNoAdminReadRecorded();
     }
 
@@ -74,11 +74,11 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_the_audit_write_fails_then_the_detail_returns_no_request_data(): void
     {
         // Given a submitted request and an audit write that fails after its row is inserted
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member);
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the admin opens it
-        $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
+        $response = $this->viewAsAdmin($this->platformAdmin, $dsarRequest->getKey());
 
         // Then the read fails closed and the inserted row is rolled back with it
         $this->assertFailedClosed($response);
@@ -90,11 +90,11 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_the_deadline_is_near_then_days_remaining_counts_calendar_days(string $viewedAt, int $daysRemaining): void
     {
         // Given a request whose deadline is 31 Oct 09:00 UTC, viewed at this row's moment
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member);
         $this->travelTo($viewedAt);
 
         // When the admin opens it
-        $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
+        $response = $this->viewAsAdmin($this->platformAdmin, $dsarRequest->getKey());
 
         // Then the days remaining count calendar days on UTC dates
         $response->assertOk();
@@ -105,14 +105,14 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_a_breached_request_is_fulfilled_late_then_its_timeline_shows_the_breach_first(): void
     {
         // Given a request flagged at its 31 Oct deadline and fulfilled on 2 Nov
-        $request = $this->aSubmittedRequest($this->company, $this->member);
-        $this->flagTheBreachAt($request, '2026-10-31 09:00:00');
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member);
+        $this->flagTheBreachAt($dsarRequest, '2026-10-31 09:00:00');
         $this->travelTo('2026-11-02 09:00:00');
-        $this->runTheExportFor($request);
+        $this->runTheExportFor($dsarRequest);
 
         // When the admin opens it on 3 Nov, while its download window is open
         $this->travelTo('2026-11-03 09:00:00');
-        $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
+        $response = $this->viewAsAdmin($this->platformAdmin, $dsarRequest->getKey());
 
         // Then the breach precedes the fulfilment on its timeline and the download shows as available
         $this->assertShown($response, [
@@ -129,18 +129,18 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     public function when_the_admin_opens_a_fulfilled_request_then_its_timeline_shows_the_download_expiry(): void
     {
         // Given a request made on 1 Oct, fulfilled on 8 Oct, its download expired on 15 Oct
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member);
         $this->travelTo('2026-10-08 09:00:00');
-        $this->runTheExportFor($request);
-        $this->expireTheDownloadAt($request, '2026-10-15 09:00:00');
+        $this->runTheExportFor($dsarRequest);
+        $this->expireTheDownloadAt($dsarRequest, '2026-10-15 09:00:00');
 
         // When the admin opens it on 15 Oct
-        $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
+        $response = $this->viewAsAdmin($this->platformAdmin, $dsarRequest->getKey());
 
         // Then the whole admin view is shown, the read is recorded and the request is unchanged
         $response->assertOk();
         $response->assertExactJson(['data' => [
-            'id' => $request->getKey(),
+            'id' => $dsarRequest->getKey(),
             'status' => 'fulfilled',
             'request_type' => 'access',
             'subject' => ['id' => $this->member->getKey(), 'name' => $this->member->name],
@@ -162,20 +162,20 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
                 ['event' => 'download_expired', 'at' => '2026-10-15T09:00:00.000000Z'],
             ],
         ]]);
-        $this->assertAdminReadAudited($request, $response);
-        $this->assertStreamUnchanged($request, 3);
+        $this->assertAdminReadAudited($dsarRequest, $response);
+        $this->assertStreamUnchanged($dsarRequest, 3);
     }
 
     #[Test]
     public function when_the_admin_opens_a_breached_request_then_it_shows_negative_days_and_the_breach(): void
     {
         // Given a request the Owner made for a member on 1 Oct, flagged by the daily sweep at its 31 Oct deadline, still in progress
-        $request = $this->aSubmittedRequest($this->company, $this->member, $this->owner);
-        $this->flagTheBreachAt($request, '2026-10-31 09:00:00');
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member, $this->owner);
+        $this->flagTheBreachAt($dsarRequest, '2026-10-31 09:00:00');
         $this->travelTo('2026-11-15 09:00:00');
 
         // When the admin opens it on 15 Nov
-        $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
+        $response = $this->viewAsAdmin($this->platformAdmin, $dsarRequest->getKey());
 
         // Then it shows who it is about and who asked, fifteen days past the deadline, and the breach on its timeline
         $this->assertShown($response, [
@@ -188,17 +188,17 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
             ['event' => 'requested', 'at' => '2026-10-01T09:00:00.000000Z'],
             ['event' => 'sla_breached', 'at' => '2026-10-31T09:00:00.000000Z'],
         ]);
-        $this->assertAdminReadAudited($request, $response);
+        $this->assertAdminReadAudited($dsarRequest, $response);
     }
 
     #[Test]
     public function when_the_admin_opens_a_rejected_request_then_it_shows_the_rejection_reason(): void
     {
         // Given a request rejected after its export failed
-        $request = $this->aClosedRequest($this->company, $this->member, 'rejected');
+        $dsarRequest = $this->aClosedRequest($this->company, $this->member, 'rejected');
 
         // When the admin opens it
-        $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
+        $response = $this->viewAsAdmin($this->platformAdmin, $dsarRequest->getKey());
 
         // Then it shows the rejection and its reason
         $this->assertShown($response, [
@@ -208,17 +208,17 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
             ['event' => 'requested', 'at' => '2026-10-01T09:00:00.000000Z'],
             ['event' => 'rejected', 'at' => '2026-10-01T09:00:00.000000Z'],
         ]);
-        $this->assertAdminReadAudited($request, $response);
+        $this->assertAdminReadAudited($dsarRequest, $response);
     }
 
     #[Test]
     public function when_the_admin_opens_a_withdrawn_request_then_it_shows_the_cancellation(): void
     {
         // Given a request its requester withdrew before it was fulfilled
-        $request = $this->aClosedRequest($this->company, $this->member, 'withdrawn');
+        $dsarRequest = $this->aClosedRequest($this->company, $this->member, 'withdrawn');
 
         // When the admin opens it
-        $response = $this->viewAsAdmin($this->platformAdmin, $request->getKey());
+        $response = $this->viewAsAdmin($this->platformAdmin, $dsarRequest->getKey());
 
         // Then it shows the withdrawal
         $this->assertShown($response, [
@@ -228,7 +228,7 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
             ['event' => 'requested', 'at' => '2026-10-01T09:00:00.000000Z'],
             ['event' => 'cancelled', 'at' => '2026-10-01T09:00:00.000000Z'],
         ]);
-        $this->assertAdminReadAudited($request, $response);
+        $this->assertAdminReadAudited($dsarRequest, $response);
     }
 
     /**
@@ -245,25 +245,25 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     }
 
     /**
-     * Ask for one DSAR request on the platform-admin surface as $caller, or as
+     * Ask for one DSAR request on the platform-admin surface as $actor, or as
      * a guest when null — no company header, the admin family is cross-tenant.
      */
-    protected function viewAsAdmin(?User $caller, string $requestId): TestResponse
+    protected function viewAsAdmin(?User $actor, string $requestId): TestResponse
     {
-        if ($caller !== null) {
-            Sanctum::actingAs($caller);
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
         }
 
         return $this->getJson("/api/v1/admin/dsar-requests/{$requestId}");
     }
 
     /**
-     * $request's missed deadline is flagged at $at, recorded by the aggregate itself.
+     * $dsarRequest's missed deadline is flagged at $breachedAt, recorded by the aggregate itself.
      */
-    protected function flagTheBreachAt(DsarRequestRecord $request, string $at): void
+    protected function flagTheBreachAt(DsarRequestRecord $dsarRequest, string $breachedAt): void
     {
-        $this->travelTo($at);
-        DsarRequest::retrieve($request->getKey())->flagSlaBreach(CarbonImmutable::now())->persist();
+        $this->travelTo($breachedAt);
+        DsarRequest::retrieve($dsarRequest->getKey())->flagSlaBreach(CarbonImmutable::now())->persist();
     }
 
     /**
@@ -285,27 +285,27 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
     }
 
     /**
-     * $request's download expires at $at, recorded by the aggregate itself.
+     * $dsarRequest's download expires at $expiredAt, recorded by the aggregate itself.
      */
-    protected function expireTheDownloadAt(DsarRequestRecord $request, string $at): void
+    protected function expireTheDownloadAt(DsarRequestRecord $dsarRequest, string $expiredAt): void
     {
-        $this->travelTo($at);
-        DsarRequest::retrieve($request->getKey())->expireDownload(CarbonImmutable::now())->persist();
+        $this->travelTo($expiredAt);
+        DsarRequest::retrieve($dsarRequest->getKey())->expireDownload(CarbonImmutable::now())->persist();
     }
 
     /**
-     * Exactly one platform-admin read of $request is recorded — against the
+     * Exactly one platform-admin read of $dsarRequest is recorded — against the
      * request and its company, by the admin, with the request's context.
      */
-    protected function assertAdminReadAudited(DsarRequestRecord $request, TestResponse $response): void
+    protected function assertAdminReadAudited(DsarRequestRecord $dsarRequest, TestResponse $response): void
     {
         $this->assertSame(1, AuditEntry::query()->where('action', 'dsar_admin_viewed')->count());
         $this->assertDatabaseHas('audit_trail', [
-            'company_id' => $request->company_id,
+            'company_id' => $dsarRequest->company_id,
             'stored_event_id' => null,
             'event_class' => 'DsarRequestViewedByAdmin',
             'subject_type' => 'dsar_request',
-            'subject_id' => $request->getKey(),
+            'subject_id' => $dsarRequest->getKey(),
             'subject_label' => null,
             'action' => 'dsar_admin_viewed',
             'description' => 'DSAR request viewed by a platform admin.',
@@ -318,17 +318,17 @@ class ReviewDsarRequestAsAdminTest extends DsarTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->where('action', 'dsar_admin_viewed')->sole();
-        $this->assertSame($correlationId, $entry->request_id);
-        $this->assertSame('Symfony', $entry->user_agent);
+        $auditEntry = AuditEntry::query()->where('action', 'dsar_admin_viewed')->sole();
+        $this->assertSame($correlationId, $auditEntry->request_id);
+        $this->assertSame('Symfony', $auditEntry->user_agent);
     }
 
     /**
-     * Viewing recorded nothing on $request's stream — it still holds $events.
+     * Viewing recorded nothing on $dsarRequest's stream — it still holds $events.
      */
-    protected function assertStreamUnchanged(DsarRequestRecord $request, int $events): void
+    protected function assertStreamUnchanged(DsarRequestRecord $dsarRequest, int $events): void
     {
-        $this->assertSame($events, LesilyStoredEvent::query()->where('aggregate_uuid', $request->getKey())->count());
+        $this->assertSame($events, LesilyStoredEvent::query()->where('aggregate_uuid', $dsarRequest->getKey())->count());
     }
 
     /**

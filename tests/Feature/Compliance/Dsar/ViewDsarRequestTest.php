@@ -13,10 +13,10 @@ class ViewDsarRequestTest extends DsarTestCase
     public function when_a_guest_views_a_request_then_they_are_refused_as_unauthenticated(): void
     {
         // Given
-        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
+        $dsarRequest = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
 
         // When
-        $response = $this->viewDsarRequestAsGuest($request->getKey());
+        $response = $this->viewDsarRequestAsGuest($dsarRequest->getKey());
 
         // Then
         $this->assertUnauthenticated($response);
@@ -44,14 +44,14 @@ class ViewDsarRequestTest extends DsarTestCase
         $subject = $this->member;
         $otherCompany = Company::factory()->create();
         $this->attachMember($otherCompany, $subject, $this->seededRole('employee'));
-        $request = DsarRequestRecord::factory()->forSubject($otherCompany, $subject)->create();
+        $dsarRequest = DsarRequestRecord::factory()->forSubject($otherCompany, $subject)->create();
         $viewer = $viewerKind === 'owner' ? $this->owner : $subject;
 
         // When
-        $response = $this->viewDsarRequest($viewer, $this->company, $request->getKey());
+        $response = $this->viewDsarRequest($viewer, $this->company, $dsarRequest->getKey());
 
         // Then
-        $this->assertHiddenAsNotFound($response, $request->getKey());
+        $this->assertHiddenAsNotFound($response, $dsarRequest->getKey());
     }
 
     #[Test]
@@ -60,13 +60,13 @@ class ViewDsarRequestTest extends DsarTestCase
     {
         // Given
         $member = $this->memberWithRole($roleCode);
-        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->aCompanyMember($this->company))->create();
+        $dsarRequest = DsarRequestRecord::factory()->forSubject($this->company, $this->aCompanyMember($this->company))->create();
 
         // When
-        $response = $this->viewDsarRequest($member, $this->company, $request->getKey());
+        $response = $this->viewDsarRequest($member, $this->company, $dsarRequest->getKey());
 
         // Then
-        $this->assertHiddenAsNotFound($response, $request->getKey());
+        $this->assertHiddenAsNotFound($response, $dsarRequest->getKey());
     }
 
     #[Test]
@@ -74,31 +74,31 @@ class ViewDsarRequestTest extends DsarTestCase
     {
         // Given a fulfilled request whose window has closed, its expiry not yet recorded
         $subject = $this->member;
-        $request = DsarRequestRecord::factory()->forSubject($this->company, $subject)->fulfilled()->create();
-        $this->travelTo($request->download_expires_at);
+        $dsarRequest = DsarRequestRecord::factory()->forSubject($this->company, $subject)->fulfilled()->create();
+        $this->travelTo($dsarRequest->download_expires_at);
 
         // When
-        $response = $this->viewDsarRequest($subject, $this->company, $request->getKey());
+        $response = $this->viewDsarRequest($subject, $this->company, $dsarRequest->getKey());
 
         // Then
-        $this->assertDsarRequestShown($response, $request, false);
+        $this->assertDsarRequestShown($response, $dsarRequest, false);
     }
 
     #[Test]
     public function when_the_requester_no_longer_holds_view_all_then_they_still_see_the_request_they_made(): void
     {
         // Given a former admin, now an employee, who requested an export for a member
-        $formerAdmin = $this->member;
-        $request = DsarRequestRecord::factory()
+        $requester = $this->member;
+        $dsarRequest = DsarRequestRecord::factory()
             ->forSubject($this->company, $this->aCompanyMember($this->company))
-            ->requestedBy($formerAdmin, 'admin')
+            ->requestedBy($requester, 'admin')
             ->create();
 
         // When
-        $response = $this->viewDsarRequest($formerAdmin, $this->company, $request->getKey());
+        $response = $this->viewDsarRequest($requester, $this->company, $dsarRequest->getKey());
 
         // Then
-        $this->assertDsarRequestShown($response, $request, false);
+        $this->assertDsarRequestShown($response, $dsarRequest, false);
     }
 
     #[Test]
@@ -106,16 +106,16 @@ class ViewDsarRequestTest extends DsarTestCase
     {
         // Given an admin requested an export for the subject
         $subject = $this->member;
-        $request = DsarRequestRecord::factory()
+        $dsarRequest = DsarRequestRecord::factory()
             ->forSubject($this->company, $subject)
             ->requestedBy($this->admin, 'admin')
             ->create();
 
         // When
-        $response = $this->viewDsarRequest($subject, $this->company, $request->getKey());
+        $response = $this->viewDsarRequest($subject, $this->company, $dsarRequest->getKey());
 
         // Then
-        $this->assertDsarRequestShown($response, $request, false);
+        $this->assertDsarRequestShown($response, $dsarRequest, false);
     }
 
     #[Test]
@@ -123,14 +123,14 @@ class ViewDsarRequestTest extends DsarTestCase
     public function when_a_view_all_holder_views_any_company_request_then_it_is_shown(string $roleCode): void
     {
         // Given
-        $holder = $this->memberWithRole($roleCode);
-        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
+        $viewer = $this->memberWithRole($roleCode);
+        $dsarRequest = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
 
         // When
-        $response = $this->viewDsarRequest($holder, $this->company, $request->getKey());
+        $response = $this->viewDsarRequest($viewer, $this->company, $dsarRequest->getKey());
 
         // Then
-        $this->assertDsarRequestShown($response, $request, false);
+        $this->assertDsarRequestShown($response, $dsarRequest, false);
     }
 
     #[Test]
@@ -138,13 +138,13 @@ class ViewDsarRequestTest extends DsarTestCase
     {
         // Given a request made 28 days ago and fulfilled today
         $subject = $this->member;
-        $request = DsarRequestRecord::factory()->forSubject($this->company, $subject)->requestedDaysAgo(28)->fulfilled()->create();
+        $dsarRequest = DsarRequestRecord::factory()->forSubject($this->company, $subject)->requestedDaysAgo(28)->fulfilled()->create();
 
         // When
-        $response = $this->viewDsarRequest($subject, $this->company, $request->getKey());
+        $response = $this->viewDsarRequest($subject, $this->company, $dsarRequest->getKey());
 
         // Then
-        $this->assertDsarRequestShown($response, $request, true);
+        $this->assertDsarRequestShown($response, $dsarRequest, true);
     }
 
     /**

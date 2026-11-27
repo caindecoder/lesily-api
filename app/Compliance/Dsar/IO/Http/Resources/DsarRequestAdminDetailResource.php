@@ -44,9 +44,9 @@ class DsarRequestAdminDetailResource extends JsonResource
 
         $timeline = [];
 
-        foreach ($moments as $event => $at) {
-            if ($at !== null) {
-                $timeline[] = ['event' => $event, 'at' => $at->toISOString()];
+        foreach ($moments as $event => $happenedAt) {
+            if ($happenedAt !== null) {
+                $timeline[] = ['event' => $event, 'at' => $happenedAt->toISOString()];
             }
         }
 

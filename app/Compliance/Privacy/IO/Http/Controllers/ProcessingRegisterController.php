@@ -8,8 +8,8 @@ use App\Compliance\Privacy\IO\Http\Resources\ProcessingActivityResource;
 
 class ProcessingRegisterController
 {
-    public function index(ProcessingRegister $register): AnonymousResourceCollection
+    public function index(ProcessingRegister $processingRegister): AnonymousResourceCollection
     {
-        return ProcessingActivityResource::collection($register->activities());
+        return ProcessingActivityResource::collection($processingRegister->activities());
     }
 }

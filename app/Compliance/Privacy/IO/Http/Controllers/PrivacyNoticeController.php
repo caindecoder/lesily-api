@@ -9,8 +9,8 @@ use App\Compliance\Privacy\IO\Http\Resources\PrivacyNoticeResource;
 
 class PrivacyNoticeController
 {
-    public function show(Request $request, ProcessingRegister $register): PrivacyNoticeResource
+    public function show(Request $request, ProcessingRegister $processingRegister): PrivacyNoticeResource
     {
-        return new PrivacyNoticeResource(new PrivacyNotice($request->company()->load('dataProtectionOfficer'), $register->activities()));
+        return new PrivacyNoticeResource(new PrivacyNotice($request->company()->load('dataProtectionOfficer'), $processingRegister->activities()));
     }
 }

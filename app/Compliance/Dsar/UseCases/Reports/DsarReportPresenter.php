@@ -15,14 +15,14 @@ class DsarReportPresenter
     private ?array $roleNames = null;
 
     /**
-     * The report of $request's export — its sections as collected, every
+     * The report of $dsarRequest's export — its sections as collected, every
      * value written for a person to read.
      *
      * @param  array<string, array<int|string, mixed>>  $sections
      */
-    public function present(DsarRequestRecord $request, array $sections): DsarReport
+    public function present(DsarRequestRecord $dsarRequest, array $sections): DsarReport
     {
-        return new DsarReport($this->coverOf($request), array_map(
+        return new DsarReport($this->coverOf($dsarRequest), array_map(
             fn (string $key, array $data): DsarReportSection => new DsarReportSection(
                 __("dsar.sections.{$key}.title"),
                 $this->tablesOf($key, $data, null),
@@ -32,14 +32,14 @@ class DsarReportPresenter
         ));
     }
 
-    protected function coverOf(DsarRequestRecord $request): DsarReportCover
+    protected function coverOf(DsarRequestRecord $dsarRequest): DsarReportCover
     {
         return new DsarReportCover(
-            subjectName: $request->subject->name,
-            subjectEmail: $request->subject->email,
-            companyName: Company::query()->findOrFail($request->company_id)->name,
-            reference: $request->getKey(),
-            requestedAt: $this->readableTime($request->requested_at),
+            subjectName: $dsarRequest->subject->name,
+            subjectEmail: $dsarRequest->subject->email,
+            companyName: Company::query()->findOrFail($dsarRequest->company_id)->name,
+            reference: $dsarRequest->getKey(),
+            requestedAt: $this->readableTime($dsarRequest->requested_at),
             generatedAt: $this->readableTime(now()),
         );
     }
@@ -146,8 +146,8 @@ class DsarReportPresenter
         return $this->roleNames ??= Role::query()->pluck('name', 'code')->all();
     }
 
-    protected function readableTime(CarbonInterface $time): string
+    protected function readableTime(CarbonInterface $happenedAt): string
     {
-        return $time->utc()->format('j M Y, H:i').' UTC';
+        return $happenedAt->utc()->format('j M Y, H:i').' UTC';
     }
 }

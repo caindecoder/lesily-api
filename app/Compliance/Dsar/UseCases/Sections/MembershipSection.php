@@ -18,7 +18,7 @@ class MembershipSection implements DsarSectionProvider
     public function collect(string $subjectUserId, string $companyId): array
     {
         $company = Company::query()->findOrFail($companyId);
-        $membership = CompanyUser::query()
+        $companyUser = CompanyUser::query()
             ->with('role')
             ->where('company_id', $companyId)
             ->where('user_id', $subjectUserId)
@@ -26,13 +26,13 @@ class MembershipSection implements DsarSectionProvider
 
         return [
             'company' => ['id' => $company->getKey(), 'name' => $company->name],
-            'role' => $membership->role?->code,
-            'joined_at' => $membership->created_at?->toISOString(),
+            'role' => $companyUser->role?->code,
+            'joined_at' => $companyUser->created_at?->toISOString(),
             'emergency_contact' => [
-                'name' => $membership->emergency_contact_name,
-                'email' => $membership->emergency_contact_email,
-                'phone' => $membership->emergency_contact_phone,
-                'relationship' => $membership->emergency_contact_relationship,
+                'name' => $companyUser->emergency_contact_name,
+                'email' => $companyUser->emergency_contact_email,
+                'phone' => $companyUser->emergency_contact_phone,
+                'relationship' => $companyUser->emergency_contact_relationship,
             ],
         ];
     }

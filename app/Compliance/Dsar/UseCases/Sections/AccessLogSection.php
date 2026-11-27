@@ -22,20 +22,20 @@ class AccessLogSection implements DsarSectionProvider
     {
         return AccessLogEntry::query()
             ->where('user_id', $subjectUserId)
-            ->where(fn (Builder $query): Builder => $query->where('company_id', $companyId)->orWhereNull('company_id'))
+            ->where(fn (Builder $builder): Builder => $builder->where('company_id', $companyId)->orWhereNull('company_id'))
             ->orderBy('first_seen_at')
             ->orderBy('id')
             ->get()
-            ->map(fn (AccessLogEntry $entry): array => [
-                'access_event' => $entry->event->value,
-                'access_reason' => $entry->reason?->value,
-                'http_method' => $entry->http_method,
-                'route' => $entry->route,
-                'ip_address' => $entry->ip_address,
-                'user_agent' => $entry->user_agent,
-                'occurrences' => $entry->occurrences,
-                'first_seen_at' => $entry->first_seen_at->toISOString(),
-                'last_seen_at' => $entry->last_seen_at->toISOString(),
+            ->map(fn (AccessLogEntry $accessLogEntry): array => [
+                'access_event' => $accessLogEntry->event->value,
+                'access_reason' => $accessLogEntry->reason?->value,
+                'http_method' => $accessLogEntry->http_method,
+                'route' => $accessLogEntry->route,
+                'ip_address' => $accessLogEntry->ip_address,
+                'user_agent' => $accessLogEntry->user_agent,
+                'occurrences' => $accessLogEntry->occurrences,
+                'first_seen_at' => $accessLogEntry->first_seen_at->toISOString(),
+                'last_seen_at' => $accessLogEntry->last_seen_at->toISOString(),
             ])
             ->all();
     }

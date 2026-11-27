@@ -12,14 +12,14 @@ use App\Compliance\Dsar\UseCases\Commands\FulfilDsarRequestCommand;
 
 class FulfilDsarRequestInteractor
 {
-    public function __construct(private readonly DsarOutcomeAudit $audit) {}
+    public function __construct(private readonly DsarOutcomeAudit $dsarOutcomeAudit) {}
 
-    public function execute(FulfilDsarRequestCommand $command): void
+    public function execute(FulfilDsarRequestCommand $fulfilDsarRequestCommand): void
     {
-        DB::transaction(function () use ($command): void {
-            DsarRequest::retrieve($command->dsarRequest->getKey())->fulfil($command)->persist();
+        DB::transaction(function () use ($fulfilDsarRequestCommand): void {
+            DsarRequest::retrieve($fulfilDsarRequestCommand->dsarRequest->getKey())->fulfil($fulfilDsarRequestCommand)->persist();
 
-            $this->audit->record(DsarRequestRecord::query()->whereKey($command->dsarRequest->getKey())->firstOrFail(), DsarRequestFulfilled::class, AuditAction::DsarFulfilled);
+            $this->dsarOutcomeAudit->record(DsarRequestRecord::query()->whereKey($fulfilDsarRequestCommand->dsarRequest->getKey())->firstOrFail(), DsarRequestFulfilled::class, AuditAction::DsarFulfilled);
         });
     }
 }

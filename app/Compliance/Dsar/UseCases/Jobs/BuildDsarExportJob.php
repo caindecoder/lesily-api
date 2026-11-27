@@ -32,7 +32,7 @@ class BuildDsarExportJob implements ShouldQueue
         public string $subjectUserId,
     ) {}
 
-    public function handle(DsarExport $export, FulfilDsarRequestInteractor $fulfil): void
+    public function handle(DsarExport $dsarExport, FulfilDsarRequestInteractor $fulfilDsarRequestInteractor): void
     {
         if ($this->status() !== DsarRequestStatus::InProgress) {
             $this->discardExportUnlessFulfilled();
@@ -42,10 +42,10 @@ class BuildDsarExportJob implements ShouldQueue
 
         $dsarRequest = DsarRequestRecord::query()->with('subject')->findOrFail($this->requestId);
 
-        Storage::disk('dsar')->put($this->filePath(), $export->build($dsarRequest));
+        Storage::disk('dsar')->put($this->filePath(), $dsarExport->build($dsarRequest));
 
         try {
-            $fulfil->execute(FulfilDsarRequestCommand::from([
+            $fulfilDsarRequestInteractor->execute(FulfilDsarRequestCommand::from([
                 'dsarRequest' => $dsarRequest,
                 'filePath' => $this->filePath(),
             ]));
@@ -58,7 +58,7 @@ class BuildDsarExportJob implements ShouldQueue
      * After the last try: the partial file goes, and the request is rejected
      * with a fixed reason — the error itself stays in the worker's reports.
      */
-    public function failed(Throwable $exception): void
+    public function failed(Throwable $throwable): void
     {
         try {
             resolve(RejectDsarRequestInteractor::class)->execute(RejectDsarRequestCommand::from([

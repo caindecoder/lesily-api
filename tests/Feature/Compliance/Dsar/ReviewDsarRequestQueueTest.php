@@ -51,11 +51,11 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     public function when_a_tenant_member_requests_the_dsar_queue_then_the_admin_surface_is_not_acknowledged(string $roleCode): void
     {
         // Given a member of a company in this role, not a platform admin, and a request in their own company
-        $tenantMember = $this->memberWithRole($roleCode);
-        DsarRequestRecord::factory()->forSubject($this->company, $tenantMember)->create();
+        $member = $this->memberWithRole($roleCode);
+        DsarRequestRecord::factory()->forSubject($this->company, $member)->create();
 
         // When they list the queue
-        $response = $this->listQueue($tenantMember);
+        $response = $this->listQueue($member);
 
         // Then the admin surface is not acknowledged — not even their own company's request — and no read is recorded
         $this->assertResourceNotFound($response);
@@ -143,13 +143,13 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     public function when_a_request_is_no_longer_in_progress_then_the_kpis_leave_it_out(string $state): void
     {
         // Given one request closed this row's way, its deadline passed
-        $closed = $this->aRequestDue($this->company, '2026-09-25 09:00:00', $state);
+        $closedDsarRequest = $this->aRequestDue($this->company, '2026-09-25 09:00:00', $state);
 
         // When the admin lists the queue
         $response = $this->listQueue($this->platformAdmin);
 
         // Then it is listed, but no count includes it — open, overdue and due-soon are in-progress counts
-        $this->assertListed($response, [$closed]);
+        $this->assertListed($response, [$closedDsarRequest]);
         $this->assertKpis($response, ['open' => 0, 'overdue' => 0, 'due_in_7_days' => 0]);
     }
 
@@ -208,12 +208,12 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     {
         // Given no query values at all
         // When the filter is built
-        $filters = ReviewDsarRequestQueueCommand::validateAndCreate([]);
+        $reviewDsarRequestQueueCommand = ReviewDsarRequestQueueCommand::validateAndCreate([]);
 
         // Then nothing is filtered, neither flag is set, and pagination falls to its defaults
         $this->assertSame(
             [null, null, null, null, null, null],
-            [$filters->status, $filters->companyId, $filters->overdue, $filters->slaBreached, $filters->page, $filters->perPage],
+            [$reviewDsarRequestQueueCommand->status, $reviewDsarRequestQueueCommand->companyId, $reviewDsarRequestQueueCommand->overdue, $reviewDsarRequestQueueCommand->slaBreached, $reviewDsarRequestQueueCommand->page, $reviewDsarRequestQueueCommand->perPage],
         );
     }
 
@@ -221,8 +221,8 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     public function when_requests_exist_across_companies_then_the_queue_lists_them_soonest_deadline_first(): void
     {
         // Given a request in one company due in three days, and one in another company due tomorrow
-        $dueLater = $this->aRequestDue($this->company, '2026-10-04 09:00:00');
-        $dueSooner = $this->aRequestDue($this->otherCompany, '2026-10-02 09:00:00');
+        $dueLaterDsarRequest = $this->aRequestDue($this->company, '2026-10-04 09:00:00');
+        $dueSoonerDsarRequest = $this->aRequestDue($this->otherCompany, '2026-10-02 09:00:00');
 
         // When the admin lists the queue
         $response = $this->listQueue($this->platformAdmin);
@@ -230,7 +230,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
         // Then both companies' requests are listed soonest deadline first, as admin rows, with the counts
         $response->assertOk();
         $response->assertExactJson([
-            'data' => [$this->adminRowOf($dueSooner, 1), $this->adminRowOf($dueLater, 3)],
+            'data' => [$this->adminRowOf($dueSoonerDsarRequest, 1), $this->adminRowOf($dueLaterDsarRequest, 3)],
             'meta' => ['pagination' => ['page' => 1, 'per_page' => 15, 'total' => 2, 'last_page' => 1]],
             'kpis' => ['open' => 2, 'overdue' => 0, 'due_in_7_days' => 2],
         ]);
@@ -263,15 +263,15 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     public function when_the_queue_is_filtered_by_company_then_only_that_companys_requests_and_kpis_are_shown(): void
     {
         // Given two requests in one company — one overdue, one due in four days — and an overdue one in another company
-        $overdue = $this->aRequestDue($this->company, '2026-09-30 09:00:00');
-        $dueSoon = $this->aRequestDue($this->company, '2026-10-05 09:00:00');
+        $overdueDsarRequest = $this->aRequestDue($this->company, '2026-09-30 09:00:00');
+        $dueSoonDsarRequest = $this->aRequestDue($this->company, '2026-10-05 09:00:00');
         $this->aRequestDue($this->otherCompany, '2026-09-29 09:00:00');
 
         // When the admin lists the queue for the first company
         $response = $this->listQueue($this->platformAdmin, ['company_id' => $this->company->getKey()]);
 
         // Then only that company's requests are listed and counted, and the filter is recorded
-        $this->assertListed($response, [$overdue, $dueSoon]);
+        $this->assertListed($response, [$overdueDsarRequest, $dueSoonDsarRequest]);
         $this->assertKpis($response, ['open' => 2, 'overdue' => 1, 'due_in_7_days' => 1]);
         $this->assertQueueReadAudited($response, ['filters' => ['company_id' => $this->company->getKey()], 'result_count' => 2, 'page' => 1]);
     }
@@ -281,8 +281,8 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     {
         // Given in-progress requests two days late and due today (both overdue — 0 days or fewer left),
         // one in progress due at the first second of tomorrow, and a fulfilled one whose deadline passed
-        $dueToday = $this->aRequestDue($this->company, '2026-10-01 09:00:00');
-        $twoDaysLate = $this->aRequestDue($this->otherCompany, '2026-09-29 09:00:00');
+        $dueTodayDsarRequest = $this->aRequestDue($this->company, '2026-10-01 09:00:00');
+        $twoDaysLateDsarRequest = $this->aRequestDue($this->otherCompany, '2026-09-29 09:00:00');
         $this->aRequestDue($this->company, '2026-10-02 00:00:00');
         $this->aRequestDue($this->otherCompany, '2026-09-25 09:00:00', 'fulfilled');
 
@@ -291,7 +291,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
 
         // Then only the overdue in-progress requests are listed, soonest deadline first, the counts recompute
         // against them, and the filter is recorded
-        $this->assertListed($response, [$twoDaysLate, $dueToday]);
+        $this->assertListed($response, [$twoDaysLateDsarRequest, $dueTodayDsarRequest]);
         $this->assertKpis($response, ['open' => 2, 'overdue' => 2, 'due_in_7_days' => 0]);
         $this->assertQueueReadAudited($response, ['filters' => ['overdue' => 'true'], 'result_count' => 2, 'page' => 1]);
     }
@@ -300,15 +300,15 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     public function when_breached_is_toggled_then_only_flagged_requests_are_listed(): void
     {
         // Given a flagged request still in progress, a flagged one fulfilled late, and an overdue one the sweep has not flagged
-        $flaggedInProgress = $this->aRequestDue($this->company, '2026-09-28 09:00:00', 'breached');
-        $flaggedThenFulfilled = $this->aRequestDue($this->otherCompany, '2026-09-26 09:00:00', 'breached_fulfilled');
+        $flaggedInProgressDsarRequest = $this->aRequestDue($this->company, '2026-09-28 09:00:00', 'breached');
+        $flaggedThenFulfilledDsarRequest = $this->aRequestDue($this->otherCompany, '2026-09-26 09:00:00', 'breached_fulfilled');
         $this->aRequestDue($this->company, '2026-09-30 09:00:00');
 
         // When the admin toggles "Breached"
         $response = $this->listQueue($this->platformAdmin, ['sla_breached' => 'true']);
 
         // Then only the flagged requests are listed, the counts recompute against them, and the filter is recorded
-        $this->assertListed($response, [$flaggedThenFulfilled, $flaggedInProgress]);
+        $this->assertListed($response, [$flaggedThenFulfilledDsarRequest, $flaggedInProgressDsarRequest]);
         $this->assertKpis($response, ['open' => 1, 'overdue' => 1, 'due_in_7_days' => 0]);
         $this->assertQueueReadAudited($response, ['filters' => ['sla_breached' => 'true'], 'result_count' => 2, 'page' => 1]);
     }
@@ -318,14 +318,14 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     public function when_a_flag_is_false_then_the_queue_is_not_restricted(string $flag): void
     {
         // Given an unflagged request due in four days and a flagged overdue one
-        $dueSoon = $this->aRequestDue($this->company, '2026-10-05 09:00:00');
-        $flaggedOverdue = $this->aRequestDue($this->otherCompany, '2026-09-28 09:00:00', 'breached');
+        $dueSoonDsarRequest = $this->aRequestDue($this->company, '2026-10-05 09:00:00');
+        $flaggedOverdueDsarRequest = $this->aRequestDue($this->otherCompany, '2026-09-28 09:00:00', 'breached');
 
         // When the admin lists the queue with this row's flag switched off
         $response = $this->listQueue($this->platformAdmin, [$flag => 'false']);
 
         // Then nothing is filtered out, the counts cover both, and the switched-off flag is recorded
-        $this->assertListed($response, [$flaggedOverdue, $dueSoon]);
+        $this->assertListed($response, [$flaggedOverdueDsarRequest, $dueSoonDsarRequest]);
         $this->assertKpis($response, ['open' => 2, 'overdue' => 1, 'due_in_7_days' => 1]);
         $this->assertQueueReadAudited($response, ['filters' => [$flag => 'false'], 'result_count' => 2, 'page' => 1]);
     }
@@ -437,15 +437,15 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     }
 
     /**
-     * List the DSAR queue on the platform-admin surface as $caller, or as a
+     * List the DSAR queue on the platform-admin surface as $actor, or as a
      * guest when null — no company header, the admin family is cross-tenant.
      *
      * @param  array<string, mixed>  $query
      */
-    protected function listQueue(?User $caller, array $query = []): TestResponse
+    protected function listQueue(?User $actor, array $query = []): TestResponse
     {
-        if ($caller !== null) {
-            Sanctum::actingAs($caller);
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
         }
 
         return $this->getJson('/api/v1/admin/dsar-requests?'.http_build_query($query));
@@ -457,45 +457,45 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
      */
     protected function aRequestDue(Company $company, string $deadline, string $state = 'in_progress'): DsarRequestRecord
     {
-        $factory = DsarRequestRecord::factory()
+        $dsarRequestRecordFactory = DsarRequestRecord::factory()
             ->forSubject($company, $this->aCompanyMember($company))
             ->dueAt($deadline);
 
-        $factory = match ($state) {
-            'in_progress' => $factory,
-            'fulfilled' => $factory->fulfilled(),
-            'rejected' => $factory->rejected(),
-            'cancelled' => $factory->cancelled(),
-            'breached' => $factory->slaBreached(),
-            'breached_fulfilled' => $factory->slaBreached()->fulfilled(),
+        $dsarRequestRecordFactory = match ($state) {
+            'in_progress' => $dsarRequestRecordFactory,
+            'fulfilled' => $dsarRequestRecordFactory->fulfilled(),
+            'rejected' => $dsarRequestRecordFactory->rejected(),
+            'cancelled' => $dsarRequestRecordFactory->cancelled(),
+            'breached' => $dsarRequestRecordFactory->slaBreached(),
+            'breached_fulfilled' => $dsarRequestRecordFactory->slaBreached()->fulfilled(),
             default => throw new LogicException("No such request state: {$state}"),
         };
 
-        return $factory->create();
+        return $dsarRequestRecordFactory->create();
     }
 
     /**
-     * The admin row an in-progress $request is listed as — the member fields,
+     * The admin row an in-progress $dsarRequest is listed as — the member fields,
      * its company and its countdown; no timeline (the detail's alone).
      *
      * @return array<string, mixed>
      */
-    protected function adminRowOf(DsarRequestRecord $request, int $daysRemaining): array
+    protected function adminRowOf(DsarRequestRecord $dsarRequest, int $daysRemaining): array
     {
         return [
-            'id' => $request->getKey(),
+            'id' => $dsarRequest->getKey(),
             'status' => 'in_progress',
             'request_type' => 'access',
-            'subject' => ['id' => $request->subject->getKey(), 'name' => $request->subject->name],
-            'requested_by' => ['id' => $request->requestedBy->getKey(), 'name' => $request->requestedBy->name],
-            'requested_at' => $request->requested_at->toISOString(),
-            'sla_deadline' => $request->sla_deadline->toISOString(),
+            'subject' => ['id' => $dsarRequest->subject->getKey(), 'name' => $dsarRequest->subject->name],
+            'requested_by' => ['id' => $dsarRequest->requestedBy->getKey(), 'name' => $dsarRequest->requestedBy->name],
+            'requested_at' => $dsarRequest->requested_at->toISOString(),
+            'sla_deadline' => $dsarRequest->sla_deadline->toISOString(),
             'completed_at' => null,
             'download_available' => false,
             'download_expires_at' => null,
             'cancelled_at' => null,
             'rejection_reason' => null,
-            'company' => ['id' => $request->company->getKey(), 'name' => $request->company->name],
+            'company' => ['id' => $dsarRequest->company->getKey(), 'name' => $dsarRequest->company->name],
             'days_remaining' => $daysRemaining,
             'sla_breached_at' => null,
             'download_expired_at' => null,
@@ -511,7 +511,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     {
         $response->assertOk();
         $this->assertSame(
-            array_map(fn (DsarRequestRecord $request): string => $request->getKey(), $requests),
+            array_map(fn (DsarRequestRecord $dsarRequest): string => $dsarRequest->getKey(), $requests),
             array_column($response->json('data'), 'id'),
         );
     }
@@ -536,10 +536,10 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
     {
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->where('action', 'dsar_queue_viewed')->sole();
+        $auditEntry = AuditEntry::query()->where('action', 'dsar_queue_viewed')->sole();
 
         $this->assertDatabaseHas('audit_trail', [
-            'id' => $entry->getKey(),
+            'id' => $auditEntry->getKey(),
             'company_id' => null,
             'stored_event_id' => null,
             'event_class' => 'DsarRequestQueueViewed',
@@ -555,7 +555,7 @@ class ReviewDsarRequestQueueTest extends DsarTestCase
             'request_id' => $correlationId,
         ]);
         /** @var array{filters: array<string, mixed>} $stored */
-        $stored = $entry->metadata;
+        $stored = $auditEntry->metadata;
         $this->assertEquals($metadata, $stored);
         $this->assertContainsOnlyString($stored['filters']);
     }

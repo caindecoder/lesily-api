@@ -8,7 +8,7 @@ class DsarReport
      * @param  array<int, DsarReportSection>  $sections
      */
     public function __construct(
-        public readonly DsarReportCover $cover,
+        public readonly DsarReportCover $dsarReportCover,
         public readonly array $sections,
     ) {}
 }

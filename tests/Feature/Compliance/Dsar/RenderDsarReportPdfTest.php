@@ -26,16 +26,16 @@ class RenderDsarReportPdfTest extends DsarTestCase
     public function when_chromium_fails_then_rendering_fails_with_the_report_error(): void
     {
         // Given Chromium dies while printing
-        $cause = new RuntimeException('Chromium process died');
-        Pdf::shouldReceive('html')->once()->andThrow($cause);
+        $inducedRuntimeException = new RuntimeException('Chromium process died');
+        Pdf::shouldReceive('html')->once()->andThrow($inducedRuntimeException);
 
         try {
             // When the registered renderer renders a report
             $this->theRegisteredReportRenderer()->render($this->aReport());
             $this->fail('A Chromium failure should fail the rendering.');
-        } catch (DsarReportRenderingFailedException $failure) {
+        } catch (DsarReportRenderingFailedException $dsarReportRenderingFailedException) {
             // Then rendering fails with the report error, the cause kept
-            $this->assertSame($cause, $failure->getPrevious());
+            $this->assertSame($inducedRuntimeException, $dsarReportRenderingFailedException->getPrevious());
         }
     }
 
@@ -117,10 +117,10 @@ class RenderDsarReportPdfTest extends DsarTestCase
     public function when_personal_data_reads_like_a_local_address_then_the_report_still_renders(string $subjectName): void
     {
         // Given a report whose subject's name reads like a local address
-        $report = $this->aReportNaming($subjectName);
+        $dsarReport = $this->aReportNaming($subjectName);
 
         // When the registered renderer renders it
-        $pdf = $this->theRegisteredReportRenderer()->render($report);
+        $pdf = $this->theRegisteredReportRenderer()->render($dsarReport);
 
         // Then a PDF document comes back
         $this->assertStringStartsWith('%PDF', $pdf);
@@ -131,10 +131,10 @@ class RenderDsarReportPdfTest extends DsarTestCase
     {
         // Given a renderer working in an empty directory of its own
         $directory = $this->anEmptyWorkDirectory();
-        $renderer = new ChromiumDsarReportRenderer(new Filesystem, $directory);
+        $chromiumDsarReportRenderer = new ChromiumDsarReportRenderer(new Filesystem, $directory);
 
         // When it renders a report
-        $renderer->render($this->aReport());
+        $chromiumDsarReportRenderer->render($this->aReport());
 
         // Then nothing of the report's page is left there
         $this->assertSame([], (new Filesystem)->files($directory));
@@ -144,10 +144,10 @@ class RenderDsarReportPdfTest extends DsarTestCase
     public function when_a_report_is_rendered_then_a_pdf_typeset_in_the_brand_font_is_returned(): void
     {
         // Given a report
-        $report = $this->aReport();
+        $dsarReport = $this->aReport();
 
         // When the registered renderer renders it
-        $pdf = $this->theRegisteredReportRenderer()->render($report);
+        $pdf = $this->theRegisteredReportRenderer()->render($dsarReport);
 
         // Then a PDF document comes back, laid out as the report in Inter rather than printed as page source
         $this->assertStringStartsWith('%PDF', $pdf);
@@ -180,11 +180,11 @@ class RenderDsarReportPdfTest extends DsarTestCase
     protected function aReportTemplateLoading(string $url): void
     {
         $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dsar-views-'.Str::random(8);
-        $files = new Filesystem;
-        $files->ensureDirectoryExists($directory.DIRECTORY_SEPARATOR.'dsar');
-        $files->put($directory.DIRECTORY_SEPARATOR.'dsar'.DIRECTORY_SEPARATOR.'report.blade.php', '<html><body><img src="'.$url.'"></body></html>');
+        $filesystem = new Filesystem;
+        $filesystem->ensureDirectoryExists($directory.DIRECTORY_SEPARATOR.'dsar');
+        $filesystem->put($directory.DIRECTORY_SEPARATOR.'dsar'.DIRECTORY_SEPARATOR.'report.blade.php', '<html><body><img src="'.$url.'"></body></html>');
         View::prependLocation($directory);
-        $this->beforeApplicationDestroyed(fn () => $files->deleteDirectory($directory));
+        $this->beforeApplicationDestroyed(fn () => $filesystem->deleteDirectory($directory));
     }
 
     /**
@@ -201,12 +201,12 @@ class RenderDsarReportPdfTest extends DsarTestCase
         mkdir($directory.DIRECTORY_SEPARATOR.'docroot', recursive: true);
         $this->serverLog = $directory.DIRECTORY_SEPARATOR.'server.log';
         $address = $this->aFreeLoopbackAddress();
-        $server = Process::fromShellCommandline('"${:PHP}" -S "${:ADDRESS}" -t "${:DOCROOT}" 2> "${:LOG}"')
+        $process = Process::fromShellCommandline('"${:PHP}" -S "${:ADDRESS}" -t "${:DOCROOT}" 2> "${:LOG}"')
             ->disableOutput()
             ->setTimeout(null);
-        $server->start(null, ['PHP' => PHP_BINARY, 'ADDRESS' => $address, 'DOCROOT' => $directory.DIRECTORY_SEPARATOR.'docroot', 'LOG' => $this->serverLog]);
-        $this->beforeApplicationDestroyed(function () use ($server, $directory): void {
-            $server->stop(0);
+        $process->start(null, ['PHP' => PHP_BINARY, 'ADDRESS' => $address, 'DOCROOT' => $directory.DIRECTORY_SEPARATOR.'docroot', 'LOG' => $this->serverLog]);
+        $this->beforeApplicationDestroyed(function () use ($process, $directory): void {
+            $process->stop(0);
             (new Filesystem)->deleteDirectory($directory);
         });
         $this->requestOnceWhenListening($address);

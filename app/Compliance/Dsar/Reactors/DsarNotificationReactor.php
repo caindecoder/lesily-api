@@ -22,19 +22,19 @@ class DsarNotificationReactor extends Reactor implements ShouldQueue
 {
     public function __construct(private readonly PlatformAdminAllowlist $platformAdminAllowlist) {}
 
-    public function onDsarRequestFulfilled(DsarRequestFulfilled $event): void
+    public function onDsarRequestFulfilled(DsarRequestFulfilled $dsarRequestFulfilled): void
     {
-        $this->notifyAbout($event, NotificationType::DsarExportReady);
+        $this->notifyAbout($dsarRequestFulfilled, NotificationType::DsarExportReady);
     }
 
-    public function onDsarRequestRejected(DsarRequestRejected $event): void
+    public function onDsarRequestRejected(DsarRequestRejected $dsarRequestRejected): void
     {
-        $this->notifyAbout($event, NotificationType::DsarExportFailed);
+        $this->notifyAbout($dsarRequestRejected, NotificationType::DsarExportFailed);
     }
 
-    public function onDsarRequestCancelled(DsarRequestCancelled $event): void
+    public function onDsarRequestCancelled(DsarRequestCancelled $dsarRequestCancelled): void
     {
-        $this->notifyAbout($event, NotificationType::DsarRequestWithdrawn);
+        $this->notifyAbout($dsarRequestCancelled, NotificationType::DsarRequestWithdrawn);
     }
 
     /**
@@ -42,25 +42,25 @@ class DsarNotificationReactor extends Reactor implements ShouldQueue
      * company and its deadline — a platform notice, filed under no company.
      * With no admin to alert, the gap is reported; the breach stays recorded.
      */
-    public function onDsarSlaBreached(DsarSlaBreached $event): void
+    public function onDsarSlaBreached(DsarSlaBreached $dsarSlaBreached): void
     {
-        $request = DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid());
+        $dsarRequest = DsarRequestRecord::query()->findOrFail($dsarSlaBreached->aggregateRootUuid());
         $platformAdmins = User::query()->whereKey($this->platformAdminAllowlist->userIds())->get();
 
         if ($platformAdmins->isNotEmpty()) {
-            Notification::send($platformAdmins, $this->deadlineMissedAlert($request));
+            Notification::send($platformAdmins, $this->deadlineMissedAlert($dsarRequest));
         } else {
-            report(new RuntimeException("No platform admin to alert about DSAR request {$request->getKey()}."));
+            report(new RuntimeException("No platform admin to alert about DSAR request {$dsarRequest->getKey()}."));
         }
     }
 
-    protected function deadlineMissedAlert(DsarRequestRecord $request): SystemNotification
+    protected function deadlineMissedAlert(DsarRequestRecord $dsarRequest): SystemNotification
     {
-        $company = Company::query()->findOrFail($request->company_id);
+        $company = Company::query()->findOrFail($dsarRequest->company_id);
 
         return new SystemNotification(NotificationType::DsarDeadlineMissed, $company->name, null, [
-            'request' => $request->getKey(),
-            'deadline' => $request->sla_deadline->format('j M Y, H:i').' UTC',
+            'request' => $dsarRequest->getKey(),
+            'deadline' => $dsarRequest->sla_deadline->format('j M Y, H:i').' UTC',
         ]);
     }
 
@@ -68,14 +68,14 @@ class DsarNotificationReactor extends Reactor implements ShouldQueue
      * One notice each to the request's subject and to whoever asked for it —
      * one in all when they are the same person.
      */
-    protected function notifyAbout(ShouldBeStored $event, NotificationType $type): void
+    protected function notifyAbout(ShouldBeStored $shouldBeStored, NotificationType $notificationType): void
     {
-        $request = DsarRequestRecord::query()->findOrFail($event->aggregateRootUuid());
-        $company = Company::query()->findOrFail($request->company_id);
+        $dsarRequest = DsarRequestRecord::query()->findOrFail($shouldBeStored->aggregateRootUuid());
+        $company = Company::query()->findOrFail($dsarRequest->company_id);
 
         Notification::send(
-            collect([$request->subject, $request->requestedBy])->unique(fn (User $user): string => $user->getKey()),
-            new SystemNotification($type, $company->name, $company->getKey()),
+            collect([$dsarRequest->subject, $dsarRequest->requestedBy])->unique(fn (User $user): string => $user->getKey()),
+            new SystemNotification($notificationType, $company->name, $company->getKey()),
         );
     }
 }

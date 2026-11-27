@@ -12,10 +12,10 @@ use App\Compliance\Dsar\Entities\DsarRequestRecord;
 class DsarRequestQueue
 {
     /**
-     * @param  LengthAwarePaginator<int, DsarRequestRecord>  $page
+     * @param  LengthAwarePaginator<int, DsarRequestRecord>  $dsarRequests
      */
     public function __construct(
-        public readonly LengthAwarePaginator $page,
+        public readonly LengthAwarePaginator $dsarRequests,
         public readonly int $open,
         public readonly int $overdue,
         public readonly int $dueInSevenDays,

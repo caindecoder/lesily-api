@@ -13,23 +13,23 @@ use App\Compliance\Dsar\UseCases\Interactors\ExpireDsarDownloadsInteractor;
 #[Description('Expire DSAR downloads whose seven-day window has closed (defaults to now; --date replays a missed night).')]
 class ExpireDsarDownloads extends Command
 {
-    public function handle(ExpireDsarDownloadsInteractor $interactor): int
+    public function handle(ExpireDsarDownloadsInteractor $expireDsarDownloadsInteractor): int
     {
         try {
-            $cutoff = CarbonImmutable::parse($this->option('date'));
+            $scannedAt = CarbonImmutable::parse($this->option('date'));
         } catch (InvalidFormatException) {
             $this->error('The --date option must be a date, such as 2026-10-08.');
 
             return self::FAILURE;
         }
 
-        if ($cutoff->isFuture()) {
+        if ($scannedAt->isFuture()) {
             $this->error('The --date option cannot be later than now.');
 
             return self::FAILURE;
         }
 
-        $expired = $interactor->execute($cutoff);
+        $expired = $expireDsarDownloadsInteractor->execute($scannedAt);
 
         $this->info("{$expired} download(s) expired.");
 

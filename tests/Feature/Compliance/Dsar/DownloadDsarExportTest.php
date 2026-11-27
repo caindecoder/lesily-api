@@ -13,10 +13,10 @@ class DownloadDsarExportTest extends DsarTestCase
     public function when_a_guest_downloads_an_export_then_they_must_sign_in(): void
     {
         // Given
-        $request = $this->aReadyExportFor($this->company, $this->member);
+        $dsarRequest = $this->aReadyExportFor($this->company, $this->member);
 
         // When
-        $response = $this->downloadDsarExportAsGuest($request->getKey());
+        $response = $this->downloadDsarExportAsGuest($dsarRequest->getKey());
 
         // Then
         $this->assertUnauthenticated($response);
@@ -43,13 +43,13 @@ class DownloadDsarExportTest extends DsarTestCase
         $subject = $this->member;
         $otherCompany = Company::factory()->create();
         $this->attachMember($otherCompany, $subject, $this->seededRole('employee'));
-        $request = $this->aReadyExportFor($otherCompany, $subject);
+        $dsarRequest = $this->aReadyExportFor($otherCompany, $subject);
 
         // When
-        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+        $response = $this->downloadDsarExport($subject, $this->company, $dsarRequest->getKey());
 
         // Then
-        $this->assertHiddenAsNotFound($response, $request->getKey());
+        $this->assertHiddenAsNotFound($response, $dsarRequest->getKey());
     }
 
     #[Test]
@@ -57,15 +57,15 @@ class DownloadDsarExportTest extends DsarTestCase
     public function when_someone_other_than_the_subject_downloads_then_its_existence_stays_hidden(string $viewerKind): void
     {
         // Given an export an admin requested for a member
-        $request = $this->aReadyExportFor($this->company, $this->member, $this->admin);
+        $dsarRequest = $this->aReadyExportFor($this->company, $this->member, $this->admin);
         $viewer = $this->aNonSubjectViewer($viewerKind, $this->company, $this->admin);
 
         // When
-        $response = $this->downloadDsarExport($viewer, $this->company, $request->getKey());
+        $response = $this->downloadDsarExport($viewer, $this->company, $dsarRequest->getKey());
 
         // Then
-        $this->assertHiddenAsNotFound($response, $request->getKey());
-        $this->assertDownloadsAudited($request, 0);
+        $this->assertHiddenAsNotFound($response, $dsarRequest->getKey());
+        $this->assertDownloadsAudited($dsarRequest, 0);
     }
 
     #[Test]
@@ -74,14 +74,14 @@ class DownloadDsarExportTest extends DsarTestCase
     {
         // Given the subject's request, not fulfilled
         $subject = $this->member;
-        $request = $this->anUnreadyRequest($state, $this->company, $subject);
+        $dsarRequest = $this->anUnreadyRequest($state, $this->company, $subject);
 
         // When
-        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+        $response = $this->downloadDsarExport($subject, $this->company, $dsarRequest->getKey());
 
         // Then
         $this->assertRefusedAsNotReady($response);
-        $this->assertDownloadsAudited($request, 0);
+        $this->assertDownloadsAudited($dsarRequest, 0);
     }
 
     #[Test]
@@ -89,15 +89,15 @@ class DownloadDsarExportTest extends DsarTestCase
     {
         // Given the subject's ready export, at the very end of its window
         $subject = $this->member;
-        $request = $this->aReadyExportFor($this->company, $subject);
-        $this->travelTo($request->download_expires_at);
+        $dsarRequest = $this->aReadyExportFor($this->company, $subject);
+        $this->travelTo($dsarRequest->download_expires_at);
 
         // When
-        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+        $response = $this->downloadDsarExport($subject, $this->company, $dsarRequest->getKey());
 
         // Then
         $this->assertRefusedAsExpired($response);
-        $this->assertDownloadsAudited($request, 0);
+        $this->assertDownloadsAudited($dsarRequest, 0);
     }
 
     #[Test]
@@ -106,16 +106,16 @@ class DownloadDsarExportTest extends DsarTestCase
     {
         // Given the subject's ready export whose ZIP is lost
         $subject = $this->member;
-        $request = $this->aReadyExportFor($this->company, $subject);
-        $this->loseTheExportFile($how, $request);
+        $dsarRequest = $this->aReadyExportFor($this->company, $subject);
+        $this->loseTheExportFile($how, $dsarRequest);
         Exceptions::fake();
 
         // When
-        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+        $response = $this->downloadDsarExport($subject, $this->company, $dsarRequest->getKey());
 
         // Then
         $this->assertFailedAsMissingFile($response);
-        $this->assertDownloadsAudited($request, 0);
+        $this->assertDownloadsAudited($dsarRequest, 0);
     }
 
     #[Test]
@@ -123,14 +123,14 @@ class DownloadDsarExportTest extends DsarTestCase
     {
         // Given the subject's ready export, one second before its window closes
         $subject = $this->member;
-        $request = $this->aReadyExportFor($this->company, $subject);
-        $this->travelTo($request->download_expires_at?->subSecond());
+        $dsarRequest = $this->aReadyExportFor($this->company, $subject);
+        $this->travelTo($dsarRequest->download_expires_at?->subSecond());
 
         // When
-        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+        $response = $this->downloadDsarExport($subject, $this->company, $dsarRequest->getKey());
 
         // Then
-        $this->assertExportServed($response, $request);
+        $this->assertExportServed($response, $dsarRequest);
     }
 
     #[Test]
@@ -138,13 +138,13 @@ class DownloadDsarExportTest extends DsarTestCase
     {
         // Given an export an admin requested on the subject's behalf
         $subject = $this->member;
-        $request = $this->aReadyExportFor($this->company, $subject, $this->admin);
+        $dsarRequest = $this->aReadyExportFor($this->company, $subject, $this->admin);
 
         // When
-        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+        $response = $this->downloadDsarExport($subject, $this->company, $dsarRequest->getKey());
 
         // Then
-        $this->assertExportServed($response, $request);
+        $this->assertExportServed($response, $dsarRequest);
     }
 
     #[Test]
@@ -153,13 +153,13 @@ class DownloadDsarExportTest extends DsarTestCase
         // Given an owner of another company who is an employee here, with a ready export here
         $subject = $this->aCompanyMember(Company::factory()->create(), 'owner');
         $this->attachMember($this->company, $subject, $this->seededRole('employee'));
-        $request = $this->aReadyExportFor($this->company, $subject);
+        $dsarRequest = $this->aReadyExportFor($this->company, $subject);
 
         // When
-        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+        $response = $this->downloadDsarExport($subject, $this->company, $dsarRequest->getKey());
 
         // Then
-        $this->assertDownloadAudited($response, $request, $subject);
+        $this->assertDownloadAudited($response, $dsarRequest, $subject);
     }
 
     #[Test]
@@ -167,15 +167,15 @@ class DownloadDsarExportTest extends DsarTestCase
     {
         // Given the subject's ready export, downloaded once already
         $subject = $this->member;
-        $request = $this->aReadyExportFor($this->company, $subject);
-        $this->downloadDsarExport($subject, $this->company, $request->getKey());
+        $dsarRequest = $this->aReadyExportFor($this->company, $subject);
+        $this->downloadDsarExport($subject, $this->company, $dsarRequest->getKey());
 
         // When
-        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+        $response = $this->downloadDsarExport($subject, $this->company, $dsarRequest->getKey());
 
         // Then
-        $this->assertDownloadAudited($response, $request, $subject);
-        $this->assertDownloadsAudited($request, 2);
+        $this->assertDownloadAudited($response, $dsarRequest, $subject);
+        $this->assertDownloadsAudited($dsarRequest, 2);
     }
 
     #[Test]
@@ -183,14 +183,14 @@ class DownloadDsarExportTest extends DsarTestCase
     {
         // Given the subject's own ready export
         $subject = $this->member;
-        $request = $this->aReadyExportFor($this->company, $subject);
+        $dsarRequest = $this->aReadyExportFor($this->company, $subject);
 
         // When
-        $response = $this->downloadDsarExport($subject, $this->company, $request->getKey());
+        $response = $this->downloadDsarExport($subject, $this->company, $dsarRequest->getKey());
 
         // Then
-        $this->assertExportServed($response, $request);
+        $this->assertExportServed($response, $dsarRequest);
         $this->assertServedPrivately($response);
-        $this->assertDownloadAudited($response, $request, $subject);
+        $this->assertDownloadAudited($response, $dsarRequest, $subject);
     }
 }

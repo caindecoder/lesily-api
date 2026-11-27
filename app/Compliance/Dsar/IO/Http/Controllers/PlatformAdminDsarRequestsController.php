@@ -15,23 +15,23 @@ use App\Compliance\Dsar\UseCases\Interactors\ReviewDsarRequestAsAdminInteractor;
 
 class PlatformAdminDsarRequestsController extends Controller
 {
-    public function index(Request $request, ReviewDsarRequestQueueInteractor $interactor): JsonResponse
+    public function index(Request $request, ReviewDsarRequestQueueInteractor $reviewDsarRequestQueueInteractor): JsonResponse
     {
         /** @var User $platformAdmin — guaranteed by auth:sanctum */
         $platformAdmin = $request->user();
 
-        $queue = $interactor->execute(ReviewDsarRequestQueueCommand::fromQuery($request), $platformAdmin, RequestOrigin::fromRequest($request));
+        $dsarRequestQueue = $reviewDsarRequestQueueInteractor->execute(ReviewDsarRequestQueueCommand::fromQuery($request), $platformAdmin, RequestOrigin::fromRequest($request));
 
-        return (new DsarRequestAdminCollection($queue->page))
-            ->additional(['kpis' => ['open' => $queue->open, 'overdue' => $queue->overdue, 'due_in_7_days' => $queue->dueInSevenDays]])
+        return (new DsarRequestAdminCollection($dsarRequestQueue->dsarRequests))
+            ->additional(['kpis' => ['open' => $dsarRequestQueue->open, 'overdue' => $dsarRequestQueue->overdue, 'due_in_7_days' => $dsarRequestQueue->dueInSevenDays]])
             ->response($request);
     }
 
-    public function show(Request $request, string $requestId, ReviewDsarRequestAsAdminInteractor $interactor): DsarRequestAdminDetailResource
+    public function show(Request $request, string $requestId, ReviewDsarRequestAsAdminInteractor $reviewDsarRequestAsAdminInteractor): DsarRequestAdminDetailResource
     {
         /** @var User $platformAdmin — guaranteed by auth:sanctum */
         $platformAdmin = $request->user();
 
-        return new DsarRequestAdminDetailResource($interactor->execute($requestId, $platformAdmin, RequestOrigin::fromRequest($request)));
+        return new DsarRequestAdminDetailResource($reviewDsarRequestAsAdminInteractor->execute($requestId, $platformAdmin, RequestOrigin::fromRequest($request)));
     }
 }

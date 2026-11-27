@@ -28,10 +28,10 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
     public function when_the_caller_is_not_a_member_of_the_company_then_company_access_is_denied(): void
     {
         // Given an employee of another company, never a member of Contoso
-        $outsider = $this->aCompanyMember(Company::factory()->create());
+        $actor = $this->aCompanyMember(Company::factory()->create());
 
         // When they view Contoso's privacy notice
-        $response = $this->viewNotice($outsider, $this->company);
+        $response = $this->viewNotice($actor, $this->company);
 
         // Then company access is denied
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::CompanyAccessDenied);
@@ -56,10 +56,10 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
     {
         // Given a company where no member holds the owner role
         $company = Company::factory()->named('Northwind (Pvt) Ltd')->registeredAs('PV-00054321', 'EPF-0054321')->create();
-        $employee = $this->aCompanyMember($company);
+        $member = $this->aCompanyMember($company);
 
         // When its employee views the privacy notice
-        $response = $this->viewNotice($employee, $company);
+        $response = $this->viewNotice($member, $company);
 
         // Then item 1 names the company and says no contact is on record
         $this->assertSame([
@@ -73,12 +73,12 @@ class ViewPrivacyNoticeTest extends PrivacyTestCase
     {
         // Given Contoso is Contoso (Pvt) Ltd, BR number PV-00012345, and its owner also owns Fabrikam
         $this->company->update(['name' => 'Contoso (Pvt) Ltd', 'br_number' => 'PV-00012345']);
-        $fabrikam = Company::factory()
+        $fabrikamCompany = Company::factory()
             ->named('Fabrikam (Pvt) Ltd')
             ->registeredAs('PV-00099999', 'EPF-0099999')
             ->ownedBy($this->owner)
             ->create();
-        $this->attachMember($fabrikam, $this->owner, $this->seededRole('owner'));
+        $this->attachMember($fabrikamCompany, $this->owner, $this->seededRole('owner'));
 
         // When the owner views Contoso's privacy notice
         $response = $this->viewNotice($this->owner, $this->company);
