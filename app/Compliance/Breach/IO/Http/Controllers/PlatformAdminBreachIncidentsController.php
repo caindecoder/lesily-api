@@ -30,90 +30,90 @@ use App\Compliance\Breach\UseCases\Interactors\FileBreachWithRegulatorInteractor
 
 class PlatformAdminBreachIncidentsController extends Controller
 {
-    public function __construct(protected readonly FileBreachWithRegulatorInteractor $fileBreachWithRegulator) {}
+    public function __construct(protected readonly FileBreachWithRegulatorInteractor $fileBreachWithRegulatorInteractor) {}
 
-    public function store(Request $request, RecordBreachInteractor $interactor): JsonResponse
+    public function store(Request $request, RecordBreachInteractor $recordBreachInteractor): JsonResponse
     {
         /** @var User $platformAdmin */
         $platformAdmin = $request->user();
 
-        $breach = $interactor->execute(
+        $breachIncident = $recordBreachInteractor->execute(
             RecordBreachCommand::validateAndCreate($request),
             $platformAdmin,
             RequestOrigin::fromRequest($request),
         );
 
-        return (new BreachIncidentAdminDetailResource($breach))
+        return (new BreachIncidentAdminDetailResource($breachIncident))
             ->response($request)
             ->setStatusCode(Response::HTTP_CREATED);
     }
 
-    public function index(Request $request, ReviewBreachQueueInteractor $interactor): JsonResponse
+    public function index(Request $request, ReviewBreachQueueInteractor $reviewBreachQueueInteractor): JsonResponse
     {
         /** @var User $platformAdmin */
         $platformAdmin = $request->user();
 
-        $page = $interactor->execute(ReviewBreachQueueCommand::fromQuery($request), $platformAdmin, RequestOrigin::fromRequest($request));
+        $lengthAwarePaginator = $reviewBreachQueueInteractor->execute(ReviewBreachQueueCommand::fromQuery($request), $platformAdmin, RequestOrigin::fromRequest($request));
 
-        return (new BreachIncidentAdminCollection($page))->response($request);
+        return (new BreachIncidentAdminCollection($lengthAwarePaginator))->response($request);
     }
 
-    public function show(Request $request, string $breachId, ReviewBreachAsAdminInteractor $interactor): BreachIncidentAdminDetailResource
+    public function show(Request $request, string $breachId, ReviewBreachAsAdminInteractor $reviewBreachAsAdminInteractor): BreachIncidentAdminDetailResource
     {
         /** @var User $platformAdmin */
         $platformAdmin = $request->user();
 
-        return new BreachIncidentAdminDetailResource($interactor->execute($breachId, $platformAdmin, RequestOrigin::fromRequest($request)));
+        return new BreachIncidentAdminDetailResource($reviewBreachAsAdminInteractor->execute($breachId, $platformAdmin, RequestOrigin::fromRequest($request)));
     }
 
-    public function notifyCompanies(Request $request, string $breachId, NotifyBreachCompaniesInteractor $interactor): BreachIncidentAdminDetailResource
+    public function notifyCompanies(Request $request, string $breachId, NotifyBreachCompaniesInteractor $notifyBreachCompaniesInteractor): BreachIncidentAdminDetailResource
     {
         /** @var User $platformAdmin */
         $platformAdmin = $request->user();
 
-        $command = NotifyBreachCompaniesCommand::validateAndCreate(['breachId' => $breachId]);
+        $notifyBreachCompaniesCommand = NotifyBreachCompaniesCommand::validateAndCreate(['breachId' => $breachId]);
 
-        return new BreachIncidentAdminDetailResource($interactor->execute($command, $platformAdmin, RequestOrigin::fromRequest($request)));
+        return new BreachIncidentAdminDetailResource($notifyBreachCompaniesInteractor->execute($notifyBreachCompaniesCommand, $platformAdmin, RequestOrigin::fromRequest($request)));
     }
 
-    public function amend(Request $request, string $breachId, AmendBreachInteractor $interactor): BreachIncidentAdminDetailResource
+    public function amend(Request $request, string $breachId, AmendBreachInteractor $amendBreachInteractor): BreachIncidentAdminDetailResource
     {
         /** @var User $platformAdmin */
         $platformAdmin = $request->user();
 
-        $command = AmendBreachCommand::fromRequest($request, $breachId);
+        $amendBreachCommand = AmendBreachCommand::fromRequest($request, $breachId);
 
-        return new BreachIncidentAdminDetailResource($interactor->execute($command, $platformAdmin, RequestOrigin::fromRequest($request)));
+        return new BreachIncidentAdminDetailResource($amendBreachInteractor->execute($amendBreachCommand, $platformAdmin, RequestOrigin::fromRequest($request)));
     }
 
-    public function addCompany(Request $request, string $breachId, AddBreachCompanyInteractor $interactor): BreachIncidentAdminDetailResource
+    public function addCompany(Request $request, string $breachId, AddBreachCompanyInteractor $addBreachCompanyInteractor): BreachIncidentAdminDetailResource
     {
         /** @var User $platformAdmin */
         $platformAdmin = $request->user();
 
-        $command = AddBreachCompanyCommand::validateAndCreate([...$request->all(), 'breachId' => $breachId]);
+        $addBreachCompanyCommand = AddBreachCompanyCommand::validateAndCreate([...$request->all(), 'breachId' => $breachId]);
 
-        return new BreachIncidentAdminDetailResource($interactor->execute($command, $platformAdmin, RequestOrigin::fromRequest($request)));
+        return new BreachIncidentAdminDetailResource($addBreachCompanyInteractor->execute($addBreachCompanyCommand, $platformAdmin, RequestOrigin::fromRequest($request)));
     }
 
-    public function resolve(Request $request, string $breachId, ResolveBreachInteractor $interactor): BreachIncidentAdminDetailResource
+    public function resolve(Request $request, string $breachId, ResolveBreachInteractor $resolveBreachInteractor): BreachIncidentAdminDetailResource
     {
         /** @var User $platformAdmin */
         $platformAdmin = $request->user();
 
-        $command = ResolveBreachCommand::validateAndCreate([...$request->all(), 'breachId' => $breachId]);
+        $resolveBreachCommand = ResolveBreachCommand::validateAndCreate([...$request->all(), 'breachId' => $breachId]);
 
-        return new BreachIncidentAdminDetailResource($interactor->execute($command, $platformAdmin, RequestOrigin::fromRequest($request)));
+        return new BreachIncidentAdminDetailResource($resolveBreachInteractor->execute($resolveBreachCommand, $platformAdmin, RequestOrigin::fromRequest($request)));
     }
 
-    public function markFalseAlarm(Request $request, string $breachId, MarkBreachFalseAlarmInteractor $interactor): BreachIncidentAdminDetailResource
+    public function markFalseAlarm(Request $request, string $breachId, MarkBreachFalseAlarmInteractor $markBreachFalseAlarmInteractor): BreachIncidentAdminDetailResource
     {
         /** @var User $platformAdmin */
         $platformAdmin = $request->user();
 
-        $command = MarkBreachFalseAlarmCommand::validateAndCreate([...$request->all(), 'breachId' => $breachId]);
+        $markBreachFalseAlarmCommand = MarkBreachFalseAlarmCommand::validateAndCreate([...$request->all(), 'breachId' => $breachId]);
 
-        return new BreachIncidentAdminDetailResource($interactor->execute($command, $platformAdmin, RequestOrigin::fromRequest($request)));
+        return new BreachIncidentAdminDetailResource($markBreachFalseAlarmInteractor->execute($markBreachFalseAlarmCommand, $platformAdmin, RequestOrigin::fromRequest($request)));
     }
 
     public function fileWithRegulator(Request $request, string $breachId, string $companyId): BreachIncidentAdminDetailResource
@@ -121,13 +121,13 @@ class PlatformAdminBreachIncidentsController extends Controller
         /** @var User $platformAdmin */
         $platformAdmin = $request->user();
 
-        $command = FileBreachWithRegulatorCommand::validateAndCreate([
+        $fileBreachWithRegulatorCommand = FileBreachWithRegulatorCommand::validateAndCreate([
             'breachId' => $breachId,
             'company' => $companyId,
         ]);
 
         return new BreachIncidentAdminDetailResource(
-            $this->fileBreachWithRegulator->execute($command, $platformAdmin, RequestOrigin::fromRequest($request)),
+            $this->fileBreachWithRegulatorInteractor->execute($fileBreachWithRegulatorCommand, $platformAdmin, RequestOrigin::fromRequest($request)),
         );
     }
 }

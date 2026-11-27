@@ -16,13 +16,13 @@ use App\Compliance\Breach\UseCases\Interactors\RequestBreachFilingInteractor;
 
 class BreachNoticesController extends Controller
 {
-    public function __construct(protected readonly RequestBreachFilingInteractor $requestBreachFiling) {}
+    public function __construct(protected readonly RequestBreachFilingInteractor $requestBreachFilingInteractor) {}
 
-    public function index(Request $request, ListBreachNoticesInteractor $interactor): JsonResponse
+    public function index(Request $request, ListBreachNoticesInteractor $listBreachNoticesInteractor): JsonResponse
     {
-        $notices = $interactor->execute(ListBreachNoticesCommand::fromQuery($request), $request->company());
+        $breachIncidentCompanies = $listBreachNoticesInteractor->execute(ListBreachNoticesCommand::fromQuery($request), $request->company());
 
-        return (new BreachNoticeCollection($notices))->response($request);
+        return (new BreachNoticeCollection($breachIncidentCompanies))->response($request);
     }
 
     public function requestFiling(Request $request, string $companyId, string $breachId): BreachNoticeResource
@@ -30,11 +30,11 @@ class BreachNoticesController extends Controller
         /** @var User $owner — guaranteed by auth:sanctum */
         $owner = $request->user();
 
-        $command = RequestBreachFilingCommand::validateAndCreate([
+        $requestBreachFilingCommand = RequestBreachFilingCommand::validateAndCreate([
             'breachId' => $breachId,
             'company' => $companyId,
         ]);
 
-        return new BreachNoticeResource($this->requestBreachFiling->execute($command, $owner, RequestOrigin::fromRequest($request)));
+        return new BreachNoticeResource($this->requestBreachFilingInteractor->execute($requestBreachFilingCommand, $owner, RequestOrigin::fromRequest($request)));
     }
 }
