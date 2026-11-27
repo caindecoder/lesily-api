@@ -21,29 +21,29 @@ use App\Compliance\Breach\UseCases\Renderers\BreachCompanyPartRenderer;
 
 class AddBreachCompanyInteractor
 {
-    public function __construct(protected readonly BreachCompanyPartRenderer $renderer) {}
+    public function __construct(protected readonly BreachCompanyPartRenderer $breachCompanyPartRenderer) {}
 
-    public function execute(AddBreachCompanyCommand $command, User $platformAdmin, RequestOrigin $context): BreachIncidentRecord
+    public function execute(AddBreachCompanyCommand $addBreachCompanyCommand, User $platformAdmin, RequestOrigin $requestOrigin): BreachIncidentRecord
     {
-        return DB::transaction(function () use ($command, $platformAdmin, $context): BreachIncidentRecord {
-            $breach = BreachIncidentRecord::query()->whereKey($command->breachId)->lockForUpdate()->first()
+        return DB::transaction(function () use ($addBreachCompanyCommand, $platformAdmin, $requestOrigin): BreachIncidentRecord {
+            $breachIncident = BreachIncidentRecord::query()->whereKey($addBreachCompanyCommand->breachId)->lockForUpdate()->first()
                 ?? throw new ModelNotFoundException;
 
-            $this->guardOpen($breach);
+            $this->guardOpen($breachIncident);
 
-            BreachIncident::retrieve($breach->getKey())
-                ->addLateCompany($command, $platformAdmin, $this->partFor($breach, $command))
+            BreachIncident::retrieve($breachIncident->getKey())
+                ->addLateCompany($addBreachCompanyCommand, $platformAdmin, $this->partFor($breachIncident, $addBreachCompanyCommand))
                 ->persist();
 
-            $this->recordAudit($breach, $platformAdmin, $context);
+            $this->recordAudit($breachIncident, $platformAdmin, $requestOrigin);
 
-            return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breach->getKey())->firstOrFail();
+            return BreachIncidentRecord::query()->with(['companies.company', 'amendments'])->whereKey($breachIncident->getKey())->firstOrFail();
         });
     }
 
-    protected function guardOpen(BreachIncidentRecord $breach): void
+    protected function guardOpen(BreachIncidentRecord $breachIncident): void
     {
-        match ($breach->stage) {
+        match ($breachIncident->stage) {
             BreachStage::Resolved => throw LateBreachCompanyRefusedException::incidentResolved(),
             BreachStage::FalseAlarm => throw LateBreachCompanyRefusedException::falseAlarm(),
             BreachStage::Recorded, BreachStage::CompaniesNotified => null,
@@ -53,42 +53,42 @@ class AddBreachCompanyInteractor
     /**
      * @return array<string, string>
      */
-    protected function partFor(BreachIncidentRecord $breach, AddBreachCompanyCommand $command): array
+    protected function partFor(BreachIncidentRecord $breachIncident, AddBreachCompanyCommand $addBreachCompanyCommand): array
     {
-        $figures = $command->figures();
+        $figures = $addBreachCompanyCommand->figures();
 
-        return $this->renderer->render($breach, new BreachIncidentCompany([
+        return $this->breachCompanyPartRenderer->render($breachIncident, new BreachIncidentCompany([
             'data_types' => $figures['dataTypes'],
             'estimated_count' => $figures['estimatedCount'],
         ]));
     }
 
-    protected function recordAudit(BreachIncidentRecord $breach, User $platformAdmin, RequestOrigin $context): void
+    protected function recordAudit(BreachIncidentRecord $breachIncident, User $platformAdmin, RequestOrigin $requestOrigin): void
     {
         AuditEntry::query()->create([
-            'stored_event_id' => $this->addedEventIdFor($breach),
+            'stored_event_id' => $this->addedEventIdFor($breachIncident),
             'event_class' => 'BreachCompanyAdded',
             'subject_type' => AuditSubjectType::BreachIncident,
-            'subject_id' => $breach->getKey(),
+            'subject_id' => $breachIncident->getKey(),
             'subject_label' => null,
             'action' => AuditAction::BreachCompanyAdded,
             'description' => 'Platform admin added a company found after the breach notices and told it.',
             'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $platformAdmin->name,
-            'ip_address' => $context->ip,
-            'user_agent' => $context->boundedUserAgent(),
-            'request_id' => $context->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'metadata' => null,
             'severity' => 'critical',
             'recorded_at' => now(),
         ]);
     }
 
-    protected function addedEventIdFor(BreachIncidentRecord $breach): int
+    protected function addedEventIdFor(BreachIncidentRecord $breachIncident): int
     {
         return LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $breach->getKey())
+            ->where('aggregate_uuid', $breachIncident->getKey())
             ->where('event_class', BreachCompanyAdded::class)
             ->latest('id')
             ->firstOrFail()

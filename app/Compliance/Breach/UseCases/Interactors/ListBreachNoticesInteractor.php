@@ -12,7 +12,7 @@ class ListBreachNoticesInteractor
     /**
      * @return LengthAwarePaginator<int, BreachIncidentCompany>
      */
-    public function execute(ListBreachNoticesCommand $command, Company $company): LengthAwarePaginator
+    public function execute(ListBreachNoticesCommand $listBreachNoticesCommand, Company $company): LengthAwarePaginator
     {
         return BreachIncidentCompany::query()
             ->whereCompany($company)
@@ -20,6 +20,6 @@ class ListBreachNoticesInteractor
             ->with(['breach', 'company'])
             ->orderByDesc('notified_at')
             ->orderByDesc('id')
-            ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
+            ->paginate(perPage: $listBreachNoticesCommand->perPage ?? 15, page: $listBreachNoticesCommand->page ?? 1);
     }
 }

@@ -19,44 +19,44 @@ class ReviewBreachQueueInteractor
      *
      * @return LengthAwarePaginator<int, BreachIncidentRecord>
      */
-    public function execute(ReviewBreachQueueCommand $command, User $platformAdmin, RequestOrigin $context): LengthAwarePaginator
+    public function execute(ReviewBreachQueueCommand $reviewBreachQueueCommand, User $platformAdmin, RequestOrigin $requestOrigin): LengthAwarePaginator
     {
-        return DB::transaction(function () use ($command, $platformAdmin, $context): LengthAwarePaginator {
-            $page = BreachIncidentRecord::query()
-                ->whereStage($command->stage)
+        return DB::transaction(function () use ($reviewBreachQueueCommand, $platformAdmin, $requestOrigin): LengthAwarePaginator {
+            $breachIncidents = BreachIncidentRecord::query()
+                ->whereStage($reviewBreachQueueCommand->stage)
                 ->withCount('companies')
                 ->withSum('companies', 'estimated_count')
                 ->orderByDeadline()
                 // page defaults here, never through Laravel's resolver, which would
                 // honour a body-supplied page past the validated query filters.
-                ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
+                ->paginate(perPage: $reviewBreachQueueCommand->perPage ?? 15, page: $reviewBreachQueueCommand->page ?? 1);
 
-            $this->recordQueueRead($this->queryContextOf($command, $page), $platformAdmin, $context);
+            $this->recordQueueRead($this->queryContextOf($reviewBreachQueueCommand, $breachIncidents), $platformAdmin, $requestOrigin);
 
-            return $page;
+            return $breachIncidents;
         });
     }
 
     /**
-     * @param  LengthAwarePaginator<int, BreachIncidentRecord>  $page
+     * @param  LengthAwarePaginator<int, BreachIncidentRecord>  $lengthAwarePaginator
      * @return array<string, mixed>
      */
-    protected function queryContextOf(ReviewBreachQueueCommand $command, LengthAwarePaginator $page): array
+    protected function queryContextOf(ReviewBreachQueueCommand $reviewBreachQueueCommand, LengthAwarePaginator $lengthAwarePaginator): array
     {
         return [
             'filters' => array_filter(
-                ['stage' => $command->stage?->value],
+                ['stage' => $reviewBreachQueueCommand->stage?->value],
                 fn (?string $value): bool => $value !== null,
             ),
-            'result_count' => count($page->items()),
-            'page' => $page->currentPage(),
+            'result_count' => count($lengthAwarePaginator->items()),
+            'page' => $lengthAwarePaginator->currentPage(),
         ];
     }
 
     /**
      * @param  array<string, mixed>  $queryContext
      */
-    protected function recordQueueRead(array $queryContext, User $platformAdmin, RequestOrigin $context): void
+    protected function recordQueueRead(array $queryContext, User $platformAdmin, RequestOrigin $requestOrigin): void
     {
         AuditEntry::query()->create([
             'event_class' => 'BreachIncidentQueueViewed',
@@ -66,9 +66,9 @@ class ReviewBreachQueueInteractor
             'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $platformAdmin->name,
-            'ip_address' => $context->ip,
-            'user_agent' => $context->boundedUserAgent(),
-            'request_id' => $context->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'metadata' => $queryContext,
             'severity' => 'info',
             'recorded_at' => now(),

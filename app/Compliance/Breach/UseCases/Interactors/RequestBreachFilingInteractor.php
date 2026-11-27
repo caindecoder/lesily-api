@@ -23,73 +23,73 @@ class RequestBreachFilingInteractor
 {
     public function __construct(protected readonly MemberRoleCode $memberRoleCode) {}
 
-    public function execute(RequestBreachFilingCommand $command, User $owner, RequestOrigin $context): BreachIncidentCompany
+    public function execute(RequestBreachFilingCommand $requestBreachFilingCommand, User $owner, RequestOrigin $requestOrigin): BreachIncidentCompany
     {
-        return DB::transaction(function () use ($command, $owner, $context): BreachIncidentCompany {
-            $breach = BreachIncidentRecord::query()->whereKey($command->breachId)->lockForUpdate()->first()
+        return DB::transaction(function () use ($requestBreachFilingCommand, $owner, $requestOrigin): BreachIncidentCompany {
+            $breachIncident = BreachIncidentRecord::query()->whereKey($requestBreachFilingCommand->breachId)->lockForUpdate()->first()
                 ?? throw new ModelNotFoundException;
 
-            $notice = BreachIncidentCompany::query()
-                ->where('breach_incident_id', $breach->getKey())
-                ->whereCompany($command->company)
+            $breachIncidentCompany = BreachIncidentCompany::query()
+                ->where('breach_incident_id', $breachIncident->getKey())
+                ->whereCompany($requestBreachFilingCommand->company)
                 ->whereNotified()
                 ->first()
                 ?? throw new ModelNotFoundException;
 
-            $this->guardFilingOpen($breach, $notice);
+            $this->guardFilingOpen($breachIncident, $breachIncidentCompany);
 
-            BreachIncident::retrieve($breach->getKey())->requestFiling($command, $owner)->persist();
+            BreachIncident::retrieve($breachIncident->getKey())->requestFiling($requestBreachFilingCommand, $owner)->persist();
 
-            $this->recordAudit($notice, $owner, $context);
+            $this->recordAudit($breachIncidentCompany, $owner, $requestOrigin);
 
-            return BreachIncidentCompany::query()->whereKey($notice->getKey())->firstOrFail();
+            return BreachIncidentCompany::query()->whereKey($breachIncidentCompany->getKey())->firstOrFail();
         });
     }
 
-    protected function recordAudit(BreachIncidentCompany $notice, User $owner, RequestOrigin $context): void
+    protected function recordAudit(BreachIncidentCompany $breachIncidentCompany, User $owner, RequestOrigin $requestOrigin): void
     {
         AuditEntry::query()->create([
-            'company_id' => $notice->company_id,
-            'stored_event_id' => $this->requestedEventIdFor($notice),
+            'company_id' => $breachIncidentCompany->company_id,
+            'stored_event_id' => $this->requestedEventIdFor($breachIncidentCompany),
             'event_class' => 'BreachFilingRequested',
             'subject_type' => AuditSubjectType::BreachIncident,
-            'subject_id' => $notice->breach_incident_id,
+            'subject_id' => $breachIncidentCompany->breach_incident_id,
             'subject_label' => null,
             'action' => AuditAction::BreachFilingRequested,
             'description' => 'Owner asked Lesily to file a data breach with the Data Protection Authority.',
             'actor_user_id' => $owner->getKey(),
-            'actor_role_code' => $this->memberRoleCode->of($owner, $notice->company_id),
+            'actor_role_code' => $this->memberRoleCode->of($owner, $breachIncidentCompany->company_id),
             'actor_label' => $owner->name,
-            'ip_address' => $context->ip,
-            'user_agent' => $context->boundedUserAgent(),
-            'request_id' => $context->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'metadata' => null,
             'severity' => 'critical',
             'recorded_at' => now(),
         ]);
     }
 
-    protected function requestedEventIdFor(BreachIncidentCompany $notice): int
+    protected function requestedEventIdFor(BreachIncidentCompany $breachIncidentCompany): int
     {
         return LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $notice->breach_incident_id)
+            ->where('aggregate_uuid', $breachIncidentCompany->breach_incident_id)
             ->where('event_class', BreachFilingRequested::class)
-            ->where('event_properties->companyId', $notice->company_id)
+            ->where('event_properties->companyId', $breachIncidentCompany->company_id)
             ->sole()
             ->getKey();
     }
 
-    protected function guardFilingOpen(BreachIncidentRecord $breach, BreachIncidentCompany $notice): void
+    protected function guardFilingOpen(BreachIncidentRecord $breachIncident, BreachIncidentCompany $breachIncidentCompany): void
     {
-        if ($breach->stage === BreachStage::Resolved) {
+        if ($breachIncident->stage === BreachStage::Resolved) {
             throw BreachFilingNotOpenException::resolved();
         }
 
-        if ($notice->filed_at !== null) {
+        if ($breachIncidentCompany->filed_at !== null) {
             throw BreachFilingNotOpenException::alreadyFiled();
         }
 
-        if ($notice->filing_requested_at !== null) {
+        if ($breachIncidentCompany->filing_requested_at !== null) {
             throw BreachFilingNotOpenException::alreadyRequested();
         }
     }

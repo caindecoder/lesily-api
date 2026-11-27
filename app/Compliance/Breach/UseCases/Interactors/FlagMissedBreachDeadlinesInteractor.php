@@ -16,38 +16,38 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class FlagMissedBreachDeadlinesInteractor
 {
-    public function execute(CarbonInterface $at): int
+    public function execute(CarbonInterface $scannedAt): int
     {
         /** @var array<int, string> $breachIds */
-        $breachIds = BreachIncidentRecord::query()->whereDeadlineMissedToFlag($at)->pluck('id')->all();
+        $breachIds = BreachIncidentRecord::query()->whereDeadlineMissedToFlag($scannedAt)->pluck('id')->all();
 
         $flagged = 0;
 
         foreach ($breachIds as $breachId) {
             try {
-                if ($this->flag($breachId, $at)) {
+                if ($this->flag($breachId, $scannedAt)) {
                     $flagged++;
                 }
-            } catch (Throwable $failure) {
-                report(new RuntimeException("Breach deadline flag failed for incident {$breachId}.", previous: $failure));
+            } catch (Throwable $throwable) {
+                report(new RuntimeException("Breach deadline flag failed for incident {$breachId}.", previous: $throwable));
             }
         }
 
         return $flagged;
     }
 
-    protected function flag(string $breachId, CarbonInterface $at): bool
+    protected function flag(string $breachId, CarbonInterface $scannedAt): bool
     {
-        return DB::transaction(function () use ($breachId, $at): bool {
+        return DB::transaction(function () use ($breachId, $scannedAt): bool {
             BreachIncidentRecord::query()->whereKey($breachId)->lockForUpdate()->firstOrFail();
 
-            $incident = BreachIncident::retrieve($breachId)->flagMissedDeadline($at);
+            $breachIncident = BreachIncident::retrieve($breachId)->flagMissedDeadline($scannedAt);
 
-            if ($incident->getRecordedEvents() === []) {
+            if ($breachIncident->getRecordedEvents() === []) {
                 return false;
             }
 
-            $incident->persist();
+            $breachIncident->persist();
             $this->recordAudit($breachId);
 
             return true;
