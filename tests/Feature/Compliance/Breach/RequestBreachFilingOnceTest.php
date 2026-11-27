@@ -30,9 +30,9 @@ class RequestBreachFilingOnceTest extends BreachIncidentsTestCase
         try {
             BreachIncident::retrieve($breachId)->requestFiling($this->aRequestFor($breachId), $this->owner);
             $this->fail('A request from a company not told, or one already asking, must be refused.');
-        } catch (BreachFilingNotOpenException $refusal) {
+        } catch (BreachFilingNotOpenException $breachFilingNotOpenException) {
             // Then it is refused with the reason and no further request is recorded
-            $this->assertSame($message, $refusal->getMessage());
+            $this->assertSame($message, $breachFilingNotOpenException->getMessage());
             $this->assertSame($requestsBefore, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachFilingRequested::class)->count());
         }
     }
@@ -44,17 +44,17 @@ class RequestBreachFilingOnceTest extends BreachIncidentsTestCase
     {
         return [
             'a company not notified' => [
-                fn (self $test): string => $test->aRecordedIncident(),
+                fn (self $requestBreachFilingOnceTest): string => $requestBreachFilingOnceTest->aRecordedIncident(),
                 'Only a company notified of this breach can ask Lesily to file it.',
                 0,
             ],
             'a second request' => [
-                fn (self $test): string => $test->anIncidentAlreadyAskedToBeFiled(),
+                fn (self $requestBreachFilingOnceTest): string => $requestBreachFilingOnceTest->anIncidentAlreadyAskedToBeFiled(),
                 'Lesily has already been asked to file this breach for the company.',
                 1,
             ],
             'a request after the filing' => [
-                fn (self $test): string => $test->anIncidentFiledFor($test->contosoCompany),
+                fn (self $requestBreachFilingOnceTest): string => $requestBreachFilingOnceTest->anIncidentFiledFor($requestBreachFilingOnceTest->contosoCompany),
                 'Lesily has already filed this breach with the regulator for the company.',
                 1,
             ],

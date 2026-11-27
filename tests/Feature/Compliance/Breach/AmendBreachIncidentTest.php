@@ -499,7 +499,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
             ['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 120],
             ['companyId' => $this->otherCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 30],
         ]);
-        $ownerB = $this->anOwnerOf($this->otherCompany);
+        $owner = $this->anOwnerOf($this->otherCompany);
         Notification::fake();
 
         // When the platform admin corrects company A's count to 145
@@ -510,7 +510,7 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
 
         // Then company A's notices list shows 145, company B's still shows 30, and nobody is told
         $this->assertSame([145], $this->listNotices($this->owner, $this->contosoCompany)->json('data.*.estimated_count'));
-        $this->assertSame([30], $this->listNotices($ownerB, $this->otherCompany)->json('data.*.estimated_count'));
+        $this->assertSame([30], $this->listNotices($owner, $this->otherCompany)->json('data.*.estimated_count'));
         Notification::assertNothingSent();
     }
 
@@ -518,23 +518,23 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     public function when_a_late_company_s_figures_are_corrected_then_the_list_with_it_is_accepted(): void
     {
         // Given an incident whose company A (about 40 people) was notified, and Initech (about 15) added late
-        $initech = Company::factory()->named('Initech Systems')->createOne();
+        $initechCompany = Company::factory()->named('Initech Systems')->createOne();
         $breachId = $this->aNotifiedIncident($this->contosoCompany);
         BreachIncident::retrieve($breachId)->addLateCompany(AddBreachCompanyCommand::from([
-            'breachId' => $breachId, 'company' => $initech, 'dataTypes' => [BreachDataType::Payroll], 'estimatedCount' => 15, 'reason' => self::REASON,
+            'breachId' => $breachId, 'company' => $initechCompany, 'dataTypes' => [BreachDataType::Payroll], 'estimatedCount' => 15, 'reason' => self::REASON,
         ]), $this->platformAdmin, ['description' => 'A payroll export was emailed to the wrong recipient.'])->persist();
 
         // When the platform admin corrects Initech's count to 20, sending the whole list with Initech on it
         $response = $this->amendIncident($this->platformAdmin, $breachId, $this->aCorrection(['companies' => [
             ['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40],
-            ['companyId' => $initech->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 20],
+            ['companyId' => $initechCompany->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 20],
         ]]));
 
         // Then the correction is taken: one count change for Initech, 15 to 20, and Initech's row reads 20
         $response->assertOk();
-        $change = BreachAmendment::query()->where('breach_incident_id', $breachId)->where('field', 'estimated_count')->sole();
-        $this->assertSame([$initech->getKey(), 15, 20], [$change->company_id, $change->old_value, $change->new_value]);
-        $this->assertSame(20, BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->where('company_id', $initech->getKey())->sole()->estimated_count);
+        $breachAmendment = BreachAmendment::query()->where('breach_incident_id', $breachId)->where('field', 'estimated_count')->sole();
+        $this->assertSame([$initechCompany->getKey(), 15, 20], [$breachAmendment->company_id, $breachAmendment->old_value, $breachAmendment->new_value]);
+        $this->assertSame(20, BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->where('company_id', $initechCompany->getKey())->sole()->estimated_count);
     }
 
     #[Test]
@@ -551,8 +551,8 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
 
         // Then company B joins the incident, added by the platform admin now, and the addition is in the history
         $response->assertOk();
-        $row = BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->where('company_id', $this->otherCompany->getKey())->sole();
-        $this->assertSame([['payroll'], 7, $this->platformAdmin->getKey(), '2026-05-05 09:00:00'], [$row->data_types, $row->estimated_count, $row->added_by, $row->added_at->toDateTimeString()]);
+        $breachIncidentCompany = BreachIncidentCompany::query()->where('breach_incident_id', $breachId)->where('company_id', $this->otherCompany->getKey())->sole();
+        $this->assertSame([['payroll'], 7, $this->platformAdmin->getKey(), '2026-05-05 09:00:00'], [$breachIncidentCompany->data_types, $breachIncidentCompany->estimated_count, $breachIncidentCompany->added_by, $breachIncidentCompany->added_at->toDateTimeString()]);
         $this->assertHistory($breachId, [['company_added', $this->otherCompany->getKey(), null, ['dataTypes' => ['payroll'], 'estimatedCount' => 7]]]);
     }
 
@@ -654,10 +654,10 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     public static function provideCorrectionsToResend(): array
     {
         return [
-            'a severity' => [fn (self $test): array => ['severity' => 'medium']],
-            'a company added' => [fn (self $test): array => ['companies' => [$test->aNotifiedPartOf($test->contosoCompany), ['companyId' => $test->otherCompany->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7]]]],
-            'a company\'s data types' => [fn (self $test): array => ['companies' => [['companyId' => $test->contosoCompany->getKey(), 'dataTypes' => ['pii', 'banking'], 'estimatedCount' => 40]]]],
-            'a company\'s count' => [fn (self $test): array => ['companies' => [['companyId' => $test->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 55]]]],
+            'a severity' => [fn (self $amendBreachIncidentTest): array => ['severity' => 'medium']],
+            'a company added' => [fn (self $amendBreachIncidentTest): array => ['companies' => [$amendBreachIncidentTest->aNotifiedPartOf($amendBreachIncidentTest->contosoCompany), ['companyId' => $amendBreachIncidentTest->otherCompany->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 7]]]],
+            'a company\'s data types' => [fn (self $amendBreachIncidentTest): array => ['companies' => [['companyId' => $amendBreachIncidentTest->contosoCompany->getKey(), 'dataTypes' => ['pii', 'banking'], 'estimatedCount' => 40]]]],
+            'a company\'s count' => [fn (self $amendBreachIncidentTest): array => ['companies' => [['companyId' => $amendBreachIncidentTest->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 55]]]],
         ];
     }
 
@@ -668,27 +668,27 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     {
         return [
             'the description' => [
-                fn (self $test): array => ['description' => 'Payroll and bank export left on a shared drive'],
-                fn (self $test): array => ['field' => 'description', 'companyId' => null, 'old' => 'A payroll export was emailed to the wrong recipient.', 'new' => 'Payroll and bank export left on a shared drive'],
-                fn (self $test, TestResponse $response): mixed => $response->json('data.description'),
+                fn (self $amendBreachIncidentTest): array => ['description' => 'Payroll and bank export left on a shared drive'],
+                fn (self $amendBreachIncidentTest): array => ['field' => 'description', 'companyId' => null, 'old' => 'A payroll export was emailed to the wrong recipient.', 'new' => 'Payroll and bank export left on a shared drive'],
+                fn (self $amendBreachIncidentTest, TestResponse $response): mixed => $response->json('data.description'),
             ],
             'the likely consequences' => [
-                fn (self $test): array => ['likelyConsequences' => 'Bank details may be used to attempt payment fraud.'],
-                fn (self $test): array => ['field' => 'likely_consequences', 'companyId' => null, 'old' => 'Salary and bank details may be read by one outside person.', 'new' => 'Bank details may be used to attempt payment fraud.'],
-                fn (self $test, TestResponse $response): mixed => $response->json('data.likely_consequences'),
+                fn (self $amendBreachIncidentTest): array => ['likelyConsequences' => 'Bank details may be used to attempt payment fraud.'],
+                fn (self $amendBreachIncidentTest): array => ['field' => 'likely_consequences', 'companyId' => null, 'old' => 'Salary and bank details may be read by one outside person.', 'new' => 'Bank details may be used to attempt payment fraud.'],
+                fn (self $amendBreachIncidentTest, TestResponse $response): mixed => $response->json('data.likely_consequences'),
             ],
             'the measures' => [
-                fn (self $test): array => ['measures' => 'The shared drive was locked and its access log is being reviewed.'],
-                fn (self $test): array => ['field' => 'measures', 'companyId' => null, 'old' => 'The recipient was asked to delete the file; exports now need a second check.', 'new' => 'The shared drive was locked and its access log is being reviewed.'],
-                fn (self $test, TestResponse $response): mixed => $response->json('data.measures'),
+                fn (self $amendBreachIncidentTest): array => ['measures' => 'The shared drive was locked and its access log is being reviewed.'],
+                fn (self $amendBreachIncidentTest): array => ['field' => 'measures', 'companyId' => null, 'old' => 'The recipient was asked to delete the file; exports now need a second check.', 'new' => 'The shared drive was locked and its access log is being reviewed.'],
+                fn (self $amendBreachIncidentTest, TestResponse $response): mixed => $response->json('data.measures'),
             ],
             'a company\'s data types' => [
-                fn (self $test): array => ['companies' => [
-                    ['companyId' => $test->contosoCompany->getKey(), 'dataTypes' => ['pii', 'banking'], 'estimatedCount' => 40],
-                    $test->aNotifiedPartOf($test->otherCompany),
+                fn (self $amendBreachIncidentTest): array => ['companies' => [
+                    ['companyId' => $amendBreachIncidentTest->contosoCompany->getKey(), 'dataTypes' => ['pii', 'banking'], 'estimatedCount' => 40],
+                    $amendBreachIncidentTest->aNotifiedPartOf($amendBreachIncidentTest->otherCompany),
                 ]],
-                fn (self $test): array => ['field' => 'data_types', 'companyId' => $test->contosoCompany->getKey(), 'old' => ['pii'], 'new' => ['pii', 'banking']],
-                fn (self $test, TestResponse $response): mixed => $response->collect('data.companies')->firstWhere('company_id', $test->contosoCompany->getKey())['data_types'],
+                fn (self $amendBreachIncidentTest): array => ['field' => 'data_types', 'companyId' => $amendBreachIncidentTest->contosoCompany->getKey(), 'old' => ['pii'], 'new' => ['pii', 'banking']],
+                fn (self $amendBreachIncidentTest, TestResponse $response): mixed => $response->collect('data.companies')->firstWhere('company_id', $amendBreachIncidentTest->contosoCompany->getKey())['data_types'],
             ],
         ];
     }
@@ -722,8 +722,8 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
     public static function provideClosedStages(): array
     {
         return [
-            'resolved' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->resolved(), 'A resolved breach incident cannot be amended.'],
-            'a false alarm' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->falseAlarm(), 'A breach incident marked as a false alarm cannot be amended.'],
+            'resolved' => [fn (BreachIncidentRecordFactory $breachIncidentRecordFactory): BreachIncidentRecordFactory => $breachIncidentRecordFactory->resolved(), 'A resolved breach incident cannot be amended.'],
+            'a false alarm' => [fn (BreachIncidentRecordFactory $breachIncidentRecordFactory): BreachIncidentRecordFactory => $breachIncidentRecordFactory->falseAlarm(), 'A breach incident marked as a false alarm cannot be amended.'],
         ];
     }
 
@@ -775,10 +775,10 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
         ];
     }
 
-    protected function amendIncident(?User $caller, string $breachId, array $body): TestResponse
+    protected function amendIncident(?User $actor, string $breachId, array $body): TestResponse
     {
-        if ($caller !== null) {
-            Sanctum::actingAs($caller);
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
         }
 
         return $this->patchJson("/api/v1/admin/breach-incidents/{$breachId}", $body);
@@ -822,25 +822,25 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
 
     protected function assertAmendedOnce(string $breachId, array $changes): int
     {
-        $event = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachAmended::class)->sole();
-        $properties = $event->event_properties;
+        $eloquentStoredEvent = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachAmended::class)->sole();
+        $properties = $eloquentStoredEvent->event_properties;
 
         $this->assertEquals($changes, $properties['changes']);
         $this->assertSame([self::REASON, $this->platformAdmin->getKey()], [$properties['reason'], $properties['amendedByUserId']]);
         $this->assertTrue(CarbonImmutable::now()->equalTo(CarbonImmutable::parse($properties['amendedAt'])));
 
-        return (int) $event->getKey();
+        return (int) $eloquentStoredEvent->getKey();
     }
 
     protected function assertHistory(string $breachId, array $rows): void
     {
-        $history = BreachAmendment::query()->where('breach_incident_id', $breachId)->orderBy('field')->orderBy('company_id')->get();
-        $this->assertCount(count($rows), $history);
+        $breachAmendments = BreachAmendment::query()->where('breach_incident_id', $breachId)->orderBy('field')->orderBy('company_id')->get();
+        $this->assertCount(count($rows), $breachAmendments);
 
-        $this->assertSame($rows, $history->map(fn (BreachAmendment $row): array => [$row->field->value, $row->company_id, $row->old_value, $row->new_value])->all());
+        $this->assertSame($rows, $breachAmendments->map(fn (BreachAmendment $breachAmendment): array => [$breachAmendment->field->value, $breachAmendment->company_id, $breachAmendment->old_value, $breachAmendment->new_value])->all());
         $this->assertSame(
             [[self::REASON], [$this->platformAdmin->getKey()], [CarbonImmutable::now()->toDateTimeString()]],
-            [$history->pluck('reason')->unique()->values()->all(), $history->pluck('amended_by')->unique()->values()->all(), $history->map(fn (BreachAmendment $row): string => $row->amended_at->toDateTimeString())->unique()->values()->all()],
+            [$breachAmendments->pluck('reason')->unique()->values()->all(), $breachAmendments->pluck('amended_by')->unique()->values()->all(), $breachAmendments->map(fn (BreachAmendment $breachAmendment): string => $breachAmendment->amended_at->toDateTimeString())->unique()->values()->all()],
         );
     }
 
@@ -866,8 +866,8 @@ class AmendBreachIncidentTest extends BreachIncidentsTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
-        $this->assertSame('Symfony', $entry->user_agent);
+        $auditEntry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $this->assertSame('Symfony', $auditEntry->user_agent);
     }
 
     protected function assertNothingAmended(string $breachId, array $before): void

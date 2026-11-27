@@ -26,9 +26,9 @@ class FileBreachWithRegulatorOnceTest extends BreachIncidentsTestCase
         try {
             BreachIncident::retrieve($breachId)->fileWithRegulator($this->aFilingCommandFor($breachId, $this->contosoCompany), $this->platformAdmin, $this->aRegulatorFiling());
             $this->fail('A second filing for a company must be refused.');
-        } catch (BreachFilingNotOpenException $refusal) {
+        } catch (BreachFilingNotOpenException $breachFilingNotOpenException) {
             // Then it is refused with the reason and no second filing is recorded
-            $this->assertSame('Lesily has already filed this breach with the regulator for the company.', $refusal->getMessage());
+            $this->assertSame('Lesily has already filed this breach with the regulator for the company.', $breachFilingNotOpenException->getMessage());
             $this->assertSame(1, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachFiledWithRegulator::class)->count());
         }
     }

@@ -135,8 +135,8 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
         $this->aRecordedIncident();
         $ambient = DB::transactionLevel();
         $queries = [];
-        DB::listen(function (QueryExecuted $query) use (&$queries): void {
-            $queries[] = ['sql' => $query->sql, 'depth' => DB::transactionLevel()];
+        DB::listen(function (QueryExecuted $queryExecuted) use (&$queries): void {
+            $queries[] = ['sql' => $queryExecuted->sql, 'depth' => DB::transactionLevel()];
         });
 
         // When the daily scan runs
@@ -160,16 +160,16 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
             $this->aRecordedIncident(['dateDiscovered' => '2026-05-04T18:00:00Z']),
         ];
         $failing = $breachIds[$failingPosition];
-        $cause = new RuntimeException('induced audit failure');
-        AuditEntry::creating(fn (AuditEntry $entry) => $entry->subject_id === $failing ? throw $cause : null);
+        $inducedRuntimeException = new RuntimeException('induced audit failure');
+        AuditEntry::creating(fn (AuditEntry $auditEntry) => $auditEntry->subject_id === $failing ? throw $inducedRuntimeException : null);
 
         // When the daily scan runs
         $this->runFlagMissedDeadlines()->expectsOutput('2 missed deadline(s) flagged.')->assertSuccessful();
 
         // Then the failing incident is left unflagged and reported with its cause; the others are flagged
         $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $failing)->where('event_class', BreachDeadlineMissed::class)->count());
-        Exceptions::assertReported(fn (RuntimeException $reported): bool => $reported->getMessage() === "Breach deadline flag failed for incident {$failing}."
-            && $reported->getPrevious() === $cause);
+        Exceptions::assertReported(fn (RuntimeException $reportedRuntimeException): bool => $reportedRuntimeException->getMessage() === "Breach deadline flag failed for incident {$failing}."
+            && $reportedRuntimeException->getPrevious() === $inducedRuntimeException);
         $this->assertSame(2, BreachIncidentRecord::query()->whereNotNull('deadline_missed_at')->count());
     }
 
@@ -191,7 +191,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
 
         // Then the flag is kept, the gap is reported, and nobody is sent anything
         $this->assertFlagged($breachId, CarbonImmutable::parse(self::THE_NIGHT_AFTER));
-        Exceptions::assertReported(fn (RuntimeException $gap): bool => $gap->getMessage() === "No platform admin to alert about the missed deadline of breach incident {$breachId}.");
+        Exceptions::assertReported(fn (RuntimeException $runtimeException): bool => $runtimeException->getMessage() === "No platform admin to alert about the missed deadline of breach incident {$breachId}.");
         Notification::assertNothingSent();
     }
 
@@ -288,15 +288,15 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
     {
         // Given an incident affecting Zenith Retail and Acme Payroll, named in that order, two allowlisted
         // platform admins, and both companies' owners
-        $zenith = Company::factory()->named('Zenith Retail')->create();
-        $acme = Company::factory()->named('Acme Payroll')->create();
+        $zenithCompany = Company::factory()->named('Zenith Retail')->create();
+        $acmeCompany = Company::factory()->named('Acme Payroll')->create();
         $breachId = $this->aRecordedIncident(['companies' => [
-            ['companyId' => $zenith->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 12],
-            ['companyId' => $acme->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 30],
+            ['companyId' => $zenithCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 12],
+            ['companyId' => $acmeCompany->getKey(), 'dataTypes' => ['payroll'], 'estimatedCount' => 30],
         ]]);
         $this->allowlist([$this->platformAdmin->getKey(), User::factory()->create()->getKey()]);
-        $this->anOwnerOf($zenith);
-        $this->anOwnerOf($acme);
+        $this->anOwnerOf($zenithCompany);
+        $this->anOwnerOf($acmeCompany);
 
         // When the daily scan runs and the alerts leave the queue
         $this->runFlagMissedDeadlines()->assertSuccessful();
@@ -432,10 +432,10 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
         $this->assertCount(2, $platformAdmins);
         foreach ($platformAdmins as $platformAdmin) {
             Notification::assertSentToTimes($platformAdmin, SystemNotification::class, 1);
-            Notification::assertSentTo($platformAdmin, SystemNotification::class, fn (SystemNotification $alert): bool => $alert->type === NotificationType::BreachDeadlineMissed
-                && $alert->companyName === $companies
-                && $alert->companyId === null
-                && $alert->details === ['incident' => $breachId, 'deadline' => '7 May 2026, 14:00 UTC']);
+            Notification::assertSentTo($platformAdmin, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::BreachDeadlineMissed
+                && $systemNotification->companyName === $companies
+                && $systemNotification->companyId === null
+                && $systemNotification->details === ['incident' => $breachId, 'deadline' => '7 May 2026, 14:00 UTC']);
         }
         Notification::assertCount(2);
     }
@@ -449,12 +449,12 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
 
     protected function assertFlagged(string $breachId, CarbonImmutable $missedAt): void
     {
-        $event = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachDeadlineMissed::class)->sole();
-        $this->assertSame(['breachId' => $breachId, 'missedAt' => $missedAt->toAtomString()], $event->event_properties);
+        $eloquentStoredEvent = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachDeadlineMissed::class)->sole();
+        $this->assertSame(['breachId' => $breachId, 'missedAt' => $missedAt->toAtomString()], $eloquentStoredEvent->event_properties);
 
-        $incident = BreachIncidentRecord::query()->findOrFail($breachId);
-        $this->assertEquals($missedAt, $incident->deadline_missed_at);
-        $this->assertSame(BreachStage::Recorded, $incident->stage);
+        $breachIncident = BreachIncidentRecord::query()->findOrFail($breachId);
+        $this->assertEquals($missedAt, $breachIncident->deadline_missed_at);
+        $this->assertSame(BreachStage::Recorded, $breachIncident->stage);
     }
 
     protected function assertFlagAudited(string $breachId): void

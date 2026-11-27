@@ -34,10 +34,10 @@ class FlagMissedBreachDeadlineOnceTest extends BreachIncidentsTestCase
         $flagsBefore = $this->flagCountOf($breachId);
 
         // When its aggregate is asked to flag the missed deadline now
-        $incident = BreachIncident::retrieve($breachId)->flagMissedDeadline(CarbonImmutable::now());
+        $breachIncident = BreachIncident::retrieve($breachId)->flagMissedDeadline(CarbonImmutable::now());
 
         // Then nothing is recorded and the store is unchanged
-        $this->assertSame([], $incident->getRecordedEvents());
+        $this->assertSame([], $breachIncident->getRecordedEvents());
         $this->assertSame($flagsBefore, $this->flagCountOf($breachId));
     }
 

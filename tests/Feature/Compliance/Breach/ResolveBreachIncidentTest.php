@@ -256,8 +256,8 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
 
         // Then the incident is resolved with every fact kept whole
         $response->assertOk();
-        $row = BreachIncidentRecord::query()->findOrFail($breachId);
-        $this->assertSame($longest, [$row->root_cause, $row->remediation_steps, $row->resolution_summary]);
+        $breachIncident = BreachIncidentRecord::query()->findOrFail($breachId);
+        $this->assertSame($longest, [$breachIncident->root_cause, $breachIncident->remediation_steps, $breachIncident->resolution_summary]);
     }
 
     #[Test]
@@ -344,8 +344,8 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
     public static function provideClosedStages(): array
     {
         return [
-            'resolved' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->resolved(), 'A resolved breach incident cannot be resolved again.'],
-            'a false alarm' => [fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->falseAlarm(), 'A breach incident marked as a false alarm cannot be resolved.'],
+            'resolved' => [fn (BreachIncidentRecordFactory $breachIncidentRecordFactory): BreachIncidentRecordFactory => $breachIncidentRecordFactory->resolved(), 'A resolved breach incident cannot be resolved again.'],
+            'a false alarm' => [fn (BreachIncidentRecordFactory $breachIncidentRecordFactory): BreachIncidentRecordFactory => $breachIncidentRecordFactory->falseAlarm(), 'A breach incident marked as a false alarm cannot be resolved.'],
         ];
     }
 
@@ -364,10 +364,10 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         ];
     }
 
-    protected function resolve(?User $caller, string $breachId, array $body): TestResponse
+    protected function resolve(?User $actor, string $breachId, array $body): TestResponse
     {
-        if ($caller !== null) {
-            Sanctum::actingAs($caller);
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
         }
 
         return $this->patchJson("/api/v1/admin/breach-incidents/{$breachId}/resolve", $body);
@@ -385,7 +385,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
 
     protected function aLateCompanyOn(string $breachId, Company $company): void
     {
-        $command = AddBreachCompanyCommand::from([
+        $addBreachCompanyCommand = AddBreachCompanyCommand::from([
             'breachId' => $breachId,
             'companyId' => $company,
             'dataTypes' => ['payroll'],
@@ -394,7 +394,7 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
         ]);
 
         BreachIncident::retrieve($breachId)
-            ->addLateCompany($command, $this->platformAdmin, ['description' => 'A payroll export was emailed to the wrong recipient.'])
+            ->addLateCompany($addBreachCompanyCommand, $this->platformAdmin, ['description' => 'A payroll export was emailed to the wrong recipient.'])
             ->persist();
     }
 
@@ -423,26 +423,26 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
 
     protected function assertResolutionStored(string $breachId): int
     {
-        $resolved = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->latest('id')->firstOrFail();
-        $this->assertSame(BreachResolved::class, $resolved->event_class);
+        $resolvedEloquentStoredEvent = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->latest('id')->firstOrFail();
+        $this->assertSame(BreachResolved::class, $resolvedEloquentStoredEvent->event_class);
         $this->assertSame([$breachId, self::ROOT_CAUSE, self::REMEDIATION, self::SUMMARY, $this->platformAdmin->getKey(), self::RESOLVED_AT_ISO], [
-            $resolved->event_properties['breachId'],
-            $resolved->event_properties['rootCause'],
-            $resolved->event_properties['remediationSteps'],
-            $resolved->event_properties['summary'],
-            $resolved->event_properties['resolvedByUserId'],
-            CarbonImmutable::parse($resolved->event_properties['resolvedAt'])->toIso8601String(),
+            $resolvedEloquentStoredEvent->event_properties['breachId'],
+            $resolvedEloquentStoredEvent->event_properties['rootCause'],
+            $resolvedEloquentStoredEvent->event_properties['remediationSteps'],
+            $resolvedEloquentStoredEvent->event_properties['summary'],
+            $resolvedEloquentStoredEvent->event_properties['resolvedByUserId'],
+            CarbonImmutable::parse($resolvedEloquentStoredEvent->event_properties['resolvedAt'])->toIso8601String(),
         ]);
 
-        return (int) $resolved->getKey();
+        return (int) $resolvedEloquentStoredEvent->getKey();
     }
 
     protected function assertResolutionProjected(string $breachId): void
     {
-        $row = BreachIncidentRecord::query()->findOrFail($breachId);
+        $breachIncident = BreachIncidentRecord::query()->findOrFail($breachId);
         $this->assertSame(
             [BreachStage::Resolved, self::ROOT_CAUSE, self::REMEDIATION, self::SUMMARY, $this->platformAdmin->getKey(), self::RESOLVED_AT_ISO],
-            [$row->stage, $row->root_cause, $row->remediation_steps, $row->resolution_summary, $row->resolved_by, $row->resolved_at?->toIso8601String()],
+            [$breachIncident->stage, $breachIncident->root_cause, $breachIncident->remediation_steps, $breachIncident->resolution_summary, $breachIncident->resolved_by, $breachIncident->resolved_at?->toIso8601String()],
         );
     }
 
@@ -469,8 +469,8 @@ class ResolveBreachIncidentTest extends BreachIncidentsTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
-        $this->assertSame('Symfony', $entry->user_agent);
+        $auditEntry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $this->assertSame('Symfony', $auditEntry->user_agent);
     }
 
     protected function assertNobodyTold(): void

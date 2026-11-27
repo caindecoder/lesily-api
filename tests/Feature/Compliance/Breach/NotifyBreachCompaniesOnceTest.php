@@ -33,9 +33,9 @@ class NotifyBreachCompaniesOnceTest extends BreachIncidentsTestCase
         try {
             BreachIncident::retrieve($breachId)->notifyCompanies($this->platformAdmin, $parts);
             $this->fail('Notifying an incident that is not at Recorded must be refused.');
-        } catch (BreachIncidentNotRecordedException $refusal) {
+        } catch (BreachIncidentNotRecordedException $breachIncidentNotRecordedException) {
             // Then it is refused with its stage named and no further notice is recorded
-            $this->assertSame($message, $refusal->getMessage());
+            $this->assertSame($message, $breachIncidentNotRecordedException->getMessage());
             $this->assertSame($notifiedBefore, LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->where('event_class', BreachCompaniesNotified::class)->count());
         }
     }

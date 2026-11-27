@@ -123,8 +123,8 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
         $response = $this->recordBreach($this->platformAdmin, $payload);
 
         // Then the discovery moment and the deadline are kept in UTC
-        $breach = BreachIncidentRecord::query()->findOrFail($this->assertIncidentCreated($response));
-        $this->assertSame(['2026-05-04 14:00:00', '2026-05-07 14:00:00'], [$breach->getRawOriginal('date_discovered'), $breach->getRawOriginal('deadline')]);
+        $breachIncident = BreachIncidentRecord::query()->findOrFail($this->assertIncidentCreated($response));
+        $this->assertSame(['2026-05-04 14:00:00', '2026-05-07 14:00:00'], [$breachIncident->getRawOriginal('date_discovered'), $breachIncident->getRawOriginal('deadline')]);
         $this->assertSame(['2026-05-04T14:00:00.000000Z', '2026-05-07T14:00:00.000000Z'], [$response->json('data.date_discovered'), $response->json('data.deadline')]);
     }
 
@@ -340,18 +340,18 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
 
     protected function assertBreachRecordedStored(string $breachId): int
     {
-        $event = LesilyStoredEvent::query()
+        $eloquentStoredEvent = LesilyStoredEvent::query()
             ->where('aggregate_uuid', $breachId)
             ->where('event_class', BreachRecorded::class)
             ->sole();
 
-        $properties = $event->event_properties;
-        $this->assertNull($event->meta_data['company_id'] ?? null);
+        $properties = $eloquentStoredEvent->event_properties;
+        $this->assertNull($eloquentStoredEvent->meta_data['company_id'] ?? null);
         $this->assertSame([$breachId, $this->platformAdmin->getKey(), 'high'], [$properties['breachId'], $properties['recordedByUserId'], $properties['severity']]);
         $this->assertTrue(CarbonImmutable::parse($properties['deadline'])->equalTo(CarbonImmutable::parse('2026-05-07T14:00:00Z')));
         $this->assertSame([['companyId' => $this->contosoCompany->getKey(), 'dataTypes' => ['pii'], 'estimatedCount' => 40]], $properties['companies']);
 
-        return (int) $event->getKey();
+        return (int) $eloquentStoredEvent->getKey();
     }
 
     protected function assertRecordAudited(TestResponse $response, string $breachId, int $storedEventId): void
@@ -377,7 +377,7 @@ class RecordBreachIncidentTest extends BreachIncidentsTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
-        $this->assertSame('Symfony', $entry->user_agent);
+        $auditEntry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $this->assertSame('Symfony', $auditEntry->user_agent);
     }
 }

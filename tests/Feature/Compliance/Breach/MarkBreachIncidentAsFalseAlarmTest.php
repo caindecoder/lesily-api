@@ -154,11 +154,11 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
     {
         return [
             'resolved' => [
-                fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->resolved(),
+                fn (BreachIncidentRecordFactory $breachIncidentRecordFactory): BreachIncidentRecordFactory => $breachIncidentRecordFactory->resolved(),
                 'A resolved breach incident cannot be marked a false alarm.',
             ],
             'a false alarm' => [
-                fn (BreachIncidentRecordFactory $incident): BreachIncidentRecordFactory => $incident->falseAlarm(),
+                fn (BreachIncidentRecordFactory $breachIncidentRecordFactory): BreachIncidentRecordFactory => $breachIncidentRecordFactory->falseAlarm(),
                 'A breach incident already marked as a false alarm cannot be marked again.',
             ],
         ];
@@ -211,8 +211,8 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
 
         // Then it is marked with both texts whole
         $response->assertOk();
-        $row = BreachIncidentRecord::query()->findOrFail($breachId);
-        $this->assertSame([BreachStage::FalseAlarm, $reason, $findings], [$row->stage, $row->false_alarm_reason, $row->false_alarm_findings]);
+        $breachIncident = BreachIncidentRecord::query()->findOrFail($breachId);
+        $this->assertSame([BreachStage::FalseAlarm, $reason, $findings], [$breachIncident->stage, $breachIncident->false_alarm_reason, $breachIncident->false_alarm_findings]);
     }
 
     #[Test]
@@ -228,8 +228,8 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
 
         // Then it is marked, and the missed deadline stays on the record
         $response->assertOk();
-        $row = BreachIncidentRecord::query()->findOrFail($breachId);
-        $this->assertSame([BreachStage::FalseAlarm, '2026-05-08T10:00:00+00:00'], [$row->stage, $row->deadline_missed_at?->toIso8601String()]);
+        $breachIncident = BreachIncidentRecord::query()->findOrFail($breachId);
+        $this->assertSame([BreachStage::FalseAlarm, '2026-05-08T10:00:00+00:00'], [$breachIncident->stage, $breachIncident->deadline_missed_at?->toIso8601String()]);
     }
 
     #[Test]
@@ -291,10 +291,10 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
         $this->assertNobodyTold();
     }
 
-    protected function markFalseAlarm(?User $caller, string $breachId, array $body): TestResponse
+    protected function markFalseAlarm(?User $actor, string $breachId, array $body): TestResponse
     {
-        if ($caller !== null) {
-            Sanctum::actingAs($caller);
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
         }
 
         return $this->patchJson("/api/v1/admin/breach-incidents/{$breachId}/false-alarm", $body);
@@ -338,24 +338,24 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
             LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->orderBy('id')->pluck('event_class')->all(),
         );
 
-        $marked = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->latest('id')->firstOrFail();
+        $markedEloquentStoredEvent = LesilyStoredEvent::query()->where('aggregate_uuid', $breachId)->latest('id')->firstOrFail();
         $this->assertSame([$breachId, self::REASON, self::FINDINGS, $this->platformAdmin->getKey(), self::MARKED_AT_ISO], [
-            $marked->event_properties['breachId'],
-            $marked->event_properties['reason'],
-            $marked->event_properties['findings'],
-            $marked->event_properties['markedByUserId'],
-            CarbonImmutable::parse($marked->event_properties['markedAt'])->toIso8601String(),
+            $markedEloquentStoredEvent->event_properties['breachId'],
+            $markedEloquentStoredEvent->event_properties['reason'],
+            $markedEloquentStoredEvent->event_properties['findings'],
+            $markedEloquentStoredEvent->event_properties['markedByUserId'],
+            CarbonImmutable::parse($markedEloquentStoredEvent->event_properties['markedAt'])->toIso8601String(),
         ]);
 
-        return (int) $marked->getKey();
+        return (int) $markedEloquentStoredEvent->getKey();
     }
 
     protected function assertMarkProjected(string $breachId): void
     {
-        $row = BreachIncidentRecord::query()->findOrFail($breachId);
+        $breachIncident = BreachIncidentRecord::query()->findOrFail($breachId);
         $this->assertSame(
             [BreachStage::FalseAlarm, self::REASON, self::FINDINGS, $this->platformAdmin->getKey(), self::MARKED_AT_ISO],
-            [$row->stage, $row->false_alarm_reason, $row->false_alarm_findings, $row->false_alarm_by, $row->false_alarm_at?->toIso8601String()],
+            [$breachIncident->stage, $breachIncident->false_alarm_reason, $breachIncident->false_alarm_findings, $breachIncident->false_alarm_by, $breachIncident->false_alarm_at?->toIso8601String()],
         );
     }
 
@@ -382,8 +382,8 @@ class MarkBreachIncidentAsFalseAlarmTest extends BreachIncidentsTestCase
 
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->where('request_id', $correlationId)->sole();
-        $this->assertSame('Symfony', $entry->user_agent);
+        $auditEntry = AuditEntry::query()->where('request_id', $correlationId)->sole();
+        $this->assertSame('Symfony', $auditEntry->user_agent);
     }
 
     protected function assertNobodyTold(): void

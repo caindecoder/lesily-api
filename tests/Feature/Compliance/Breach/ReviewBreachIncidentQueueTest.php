@@ -171,14 +171,14 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     public function when_incidents_are_past_their_first_stage_then_each_row_shows_its_stage_stamps(): void
     {
         // Given an incident that missed its deadline and was resolved, and one closed as a false alarm a week later
-        $resolved = $this->anIncident()->deadlineMissed()->resolved()->createOne();
-        $falseAlarm = $this->anIncident()->dueAt('2026-05-14 14:00:00')->falseAlarm()->createOne();
+        $resolvedBreachIncident = $this->anIncident()->deadlineMissed()->resolved()->createOne();
+        $falseAlarmBreachIncident = $this->anIncident()->dueAt('2026-05-14 14:00:00')->falseAlarm()->createOne();
 
         // When the platform admin opens the queue
         $response = $this->listQueue($this->platformAdmin);
 
         // Then each row carries its own stage stamps, each in its own field
-        $this->assertListed($response, [$resolved, $falseAlarm]);
+        $this->assertListed($response, [$resolvedBreachIncident, $falseAlarmBreachIncident]);
         $this->assertSame(
             [
                 ['2026-05-08T00:00:00.000000Z', '2026-05-05T14:00:00.000000Z', '2026-05-09T14:00:00.000000Z', null],
@@ -215,22 +215,22 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     public function when_the_queue_is_opened_then_incidents_are_listed_soonest_deadline_first(): void
     {
         // Given three incidents recorded out of deadline order
-        $dueLast = $this->anIncident()->dueAt('2026-05-12 09:00:00')->createOne();
-        $dueFirst = $this->anIncident()->dueAt('2026-05-10 09:00:00')->createOne();
-        $dueSecond = $this->anIncident()->dueAt('2026-05-11 09:00:00')->createOne();
+        $dueLastBreachIncident = $this->anIncident()->dueAt('2026-05-12 09:00:00')->createOne();
+        $dueFirstBreachIncident = $this->anIncident()->dueAt('2026-05-10 09:00:00')->createOne();
+        $dueSecondBreachIncident = $this->anIncident()->dueAt('2026-05-11 09:00:00')->createOne();
 
         // When the platform admin opens the queue
         $response = $this->listQueue($this->platformAdmin);
 
         // Then the soonest deadline comes first
-        $this->assertListed($response, [$dueFirst, $dueSecond, $dueLast]);
+        $this->assertListed($response, [$dueFirstBreachIncident, $dueSecondBreachIncident, $dueLastBreachIncident]);
     }
 
     #[Test]
     public function when_the_queue_is_opened_then_each_row_shows_its_facts_and_the_read_is_audited(): void
     {
         // Given an incident whose two companies were notified — company A counted 40 people, company B 7
-        $incident = $this->anIncident()
+        $breachIncident = $this->anIncident()
             ->companiesNotified()
             ->withCompany($this->contosoCompany, ['pii'], 40)
             ->withCompany($this->otherCompany, ['payroll', 'banking'], 7)
@@ -242,10 +242,10 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
         // Then the row shows the incident's facts, its company count and their total, and the read left its evidence
         $response->assertExactJson([
             'data' => [[
-                'id' => $incident->getKey(),
+                'id' => $breachIncident->getKey(),
                 'stage' => 'companies_notified',
                 'severity' => 'high',
-                'description' => $incident->description,
+                'description' => $breachIncident->description,
                 'date_discovered' => '2026-05-04T14:00:00.000000Z',
                 'deadline' => '2026-05-07T14:00:00.000000Z',
                 'deadline_missed_at' => null,
@@ -308,10 +308,10 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     /**
      * @param  array<string, mixed>  $query
      */
-    protected function listQueue(?User $caller, array $query = []): TestResponse
+    protected function listQueue(?User $actor, array $query = []): TestResponse
     {
-        if ($caller !== null) {
-            Sanctum::actingAs($caller);
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
         }
 
         return $this->getJson('/api/v1/admin/breach-incidents?'.http_build_query($query));
@@ -324,7 +324,7 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     {
         $response->assertOk();
         $this->assertSame(
-            array_map(fn (BreachIncidentRecord $incident): string => $incident->getKey(), $incidents),
+            array_map(fn (BreachIncidentRecord $breachIncident): string => $breachIncident->getKey(), $incidents),
             array_column($response->json('data'), 'id'),
         );
     }
@@ -336,10 +336,10 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
     {
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->where('action', 'breach_queue_viewed')->sole();
+        $auditEntry = AuditEntry::query()->where('action', 'breach_queue_viewed')->sole();
 
         $this->assertDatabaseHas('audit_trail', [
-            'id' => $entry->getKey(),
+            'id' => $auditEntry->getKey(),
             'company_id' => null,
             'stored_event_id' => null,
             'event_class' => 'BreachIncidentQueueViewed',
@@ -356,7 +356,7 @@ class ReviewBreachIncidentQueueTest extends BreachIncidentsTestCase
             'severity' => 'info',
         ]);
         /** @var array{filters: array<string, mixed>} $stored */
-        $stored = $entry->metadata;
+        $stored = $auditEntry->metadata;
         $this->assertEquals($metadata, $stored);
         $this->assertContainsOnlyString($stored['filters']);
     }

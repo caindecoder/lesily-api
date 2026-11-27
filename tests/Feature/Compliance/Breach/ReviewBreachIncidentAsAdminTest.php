@@ -21,10 +21,10 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     public function when_an_unauthenticated_caller_opens_an_incident_then_they_are_refused(): void
     {
         // Given a recorded incident
-        $incident = $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
+        $breachIncident = $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
 
         // When a caller with no token opens it
-        $response = $this->showIncident(null, $incident->getKey());
+        $response = $this->showIncident(null, $breachIncident->getKey());
 
         // Then they are refused as unauthenticated and no read is recorded
         $this->assertUnauthenticated($response);
@@ -35,10 +35,10 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     public function when_a_company_owner_opens_an_incident_then_it_is_not_found_and_nothing_is_audited(): void
     {
         // Given an incident naming company A, and company A's owner, who is not a platform admin
-        $incident = $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
+        $breachIncident = $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
 
         // When the owner opens the incident
-        $response = $this->showIncident($this->owner, $incident->getKey());
+        $response = $this->showIncident($this->owner, $breachIncident->getKey());
 
         // Then the admin surface is not acknowledged — not even their own company's incident — and no read is recorded
         $this->assertResourceNotFoundNoLeak($response);
@@ -64,11 +64,11 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     {
         // Given an incident, and an audit write that fails after its row is inserted —
         // only the read's transaction can take the row back out
-        $incident = $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
+        $breachIncident = $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         // When the platform admin opens the incident
-        $response = $this->showIncident($this->platformAdmin, $incident->getKey());
+        $response = $this->showIncident($this->platformAdmin, $breachIncident->getKey());
 
         // Then the read fails closed — no incident data, and the evidence row was rolled back with it
         $this->assertFailedClosed($response);
@@ -80,13 +80,13 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     public function when_some_companies_have_no_estimated_count_then_the_sum_counts_only_the_known_ones(?int $countA, ?int $countB, ?int $expectedTotal): void
     {
         // Given an incident whose two companies carry these counts — a null count is not yet known
-        $incident = $this->anIncident()
+        $breachIncident = $this->anIncident()
             ->withCompany($this->contosoCompany, ['pii'], $countA)
             ->withCompany($this->otherCompany, ['payroll'], $countB)
             ->createOne();
 
         // When the platform admin opens the incident
-        $response = $this->showIncident($this->platformAdmin, $incident->getKey());
+        $response = $this->showIncident($this->platformAdmin, $breachIncident->getKey());
 
         // Then the total adds the known counts only, and is empty when none is known
         $response->assertOk();
@@ -97,15 +97,15 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     public function when_an_incident_names_several_companies_then_they_are_listed_by_name(): void
     {
         // Given an incident naming Zeta Traders and then Acme Holdings — added in that order, Zeta first by id
-        $zeta = Company::factory()->named('Zeta Traders')->createOne();
-        $acme = Company::factory()->named('Acme Holdings')->createOne();
-        $incident = $this->anIncident()
-            ->withCompany($zeta, ['pii'], 4)
-            ->withCompany($acme, ['payroll'], 9)
+        $zetaCompany = Company::factory()->named('Zeta Traders')->createOne();
+        $acmeCompany = Company::factory()->named('Acme Holdings')->createOne();
+        $breachIncident = $this->anIncident()
+            ->withCompany($zetaCompany, ['pii'], 4)
+            ->withCompany($acmeCompany, ['payroll'], 9)
             ->createOne();
 
         // When the platform admin opens the incident
-        $response = $this->showIncident($this->platformAdmin, $incident->getKey());
+        $response = $this->showIncident($this->platformAdmin, $breachIncident->getKey());
 
         // Then the companies are listed by name, whatever order they were added in
         $response->assertOk();
@@ -116,34 +116,34 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     public function when_an_admin_opens_an_incident_then_every_company_and_the_sum_are_shown_and_the_read_is_audited(): void
     {
         // Given an incident whose companies were notified — company A's owner has asked Lesily to file
-        $incident = $this->anIncident()->companiesNotified()->createOne();
-        BreachIncidentCompany::factory()->forIncident($incident, $this->contosoCompany)->withFigures(['pii'], 40)->filingRequested($this->owner->getKey())->createOne();
-        BreachIncidentCompany::factory()->forIncident($incident, $this->otherCompany)->withFigures(['payroll', 'banking'], 7)->notified()->createOne();
+        $breachIncident = $this->anIncident()->companiesNotified()->createOne();
+        BreachIncidentCompany::factory()->forIncident($breachIncident, $this->contosoCompany)->withFigures(['pii'], 40)->filingRequested($this->owner->getKey())->createOne();
+        BreachIncidentCompany::factory()->forIncident($breachIncident, $this->otherCompany)->withFigures(['payroll', 'banking'], 7)->notified()->createOne();
 
         // When the platform admin opens the incident
-        $response = $this->showIncident($this->platformAdmin, $incident->getKey());
+        $response = $this->showIncident($this->platformAdmin, $breachIncident->getKey());
 
         // Then every fact of the incident and of each company is shown with the sum, and the read left its evidence
-        $this->assertIncidentShown($response, $incident);
-        $this->assertDetailReadAudited($response, $incident);
+        $this->assertIncidentShown($response, $breachIncident);
+        $this->assertDetailReadAudited($response, $breachIncident);
     }
 
     #[Test]
     public function when_a_resolved_incident_is_opened_then_its_resolution_missed_deadline_and_filing_are_shown(): void
     {
         // Given an incident that missed its deadline, was filed with the regulator for company A, then was resolved
-        $incident = $this->anIncident()->deadlineMissed()->resolved()->createOne();
-        BreachIncidentCompany::factory()->forIncident($incident, $this->contosoCompany)->filed($this->owner->getKey(), $this->platformAdmin->getKey())->createOne();
+        $breachIncident = $this->anIncident()->deadlineMissed()->resolved()->createOne();
+        BreachIncidentCompany::factory()->forIncident($breachIncident, $this->contosoCompany)->filed($this->owner->getKey(), $this->platformAdmin->getKey())->createOne();
 
         // When the platform admin opens the incident
-        $response = $this->showIncident($this->platformAdmin, $incident->getKey());
+        $response = $this->showIncident($this->platformAdmin, $breachIncident->getKey());
 
         // Then the missed deadline, the resolution and the filing are each shown in their own field
         $response->assertOk();
         $this->assertSame(
             [
                 '2026-05-08T00:00:00.000000Z', '2026-05-09T14:00:00.000000Z', $this->platformAdmin->getKey(),
-                $incident->root_cause, $incident->remediation_steps, $incident->resolution_summary,
+                $breachIncident->root_cause, $breachIncident->remediation_steps, $breachIncident->resolution_summary,
                 '2026-05-07T14:00:00.000000Z',
             ],
             [
@@ -158,15 +158,15 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     public function when_a_false_alarm_is_opened_then_its_reason_and_findings_are_shown(): void
     {
         // Given an incident closed as a false alarm
-        $incident = $this->anIncident()->falseAlarm()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
+        $breachIncident = $this->anIncident()->falseAlarm()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
 
         // When the platform admin opens the incident
-        $response = $this->showIncident($this->platformAdmin, $incident->getKey());
+        $response = $this->showIncident($this->platformAdmin, $breachIncident->getKey());
 
         // Then when, by whom, why and what was found are each shown in their own field
         $response->assertOk();
         $this->assertSame(
-            ['2026-05-05T14:00:00.000000Z', $this->platformAdmin->getKey(), $incident->false_alarm_reason, $incident->false_alarm_findings],
+            ['2026-05-05T14:00:00.000000Z', $this->platformAdmin->getKey(), $breachIncident->false_alarm_reason, $breachIncident->false_alarm_findings],
             [
                 $response->json('data.false_alarm_at'), $response->json('data.false_alarm_by'),
                 $response->json('data.false_alarm_reason'), $response->json('data.false_alarm_findings'),
@@ -179,14 +179,14 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
     {
         // Given an incident corrected twice - its description on 5 May, then on 6 May its severity
         // and company A's data types - with the rows stored out of that order
-        $incident = $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
-        $correction = BreachAmendment::factory()->forIncident($incident);
-        $correction->amendedAt('2026-05-06 10:00:00')->changing(BreachAmendmentField::Severity, 'high', 'critical')->createOne(['reason' => 'The export held bank details.']);
-        $correction->amendedAt('2026-05-05 09:00:00')->createOne();
-        $correction->amendedAt('2026-05-06 10:00:00')->forCompany($this->contosoCompany)->changing(BreachAmendmentField::DataTypes, ['pii'], ['pii', 'banking'])->createOne(['reason' => 'The export held bank details.']);
+        $breachIncident = $this->anIncident()->withCompany($this->contosoCompany, ['pii'], 40)->createOne();
+        $breachAmendmentFactory = BreachAmendment::factory()->forIncident($breachIncident);
+        $breachAmendmentFactory->amendedAt('2026-05-06 10:00:00')->changing(BreachAmendmentField::Severity, 'high', 'critical')->createOne(['reason' => 'The export held bank details.']);
+        $breachAmendmentFactory->amendedAt('2026-05-05 09:00:00')->createOne();
+        $breachAmendmentFactory->amendedAt('2026-05-06 10:00:00')->forCompany($this->contosoCompany)->changing(BreachAmendmentField::DataTypes, ['pii'], ['pii', 'banking'])->createOne(['reason' => 'The export held bank details.']);
 
         // When the platform admin opens the incident
-        $response = $this->showIncident($this->platformAdmin, $incident->getKey());
+        $response = $this->showIncident($this->platformAdmin, $breachIncident->getKey());
 
         // Then the history lists the 6 May request first, its changes by field, then the 5 May correction
         $response->assertOk();
@@ -220,28 +220,28 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         ];
     }
 
-    protected function showIncident(?User $caller, string $breachId): TestResponse
+    protected function showIncident(?User $actor, string $breachId): TestResponse
     {
-        if ($caller !== null) {
-            Sanctum::actingAs($caller);
+        if ($actor !== null) {
+            Sanctum::actingAs($actor);
         }
 
         return $this->getJson('/api/v1/admin/breach-incidents/'.$breachId);
     }
 
-    protected function assertIncidentShown(TestResponse $response, BreachIncidentRecord $incident): void
+    protected function assertIncidentShown(TestResponse $response, BreachIncidentRecord $breachIncident): void
     {
         $response->assertOk();
-        $companies = BreachIncidentCompany::query()->with('company')->where('breach_incident_id', $incident->getKey())->get()->sortBy(fn (BreachIncidentCompany $company): string => $company->company->name)->values();
-        $this->assertCount(2, $companies);
+        $breachIncidentCompanies = BreachIncidentCompany::query()->with('company')->where('breach_incident_id', $breachIncident->getKey())->get()->sortBy(fn (BreachIncidentCompany $breachIncidentCompany): string => $breachIncidentCompany->company->name)->values();
+        $this->assertCount(2, $breachIncidentCompanies);
 
         $response->assertExactJson(['data' => [
-            'id' => $incident->getKey(),
+            'id' => $breachIncident->getKey(),
             'stage' => 'companies_notified',
             'severity' => 'high',
-            'description' => $incident->description,
-            'likely_consequences' => $incident->likely_consequences,
-            'measures' => $incident->measures,
+            'description' => $breachIncident->description,
+            'likely_consequences' => $breachIncident->likely_consequences,
+            'measures' => $breachIncident->measures,
             'date_discovered' => '2026-05-04T14:00:00.000000Z',
             'deadline' => '2026-05-07T14:00:00.000000Z',
             'recorded_at' => '2026-05-04T14:00:00.000000Z',
@@ -257,14 +257,14 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
             'false_alarm_by' => null,
             'false_alarm_reason' => null,
             'false_alarm_findings' => null,
-            'companies' => $companies->map(fn (BreachIncidentCompany $company): array => [
-                'company_id' => $company->company_id,
-                'name' => $company->company->name,
-                'data_types' => $company->data_types,
-                'estimated_count' => $company->estimated_count,
+            'companies' => $breachIncidentCompanies->map(fn (BreachIncidentCompany $breachIncidentCompany): array => [
+                'company_id' => $breachIncidentCompany->company_id,
+                'name' => $breachIncidentCompany->company->name,
+                'data_types' => $breachIncidentCompany->data_types,
+                'estimated_count' => $breachIncidentCompany->estimated_count,
                 'notified_at' => '2026-05-05T14:00:00.000000Z',
-                'filing_requested_at' => $company->company_id === $this->contosoCompany->getKey() ? '2026-05-06T14:00:00.000000Z' : null,
-                'filing_requested_by' => $company->filing_requested_by,
+                'filing_requested_at' => $breachIncidentCompany->company_id === $this->contosoCompany->getKey() ? '2026-05-06T14:00:00.000000Z' : null,
+                'filing_requested_by' => $breachIncidentCompany->filing_requested_by,
                 'filed_at' => null,
             ])->all(),
             'total_estimated_count' => 47,
@@ -272,19 +272,19 @@ class ReviewBreachIncidentAsAdminTest extends BreachIncidentsTestCase
         ]]);
     }
 
-    protected function assertDetailReadAudited(TestResponse $response, BreachIncidentRecord $incident): void
+    protected function assertDetailReadAudited(TestResponse $response, BreachIncidentRecord $breachIncident): void
     {
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
-        $entry = AuditEntry::query()->where('action', 'breach_admin_viewed')->sole();
+        $auditEntry = AuditEntry::query()->where('action', 'breach_admin_viewed')->sole();
 
         $this->assertDatabaseHas('audit_trail', [
-            'id' => $entry->getKey(),
+            'id' => $auditEntry->getKey(),
             'company_id' => null,
             'stored_event_id' => null,
             'event_class' => 'BreachIncidentViewedByAdmin',
             'subject_type' => 'breach_incident',
-            'subject_id' => $incident->getKey(),
+            'subject_id' => $breachIncident->getKey(),
             'subject_label' => null,
             'description' => 'Platform admin viewed a data breach.',
             'actor_user_id' => $this->platformAdmin->getKey(),
