@@ -2461,150 +2461,6 @@ parameters:
 			path: ../../tests/Feature/Auth/AccessLog/RecordSignInOutcomesTest.php
 
 		-
-			message: '#^`AccessEvent \$event` should be named `\$accessEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 3
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`AccessEventReason \$reason` should be named `\$accessEventReason` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`AccessLogEntry \$entry` should be named `\$accessLogEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`AccessLogEntry \$row` should be named `\$accessLogEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`ApiErrorCode \$errorCode` should be named `\$apiErrorCode` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`ArrayObject \$logged` should be named `\$arrayObject` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`AuditAction \$action` should be named `\$auditAction` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 3
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`AuditEntry \$entry` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 11
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`Builder \$query` should be named `\$builder` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`Collection \$entries` should be named `\$auditEntries` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`Collection \$rows` should be named `\$accessLogEntries` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`Collection \$rows` should be named `\$auditEntries` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`CompanyUser \$membership` should be named `\$companyUser` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`ConsentRecord \$record` should be named `\$consent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`EloquentStoredEvent \$createdEvent` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`EloquentStoredEvent \$linked` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`EloquentStoredEvent \$storedEvent` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`GoogleIdentity \$identity` should be named `\$googleIdentity` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`MessageLogged \$record` should be named `\$messageLogged` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`PDOException \$driverError` should be named `\$pDOException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`ShouldBeStored \$event` should be named `\$shouldBeStored` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`TestResponse \$newLogin` should be named `\$response` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
-			message: '#^`Throwable \$failure` should be named `\$throwable` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Auth/AuthTestCase.php
-
-		-
 			message: '#^`EloquentStoredEvent \$event` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 2
@@ -3295,18 +3151,6 @@ parameters:
 			path: ../../tests/Feature/Auth/WelcomeEmailTest.php
 
 		-
-			message: '#^`AuditEntry \$entry` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 3
-			path: ../../tests/Feature/Billing/BillingTestCase.php
-
-		-
-			message: '#^`Collection \$entries` should be named `\$auditEntries` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/BillingTestCase.php
-
-		-
 			message: '#^`CorruptReceiptSnapshotException \$e` should be named `\$corruptReceiptSnapshotException` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -3583,36 +3427,6 @@ parameters:
 			path: ../../tests/Feature/Companies/AddCompanyTest.php
 
 		-
-			message: '#^`AuditAction \$action` should be named `\$auditAction` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/CompaniesTestCase.php
-
-		-
-			message: '#^`AuditEntry \$entry` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 10
-			path: ../../tests/Feature/Companies/CompaniesTestCase.php
-
-		-
-			message: '#^`Builder \$query` should be named `\$builder` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/CompaniesTestCase.php
-
-		-
-			message: '#^`Collection \$entries` should be named `\$auditEntries` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 3
-			path: ../../tests/Feature/Companies/CompaniesTestCase.php
-
-		-
-			message: '#^`Collection \$rows` should be named `\$auditEntries` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/CompaniesTestCase.php
-
-		-
 			message: '#^`CompanyDataProtectionOfficer \$officer` should be named `\$companyDataProtectionOfficer` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -3622,42 +3436,6 @@ parameters:
 			message: '#^`CompanySettings \$settings` should be named `\$companySettings` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 5
-			path: ../../tests/Feature/Companies/CompaniesTestCase.php
-
-		-
-			message: '#^`CompanyUser \$membership` should be named `\$companyUser` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/CompaniesTestCase.php
-
-		-
-			message: '#^`ConsentRecord \$record` should be named `\$consent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/CompaniesTestCase.php
-
-		-
-			message: '#^`EloquentStoredEvent \$createdEvent` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/CompaniesTestCase.php
-
-		-
-			message: '#^`EloquentStoredEvent \$storedEvent` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Companies/CompaniesTestCase.php
-
-		-
-			message: '#^`ShouldBeStored \$event` should be named `\$shouldBeStored` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/CompaniesTestCase.php
-
-		-
-			message: '#^`Throwable \$failure` should be named `\$throwable` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
 			path: ../../tests/Feature/Companies/CompaniesTestCase.php
 
 		-
@@ -3885,23 +3663,11 @@ parameters:
 		-
 			message: '#^`AuditEntry \$entry` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
-			count: 12
-			path: ../../tests/Feature/Companies/Memberships/MembershipsTestCase.php
-
-		-
-			message: '#^`Builder \$query` should be named `\$builder` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
+			count: 5
 			path: ../../tests/Feature/Companies/Memberships/MembershipsTestCase.php
 
 		-
 			message: '#^`Collection \$entries` should be named `\$auditEntries` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Companies/Memberships/MembershipsTestCase.php
-
-		-
-			message: '#^`Collection \$rows` should be named `\$auditEntries` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Companies/Memberships/MembershipsTestCase.php
@@ -3915,12 +3681,6 @@ parameters:
 		-
 			message: '#^`ConsentRecord \$record` should be named `\$consent` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Companies/Memberships/MembershipsTestCase.php
-
-		-
-			message: '#^`EloquentStoredEvent \$createdEvent` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Companies/Memberships/MembershipsTestCase.php
 
@@ -3932,12 +3692,6 @@ parameters:
 
 		-
 			message: '#^`EloquentStoredEvent \$newestEvent` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Companies/Memberships/MembershipsTestCase.php
-
-		-
-			message: '#^`EloquentStoredEvent \$storedEvent` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 2
 			path: ../../tests/Feature/Companies/Memberships/MembershipsTestCase.php
@@ -3958,12 +3712,6 @@ parameters:
 			message: '#^`InvitationMail \$mail` should be named `\$invitationMail` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 2
-			path: ../../tests/Feature/Companies/Memberships/MembershipsTestCase.php
-
-		-
-			message: '#^`PDOException \$driverError` should be named `\$pDOException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
 			path: ../../tests/Feature/Companies/Memberships/MembershipsTestCase.php
 
 		-
@@ -4491,17 +4239,11 @@ parameters:
 		-
 			message: '#^`AuditEntry \$entry` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Foundation/AccessLog/PruneExpiredAccessLogRowsTest.php
-
-		-
-			message: '#^`AuditEntry \$oldAuditRow` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Foundation/AccessLog/PruneExpiredAccessLogRowsTest.php
 
 		-
-			message: '#^`Collection \$entries` should be named `\$auditEntries` \(coding\-conventions §2\.26\)\.$#'
+			message: '#^`AuditEntry \$oldAuditRow` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Foundation/AccessLog/PruneExpiredAccessLogRowsTest.php
@@ -5113,60 +4855,6 @@ parameters:
 			path: ../../tests/Feature/Foundation/FeatureTestsExtendTheirNearestBaseTest.php
 
 		-
-			message: '#^`AccessEvent \$event` should be named `\$accessEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 3
-			path: ../../tests/Feature/Foundation/FoundationTestCase.php
-
-		-
-			message: '#^`AccessEventReason \$reason` should be named `\$accessEventReason` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Foundation/FoundationTestCase.php
-
-		-
-			message: '#^`AccessLogEntry \$entry` should be named `\$accessLogEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Foundation/FoundationTestCase.php
-
-		-
-			message: '#^`AccessLogEntry \$row` should be named `\$accessLogEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Foundation/FoundationTestCase.php
-
-		-
-			message: '#^`ApiErrorCode \$errorCode` should be named `\$apiErrorCode` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Foundation/FoundationTestCase.php
-
-		-
-			message: '#^`ArrayObject \$logged` should be named `\$arrayObject` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Foundation/FoundationTestCase.php
-
-		-
-			message: '#^`Collection \$rows` should be named `\$accessLogEntries` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Foundation/FoundationTestCase.php
-
-		-
-			message: '#^`MessageLogged \$record` should be named `\$messageLogged` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Foundation/FoundationTestCase.php
-
-		-
-			message: '#^`PDOException \$driverError` should be named `\$pDOException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Foundation/FoundationTestCase.php
-
-		-
 			message: '#^`IdempotencyCache \$cache` should be named `\$idempotencyCache` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -5427,13 +5115,13 @@ parameters:
 		-
 			message: '#^`AuditEntry \$entry` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
-			count: 9
+			count: 6
 			path: ../../tests/Feature/PlatformAdmin/OwnershipTransferCasesTestCase.php
 
 		-
 			message: '#^`Collection \$entries` should be named `\$auditEntries` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
-			count: 2
+			count: 1
 			path: ../../tests/Feature/PlatformAdmin/OwnershipTransferCasesTestCase.php
 
 		-
@@ -5486,12 +5174,6 @@ parameters:
 
 		-
 			message: '#^`AuditEntry \$entry` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/PlatformAdmin/PlatformAdminTestCase.php
-
-		-
-			message: '#^`PDOException \$driverError` should be named `\$pDOException` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/PlatformAdmin/PlatformAdminTestCase.php
