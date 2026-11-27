@@ -12,9 +12,9 @@ use App\Billing\Subscriptions\Entities\Subscription as SubscriptionReadModel;
 
 trait HasSubscription
 {
-    protected function putOnPlan(Company $company, BillingPlan $plan): void
+    protected function putOnPlan(Company $company, BillingPlan $billingPlan): void
     {
-        $company->update(['current_billing_plan' => $plan]);
+        $company->update(['current_billing_plan' => $billingPlan]);
     }
 
     protected function putOnTrial(Company $company, CarbonImmutable $endsAt): void

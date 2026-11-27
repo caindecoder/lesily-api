@@ -17,7 +17,7 @@ trait InteractsWithQueuedReactors
 
         Queue::assertPushed(
             HandleStoredEventJob::class,
-            fn (HandleStoredEventJob $job): bool => $job->storedEvent->event_class === $eventClass,
+            fn (HandleStoredEventJob $handleStoredEventJob): bool => $handleStoredEventJob->storedEvent->event_class === $eventClass,
         );
     }
 
@@ -25,7 +25,7 @@ trait InteractsWithQueuedReactors
     {
         Queue::assertNotPushed(
             HandleStoredEventJob::class,
-            fn (HandleStoredEventJob $job): bool => $job->storedEvent->event_class === $eventClass,
+            fn (HandleStoredEventJob $handleStoredEventJob): bool => $handleStoredEventJob->storedEvent->event_class === $eventClass,
         );
     }
 
@@ -46,18 +46,18 @@ trait InteractsWithQueuedReactors
         }
 
         return collect($queue->pushed(HandleStoredEventJob::class))
-            ->filter(fn (HandleStoredEventJob $job): bool => $job->storedEvent->event_class === $eventClass)
+            ->filter(fn (HandleStoredEventJob $handleStoredEventJob): bool => $handleStoredEventJob->storedEvent->event_class === $eventClass)
             ->values();
     }
 
     protected function runQueuedHandlersFor(string $eventClass): void
     {
-        $jobs = $this->queuedHandlersFor($eventClass);
+        $handleStoredEventJobs = $this->queuedHandlersFor($eventClass);
 
-        if ($jobs->isEmpty()) {
+        if ($handleStoredEventJobs->isEmpty()) {
             self::fail("No captured HandleStoredEventJob matches {$eventClass} — nothing to drain.");
         }
 
-        $jobs->each(fn (HandleStoredEventJob $job) => $job->handle(app(Projectionist::class)));
+        $handleStoredEventJobs->each(fn (HandleStoredEventJob $handleStoredEventJob) => $handleStoredEventJob->handle(app(Projectionist::class)));
     }
 }

@@ -4339,12 +4339,6 @@ parameters:
 			path: ../../tests/Feature/Auth/CreateOwnerTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/DefaultCompanyTest.php
-
-		-
 			message: '#^`Company \$beta` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 4
@@ -4369,24 +4363,6 @@ parameters:
 			path: ../../tests/Feature/Auth/DefaultCompanyTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/Google/GoogleAccountLinkedNotificationTest.php
-
-		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/Google/GoogleAccountLinkedNotificationTest.php
-
-		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Auth/Google/GoogleAccountLinkedNotificationTest.php
-
-		-
 			message: '#^`SystemNotification \$notification` should be named `\$systemNotification` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -4397,18 +4373,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Auth/Google/GoogleAccountLinkedNotificationTest.php
-
-		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/Google/GoogleAccountUnlinkedNotificationTest.php
-
-		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Auth/Google/GoogleAccountUnlinkedNotificationTest.php
 
 		-
 			message: '#^`SystemNotification \$notification` should be named `\$systemNotification` \(coding\-conventions §2\.26\)\.$#'
@@ -4454,12 +4418,6 @@ parameters:
 
 		-
 			message: '#^`ApiErrorCode \$code` should be named `\$apiErrorCode` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/Google/LinkGoogleAccountTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Auth/Google/LinkGoogleAccountTest.php
@@ -4567,12 +4525,6 @@ parameters:
 			path: ../../tests/Feature/Auth/Google/UnlinkGoogleAccountTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/ListMyCompaniesTest.php
-
-		-
 			message: '#^`Company \$acme` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -4639,21 +4591,9 @@ parameters:
 			path: ../../tests/Feature/Auth/Password/ChangePasswordTest.php
 
 		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/Password/ChangePasswordTest.php
-
-		-
 			message: '#^`EloquentStoredEvent \$stored` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
-			path: ../../tests/Feature/Auth/Password/ChangePasswordTest.php
-
-		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
 			path: ../../tests/Feature/Auth/Password/ChangePasswordTest.php
 
 		-
@@ -4693,18 +4633,6 @@ parameters:
 			path: ../../tests/Feature/Auth/Password/ForgotPasswordTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/Password/PasswordChangedNotificationTest.php
-
-		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/Password/PasswordChangedNotificationTest.php
-
-		-
 			message: '#^`Company \$default` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -4726,12 +4654,6 @@ parameters:
 			message: '#^`Company \$oldest` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
-			path: ../../tests/Feature/Auth/Password/PasswordChangedNotificationTest.php
-
-		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
 			path: ../../tests/Feature/Auth/Password/PasswordChangedNotificationTest.php
 
 		-
@@ -4765,21 +4687,9 @@ parameters:
 			path: ../../tests/Feature/Auth/Password/ResetPasswordTest.php
 
 		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/Password/ResetPasswordTest.php
-
-		-
 			message: '#^`EloquentStoredEvent \$stored` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
-			path: ../../tests/Feature/Auth/Password/ResetPasswordTest.php
-
-		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
 			path: ../../tests/Feature/Auth/Password/ResetPasswordTest.php
 
 		-
@@ -5025,7 +4935,7 @@ parameters:
 		-
 			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
-			count: 2
+			count: 1
 			path: ../../tests/Feature/Auth/TwoFactor/EnableTwoFactorTest.php
 
 		-
@@ -5155,12 +5065,6 @@ parameters:
 			path: ../../tests/Feature/Billing/BillingTestCase.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/DownloadInvoiceReceiptTest.php
-
-		-
 			message: '#^`Company \$companyB` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 2
@@ -5197,19 +5101,7 @@ parameters:
 			path: ../../tests/Feature/Billing/ExpireTrialsCommandTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/ExpireTrialsCommandTest.php
-
-		-
 			message: '#^`CarbonImmutable \$now` does not say what happened — end it in At, On, Date, Deadline or Until \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/ExpireTrialsCommandTest.php
-
-		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Billing/ExpireTrialsCommandTest.php
@@ -5227,12 +5119,6 @@ parameters:
 			path: ../../tests/Feature/Billing/ExpireTrialsCommandTest.php
 
 		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Billing/ExpireTrialsCommandTest.php
-
-		-
 			message: '#^`RuntimeException \$failure` should be named `\$runtimeException` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 2
@@ -5245,12 +5131,6 @@ parameters:
 			path: ../../tests/Feature/Billing/ExpireTrialsCommandTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/FileInvoiceDisputeTest.php
-
-		-
 			message: '#^`InvoiceDisputeNotAllowedException \$exception` should be named `\$invoiceDisputeNotAllowedException` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -5261,12 +5141,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Billing/FileInvoiceDisputeTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/IssueInvoiceTest.php
 
 		-
 			message: '#^`InvoiceAmountNotPositiveException \$exception` should be named `\$invoiceAmountNotPositiveException` \(coding\-conventions §2\.26\)\.$#'
@@ -5285,12 +5159,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Billing/IssueInvoiceTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/ListInvoicesTest.php
 
 		-
 			message: '#^`Company \$companyB` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
@@ -5389,28 +5257,10 @@ parameters:
 			path: ../../tests/Feature/Billing/ListInvoicesTest.php
 
 		-
-			message: '#^`ValidationException \$exception` should be named `\$validationException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/ListInvoicesTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/ListPlansTest.php
-
-		-
 			message: '#^`User \$employee` is not a role word \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Billing/ListPlansTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/RecordInvoicePaymentFailureTest.php
 
 		-
 			message: '#^`InvoiceNotPayableException \$exception` should be named `\$invoiceNotPayableException` \(coding\-conventions §2\.26\)\.$#'
@@ -5423,12 +5273,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Billing/RecordInvoicePaymentFailureTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/RecordInvoicePaymentTest.php
 
 		-
 			message: '#^`InvoiceNotPayableException \$exception` should be named `\$invoiceNotPayableException` \(coding\-conventions §2\.26\)\.$#'
@@ -5441,12 +5285,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Billing/RecordInvoicePaymentTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/RefundInvoiceTest.php
 
 		-
 			message: '#^`InvoiceNotRefundableException \$exception` should be named `\$invoiceNotRefundableException` \(coding\-conventions §2\.26\)\.$#'
@@ -5479,12 +5317,6 @@ parameters:
 			path: ../../tests/Feature/Billing/StartTrialTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/ViewSubscriptionTest.php
-
-		-
 			message: '#^`Company \$companyA` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -5501,12 +5333,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Billing/ViewSubscriptionTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Billing/VoidInvoiceTest.php
 
 		-
 			message: '#^`InvoiceNotVoidableException \$exception` should be named `\$invoiceNotVoidableException` \(coding\-conventions §2\.26\)\.$#'
@@ -5689,12 +5515,6 @@ parameters:
 			path: ../../tests/Feature/Companies/FillConsentStoreFromRecordedConsentsTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/AcceptConsentTest.php
-
-		-
 			message: '#^`Company \$second` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -5714,12 +5534,6 @@ parameters:
 
 		-
 			message: '#^`ApiErrorCode \$expected` should be named `\$apiErrorCode` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/AcceptInvitationTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Companies/Memberships/AcceptInvitationTest.php
@@ -5767,12 +5581,6 @@ parameters:
 			path: ../../tests/Feature/Companies/Memberships/AcceptInvitationTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/BulkInviteUsersTest.php
-
-		-
 			message: '#^`Company \$other` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -5798,12 +5606,6 @@ parameters:
 
 		-
 			message: '#^`ApiErrorCode \$expected` should be named `\$apiErrorCode` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/ChangeMemberRoleTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Companies/Memberships/ChangeMemberRoleTest.php
@@ -5851,12 +5653,6 @@ parameters:
 			path: ../../tests/Feature/Companies/Memberships/EncryptStoredEmergencyContactsTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/ExpireInvitationsTest.php
-
-		-
 			message: '#^`User \$employee` is not a role word \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -5867,12 +5663,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 6
 			path: ../../tests/Feature/Companies/Memberships/InvitationMailRenderTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/InviteUserTest.php
 
 		-
 			message: '#^`Collection \$rows` should be named `\$invitations` \(coding\-conventions §2\.26\)\.$#'
@@ -6055,12 +5845,6 @@ parameters:
 			path: ../../tests/Feature/Companies/Memberships/RemoveMemberTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/RemoveMemberTest.php
-
-		-
 			message: '#^`Company \$companyB` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 2
@@ -6109,12 +5893,6 @@ parameters:
 			path: ../../tests/Feature/Companies/Memberships/ReplayEmergencyContactTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/RequireCurrentConsentTest.php
-
-		-
 			message: '#^`Company \$second` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -6134,12 +5912,6 @@ parameters:
 
 		-
 			message: '#^`ApiErrorCode \$code` should be named `\$apiErrorCode` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/ResendInvitationTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Companies/Memberships/ResendInvitationTest.php
@@ -6205,12 +5977,6 @@ parameters:
 			path: ../../tests/Feature/Companies/Memberships/ResendInvitationTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/RevokeInvitationTest.php
-
-		-
 			message: '#^`Company \$companyB` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -6241,18 +6007,6 @@ parameters:
 			path: ../../tests/Feature/Companies/Memberships/TransferCompanyOwnershipTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/TransferCompanyOwnershipTest.php
-
-		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/TransferCompanyOwnershipTest.php
-
-		-
 			message: '#^`Company \$acme` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -6262,12 +6016,6 @@ parameters:
 			message: '#^`CompanyUser \$outgoing` should be named `\$companyUser` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
-			path: ../../tests/Feature/Companies/Memberships/TransferCompanyOwnershipTest.php
-
-		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
 			path: ../../tests/Feature/Companies/Memberships/TransferCompanyOwnershipTest.php
 
 		-
@@ -6331,12 +6079,6 @@ parameters:
 			path: ../../tests/Feature/Companies/Memberships/UpdateEmergencyContactTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/UpdateEmergencyContactTest.php
-
-		-
 			message: '#^`Builder \$events` should be named `\$builder` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -6361,12 +6103,6 @@ parameters:
 			path: ../../tests/Feature/Companies/Memberships/UpdateEmergencyContactTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/ViewEmergencyContactTest.php
-
-		-
 			message: '#^`Company \$companyB` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 2
@@ -6377,12 +6113,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Companies/Memberships/ViewEmergencyContactTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/ViewMembershipsTest.php
 
 		-
 			message: '#^`Company \$companyB` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
@@ -6457,18 +6187,6 @@ parameters:
 			path: ../../tests/Feature/Companies/Memberships/ViewMembershipsTest.php
 
 		-
-			message: '#^`ValidationException \$exception` should be named `\$validationException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/ViewMembershipsTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/Memberships/ViewRolesTest.php
-
-		-
 			message: '#^`User \$employee` is not a role word \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -6481,12 +6199,6 @@ parameters:
 			path: ../../tests/Feature/Companies/Memberships/ViewRolesTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/RemoveDataProtectionOfficerTest.php
-
-		-
 			message: '#^`Company \$companyB` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 2
@@ -6497,12 +6209,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Companies/RemoveDataProtectionOfficerTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/ResetCompanySettingTest.php
 
 		-
 			message: '#^`Company \$companyB` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
@@ -6529,12 +6235,6 @@ parameters:
 			path: ../../tests/Feature/Companies/ResetCompanySettingTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/SetDataProtectionOfficerTest.php
-
-		-
 			message: '#^`Company \$companyB` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 2
@@ -6551,24 +6251,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Companies/SetDataProtectionOfficerTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/TrialExpiredNotificationTest.php
-
-		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/TrialExpiredNotificationTest.php
-
-		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Companies/TrialExpiredNotificationTest.php
 
 		-
 			message: '#^`SystemNotification \$notification` should be named `\$systemNotification` \(coding\-conventions §2\.26\)\.$#'
@@ -6595,12 +6277,6 @@ parameters:
 			path: ../../tests/Feature/Companies/TrialExpiredNotificationTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/UpdateCompanyTest.php
-
-		-
 			message: '#^`Company \$companyB` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -6611,12 +6287,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Companies/UpdateCompanyTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/ViewCompanyDetailsTest.php
 
 		-
 			message: '#^`Company \$companyA` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
@@ -6643,12 +6313,6 @@ parameters:
 			path: ../../tests/Feature/Companies/ViewCompanyDetailsTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/ViewCompanySettingsTest.php
-
-		-
 			message: '#^`Company \$companyB` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -6667,12 +6331,6 @@ parameters:
 			path: ../../tests/Feature/Companies/ViewCompanySettingsTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Companies/ViewDataProtectionOfficerTest.php
-
-		-
 			message: '#^`Company \$companyB` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 2
@@ -6685,88 +6343,10 @@ parameters:
 			path: ../../tests/Feature/Companies/ViewDataProtectionOfficerTest.php
 
 		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Breach/AddLateBreachCompanyTest.php
-
-		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Compliance/Breach/AddLateBreachCompanyTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Breach/BreachIncidentsTestCase.php
-
-		-
 			message: '#^`User \$employee` is not a role word \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Compliance/Breach/BreachIncidentsTestCase.php
-
-		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Breach/FileBreachWithRegulatorTest.php
-
-		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Compliance/Breach/FileBreachWithRegulatorTest.php
-
-		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Breach/FlagMissedBreachDeadlinesTest.php
-
-		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Compliance/Breach/FlagMissedBreachDeadlinesTest.php
-
-		-
-			message: '#^`ValidationException \$exception` should be named `\$validationException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Breach/ListBreachNoticesTest.php
-
-		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Breach/NotifyBreachCompaniesTest.php
-
-		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Compliance/Breach/NotifyBreachCompaniesTest.php
-
-		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Breach/RequestBreachFilingTest.php
-
-		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Compliance/Breach/RequestBreachFilingTest.php
-
-		-
-			message: '#^`ValidationException \$exception` should be named `\$validationException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Breach/ReviewBreachIncidentQueueTest.php
 
 		-
 			message: '#^`DsarRequestRecord \$request` should be named `\$dsarRequest` \(coding\-conventions §2\.26\)\.$#'
@@ -6778,12 +6358,6 @@ parameters:
 			message: '#^`AuditEntry \$entry` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 3
-			path: ../../tests/Feature/Compliance/Dsar/DsarTestCase.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
 			path: ../../tests/Feature/Compliance/Dsar/DsarTestCase.php
 
 		-
@@ -6800,12 +6374,6 @@ parameters:
 
 		-
 			message: '#^`Collection \$deletions` should be named `\$collection` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Dsar/DsarTestCase.php
-
-		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Compliance/Dsar/DsarTestCase.php
@@ -6898,12 +6466,6 @@ parameters:
 			message: '#^`Filesystem \$files` should be named `\$filesystem` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
-			path: ../../tests/Feature/Compliance/Dsar/DsarTestCase.php
-
-		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
 			path: ../../tests/Feature/Compliance/Dsar/DsarTestCase.php
 
 		-
@@ -7261,12 +6823,6 @@ parameters:
 			path: ../../tests/Feature/Compliance/Dsar/ListDsarRequestsTest.php
 
 		-
-			message: '#^`ValidationException \$exception` should be named `\$validationException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Dsar/ListDsarRequestsTest.php
-
-		-
 			message: '#^`AssertionFailedError \$guard` should be named `\$assertionFailedError` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 2
@@ -7447,12 +7003,6 @@ parameters:
 			path: ../../tests/Feature/Compliance/Dsar/ReviewDsarRequestQueueTest.php
 
 		-
-			message: '#^`ValidationException \$exception` should be named `\$validationException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Dsar/ReviewDsarRequestQueueTest.php
-
-		-
 			message: '#^`TestResponse \$first` should be named `\$response` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -7499,12 +7049,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Compliance/Dsar/WithdrawDsarRequestTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Compliance/Privacy/PrivacyTestCase.php
 
 		-
 			message: '#^`User \$employee` is not a role word \(coding\-conventions §2\.26\)\.$#'
@@ -7556,12 +7100,6 @@ parameters:
 
 		-
 			message: '#^`ArrayObject \$logged` should be named `\$arrayObject` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Foundation/AccessLog/FoldRepeatedRefusalsTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Foundation/AccessLog/FoldRepeatedRefusalsTest.php
@@ -7651,12 +7189,6 @@ parameters:
 			path: ../../tests/Feature/Foundation/AccessLog/PruneExpiredAccessLogRowsTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Foundation/AccessLog/PruneExpiredAccessLogRowsTest.php
-
-		-
 			message: '#^`Collection \$entries` should be named `\$auditEntries` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -7687,12 +7219,6 @@ parameters:
 			path: ../../tests/Feature/Foundation/AccessLog/RecordRefusedRequestsTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Foundation/AccessLog/RecordRefusedRequestsTest.php
-
-		-
 			message: '#^`User \$employee` is not a role word \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -7712,12 +7238,6 @@ parameters:
 
 		-
 			message: '#^`AuditSubjectType \$subjectType` should be named `\$auditSubjectType` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Foundation/AuditTrail/AuditTrailTestCase.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Foundation/AuditTrail/AuditTrailTestCase.php
@@ -7933,12 +7453,6 @@ parameters:
 			path: ../../tests/Feature/Foundation/AuditTrail/SearchAuditLogsTest.php
 
 		-
-			message: '#^`ValidationException \$exception` should be named `\$validationException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Foundation/AuditTrail/SearchAuditLogsTest.php
-
-		-
 			message: '#^`AccessLogEntry \$failedSignIn` should be named `\$accessLogEntry` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -8065,12 +7579,6 @@ parameters:
 			path: ../../tests/Feature/Foundation/AuditTrail/ViewAuditLogsTest.php
 
 		-
-			message: '#^`ValidationException \$exception` should be named `\$validationException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Foundation/AuditTrail/ViewAuditLogsTest.php
-
-		-
 			message: '#^`AuditEntry \$alicesEntry` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -8165,18 +7673,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Foundation/AuditTrail/ViewAuditTrailTest.php
-
-		-
-			message: '#^`ValidationException \$exception` should be named `\$validationException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Foundation/AuditTrail/ViewAuditTrailTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Foundation/AuthorizeCompanyTest.php
 
 		-
 			message: '#^`User \$employee` is not a role word \(coding\-conventions §2\.26\)\.$#'
@@ -8413,12 +7909,6 @@ parameters:
 			path: ../../tests/Feature/Foundation/ModelCastAdaptsIdsToModelsTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Foundation/PermissionEvaluatorTest.php
-
-		-
 			message: '#^`User \$employee` is not a role word \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -8511,7 +8001,7 @@ parameters:
 		-
 			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
-			count: 3
+			count: 2
 			path: ../../tests/Feature/Foundation/TwoGateCheckTest.php
 
 		-
@@ -8545,12 +8035,6 @@ parameters:
 			path: ../../tests/Feature/PlatformAdmin/AppendAuditEntryTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/PlatformAdmin/EnsurePlatformAdminTest.php
-
-		-
 			message: '#^`User \$employee` is not a role word \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -8566,12 +8050,6 @@ parameters:
 			message: '#^`AuditEntry \$entry` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 2
-			path: ../../tests/Feature/PlatformAdmin/ExecuteOwnershipTransferCaseTest.php
-
-		-
-			message: '#^`Collection \$jobs` should be named `\$handleStoredEventJobs` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
 			path: ../../tests/Feature/PlatformAdmin/ExecuteOwnershipTransferCaseTest.php
 
 		-
@@ -8596,12 +8074,6 @@ parameters:
 			message: '#^`EloquentStoredEvent \$routineEvent` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
-			path: ../../tests/Feature/PlatformAdmin/ExecuteOwnershipTransferCaseTest.php
-
-		-
-			message: '#^`HandleStoredEventJob \$job` should be named `\$handleStoredEventJob` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
 			path: ../../tests/Feature/PlatformAdmin/ExecuteOwnershipTransferCaseTest.php
 
 		-
@@ -8692,12 +8164,6 @@ parameters:
 			message: '#^`AuditEntry \$entry` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 9
-			path: ../../tests/Feature/PlatformAdmin/OwnershipTransferCasesTestCase.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
 			path: ../../tests/Feature/PlatformAdmin/OwnershipTransferCasesTestCase.php
 
 		-
@@ -8833,12 +8299,6 @@ parameters:
 			path: ../../tests/Feature/PlatformAdmin/ReviewInvoiceAsAdminTest.php
 
 		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/PlatformAdmin/ReviewInvoiceAsAdminTest.php
-
-		-
 			message: '#^`User \$employee` is not a role word \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -8900,12 +8360,6 @@ parameters:
 
 		-
 			message: '#^`ReviewOwnershipTransferCaseQueueCommand \$filters` should be named `\$reviewOwnershipTransferCaseQueueCommand` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/PlatformAdmin/ReviewOwnershipTransferCaseQueueTest.php
-
-		-
-			message: '#^`ValidationException \$exception` should be named `\$validationException` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/PlatformAdmin/ReviewOwnershipTransferCaseQueueTest.php
