@@ -20,51 +20,51 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 class CancelDsarRequestInteractor
 {
     public function __construct(
-        private readonly DsarRequestVisibility $visibility,
+        private readonly DsarRequestVisibility $dsarRequestVisibility,
         private readonly MemberRoleCode $memberRoleCode,
     ) {}
 
-    public function execute(CancelDsarRequestCommand $command, User $actor, RequestOrigin $context): DsarRequestRecord
+    public function execute(CancelDsarRequestCommand $cancelDsarRequestCommand, User $actor, RequestOrigin $requestOrigin): DsarRequestRecord
     {
-        $request = $this->visibility->visibleTo($actor, $command->company)->whereKey($command->dsarRequest->getKey())->first()
+        $dsarRequest = $this->dsarRequestVisibility->visibleTo($actor, $cancelDsarRequestCommand->company)->whereKey($cancelDsarRequestCommand->dsarRequest->getKey())->first()
             ?? throw new ModelNotFoundException;
 
-        return DB::transaction(function () use ($request, $command, $actor, $context): DsarRequestRecord {
-            DsarRequest::retrieve($request->getKey())->cancel($command)->persist();
+        return DB::transaction(function () use ($dsarRequest, $cancelDsarRequestCommand, $actor, $requestOrigin): DsarRequestRecord {
+            DsarRequest::retrieve($dsarRequest->getKey())->cancel($cancelDsarRequestCommand)->persist();
 
-            $withdrawn = DsarRequestRecord::query()->whereKey($request->getKey())->firstOrFail();
-            $this->recordWithdrawn($withdrawn, $actor, $context);
+            $withdrawnDsarRequest = DsarRequestRecord::query()->whereKey($dsarRequest->getKey())->firstOrFail();
+            $this->recordWithdrawn($withdrawnDsarRequest, $actor, $requestOrigin);
 
-            return $withdrawn;
+            return $withdrawnDsarRequest;
         });
     }
 
-    protected function recordWithdrawn(DsarRequestRecord $request, User $actor, RequestOrigin $context): void
+    protected function recordWithdrawn(DsarRequestRecord $dsarRequest, User $actor, RequestOrigin $requestOrigin): void
     {
         AuditEntry::query()->create([
-            'company_id' => $request->company_id,
-            'stored_event_id' => $this->cancelledEventIdFor($request),
+            'company_id' => $dsarRequest->company_id,
+            'stored_event_id' => $this->cancelledEventIdFor($dsarRequest),
             'event_class' => 'DsarRequestCancelled',
             'subject_type' => AuditSubjectType::DsarRequest,
-            'subject_id' => $request->getKey(),
+            'subject_id' => $dsarRequest->getKey(),
             'subject_label' => null,
             'action' => AuditAction::DsarWithdrawn,
-            'description' => 'DSAR withdrawn — for: '.$request->subject->name.', by: '.$actor->name,
+            'description' => 'DSAR withdrawn — for: '.$dsarRequest->subject->name.', by: '.$actor->name,
             'actor_user_id' => $actor->getKey(),
-            'actor_role_code' => $this->memberRoleCode->of($actor, $request->company_id),
+            'actor_role_code' => $this->memberRoleCode->of($actor, $dsarRequest->company_id),
             'actor_label' => $actor->name,
-            'ip_address' => $context->ip,
-            'user_agent' => $context->boundedUserAgent(),
-            'request_id' => $context->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'metadata' => null,
             'recorded_at' => now(),
         ]);
     }
 
-    protected function cancelledEventIdFor(DsarRequestRecord $request): int
+    protected function cancelledEventIdFor(DsarRequestRecord $dsarRequest): int
     {
         return LesilyStoredEvent::query()
-            ->where('aggregate_uuid', $request->getKey())
+            ->where('aggregate_uuid', $dsarRequest->getKey())
             ->where('event_class', DsarRequestCancelled::class)
             ->sole()
             ->getKey();

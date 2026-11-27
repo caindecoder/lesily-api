@@ -21,59 +21,59 @@ class ReviewDsarRequestQueueInteractor
     /**
      * The read and its audit row share one transaction — no read without its evidence.
      */
-    public function execute(ReviewDsarRequestQueueCommand $command, User $platformAdmin, RequestOrigin $context): DsarRequestQueue
+    public function execute(ReviewDsarRequestQueueCommand $reviewDsarRequestQueueCommand, User $platformAdmin, RequestOrigin $requestOrigin): DsarRequestQueue
     {
-        $now = CarbonImmutable::now();
+        $viewedAt = CarbonImmutable::now();
 
-        return DB::transaction(function () use ($command, $now, $platformAdmin, $context): DsarRequestQueue {
-            $page = $this->selectedBy($command, $now)
+        return DB::transaction(function () use ($reviewDsarRequestQueueCommand, $viewedAt, $platformAdmin, $requestOrigin): DsarRequestQueue {
+            $dsarRequests = $this->selectedBy($reviewDsarRequestQueueCommand, $viewedAt)
                 ->with(['company', 'subject', 'requestedBy'])
                 ->orderBy('sla_deadline')
                 ->orderBy('id')
                 // page defaults here, never through Laravel's resolver, which would
                 // honour a body-supplied page past the validated query filters.
-                ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
-            $counts = $this->countInProgress($this->selectedBy($command, $now), $now);
+                ->paginate(perPage: $reviewDsarRequestQueueCommand->perPage ?? 15, page: $reviewDsarRequestQueueCommand->page ?? 1);
+            $counts = $this->countInProgress($this->selectedBy($reviewDsarRequestQueueCommand, $viewedAt), $viewedAt);
 
-            $this->recordQueueRead($this->queryContextOf($command, $page), $platformAdmin, $context);
+            $this->recordQueueRead($this->queryContextOf($reviewDsarRequestQueueCommand, $dsarRequests), $platformAdmin, $requestOrigin);
 
-            return new DsarRequestQueue($page, ...$counts);
+            return new DsarRequestQueue($dsarRequests, ...$counts);
         });
     }
 
     /**
-     * The requests the filters select on $now — the page and the counts read the same set.
+     * The requests the filters select on $viewedAt — the page and the counts read the same set.
      *
      * @return Builder<DsarRequestRecord>
      */
-    protected function selectedBy(ReviewDsarRequestQueueCommand $command, CarbonImmutable $now): Builder
+    protected function selectedBy(ReviewDsarRequestQueueCommand $reviewDsarRequestQueueCommand, CarbonImmutable $viewedAt): Builder
     {
         return DsarRequestRecord::query()
-            ->when($command->status, fn (Builder $query, DsarRequestStatus $status) => $query->where('status', $status))
-            ->when($command->companyId, fn (Builder $query, string $companyId) => $query->where('company_id', $companyId))
-            ->when($command->overdue, fn (Builder $query) => $query->whereOverdue($now))
-            ->when($command->slaBreached, fn (Builder $query) => $query->whereSlaBreached());
+            ->when($reviewDsarRequestQueueCommand->status, fn (Builder $builder, DsarRequestStatus $dsarRequestStatus) => $builder->where('status', $dsarRequestStatus))
+            ->when($reviewDsarRequestQueueCommand->companyId, fn (Builder $builder, string $companyId) => $builder->where('company_id', $companyId))
+            ->when($reviewDsarRequestQueueCommand->overdue, fn (Builder $builder) => $builder->whereOverdue($viewedAt))
+            ->when($reviewDsarRequestQueueCommand->slaBreached, fn (Builder $builder) => $builder->whereSlaBreached());
     }
 
     /**
-     * The in-progress requests among $selected, counted in one query. Days are
+     * The in-progress requests among $dsarRequests, counted in one query. Days are
      * calendar days on UTC dates: overdue = due before tomorrow's start
      * (0 days or fewer left); due within seven days = from tomorrow's start to
      * before the eighth day's start.
      *
-     * @param  Builder<DsarRequestRecord>  $selected
+     * @param  Builder<DsarRequestRecord>  $dsarRequests
      * @return array{open: int, overdue: int, dueInSevenDays: int}
      */
-    protected function countInProgress(Builder $selected, CarbonImmutable $now): array
+    protected function countInProgress(Builder $dsarRequests, CarbonImmutable $viewedAt): array
     {
-        $tomorrow = $now->startOfDay()->addDay();
+        $tomorrowStartsAt = $viewedAt->startOfDay()->addDay();
 
         /** @var array{open: int, overdue: string|null, due_in_7_days: string|null} $counts */
-        $counts = (array) $selected
+        $counts = (array) $dsarRequests
             ->where('status', DsarRequestStatus::InProgress)
             ->selectRaw('count(*) as open')
-            ->selectRaw('sum(case when sla_deadline < ? then 1 else 0 end) as overdue', [$tomorrow])
-            ->selectRaw('sum(case when sla_deadline >= ? and sla_deadline < ? then 1 else 0 end) as due_in_7_days', [$tomorrow, $tomorrow->addDays(7)])
+            ->selectRaw('sum(case when sla_deadline < ? then 1 else 0 end) as overdue', [$tomorrowStartsAt])
+            ->selectRaw('sum(case when sla_deadline >= ? and sla_deadline < ? then 1 else 0 end) as due_in_7_days', [$tomorrowStartsAt, $tomorrowStartsAt->addDays(7)])
             ->toBase()
             ->sole();
 
@@ -86,23 +86,23 @@ class ReviewDsarRequestQueueInteractor
     }
 
     /**
-     * @param  LengthAwarePaginator<int, DsarRequestRecord>  $page
+     * @param  LengthAwarePaginator<int, DsarRequestRecord>  $dsarRequests
      * @return array<string, mixed>
      */
-    protected function queryContextOf(ReviewDsarRequestQueueCommand $command, LengthAwarePaginator $page): array
+    protected function queryContextOf(ReviewDsarRequestQueueCommand $reviewDsarRequestQueueCommand, LengthAwarePaginator $dsarRequests): array
     {
         return [
             'filters' => array_filter(
                 [
-                    'status' => $command->status?->value,
-                    'company_id' => $command->companyId,
-                    'overdue' => $this->asQueryValue($command->overdue),
-                    'sla_breached' => $this->asQueryValue($command->slaBreached),
+                    'status' => $reviewDsarRequestQueueCommand->status?->value,
+                    'company_id' => $reviewDsarRequestQueueCommand->companyId,
+                    'overdue' => $this->asQueryValue($reviewDsarRequestQueueCommand->overdue),
+                    'sla_breached' => $this->asQueryValue($reviewDsarRequestQueueCommand->slaBreached),
                 ],
                 fn (?string $value): bool => $value !== null,
             ),
-            'result_count' => count($page->items()),
-            'page' => $page->currentPage(),
+            'result_count' => count($dsarRequests->items()),
+            'page' => $dsarRequests->currentPage(),
         ];
     }
 
@@ -121,7 +121,7 @@ class ReviewDsarRequestQueueInteractor
      *
      * @param  array<string, mixed>  $queryContext
      */
-    protected function recordQueueRead(array $queryContext, User $platformAdmin, RequestOrigin $context): void
+    protected function recordQueueRead(array $queryContext, User $platformAdmin, RequestOrigin $requestOrigin): void
     {
         AuditEntry::query()->create([
             'event_class' => 'DsarRequestQueueViewed',
@@ -131,9 +131,9 @@ class ReviewDsarRequestQueueInteractor
             'actor_user_id' => $platformAdmin->getKey(),
             'actor_role_code' => AuditEntry::STAFF_ROLE_CODE,
             'actor_label' => $platformAdmin->name,
-            'ip_address' => $context->ip,
-            'user_agent' => $context->boundedUserAgent(),
-            'request_id' => $context->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'metadata' => $queryContext,
             'recorded_at' => now(),
         ]);

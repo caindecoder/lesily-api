@@ -10,11 +10,11 @@ use App\Compliance\Dsar\UseCases\Queries\DsarRequestVisibility;
 
 class ShowDsarRequestInteractor
 {
-    public function __construct(private readonly DsarRequestVisibility $visibility) {}
+    public function __construct(private readonly DsarRequestVisibility $dsarRequestVisibility) {}
 
     public function execute(string $requestId, User $actor, Company $company): DsarRequestRecord
     {
-        return $this->visibility->visibleTo($actor, $company)->whereKey($requestId)->first()
+        return $this->dsarRequestVisibility->visibleTo($actor, $company)->whereKey($requestId)->first()
             ?? throw new ModelNotFoundException;
     }
 }
