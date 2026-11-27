@@ -32,16 +32,16 @@ class ExportDsarReportTest extends DsarTestCase
     public function when_the_report_cannot_be_rendered_then_the_export_fails_without_fulfilling(): void
     {
         // Given a member's submitted request, and a renderer that cannot produce the report
-        $request = $this->aSubmittedRequest($this->company, $this->subject);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->subject);
         $this->aReportRendererThatFails();
 
         try {
             // When their export is built
-            $this->runTheExportFor($request);
+            $this->runTheExportFor($dsarRequest);
             $this->fail('A report that cannot be rendered should fail the export job.');
         } catch (DsarReportRenderingFailedException) {
             // Then the attempt fails on the report, and the request stays in progress with no file
-            $this->assertStillInProgressWithoutExportFile($request);
+            $this->assertStillInProgressWithoutExportFile($dsarRequest);
         }
     }
 
@@ -51,20 +51,20 @@ class ExportDsarReportTest extends DsarTestCase
         // Given a member with a password, a remember token, two-factor sign-in, a sign-in token, an invitation and a verified-then-rejected case
         $member = User::factory()->withTwoFactor()->create();
         $this->company->users()->attach($member, ['role_id' => $this->seededRole('employee')->getKey()]);
-        $signIn = $this->aSignInFor($member, 'iPhone', now()->addDays(90));
+        $personalAccessToken = $this->aSignInFor($member, 'iPhone', now()->addDays(90));
         $invitationId = $this->anInvitationTo($member, $this->company);
-        $case = OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->verified()->closedRejected()->create();
-        $request = $this->aSubmittedRequest($this->company, $member);
+        $ownershipTransferCase = OwnershipTransferCase::factory()->forCompany($this->company)->proposedOwner($member)->verified()->closedRejected()->create();
+        $dsarRequest = $this->aSubmittedRequest($this->company, $member);
 
         // When their export is built
-        $this->runTheExportFor($request);
+        $this->runTheExportFor($dsarRequest);
 
         // Then none of their secrets, token hashes, case notes or prose reasons appears in the report
         $this->assertReportHoldsNoSecretOf($member, [
-            $signIn->token,
+            $personalAccessToken->token,
             Invitation::query()->findOrFail($invitationId)->token_hash,
-            $case->verification_notes,
-            $case->rejection_reason,
+            $ownershipTransferCase->verification_notes,
+            $ownershipTransferCase->rejection_reason,
         ]);
     }
 
@@ -72,10 +72,10 @@ class ExportDsarReportTest extends DsarTestCase
     public function when_a_section_has_no_entries_then_the_report_says_none_recorded(): void
     {
         // Given a member who never consented here, acted in nothing audited, holds no sign-in, was never invited, took part in no transfer, received no notice, switched none off and was never refused
-        $request = $this->aSubmittedRequest($this->company, $this->aMemberWhoNeverConsented($this->company));
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->aMemberWhoNeverConsented($this->company));
 
         // When their export is built
-        $this->runTheExportFor($request);
+        $this->runTheExportFor($dsarRequest);
 
         // Then every empty list in the report reads "None recorded" under its own heading
         $this->assertReportShowsInOrder([
@@ -122,11 +122,11 @@ class ExportDsarReportTest extends DsarTestCase
     public function when_a_value_is_a_date_flag_empty_or_code_then_the_report_writes_it_readably(string $field, mixed $value, string $readable): void
     {
         // Given an export whose section holds the value
-        $request = $this->aSubmittedRequest($this->company, $this->subject);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->subject);
         $this->withSections($this->aSectionHolding('profile', [$field => $value]));
 
         // When their export is built
-        $this->runTheExportFor($request);
+        $this->runTheExportFor($dsarRequest);
 
         // Then the report writes it for a person to read
         $this->assertReportCell($readable);
@@ -138,10 +138,10 @@ class ExportDsarReportTest extends DsarTestCase
     public static function provideLoggedCodes(): array
     {
         return [
-            ...collect(AuditAction::cases())->mapWithKeys(fn (AuditAction $action): array => ["action {$action->value}" => ['action', $action->value]])->all(),
-            ...collect(AuditSubjectType::cases())->mapWithKeys(fn (AuditSubjectType $type): array => ["subject type {$type->value}" => ['subject_type', $type->value]])->all(),
-            ...collect(AccessEvent::cases())->mapWithKeys(fn (AccessEvent $event): array => ["access event {$event->value}" => ['access_event', $event->value]])->all(),
-            ...collect(AccessEventReason::cases())->mapWithKeys(fn (AccessEventReason $reason): array => ["access reason {$reason->value}" => ['access_reason', $reason->value]])->all(),
+            ...collect(AuditAction::cases())->mapWithKeys(fn (AuditAction $auditAction): array => ["action {$auditAction->value}" => ['action', $auditAction->value]])->all(),
+            ...collect(AuditSubjectType::cases())->mapWithKeys(fn (AuditSubjectType $auditSubjectType): array => ["subject type {$auditSubjectType->value}" => ['subject_type', $auditSubjectType->value]])->all(),
+            ...collect(AccessEvent::cases())->mapWithKeys(fn (AccessEvent $accessEvent): array => ["access event {$accessEvent->value}" => ['access_event', $accessEvent->value]])->all(),
+            ...collect(AccessEventReason::cases())->mapWithKeys(fn (AccessEventReason $accessEventReason): array => ["access reason {$accessEventReason->value}" => ['access_reason', $accessEventReason->value]])->all(),
         ];
     }
 
@@ -149,11 +149,11 @@ class ExportDsarReportTest extends DsarTestCase
     public function when_any_logged_code_is_exported_then_the_report_has_words_for_it(string $field, string $code): void
     {
         // Given an export whose section holds the logged code
-        $request = $this->aSubmittedRequest($this->company, $this->subject);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->subject);
         $this->withSections($this->aSectionHolding('profile', [$field => $code]));
 
         // When their export is built
-        $this->runTheExportFor($request);
+        $this->runTheExportFor($dsarRequest);
 
         // Then the report explains the code in words
         $this->assertReportExplains($field, $code);
@@ -163,11 +163,11 @@ class ExportDsarReportTest extends DsarTestCase
     public function when_a_section_holds_one_entry_then_the_report_lists_each_field_label_before_its_value(): void
     {
         // Given an export whose profile holds a name and a two-step sign-in flag
-        $request = $this->aSubmittedRequest($this->company, $this->subject);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->subject);
         $this->withSections($this->aSectionHolding('profile', ['name' => 'Nimal Perera', 'two_factor_enabled' => true]));
 
         // When their export is built
-        $this->runTheExportFor($request);
+        $this->runTheExportFor($dsarRequest);
 
         // Then each field reads as its label, then its value
         $this->assertReportShowsInOrder(['Name', 'Nimal Perera', 'Two-step sign-in turned on', 'Yes']);
@@ -177,14 +177,14 @@ class ExportDsarReportTest extends DsarTestCase
     public function when_a_section_lists_entries_then_the_report_tables_them_under_column_headings(): void
     {
         // Given an export whose section lists two entries
-        $request = $this->aSubmittedRequest($this->company, $this->subject);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->subject);
         $this->withSections($this->aSectionHolding('audit_trail', [
             ['recorded_at' => '2026-09-15T14:30:00.000000Z', 'action' => 'dsar_requested'],
             ['recorded_at' => '2026-09-16T08:05:00.000000Z', 'action' => 'dsar_withdrawn'],
         ]));
 
         // When their export is built
-        $this->runTheExportFor($request);
+        $this->runTheExportFor($dsarRequest);
 
         // Then the entries are rows under labelled column headings, each value readable, in order
         $this->assertReportShowsInOrder([
@@ -198,7 +198,7 @@ class ExportDsarReportTest extends DsarTestCase
     public function when_an_audit_row_lists_changes_then_the_report_tables_them_by_field_from_and_to(): void
     {
         // Given an export whose audit section holds a row that changed a role and set a name
-        $request = $this->aSubmittedRequest($this->company, $this->subject);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->subject);
         $this->withSections($this->aSectionHolding('audit_trail', [[
             'recorded_at' => '2026-09-15T14:30:00.000000Z',
             'action' => 'role_changed',
@@ -209,7 +209,7 @@ class ExportDsarReportTest extends DsarTestCase
         ]]));
 
         // When their export is built
-        $this->runTheExportFor($request);
+        $this->runTheExportFor($dsarRequest);
 
         // Then the section's changes are a table of each field with its old and new value, a dash for none
         $this->assertReportShowsInOrder([
@@ -224,14 +224,14 @@ class ExportDsarReportTest extends DsarTestCase
     public function when_each_entry_holds_a_list_then_the_report_tables_it_under_its_label(): void
     {
         // Given an export whose section lists two invitations, each with its own history
-        $request = $this->aSubmittedRequest($this->company, $this->subject);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->subject);
         $this->withSections($this->aSectionHolding('invitations', [
             ['timeline' => [['event' => 'invited', 'at' => '2026-09-15T14:30:00.000000Z']]],
             ['timeline' => [['event' => 'joined', 'at' => '2026-09-16T08:05:00.000000Z']]],
         ]));
 
         // When their export is built
-        $this->runTheExportFor($request);
+        $this->runTheExportFor($dsarRequest);
 
         // Then each entry's list is its own labelled table, in order
         $this->assertReportShowsInOrder([
@@ -244,50 +244,50 @@ class ExportDsarReportTest extends DsarTestCase
     public function when_any_section_exports_a_field_then_the_report_labels_it(): void
     {
         // Given a member with an entry in every section
-        $request = $this->aRequestFromAMemberWithAnEntryInEverySection();
+        $dsarRequest = $this->aRequestFromAMemberWithAnEntryInEverySection();
 
         // When their export is built
-        $this->runTheExportFor($request);
+        $this->runTheExportFor($dsarRequest);
 
         // Then every field the export holds has a label in words, and no label is missing from the report
-        $this->assertEveryFieldLabelled($this->exportedData($request));
+        $this->assertEveryFieldLabelled($this->exportedData($dsarRequest));
     }
 
     #[Test]
     public function when_the_export_is_built_then_the_zip_holds_the_report_beside_the_data(): void
     {
         // Given a member's submitted request
-        $request = $this->aSubmittedRequest($this->company, $this->subject);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->subject);
 
         // When their export is built
-        $this->runTheExportFor($request);
+        $this->runTheExportFor($dsarRequest);
 
         // Then the ZIP holds data.json and the rendered report.pdf
-        $this->assertExportHoldsDataAndReport($request);
+        $this->assertExportHoldsDataAndReport($dsarRequest);
     }
 
     #[Test]
     public function when_the_export_is_built_then_the_report_opens_with_the_cover_and_reading_guide(): void
     {
         // Given a member's request, submitted two hours before its export is built
-        $request = $this->aSubmittedRequest($this->company, $this->subject);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->subject);
         $this->travel(2)->hours();
 
         // When their export is built
-        $this->runTheExportFor($request);
+        $this->runTheExportFor($dsarRequest);
 
         // Then the report opens with who and what it is for, and how to read it
-        $this->assertReportCover($request, $this->subject, $this->company);
+        $this->assertReportCover($dsarRequest, $this->subject, $this->company);
     }
 
     #[Test]
     public function when_the_export_is_built_then_the_report_holds_every_section_titled_in_order(): void
     {
         // Given a member's submitted request
-        $request = $this->aSubmittedRequest($this->company, $this->subject);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->subject);
 
         // When their export is built
-        $this->runTheExportFor($request);
+        $this->runTheExportFor($dsarRequest);
 
         // Then the contents list names every section, and each follows under its title, in the same order
         $titles = ['Your profile', 'Your membership', 'Consent records', 'Audit trail: your actions and changes to your record', 'Sign-ins', 'Invitations', 'Ownership transfers', 'Notifications and preferences', 'Account access history'];
@@ -298,12 +298,12 @@ class ExportDsarReportTest extends DsarTestCase
     public function when_a_subject_who_downloaded_an_export_asks_again_then_the_report_names_the_download(): void
     {
         // Given a member who downloaded their ready export, then asked for their data again
-        $first = $this->aReadyExportFor($this->company, $this->subject);
-        $this->downloadDsarExport($this->subject, $this->company, $first->getKey());
-        $request = $this->aSubmittedRequest($this->company, $this->subject);
+        $firstDsarRequest = $this->aReadyExportFor($this->company, $this->subject);
+        $this->downloadDsarExport($this->subject, $this->company, $firstDsarRequest->getKey());
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->subject);
 
         // When their new export is built
-        $this->runTheExportFor($request);
+        $this->runTheExportFor($dsarRequest);
 
         // Then the report names the download in words
         $this->assertReportCell('Downloaded a copy of personal data (dsar_downloaded)');

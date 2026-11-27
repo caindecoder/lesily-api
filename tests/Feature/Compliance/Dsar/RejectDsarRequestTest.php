@@ -19,19 +19,19 @@ class RejectDsarRequestTest extends DsarTestCase
     public function when_a_section_fails_then_the_job_fails_without_fulfilling(): void
     {
         // Given a member's own request and a section that fails while collecting
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member);
         $this->withSections($this->aSectionThatFails());
 
         try {
             // When its export is built
-            $this->runTheExportFor($request);
+            $this->runTheExportFor($dsarRequest);
             $this->fail('A failing section should fail the export job.');
-        } catch (AssertionFailedError $guard) {
-            throw $guard;
-        } catch (RuntimeException $failure) {
+        } catch (AssertionFailedError $assertionFailedError) {
+            throw $assertionFailedError;
+        } catch (RuntimeException $runtimeException) {
             // Then the section's own failure reaches the worker's retries and nothing is fulfilled
-            $this->assertSame('induced section failure', $failure->getMessage());
-            $this->assertNothingFulfilled($request, DsarRequestStatus::InProgress);
+            $this->assertSame('induced section failure', $runtimeException->getMessage());
+            $this->assertNothingFulfilled($dsarRequest, DsarRequestStatus::InProgress);
         }
     }
 
@@ -39,15 +39,15 @@ class RejectDsarRequestTest extends DsarTestCase
     public function when_the_request_was_withdrawn_before_the_final_failure_then_nothing_is_rejected(): void
     {
         // Given a member's own request they withdrew while its export kept failing
-        $request = $this->aSubmittedRequest($this->company, $this->member);
-        $this->withdrawDsarRequest($this->member, $this->company, $request->getKey())->assertOk();
-        $this->aPartialExportFor($request);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member);
+        $this->withdrawDsarRequest($this->member, $this->company, $dsarRequest->getKey())->assertOk();
+        $this->aPartialExportFor($dsarRequest);
 
         // When the export fails for good
-        $this->failTheExportFor($request, new RuntimeException('export failure'));
+        $this->failTheExportFor($dsarRequest, new RuntimeException('export failure'));
 
         // Then the withdrawal stands, nothing is rejected, the partial file is gone and no failed notice is queued
-        $this->assertNothingRejected($request, DsarRequestStatus::Cancelled);
+        $this->assertNothingRejected($dsarRequest, DsarRequestStatus::Cancelled);
         $this->assertNoHandlersQueuedFor(DsarRequestRejected::class);
     }
 
@@ -55,49 +55,49 @@ class RejectDsarRequestTest extends DsarTestCase
     public function when_the_request_was_fulfilled_before_the_final_failure_then_its_export_is_kept(): void
     {
         // Given a member's request a sibling run already fulfilled, and the export it is downloadable from
-        $request = $this->aClosedRequest($this->company, $this->member, 'fulfilled');
-        $this->aPartialExportFor($request);
+        $dsarRequest = $this->aClosedRequest($this->company, $this->member, 'fulfilled');
+        $this->aPartialExportFor($dsarRequest);
 
         // When this run's export fails for good
-        $this->failTheExportFor($request, new RuntimeException('export failure'));
+        $this->failTheExportFor($dsarRequest, new RuntimeException('export failure'));
 
         // Then the fulfilment stands and its export is left exactly as it was
-        $this->assertStillFulfilledWithExportKept($request);
+        $this->assertStillFulfilledWithExportKept($dsarRequest);
     }
 
     #[Test]
     public function when_a_sibling_run_fulfils_the_request_during_the_final_failure_then_its_export_is_kept(): void
     {
         // Given a member's request still in progress, the export a sibling run wrote, and that run fulfilling just as this one gives up
-        $request = $this->aSubmittedRequest($this->company, $this->member);
-        $this->aPartialExportFor($request);
-        $this->aSiblingRunFulfilsBeforeTheReject($request);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member);
+        $this->aPartialExportFor($dsarRequest);
+        $this->aSiblingRunFulfilsBeforeTheReject($dsarRequest);
 
         // When this run's export fails for good
-        $this->failTheExportFor($request, new RuntimeException('export failure'));
+        $this->failTheExportFor($dsarRequest, new RuntimeException('export failure'));
 
         // Then the sibling's fulfilment stands and its export survives
-        $this->assertStillFulfilledWithExportKept($request);
+        $this->assertStillFulfilledWithExportKept($dsarRequest);
     }
 
     #[Test]
     public function when_the_audit_entry_cannot_be_written_then_nothing_is_rejected(): void
     {
         // Given a member's own request, its partial export, and an audit write that fails after its row is inserted
-        $request = $this->aSubmittedRequest($this->company, $this->member);
-        $this->aPartialExportFor($request);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member);
+        $this->aPartialExportFor($dsarRequest);
         AuditEntry::created(fn () => throw new RuntimeException('induced audit failure'));
 
         try {
             // When the export fails for good
-            $this->failTheExportFor($request, new RuntimeException('export failure'));
+            $this->failTheExportFor($dsarRequest, new RuntimeException('export failure'));
             $this->fail('The induced audit failure should surface from failed().');
-        } catch (AssertionFailedError $guard) {
-            throw $guard;
-        } catch (RuntimeException $failure) {
+        } catch (AssertionFailedError $assertionFailedError) {
+            throw $assertionFailedError;
+        } catch (RuntimeException $runtimeException) {
             // Then the one transaction takes back the event, the row change and the audit row together — and no partial file is left
-            $this->assertSame('induced audit failure', $failure->getMessage());
-            $this->assertStillInProgressWithoutExportFile($request);
+            $this->assertSame('induced audit failure', $runtimeException->getMessage());
+            $this->assertStillInProgressWithoutExportFile($dsarRequest);
         }
     }
 
@@ -105,13 +105,13 @@ class RejectDsarRequestTest extends DsarTestCase
     public function when_the_job_is_queued_then_it_tries_three_times_with_backoff(): void
     {
         // Given
-        $request = $this->aSubmittedRequest($this->company, $this->member);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member);
 
         // When
-        $job = new BuildDsarExportJob($request->getKey(), $request->company_id, $request->subject_user_id);
+        $buildDsarExportJob = new BuildDsarExportJob($dsarRequest->getKey(), $dsarRequest->company_id, $dsarRequest->subject_user_id);
 
         // Then
-        $this->assertTriesThreeTimesWithBackoff($job);
+        $this->assertTriesThreeTimesWithBackoff($buildDsarExportJob);
     }
 
     #[Test]
@@ -120,28 +120,28 @@ class RejectDsarRequestTest extends DsarTestCase
     {
         // Given a member's request, made by them or by an owner on their behalf, with notices captured from the start
         Notification::fake();
-        $request = $this->aSubmittedRequest($this->company, $this->member, $this->aRequesterFor($this->member, $requestedBy));
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member, $this->aRequesterFor($this->member, $requestedBy));
 
         // When its export fails for good and the notices are delivered
-        $this->failTheExportFor($request, new RuntimeException('export failure'));
+        $this->failTheExportFor($dsarRequest, new RuntimeException('export failure'));
         $this->deliverTheNoticesOf(DsarRequestRejected::class);
 
         // Then the member and whoever asked for it each hear once that it failed
-        $this->assertNoticeSentOnceEach($request, NotificationType::DsarExportFailed, $notices);
+        $this->assertNoticeSentOnceEach($dsarRequest, NotificationType::DsarExportFailed, $notices);
     }
 
     #[Test]
     public function when_the_export_fails_for_good_then_the_request_is_rejected_with_a_fixed_reason(): void
     {
         // Given a member's own request and the partial export its last try left behind
-        $request = $this->aSubmittedRequest($this->company, $this->member);
-        $this->aPartialExportFor($request);
+        $dsarRequest = $this->aSubmittedRequest($this->company, $this->member);
+        $this->aPartialExportFor($dsarRequest);
 
         // When the export fails for good on an error carrying internal detail
-        $this->failTheExportFor($request, new RuntimeException('SQLSTATE[HY000] secret internal detail'));
+        $this->failTheExportFor($dsarRequest, new RuntimeException('SQLSTATE[HY000] secret internal detail'));
 
         // Then the request is rejected with the fixed reason, the partial file is gone and the rejection audited
-        $this->assertRejected($request);
-        $this->assertRejectionAudited($request, $this->member);
+        $this->assertRejected($dsarRequest);
+        $this->assertRejectionAudited($dsarRequest, $this->member);
     }
 }

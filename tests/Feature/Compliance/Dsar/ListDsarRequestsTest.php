@@ -60,7 +60,7 @@ class ListDsarRequestsTest extends DsarTestCase
     public function when_a_view_all_holder_lists_then_other_companies_requests_stay_hidden(): void
     {
         // Given
-        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
+        $dsarRequest = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
         $otherCompany = Company::factory()->create();
         DsarRequestRecord::factory()->forSubject($otherCompany, $this->aCompanyMember($otherCompany))->create();
 
@@ -68,7 +68,7 @@ class ListDsarRequestsTest extends DsarTestCase
         $response = $this->listDsarRequests($this->owner, $this->company);
 
         // Then
-        $this->assertDsarRequestsListed($response, [$request->getKey()]);
+        $this->assertDsarRequestsListed($response, [$dsarRequest->getKey()]);
     }
 
     #[Test]
@@ -78,13 +78,13 @@ class ListDsarRequestsTest extends DsarTestCase
         $otherCompany = Company::factory()->create();
         $this->attachMember($otherCompany, $this->member, $this->seededRole('employee'));
         DsarRequestRecord::factory()->forSubject($otherCompany, $this->member)->create();
-        $request = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
+        $dsarRequest = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
 
         // When
         $response = $this->listDsarRequests($this->member, $this->company);
 
         // Then
-        $this->assertDsarRequestsListed($response, [$request->getKey()]);
+        $this->assertDsarRequestsListed($response, [$dsarRequest->getKey()]);
     }
 
     #[Test]
@@ -106,31 +106,31 @@ class ListDsarRequestsTest extends DsarTestCase
     public function when_a_requester_no_longer_holds_view_all_then_the_requests_they_made_stay_listed(): void
     {
         // Given a former admin, now an employee, who requested an export for a member
-        $formerAdmin = $this->member;
-        $request = DsarRequestRecord::factory()
+        $requester = $this->member;
+        $dsarRequest = DsarRequestRecord::factory()
             ->forSubject($this->company, $this->aCompanyMember($this->company))
-            ->requestedBy($formerAdmin, 'admin')
+            ->requestedBy($requester, 'admin')
             ->create();
 
         // When
-        $response = $this->listDsarRequests($formerAdmin, $this->company);
+        $response = $this->listDsarRequests($requester, $this->company);
 
         // Then
-        $this->assertDsarRequestsListed($response, [$request->getKey()]);
+        $this->assertDsarRequestsListed($response, [$dsarRequest->getKey()]);
     }
 
     #[Test]
     public function when_a_status_filter_is_given_then_only_requests_in_that_status_are_listed(): void
     {
         // Given
-        $fulfilled = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->requestedDaysAgo(10)->fulfilled()->create();
+        $fulfilledDsarRequest = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->requestedDaysAgo(10)->fulfilled()->create();
         DsarRequestRecord::factory()->forSubject($this->company, $this->member)->create();
 
         // When
         $response = $this->listDsarRequests($this->member, $this->company, ['status' => 'fulfilled']);
 
         // Then
-        $this->assertDsarRequestsListed($response, [$fulfilled->getKey()]);
+        $this->assertDsarRequestsListed($response, [$fulfilledDsarRequest->getKey()]);
     }
 
     #[Test]
@@ -162,7 +162,7 @@ class ListDsarRequestsTest extends DsarTestCase
         // Then paging follows only the validated query, so the first page comes back
         $this->assertDsarRequestPage(
             $response,
-            array_map(fn (DsarRequestRecord $request): string => $request->getKey(), array_slice($newestFirst, 0, 15)),
+            array_map(fn (DsarRequestRecord $dsarRequest): string => $dsarRequest->getKey(), array_slice($newestFirst, 0, 15)),
             ['page' => 1, 'per_page' => 15, 'total' => 20, 'last_page' => 2],
         );
     }
@@ -171,7 +171,7 @@ class ListDsarRequestsTest extends DsarTestCase
     public function when_request_times_tie_then_the_rows_come_back_in_a_stable_order(): void
     {
         // Given three requests made at the same instant
-        $requestIds = array_map(fn (DsarRequestRecord $request): string => $request->getKey(), $this->requestsMadeDaysAgo([0, 0, 0]));
+        $requestIds = array_map(fn (DsarRequestRecord $dsarRequest): string => $dsarRequest->getKey(), $this->requestsMadeDaysAgo([0, 0, 0]));
         rsort($requestIds);
 
         // When
@@ -185,13 +185,13 @@ class ListDsarRequestsTest extends DsarTestCase
     public function when_the_download_window_has_closed_then_the_request_is_listed_as_no_longer_downloadable(): void
     {
         // Given a fulfilled request whose download window has closed and been marked expired
-        $expired = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->fulfilled()->downloadExpired()->create();
+        $expiredDsarRequest = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->fulfilled()->downloadExpired()->create();
 
         // When
         $response = $this->listDsarRequests($this->member, $this->company);
 
         // Then
-        $this->assertListedRowShows($response, $expired, false);
+        $this->assertListedRowShows($response, $expiredDsarRequest, false);
     }
 
     #[Test]
@@ -212,11 +212,11 @@ class ListDsarRequestsTest extends DsarTestCase
     public function when_a_view_all_holder_lists_then_every_company_request_is_listed_newest_first(string $roleCode): void
     {
         // Given
-        $holder = $this->memberWithRole($roleCode);
+        $viewer = $this->memberWithRole($roleCode);
         [$oldest, $middle, $newest] = $this->requestsMadeDaysAgo([3, 2, 1]);
 
         // When
-        $response = $this->listDsarRequests($holder, $this->company);
+        $response = $this->listDsarRequests($viewer, $this->company);
 
         // Then
         $this->assertDsarRequestsListed($response, [$newest->getKey(), $middle->getKey(), $oldest->getKey()]);
@@ -226,8 +226,8 @@ class ListDsarRequestsTest extends DsarTestCase
     public function when_a_member_lists_then_their_requests_show_the_sla_dates_and_download_availability(): void
     {
         // Given a fulfilled request from 28 days ago and an open one an admin made today
-        $fulfilled = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->requestedDaysAgo(28)->fulfilled()->create();
-        $open = DsarRequestRecord::factory()
+        $fulfilledDsarRequest = DsarRequestRecord::factory()->forSubject($this->company, $this->member)->requestedDaysAgo(28)->fulfilled()->create();
+        $openDsarRequest = DsarRequestRecord::factory()
             ->forSubject($this->company, $this->member)
             ->requestedBy($this->admin, 'admin')
             ->create();
@@ -236,9 +236,9 @@ class ListDsarRequestsTest extends DsarTestCase
         $response = $this->listDsarRequests($this->member, $this->company);
 
         // Then
-        $this->assertDsarRequestsListed($response, [$open->getKey(), $fulfilled->getKey()]);
-        $this->assertListedRowShows($response, $fulfilled, true);
-        $this->assertListedRowShows($response, $open, false);
+        $this->assertDsarRequestsListed($response, [$openDsarRequest->getKey(), $fulfilledDsarRequest->getKey()]);
+        $this->assertListedRowShows($response, $fulfilledDsarRequest, true);
+        $this->assertListedRowShows($response, $openDsarRequest, false);
     }
 
     /**

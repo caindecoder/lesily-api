@@ -71,10 +71,10 @@ class SubmitDsarRequestTest extends DsarTestCase
     {
         // Given
         $actor = $this->memberWithRole($roleCode);
-        $colleague = $this->aCompanyMember($this->company);
+        $subject = $this->aCompanyMember($this->company);
 
         // When
-        $response = $this->submitDsarRequest($actor, $this->company, ['subjectUserId' => $colleague->getKey()]);
+        $response = $this->submitDsarRequest($actor, $this->company, ['subjectUserId' => $subject->getKey()]);
 
         // Then
         $this->assertRoleInsufficient($response, 'dsar.request-for-others');
@@ -198,13 +198,13 @@ class SubmitDsarRequestTest extends DsarTestCase
     {
         // Given
         $subject = $this->member;
-        $first = $this->submitDsarRequest($subject, $this->company);
+        $firstResponse = $this->submitDsarRequest($subject, $this->company);
 
         // When
-        $replay = $this->submitDsarRequest($subject, $this->company);
+        $replayResponse = $this->submitDsarRequest($subject, $this->company);
 
         // Then
-        $this->assertReplayedOf($replay, $first);
+        $this->assertReplayedOf($replayResponse, $firstResponse);
         $this->assertOneDsarRequestRecorded($this->company, $subject);
         $this->assertDatabaseCount('audit_trail', self::READY_MADE_AUDIT_ROWS + 1);
     }
