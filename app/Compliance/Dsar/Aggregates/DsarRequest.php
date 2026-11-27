@@ -27,7 +27,7 @@ class DsarRequest extends AggregateRoot
 
     private const int DOWNLOAD_DAYS = 7;
 
-    protected ?DsarRequestStatus $status = null;
+    protected ?DsarRequestStatus $dsarRequestStatus = null;
 
     protected ?string $requestedByUserId = null;
 
@@ -40,16 +40,16 @@ class DsarRequest extends AggregateRoot
 
     protected bool $downloadExpired = false;
 
-    public function submit(SubmitDsarRequestCommand $command, string $requestedByRole): static
+    public function submit(SubmitDsarRequestCommand $submitDsarRequestCommand, string $requestedByRole): static
     {
         $requestedAt = CarbonImmutable::now();
 
-        return $this->forCompany($command->company->getKey())
+        return $this->forCompany($submitDsarRequestCommand->company->getKey())
             ->recordThat(new DsarRequestSubmitted(
                 requestId: $this->uuid(),
-                companyId: $command->company->getKey(),
-                subjectUserId: $command->resolvedSubjectUserId(),
-                requestedByUserId: $command->requestedBy->getKey(),
+                companyId: $submitDsarRequestCommand->company->getKey(),
+                subjectUserId: $submitDsarRequestCommand->resolvedSubjectUserId(),
+                requestedByUserId: $submitDsarRequestCommand->requestedBy->getKey(),
                 requestedByRole: $requestedByRole,
                 requestType: self::REQUEST_TYPE_ACCESS,
                 requestedAt: $requestedAt,
@@ -57,16 +57,16 @@ class DsarRequest extends AggregateRoot
             ));
     }
 
-    public function cancel(CancelDsarRequestCommand $command): static
+    public function cancel(CancelDsarRequestCommand $cancelDsarRequestCommand): static
     {
         /** @var string $cancelledById users are UUID-keyed (HasUuids) */
-        $cancelledById = $command->cancelledBy->getKey();
+        $cancelledById = $cancelDsarRequestCommand->cancelledBy->getKey();
 
         if ($cancelledById !== $this->requestedByUserId) {
             throw new DsarRequesterMismatchException;
         }
 
-        if ($this->status !== DsarRequestStatus::InProgress) {
+        if ($this->dsarRequestStatus !== DsarRequestStatus::InProgress) {
             throw new DsarRequestNotInProgressException;
         }
 
@@ -76,9 +76,9 @@ class DsarRequest extends AggregateRoot
         ));
     }
 
-    public function fulfil(FulfilDsarRequestCommand $command): static
+    public function fulfil(FulfilDsarRequestCommand $fulfilDsarRequestCommand): static
     {
-        if ($this->status !== DsarRequestStatus::InProgress) {
+        if ($this->dsarRequestStatus !== DsarRequestStatus::InProgress) {
             throw new DsarRequestNotInProgressException;
         }
 
@@ -86,84 +86,84 @@ class DsarRequest extends AggregateRoot
 
         return $this->recordThat(new DsarRequestFulfilled(
             completedAt: $completedAt,
-            filePath: $command->filePath,
+            filePath: $fulfilDsarRequestCommand->filePath,
             downloadExpiresAt: $completedAt->addDays(self::DOWNLOAD_DAYS),
         ));
     }
 
-    public function reject(RejectDsarRequestCommand $command): static
+    public function reject(RejectDsarRequestCommand $rejectDsarRequestCommand): static
     {
-        if ($this->status !== DsarRequestStatus::InProgress) {
+        if ($this->dsarRequestStatus !== DsarRequestStatus::InProgress) {
             throw new DsarRequestNotInProgressException;
         }
 
         return $this->recordThat(new DsarRequestRejected(
             rejectedAt: CarbonImmutable::now(),
-            reason: $command->reason,
+            reason: $rejectDsarRequestCommand->reason,
         ));
     }
 
     /**
      * Closes a fulfilled export's download once its window has closed by
-     * $at; any other request, or one already expired, is left as it is.
+     * $expiredAt; any other request, or one already expired, is left as it is.
      * Only fulfilment opens a download window.
      */
-    public function expireDownload(CarbonInterface $at): static
+    public function expireDownload(CarbonInterface $expiredAt): static
     {
-        if ($this->downloadExpiresAt === null || $this->downloadExpired || $at->lessThan($this->downloadExpiresAt)) {
+        if ($this->downloadExpiresAt === null || $this->downloadExpired || $expiredAt->lessThan($this->downloadExpiresAt)) {
             return $this;
         }
 
-        return $this->recordThat(new DsarDownloadExpired(expiredAt: $at));
+        return $this->recordThat(new DsarDownloadExpired(expiredAt: $expiredAt));
     }
 
     /**
-     * Records that an open request missed its 30-day deadline, found by $at;
+     * Records that an open request missed its 30-day deadline, found by $breachedAt;
      * a closed request, one not yet due or one already flagged is left as
      * it is.
      */
-    public function flagSlaBreach(CarbonInterface $at): static
+    public function flagSlaBreach(CarbonInterface $breachedAt): static
     {
-        if ($this->openDeadline === null || $this->slaBreached || $at->lessThan($this->openDeadline)) {
+        if ($this->openDeadline === null || $this->slaBreached || $breachedAt->lessThan($this->openDeadline)) {
             return $this;
         }
 
-        return $this->recordThat(new DsarSlaBreached(breachedAt: $at));
+        return $this->recordThat(new DsarSlaBreached(breachedAt: $breachedAt));
     }
 
-    protected function applyDsarRequestSubmitted(DsarRequestSubmitted $event): void
+    protected function applyDsarRequestSubmitted(DsarRequestSubmitted $dsarRequestSubmitted): void
     {
-        $this->status = DsarRequestStatus::InProgress;
-        $this->requestedByUserId = $event->requestedByUserId;
-        $this->openDeadline = $event->slaDeadline;
+        $this->dsarRequestStatus = DsarRequestStatus::InProgress;
+        $this->requestedByUserId = $dsarRequestSubmitted->requestedByUserId;
+        $this->openDeadline = $dsarRequestSubmitted->slaDeadline;
     }
 
-    protected function applyDsarSlaBreached(DsarSlaBreached $event): void
+    protected function applyDsarSlaBreached(DsarSlaBreached $dsarSlaBreached): void
     {
         $this->slaBreached = true;
     }
 
-    protected function applyDsarRequestFulfilled(DsarRequestFulfilled $event): void
+    protected function applyDsarRequestFulfilled(DsarRequestFulfilled $dsarRequestFulfilled): void
     {
-        $this->status = DsarRequestStatus::Fulfilled;
+        $this->dsarRequestStatus = DsarRequestStatus::Fulfilled;
         $this->openDeadline = null;
-        $this->downloadExpiresAt = $event->downloadExpiresAt;
+        $this->downloadExpiresAt = $dsarRequestFulfilled->downloadExpiresAt;
     }
 
-    protected function applyDsarDownloadExpired(DsarDownloadExpired $event): void
+    protected function applyDsarDownloadExpired(DsarDownloadExpired $dsarDownloadExpired): void
     {
         $this->downloadExpired = true;
     }
 
-    protected function applyDsarRequestRejected(DsarRequestRejected $event): void
+    protected function applyDsarRequestRejected(DsarRequestRejected $dsarRequestRejected): void
     {
-        $this->status = DsarRequestStatus::Rejected;
+        $this->dsarRequestStatus = DsarRequestStatus::Rejected;
         $this->openDeadline = null;
     }
 
-    protected function applyDsarRequestCancelled(DsarRequestCancelled $event): void
+    protected function applyDsarRequestCancelled(DsarRequestCancelled $dsarRequestCancelled): void
     {
-        $this->status = DsarRequestStatus::Cancelled;
+        $this->dsarRequestStatus = DsarRequestStatus::Cancelled;
         $this->openDeadline = null;
     }
 }

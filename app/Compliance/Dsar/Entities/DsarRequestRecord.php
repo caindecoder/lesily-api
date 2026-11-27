@@ -96,11 +96,11 @@ class DsarRequestRecord extends Model
     }
 
     /**
-     * @param  Builder<self>  $query
+     * @param  Builder<self>  $dsarRequests
      */
-    protected function scopeWhereCompany(Builder $query, Company $company): void
+    protected function scopeWhereCompany(Builder $dsarRequests, Company $company): void
     {
-        $query->where('company_id', $company->getKey());
+        $dsarRequests->where('company_id', $company->getKey());
     }
 
     /**
@@ -131,68 +131,68 @@ class DsarRequestRecord extends Model
     }
 
     /**
-     * Requests whose download window has closed by $at — the instant the
+     * Requests whose download window has closed by $scannedAt — the instant the
      * download is refused — and whose expiry is not yet recorded. Only
      * fulfilment sets download_expires_at.
      *
-     * @param  Builder<self>  $query
+     * @param  Builder<self>  $dsarRequests
      */
-    protected function scopeWhereDownloadDueToExpire(Builder $query, CarbonInterface $at): void
+    protected function scopeWhereDownloadDueToExpire(Builder $dsarRequests, CarbonInterface $scannedAt): void
     {
-        $query->where('download_expires_at', '<=', $at)->whereNull('download_expired_at');
+        $dsarRequests->where('download_expires_at', '<=', $scannedAt)->whereNull('download_expired_at');
     }
 
     /**
-     * Requests still in progress whose 30-day deadline passed by $at and
+     * Requests still in progress whose 30-day deadline passed by $scannedAt and
      * whose breach is not yet recorded.
      *
-     * @param  Builder<self>  $query
+     * @param  Builder<self>  $dsarRequests
      */
-    protected function scopeWhereBreachDueToFlag(Builder $query, CarbonInterface $at): void
+    protected function scopeWhereBreachDueToFlag(Builder $dsarRequests, CarbonInterface $scannedAt): void
     {
-        $query->where('status', DsarRequestStatus::InProgress)->where('sla_deadline', '<=', $at)->whereNull('sla_breached_at');
+        $dsarRequests->where('status', DsarRequestStatus::InProgress)->where('sla_deadline', '<=', $scannedAt)->whereNull('sla_breached_at');
     }
 
     /**
-     * Requests still in progress with 0 days or fewer left on $at — due
+     * Requests still in progress with 0 days or fewer left on $viewedAt — due
      * before the start of the next calendar day.
      *
-     * @param  Builder<self>  $query
+     * @param  Builder<self>  $dsarRequests
      */
-    protected function scopeWhereOverdue(Builder $query, CarbonInterface $at): void
+    protected function scopeWhereOverdue(Builder $dsarRequests, CarbonInterface $viewedAt): void
     {
-        $query->where('status', DsarRequestStatus::InProgress)
-            ->where('sla_deadline', '<', CarbonImmutable::instance($at)->startOfDay()->addDay());
+        $dsarRequests->where('status', DsarRequestStatus::InProgress)
+            ->where('sla_deadline', '<', CarbonImmutable::instance($viewedAt)->startOfDay()->addDay());
     }
 
     /**
      * Requests whose missed deadline the daily sweep has flagged.
      *
-     * @param  Builder<self>  $query
+     * @param  Builder<self>  $dsarRequests
      */
-    protected function scopeWhereSlaBreached(Builder $query): void
+    protected function scopeWhereSlaBreached(Builder $dsarRequests): void
     {
-        $query->whereNotNull('sla_breached_at');
+        $dsarRequests->whereNotNull('sla_breached_at');
     }
 
     /**
      * Requests about $user — the data subject's own.
      *
-     * @param  Builder<self>  $query
+     * @param  Builder<self>  $dsarRequests
      */
-    protected function scopeWhereSubject(Builder $query, User $user): void
+    protected function scopeWhereSubject(Builder $dsarRequests, User $user): void
     {
-        $query->where('subject_user_id', $user->getKey());
+        $dsarRequests->where('subject_user_id', $user->getKey());
     }
 
     /**
      * Requests about $user or made by $user.
      *
-     * @param  Builder<self>  $query
+     * @param  Builder<self>  $dsarRequests
      */
-    protected function scopeWhereVisibleTo(Builder $query, User $user): void
+    protected function scopeWhereVisibleTo(Builder $dsarRequests, User $user): void
     {
-        $query->where('subject_user_id', $user->getKey())->orWhere('requested_by', $user->getKey());
+        $dsarRequests->where('subject_user_id', $user->getKey())->orWhere('requested_by', $user->getKey());
     }
 
     protected static function newFactory(): DsarRequestRecordFactory
