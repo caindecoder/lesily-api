@@ -30,8 +30,8 @@ class RecordSignInOutcomesTest extends AuthTestCase
 
         // Then a failed sign-in is logged against them, with the refusal it answered
         $response->assertUnauthorized();
-        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::WrongPassword, $user);
-        $this->assertAnsweredAs($entry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::WrongPassword, $user);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
     }
 
     #[Test]
@@ -45,8 +45,8 @@ class RecordSignInOutcomesTest extends AuthTestCase
 
         // Then a failed sign-in is logged against no user, and the typed email is kept nowhere
         $response->assertUnauthorized();
-        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::UnknownAccount, null);
-        $this->assertStringNotContainsString($email, (string) json_encode($entry->getAttributes()));
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::UnknownAccount, null);
+        $this->assertStringNotContainsString($email, (string) json_encode($accessLogEntry->getAttributes()));
     }
 
     #[Test]
@@ -61,8 +61,8 @@ class RecordSignInOutcomesTest extends AuthTestCase
 
         // Then a failed sign-in is logged for the device limit
         $response->assertForbidden();
-        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $user);
-        $this->assertAnsweredAs($entry, Response::HTTP_FORBIDDEN, ApiErrorCode::DeviceLimitReached);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $user);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_FORBIDDEN, ApiErrorCode::DeviceLimitReached);
     }
 
     #[Test]
@@ -78,8 +78,8 @@ class RecordSignInOutcomesTest extends AuthTestCase
 
         // Then a failed sign-in is logged for the wrong code
         $response->assertUnauthorized();
-        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::WrongTwoFactorCode, $user);
-        $this->assertAnsweredAs($entry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::TwoFactorVerificationFailed);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::WrongTwoFactorCode, $user);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::TwoFactorVerificationFailed);
     }
 
     #[Test]
@@ -93,8 +93,8 @@ class RecordSignInOutcomesTest extends AuthTestCase
 
         // Then a failed sign-in is logged against no user
         $response->assertNotFound();
-        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::ChallengeExpired, null);
-        $this->assertAnsweredAs($entry, Response::HTTP_NOT_FOUND, ApiErrorCode::TwoFactorChallengeNotFound);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::ChallengeExpired, null);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_NOT_FOUND, ApiErrorCode::TwoFactorChallengeNotFound);
     }
 
     #[Test]
@@ -111,8 +111,8 @@ class RecordSignInOutcomesTest extends AuthTestCase
 
         // Then a failed sign-in is logged for the device limit, on the verification route
         $response->assertForbidden();
-        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $user);
-        $this->assertSame('api/v1/auth/2fa/verify', $entry->route);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $user);
+        $this->assertSame('api/v1/auth/2fa/verify', $accessLogEntry->route);
     }
 
     #[Test]
@@ -174,7 +174,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
         // Given a registered user, and an access log that refuses every write
         $user = $this->aRegisteredUser();
         $this->failAccessLogInsertStatements();
-        $logged = $this->collectLogRecords();
+        $arrayObject = $this->collectLogRecords();
 
         // When they sign in
         $response = $this->signIn(self::LOGIN_PASSWORD);
@@ -182,7 +182,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
         // Then the sign-in answers as usual and the failure is reported as critical
         $response->assertOk();
         $this->assertSame(1, $user->tokens()->count());
-        $this->assertWriteFailureReported($logged, ['event' => 'login_succeeded', 'reason' => null, 'user_id' => $user->getKey()]);
+        $this->assertWriteFailureReported($arrayObject, ['event' => 'login_succeeded', 'reason' => null, 'user_id' => $user->getKey()]);
     }
 
     #[Test]
@@ -192,7 +192,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
         $user = $this->aRegisteredUser();
         $this->inTwoCompanies($user);
         $this->failAccessLogInsertStatements();
-        $logged = $this->collectLogRecords();
+        $arrayObject = $this->collectLogRecords();
 
         // When they sign in
         $response = $this->signIn(self::LOGIN_PASSWORD);
@@ -200,7 +200,7 @@ class RecordSignInOutcomesTest extends AuthTestCase
         // Then the sign-in answers as usual, no company keeps a copy, and the one failure is reported
         $response->assertOk();
         $this->assertDatabaseCount('access_log', 0);
-        $this->assertWriteFailureReported($logged, ['event' => 'login_succeeded', 'reason' => null, 'user_id' => $user->getKey()]);
+        $this->assertWriteFailureReported($arrayObject, ['event' => 'login_succeeded', 'reason' => null, 'user_id' => $user->getKey()]);
     }
 
     #[Test]
@@ -294,10 +294,10 @@ class RecordSignInOutcomesTest extends AuthTestCase
 
         // Then one successful sign-in is logged with the request it answered
         $response->assertOk();
-        $entry = $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $user);
-        $this->assertAnsweredAs($entry, Response::HTTP_OK, null);
-        $this->assertLoggedRequest($response, $entry, 'POST api/v1/auth/login');
-        $this->assertSeenOnceAsAPlatformRow($entry);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $user);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_OK, null);
+        $this->assertLoggedRequest($response, $accessLogEntry, 'POST api/v1/auth/login');
+        $this->assertSeenOnceAsAPlatformRow($accessLogEntry);
     }
 
     #[Test]
@@ -311,8 +311,8 @@ class RecordSignInOutcomesTest extends AuthTestCase
 
         // Then a challenge is logged, not a completed sign-in
         $response->assertAccepted();
-        $entry = $this->assertAccessLogged(AccessEvent::LoginChallenged, null, $user);
-        $this->assertAnsweredAs($entry, Response::HTTP_ACCEPTED, null);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::LoginChallenged, null, $user);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_ACCEPTED, null);
     }
 
     #[Test]
@@ -328,8 +328,8 @@ class RecordSignInOutcomesTest extends AuthTestCase
 
         // Then a successful sign-in is logged, on the verification route
         $response->assertOk();
-        $entry = $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $user);
-        $this->assertSame('api/v1/auth/2fa/verify', $entry->route);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $user);
+        $this->assertSame('api/v1/auth/2fa/verify', $accessLogEntry->route);
     }
 
     #[Test]
@@ -345,8 +345,8 @@ class RecordSignInOutcomesTest extends AuthTestCase
 
         // Then a successful sign-in is logged as a recovery-code sign-in, and the code is kept nowhere
         $response->assertOk();
-        $entry = $this->assertAccessLogged(AccessEvent::LoginSucceeded, AccessEventReason::RecoveryCode, $user);
-        $this->assertStringNotContainsString('RECOVER-ONE', (string) json_encode($entry->getAttributes()));
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::LoginSucceeded, AccessEventReason::RecoveryCode, $user);
+        $this->assertStringNotContainsString('RECOVER-ONE', (string) json_encode($accessLogEntry->getAttributes()));
     }
 
     protected function signIn(string $password, string $email = self::LOGIN_EMAIL): TestResponse

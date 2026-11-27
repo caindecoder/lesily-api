@@ -26,14 +26,14 @@ class ViewProfileTest extends AuthTestCase
     public function when_another_user_exists_then_only_own_profile_is_returned(): void
     {
         // Given an authenticated user Alice and another user Bob in the system
-        $alice = User::factory()->named('Alice')->create();
-        $bob = User::factory()->named('Bob')->create();
+        $user = User::factory()->named('Alice')->create();
+        $otherUser = User::factory()->named('Bob')->create();
 
         // When Alice requests GET /api/v1/me
-        $response = $this->viewProfile($alice);
+        $response = $this->viewProfile($user);
 
         // Then the response contains only Alice's data and no field references Bob
-        $this->assertOnlyOwnProfile($response, $alice, $bob);
+        $this->assertOnlyOwnProfile($response, $user, $otherUser);
     }
 
     #[Test]
@@ -116,13 +116,13 @@ class ViewProfileTest extends AuthTestCase
         $this->assertExactProfileEnvelope($response, $user);
     }
 
-    protected function assertOnlyOwnProfile(TestResponse $response, User $owner, User $other): void
+    protected function assertOnlyOwnProfile(TestResponse $response, User $owner, User $otherUser): void
     {
         $response->assertOk();
         $response->assertJsonPath('data.id', $owner->getKey());
         $response->assertJsonPath('data.email', $owner->email);
-        $this->assertStringNotContainsString($other->getKey(), (string) $response->getContent());
-        $this->assertStringNotContainsString($other->email, (string) $response->getContent());
+        $this->assertStringNotContainsString($otherUser->getKey(), (string) $response->getContent());
+        $this->assertStringNotContainsString($otherUser->email, (string) $response->getContent());
     }
 
     /**

@@ -66,8 +66,8 @@ class RecordSessionEndingsTest extends AuthTestCase
 
         // Then the logout is logged
         $response->assertNoContent();
-        $entry = $this->assertAccessLogged(AccessEvent::LoggedOut, null, $user);
-        $this->assertAnsweredAs($entry, Response::HTTP_NO_CONTENT, null);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::LoggedOut, null, $user);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_NO_CONTENT, null);
     }
 
     #[Test]
@@ -83,8 +83,8 @@ class RecordSessionEndingsTest extends AuthTestCase
 
         // Then the revocation of the other sessions is logged
         $response->assertOk();
-        $entry = $this->assertAccessLogged(AccessEvent::OtherSessionsRevoked, null, $user);
-        $this->assertAnsweredAs($entry, Response::HTTP_OK, null);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::OtherSessionsRevoked, null, $user);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_OK, null);
     }
 
     #[Test]
@@ -100,7 +100,7 @@ class RecordSessionEndingsTest extends AuthTestCase
 
         // Then the revocation is logged
         $response->assertNoContent();
-        $entry = $this->assertAccessLogged(AccessEvent::SessionRevoked, null, $user);
-        $this->assertAnsweredAs($entry, Response::HTTP_NO_CONTENT, null);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::SessionRevoked, null, $user);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_NO_CONTENT, null);
     }
 }

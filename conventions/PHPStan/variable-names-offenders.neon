@@ -2437,72 +2437,6 @@ parameters:
 			path: ../../scripts/crap-radar.php
 
 		-
-			message: '#^`AccessLogEntry \$entry` should be named `\$accessLogEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/AccessLog/RecordFailedPasswordRecheckTest.php
-
-		-
-			message: '#^`AccessLogEntry \$entry` should be named `\$accessLogEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 3
-			path: ../../tests/Feature/Auth/AccessLog/RecordSessionEndingsTest.php
-
-		-
-			message: '#^`AccessLogEntry \$entry` should be named `\$accessLogEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 10
-			path: ../../tests/Feature/Auth/AccessLog/RecordSignInOutcomesTest.php
-
-		-
-			message: '#^`ArrayObject \$logged` should be named `\$arrayObject` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Auth/AccessLog/RecordSignInOutcomesTest.php
-
-		-
-			message: '#^`EloquentStoredEvent \$event` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Auth/CreateOwnerTest.php
-
-		-
-			message: '#^`EloquentStoredEvent \$genesis` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/CreateOwnerTest.php
-
-		-
-			message: '#^`RegisterOwnerCommand \$command` should be named `\$registerOwnerCommand` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 5
-			path: ../../tests/Feature/Auth/CreateOwnerTest.php
-
-		-
-			message: '#^`User \$row` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 3
-			path: ../../tests/Feature/Auth/CreateOwnerTest.php
-
-		-
-			message: '#^`Company \$beta` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 4
-			path: ../../tests/Feature/Auth/DefaultCompanyTest.php
-
-		-
-			message: '#^`Company \$home` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/DefaultCompanyTest.php
-
-		-
-			message: '#^`Company \$other` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Auth/DefaultCompanyTest.php
-
-		-
 			message: '#^`SystemNotification \$notification` should be named `\$systemNotification` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -2653,60 +2587,6 @@ parameters:
 			path: ../../tests/Feature/Auth/Google/UnlinkGoogleAccountTest.php
 
 		-
-			message: '#^`Company \$acme` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/ListMyCompaniesTest.php
-
-		-
-			message: '#^`Company \$beta` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/ListMyCompaniesTest.php
-
-		-
-			message: '#^`Company \$second` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/ListMyCompaniesTest.php
-
-		-
-			message: '#^`Company \$zeta` should be named `\$company` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/ListMyCompaniesTest.php
-
-		-
-			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Auth/LoginTest.php
-
-		-
-			message: '#^`TestResponse \$unknownEmail` should be named `\$response` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Auth/LoginTest.php
-
-		-
-			message: '#^`TestResponse \$wrongPassword` should be named `\$response` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../tests/Feature/Auth/LoginTest.php
-
-		-
-			message: '#^`TestResponse \$current` should be named `\$response` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/LogoutTest.php
-
-		-
-			message: '#^`TestResponse \$other` should be named `\$response` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/LogoutTest.php
-
-		-
 			message: '#^`AssertionFailedError \$guard` should be named `\$assertionFailedError` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -2845,72 +2725,6 @@ parameters:
 			path: ../../tests/Feature/Auth/Password/ResetPasswordTest.php
 
 		-
-			message: '#^`AuditEntry \$entry` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/RegisterOwnerTest.php
-
-		-
-			message: '#^`CompanyUser \$membership` should be named `\$companyUser` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/RegisterOwnerTest.php
-
-		-
-			message: '#^`ConsentRecord \$record` should be named `\$consent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/RegisterOwnerTest.php
-
-		-
-			message: '#^`EloquentStoredEvent \$consent` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/RegisterOwnerTest.php
-
-		-
-			message: '#^`EloquentStoredEvent \$event` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/RegisterOwnerTest.php
-
-		-
-			message: '#^`EloquentStoredEvent \$signedUpEvent` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/RegisterOwnerTest.php
-
-		-
-			message: '#^`TestResponse \$registration` should be named `\$response` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/RegisterOwnerTest.php
-
-		-
-			message: '#^`SendQueuedNotifications \$job` should be named `\$sendQueuedNotifications` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/ResendVerificationEmailTest.php
-
-		-
-			message: '#^`User \$other` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/ResendVerificationEmailTest.php
-
-		-
-			message: '#^`User \$person` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 3
-			path: ../../tests/Feature/Auth/ResendVerificationEmailTest.php
-
-		-
-			message: '#^`User \$verified` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/ResendVerificationEmailTest.php
-
-		-
 			message: '#^`NewAccessToken \$aliceCurrent` should be named `\$newAccessToken` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -3019,18 +2833,6 @@ parameters:
 			path: ../../tests/Feature/Auth/Sessions/ViewSessionsTest.php
 
 		-
-			message: '#^`RegistrationConflictException \$conflict` should be named `\$registrationConflictException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/TranslateRegistrationConflictTest.php
-
-		-
-			message: '#^`UniqueConstraintViolationException \$violation` should be named `\$uniqueConstraintViolationException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/TranslateRegistrationConflictTest.php
-
-		-
 			message: '#^`NewAccessToken \$current` should be named `\$newAccessToken` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -3095,60 +2897,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../tests/Feature/Auth/TwoFactor/VerifyTwoFactorTest.php
-
-		-
-			message: '#^`EloquentStoredEvent \$stored` should be named `\$eloquentStoredEvent` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/UpdateProfileTest.php
-
-		-
-			message: '#^`SystemNotificationMail \$mail` should be named `\$systemNotificationMail` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/UpdateProfileTest.php
-
-		-
-			message: '#^`User \$alice` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/UpdateProfileTest.php
-
-		-
-			message: '#^`User \$bob` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/UpdateProfileTest.php
-
-		-
-			message: '#^`User \$target` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/UpdateProfileTest.php
-
-		-
-			message: '#^`User \$alice` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/ViewProfileTest.php
-
-		-
-			message: '#^`User \$bob` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/ViewProfileTest.php
-
-		-
-			message: '#^`User \$other` is not a role word \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/ViewProfileTest.php
-
-		-
-			message: '#^`SystemNotification \$notification` should be named `\$systemNotification` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/Auth/WelcomeEmailTest.php
 
 		-
 			message: '#^`CorruptReceiptSnapshotException \$e` should be named `\$corruptReceiptSnapshotException` \(coding\-conventions §2\.26\)\.$#'

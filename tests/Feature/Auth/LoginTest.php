@@ -49,18 +49,18 @@ class LoginTest extends AuthTestCase
         $this->aRegisteredUser();
 
         // When an unknown email and the known email with a wrong password are each tried
-        $unknownEmail = $this->postJson('/api/v1/auth/login', [
+        $unknownEmailResponse = $this->postJson('/api/v1/auth/login', [
             'email' => 'ghost@contoso.lk',
             'password' => self::LOGIN_PASSWORD,
         ]);
-        $wrongPassword = $this->postJson('/api/v1/auth/login', [
+        $wrongPasswordResponse = $this->postJson('/api/v1/auth/login', [
             'email' => self::LOGIN_EMAIL,
             'password' => 'not-the-password',
         ]);
 
         // Then the unknown-email response is rejected identically to the wrong-password one
-        $this->assertCredentialsRejected($unknownEmail);
-        $this->assertSameRejection($unknownEmail, $wrongPassword);
+        $this->assertCredentialsRejected($unknownEmailResponse);
+        $this->assertSameRejection($unknownEmailResponse, $wrongPasswordResponse);
     }
 
     // Sad — a missing or malformed credential field is rejected by shape validation
@@ -118,11 +118,11 @@ class LoginTest extends AuthTestCase
     // a fourth session at login (UC-1-002 alt-5a); the cap is enforced before the mint.
     #[Test]
     #[DataProvider('provideDeviceCappedPlans')]
-    public function when_a_capped_account_at_the_limit_logs_in_then_it_is_rejected(BillingPlan $plan): void
+    public function when_a_capped_account_at_the_limit_logs_in_then_it_is_rejected(BillingPlan $billingPlan): void
     {
         // Given a user on a device-capped plan already holding three active sessions
         $user = $this->aRegisteredUser();
-        $this->memberOfCompanyOnPlan($user, $plan);
+        $this->memberOfCompanyOnPlan($user, $billingPlan);
         $this->aSessionFor($user, 'web');
         $this->aSessionFor($user, 'mobile');
         $this->aSessionFor($user, 'tablet');
@@ -325,11 +325,11 @@ class LoginTest extends AuthTestCase
     // normally; the cap applies only to Pro+ members (UC-1-002 alt-5a / S14).
     #[Test]
     #[DataProvider('provideUncappedPlans')]
-    public function when_an_uncapped_plan_exceeds_three_devices_then_login_is_allowed(BillingPlan $plan): void
+    public function when_an_uncapped_plan_exceeds_three_devices_then_login_is_allowed(BillingPlan $billingPlan): void
     {
         // Given a user on an uncapped plan already holding three active sessions
         $user = $this->aRegisteredUser();
-        $this->memberOfCompanyOnPlan($user, $plan);
+        $this->memberOfCompanyOnPlan($user, $billingPlan);
         $this->aSessionFor($user, 'web');
         $this->aSessionFor($user, 'mobile');
         $this->aSessionFor($user, 'tablet');
@@ -568,14 +568,14 @@ class LoginTest extends AuthTestCase
         $response->assertJsonPath('message', 'Invalid credentials.');
     }
 
-    protected function assertSameRejection(TestResponse $unknownEmail, TestResponse $wrongPassword): void
+    protected function assertSameRejection(TestResponse $unknownEmailResponse, TestResponse $wrongPasswordResponse): void
     {
         // The per-request correlation_id legitimately differs and reveals nothing;
         // every other field must match so the two failures are indistinguishable.
-        $this->assertSame($unknownEmail->status(), $wrongPassword->status());
+        $this->assertSame($unknownEmailResponse->status(), $wrongPasswordResponse->status());
         $this->assertSame(
-            Arr::except($unknownEmail->json(), 'correlation_id'),
-            Arr::except($wrongPassword->json(), 'correlation_id'),
+            Arr::except($unknownEmailResponse->json(), 'correlation_id'),
+            Arr::except($wrongPasswordResponse->json(), 'correlation_id'),
         );
     }
 }

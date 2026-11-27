@@ -71,10 +71,10 @@ class ResendVerificationEmailTest extends AuthTestCase
     {
         // Given a person whose email is already verified
         Notification::fake();
-        $verified = User::factory()->create();
+        $user = User::factory()->create();
 
         // When they ask for a new verification link
-        $response = $this->askForNewLinkAs($verified);
+        $response = $this->askForNewLinkAs($user);
 
         // Then the request succeeds and nothing is sent
         $this->assertNothingSent($response);
@@ -87,13 +87,13 @@ class ResendVerificationEmailTest extends AuthTestCase
         // unverified person shares the owner's IP
         Notification::fake();
         $this->askForNewLinkAs($this->owner);
-        $other = User::factory()->unverified()->create();
+        $otherUser = User::factory()->unverified()->create();
 
         // When the second person asks for a new link
-        $response = $this->askForNewLinkAs($other);
+        $response = $this->askForNewLinkAs($otherUser);
 
         // Then a fresh link is sent to them
-        $this->assertNewLinkSentTo($response, $other, 1);
+        $this->assertNewLinkSentTo($response, $otherUser, 1);
     }
 
     #[Test]
@@ -142,9 +142,9 @@ class ResendVerificationEmailTest extends AuthTestCase
         return $this->postJson(self::RESEND_URL);
     }
 
-    protected function askForNewLinkAs(User $person): TestResponse
+    protected function askForNewLinkAs(User $user): TestResponse
     {
-        Sanctum::actingAs($person);
+        Sanctum::actingAs($user);
 
         return $this->postJson(self::RESEND_URL);
     }
@@ -162,19 +162,19 @@ class ResendVerificationEmailTest extends AuthTestCase
         Notification::assertNothingSent();
     }
 
-    protected function assertNewLinkSentTo(TestResponse $response, User $person, int $times): void
+    protected function assertNewLinkSentTo(TestResponse $response, User $user, int $times): void
     {
         $response->assertNoContent();
-        Notification::assertSentToTimes($person, EmailVerificationLinkNotification::class, $times);
+        Notification::assertSentToTimes($user, EmailVerificationLinkNotification::class, $times);
     }
 
-    protected function assertNewLinkQueuedFor(TestResponse $response, User $person): void
+    protected function assertNewLinkQueuedFor(TestResponse $response, User $user): void
     {
         $response->assertNoContent();
         Queue::assertPushed(
             SendQueuedNotifications::class,
-            fn (SendQueuedNotifications $job) => $job->notification instanceof EmailVerificationLinkNotification
-                && $job->notifiables->contains($person),
+            fn (SendQueuedNotifications $sendQueuedNotifications) => $sendQueuedNotifications->notification instanceof EmailVerificationLinkNotification
+                && $sendQueuedNotifications->notifiables->contains($user),
         );
     }
 }
