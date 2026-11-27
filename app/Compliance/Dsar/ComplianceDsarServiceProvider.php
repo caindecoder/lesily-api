@@ -25,26 +25,26 @@ class ComplianceDsarServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->bind(DsarExportArchive::class, fn (Application $app): DsarExportArchive => new DsarExportArchive(
-            $app->make(Filesystem::class),
+        $this->app->bind(DsarExportArchive::class, fn (Application $application): DsarExportArchive => new DsarExportArchive(
+            $application->make(Filesystem::class),
             sys_get_temp_dir(),
         ));
 
-        $this->app->bind(DsarReportRendererInterface::class, fn (Application $app): ChromiumDsarReportRenderer => new ChromiumDsarReportRenderer(
-            $app->make(Filesystem::class),
+        $this->app->bind(DsarReportRendererInterface::class, fn (Application $application): ChromiumDsarReportRenderer => new ChromiumDsarReportRenderer(
+            $application->make(Filesystem::class),
             sys_get_temp_dir(),
         ));
 
-        $this->app->bind(DsarSections::class, fn (Application $app): DsarSections => new DsarSections([
-            $app->make(ProfileSection::class),
-            $app->make(MembershipSection::class),
-            $app->make(ConsentRecordsSection::class),
-            $app->make(AuditTrailSection::class),
-            $app->make(SignInsSection::class),
-            $app->make(InvitationsSection::class),
-            $app->make(OwnershipTransferCasesSection::class),
-            $app->make(NotificationsSection::class),
-            $app->make(AccessLogSection::class),
+        $this->app->bind(DsarSections::class, fn (Application $application): DsarSections => new DsarSections([
+            $application->make(ProfileSection::class),
+            $application->make(MembershipSection::class),
+            $application->make(ConsentRecordsSection::class),
+            $application->make(AuditTrailSection::class),
+            $application->make(SignInsSection::class),
+            $application->make(InvitationsSection::class),
+            $application->make(OwnershipTransferCasesSection::class),
+            $application->make(NotificationsSection::class),
+            $application->make(AccessLogSection::class),
         ]));
     }
 

@@ -20,51 +20,51 @@ use App\Compliance\Dsar\UseCases\Interactors\SubmitDsarRequestInteractor;
 
 class DsarRequestsController extends Controller
 {
-    public function index(Request $request, ListDsarRequestsInteractor $interactor): DsarRequestCollection
+    public function index(Request $request, ListDsarRequestsInteractor $listDsarRequestsInteractor): DsarRequestCollection
     {
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
         return new DsarRequestCollection(
-            $interactor->execute(ListDsarRequestsCommand::fromQuery($request), $actor, $request->company())
+            $listDsarRequestsInteractor->execute(ListDsarRequestsCommand::fromQuery($request), $actor, $request->company())
         );
     }
 
-    public function show(Request $request, string $requestId, ShowDsarRequestInteractor $interactor): DsarRequestResource
+    public function show(Request $request, string $requestId, ShowDsarRequestInteractor $showDsarRequestInteractor): DsarRequestResource
     {
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
-        return new DsarRequestResource($interactor->execute($requestId, $actor, $request->company()));
+        return new DsarRequestResource($showDsarRequestInteractor->execute($requestId, $actor, $request->company()));
     }
 
-    public function store(Request $request, SubmitDsarRequestInteractor $interactor): JsonResponse
+    public function store(Request $request, SubmitDsarRequestInteractor $submitDsarRequestInteractor): JsonResponse
     {
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
-        $command = SubmitDsarRequestCommand::validateAndCreate([
+        $submitDsarRequestCommand = SubmitDsarRequestCommand::validateAndCreate([
             'subjectUserId' => $request->input('subjectUserId'),
             'company' => $request->company(),
             'requestedBy' => $actor,
         ]);
 
-        $dsarRequest = $interactor->execute($command, $actor, RequestOrigin::fromRequest($request));
+        $dsarRequest = $submitDsarRequestInteractor->execute($submitDsarRequestCommand, $actor, RequestOrigin::fromRequest($request));
 
         return (new DsarRequestResource($dsarRequest))->response()->setStatusCode(Response::HTTP_CREATED);
     }
 
-    public function cancel(Request $request, string $requestId, CancelDsarRequestInteractor $interactor): DsarRequestResource
+    public function cancel(Request $request, string $requestId, CancelDsarRequestInteractor $cancelDsarRequestInteractor): DsarRequestResource
     {
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
-        $command = CancelDsarRequestCommand::validateAndCreate([
+        $cancelDsarRequestCommand = CancelDsarRequestCommand::validateAndCreate([
             'dsarRequest' => $requestId,
             'company' => $request->company(),
             'cancelledBy' => $actor,
         ]);
 
-        return new DsarRequestResource($interactor->execute($command, $actor, RequestOrigin::fromRequest($request)));
+        return new DsarRequestResource($cancelDsarRequestInteractor->execute($cancelDsarRequestCommand, $actor, RequestOrigin::fromRequest($request)));
     }
 }

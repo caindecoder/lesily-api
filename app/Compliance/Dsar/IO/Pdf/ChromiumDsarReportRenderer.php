@@ -15,13 +15,13 @@ use App\Compliance\Dsar\UseCases\Renderers\DsarReportRendererInterface;
 class ChromiumDsarReportRenderer implements DsarReportRendererInterface
 {
     public function __construct(
-        private readonly Filesystem $files,
+        private readonly Filesystem $filesystem,
         private readonly string $workDirectory,
     ) {}
 
-    public function render(DsarReport $report): string
+    public function render(DsarReport $dsarReport): string
     {
-        return $this->print(view('dsar.report', ['report' => $report])->render());
+        return $this->print(view('dsar.report', ['report' => $dsarReport])->render());
     }
 
     /**
@@ -33,7 +33,7 @@ class ChromiumDsarReportRenderer implements DsarReportRendererInterface
     protected function print(string $html): string
     {
         $page = sprintf('%s%s%s.html', $this->workDirectory, DIRECTORY_SEPARATOR, Str::uuid7());
-        $this->files->put($page, $html);
+        $this->filesystem->put($page, $html);
 
         try {
             $bytes = base64_decode(Pdf::html('')
@@ -45,10 +45,10 @@ class ChromiumDsarReportRenderer implements DsarReportRendererInterface
                         ->blockUrls(['http://', 'https://']);
                 })
                 ->base64());
-        } catch (Throwable $e) {
-            throw new DsarReportRenderingFailedException('The report could not be rendered.', previous: $e);
+        } catch (Throwable $throwable) {
+            throw new DsarReportRenderingFailedException('The report could not be rendered.', previous: $throwable);
         } finally {
-            $this->files->delete($page);
+            $this->filesystem->delete($page);
         }
 
         if (! str_starts_with($bytes, '%PDF')) {
