@@ -39,7 +39,7 @@ class InvitationsSection implements DsarSectionProvider
      */
     public function collect(string $subjectUserId, string $companyId): array
     {
-        $invitationIds = LesilyStoredEvent::query()
+        $invitationEloquentStoredEvents = LesilyStoredEvent::query()
             ->whereForCompany($companyId)
             ->where('event_class', UserInvited::class)
             ->whereRaw(
@@ -48,25 +48,25 @@ class InvitationsSection implements DsarSectionProvider
             )
             ->select('aggregate_uuid');
 
-        $events = LesilyStoredEvent::query()
+        $eloquentStoredEvents = LesilyStoredEvent::query()
             ->whereForCompany($companyId)
-            ->whereIn('aggregate_uuid', $invitationIds)
+            ->whereIn('aggregate_uuid', $invitationEloquentStoredEvents)
             ->whereIn('event_class', array_keys(self::EVENTS))
             ->orderBy('id')
             ->get();
 
-        $roleCodes = Role::query()
-            ->whereIn('id', $events->pluck('event_properties.roleId')->filter()->unique())
+        $roleCodeCollection = Role::query()
+            ->whereIn('id', $eloquentStoredEvents->pluck('event_properties.roleId')->filter()->unique())
             ->pluck('code', 'id');
 
-        return $events
+        return $eloquentStoredEvents
             ->groupBy('aggregate_uuid')
-            ->map(fn (Collection $stream): array => [
-                'timeline' => $stream
-                    ->map(fn (EloquentStoredEvent $event): array => [
-                        'event' => self::EVENTS[$event->event_class],
-                        'role' => $roleCodes[$event->event_properties['roleId'] ?? ''] ?? null,
-                        'at' => CarbonImmutable::parse($event->getAttribute('created_at'))->toISOString(),
+            ->map(fn (Collection $streamCollection): array => [
+                'timeline' => $streamCollection
+                    ->map(fn (EloquentStoredEvent $eloquentStoredEvent): array => [
+                        'event' => self::EVENTS[$eloquentStoredEvent->event_class],
+                        'role' => $roleCodeCollection[$eloquentStoredEvent->event_properties['roleId'] ?? ''] ?? null,
+                        'at' => CarbonImmutable::parse($eloquentStoredEvent->getAttribute('created_at'))->toISOString(),
                     ])
                     ->values()
                     ->all(),

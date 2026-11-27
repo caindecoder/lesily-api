@@ -22,7 +22,7 @@ class PlatformAdminDsarRequestsController extends Controller
 
         $queue = $interactor->execute(ReviewDsarRequestQueueCommand::fromQuery($request), $platformAdmin, RequestOrigin::fromRequest($request));
 
-        return (new DsarRequestAdminCollection($queue->page))
+        return (new DsarRequestAdminCollection($queue->dsarRequests))
             ->additional(['kpis' => ['open' => $queue->open, 'overdue' => $queue->overdue, 'due_in_7_days' => $queue->dueInSevenDays]])
             ->response($request);
     }

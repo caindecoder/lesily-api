@@ -40,15 +40,15 @@ class OwnershipTransferCasesSection implements DsarSectionProvider
         return LesilyStoredEvent::query()
             ->whereForCompany($companyId)
             ->where('event_class', CompanyOwnershipTransferred::class)
-            ->where(fn (Builder $query) => $query
+            ->where(fn (Builder $builder) => $builder
                 ->where('event_properties->previousOwnerUserId', $subjectUserId)
                 ->orWhere('event_properties->newOwnerUserId', $subjectUserId))
             ->orderBy('id')
             ->get()
-            ->map(fn (EloquentStoredEvent $transfer): array => [
-                'transferred_at' => CarbonImmutable::parse($transfer->getAttribute('created_at'))->toISOString(),
-                'role' => $transfer->event_properties['previousOwnerUserId'] === $subjectUserId ? 'previous_owner' : 'new_owner',
-                'source' => $transfer->event_properties['source'],
+            ->map(fn (EloquentStoredEvent $eloquentStoredEvent): array => [
+                'transferred_at' => CarbonImmutable::parse($eloquentStoredEvent->getAttribute('created_at'))->toISOString(),
+                'role' => $eloquentStoredEvent->event_properties['previousOwnerUserId'] === $subjectUserId ? 'previous_owner' : 'new_owner',
+                'source' => $eloquentStoredEvent->event_properties['source'],
             ])
             ->all();
     }
@@ -60,20 +60,20 @@ class OwnershipTransferCasesSection implements DsarSectionProvider
     {
         return OwnershipTransferCase::query()
             ->forCompanyId($companyId)
-            ->where(fn (Builder $query) => $query
+            ->where(fn (Builder $builder) => $builder
                 ->where('expected_owner_user_id', $subjectUserId)
                 ->orWhere('new_owner_user_id', $subjectUserId))
             ->orderBy('created_at')
             ->orderBy('id')
             ->get()
-            ->map(fn (OwnershipTransferCase $case): array => [
-                'status' => $case->status->value,
-                'outcome' => $case->closed_outcome?->value,
-                'rejection_reason_code' => $case->rejection_reason_code?->value,
-                'requested_context' => $case->requested_context,
-                'opened_at' => $case->created_at->toISOString(),
-                'verified_at' => $case->verified_at?->toISOString(),
-                'executed_at' => $case->executed_at?->toISOString(),
+            ->map(fn (OwnershipTransferCase $ownershipTransferCase): array => [
+                'status' => $ownershipTransferCase->status->value,
+                'outcome' => $ownershipTransferCase->closed_outcome?->value,
+                'rejection_reason_code' => $ownershipTransferCase->rejection_reason_code?->value,
+                'requested_context' => $ownershipTransferCase->requested_context,
+                'opened_at' => $ownershipTransferCase->created_at->toISOString(),
+                'verified_at' => $ownershipTransferCase->verified_at?->toISOString(),
+                'executed_at' => $ownershipTransferCase->executed_at?->toISOString(),
             ])
             ->all();
     }

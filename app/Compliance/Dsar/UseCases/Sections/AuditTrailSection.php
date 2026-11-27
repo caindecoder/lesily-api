@@ -24,22 +24,22 @@ class AuditTrailSection implements DsarSectionProvider
     {
         return AuditEntry::query()
             ->where('company_id', $companyId)
-            ->where(fn (Builder $query): Builder => $query
+            ->where(fn (Builder $builder): Builder => $builder
                 ->where('actor_user_id', $subjectUserId)
-                ->orWhere(fn (Builder $about): Builder => $about
+                ->orWhere(fn (Builder $aboutBuilder): Builder => $aboutBuilder
                     ->where('subject_type', AuditSubjectType::User)
                     ->where('subject_id', $subjectUserId)))
             ->orderBy('recorded_at')
             ->orderBy('id')
             ->get()
-            ->map(fn (AuditEntry $entry): array => [
-                'recorded_at' => $entry->recorded_at->toISOString(),
-                'action' => $entry->action->value,
-                'description' => $entry->description,
-                'subject_type' => $entry->subject_type->value,
-                'subject_id' => $entry->subject_id,
-                ...$this->originOf($entry, $subjectUserId),
-                'changes' => $this->changesOf($entry),
+            ->map(fn (AuditEntry $auditEntry): array => [
+                'recorded_at' => $auditEntry->recorded_at->toISOString(),
+                'action' => $auditEntry->action->value,
+                'description' => $auditEntry->description,
+                'subject_type' => $auditEntry->subject_type->value,
+                'subject_id' => $auditEntry->subject_id,
+                ...$this->originOf($auditEntry, $subjectUserId),
+                'changes' => $this->changesOf($auditEntry),
             ])
             ->all();
     }
@@ -49,9 +49,9 @@ class AuditTrailSection implements DsarSectionProvider
      *
      * @return list<array{field: string, from: mixed, to: mixed}>
      */
-    protected function changesOf(AuditEntry $entry): array
+    protected function changesOf(AuditEntry $auditEntry): array
     {
-        $changes = FieldChanges::readable($entry->metadata['changes'] ?? null) ?? [];
+        $changes = FieldChanges::readable($auditEntry->metadata['changes'] ?? null) ?? [];
 
         return array_map(
             fn (string $field, array $change): array => [
@@ -70,12 +70,12 @@ class AuditTrailSection implements DsarSectionProvider
      *
      * @return array{ip_address: ?string, user_agent: ?string}
      */
-    protected function originOf(AuditEntry $entry, string $subjectUserId): array
+    protected function originOf(AuditEntry $auditEntry, string $subjectUserId): array
     {
-        if ($entry->actor_user_id !== $subjectUserId) {
+        if ($auditEntry->actor_user_id !== $subjectUserId) {
             return ['ip_address' => null, 'user_agent' => null];
         }
 
-        return ['ip_address' => $entry->ip_address, 'user_agent' => $entry->user_agent];
+        return ['ip_address' => $auditEntry->ip_address, 'user_agent' => $auditEntry->user_agent];
     }
 }

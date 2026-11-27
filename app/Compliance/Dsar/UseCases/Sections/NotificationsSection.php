@@ -37,16 +37,16 @@ class NotificationsSection implements DsarSectionProvider
     {
         return User::query()->findOrFail($subjectUserId)
             ->notifications()
-            ->where(fn (Builder $query): Builder => $query->where('company_id', $companyId)->orWhereNull('company_id'))
+            ->where(fn (Builder $builder): Builder => $builder->where('company_id', $companyId)->orWhereNull('company_id'))
             ->reorder()
             ->orderBy('created_at')
             ->orderBy('id')
             ->get()
-            ->map(fn (DatabaseNotification $notification): array => [
-                'notification_type' => $notification->data['notification_type'],
-                'company_name' => $notification->getAttribute('company_id') === null ? null : $notification->data['company_name'],
-                'sent_at' => $notification->created_at?->toISOString(),
-                'read_at' => $notification->read_at?->toISOString(),
+            ->map(fn (DatabaseNotification $databaseNotification): array => [
+                'notification_type' => $databaseNotification->data['notification_type'],
+                'company_name' => $databaseNotification->getAttribute('company_id') === null ? null : $databaseNotification->data['company_name'],
+                'sent_at' => $databaseNotification->created_at?->toISOString(),
+                'read_at' => $databaseNotification->read_at?->toISOString(),
             ])
             ->all();
     }
@@ -61,11 +61,11 @@ class NotificationsSection implements DsarSectionProvider
             ->orderBy('notification_type')
             ->orderBy('channel')
             ->get()
-            ->map(fn (NotificationPreference $preference): array => [
-                'notification_type' => $preference->notification_type,
-                'channel' => $preference->channel,
-                'enabled' => $preference->enabled,
-                'changed_at' => $preference->updated_at?->toISOString(),
+            ->map(fn (NotificationPreference $notificationPreference): array => [
+                'notification_type' => $notificationPreference->notification_type,
+                'channel' => $notificationPreference->channel,
+                'enabled' => $notificationPreference->enabled,
+                'changed_at' => $notificationPreference->updated_at?->toISOString(),
             ])
             ->all();
     }

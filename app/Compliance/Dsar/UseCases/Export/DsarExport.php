@@ -11,20 +11,20 @@ use App\Compliance\Dsar\UseCases\Renderers\DsarReportRendererInterface;
 class DsarExport
 {
     public function __construct(
-        private readonly DsarSections $sections,
-        private readonly DsarReportPresenter $presenter,
-        private readonly DsarReportRendererInterface $renderer,
-        private readonly DsarExportArchive $archive,
+        private readonly DsarSections $dsarSections,
+        private readonly DsarReportPresenter $dsarReportPresenter,
+        private readonly DsarReportRendererInterface $dsarReportRenderer,
+        private readonly DsarExportArchive $dsarExportArchive,
     ) {}
 
     /**
-     * The export bundle of the subject's data in $request's company, as ZIP
+     * The export bundle of the subject's data in $dsarRequest's company, as ZIP
      * bytes: the data, and the report of it.
      */
-    public function build(DsarRequestRecord $request): string
+    public function build(DsarRequestRecord $dsarRequest): string
     {
-        $sections = $this->sections->collectFor($request->subject_user_id, $request->company_id);
+        $sections = $this->dsarSections->collectFor($dsarRequest->subject_user_id, $dsarRequest->company_id);
 
-        return $this->archive->build($sections, $this->renderer->render($this->presenter->present($request, $sections)));
+        return $this->dsarExportArchive->build($sections, $this->dsarReportRenderer->render($this->dsarReportPresenter->present($dsarRequest, $sections)));
     }
 }

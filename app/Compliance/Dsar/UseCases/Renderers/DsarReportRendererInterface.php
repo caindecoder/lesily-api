@@ -12,5 +12,5 @@ interface DsarReportRendererInterface
      *
      * @throws DsarReportRenderingFailedException when no complete PDF can be produced
      */
-    public function render(DsarReport $report): string;
+    public function render(DsarReport $dsarReport): string;
 }
