@@ -30,7 +30,7 @@ class RegisterController extends Controller
             DeviceName::resolve(null, $request),
         );
 
-        return (new RegisterSuccessResource($result->user, $result->session->token, $result->companyId))
+        return (new RegisterSuccessResource($result->user, $result->issuedSession->token, $result->companyId))
             ->response()
             ->setStatusCode(Response::HTTP_CREATED);
     }

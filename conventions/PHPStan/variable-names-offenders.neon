@@ -2215,18 +2215,6 @@ parameters:
 			path: ../../app/Foundation/AuditTrail/Values/AuditLogPage.php
 
 		-
-			message: '#^`InvalidArgumentException \$invalid` should be named `\$invalidArgumentException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 2
-			path: ../../app/Foundation/Auth/IO/Google/GoogleAuthIdTokenVerifier.php
-
-		-
-			message: '#^`RuntimeException \$unreachable` should be named `\$runtimeException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/IO/Google/GoogleAuthIdTokenVerifier.php
-
-		-
 			message: '#^`ChangePasswordCommand \$command` should be named `\$changePasswordCommand` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
@@ -2465,42 +2453,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../app/Foundation/Auth/IO/Http/Resources/TwoFactorSetupResource.php
-
-		-
-			message: '#^`Builder \$query` should be named `\$builder` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/ActiveSessions.php
-
-		-
-			message: '#^`Carbon \$windowStart` does not say what happened — end it in At, On, Date, Deadline or Until \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/ActiveSessions.php
-
-		-
-			message: '#^`AuditTrailWriter \$writer` should be named `\$auditTrailWriter` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/Audit/RegistrationAudit.php
-
-		-
-			message: '#^`RequestOrigin \$origin` should be named `\$requestOrigin` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/Audit/RegistrationAudit.php
-
-		-
-			message: '#^`RequestOrigin \$origin` should be named `\$requestOrigin` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/CurrentSession.php
-
-		-
-			message: '#^`AccessLogRecorder \$accessLog` should be named `\$accessLogRecorder` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/DeviceLimitGuard.php
 
 		-
 			message: '#^`ChangePasswordCommand \$command` should be named `\$changePasswordCommand` \(coding\-conventions §2\.26\)\.$#'
@@ -2885,66 +2837,6 @@ parameters:
 			identifier: lesily.variableName
 			count: 1
 			path: ../../app/Foundation/Auth/UseCases/Interactors/VerifyTwoFactorInteractor.php
-
-		-
-			message: '#^`AccessLogRecorder \$accessLog` should be named `\$accessLogRecorder` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/PasswordVerifier.php
-
-		-
-			message: '#^`AccessEventReason \$factor` should be named `\$accessEventReason` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/PendingSession.php
-
-		-
-			message: '#^`RegisterOwnerCommand \$command` should be named `\$registerOwnerCommand` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/RegistrationUniquenessGuard.php
-
-		-
-			message: '#^`UniqueConstraintViolationException \$violation` should be named `\$uniqueConstraintViolationException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/RegistrationUniquenessGuard.php
-
-		-
-			message: '#^`IssuedSession \$session` should be named `\$issuedSession` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/Results/RegisterResult.php
-
-		-
-			message: '#^`IssuedSession \$session` should be named `\$issuedSession` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/Results/SessionIssued.php
-
-		-
-			message: '#^`NewAccessToken \$token` should be named `\$newAccessToken` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/SessionIssuer.php
-
-		-
-			message: '#^`AccessLogRecorder \$accessLog` should be named `\$accessLogRecorder` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/SignInFinisher.php
-
-		-
-			message: '#^`IssuedSession \$session` should be named `\$issuedSession` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/SignInFinisher.php
-
-		-
-			message: '#^`PendingSession \$pending` should be named `\$pendingSession` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../app/Foundation/Auth/UseCases/SignInFinisher.php
 
 		-
 			message: '#^`BillingPlan \$plan` should be named `\$billingPlan` \(coding\-conventions §2\.26\)\.$#'

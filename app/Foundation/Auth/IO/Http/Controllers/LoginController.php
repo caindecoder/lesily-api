@@ -36,7 +36,7 @@ class LoginController extends Controller
 
         // The only other outcome is SessionIssued — LogInInteractor returns the sealed
         // ChallengeRequired|SessionIssued union, so the type narrows here automatically.
-        return (new LoginResource($outcome->user, $outcome->session->token, $outcome->session->expiresAt))
+        return (new LoginResource($outcome->user, $outcome->issuedSession->token, $outcome->issuedSession->expiresAt))
             ->response();
     }
 }

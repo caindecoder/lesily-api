@@ -28,7 +28,7 @@ class GoogleOAuthController extends Controller
                 ->setStatusCode(Response::HTTP_ACCEPTED);
         }
 
-        return (new LoginResource($outcome->user, $outcome->session->token, $outcome->session->expiresAt))
+        return (new LoginResource($outcome->user, $outcome->issuedSession->token, $outcome->issuedSession->expiresAt))
             ->response();
     }
 }

@@ -48,7 +48,7 @@ class DisableTwoFactorInteractor
 
             UserAggregate::retrieve($user->getKey())->disableTwoFactor()->persist();
 
-            $this->audit->record($user, AuditAction::TwoFactorDisabled, $session->origin);
+            $this->audit->record($user, AuditAction::TwoFactorDisabled, $session->requestOrigin);
         });
 
         // After the disable commits, invalidate every other device immediately (OQ-1-120):

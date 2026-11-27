@@ -23,7 +23,7 @@ class DeviceLimitGuard
 {
     private const MAX_DEVICES = 3;
 
-    public function __construct(private readonly AccessLogRecorder $accessLog) {}
+    public function __construct(private readonly AccessLogRecorder $accessLogRecorder) {}
 
     public function enforce(User $user): void
     {
@@ -32,7 +32,7 @@ class DeviceLimitGuard
         }
 
         if (ActiveSessions::constrain($user)->count() >= self::MAX_DEVICES) {
-            $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $user);
+            $this->accessLogRecorder->note(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $user);
 
             throw new DeviceLimitReachedException;
         }

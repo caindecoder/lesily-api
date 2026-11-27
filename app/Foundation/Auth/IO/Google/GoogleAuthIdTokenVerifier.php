@@ -44,20 +44,20 @@ class GoogleAuthIdTokenVerifier implements GoogleIdTokenVerifier
                 emailVerified: Arr::boolean($claims, 'email_verified'),
                 name: Arr::string($claims, 'name', ''),
             );
-        } catch (InvalidArgumentException $invalid) {
-            throw $this->isBrokenKeySet($invalid) ? $this->unavailable($invalid) : new GoogleTokenInvalidException;
+        } catch (InvalidArgumentException $invalidArgumentException) {
+            throw $this->isBrokenKeySet($invalidArgumentException) ? $this->unavailable($invalidArgumentException) : new GoogleTokenInvalidException;
         } catch (UnexpectedValueException|DomainException) {
             throw new GoogleTokenInvalidException;
-        } catch (RuntimeException $unreachable) {
+        } catch (RuntimeException $runtimeException) {
             // A non-200 key download and every Guzzle transfer error land here; the token was never judged.
-            throw $this->unavailable($unreachable);
+            throw $this->unavailable($runtimeException);
         }
     }
 
     /** google/auth raises these for a key set Google served broken, not for a bad token. */
-    protected function isBrokenKeySet(InvalidArgumentException $invalid): bool
+    protected function isBrokenKeySet(InvalidArgumentException $invalidArgumentException): bool
     {
-        return in_array($invalid->getMessage(), [
+        return in_array($invalidArgumentException->getMessage(), [
             'federated sign-on certs expects "keys" to be set',
             'certs expects "alg" to be set',
             'More than one alg detected in certs',

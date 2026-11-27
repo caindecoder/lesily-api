@@ -24,6 +24,6 @@ class VerifyTwoFactorController extends Controller
             $request->merge(['deviceName' => DeviceName::resolve($request->input('deviceName'), $request)])
         ));
 
-        return (new LoginResource($outcome->user, $outcome->session->token, $outcome->session->expiresAt))->response();
+        return (new LoginResource($outcome->user, $outcome->issuedSession->token, $outcome->issuedSession->expiresAt))->response();
     }
 }

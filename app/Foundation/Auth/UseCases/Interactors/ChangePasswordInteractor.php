@@ -39,7 +39,7 @@ class ChangePasswordInteractor
 
             $this->tokenRevoker->revokeAllForUserExcept($user, $session->tokenId);
 
-            $this->audit->record($user, AuditAction::PasswordChanged, $session->origin);
+            $this->audit->record($user, AuditAction::PasswordChanged, $session->requestOrigin);
         });
     }
 }

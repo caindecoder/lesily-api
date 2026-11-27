@@ -20,12 +20,12 @@ class RegistrationAudit
 {
     public function __construct(
         protected readonly MemberRoleCode $memberRoleCode,
-        protected readonly AuditTrailWriter $writer,
+        protected readonly AuditTrailWriter $auditTrailWriter,
     ) {}
 
-    public function registered(User $owner, Company $company, RequestOrigin $origin): void
+    public function registered(User $owner, Company $company, RequestOrigin $requestOrigin): void
     {
-        $this->writer->write([
+        $this->auditTrailWriter->write([
             'company_id' => $company->getKey(),
             'stored_event_id' => LesilyStoredEvent::query()
                 ->where('aggregate_uuid', $owner->getKey())
@@ -36,7 +36,7 @@ class RegistrationAudit
             'subject_type' => AuditSubjectType::User,
             'subject_id' => $owner->getKey(),
             'subject_label' => $owner->name,
-            ...$this->writer->actorAndOrigin($owner, $this->memberRoleCode->of($owner, $company->getKey()), $origin),
+            ...$this->auditTrailWriter->actorAndOrigin($owner, $this->memberRoleCode->of($owner, $company->getKey()), $requestOrigin),
             'metadata' => null,
         ], AuditAction::UserRegistered, 'info');
     }

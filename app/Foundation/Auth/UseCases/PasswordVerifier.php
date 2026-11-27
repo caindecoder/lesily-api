@@ -20,12 +20,12 @@ use App\Foundation\Auth\Exceptions\IncorrectPasswordException;
  */
 class PasswordVerifier
 {
-    public function __construct(private readonly AccessLogRecorder $accessLog) {}
+    public function __construct(private readonly AccessLogRecorder $accessLogRecorder) {}
 
     public function verify(User $user, string $password): void
     {
         if (! Hash::check($password, $user->password)) {
-            $this->accessLog->note(AccessEvent::ReauthFailed, AccessEventReason::WrongPassword, $user);
+            $this->accessLogRecorder->note(AccessEvent::ReauthFailed, AccessEventReason::WrongPassword, $user);
 
             throw new IncorrectPasswordException;
         }

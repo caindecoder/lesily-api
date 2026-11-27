@@ -15,6 +15,6 @@ class RegisterResult
     public function __construct(
         public readonly User $user,
         public readonly string $companyId,
-        public readonly IssuedSession $session,
+        public readonly IssuedSession $issuedSession,
     ) {}
 }

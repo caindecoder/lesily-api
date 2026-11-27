@@ -11,6 +11,6 @@ class CurrentSession
 {
     public function __construct(
         public readonly string $tokenId,
-        public readonly RequestOrigin $origin,
+        public readonly RequestOrigin $requestOrigin,
     ) {}
 }
